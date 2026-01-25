@@ -1,0 +1,262 @@
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Arial', sans-serif;
+        color: #333;
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 40px;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+        border-bottom: 3px solid #ff9900;
+        padding-bottom: 20px;
+      }
+
+      .header h1 {
+        font-size: 28px;
+        color: #ff9900;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        font-size: 14px;
+        color: #666;
+      }
+
+      .section {
+        margin-bottom: 30px;
+      }
+
+      .section h2 {
+        font-size: 18px;
+        color: #ff9900;
+        margin-bottom: 15px;
+        border-left: 4px solid #ff9900;
+        padding-left: 10px;
+      }
+
+      .section-content {
+        background-color: #f9f9f9;
+        padding: 15px;
+        border-radius: 5px;
+      }
+
+      .field-group {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .field-label {
+        font-weight: bold;
+        color: #333;
+      }
+
+      .field-value {
+        color: #666;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+      }
+
+      .table th {
+        background-color: #ff9900;
+        color: white;
+        padding: 10px;
+        text-align: left;
+      }
+
+      .table td {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .table tr:nth-child(even) {
+        background-color: #f9f9f9;
+      }
+
+      .footer {
+        text-align: center;
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+        color: #666;
+        font-size: 12px;
+      }
+
+      .highlight {
+        background-color: #fffacd;
+        padding: 2px 5px;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>COTIZACIÓN - CONSTROAD</h1>
+        <p>Servicios Profesionales de Asfalto</p>
+      </div>
+
+      <div class="section">
+        <h2>Datos del Cliente</h2>
+        <div class="section-content">
+          <div class="field-group">
+            <span class="field-label">Nombre:</span>
+            <span class="field-value">{{clientName}}</span>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Teléfono:</span>
+            <span class="field-value">{{clientPhone}}</span>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Ubicación:</span>
+            <span class="field-value">{{location}}</span>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Fecha:</span>
+            <span class="field-value">{{date}}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Detalles del Proyecto</h2>
+        <div class="section-content">
+          <div class="field-group">
+            <span class="field-label">Tipo de Servicio:</span>
+            <span class="field-value"><span class="highlight">{{serviceType}}</span></span>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Área (m²):</span>
+            <span class="field-value">{{area}}</span>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Tipo de Asfalto:</span>
+            <span class="field-value">{{asphaltType}}</span>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Espesor:</span>
+            <span class="field-value">{{thickness}}</span>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Descripción:</span>
+            <span class="field-value">{{description}}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Cotización</h2>
+        <div class="section-content">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Concepto</th>
+                <th>Cantidad</th>
+                <th>Precio Unitario</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#items}}
+              <tr>
+                <td>{{name}}</td>
+                <td>{{quantity}}</td>
+                <td>S/. {{unitPrice}}</td>
+                <td>S/. {{total}}</td>
+              </tr>
+              {{/items}}
+            </tbody>
+          </table>
+
+          <div
+            style="
+              text-align: right;
+              margin-top: 20px;
+              padding: 20px;
+              background-color: #f0f0f0;
+              border-radius: 5px;
+            "
+          >
+            <div
+              style="
+                font-size: 16px;
+                color: #666;
+                margin-bottom: 10px;
+              "
+            >
+              <strong>Subtotal:</strong> S/. {{subtotal}}
+            </div>
+            <div
+              style="
+                font-size: 16px;
+                color: #666;
+                margin-bottom: 10px;
+              "
+            >
+              <strong>IGV (18%):</strong> S/. {{tax}}
+            </div>
+            <div
+              style="
+                font-size: 20px;
+                color: #ff9900;
+                font-weight: bold;
+              "
+            >
+              <strong>TOTAL:</strong> S/. {{total}}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Términos y Condiciones</h2>
+        <div class="section-content">
+          <p>
+            <strong>Vigencia:</strong> Esta cotización es válida por 7 días hábiles.
+          </p>
+          <p style="margin-top: 10px;">
+            <strong>Pago:</strong> Se requiere un adelanto del 50% para reservar el proyecto.
+            El saldo restante se paga al inicio de los trabajos.
+          </p>
+          <p style="margin-top: 10px;">
+            <strong>Cronograma:</strong> Los trabajos iniciarían 3-5 días hábiles después de
+            confirmado el proyecto.
+          </p>
+          <p style="margin-top: 10px;">
+            <strong>Garantía:</strong> Todos nuestros trabajos incluyen garantía por 2 años
+            contra defectos de mano de obra.
+          </p>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>CONSTROAD - Empresa de Servicios de Asfalto</p>
+        <p>Teléfono: +51 987 654 321 | Email: info@constroad.com</p>
+        <p>Esta cotización ha sido generada automáticamente por el sistema CONSTROAD.</p>
+      </div>
+    </div>
+  </body>
+</html>

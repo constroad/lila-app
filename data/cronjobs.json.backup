@@ -1,0 +1,141 @@
+[
+  {
+    "id": "367bc45f-bee6-4816-b4f2-dcd8f6ab6da4",
+    "name": "Alerta de lunes 9 am",
+    "url": "",
+    "cronExpression": "0 9 * * 1",
+    "company": "constroad",
+    "isActive": true,
+    "lastExecution": "2025-12-29T22:18:56.349Z",
+    "status": "success",
+    "history": [
+      {
+        "status": "success",
+        "timestamp": "2025-11-10T14:00:00.022Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-11-03T14:00:00.035Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-10-27T14:00:00.023Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-10-20T14:00:00.136Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-10-13T14:00:00.025Z"
+      },
+      {
+        "status": "error",
+        "timestamp": "2025-12-29T22:07:56.726Z",
+        "error": "Cannot read properties of undefined (reading 'maxRetries')"
+      },
+      {
+        "status": "error",
+        "timestamp": "2025-12-29T22:10:04.618Z",
+        "error": "Cannot read properties of undefined (reading 'maxRetries')"
+      },
+      {
+        "status": "error",
+        "timestamp": "2025-12-29T22:16:32.373Z",
+        "error": "Failed after 3 attempts: WhatsApp session not connected"
+      },
+      {
+        "status": "error",
+        "timestamp": "2025-12-29T22:17:09.221Z",
+        "error": "Failed after 3 attempts: WhatsApp session not connected"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-12-29T22:18:56.349Z"
+      }
+    ],
+    "type": "message",
+    "message": {
+      "sender": "51902049935",
+      "chatId": "120363288945205546@g.us",
+      "body": "🤖 ConstRoadBot:\n\n*Es Lunes*\n- Limpiar paneles\n- Limpiar lentes de camaras en planta con paño de fibra\n- Limpiar filtros de grupos"
+    },
+    "metadata": {
+      "createdAt": "2025-12-29T22:07:56.726Z",
+      "updatedAt": "2025-12-29T22:07:56.726Z",
+      "failureCount": 0,
+      "lastError": "Failed after 3 attempts: WhatsApp session not connected",
+      "lastRun": "2025-12-29T22:18:56.349Z"
+    },
+    "retryPolicy": {
+      "maxRetries": 3,
+      "backoffMultiplier": 2
+    },
+    "timeout": 30000
+  },
+  {
+    "id": "ef5d52f0-9ac5-43d3-a5b1-d4a4ed40be2d",
+    "company": "constroad",
+    "type": "api",
+    "name": "kardex check Mañana",
+    "url": "https://www.constroad.com/api/cron/kardex-check",
+    "cronExpression": "0 10 * * *",
+    "isActive": true,
+    "lastExecution": "2026-01-20T15:00:05.968Z",
+    "status": "success",
+    "history": [
+      {
+        "status": "success",
+        "timestamp": "2025-12-26T15:00:00.017Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-12-25T15:00:00.016Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-12-23T15:00:00.007Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-12-21T15:00:00.082Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-12-20T15:00:00.012Z"
+      },
+      {
+        "status": "error",
+        "timestamp": "2025-12-19T15:00:00.167Z",
+        "error": "Request failed with status code 504"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-12-18T15:00:00.092Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2025-12-29T22:35:17.803Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2026-01-16T15:00:04.701Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2026-01-20T15:00:05.968Z"
+      }
+    ],
+    "metadata": {
+      "createdAt": "2025-12-29T22:35:17.803Z",
+      "updatedAt": "2025-12-29T22:35:49.269Z",
+      "failureCount": 0,
+      "lastRun": "2026-01-20T15:00:05.968Z"
+    },
+    "retryPolicy": {
+      "maxRetries": 3,
+      "backoffMultiplier": 2
+    },
+    "timeout": 30000
+  }
+]
