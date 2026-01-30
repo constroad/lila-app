@@ -35,6 +35,11 @@ export function errorHandler(
 }
 
 export function notFoundHandler(req: Request, res: Response, next: NextFunction) {
+  // Ignorar silenciosamente rutas de Next.js HMR
+  if (req.path.includes('_next/') || req.path.includes('/__webpack')) {
+    return res.status(404).end();
+  }
+
   const error: CustomError = new Error(`Route not found: ${req.path}`);
   error.statusCode = HTTP_STATUS.NOT_FOUND;
   next(error);

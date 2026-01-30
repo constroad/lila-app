@@ -2,8 +2,8 @@ export const openApiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'WhatsApp API v2',
-    version: '1.0.0',
-    description: 'API para sesiones, mensajeria, jobs y PDFs.',
+    version: '2.0.0',
+    description: 'API para sesiones, mensajeria, jobs, PDFs y almacenamiento multi-tenant.',
   },
   servers: [
     {
@@ -16,9 +16,46 @@ export const openApiSpec = {
     { name: 'Messages', description: 'Historial de conversaciones' },
     { name: 'Jobs', description: 'Cron jobs' },
     { name: 'PDF', description: 'Generacion de PDFs y templates' },
-    { name: 'Drive', description: 'Almacenamiento local tipo drive' },
+    { name: 'Drive', description: 'Almacenamiento multi-tenant (requiere JWT con companyId)' },
     { name: 'System', description: 'Health y estado del servidor' },
   ],
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'JWT token con companyId en el payload. Formato: Authorization: Bearer {token}',
+      },
+    },
+    schemas: {
+      Error: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: false },
+          error: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+              statusCode: { type: 'number' },
+            },
+          },
+        },
+      },
+      DriveEntry: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Nombre del archivo o carpeta' },
+          path: { type: 'string', description: 'Ruta relativa' },
+          type: { type: 'string', enum: ['file', 'folder'] },
+          size: { type: 'number', description: 'Tamaño en bytes (solo archivos)' },
+          updatedAt: { type: 'string', format: 'date-time' },
+          url: { type: 'string', description: 'URL publica (solo archivos)' },
+          listUrl: { type: 'string', description: 'URL para listar (solo carpetas)' },
+        },
+      },
+    },
+  },
   paths: {
     '/health': {
       get: {
@@ -875,35 +912,81 @@ export const openApiSpec = {
     '/api/drive/list': {
       get: {
         tags: ['Drive'],
-        summary: 'Listar archivos y carpetas',
+        summary: 'Listar archivos y carpetas (Multi-tenant)',
+        description: 'Lista el contenido de una carpeta dentro del espacio de almacenamiento de la empresa. Requiere JWT con companyId.',
+        security: [{ bearerAuth: [] }],
         parameters: [
           {
             name: 'path',
             in: 'query',
             required: false,
             schema: { type: 'string' },
-            description: 'Ruta relativa dentro del drive',
+            description: 'Ruta relativa dentro del espacio de la empresa (ej: orders/project-1)',
           },
         ],
         responses: {
-          200: { description: 'Listado de contenido' },
+          200: {
+            description: 'Listado de contenido',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        path: { type: 'string' },
+                        total: { type: 'number' },
+                        entries: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/DriveEntry' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'No autorizado - Token invalido o ausente' },
+          403: { description: 'Acceso denegado - Ruta fuera del espacio de la empresa' },
+          404: { description: 'Ruta no encontrada' },
         },
       },
     },
     '/api/drive/info': {
       get: {
         tags: ['Drive'],
-        summary: 'Obtener metadata de un archivo o carpeta',
+        summary: 'Obtener metadata de un archivo o carpeta (Multi-tenant)',
+        description: 'Obtiene información detallada de un archivo o carpeta. Requiere JWT con companyId.',
+        security: [{ bearerAuth: [] }],
         parameters: [
           {
             name: 'path',
             in: 'query',
             required: true,
             schema: { type: 'string' },
+            description: 'Ruta relativa del archivo o carpeta',
           },
         ],
         responses: {
-          200: { description: 'Metadata' },
+          200: {
+            description: 'Metadata del archivo o carpeta',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/DriveEntry' },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'No autorizado' },
+          403: { description: 'Acceso denegado' },
           404: { description: 'No encontrado' },
         },
       },
@@ -911,7 +994,9 @@ export const openApiSpec = {
     '/api/drive/folders': {
       post: {
         tags: ['Drive'],
-        summary: 'Crear carpeta',
+        summary: 'Crear carpeta (Multi-tenant)',
+        description: 'Crea una nueva carpeta en el espacio de la empresa. Requiere JWT con companyId.',
+        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -920,22 +1005,52 @@ export const openApiSpec = {
                 type: 'object',
                 required: ['name'],
                 properties: {
-                  path: { type: 'string', description: 'Ruta padre' },
-                  name: { type: 'string', description: 'Nombre de carpeta' },
+                  path: { type: 'string', description: 'Ruta padre (opcional, raiz si se omite)' },
+                  name: { type: 'string', description: 'Nombre de la carpeta' },
+                },
+                example: {
+                  path: 'orders',
+                  name: 'project-1',
                 },
               },
             },
           },
         },
         responses: {
-          201: { description: 'Carpeta creada' },
+          201: {
+            description: 'Carpeta creada exitosamente',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string' },
+                        path: { type: 'string' },
+                        type: { type: 'string', example: 'folder' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Nombre de carpeta invalido' },
+          401: { description: 'No autorizado' },
+          403: { description: 'Acceso denegado' },
+          404: { description: 'Ruta padre no encontrada' },
         },
       },
     },
     '/api/drive/files': {
       post: {
         tags: ['Drive'],
-        summary: 'Subir archivo',
+        summary: 'Subir archivo (Multi-tenant)',
+        description: 'Sube un archivo al espacio de almacenamiento de la empresa. Requiere JWT con companyId. El archivo se almacenará en /companies/{companyId}/{path}/',
+        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -944,39 +1059,103 @@ export const openApiSpec = {
                 type: 'object',
                 required: ['file'],
                 properties: {
-                  path: { type: 'string', description: 'Ruta destino' },
-                  file: { type: 'string', format: 'binary' },
+                  path: { type: 'string', description: 'Ruta destino relativa (ej: orders/project-1)' },
+                  file: { type: 'string', format: 'binary', description: 'Archivo a subir' },
                 },
               },
             },
           },
         },
         responses: {
-          201: { description: 'Archivo subido' },
+          201: {
+            description: 'Archivo subido exitosamente',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string' },
+                        path: { type: 'string' },
+                        type: { type: 'string', example: 'file' },
+                        size: { type: 'number' },
+                        url: { type: 'string', description: 'URL publica del archivo' },
+                        urlAbsolute: { type: 'string', description: 'URL absoluta' },
+                      },
+                    },
+                  },
+                  example: {
+                    success: true,
+                    data: {
+                      name: 'factura.pdf',
+                      path: 'orders/project-1/factura.pdf',
+                      type: 'file',
+                      size: 102400,
+                      url: '/files/companies/company-123/orders/project-1/factura.pdf',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Archivo invalido o faltante' },
+          401: { description: 'No autorizado' },
+          403: { description: 'Acceso denegado' },
         },
       },
     },
     '/api/drive/entry': {
       delete: {
         tags: ['Drive'],
-        summary: 'Eliminar archivo o carpeta',
+        summary: 'Eliminar archivo o carpeta (Multi-tenant)',
+        description: 'Elimina un archivo o carpeta del espacio de la empresa. Requiere JWT con companyId.',
+        security: [{ bearerAuth: [] }],
         parameters: [
           {
             name: 'path',
             in: 'query',
             required: true,
             schema: { type: 'string' },
+            description: 'Ruta del archivo o carpeta a eliminar',
           },
         ],
         responses: {
-          200: { description: 'Eliminado' },
+          200: {
+            description: 'Eliminado exitosamente',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    message: { type: 'string' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        path: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Ruta requerida' },
+          401: { description: 'No autorizado' },
+          403: { description: 'Acceso denegado' },
+          404: { description: 'No encontrado' },
         },
       },
     },
     '/api/drive/move': {
       patch: {
         tags: ['Drive'],
-        summary: 'Mover o renombrar archivo/carpeta',
+        summary: 'Mover o renombrar archivo/carpeta (Multi-tenant)',
+        description: 'Mueve o renombra un archivo o carpeta dentro del espacio de la empresa. Requiere JWT con companyId.',
+        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -985,22 +1164,53 @@ export const openApiSpec = {
                 type: 'object',
                 required: ['from', 'to'],
                 properties: {
-                  from: { type: 'string' },
-                  to: { type: 'string' },
+                  from: { type: 'string', description: 'Ruta origen' },
+                  to: { type: 'string', description: 'Ruta destino' },
+                },
+                example: {
+                  from: 'orders/old-name.pdf',
+                  to: 'orders/project-1/new-name.pdf',
                 },
               },
             },
           },
         },
         responses: {
-          200: { description: 'Movido' },
+          200: {
+            description: 'Movido exitosamente',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        from: { type: 'string' },
+                        to: { type: 'string' },
+                        url: { type: 'string' },
+                        urlAbsolute: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Rutas requeridas o invalidas' },
+          401: { description: 'No autorizado' },
+          403: { description: 'Acceso denegado' },
+          404: { description: 'Origen no encontrado' },
         },
       },
     },
     '/api/drive/pdf/info': {
       get: {
         tags: ['Drive'],
-        summary: 'Obtener metadata de un PDF',
+        summary: 'Obtener metadata de un PDF (Multi-tenant)',
+        description: 'Obtiene información de un PDF (número de páginas, dimensiones, etc.). Requiere JWT con companyId.',
+        security: [{ bearerAuth: [] }],
         parameters: [
           {
             name: 'url',
@@ -1020,6 +1230,8 @@ export const openApiSpec = {
         responses: {
           200: { description: 'Metadata del PDF' },
           400: { description: 'Parametro invalido' },
+          401: { description: 'No autorizado' },
+          403: { description: 'Acceso denegado' },
           404: { description: 'No encontrado' },
         },
       },
@@ -1027,7 +1239,9 @@ export const openApiSpec = {
     '/api/drive/pdf/page': {
       get: {
         tags: ['Drive'],
-        summary: 'Renderizar pagina de PDF a imagen',
+        summary: 'Renderizar pagina de PDF a imagen (Multi-tenant)',
+        description: 'Renderiza una página de un PDF a imagen PNG. Requiere JWT con companyId.',
+        security: [{ bearerAuth: [] }],
         parameters: [
           {
             name: 'url',
@@ -1067,6 +1281,8 @@ export const openApiSpec = {
             },
           },
           400: { description: 'Parametro invalido' },
+          401: { description: 'No autorizado' },
+          403: { description: 'Acceso denegado' },
           404: { description: 'No encontrado' },
         },
       },
@@ -1074,7 +1290,9 @@ export const openApiSpec = {
     '/api/drive/pdf/preview-grid': {
       get: {
         tags: ['Drive'],
-        summary: 'Preview de PDF con grilla para coordenadas',
+        summary: 'Preview de PDF con grilla para coordenadas (Multi-tenant)',
+        description: 'Renderiza una página de PDF con grilla superpuesta para ayudar a encontrar coordenadas. Requiere JWT con companyId.',
+        security: [{ bearerAuth: [] }],
         parameters: [
           {
             name: 'url',
@@ -1119,6 +1337,10 @@ export const openApiSpec = {
               },
             },
           },
+          400: { description: 'Parametro invalido' },
+          401: { description: 'No autorizado' },
+          403: { description: 'Acceso denegado' },
+          404: { description: 'No encontrado' },
         },
       },
     },

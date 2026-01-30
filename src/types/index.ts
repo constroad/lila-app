@@ -120,3 +120,12 @@ export interface PDFGenerationRequest {
   data: Record<string, any>;
   filename?: string;
 }
+
+// Extend Express Request for multi-tenant support
+declare global {
+  namespace Express {
+    interface Request {
+      companyId?: string;
+    }
+  }
+}

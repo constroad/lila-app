@@ -31,6 +31,15 @@ router.get('/:phoneNumber/contacts', sessionController.getContactsHandler);
 // DELETE /api/sessions/:phoneNumber - Desconectar sesión
 router.delete('/:phoneNumber', sessionController.disconnectSession);
 
+// POST /api/sessions/:phoneNumber/restore - Restaurar desde backup
+router.post('/:phoneNumber/restore', sessionController.restoreSessionFromBackup);
+
+// GET /api/sessions/:phoneNumber/backups - Listar backups disponibles
+router.get('/:phoneNumber/backups', sessionController.listSessionBackups);
+
+// POST /api/sessions/:phoneNumber/reset-reconnect - Resetear estado de reconexión
+router.post('/:phoneNumber/reset-reconnect', sessionController.resetReconnectState);
+
 // GET /api/sessions - Obtener todas las sesiones
 router.get('/', sessionController.getAllSessions);
 

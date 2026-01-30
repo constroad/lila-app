@@ -272,3 +272,109 @@ export async function logoutSession(req: Request, res: Response, next: NextFunct
 export async function listActiveSessions(req: Request, res: Response, next: NextFunction) {
   return getAllSessions(req, res, next);
 }
+
+/**
+ * 🔄 Restaurar sesión desde backup
+ * POST /api/session/:phoneNumber/restore
+ * Body: { backupTimestamp?: string } (opcional, usa el más reciente si no se especifica)
+ */
+export async function restoreSessionFromBackup(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { phoneNumber } = req.params;
+    const { backupTimestamp } = req.body;
+
+    if (!phoneNumber) {
+      const error: CustomError = new Error('phoneNumber is required');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    logger.info(`Attempting to restore session ${phoneNumber} from backup`);
+
+    // Desconectar sesión existente si hay
+    try {
+      await connectionManager.disconnect(phoneNumber);
+    } catch (e) {
+      // Ignorar si no había sesión activa
+    }
+
+    // Restaurar desde backup
+    const restored = await connectionManager.restoreFromBackup(phoneNumber, backupTimestamp);
+
+    if (!restored) {
+      const error: CustomError = new Error('Failed to restore from backup - no backups found');
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+
+    // Intentar reconectar con las credenciales restauradas
+    await connectionManager.createConnection(phoneNumber);
+
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: `Session ${phoneNumber} restored from backup and reconnecting`,
+      data: {
+        phoneNumber,
+        status: connectionManager.getConnectionStatus(phoneNumber),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 📋 Listar backups disponibles para una sesión
+ * GET /api/session/:phoneNumber/backups
+ */
+export async function listSessionBackups(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { phoneNumber } = req.params;
+
+    if (!phoneNumber) {
+      const error: CustomError = new Error('phoneNumber is required');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    const backups = await connectionManager.listBackups(phoneNumber);
+
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        phoneNumber,
+        backups,
+        total: backups.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 🔄 Forzar reinicio de reconexión (limpiar estado de reconexión)
+ * POST /api/session/:phoneNumber/reset-reconnect
+ */
+export async function resetReconnectState(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { phoneNumber } = req.params;
+
+    if (!phoneNumber) {
+      const error: CustomError = new Error('phoneNumber is required');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    logger.info(`Resetting reconnect state for ${phoneNumber}`);
+
+    await connectionManager.resetReconnect(phoneNumber);
+
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: `Reconnect state reset for ${phoneNumber}`,
+    });
+  } catch (error) {
+    next(error);
+  }
+}

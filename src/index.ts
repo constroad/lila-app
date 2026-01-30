@@ -63,10 +63,10 @@ app.use('/api/message', messageRoutes);
 app.use('/api/pdf', pdfRoutes);
 app.use('/api/drive', driveRoutes);
 
-// Public file access
+// Public file access (multi-tenant only - Fase 9)
 app.use(
-  config.drive.publicBaseUrl,
-  express.static(config.drive.rootDir, {
+  '/files/companies',
+  express.static(config.storage.root + '/companies', {
     fallthrough: false,
     index: false,
     dotfiles: 'deny',
@@ -117,6 +117,16 @@ async function startServer() {
   try {
     logger.info('🚀 Starting WhatsApp AI Agent Server...');
 
+    // Inicializar QuotaValidator (Fase 10 - MongoDB only)
+    logger.info('Initializing Quota Validator...');
+    const { quotaValidatorService } = await import('./services/quota-validator.service.js');
+    try {
+      await quotaValidatorService.connect();
+      logger.info('✅ Quota Validator connected (MongoDB-only)');
+    } catch (error) {
+      logger.warn('Quota Validator initialization failed, quota validation will be disabled:', error);
+    }
+
     // Inicializar servicios
     logger.info('Initializing PDF Generator...');
     await pdfGenerator.initialize();
@@ -127,6 +137,10 @@ async function startServer() {
 
     logger.info('Reconnecting saved WhatsApp sessions...');
     await connectionManager.reconnectSavedSessions();
+
+    // 🛡️ Iniciar watchdog de recuperación automática de sesiones
+    logger.info('Starting session recovery watchdog...');
+    connectionManager.startSessionRecoveryWatchdog();
 
     cron.schedule('0 0 * * 0', async () => {
       try {
@@ -161,6 +175,10 @@ async function startServer() {
 
           // Cerrar PDF Generator
           await pdfGenerator.shutdown();
+
+          // Cerrar QuotaValidator (Fase 10 - MongoDB only)
+          const { quotaValidatorService } = await import('./services/quota-validator.service.js');
+          await quotaValidatorService.disconnect();
 
           logger.info('✅ All services shut down successfully');
           process.exit(0);

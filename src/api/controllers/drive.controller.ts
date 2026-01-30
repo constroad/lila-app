@@ -3,15 +3,17 @@ import fs from 'fs-extra';
 import path from 'path';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
-import {
-  buildPublicUrl,
-  ensureDriveRoot,
-  isValidEntryName,
-  resolveDrivePath,
-} from '../../storage/drive.store.js';
-import { config } from '../../config/environment.js';
+import { storagePathService } from '../../services/storage-path.service.js';
+import { incrementStorageUsage, decrementStorageUsage } from '../../middleware/quota.middleware.js';
 
-function toEntry(relativeBase: string, name: string, stat: fs.Stats) {
+// Helper: Validar nombre de archivo/folder
+function isValidEntryName(name: string) {
+  if (!name) return false;
+  if (name === '.' || name === '..') return false;
+  return !/[\\/]/.test(name);
+}
+
+function toEntry(relativeBase: string, name: string, stat: fs.Stats, companyId: string) {
   const relPath = relativeBase ? `${relativeBase}/${name}` : name;
   const type = stat.isDirectory() ? 'folder' : 'file';
   const listUrl = type === 'folder' ? `/api/drive/list?path=${encodeURIComponent(relPath)}` : undefined;
@@ -21,7 +23,7 @@ function toEntry(relativeBase: string, name: string, stat: fs.Stats) {
     type,
     size: stat.isFile() ? stat.size : undefined,
     updatedAt: stat.mtime.toISOString(),
-    url: stat.isFile() ? buildPublicUrl(relPath) : undefined,
+    url: stat.isFile() ? `/files/companies/${companyId}/${relPath}` : undefined,
     listUrl,
   };
 }
@@ -35,8 +37,26 @@ function buildAbsoluteUrl(req: Request, relativeUrl: string) {
 
 export async function listEntries(req: Request, res: Response, next: NextFunction) {
   try {
-    await ensureDriveRoot();
-    const { resolved, normalized } = resolveDrivePath(req.query.path as string | undefined);
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+
+    // Asegurar estructura de empresa
+    await storagePathService.ensureCompanyStructure(companyId);
+
+    // Resolver ruta dentro del espacio de la empresa
+    const relativePath = (req.query.path as string) || '';
+    const resolved = storagePathService.resolvePath(companyId, relativePath);
+
+    // Validar acceso
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error: CustomError = new Error('Access denied: invalid path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
 
     const exists = await fs.pathExists(resolved);
     if (!exists) {
@@ -56,7 +76,7 @@ export async function listEntries(req: Request, res: Response, next: NextFunctio
     const results = await Promise.all(
       entries.map(async (name) => {
         const entryStat = await fs.stat(path.join(resolved, name));
-        const entry = toEntry(normalized, name, entryStat);
+        const entry = toEntry(relativePath, name, entryStat, companyId);
         const result: Record<string, unknown> = { ...entry };
         if (entry.url) {
           result.urlAbsolute = buildAbsoluteUrl(req, entry.url);
@@ -71,7 +91,7 @@ export async function listEntries(req: Request, res: Response, next: NextFunctio
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
-        path: normalized || '',
+        path: relativePath || '',
         total: results.length,
         entries: results,
       },
@@ -83,7 +103,13 @@ export async function listEntries(req: Request, res: Response, next: NextFunctio
 
 export async function createFolder(req: Request, res: Response, next: NextFunction) {
   try {
-    await ensureDriveRoot();
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+
     const { path: parentPath, name } = req.body;
 
     if (!name || !isValidEntryName(name)) {
@@ -92,21 +118,42 @@ export async function createFolder(req: Request, res: Response, next: NextFuncti
       return next(error);
     }
 
-    const { resolved, normalized } = resolveDrivePath(parentPath);
+    // Resolver ruta padre
+    const relativePath = parentPath || '';
+    const resolved = storagePathService.resolvePath(companyId, relativePath);
+
+    // Validar acceso
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error: CustomError = new Error('Access denied: invalid path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+
     const parentExists = await fs.pathExists(resolved);
     if (!parentExists) {
       const error: CustomError = new Error('Parent path not found');
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
+
     const target = path.join(resolved, name);
+
+    // Validar que la carpeta de destino también esté dentro del espacio de la empresa
+    if (!storagePathService.validateAccess(target, companyId)) {
+      const error: CustomError = new Error('Access denied: invalid target path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+
     await fs.ensureDir(target);
+
+    const newPath = relativePath ? `${relativePath}/${name}` : name;
 
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
       data: {
         name,
-        path: normalized ? `${normalized}/${name}` : name,
+        path: newPath,
         type: 'folder',
       },
     });
@@ -117,7 +164,13 @@ export async function createFolder(req: Request, res: Response, next: NextFuncti
 
 export async function uploadFile(req: Request, res: Response, next: NextFunction) {
   try {
-    await ensureDriveRoot();
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+
     const { path: parentPath } = req.body;
     const file = req.file;
 
@@ -133,26 +186,56 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
       return next(error);
     }
 
-    const { resolved, normalized } = resolveDrivePath(parentPath);
+    // Resolver ruta
+    const relativePath = parentPath || '';
+    const resolved = storagePathService.resolvePath(companyId, relativePath);
+
+    // Validar acceso
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error: CustomError = new Error('Access denied: invalid path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+
     await fs.ensureDir(resolved);
 
+    const MAX_ORDERS_BYTES = 100 * 1024 * 1024; // 100MB
+    const MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
+    const isDriveRoot = relativePath.startsWith('drive');
+    const maxAllowedBytes = isDriveRoot ? MAX_DRIVE_BYTES : MAX_ORDERS_BYTES;
+    if (file.size > maxAllowedBytes) {
+      await fs.remove(file.path).catch(() => {});
+      const error: CustomError = new Error('File too large');
+      error.statusCode = HTTP_STATUS.REQUEST_TOO_LONG;
+      return next(error);
+    }
+
     const target = path.join(resolved, file.originalname);
-    await fs.writeFile(target, file.buffer);
+
+    // Validar acceso al archivo de destino
+    if (!storagePathService.validateAccess(target, companyId)) {
+      const error: CustomError = new Error('Access denied: invalid target path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+
+    await fs.move(file.path, target, { overwrite: true });
+
+    // Incrementar contador de almacenamiento (Fase 10)
+    await incrementStorageUsage(companyId, file.size);
+
+    const filePath = relativePath ? `${relativePath}/${file.originalname}` : file.originalname;
+    const publicUrl = `/files/companies/${companyId}/${filePath}`;
 
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
       data: {
         name: file.originalname,
-        path: normalized ? `${normalized}/${file.originalname}` : file.originalname,
+        path: filePath,
         type: 'file',
         size: file.size,
-        url: buildPublicUrl(
-          normalized ? `${normalized}/${file.originalname}` : file.originalname
-        ),
-        urlAbsolute: buildAbsoluteUrl(
-          req,
-          buildPublicUrl(normalized ? `${normalized}/${file.originalname}` : file.originalname)
-        ),
+        url: publicUrl,
+        urlAbsolute: buildAbsoluteUrl(req, publicUrl),
       },
     });
   } catch (error) {
@@ -162,13 +245,27 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
 
 export async function deleteEntry(req: Request, res: Response, next: NextFunction) {
   try {
-    await ensureDriveRoot();
-    const { path: targetPath } = req.query;
-    const { resolved, normalized } = resolveDrivePath(targetPath as string | undefined);
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
 
-    if (!normalized) {
+    const targetPath = req.query.path as string;
+
+    if (!targetPath) {
       const error: CustomError = new Error('path is required');
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    const resolved = storagePathService.resolvePath(companyId, targetPath);
+
+    // Validar acceso
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error: CustomError = new Error('Access denied: invalid path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
 
@@ -179,13 +276,23 @@ export async function deleteEntry(req: Request, res: Response, next: NextFunctio
       return next(error);
     }
 
+    // Obtener stats antes de eliminar (Fase 10)
+    const stats = await fs.stat(resolved);
+    const isFile = stats.isFile();
+    const fileSize = isFile ? stats.size : 0;
+
     await fs.remove(resolved);
+
+    // Decrementar contador de almacenamiento si es un archivo (Fase 10)
+    if (isFile && fileSize > 0) {
+      await decrementStorageUsage(companyId, fileSize);
+    }
 
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: 'Entry deleted',
       data: {
-        path: normalized,
+        path: targetPath,
       },
     });
   } catch (error) {
@@ -195,7 +302,13 @@ export async function deleteEntry(req: Request, res: Response, next: NextFunctio
 
 export async function moveEntry(req: Request, res: Response, next: NextFunction) {
   try {
-    await ensureDriveRoot();
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+
     const { from, to } = req.body;
 
     if (!from || !to) {
@@ -204,12 +317,19 @@ export async function moveEntry(req: Request, res: Response, next: NextFunction)
       return next(error);
     }
 
-    const { resolved: fromResolved, normalized: fromNormalized } = resolveDrivePath(from);
-    const { resolved: toResolved, normalized: toNormalized } = resolveDrivePath(to);
+    const fromResolved = storagePathService.resolvePath(companyId, from);
+    const toResolved = storagePathService.resolvePath(companyId, to);
 
-    if (!fromNormalized || !toNormalized) {
-      const error: CustomError = new Error('from and to must be valid paths');
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+    // Validar acceso a ambas rutas
+    if (!storagePathService.validateAccess(fromResolved, companyId)) {
+      const error: CustomError = new Error('Access denied: invalid source path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+
+    if (!storagePathService.validateAccess(toResolved, companyId)) {
+      const error: CustomError = new Error('Access denied: invalid destination path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
 
@@ -223,13 +343,15 @@ export async function moveEntry(req: Request, res: Response, next: NextFunction)
     await fs.ensureDir(path.dirname(toResolved));
     await fs.move(fromResolved, toResolved, { overwrite: false });
 
+    const publicUrl = `/files/companies/${companyId}/${to}`;
+
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
-        from: fromNormalized,
-        to: toNormalized,
-        url: buildPublicUrl(toNormalized),
-        urlAbsolute: buildAbsoluteUrl(req, buildPublicUrl(toNormalized)),
+        from,
+        to,
+        url: publicUrl,
+        urlAbsolute: buildAbsoluteUrl(req, publicUrl),
       },
     });
   } catch (error) {
@@ -239,25 +361,40 @@ export async function moveEntry(req: Request, res: Response, next: NextFunction)
 
 export async function getInfo(req: Request, res: Response, next: NextFunction) {
   try {
-    await ensureDriveRoot();
-    const { path: targetPath } = req.query;
-    const { resolved, normalized } = resolveDrivePath(targetPath as string | undefined);
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
 
-    if (!normalized) {
+    const targetPath = req.query.path as string;
+
+    if (!targetPath) {
       const error: CustomError = new Error('path is required');
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    const resolved = storagePathService.resolvePath(companyId, targetPath);
+
+    // Validar acceso
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error: CustomError = new Error('Access denied: invalid path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
 
     const stat = await fs.stat(resolved);
     const name = path.basename(resolved);
 
-    const parent = path.dirname(normalized).replace(/\\/g, '/');
+    const parent = path.dirname(targetPath).replace(/\\/g, '/');
     const base = parent === '.' ? '' : parent;
+
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: (() => {
-        const entry = toEntry(base, name, stat);
+        const entry = toEntry(base, name, stat, companyId);
         const result: Record<string, unknown> = { ...entry };
         if (entry.url) {
           result.urlAbsolute = buildAbsoluteUrl(req, entry.url);

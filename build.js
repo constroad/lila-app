@@ -36,6 +36,10 @@ esbuild
       'multer',
       'swagger-ui-express',
       '@napi-rs/canvas',
+      'dotenv',
+      'fs-extra',
+      'mongoose',
+      'pino',
     ],
   })
   .then(() => console.log('✅ Build completed successfully'))

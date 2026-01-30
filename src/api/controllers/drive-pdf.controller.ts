@@ -3,8 +3,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
-import { resolveDrivePath } from '../../storage/drive.store.js';
-import { config } from '../../config/environment.js';
+import { storagePathService } from '../../services/storage-path.service.js';
 import {
   getPdfInfo,
   renderPdfPageToPng,
@@ -12,33 +11,24 @@ import {
 } from '../../pdf/render.service.js';
 
 function getPdfPathFromRequest(req: Request) {
-  const { url, path: pathParam } = req.query as { url?: string; path?: string };
-
-  if (pathParam) {
-    const { resolved, normalized } = resolveDrivePath(pathParam);
-    return { resolved, normalized };
+  const companyId = req.companyId;
+  if (!companyId) {
+    throw new Error('Company ID is required');
   }
 
-  if (!url) {
-    throw new Error('url or path is required');
+  const { path: pathParam } = req.query as { path?: string };
+
+  if (!pathParam) {
+    throw new Error('path is required');
   }
 
-  const base = `${req.protocol}://${req.get('host') || 'localhost'}`;
-  const parsed = new URL(url, base);
+  const resolved = storagePathService.resolvePath(companyId, pathParam);
 
-  if (parsed.origin !== base) {
-    throw new Error('URL not allowed');
+  if (!storagePathService.validateAccess(resolved, companyId)) {
+    throw new Error('Access denied: invalid path');
   }
 
-  const publicBase = config.drive.publicBaseUrl.replace(/\/+$/, '');
-  if (!parsed.pathname.startsWith(publicBase + '/')) {
-    throw new Error('URL not allowed');
-  }
-
-  let relative = parsed.pathname.slice(publicBase.length + 1);
-  relative = decodePath(relative);
-  const { resolved, normalized } = resolveDrivePath(relative);
-  return { resolved, normalized };
+  return { resolved, normalized: pathParam };
 }
 
 function ensurePdfExtension(filePath: string) {
@@ -59,7 +49,11 @@ function decodePath(value: string) {
   return decoded;
 }
 
-async function resolveExistingPdfPath(resolved: string, normalized: string) {
+async function resolveExistingPdfPath(
+  resolved: string,
+  normalized: string,
+  companyId: string
+) {
   if (await fs.pathExists(resolved)) {
     return { resolved, normalized };
   }
@@ -69,9 +63,9 @@ async function resolveExistingPdfPath(resolved: string, normalized: string) {
   );
 
   for (const candidate of candidates) {
-    const alt = resolveDrivePath(candidate);
-    if (await fs.pathExists(alt.resolved)) {
-      return alt;
+    const altResolved = storagePathService.resolvePath(companyId, candidate);
+    if (await fs.pathExists(altResolved)) {
+      return { resolved: altResolved, normalized: candidate };
     }
   }
 
@@ -80,10 +74,18 @@ async function resolveExistingPdfPath(resolved: string, normalized: string) {
 
 export async function getPdfMetadata(req: Request, res: Response, next: NextFunction) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+
     const initial = getPdfPathFromRequest(req);
     const { resolved, normalized } = await resolveExistingPdfPath(
       initial.resolved,
-      initial.normalized
+      initial.normalized,
+      companyId
     );
 
     if (!normalized || !ensurePdfExtension(resolved)) {
@@ -119,10 +121,18 @@ export async function getPdfMetadata(req: Request, res: Response, next: NextFunc
 
 export async function getPdfPageImage(req: Request, res: Response, next: NextFunction) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+
     const initial = getPdfPathFromRequest(req);
     const { resolved, normalized } = await resolveExistingPdfPath(
       initial.resolved,
-      initial.normalized
+      initial.normalized,
+      companyId
     );
     const page = parseInt(String(req.query.page || '1'), 10);
     const scale = parseFloat(String(req.query.scale || '1.5'));
@@ -157,10 +167,18 @@ export async function getPdfPageImage(req: Request, res: Response, next: NextFun
 
 export async function getPdfPagePreviewGrid(req: Request, res: Response, next: NextFunction) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+
     const initial = getPdfPathFromRequest(req);
     const { resolved, normalized } = await resolveExistingPdfPath(
       initial.resolved,
-      initial.normalized
+      initial.normalized,
+      companyId
     );
     const page = parseInt(String(req.query.page || '1'), 10);
     const scale = parseFloat(String(req.query.scale || '1.5'));

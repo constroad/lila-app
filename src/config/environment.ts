@@ -14,7 +14,7 @@ if (process.env.NODE_ENV === 'development' || fs.existsSync(devEnvPath)) {
 }
 
 export const config = {
-  port: parseInt(process.env.PORT || '3000', 10),
+  port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   
   // WhatsApp
@@ -25,6 +25,7 @@ export const config = {
     qrTimeout: 60000, // 60 segundos
     aiEnabled: process.env.WHATSAPP_AI_ENABLED !== 'false',
     aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || '51949376824',
+    baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || 'fatal',
   },
   
   // Claude API
@@ -35,7 +36,13 @@ export const config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || '',
   },
-  
+
+  // MongoDB (Portal connection for quotas - MongoDB only)
+  mongodb: {
+    portalUri: process.env.PORTAL_MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017',
+    sharedDb: process.env.PORTAL_SHARED_DB || 'shared_db',
+  },
+
   // Cron Jobs
   jobs: {
     storageFile: process.env.CRONJOBS_STORAGE || './data/cronjobs.json',
@@ -50,12 +57,14 @@ export const config = {
     tempPublicBaseUrl: process.env.PDF_TEMP_PUBLIC_BASE_URL || '/pdf-temp',
   },
 
-  // Drive (local storage)
+  // Multi-tenant storage (Fase 9)
   drive: {
-    rootDir: process.env.DRIVE_ROOT_DIR || './data/drive',
-    publicBaseUrl: process.env.DRIVE_PUBLIC_BASE_URL || '/files',
     maxFileSizeMb: parseInt(process.env.DRIVE_MAX_FILE_SIZE_MB || '25', 10),
-    cacheDir: process.env.DRIVE_CACHE_DIR || './data/drive-cache',
+  },
+
+  // Storage root for multi-tenant files
+  storage: {
+    root: process.env.FILE_STORAGE_ROOT || '/mnt/constroad-storage',
   },
   
   // Logging
@@ -67,6 +76,7 @@ export const config = {
   // Security
   security: {
     apiSecretKey: process.env.API_SECRET_KEY || 'dev-secret-key',
+    jwtSecret: process.env.JWT_SECRET || 'dev-jwt-secret',
     rateLimitWindow: process.env.RATE_LIMIT_WINDOW || '5m',
     rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '200', 10),
   },

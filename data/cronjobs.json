@@ -81,25 +81,9 @@
     "url": "https://www.constroad.com/api/cron/kardex-check",
     "cronExpression": "0 10 * * *",
     "isActive": true,
-    "lastExecution": "2026-01-24T15:00:08.994Z",
+    "lastExecution": "2026-01-29T15:00:06.238Z",
     "status": "success",
     "history": [
-      {
-        "status": "success",
-        "timestamp": "2025-12-25T15:00:00.016Z"
-      },
-      {
-        "status": "success",
-        "timestamp": "2025-12-23T15:00:00.007Z"
-      },
-      {
-        "status": "success",
-        "timestamp": "2025-12-21T15:00:00.082Z"
-      },
-      {
-        "status": "success",
-        "timestamp": "2025-12-20T15:00:00.012Z"
-      },
       {
         "status": "error",
         "timestamp": "2025-12-19T15:00:00.167Z",
@@ -124,13 +108,29 @@
       {
         "status": "success",
         "timestamp": "2026-01-24T15:00:08.994Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2026-01-25T15:00:06.795Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2026-01-27T15:00:05.837Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2026-01-28T15:00:05.828Z"
+      },
+      {
+        "status": "success",
+        "timestamp": "2026-01-29T15:00:06.238Z"
       }
     ],
     "metadata": {
       "createdAt": "2025-12-29T22:35:17.803Z",
       "updatedAt": "2025-12-29T22:35:49.269Z",
       "failureCount": 0,
-      "lastRun": "2026-01-24T15:00:08.994Z"
+      "lastRun": "2026-01-29T15:00:06.238Z"
     },
     "retryPolicy": {
       "maxRetries": 3,
