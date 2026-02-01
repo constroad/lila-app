@@ -333,6 +333,35 @@ export class QuotaValidatorService {
   }
 
   /**
+   * Obtiene la empresa por número de WhatsApp configurado (sender)
+   */
+  public async getCompanyByWhatsappSender(sender: string): Promise<ICompany | null> {
+    if (!sender) return null;
+
+    if (!this.isReady()) {
+      await this.connect();
+    }
+
+    if (!this.CompanyModel) {
+      throw new Error('QuotaValidator not initialized');
+    }
+
+    const digits = sender.replace(/[^\d]/g, '');
+    const candidates = Array.from(new Set([
+      sender,
+      digits,
+      digits ? `+${digits}` : '',
+    ].filter(Boolean)));
+
+    const company = await this.CompanyModel.findOne({
+      isActive: true,
+      $or: candidates.map((value) => ({ 'whatsappConfig.sender': value })),
+    });
+
+    return company || null;
+  }
+
+  /**
    * Obtiene el periodo actual (YYYY-MM)
    */
   private getCurrentPeriod(): string {

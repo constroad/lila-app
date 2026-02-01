@@ -30,6 +30,11 @@ export interface ICompany extends Document {
   email?: string;
   phone?: string;
   address?: string;
+  whatsappConfig?: {
+    sender?: string;
+    adminGroupId?: string;
+    aiEnabled?: boolean;
+  };
 
   // Multi-tenant configuration
   limits: ICompanyLimits;
@@ -99,6 +104,11 @@ const CompanySchema = new Schema<ICompany>(
     },
     address: {
       type: String,
+    },
+    whatsappConfig: {
+      sender: { type: String },
+      adminGroupId: { type: String },
+      aiEnabled: { type: Boolean, default: false },
     },
     limits: {
       type: CompanyLimitsSchema,

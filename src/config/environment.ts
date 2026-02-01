@@ -23,7 +23,7 @@ export const config = {
     autoReconnect: process.env.WHATSAPP_AUTO_RECONNECT !== 'false',
     maxReconnectAttempts: parseInt(process.env.WHATSAPP_MAX_RECONNECT_ATTEMPTS || '0', 10),
     qrTimeout: 60000, // 60 segundos
-    aiEnabled: process.env.WHATSAPP_AI_ENABLED !== 'false',
+    aiEnabled: process.env.WHATSAPP_AI_ENABLED === 'true',
     aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || '51949376824',
     baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || 'fatal',
   },
@@ -71,6 +71,11 @@ export const config = {
   logging: {
     level: process.env.LOG_LEVEL || 'info',
     dir: process.env.LOG_DIR || './logs',
+  },
+
+  // Portal integration (internal actions)
+  portal: {
+    baseUrl: process.env.PORTAL_BASE_URL || 'http://localhost:3000',
   },
   
   // Security
