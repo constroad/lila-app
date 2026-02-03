@@ -61,6 +61,39 @@ export async function createSession(req: Request, res: Response, next: NextFunct
   }
 }
 
+/**
+ * Create session using Pairing Code (alternative to QR)
+ * User enters the code in WhatsApp: Settings → Linked Devices → Link with phone number
+ */
+export async function createPairingCodeSession(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { phoneNumber } = req.params;
+
+    if (!phoneNumber) {
+      const error: CustomError = new Error('phoneNumber is required');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    logger.info(`Creating pairing code session for ${phoneNumber}`);
+    connectionManager.enableSession(phoneNumber);
+
+    // Request pairing code instead of QR
+    const pairingCode = await connectionManager.requestPairingCode(phoneNumber);
+
+    res.status(HTTP_STATUS.CREATED).json({
+      success: true,
+      data: {
+        phoneNumber,
+        pairingCode,
+        instructions: 'Open WhatsApp → Settings → Linked Devices → Link with phone number → Enter this code',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getSessionStatus(req: Request, res: Response, next: NextFunction) {
   try {
     const { phoneNumber } = req.params;

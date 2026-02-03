@@ -22,8 +22,21 @@ import { uploadRateLimiter } from '../../middleware/company-rate-limiter.middlew
 
 const router = Router();
 const MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
-const tempDir = path.join(config.storage.root, 'temp', 'uploads');
-fs.ensureDirSync(tempDir);
+let tempDir = path.join(config.storage.root, 'temp', 'uploads');
+try {
+  fs.ensureDirSync(tempDir);
+} catch (error) {
+  if (config.nodeEnv !== 'production') {
+    const fallback = path.join(process.cwd(), 'data', 'storage', 'temp', 'uploads');
+    fs.ensureDirSync(fallback);
+    console.warn(
+      `[drive] Failed to init temp dir at ${tempDir}. Using fallback: ${fallback}`
+    );
+    tempDir = fallback;
+  } else {
+    throw error;
+  }
+}
 
 const upload = multer({
   storage: multer.diskStorage({

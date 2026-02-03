@@ -7,11 +7,14 @@ const router = Router();
 // GET /api/sessions/list - Obtener todas las sesiones
 router.get('/list', sessionController.listActiveSessions);
 
-// POST /api/sessions - Crear nueva sesión WhatsApp
+// POST /api/sessions - Crear nueva sesión WhatsApp (QR method)
 router.post('/', sessionLimiter, sessionController.createSession);
 
 // GET /api/sessions/:phoneNumber/qr - Obtener QR como imagen PNG
 router.get('/:phoneNumber/qr', sessionController.getQRCodeImage);
+
+// POST /api/sessions/:phoneNumber/request-pairing-code - Solicitar código de emparejamiento
+router.post('/:phoneNumber/request-pairing-code', sessionLimiter, sessionController.createPairingCodeSession);
 
 // GET /api/sessions/:phoneNumber/status - Obtener estado de sesión
 router.get('/:phoneNumber/status', sessionController.getSessionStatus);

@@ -3,6 +3,12 @@ import {
   DisconnectReason,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
+  jidNormalizedUser,
+  areJidsSameUser,
+  isJidGroup,
+  jidEncode,
+  isLidUser,
+  Browsers,
 } from '@whiskeysockets/baileys';
 import { isBoom } from '@hapi/boom';
 import fs from 'fs-extra';
@@ -111,6 +117,7 @@ export class ConnectionManager {
   private signalDecryptCleanupInFlight: Set<string> = new Set();
   private disabledSessions: Set<string> = new Set();
   private manualDisconnects: Set<string> = new Set();
+  private groupCapabilitiesVerified: Set<string> = new Set();
 
   constructor() {
     signalDecryptErrorHandler = this.handleSignalDecryptError.bind(this);
@@ -200,6 +207,10 @@ export class ConnectionManager {
           shouldIgnoreJid: (jid) => /status@broadcast/.test(jid),
           printQRInTerminal: false,
           logger: pino({ level: config.whatsapp.baileysLogLevel }),
+          // 🔧 FIX: Browser specification (from notifications project)
+          browser: Browsers.ubuntu('Chrome'),
+          // 🔧 FIX: Explicit WebSocket URL (from notifications project)
+          waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
         });
 
         this.contactsBySession.set(sessionPhone, new Map());
@@ -222,6 +233,65 @@ export class ConnectionManager {
       return await connectPromise;
     } finally {
       this.connectInFlight.delete(sessionPhone);
+    }
+  }
+
+  /**
+   * Request pairing code for session (alternative to QR)
+   * Returns 8-character code that user enters in WhatsApp
+   */
+  async requestPairingCode(sessionPhone: string): Promise<string> {
+    try {
+      logger.info(`🔢 Requesting pairing code for ${sessionPhone}`);
+
+      const sessionDir = path.join(config.whatsapp.sessionDir, sessionPhone);
+      await fs.ensureDir(sessionDir);
+
+      const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+      const { version } = await fetchLatestBaileysVersion();
+
+      const socket = makeWASocket({
+        auth: state,
+        version,
+        logger: pino({ level: 'silent' }),
+        browser: Browsers.ubuntu('Chrome'),
+        waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
+        printQRInTerminal: false,
+      });
+
+      this.connections.set(sessionPhone, socket);
+      this.setupListeners(socket, sessionPhone, sessionDir, saveCreds);
+
+      // Wait for socket to be ready to request pairing code
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Timeout waiting for pairing code'));
+        }, 30000);
+
+        socket.ev.on('connection.update', async (update) => {
+          const { connection } = update;
+
+          if (connection === 'connecting' && !socket.authState.creds.registered) {
+            try {
+              const code = await socket.requestPairingCode(sessionPhone);
+              clearTimeout(timeout);
+              logger.info(`✅ Pairing code generated: ${code}`);
+              resolve(code);
+            } catch (err) {
+              clearTimeout(timeout);
+              logger.error(`❌ Error requesting pairing code: ${err}`);
+              reject(err);
+            }
+          }
+
+          if (connection === 'open') {
+            clearTimeout(timeout);
+          }
+        });
+      });
+    } catch (error) {
+      logger.error(`Error requesting pairing code for ${sessionPhone}:`, error);
+      throw error;
     }
   }
 
@@ -253,6 +323,13 @@ export class ConnectionManager {
       return true;
     }
 
+    const existingSocket = this.connections.get(sessionPhone);
+    if (existingSocket) {
+      logger.warn(
+        `ensureConnected: ${sessionPhone} socket exists but state=${this.connectionStates.get(sessionPhone)}`
+      );
+    }
+
     // Esperar a que la conexión se establezca
     const start = Date.now();
     const connected = await new Promise<boolean>((resolve) => {
@@ -272,6 +349,8 @@ export class ConnectionManager {
 
     if (!connected) {
       logger.warn(`Connection timeout for ${sessionPhone} after ${timeoutMs}ms`);
+      const state = this.connectionStates.get(sessionPhone);
+      logger.warn(`Connection state for ${sessionPhone} on timeout: ${state}`);
       this.cleanupSession(sessionPhone, { clearQr: false });
       this.scheduleReconnect(sessionPhone);
     }
@@ -490,6 +569,58 @@ export class ConnectionManager {
         await this.clearSessionMarker(sessionPhone);
         this.qrIssuedAt.delete(sessionPhone);
         logger.info(`✅ Connection established for ${sessionPhone}`);
+
+        // DEBUG: Log socket.user state
+        logger.info(`🔍 socket.user state: ${socket.user ? JSON.stringify({id: socket.user.id, name: socket.user.name}) : 'NULL'}`);
+        logger.info(`🔍 creds.me state: ${socket.authState?.creds?.me ? JSON.stringify({id: socket.authState.creds.me.id, name: socket.authState.creds.me.name}) : 'NULL'}`);
+
+        // 🔧 FIX CRÍTICO: Establecer socket.user explícitamente si no existe
+        if (!socket.user && socket.authState?.creds?.me) {
+          logger.info(`🔧 Fixing socket.user from creds.me for ${sessionPhone}`);
+          socket.user = {
+            id: socket.authState.creds.me.id,
+            name: socket.authState.creds.me.name,
+            lid: socket.authState.creds.me.lid,
+          };
+          logger.info(`✅ socket.user established: ${JSON.stringify({id: socket.user.id, name: socket.user.name})}`);
+        }
+
+        // 🔒 VALIDACIÓN DE DEVICE ID: Verificar que el device ID sea válido
+        if (socket.user?.id) {
+          const deviceIdMatch = socket.user.id.match(/:(\d+)@/);
+          if (deviceIdMatch) {
+            const deviceId = parseInt(deviceIdMatch[1], 10);
+            logger.info(`📱 Device ID detected: ${deviceId}`);
+
+            // Advertir si el device ID es anormalmente alto (> 10)
+            if (deviceId > 10) {
+              logger.warn(`⚠️ WARNING: Abnormally high device ID (${deviceId}). This may indicate:`);
+              logger.warn(`   - Corrupted pairing process`);
+              logger.warn(`   - WhatsApp Web/Desktop pairing instead of primary device`);
+              logger.warn(`   - Potential issues with group messaging`);
+              logger.warn(`   Recommendation: Clear session and re-pair with PRIMARY WhatsApp app`);
+            } else if (deviceId === 0) {
+              logger.info(`✅ Primary device detected (ID: 0) - Full functionality available`);
+            } else {
+              logger.info(`📱 Linked device detected (ID: ${deviceId}) - Normal operation`);
+            }
+          }
+        }
+
+        // 🧪 VERIFICACIÓN POST-PAIRING: Test group capabilities
+        // Solo ejecutar esto para conexiones nuevas, no reconnects
+        if (!this.hasVerifiedGroupCapabilities(sessionPhone)) {
+          this.scheduleGroupCapabilityTest(sessionPhone, socket);
+        }
+
+        // 🔧 FIX: Send presence update after connection opens (from notifications project)
+        try {
+          await socket.sendPresenceUpdate('available');
+          logger.info(`✅ Presence set to 'available' for ${sessionPhone}`);
+        } catch (error) {
+          logger.warn(`Failed to set presence for ${sessionPhone}: ${String(error)}`);
+        }
+
         this.qrCodes.delete(sessionPhone);
         this.resetReconnectState(sessionPhone);
         await this.flushOutbox(sessionPhone);
@@ -535,6 +666,8 @@ export class ConnectionManager {
         store.set(update.id, { ...existing, ...update });
       });
     });
+
+    // Group metadata is fetched on-demand via getGroups() to avoid rate-overlimit on connection
 
     // Guardar credenciales
     socket.ev.on('creds.update', saveCreds);
@@ -755,6 +888,17 @@ export class ConnectionManager {
     }
 
     try {
+      // 🔧 CRITICAL FIX: Assert sessions before sending to groups
+      if (isJidGroup(recipient)) {
+        logger.info(`📨 Preparing to send group message to ${recipient}`);
+        await this.assertGroupSessions(socket, recipient);
+
+        // ⏳ Additional delay to ensure sessions are fully persisted
+        logger.info(`⏳ Extra 3s delay to ensure session persistence...`);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        logger.info(`✅ Ready to send after persistence delay`);
+      }
+
       await socket.sendMessage(recipient, { text });
       return { queued: false };
     } catch (error) {
@@ -880,6 +1024,7 @@ export class ConnectionManager {
     this.groupsCache.delete(sessionPhone);
     this.groupsInFlight.delete(sessionPhone);
     this.clearConnectWatchdog(sessionPhone);
+    this.clearGroupCapabilityVerification(sessionPhone);
     if (options.clearQr) {
       this.qrCodes.delete(sessionPhone);
       this.qrIssuedAt.delete(sessionPhone);
@@ -1869,6 +2014,170 @@ export class ConnectionManager {
         logger.warn(`Failed to flush queued message ${item.id}: ${String(error)}`);
         break;
       }
+    }
+  }
+
+  /**
+   * Verifica si ya se han verificado las capacidades de grupo para una sesión
+   */
+  private hasVerifiedGroupCapabilities(sessionPhone: string): boolean {
+    return this.groupCapabilitiesVerified.has(sessionPhone);
+  }
+
+  /**
+   * Programa una prueba de capacidades de grupo después de establecer conexión
+   */
+  private scheduleGroupCapabilityTest(sessionPhone: string, socket: any): void {
+    // Esperar 5 segundos después de la conexión para dar tiempo a la sincronización
+    setTimeout(async () => {
+      try {
+        logger.info(`🧪 Testing group capabilities for ${sessionPhone}`);
+
+        // Intentar obtener lista de grupos como test básico
+        const groups = await socket.groupFetchAllParticipating();
+        const groupCount = Object.keys(groups || {}).length;
+
+        logger.info(`✅ Group capability test passed: Found ${groupCount} groups`);
+
+        // Si el test pasa, marcar como verificado
+        this.groupCapabilitiesVerified.add(sessionPhone);
+
+        // Validación adicional: verificar que assertSessions funcione
+        if (groupCount > 0) {
+          const firstGroupId = Object.keys(groups)[0];
+          try {
+            const participants = groups[firstGroupId]?.participants || [];
+            if (participants.length > 0) {
+              const testJids = participants.slice(0, 1).map((p: any) => p.id);
+              await socket.assertSessions(testJids, false);
+              logger.info(`✅ assertSessions test passed for ${sessionPhone}`);
+            }
+          } catch (assertError) {
+            logger.warn(`⚠️ assertSessions test failed: ${String(assertError)}`);
+            logger.warn(`   This may indicate limited group messaging capabilities`);
+          }
+        }
+      } catch (error) {
+        logger.error(`❌ Group capability test failed for ${sessionPhone}: ${String(error)}`);
+        logger.warn(`   Device may have limited group messaging capabilities`);
+        logger.warn(`   Consider re-pairing with PRIMARY WhatsApp app`);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Limpia el estado de verificación de capacidades al desconectar
+   */
+  private clearGroupCapabilityVerification(sessionPhone: string): void {
+    this.groupCapabilitiesVerified.delete(sessionPhone);
+  }
+
+  /**
+   * Establece sesiones para participantes de un grupo antes de enviar mensajes
+   * Esta es la función CRÍTICA que faltaba integrar en el flujo de envío
+   */
+  private async assertGroupSessions(socket: any, groupJid: string): Promise<void> {
+    try {
+      logger.info(`🔄 Asserting sessions for group ${groupJid}...`);
+
+      // Obtener metadatos del grupo
+      const metadata = await socket.groupMetadata(groupJid);
+      const participants = (metadata?.participants || [])
+        .map((p: any) => p?.id)
+        .filter(Boolean);
+
+      if (participants.length === 0) {
+        logger.warn(`Group ${groupJid} has no participants`);
+        return;
+      }
+
+      logger.info(`📋 Group has ${participants.length} participants`);
+
+      // Obtener propios JIDs para excluirlos
+      const ownJids = [
+        socket?.user?.id,
+        socket?.user?.lid,
+        socket?.authState?.creds?.me?.id,
+        socket?.authState?.creds?.me?.lid,
+      ]
+        .filter(Boolean)
+        .map((jid) => jidNormalizedUser(jid as string));
+
+      // Normalizar y filtrar participantes
+      const normalizedParticipants = Array.from(new Set(participants))
+        .filter((jid) => typeof jid === 'string')
+        .map((jid) => jidNormalizedUser(jid as string))
+        .filter(Boolean);
+
+      // Expandir LID participants
+      const useLid = normalizedParticipants.some((jid) => isLidUser(jid));
+      const expandedParticipants = normalizedParticipants.flatMap((jid) => {
+        if (!isLidUser(jid)) {
+          return [jid];
+        }
+        const user = jid.split('@')[0] || '';
+        if (!user) {
+          return [jid];
+        }
+        return [jid, jidEncode(user, 's.whatsapp.net')];
+      });
+
+      // Filtrar: solo s.whatsapp.net y lid, excluyendo propios JIDs
+      const filtered = expandedParticipants
+        .filter((jid) => isLidUser(jid) || jid.endsWith('@s.whatsapp.net') || jid.endsWith('@c.us'))
+        .filter((jid) => !ownJids.some((ownJid) => areJidsSameUser(jid, ownJid)));
+
+      if (filtered.length === 0) {
+        logger.warn(`No participants to assert sessions for in ${groupJid}`);
+        return;
+      }
+
+      logger.info(`🔄 Asserting sessions for ${filtered.length} filtered participants...`);
+
+      // Assert user-level sessions
+      await socket.assertSessions(filtered, true);
+      logger.info(`✅ User-level sessions asserted`);
+
+      // Esperar para dar tiempo a que se establezcan las sesiones
+      const waitTime = Math.min(2000 + (filtered.length * 50), 10000);
+      logger.info(`⏳ Waiting ${waitTime}ms for sessions to establish...`);
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+
+      // Assert device-level sessions si está disponible
+      if (typeof socket.getUSyncDevices === 'function') {
+        try {
+          const devices = await socket.getUSyncDevices(normalizedParticipants, false, false);
+          const deviceJids = Array.from(
+            new Set(
+              devices
+                .map((device: { user: string; device?: number }) =>
+                  useLid
+                    ? [
+                        jidEncode(device.user, 'lid', device.device),
+                        jidEncode(device.user, 's.whatsapp.net', device.device),
+                      ]
+                    : [jidEncode(device.user, 's.whatsapp.net', device.device)]
+                )
+                .flat()
+                .filter(Boolean)
+            )
+          ).filter((jid) => !ownJids.some((ownJid) => areJidsSameUser(jid, ownJid)));
+
+          if (deviceJids.length > 0) {
+            logger.info(`🔄 Asserting ${deviceJids.length} device-level sessions...`);
+            await socket.assertSessions(deviceJids, true);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            logger.info(`✅ Device-level sessions asserted`);
+          }
+        } catch (error) {
+          logger.warn(`Failed to assert device sessions: ${String(error)}`);
+        }
+      }
+
+      logger.info(`✅ All sessions asserted for ${groupJid}, ready to send`);
+    } catch (error) {
+      logger.error(`Failed to assert group sessions for ${groupJid}: ${String(error)}`);
+      // No lanzar error - dejar que el intento de envío sea la prueba final
     }
   }
 }
