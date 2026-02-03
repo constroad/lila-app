@@ -23,7 +23,7 @@ Sistema completo de gestión de WhatsApp multi-sesión con agente conversacional
 
 1. **Clonar repositorio**
 ```bash
-cd /Users/josezamora/projects/mvp-api
+cd /Users/josezamora/projects/lila-app
 ```
 
 2. **Instalar dependencias**

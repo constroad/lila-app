@@ -41,6 +41,7 @@ export async function createSession(req: Request, res: Response, next: NextFunct
     }
 
     logger.info(`Creating session for ${phoneNumber}`);
+    connectionManager.enableSession(phoneNumber);
 
     await connectionManager.createConnection(phoneNumber);
     const qr = await waitForQRCode(phoneNumber);
@@ -97,7 +98,7 @@ export async function disconnectSession(req: Request, res: Response, next: NextF
       return next(error);
     }
 
-    await connectionManager.disconnect(phoneNumber);
+    await connectionManager.disconnectManual(phoneNumber);
 
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -138,6 +139,8 @@ export async function getQRCodeImage(req: Request, res: Response, next: NextFunc
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
+
+    connectionManager.enableSession(phoneNumber);
 
     if (!connectionManager.getConnection(phoneNumber)) {
       await connectionManager.createConnection(phoneNumber);
@@ -258,7 +261,7 @@ export async function logoutSession(req: Request, res: Response, next: NextFunct
       return next(error);
     }
 
-    await connectionManager.disconnect(phoneNumber);
+    await connectionManager.disconnectManual(phoneNumber);
 
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -290,6 +293,7 @@ export async function restoreSessionFromBackup(req: Request, res: Response, next
     }
 
     logger.info(`Attempting to restore session ${phoneNumber} from backup`);
+    connectionManager.enableSession(phoneNumber);
 
     // Desconectar sesión existente si hay
     try {
@@ -373,6 +377,27 @@ export async function resetReconnectState(req: Request, res: Response, next: Nex
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: `Reconnect state reset for ${phoneNumber}`,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function clearSession(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { phoneNumber } = req.params;
+
+    if (!phoneNumber) {
+      const error: CustomError = new Error('phoneNumber is required');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    await connectionManager.clearSession(phoneNumber);
+
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: `Session ${phoneNumber} cleared`,
     });
   } catch (error) {
     next(error);

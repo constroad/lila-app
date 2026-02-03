@@ -85,7 +85,6 @@ const CompanySchema = new Schema<ICompany>(
       type: String,
       required: true,
       unique: true,
-      index: true,
     },
     name: {
       type: String,
@@ -131,7 +130,6 @@ const CompanySchema = new Schema<ICompany>(
 // INDEXES
 // ============================================================================
 
-CompanySchema.index({ companyId: 1 });
 CompanySchema.index({ isActive: 1 });
 
 // ============================================================================

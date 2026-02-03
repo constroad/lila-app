@@ -115,7 +115,7 @@ app.use(errorHandler);
 // Inicialización del servidor
 async function startServer() {
   try {
-    logger.info('🚀 Starting WhatsApp AI Agent Server...');
+    logger.info('🚀 Starting WhatsApp Server...');
 
     // Inicializar QuotaValidator (Fase 10 - MongoDB only)
     logger.info('Initializing Quota Validator...');
@@ -128,7 +128,6 @@ async function startServer() {
     }
 
     // Inicializar servicios
-    logger.info('Initializing PDF Generator...');
     await pdfGenerator.initialize();
     await fs.ensureDir(config.pdf.tempDir);
 

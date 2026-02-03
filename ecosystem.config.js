@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'mvp-api-whatsapp',
+      name: 'lila-app-whatsapp',
       script: './dist/index.js',
       exec_mode: 'cluster',
       instances: 1,

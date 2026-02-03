@@ -3,7 +3,6 @@ import agentService from './agent.service.js';
 import conversationManager from './conversation.manager.js';
 import typingSimulator from './typing-simulator.js';
 import { WhatsAppMessage, Conversation } from '../../types/index.js';
-import { validateMessage } from '../../utils/validators.js';
 import { config } from '../../config/environment.js';
 import { sendClientReportAction } from '../../services/portal-actions.service.js';
 import { quotaValidatorService } from '../../services/quota-validator.service.js';
@@ -23,20 +22,12 @@ export class MessageListener {
         return;
       }
 
-      // 2. Validar que es un mensaje de texto
-      if (!validateMessage(message.message)) {
-        logger.debug(`Skipping non-text message from ${message.key.remoteJid}`);
-        return;
-      }
-
-      // 3. Extraer información del remitente
+      // 2. Extraer información del remitente y texto (incluye wrappers ephemeral/viewOnce)
       const chatId = message.key.remoteJid;
-      const messageText =
-        message.message?.conversation ||
-        message.message?.extendedTextMessage?.text ||
-        '';
+      const { text: messageText, quotedText } = this.extractMessageText(message);
 
       if (!messageText.trim()) {
+        logger.debug(`Skipping non-text message from ${chatId}`);
         return;
       }
 
@@ -48,7 +39,13 @@ export class MessageListener {
       }
 
       // 4.1 Acciones internas (client-report)
-      const actionHandled = await this.handleClientReportAction(messageText, chatId, sessionPhone, whatsAppClient);
+      const actionHandled = await this.handleClientReportAction(
+        messageText,
+        quotedText,
+        chatId,
+        sessionPhone,
+        whatsAppClient
+      );
       if (actionHandled) {
         return;
       }
@@ -232,15 +229,11 @@ export class MessageListener {
 
   private async handleClientReportAction(
     messageText: string,
+    quotedText: string,
     chatId: string,
     sessionPhone: string,
     whatsAppClient: any
   ): Promise<boolean> {
-    const quotedText =
-      message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.conversation ||
-      message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.extendedTextMessage?.text ||
-      '';
-
     const parsed = this.parseActionCommand(messageText, quotedText);
     if (!parsed) return false;
 
@@ -290,6 +283,60 @@ export class MessageListener {
       });
       return true;
     }
+  }
+
+  private extractMessageText(message: WhatsAppMessage): { text: string; quotedText: string } {
+    const unwrapContent = (content: any): any => {
+      let current = content;
+      for (let i = 0; i < 4; i += 1) {
+        if (current?.ephemeralMessage?.message) {
+          current = current.ephemeralMessage.message;
+          continue;
+        }
+        if (current?.viewOnceMessage?.message) {
+          current = current.viewOnceMessage.message;
+          continue;
+        }
+        if (current?.viewOnceMessageV2?.message) {
+          current = current.viewOnceMessageV2.message;
+          continue;
+        }
+        if (current?.viewOnceMessageV2Extension?.message) {
+          current = current.viewOnceMessageV2Extension.message;
+          continue;
+        }
+        break;
+      }
+      return current;
+    };
+
+    const extractText = (content: any): string => {
+      if (!content || typeof content !== 'object') return '';
+      return (
+        content.conversation ||
+        content.extendedTextMessage?.text ||
+        content.imageMessage?.caption ||
+        content.videoMessage?.caption ||
+        content.documentMessage?.caption ||
+        content.buttonsResponseMessage?.selectedButtonId ||
+        content.buttonsResponseMessage?.selectedDisplayText ||
+        content.listResponseMessage?.title ||
+        content.listResponseMessage?.singleSelectReply?.selectedRowId ||
+        ''
+      );
+    };
+
+    const content = unwrapContent(message.message);
+    const text = extractText(content);
+
+    const contextInfo =
+      content?.extendedTextMessage?.contextInfo ||
+      content?.buttonsResponseMessage?.contextInfo ||
+      content?.listResponseMessage?.contextInfo;
+    const quoted = unwrapContent(contextInfo?.quotedMessage);
+    const quotedText = extractText(quoted);
+
+    return { text, quotedText };
   }
 
   private async notifyHumanAgent(

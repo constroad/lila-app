@@ -140,7 +140,7 @@ var init_logger = __esm({
           return `${timestamp} [${level.toUpperCase()}]: ${message} ${Object.keys(meta).length ? JSON.stringify(meta, null, 2) : ""}`;
         })
       ),
-      defaultMeta: { service: "mvp-api" },
+      defaultMeta: { service: "lila-app" },
       transports: [
         new winston.transports.File({
           filename: path2.join(logDir, "error.log"),

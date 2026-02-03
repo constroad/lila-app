@@ -4,6 +4,29 @@ import { config } from '../config/environment.js';
 
 const logDir = config.logging.dir;
 
+const safeStringify = (value: unknown): string => {
+  const seen = new WeakSet();
+  return JSON.stringify(
+    value,
+    (key, val) => {
+      if (val instanceof Error) {
+        return {
+          message: val.message,
+          stack: val.stack,
+        };
+      }
+      if (typeof val === 'object' && val !== null) {
+        if (seen.has(val)) {
+          return '[Circular]';
+        }
+        seen.add(val);
+      }
+      return val;
+    },
+    2
+  );
+};
+
 const logger = winston.createLogger({
   level: config.logging.level,
   format: winston.format.combine(
@@ -13,11 +36,11 @@ const logger = winston.createLogger({
     winston.format.json(),
     winston.format.printf(({ timestamp, level, message, ...meta }) => {
       return `${timestamp} [${level.toUpperCase()}]: ${message} ${
-        Object.keys(meta).length ? JSON.stringify(meta, null, 2) : ''
+        Object.keys(meta).length ? safeStringify(meta) : ''
       }`;
     })
   ),
-  defaultMeta: { service: 'mvp-api' },
+  defaultMeta: { service: 'lila-app' },
   transports: [
     new winston.transports.File({
       filename: path.join(logDir, 'error.log'),
@@ -41,7 +64,7 @@ if (config.nodeEnv === 'development') {
         winston.format.colorize(),
         winston.format.printf(({ timestamp, level, message, ...meta }) => {
           const metaStr = Object.keys(meta).length
-            ? JSON.stringify(meta, null, 2)
+            ? safeStringify(meta)
             : '';
           return `${timestamp} [${level}]: ${message} ${metaStr}`;
         })

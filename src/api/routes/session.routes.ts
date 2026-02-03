@@ -19,6 +19,9 @@ router.get('/:phoneNumber/status', sessionController.getSessionStatus);
 // POST /api/sessions/:phoneNumber/logout - Cerrar sesión activa
 router.post('/:phoneNumber/logout', sessionController.logoutSession);
 
+// POST /api/sessions/:phoneNumber/clear - Eliminar sesión y credenciales
+router.post('/:phoneNumber/clear', sessionController.clearSession);
+
 // GET /api/sessions/:phoneNumber/groups - Listar grupos de WhatsApp
 router.get('/:phoneNumber/groups', sessionController.getGroupList);
 

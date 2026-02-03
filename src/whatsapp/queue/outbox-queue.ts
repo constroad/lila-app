@@ -58,6 +58,11 @@ export class OutboxQueue {
     const next = queue.filter((item) => item.id !== id);
     await this.store.set(sessionPhone, next);
   }
+
+  async clear(sessionPhone: string): Promise<void> {
+    await this.store.set(sessionPhone, []);
+    logger.info(`Cleared outbound queue for ${sessionPhone}`);
+  }
 }
 
 export default new OutboxQueue();

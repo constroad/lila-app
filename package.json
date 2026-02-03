@@ -1,5 +1,5 @@
 {
-  "name": "mvp-api-whatsapp-ai",
+  "name": "lila-app-whatsapp-ai",
   "version": "1.0.0",
   "description": "WhatsApp API con Agente IA para CONSTROAD",
   "main": "dist/index.js",

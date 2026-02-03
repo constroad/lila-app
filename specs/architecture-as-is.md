@@ -1,4 +1,4 @@
-# Arquitectura As-Is - mvp-api
+# Arquitectura As-Is - lila-app
 
 ## Resumen
 Sistema API en Node.js/TypeScript que expone endpoints para:

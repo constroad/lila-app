@@ -8,12 +8,55 @@ import fs from 'fs-extra';
 import path from 'path';
 import pino from 'pino';
 import logger from '../../utils/logger.js';
-import messageListener from '../ai-agent/message.listener.js';
 import { config } from '../../config/environment.js';
 import outboxQueue from '../queue/outbox-queue.js';
 
 // 🔇 Silenciar logs ruidosos de Signal Protocol/Baileys
 const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const signalDecryptErrorPatterns = [
+  'Bad MAC',
+  'Session error: Error: Bad MAC',
+  'Session error:Error: Bad MAC',
+  'Failed to decrypt message with any known session',
+  'MessageCounterError: Key used already or never filled',
+  'MessageCounterError',
+];
+
+type SignalDecryptErrorPayload = {
+  message: string;
+  stack?: string;
+};
+
+let signalDecryptErrorHandler: ((payload: SignalDecryptErrorPayload) => void) | null = null;
+
+const extractConsoleErrorPayload = (args: any[]): SignalDecryptErrorPayload => {
+  let message = '';
+  let stack: string | undefined;
+
+  for (const arg of args) {
+    if (arg instanceof Error) {
+      message = message ? `${message} ${arg.message}` : arg.message;
+      stack = stack || arg.stack;
+      continue;
+    }
+    if (typeof arg === 'string') {
+      message = message ? `${message} ${arg}` : arg;
+      continue;
+    }
+    if (arg && typeof arg === 'object') {
+      const maybeMessage = (arg as { message?: unknown }).message;
+      if (typeof maybeMessage === 'string') {
+        message = message ? `${message} ${maybeMessage}` : maybeMessage;
+      }
+    }
+  }
+
+  return {
+    message: message.trim(),
+    stack,
+  };
+};
 console.log = (...args: any[]) => {
   const message = args.join(' ');
   // Filtrar mensajes de Signal Protocol que ensucian la consola
@@ -22,17 +65,36 @@ console.log = (...args: any[]) => {
     message.includes('Closing session: SessionEntry') ||
     message.includes('_chains:') ||
     message.includes('registrationId:') ||
-    message.includes('currentRatchet:')
+    message.includes('currentRatchet:') ||
+    signalDecryptErrorPatterns.some((pattern) => message.includes(pattern))
   ) {
     return; // Silenciar estos mensajes
   }
   originalConsoleLog.apply(console, args);
+};
+console.error = (...args: any[]) => {
+  const payload = extractConsoleErrorPayload(args);
+  if (signalDecryptErrorPatterns.some((pattern) => payload.message.includes(pattern))) {
+    signalDecryptErrorHandler?.(payload);
+    return;
+  }
+  originalConsoleError.apply(console, args);
+};
+
+type BackupEntry = {
+  name: string;
+  id: string;
+  type: 'full' | 'creds';
+  path: string;
+  mtimeMs: number;
+  isDir: boolean;
 };
 
 export class ConnectionManager {
   private connections: Map<string, any> = new Map();
   private connectionStates: Map<string, 'open' | 'close' | 'connecting'> = new Map();
   private qrCodes: Map<string, string> = new Map();
+  private qrIssuedAt: Map<string, number> = new Map();
   private contactsBySession: Map<string, Map<string, any>> = new Map();
   private groupsCache: Map<string, { ts: number; data: Array<{ id: string; name: string }> }> =
     new Map();
@@ -43,6 +105,15 @@ export class ConnectionManager {
   private reconnectAttempts: Map<string, number> = new Map();
   private connectWatchdogs: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private sessionRecoveryWatchdog: ReturnType<typeof setTimeout> | null = null;
+  private signalDecryptStats: Map<string, { count: number; lastAt: number; lastCleanupAt: number }> =
+    new Map();
+  private signalDecryptCleanupInFlight: Set<string> = new Set();
+  private disabledSessions: Set<string> = new Set();
+  private manualDisconnects: Set<string> = new Set();
+
+  constructor() {
+    signalDecryptErrorHandler = this.handleSignalDecryptError.bind(this);
+  }
 
   async createConnection(sessionPhone: string): Promise<any> {
     const existing = this.connections.get(sessionPhone);
@@ -62,18 +133,58 @@ export class ConnectionManager {
         this.connectionStates.set(sessionPhone, 'connecting');
 
         const sessionDir = path.join(config.whatsapp.sessionDir, sessionPhone);
-        const credsPath = path.join(sessionDir, 'creds.json');
+        if (!this.isSessionDisabled(sessionPhone)) {
+          await this.clearSessionMarker(sessionPhone);
+        }
 
-        // 🛡️ PROTECCIÓN CRÍTICA: Restaurar automáticamente desde backup si no hay credenciales
-        const hasCredentials = await fs.pathExists(credsPath);
-        if (!hasCredentials) {
-          logger.warn(`⚠️ No credentials found for ${sessionPhone}, attempting auto-recovery from backup`);
+        // 🛡️ PROTECCIÓN CRÍTICA: Validar integridad del auth state (creds + key material)
+        const authState = await this.inspectAuthState(sessionDir);
+        const hasUsableAuthState =
+          authState.hasCreds && (authState.hasKeyMaterial || !authState.hasIdentity);
+
+        if (!hasUsableAuthState) {
+          if (authState.hasCreds && !authState.hasKeyMaterial && authState.hasIdentity) {
+            logger.warn(
+              `⚠️ Detected partial auth state for ${sessionPhone} (creds without key material), attempting recovery`
+            );
+          } else if (!authState.hasCreds) {
+            logger.warn(`⚠️ No credentials found for ${sessionPhone}, attempting auto-recovery from backup`);
+          }
+
           const recovered = await this.autoRecoverSession(sessionPhone);
 
           if (recovered) {
             logger.info(`✅ Successfully auto-recovered session ${sessionPhone} from backup`);
+            const postState = await this.inspectAuthState(sessionDir);
+            const postUsable =
+              postState.hasCreds && (postState.hasKeyMaterial || !postState.hasIdentity);
+            if (!postUsable && postState.hasCreds && postState.hasIdentity) {
+              if (this.isWithinQrGracePeriod(sessionPhone)) {
+                logger.warn(
+                  `⚠️ Recovered backup for ${sessionPhone} is incomplete but QR pairing is recent; skipping auth reset`
+                );
+              } else {
+                logger.warn(
+                  `⚠️ Recovered backup for ${sessionPhone} is incomplete (missing key material), clearing auth state to force QR`
+                );
+                await this.backupAndResetAuthState(sessionPhone, sessionDir);
+              }
+            }
           } else {
-            logger.warn(`⚠️ No valid backup found for ${sessionPhone}, will generate new QR`);
+            if (authState.hasCreds && !authState.hasKeyMaterial && authState.hasIdentity) {
+              if (this.isWithinQrGracePeriod(sessionPhone)) {
+                logger.warn(
+                  `⚠️ No valid backup found for ${sessionPhone} but QR pairing is recent; skipping auth reset`
+                );
+              } else {
+                logger.warn(
+                  `⚠️ No valid backup found for ${sessionPhone} and auth state is incomplete, clearing auth state to force QR`
+                );
+                await this.backupAndResetAuthState(sessionPhone, sessionDir);
+              }
+            } else if (!authState.hasCreds) {
+              logger.warn(`⚠️ No valid backup found for ${sessionPhone}, will generate new QR`);
+            }
           }
         }
 
@@ -120,6 +231,11 @@ export class ConnectionManager {
   ): Promise<boolean> {
     // 🛡️ PUNTO CRÍTICO: Este método se llama antes de cada operación (enviar mensaje, etc.)
     // Aquí debemos asegurar auto-recuperación si no hay conexión
+
+    if (this.isSessionDisabled(sessionPhone)) {
+      logger.warn(`Session ${sessionPhone} is disabled, skipping auto-connect`);
+      return false;
+    }
 
     if (!this.connections.has(sessionPhone)) {
       try {
@@ -181,8 +297,18 @@ export class ConnectionManager {
     const sessionsWithCreds: string[] = [];
 
     for (const sessionPhone of sessionDirs.filter(Boolean) as string[]) {
-      const credsPath = path.join(baseDir, sessionPhone, 'creds.json');
-      if (await fs.pathExists(credsPath)) {
+      const sessionDir = path.join(baseDir, sessionPhone);
+      if (await this.hasSessionClearMarker(sessionPhone)) {
+        logger.info(`Skipping cleared session ${sessionPhone} during reconnect`);
+        continue;
+      }
+      const authState = await this.inspectAuthState(sessionDir);
+      if (authState.hasCreds) {
+        if (authState.hasCreds && !authState.hasKeyMaterial && authState.hasIdentity) {
+          logger.warn(
+            `⚠️ Partial auth state detected for ${sessionPhone} during reconnect, attempting recovery`
+          );
+        }
         sessionsWithCreds.push(sessionPhone);
         try {
           await this.createConnection(sessionPhone);
@@ -239,16 +365,34 @@ export class ConnectionManager {
         const qrText = typeof qr === 'string' ? qr : String(qr);
         logger.info(`QR Code for ${sessionPhone}`);
         this.qrCodes.set(sessionPhone, qrText);
+        this.qrIssuedAt.set(sessionPhone, Date.now());
         // Aquí se podría emitir un evento para mostrar el QR en una interfaz web
       }
 
-      if (connection === 'close') {
-        this.clearConnectWatchdog(sessionPhone);
-        const reason = this.getDisconnectReason(lastDisconnect?.error);
-        const errorMessage = lastDisconnect?.error ? String(lastDisconnect.error) : '';
-        const reasonName = this.getDisconnectReasonName(reason);
+        if (connection === 'close') {
+          this.clearConnectWatchdog(sessionPhone);
+          const reason = this.getDisconnectReason(lastDisconnect?.error);
+          const errorMessage = lastDisconnect?.error ? String(lastDisconnect.error) : '';
+          const reasonName = this.getDisconnectReasonName(reason);
 
-        logger.warn(`Connection closed for ${sessionPhone}, reason: ${reason} (${reasonName}), error: ${errorMessage}`);
+          logger.warn(`Connection closed for ${sessionPhone}, reason: ${reason} (${reasonName}), error: ${errorMessage}`);
+
+          if (this.isSessionDisabled(sessionPhone)) {
+            logger.info(`Session ${sessionPhone} is disabled, skipping close handling`);
+            this.cleanupSession(sessionPhone, { clearQr: true });
+            return;
+          }
+
+          const isManualDisconnect = this.manualDisconnects.has(sessionPhone);
+          if (isManualDisconnect && reason !== DisconnectReason.loggedOut && reason !== 401) {
+            this.manualDisconnects.delete(sessionPhone);
+            logger.info(`Manual disconnect for ${sessionPhone}, skipping auto-reconnect`);
+            this.cleanupSession(sessionPhone, { clearQr: true });
+          return;
+        }
+        if (isManualDisconnect) {
+          this.manualDisconnects.delete(sessionPhone);
+        }
 
         // 🛡️ PROTECCIÓN CRÍTICA: Detectar errores de red/stream que NO deben borrar credenciales
         const isNetworkError =
@@ -337,6 +481,13 @@ export class ConnectionManager {
         }
       } else if (connection === 'open') {
         this.clearConnectWatchdog(sessionPhone);
+        if (this.isSessionDisabled(sessionPhone)) {
+          logger.warn(`Session ${sessionPhone} is disabled, closing connection`);
+          await this.disconnect(sessionPhone);
+          return;
+        }
+        await this.clearSessionMarker(sessionPhone);
+        this.qrIssuedAt.delete(sessionPhone);
         logger.info(`✅ Connection established for ${sessionPhone}`);
         this.qrCodes.delete(sessionPhone);
         this.resetReconnectState(sessionPhone);
@@ -387,12 +538,7 @@ export class ConnectionManager {
     // Guardar credenciales
     socket.ev.on('creds.update', saveCreds);
 
-    // Procesar mensajes
-    socket.ev.on('messages.upsert', async (m: any) => {
-      for (const message of m.messages) {
-        await messageListener.handleIncomingMessage(message, sessionPhone, socket);
-      }
-    });
+    // Procesar mensajes entrantes deshabilitado temporalmente (bot listener)
   }
 
   async disconnect(sessionPhone: string): Promise<void> {
@@ -411,6 +557,39 @@ export class ConnectionManager {
     } catch (error) {
       logger.error(`Error disconnecting ${sessionPhone}:`, error);
       this.cleanupSession(sessionPhone, { clearQr: true });
+    }
+  }
+
+  async disconnectManual(sessionPhone: string): Promise<void> {
+    this.markManualDisconnect(sessionPhone);
+    await this.disconnect(sessionPhone);
+  }
+
+  async clearSession(sessionPhone: string): Promise<void> {
+    try {
+      this.disableSession(sessionPhone);
+      this.resetReconnectState(sessionPhone);
+
+      const socket = this.connections.get(sessionPhone);
+      if (socket) {
+        try {
+          await socket.end({ cancel: true });
+        } catch (error) {
+          logger.warn(`Failed to end socket for ${sessionPhone}: ${String(error)}`);
+        }
+      }
+
+      this.cleanupSession(sessionPhone, { clearQr: true });
+
+      const sessionDir = path.join(config.whatsapp.sessionDir, sessionPhone);
+      await this.purgeAuthState(sessionPhone, sessionDir);
+      await this.markSessionCleared(sessionPhone);
+      await outboxQueue.clear(sessionPhone);
+
+      logger.info(`Session ${sessionPhone} cleared`);
+    } catch (error) {
+      logger.error(`Error clearing session ${sessionPhone}:`, error);
+      throw error;
     }
   }
 
@@ -459,6 +638,12 @@ export class ConnectionManager {
           if (!stat.isDirectory()) {
             continue;
           }
+          if (this.isSessionDisabled(sessionPhone)) {
+            continue;
+          }
+          if (await this.hasSessionClearMarker(sessionPhone)) {
+            continue;
+          }
 
           // Verificar si esta sesión está conectada
           const isConnected = this.isConnected(sessionPhone);
@@ -477,12 +662,13 @@ export class ConnectionManager {
 
           // Esta sesión no está conectada y no está en proceso de reconexión
           const sessionDir = path.join(baseDir, sessionPhone);
-          const credsPath = path.join(sessionDir, 'creds.json');
-          const hasCredentials = await fs.pathExists(credsPath);
+          const authState = await this.inspectAuthState(sessionDir);
+          const hasUsableAuthState =
+            authState.hasCreds && (authState.hasKeyMaterial || !authState.hasIdentity);
 
-          if (!hasCredentials) {
-            // Sesión perdida detectada - intentar auto-recuperación
-            logger.info(`🚨 Watchdog detected lost session ${sessionPhone} with backups, attempting auto-recovery`);
+          if (!hasUsableAuthState) {
+            // Sesión perdida o incompleta detectada - intentar auto-recuperación
+            logger.info(`🚨 Watchdog detected lost/incomplete session ${sessionPhone}, attempting auto-recovery`);
 
             const recovered = await this.autoRecoverSession(sessionPhone);
 
@@ -495,6 +681,18 @@ export class ConnectionManager {
                 this.scheduleReconnect(sessionPhone, error);
               }
             } else {
+              if (authState.hasCreds && !authState.hasKeyMaterial && authState.hasIdentity) {
+                if (this.isWithinQrGracePeriod(sessionPhone)) {
+                  logger.warn(
+                    `⚠️ Watchdog found incomplete auth state for ${sessionPhone} but QR pairing is recent; skipping auth reset`
+                  );
+                } else {
+                  logger.warn(
+                    `⚠️ Watchdog found incomplete auth state for ${sessionPhone} with no valid backups, clearing to force QR`
+                  );
+                  await this.backupAndResetAuthState(sessionPhone, sessionDir);
+                }
+              }
               logger.warn(`⚠️ Watchdog could not recover ${sessionPhone}, no valid backups`);
             }
           }
@@ -594,6 +792,23 @@ export class ConnectionManager {
     return 'disconnected';
   }
 
+  enableSession(sessionPhone: string): void {
+    this.disabledSessions.delete(sessionPhone);
+    void this.clearSessionMarker(sessionPhone);
+  }
+
+  private disableSession(sessionPhone: string): void {
+    this.disabledSessions.add(sessionPhone);
+  }
+
+  private isSessionDisabled(sessionPhone: string): boolean {
+    return this.disabledSessions.has(sessionPhone);
+  }
+
+  private markManualDisconnect(sessionPhone: string): void {
+    this.manualDisconnects.add(sessionPhone);
+  }
+
   async getGroups(sessionPhone: string) {
     const socket = this.connections.get(sessionPhone);
     if (!socket) {
@@ -666,6 +881,7 @@ export class ConnectionManager {
     this.clearConnectWatchdog(sessionPhone);
     if (options.clearQr) {
       this.qrCodes.delete(sessionPhone);
+      this.qrIssuedAt.delete(sessionPhone);
     }
   }
 
@@ -683,16 +899,26 @@ export class ConnectionManager {
       return;
     }
 
+    if (this.isSessionDisabled(sessionPhone)) {
+      logger.info(`Reconnect skipped for disabled session ${sessionPhone}`);
+      return;
+    }
+
     if (this.reconnectTimers.has(sessionPhone)) {
       return;
     }
 
-    const currentAttempts = this.reconnectAttempts.get(sessionPhone) || 0;
+    const pairingInProgress = this.isWithinQrGracePeriod(sessionPhone);
+    const currentAttempts = pairingInProgress ? 0 : (this.reconnectAttempts.get(sessionPhone) || 0);
     const nextAttempt = currentAttempts + 1;
-    this.reconnectAttempts.set(sessionPhone, nextAttempt);
+    if (!pairingInProgress) {
+      this.reconnectAttempts.set(sessionPhone, nextAttempt);
+    } else {
+      this.reconnectAttempts.delete(sessionPhone);
+    }
 
     const maxAttempts = config.whatsapp.maxReconnectAttempts;
-    if (maxAttempts > 0 && nextAttempt > maxAttempts) {
+    if (!pairingInProgress && maxAttempts > 0 && nextAttempt > maxAttempts) {
       logger.error(`Reconnect attempts exhausted for ${sessionPhone} after ${maxAttempts} attempts`);
 
       // 🛡️ ÚLTIMO INTENTO: Verificar si hay backup disponible
@@ -726,25 +952,53 @@ export class ConnectionManager {
 
     const timer = setTimeout(async () => {
       this.reconnectTimers.delete(sessionPhone);
+      const pairingInProgressNow = this.isWithinQrGracePeriod(sessionPhone);
 
       // 🛡️ Verificar si hay credenciales, si no, intentar auto-recuperación
       const sessionDir = path.join(config.whatsapp.sessionDir, sessionPhone);
-      const credsPath = path.join(sessionDir, 'creds.json');
-      const hasCredentials = await fs.pathExists(credsPath);
+      const authState = await this.inspectAuthState(sessionDir);
+      const hasUsableAuthState =
+        authState.hasCreds && (authState.hasKeyMaterial || !authState.hasIdentity);
 
-      if (!hasCredentials) {
-        logger.warn(`⚠️ No credentials found for ${sessionPhone}, attempting auto-recovery from backup`);
-
-        const recovered = await this.autoRecoverSession(sessionPhone);
-
-        if (!recovered) {
-          logger.error(`❌ Auto-recovery failed for ${sessionPhone}, no valid backups found`);
-          // Continuar intentando - quizás el backup se cree en el siguiente ciclo
-          this.scheduleReconnect(sessionPhone);
-          return;
+      if (!hasUsableAuthState) {
+        if (pairingInProgressNow) {
+          logger.info(`⏳ Pairing in progress for ${sessionPhone}, skipping auto-recovery and retrying connect`);
+        } else if (authState.hasCreds && !authState.hasKeyMaterial && authState.hasIdentity) {
+          logger.warn(
+            `⚠️ Detected partial auth state for ${sessionPhone} (creds without key material), attempting recovery`
+          );
+        } else if (!authState.hasCreds) {
+          logger.warn(`⚠️ No credentials found for ${sessionPhone}, attempting auto-recovery from backup`);
         }
 
-        logger.info(`✅ Auto-recovered credentials for ${sessionPhone}, proceeding with reconnect`);
+        const recovered = pairingInProgressNow ? false : await this.autoRecoverSession(sessionPhone);
+
+        if (!recovered) {
+          if (pairingInProgressNow) {
+            // Permitir que el emparejamiento termine sin borrar credenciales parciales
+          } else if (authState.hasCreds && !authState.hasKeyMaterial && authState.hasIdentity) {
+            if (this.isWithinQrGracePeriod(sessionPhone)) {
+              logger.warn(
+                `⚠️ No valid backup found for ${sessionPhone} but QR pairing is recent; skipping auth reset`
+              );
+            } else {
+              logger.warn(
+                `⚠️ No valid backup found for ${sessionPhone} and auth state is incomplete, clearing auth state to force QR`
+              );
+              await this.backupAndResetAuthState(sessionPhone, sessionDir);
+            }
+          }
+          if (!pairingInProgressNow) {
+            logger.error(`❌ Auto-recovery failed for ${sessionPhone}, no valid backups found`);
+            // Continuar intentando - quizás el backup se cree en el siguiente ciclo
+            this.scheduleReconnect(sessionPhone);
+            return;
+          }
+        }
+
+        if (!pairingInProgressNow) {
+          logger.info(`✅ Auto-recovered credentials for ${sessionPhone}, proceeding with reconnect`);
+        }
       }
 
       try {
@@ -759,26 +1013,103 @@ export class ConnectionManager {
     this.reconnectTimers.set(sessionPhone, timer);
   }
 
+  private getClearMarkerPath(sessionPhone: string): string {
+    return path.join(config.whatsapp.sessionDir, 'cleared', `${sessionPhone}.json`);
+  }
+
+  private getLegacyClearMarkerPath(sessionPhone: string): string {
+    return path.join(config.whatsapp.sessionDir, 'backups', sessionPhone, 'cleared.json');
+  }
+
+  private async markSessionCleared(sessionPhone: string): Promise<void> {
+    try {
+      const markerPath = this.getClearMarkerPath(sessionPhone);
+      await fs.ensureDir(path.dirname(markerPath));
+      await fs.writeJson(markerPath, {
+        clearedAt: new Date().toISOString(),
+        reason: 'manual-clear',
+      });
+      const legacyPath = this.getLegacyClearMarkerPath(sessionPhone);
+      if (await fs.pathExists(legacyPath)) {
+        await fs.remove(legacyPath);
+      }
+    } catch (error) {
+      logger.warn(`Failed to write clear marker for ${sessionPhone}: ${error}`);
+    }
+  }
+
+  private async clearSessionMarker(sessionPhone: string): Promise<void> {
+    try {
+      const markerPath = this.getClearMarkerPath(sessionPhone);
+      if (await fs.pathExists(markerPath)) {
+        await fs.remove(markerPath);
+      }
+      const legacyPath = this.getLegacyClearMarkerPath(sessionPhone);
+      if (await fs.pathExists(legacyPath)) {
+        await fs.remove(legacyPath);
+      }
+    } catch (error) {
+      logger.warn(`Failed to remove clear marker for ${sessionPhone}: ${error}`);
+    }
+  }
+
+  private async hasSessionClearMarker(sessionPhone: string): Promise<boolean> {
+    try {
+      if (await fs.pathExists(this.getClearMarkerPath(sessionPhone))) {
+        return true;
+      }
+      return await fs.pathExists(this.getLegacyClearMarkerPath(sessionPhone));
+    } catch (error) {
+      return false;
+    }
+  }
+
+  private isWithinQrGracePeriod(sessionPhone: string): boolean {
+    const issuedAt = this.qrIssuedAt.get(sessionPhone);
+    if (!issuedAt) {
+      return false;
+    }
+    const graceMs = Math.max(config.whatsapp.qrTimeout * 2, 120000);
+    return Date.now() - issuedAt < graceMs;
+  }
+
   /**
-   * 🛡️ PROTECCIÓN: Backup antes de eliminar credenciales
-   * Crea un backup timestamped de las credenciales antes de borrarlas
+   * 🛡️ PROTECCIÓN: Backup antes de eliminar auth state
+   * Crea un backup timestamped del auth state completo antes de borrarlo
    * para permitir recuperación manual si es necesario
    */
+  private async purgeAuthState(sessionPhone: string, sessionDir: string): Promise<void> {
+    try {
+      await fs.remove(sessionDir);
+      const backupDir = path.join(config.whatsapp.sessionDir, 'backups', sessionPhone);
+      await fs.remove(backupDir);
+      logger.info(`🗑️ Purged auth state and backups for ${sessionPhone}`);
+    } catch (error) {
+      logger.error(`❌ Failed to purge auth state for ${sessionPhone}:`, error);
+    }
+  }
+
   private async backupAndResetAuthState(sessionPhone: string, sessionDir: string): Promise<void> {
     try {
       const credsPath = path.join(sessionDir, 'creds.json');
       const credsExist = await fs.pathExists(credsPath);
+      const sessionDirExists = await fs.pathExists(sessionDir);
 
-      if (credsExist) {
-        // Crear backup con timestamp
+      if (sessionDirExists) {
+        // Crear backup con timestamp (full + legacy creds)
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const backupDir = path.join(sessionDir, '..', 'backups', sessionPhone);
-        const backupPath = path.join(backupDir, `creds-${timestamp}.json`);
+        const fullBackupDir = path.join(backupDir, `full-${timestamp}`);
 
         await fs.ensureDir(backupDir);
-        await fs.copy(credsPath, backupPath);
+        await fs.copy(sessionDir, fullBackupDir);
+        logger.info(`✅ Backed up full auth state for ${sessionPhone} to ${fullBackupDir}`);
 
-        logger.info(`✅ Backed up credentials for ${sessionPhone} to ${backupPath}`);
+        if (credsExist) {
+          const legacyBackupPath = path.join(backupDir, `creds-${timestamp}.json`);
+          await fs.copy(credsPath, legacyBackupPath);
+          logger.info(`✅ Backed up credentials for ${sessionPhone} to ${legacyBackupPath}`);
+        }
 
         // Mantener solo los últimos 20 backups (aumentado para mayor seguridad)
         await this.cleanupOldBackups(backupDir, 20);
@@ -798,15 +1129,15 @@ export class ConnectionManager {
    */
   private async cleanupOldBackups(backupDir: string, keepCount: number = 20): Promise<void> {
     try {
-      const files = await fs.readdir(backupDir);
-      const backupFiles = files
-        .filter((f) => f.startsWith('creds-') && f.endsWith('.json'))
-        .sort()
-        .reverse(); // Más recientes primero
+      const groups = await this.getBackupGroups(backupDir);
+      const sorted = groups.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
-      // Eliminar backups antiguos
-      for (let i = keepCount; i < backupFiles.length; i++) {
-        await fs.remove(path.join(backupDir, backupFiles[i]));
+      // Eliminar backups antiguos (full + legacy)
+      for (let i = keepCount; i < sorted.length; i++) {
+        const group = sorted[i];
+        for (const entry of group.entries) {
+          await fs.remove(entry.path);
+        }
       }
     } catch (error) {
       logger.warn(`Failed to cleanup old backups: ${error}`);
@@ -818,7 +1149,6 @@ export class ConnectionManager {
    */
   async restoreFromBackup(sessionPhone: string, backupTimestamp?: string): Promise<boolean> {
     try {
-      const sessionDir = path.join(config.whatsapp.sessionDir, sessionPhone);
       const backupDir = path.join(config.whatsapp.sessionDir, 'backups', sessionPhone);
 
       if (!(await fs.pathExists(backupDir))) {
@@ -826,30 +1156,88 @@ export class ConnectionManager {
         return false;
       }
 
-      let backupFile: string;
-
-      if (backupTimestamp) {
-        backupFile = `creds-${backupTimestamp}.json`;
-      } else {
-        // Usar el backup más reciente
-        const files = await fs.readdir(backupDir);
-        const backups = files.filter((f) => f.startsWith('creds-') && f.endsWith('.json')).sort().reverse();
-
-        if (backups.length === 0) {
-          logger.error(`No backup files found for ${sessionPhone}`);
-          return false;
-        }
-
-        backupFile = backups[0];
+      const groups = await this.getBackupGroups(backupDir);
+      if (groups.length === 0) {
+        logger.error(`No backup files found for ${sessionPhone}`);
+        return false;
       }
 
-      const backupPath = path.join(backupDir, backupFile);
-      const restorePath = path.join(sessionDir, 'creds.json');
+      let target: BackupEntry | undefined;
 
-      await fs.ensureDir(sessionDir);
-      await fs.copy(backupPath, restorePath);
+      if (backupTimestamp) {
+        // 1) direct name match (full dir or creds file)
+        const directPath = path.join(backupDir, backupTimestamp);
+        if (await fs.pathExists(directPath)) {
+          const stats = await fs.stat(directPath);
+          const parsed = this.parseBackupEntryName(backupTimestamp);
+          if (parsed) {
+            target = {
+              name: backupTimestamp,
+              id: parsed.id,
+              type: parsed.type,
+              path: directPath,
+              mtimeMs: stats.mtimeMs,
+              isDir: stats.isDirectory(),
+            };
+          }
+        }
 
-      logger.info(`✅ Restored credentials for ${sessionPhone} from ${backupFile}`);
+        // 2) match by id (timestamp fragment)
+        if (!target) {
+          const match = groups.find((group) => group.id === backupTimestamp);
+          if (match) {
+            target = match.preferred;
+          }
+        }
+
+        // 3) match by conventional file naming
+        if (!target) {
+          const fullName = `full-${backupTimestamp}`;
+          const credsName = `creds-${backupTimestamp}.json`;
+          const byName = groups.find(
+            (group) =>
+              group.preferred.name === fullName ||
+              group.preferred.name === credsName ||
+              group.entries.some((entry) => entry.name === fullName || entry.name === credsName)
+          );
+          if (byName) {
+            target = byName.preferred;
+          }
+        }
+
+        // 4) match by mtime ISO (from listBackups)
+        if (!target) {
+          const isoMatch = groups.find(
+            (group) => new Date(group.mtimeMs).toISOString() === backupTimestamp
+          );
+          if (isoMatch) {
+            target = isoMatch.preferred;
+          }
+        }
+      } else {
+        // Usar el backup más reciente (prefer full)
+        const sorted = groups.sort((a, b) => b.mtimeMs - a.mtimeMs);
+        target = sorted[0].preferred;
+      }
+
+      if (!target) {
+        logger.error(`No matching backup found for ${sessionPhone}`);
+        return false;
+      }
+
+      let restored = await this.restoreBackupEntry(sessionPhone, target);
+      if (!restored) {
+        const fallbackGroup = groups.find((group) => group.id === target.id);
+        if (fallbackGroup) {
+          restored = await this.restoreBackupGroup(sessionPhone, fallbackGroup);
+        }
+      }
+      if (!restored) {
+        logger.error(`Failed to restore backup for ${sessionPhone}: ${target.name}`);
+        return false;
+      }
+
+      logger.info(`✅ Restored auth state for ${sessionPhone} from ${target.name}`);
       return true;
     } catch (error) {
       logger.error(`❌ Failed to restore backup for ${sessionPhone}:`, error);
@@ -868,15 +1256,22 @@ export class ConnectionManager {
         return [];
       }
 
-      const files = await fs.readdir(backupDir);
-      const backups = files.filter((f) => f.startsWith('creds-') && f.endsWith('.json')).sort().reverse();
+      const groups = await this.getBackupGroups(backupDir);
+      const sorted = groups.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
       const backupList = await Promise.all(
-        backups.map(async (file) => {
-          const filePath = path.join(backupDir, file);
-          const stats = await fs.stat(filePath);
+        sorted.map(async (group) => {
+          const entry = group.preferred;
+          let size = 0;
+          if (entry.type === 'full') {
+            size = await this.getDirSize(entry.path);
+          } else {
+            const stats = await fs.stat(entry.path);
+            size = stats.size;
+          }
+
           const now = Date.now();
-          const ageMs = now - stats.mtimeMs;
+          const ageMs = now - entry.mtimeMs;
           const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
           const ageDays = Math.floor(ageHours / 24);
 
@@ -891,9 +1286,9 @@ export class ConnectionManager {
           }
 
           return {
-            filename: file,
-            timestamp: stats.mtime.toISOString(),
-            size: stats.size,
+            filename: entry.name,
+            timestamp: new Date(entry.mtimeMs).toISOString(),
+            size,
             age: ageStr,
           };
         })
@@ -961,6 +1356,313 @@ export class ConnectionManager {
     return reasons[code] || `unknown(${code})`;
   }
 
+  private handleSignalDecryptError(payload: SignalDecryptErrorPayload): void {
+    const sessionId = this.extractSignalSessionId(payload);
+    if (!sessionId) {
+      return;
+    }
+
+    const now = Date.now();
+    const existing =
+      this.signalDecryptStats.get(sessionId) || { count: 0, lastAt: 0, lastCleanupAt: 0 };
+
+    if (now - existing.lastAt > 2 * 60 * 1000) {
+      existing.count = 0;
+    }
+
+    existing.count += 1;
+    existing.lastAt = now;
+    this.signalDecryptStats.set(sessionId, existing);
+
+    const threshold = 3;
+    const cooldownMs = 5 * 60 * 1000;
+
+    if (existing.count < threshold) {
+      return;
+    }
+
+    if (now - existing.lastCleanupAt < cooldownMs) {
+      return;
+    }
+
+    if (this.signalDecryptCleanupInFlight.has(sessionId)) {
+      return;
+    }
+
+    existing.lastCleanupAt = now;
+    this.signalDecryptStats.set(sessionId, existing);
+    this.signalDecryptCleanupInFlight.add(sessionId);
+
+    void this.scrubSignalState(sessionId).finally(() => {
+      this.signalDecryptCleanupInFlight.delete(sessionId);
+    });
+  }
+
+  private extractSignalSessionId(payload: SignalDecryptErrorPayload): string | null {
+    const stack = payload.stack || '';
+    const stackMatch = stack.match(/\bat\s+([0-9]{6,}(?:\.[0-9]+)?)\s+\[as awaitable\]/);
+    if (stackMatch?.[1]) {
+      return stackMatch[1];
+    }
+
+    const sessionMatch = stack.match(/session-([0-9]{6,}(?:\.[0-9]+)?)\.json/);
+    if (sessionMatch?.[1]) {
+      return sessionMatch[1];
+    }
+
+    const messageMatch = payload.message.match(/([0-9]{6,}(?:\.[0-9]+)?)/);
+    if (messageMatch?.[1]) {
+      return messageMatch[1];
+    }
+
+    return null;
+  }
+
+  private async scrubSignalState(sessionId: string): Promise<void> {
+    try {
+      const baseDir = path.resolve(config.whatsapp.sessionDir);
+      if (!(await fs.pathExists(baseDir))) {
+        return;
+      }
+
+      const entries = await fs.readdir(baseDir);
+      const senderId = sessionId.split('.')[0];
+      let removed = 0;
+
+      for (const entry of entries) {
+        if (entry === 'backups') {
+          continue;
+        }
+
+        const sessionDir = path.join(baseDir, entry);
+        const stat = await fs.stat(sessionDir);
+        if (!stat.isDirectory()) {
+          continue;
+        }
+
+        const files = await fs.readdir(sessionDir);
+
+        for (const file of files) {
+          if (file.startsWith(`session-${sessionId}`) && file.endsWith('.json')) {
+            await fs.remove(path.join(sessionDir, file));
+            removed += 1;
+            continue;
+          }
+
+          if (!file.startsWith('sender-key-')) {
+            continue;
+          }
+
+          const match = file.match(/^sender-key-(.+)--([0-9]{6,}(?:\.[0-9]+)?)--/);
+          if (!match) {
+            continue;
+          }
+
+          const groupId = match[1];
+          const sender = match[2];
+          if (sender !== sessionId && sender !== senderId) {
+            continue;
+          }
+
+          await fs.remove(path.join(sessionDir, file));
+          removed += 1;
+
+          const memoryFile = path.join(sessionDir, `sender-key-memory-${groupId}.json`);
+          if (await fs.pathExists(memoryFile)) {
+            await fs.remove(memoryFile);
+            removed += 1;
+          }
+        }
+      }
+
+      if (removed > 0) {
+        logger.warn(
+          `🧹 Cleaned ${removed} signal state files for ${sessionId} to recover from decrypt errors`
+        );
+      }
+    } catch (error) {
+      logger.warn(`Failed to cleanup signal state for ${sessionId}: ${error}`);
+    }
+  }
+
+  private parseBackupEntryName(
+    name: string
+  ): { id: string; type: 'full' | 'creds' } | null {
+    if (name.startsWith('full-')) {
+      const id = name.slice('full-'.length);
+      return id ? { id, type: 'full' } : null;
+    }
+    if (name.startsWith('creds-') && name.endsWith('.json')) {
+      const id = name.slice('creds-'.length, -'.json'.length);
+      return id ? { id, type: 'creds' } : null;
+    }
+    return null;
+  }
+
+  private async listBackupEntries(backupDir: string): Promise<BackupEntry[]> {
+    const entries = await fs.readdir(backupDir);
+    const result: BackupEntry[] = [];
+
+    for (const name of entries) {
+      const parsed = this.parseBackupEntryName(name);
+      if (!parsed) {
+        continue;
+      }
+
+      const entryPath = path.join(backupDir, name);
+      const stats = await fs.stat(entryPath);
+      const isDir = stats.isDirectory();
+
+      if (parsed.type === 'full' && !isDir) {
+        continue;
+      }
+      if (parsed.type === 'creds' && isDir) {
+        continue;
+      }
+
+      result.push({
+        name,
+        id: parsed.id,
+        type: parsed.type,
+        path: entryPath,
+        mtimeMs: stats.mtimeMs,
+        isDir,
+      });
+    }
+
+    return result;
+  }
+
+  private async getBackupGroups(
+    backupDir: string
+  ): Promise<Array<{ id: string; preferred: BackupEntry; mtimeMs: number; entries: BackupEntry[] }>> {
+    const entries = await this.listBackupEntries(backupDir);
+    const groups = new Map<string, BackupEntry[]>();
+
+    for (const entry of entries) {
+      const group = groups.get(entry.id) || [];
+      group.push(entry);
+      groups.set(entry.id, group);
+    }
+
+    return Array.from(groups.entries()).map(([id, groupEntries]) => {
+      const preferred =
+        groupEntries.find((entry) => entry.type === 'full') ||
+        groupEntries.find((entry) => entry.type === 'creds')!;
+      const mtimeMs = Math.max(...groupEntries.map((entry) => entry.mtimeMs));
+      return { id, preferred, mtimeMs, entries: groupEntries };
+    });
+  }
+
+  private async getDirSize(dirPath: string): Promise<number> {
+    let total = 0;
+    const entries = await fs.readdir(dirPath);
+
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry);
+      const stats = await fs.stat(fullPath);
+      if (stats.isDirectory()) {
+        total += await this.getDirSize(fullPath);
+      } else {
+        total += stats.size;
+      }
+    }
+
+    return total;
+  }
+
+  private async inspectAuthState(sessionDir: string): Promise<{
+    hasCreds: boolean;
+    hasKeyMaterial: boolean;
+    hasIdentity: boolean;
+  }> {
+    const credsPath = path.join(sessionDir, 'creds.json');
+    const hasCreds = await fs.pathExists(credsPath);
+    let hasIdentity = false;
+
+    if (hasCreds) {
+      try {
+        const creds = await fs.readJson(credsPath);
+        hasIdentity = Boolean(creds?.me?.id || creds?.me?.lid || creds?.me?.name);
+      } catch (error) {
+        logger.warn(`Failed to read creds.json for ${sessionDir}: ${error}`);
+      }
+    }
+
+    let hasKeyMaterial = false;
+    try {
+      if (await fs.pathExists(sessionDir)) {
+        const entries = await fs.readdir(sessionDir);
+        hasKeyMaterial = entries.some(
+          (name) => name !== 'creds.json' && !name.startsWith('.')
+        );
+      }
+    } catch (error) {
+      logger.warn(`Failed to inspect auth state at ${sessionDir}: ${error}`);
+    }
+
+    return { hasCreds, hasKeyMaterial, hasIdentity };
+  }
+
+  private async restoreBackupEntry(sessionPhone: string, entry: BackupEntry): Promise<boolean> {
+    const sessionDir = path.join(config.whatsapp.sessionDir, sessionPhone);
+
+    if (entry.type === 'full') {
+      const credsPath = path.join(entry.path, 'creds.json');
+      if (!(await fs.pathExists(credsPath))) {
+        logger.warn(`Full backup ${entry.name} missing creds.json, skipping`);
+        return false;
+      }
+
+      await fs.remove(sessionDir);
+      await fs.ensureDir(sessionDir);
+      await fs.copy(entry.path, sessionDir);
+      return true;
+    }
+
+    // Legacy creds-only backup
+    try {
+      const stats = await fs.stat(entry.path);
+      if (stats.size < 100) {
+        logger.warn(`Backup ${entry.name} is too small (${stats.size} bytes), skipping`);
+        return false;
+      }
+
+      const backupContent = await fs.readJson(entry.path);
+      if (!backupContent || typeof backupContent !== 'object') {
+        logger.warn(`Backup ${entry.name} has invalid content, skipping`);
+        return false;
+      }
+
+      await fs.remove(sessionDir);
+      await fs.ensureDir(sessionDir);
+      await fs.copy(entry.path, path.join(sessionDir, 'creds.json'));
+      return true;
+    } catch (error) {
+      logger.warn(`Failed to restore backup ${entry.name}: ${error}`);
+      return false;
+    }
+  }
+
+  private async restoreBackupGroup(
+    sessionPhone: string,
+    group: { preferred: BackupEntry; entries: BackupEntry[] }
+  ): Promise<boolean> {
+    const ordered = [...group.entries].sort((a, b) => {
+      if (a.type === b.type) return 0;
+      return a.type === 'full' ? -1 : 1;
+    });
+
+    for (const entry of ordered) {
+      const restored = await this.restoreBackupEntry(sessionPhone, entry);
+      if (restored) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   /**
    * 🔄 Intenta restaurar desde el backup más reciente si existe y es reciente (< 24h)
    * Esto previene pérdida de sesión por errores transitorios
@@ -968,43 +1670,46 @@ export class ConnectionManager {
    */
   private async tryRestoreRecentBackup(sessionPhone: string): Promise<boolean> {
     try {
+      if (await this.hasSessionClearMarker(sessionPhone)) {
+        logger.info(`Auto-restore skipped for cleared session ${sessionPhone}`);
+        return false;
+      }
       const backupDir = path.join(config.whatsapp.sessionDir, 'backups', sessionPhone);
 
       if (!(await fs.pathExists(backupDir))) {
         return false;
       }
 
-      const files = await fs.readdir(backupDir);
-      const backups = files
-        .filter((f) => f.startsWith('creds-') && f.endsWith('.json'))
-        .sort()
-        .reverse(); // Más recientes primero
-
-      if (backups.length === 0) {
+      const groups = await this.getBackupGroups(backupDir);
+      if (groups.length === 0) {
         return false;
       }
-
-      // Obtener el backup más reciente
-      const latestBackup = backups[0];
-      const backupPath = path.join(backupDir, latestBackup);
-      const backupStats = await fs.stat(backupPath);
 
       // Solo restaurar si el backup tiene menos de 24 horas
       const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
-      if (backupStats.mtimeMs < twentyFourHoursAgo) {
-        logger.warn(`Latest backup for ${sessionPhone} is too old (${latestBackup}), skipping quick restore`);
+      const recent = groups
+        .filter((group) => group.mtimeMs >= twentyFourHoursAgo)
+        .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+      if (recent.length === 0) {
+        const latest = groups.sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
+        logger.warn(
+          `Latest backup for ${sessionPhone} is too old (${latest?.preferred?.name}), skipping quick restore`
+        );
         return false;
       }
 
-      // Restaurar el backup
-      const sessionDir = path.join(config.whatsapp.sessionDir, sessionPhone);
-      const restorePath = path.join(sessionDir, 'creds.json');
+      for (const candidate of recent) {
+        const restored = await this.restoreBackupGroup(sessionPhone, candidate);
+        if (restored) {
+          logger.info(
+            `✅ Auto-restored auth state for ${sessionPhone} from recent backup (${candidate.preferred.name})`
+          );
+          return true;
+        }
+      }
 
-      await fs.ensureDir(sessionDir);
-      await fs.copy(backupPath, restorePath);
-
-      logger.info(`✅ Auto-restored credentials for ${sessionPhone} from recent backup (${latestBackup})`);
-      return true;
+      return false;
     } catch (error) {
       logger.warn(`Failed to auto-restore recent backup for ${sessionPhone}: ${error}`);
       return false;
@@ -1025,6 +1730,10 @@ export class ConnectionManager {
    */
   private async autoRecoverSession(sessionPhone: string): Promise<boolean> {
     try {
+      if (await this.hasSessionClearMarker(sessionPhone)) {
+        logger.info(`Auto-recovery skipped for cleared session ${sessionPhone}`);
+        return false;
+      }
       const backupDir = path.join(config.whatsapp.sessionDir, 'backups', sessionPhone);
 
       if (!(await fs.pathExists(backupDir))) {
@@ -1032,55 +1741,27 @@ export class ConnectionManager {
         return false;
       }
 
-      const files = await fs.readdir(backupDir);
-      const backups = files
-        .filter((f) => f.startsWith('creds-') && f.endsWith('.json'))
-        .sort()
-        .reverse(); // Más recientes primero
-
-      if (backups.length === 0) {
+      const groups = await this.getBackupGroups(backupDir);
+      if (groups.length === 0) {
         logger.debug(`No backup files found for ${sessionPhone}`);
         return false;
       }
 
+      const sorted = groups.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
       // Intentar restaurar desde el backup más reciente (sin límite de tiempo)
-      for (const backupFile of backups) {
-        const backupPath = path.join(backupDir, backupFile);
-
-        try {
-          // Validar que el backup tenga contenido válido
-          const backupStats = await fs.stat(backupPath);
-          if (backupStats.size < 100) {
-            logger.warn(`Backup ${backupFile} is too small (${backupStats.size} bytes), skipping`);
-            continue;
-          }
-
-          // Intentar leer el backup para validar que sea JSON válido
-          const backupContent = await fs.readJson(backupPath);
-          if (!backupContent || typeof backupContent !== 'object') {
-            logger.warn(`Backup ${backupFile} has invalid content, skipping`);
-            continue;
-          }
-
-          // Backup válido encontrado, restaurar
-          const sessionDir = path.join(config.whatsapp.sessionDir, sessionPhone);
-          const restorePath = path.join(sessionDir, 'creds.json');
-
-          await fs.ensureDir(sessionDir);
-          await fs.copy(backupPath, restorePath);
-
-          const age = this.getBackupAge(backupStats.mtimeMs);
-          logger.info(`✅ Auto-recovered session ${sessionPhone} from backup ${backupFile} (${age} old)`);
-
+      for (const candidate of sorted) {
+        const restored = await this.restoreBackupGroup(sessionPhone, candidate);
+        if (restored) {
+          const age = this.getBackupAge(candidate.mtimeMs);
+          logger.info(
+            `✅ Auto-recovered session ${sessionPhone} from backup ${candidate.preferred.name} (${age} old)`
+          );
           return true;
-        } catch (error) {
-          logger.warn(`Failed to restore from backup ${backupFile}: ${error}`);
-          // Continuar con el siguiente backup
-          continue;
         }
       }
 
-      logger.warn(`⚠️ No valid backups found for ${sessionPhone} (tried ${backups.length} backups)`);
+      logger.warn(`⚠️ No valid backups found for ${sessionPhone} (tried ${sorted.length} backups)`);
       return false;
     } catch (error) {
       logger.error(`❌ Auto-recovery failed for ${sessionPhone}:`, error);
@@ -1099,9 +1780,7 @@ export class ConnectionManager {
         return false;
       }
 
-      const files = await fs.readdir(backupDir);
-      const backups = files.filter((f) => f.startsWith('creds-') && f.endsWith('.json'));
-
+      const backups = await this.listBackupEntries(backupDir);
       return backups.length > 0;
     } catch (error) {
       return false;

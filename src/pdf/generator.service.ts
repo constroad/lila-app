@@ -26,10 +26,33 @@ export class PDFGenerator {
       await fs.ensureDir(this.uploadsDir);
 
       // Inicializar navegador
-      this.browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+      const headlessEnv = process.env.PUPPETEER_HEADLESS;
+      const headlessMode: boolean | 'new' =
+        headlessEnv === 'true' ? true : headlessEnv === 'false' ? false : 'new';
+
+      const launchBrowser = async (headless: boolean | 'new') =>
+        puppeteer.launch({
+          headless,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+          ],
+        });
+
+      if (headlessEnv) {
+        this.browser = await launchBrowser(headlessMode);
+      } else {
+        try {
+          this.browser = await launchBrowser(headlessMode);
+        } catch (error) {
+          logger.warn(
+            `Puppeteer launch failed with headless=${String(headlessMode)}. Retrying with headless=true`,
+            error
+          );
+          this.browser = await launchBrowser(true);
+        }
+      }
 
       logger.info('PDF Generator initialized');
     } catch (error) {

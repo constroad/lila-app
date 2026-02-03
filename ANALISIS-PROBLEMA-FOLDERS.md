@@ -290,7 +290,7 @@ const addRecord = async (req: NextApiRequest, res: NextApiResponse) => {
   const response = await repo.create(newRecord);
 
   // 2. Crear carpeta física en lila-app
-  const LILA_APP_URL = process.env.CONSTROAD_SERVER_URL || 'http://localhost:3001';
+  const LILA_APP_URL = process.env.LILA_SERVER_URL || 'http://localhost:3001';
   const folderPath = `${newRecord.resourceId}/${newRecord.name}`;
 
   try {
