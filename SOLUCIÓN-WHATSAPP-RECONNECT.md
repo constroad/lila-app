@@ -482,12 +482,12 @@ git commit -m "backup: before reconnect fix"
 ```bash
 # Ya aplicados en esta sesión, solo verificar
 npm run build
-pm2 restart lila-app
+npm run start
 ```
 
 3. **Verificar logs:**
 ```bash
-pm2 logs lila-app --lines 50
+Ver logs en la consola donde corre el proceso.
 ```
 
 4. **Health check:**
@@ -503,7 +503,7 @@ git revert HEAD
 
 # 2. Rebuild y restart
 npm run build
-pm2 restart lila-app
+npm run start
 ```
 
 ---

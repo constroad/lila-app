@@ -4,3 +4,5 @@ data/conversations
 data/drive-cache
 uploads/
 logs/
+.env
+.env.redis

@@ -138,7 +138,6 @@ Principales claves:
 - `npm run dev`: `tsx src/index.ts`.
 - `npm run build`: bundle con esbuild a `dist/`.
 - `npm start`: ejecuta `dist/index.js`.
-- `pm2`: configuracion en `ecosystem.config.js` (cluster mode, 1 instancia).
 
 ## Dependencias externas
 - WhatsApp: `@whiskeysockets/baileys`.
