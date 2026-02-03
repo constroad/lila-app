@@ -4,7 +4,20 @@ data/conversations
 data/drive-cache
 data/outbox
 data/cronjobs.json
+data/cronjobs.json.backup
+data/whatsapp_backup_*
 uploads/
 logs/
 .env
 .env.redis
+.env.development
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Backups
+*.backup
+*.bak
+*~
