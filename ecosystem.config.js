@@ -1,6 +1,26 @@
 module.exports = {
   apps: [
     {
+      name: 'lila-app-dev',
+      script: './node_modules/.bin/tsx',
+      args: 'src/index.ts',
+      exec_mode: 'fork',
+      instances: 1,
+      max_memory_restart: '1G',
+      error_file: './logs/dev-err.log',
+      out_file: './logs/dev-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      env: {
+        NODE_ENV: 'development'
+      },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', 'data'],
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s'
+    },
+    {
       name: 'lila-app-whatsapp',
       script: './dist/index.js',
       exec_mode: 'cluster',
