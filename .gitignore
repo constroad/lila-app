@@ -2,5 +2,8 @@ node_modules
 data/sessions
 data/conversations
 data/drive-cache
+data/cronjobs.json
 uploads/
 logs/
+.env
+.env.redis

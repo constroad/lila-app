@@ -298,7 +298,7 @@ git revert HEAD
 npm run build
 
 # 3. Restart
-pm2 restart lila-app
+npm run start
 
 # 4. Verificar
 curl http://localhost:3001/health

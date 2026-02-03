@@ -54,17 +54,17 @@ npm run build
 
 ### Desarrollo
 ```bash
+# Resilient dev (auto-restart on crash)
 npm run dev
+
+# Direct dev (no watchdog)
+npm run dev:local
 ```
 
-### Producción con PM2
+### Producción
 ```bash
-npm run dev:pm2
-```
-
-### Ver logs
-```bash
-npm run logs
+npm run build
+npm run start
 ```
 
 ## 📚 Estructura del Proyecto
@@ -239,9 +239,7 @@ curl http://localhost:3000/api/status
 ```
 
 ### Logs en tiempo real
-```bash
-npm run logs
-```
+Ver en la consola donde corre `npm run dev` o `npm run start`.
 
 ## 🔐 Seguridad
 
@@ -252,26 +250,11 @@ npm run logs
 - CORS configurado
 - Validación de entrada con Joi
 
-## 🚀 Deploymenty PM2
+## 🚀 Deployment
 
-### Iniciar con PM2
 ```bash
-npm run dev:pm2
-```
-
-### Ver procesos
-```bash
-pm2 list
-```
-
-### Detener
-```bash
-npm run stop:pm2
-```
-
-### Reiniciar
-```bash
-npm run restart:pm2
+npm run build
+npm run start
 ```
 
 ## 📈 Escalabilidad

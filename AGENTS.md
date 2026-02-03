@@ -4,16 +4,16 @@
 - Source code lives in `src/`, with feature areas grouped under folders like `api/`, `whatsapp/`, `jobs/`, and `utils/`.
 - Build output is emitted to `dist/` by the build script; treat it as generated.
 - Runtime data and artifacts may appear in `data/`, `uploads/`, and `logs/`. Keep these paths out of version control unless explicitly required.
-- Templates live in `templates/` and configuration is in root files such as `tsconfig.json` and `ecosystem.config.js`.
+- Templates live in `templates/` and configuration is in root files such as `tsconfig.json`.
 
 ## Build, Test, and Development Commands
-- `npm run dev`: Run the TypeScript entrypoint in watchless dev mode using `ts-node` (`src/index.ts`).
+- `npm run dev`: Run the resilient dev watchdog (auto-restarts) which launches `tsx src/index.ts`.
+- `npm run dev:local`: Run the TypeScript entrypoint in watchless dev mode using `tsx` (`src/index.ts`).
 - `npm run build`: Bundle/compile to `dist/` via `build.js`.
 - `npm start`: Run the compiled server from `dist/index.js`.
 - `npm run test`: Execute Jest (no project tests are defined yet).
 - `npm run lint`: Lint `src/**/*.ts` with ESLint.
 - `npm run format`: Format `src/**/*.ts` using Prettier defaults.
-- `npm run dev:pm2`, `npm run restart:pm2`, `npm run logs`: Optional PM2 workflow for process management.
 
 ## Coding Style & Naming Conventions
 - Language: TypeScript with ES module syntax (`type: "module"`).
