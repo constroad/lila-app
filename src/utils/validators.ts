@@ -1,5 +1,4 @@
 import Joi from 'joi';
-import logger from './logger.js';
 
 export interface ValidationError {
   field: string;
@@ -33,112 +32,146 @@ export function validateSessionPhone(phone: string): boolean {
   return sessionPhoneRegex.test(phone.replace(/\D/g, ''));
 }
 
-export function validateCronJob(data: any): { valid: boolean; errors?: ValidationError[] } {
-  const schema = Joi.object({
-    name: Joi.string().required().min(3).max(100),
-    type: Joi.string().valid('api', 'message').default('api'),
-    url: Joi.string()
-      .when('type', {
-        is: 'api',
-        then: Joi.string().required().uri(),
-        otherwise: Joi.string().allow('').optional(),
-      }),
-    message: Joi.object({
-      sender: Joi.string().required(),
-      chatId: Joi.string().required(),
-      body: Joi.string().required().min(1),
-    }).when('type', {
-      is: 'message',
-      then: Joi.required(),
-      otherwise: Joi.optional(),
-    }),
-    cronExpression: Joi.string()
-      .required()
-      .custom((value, helpers) => {
-        if (!validateCronExpression(value)) {
-          return helpers.error('any.invalid');
-        }
-        return value;
-      })
-      .messages({ 'any.invalid': 'Expresión cron inválida' }),
-    company: Joi.string().valid('constroad', 'altavia').required(),
-    isActive: Joi.boolean().default(true),
-    timeout: Joi.number().default(30000).min(5000).max(300000),
-    retryPolicy: Joi.object({
-      maxRetries: Joi.number().default(3).min(0).max(10),
-      backoffMultiplier: Joi.number().default(2).min(1).max(5),
-    }),
-  });
-
-  try {
-    const { error, value } = schema.validate(data, { abortEarly: false });
-
-    if (error) {
-      const errors: ValidationError[] = error.details.map((detail) => ({
-        field: detail.path.join('.'),
-        message: detail.message,
-      }));
-      return { valid: false, errors };
-    }
-
-    return { valid: true };
-  } catch (err) {
-    logger.error('Validation error:', err);
-    return { valid: false };
-  }
-}
-
-export function validateCronJobUpdate(
-  data: any
-): { valid: boolean; errors?: ValidationError[] } {
-  const schema = Joi.object({
-    name: Joi.string().min(3).max(100),
-    type: Joi.string().valid('api', 'message'),
-    url: Joi.string().allow('').uri(),
-    message: Joi.object({
-      sender: Joi.string().required(),
-      chatId: Joi.string().required(),
-      body: Joi.string().required().min(1),
-    }),
-    cronExpression: Joi.string()
-      .custom((value, helpers) => {
-        if (!validateCronExpression(value)) {
-          return helpers.error('any.invalid');
-        }
-        return value;
-      })
-      .messages({ 'any.invalid': 'Expresión cron inválida' }),
-    company: Joi.string().valid('constroad', 'altavia'),
-    isActive: Joi.boolean(),
-    timeout: Joi.number().min(5000).max(300000),
-    retryPolicy: Joi.object({
-      maxRetries: Joi.number().min(0).max(10),
-      backoffMultiplier: Joi.number().min(1).max(5),
-    }),
-  }).min(1);
-
-  try {
-    const { error } = schema.validate(data, { abortEarly: false });
-
-    if (error) {
-      const errors: ValidationError[] = error.details.map((detail) => ({
-        field: detail.path.join('.'),
-        message: detail.message,
-      }));
-      return { valid: false, errors };
-    }
-
-    return { valid: true };
-  } catch (err) {
-    logger.error('Validation error:', err);
-    return { valid: false };
-  }
-}
-
 export function validateMessage(message: any): boolean {
   return (
     message &&
     typeof message === 'object' &&
     (message.conversation || message.extendedTextMessage?.text)
   );
+}
+
+export function validateCronJobCreate(data: any): {
+  success: boolean;
+  data?: any;
+  errors?: ValidationError[];
+} {
+  const schema = Joi.object({
+    companyId: Joi.string().required(),
+    name: Joi.string().required().min(3).max(100),
+    type: Joi.string().valid('api', 'message').required(),
+    isActive: Joi.boolean().default(true),
+    timeout: Joi.number().default(30000).min(5000).max(300000),
+    schedule: Joi.object({
+      cronExpression: Joi.string()
+        .required()
+        .custom((value, helpers) => {
+          if (!validateCronExpression(value)) {
+            return helpers.error('any.invalid');
+          }
+          return value;
+        })
+        .messages({ 'any.invalid': 'Expresión cron inválida' }),
+      timezone: Joi.string().default('America/Lima'),
+    }).required(),
+    message: Joi.when('type', {
+      is: 'message',
+      then: Joi.object({
+        sender: Joi.string().optional(),
+        chatId: Joi.string().required(),
+        body: Joi.string().required().min(1),
+        mentions: Joi.array().items(Joi.string()).optional(),
+      }).required(),
+      otherwise: Joi.object({
+        sender: Joi.string().optional(),
+        chatId: Joi.string().required(),
+        body: Joi.string().allow('').optional(),
+        mentions: Joi.array().items(Joi.string()).optional(),
+      }).optional(),
+    }),
+    apiConfig: Joi.object({
+      url: Joi.string().required().uri(),
+      method: Joi.string().valid('GET', 'POST', 'PUT').default('GET'),
+      headers: Joi.object().pattern(Joi.string(), Joi.string()).optional(),
+      body: Joi.any(),
+    }).when('type', {
+      is: 'api',
+      then: Joi.required(),
+      otherwise: Joi.optional(),
+    }),
+    metadata: Joi.object({
+      createdBy: Joi.string().optional(),
+      updatedBy: Joi.string().optional(),
+      tags: Joi.array().items(Joi.string()).optional(),
+    }).optional(),
+    retryPolicy: Joi.object({
+      maxRetries: Joi.number().default(3).min(0).max(10),
+      backoffMultiplier: Joi.number().default(2).min(1).max(5),
+      currentRetries: Joi.number().min(0).max(10).optional(),
+    }).optional(),
+  });
+
+  const { error, value } = schema.validate(data, {
+    abortEarly: false,
+    stripUnknown: true,
+  });
+
+  if (error) {
+    const errors: ValidationError[] = error.details.map((detail) => ({
+      field: detail.path.join('.'),
+      message: detail.message,
+    }));
+    return { success: false, errors };
+  }
+
+  return { success: true, data: value };
+}
+
+export function validateCronJobUpdate(data: any): {
+  success: boolean;
+  data?: any;
+  errors?: ValidationError[];
+} {
+  const schema = Joi.object({
+    name: Joi.string().min(3).max(100),
+    type: Joi.string().valid('api', 'message'),
+    isActive: Joi.boolean(),
+    timeout: Joi.number().min(5000).max(300000),
+    schedule: Joi.object({
+      cronExpression: Joi.string()
+        .custom((value, helpers) => {
+          if (!validateCronExpression(value)) {
+            return helpers.error('any.invalid');
+          }
+          return value;
+        })
+        .messages({ 'any.invalid': 'Expresión cron inválida' }),
+      timezone: Joi.string(),
+    }).optional(),
+    message: Joi.object({
+      sender: Joi.string().optional(),
+      chatId: Joi.string().required(),
+      body: Joi.string().allow('').optional(),
+      mentions: Joi.array().items(Joi.string()).optional(),
+    }).optional(),
+    apiConfig: Joi.object({
+      url: Joi.string().required().uri(),
+      method: Joi.string().valid('GET', 'POST', 'PUT'),
+      headers: Joi.object().pattern(Joi.string(), Joi.string()).optional(),
+      body: Joi.any(),
+    }).optional(),
+    metadata: Joi.object({
+      updatedBy: Joi.string().optional(),
+      tags: Joi.array().items(Joi.string()).optional(),
+    }).optional(),
+    retryPolicy: Joi.object({
+      maxRetries: Joi.number().min(0).max(10),
+      backoffMultiplier: Joi.number().min(1).max(5),
+      currentRetries: Joi.number().min(0).max(10).optional(),
+    }).optional(),
+  }).min(1);
+
+  const { error, value } = schema.validate(data, {
+    abortEarly: false,
+    stripUnknown: true,
+  });
+
+  if (error) {
+    const errors: ValidationError[] = error.details.map((detail) => ({
+      field: detail.path.join('.'),
+      message: detail.message,
+    }));
+    return { success: false, errors };
+  }
+
+  return { success: true, data: value };
 }

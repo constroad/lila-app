@@ -34,11 +34,22 @@ export interface ICompany extends Document {
     sender?: string;
     adminGroupId?: string;
     aiEnabled?: boolean;
+    cronjobPrefix?: string;
   };
 
   // Multi-tenant configuration
   limits: ICompanyLimits;
   isActive: boolean;
+
+  // Subscription (shared_db)
+  subscription?: {
+    limits?: {
+      cronJobs?: number;
+    };
+    usage?: {
+      cronJobs?: number;
+    };
+  };
 
   // Metadata
   createdAt: Date;
@@ -108,6 +119,7 @@ const CompanySchema = new Schema<ICompany>(
       sender: { type: String },
       adminGroupId: { type: String },
       aiEnabled: { type: Boolean, default: false },
+      cronjobPrefix: { type: String },
     },
     limits: {
       type: CompanyLimitsSchema,
@@ -118,6 +130,14 @@ const CompanySchema = new Schema<ICompany>(
       type: Boolean,
       required: true,
       default: true,
+    },
+    subscription: {
+      limits: {
+        cronJobs: { type: Number },
+      },
+      usage: {
+        cronJobs: { type: Number },
+      },
     },
   },
   {

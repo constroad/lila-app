@@ -3,9 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const envPath = path.join(__dirname, '../../.env');
-const devEnvPath = path.join(__dirname, '../../.env.development');
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const envPath = path.join(moduleDir, '../../.env');
+const devEnvPath = path.join(moduleDir, '../../.env.development');
 
 dotenv.config({ path: envPath });
 

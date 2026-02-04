@@ -546,28 +546,52 @@ export const openApiSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['name', 'cronExpression', 'company', 'isActive'],
+                required: ['companyId', 'name', 'type', 'schedule'],
                 properties: {
+                  companyId: { type: 'string' },
                   name: { type: 'string' },
                   type: { type: 'string', enum: ['api', 'message'] },
-                  url: { type: 'string' },
+                  isActive: { type: 'boolean' },
+                  timeout: { type: 'number' },
+                  schedule: {
+                    type: 'object',
+                    required: ['cronExpression'],
+                    properties: {
+                      cronExpression: { type: 'string' },
+                      timezone: { type: 'string' },
+                    },
+                  },
                   message: {
                     type: 'object',
                     properties: {
-                      sender: { type: 'string' },
                       chatId: { type: 'string' },
                       body: { type: 'string' },
+                      mentions: { type: 'array', items: { type: 'string' } },
                     },
                   },
-                  cronExpression: { type: 'string' },
-                  company: { type: 'string', enum: ['constroad', 'altavia'] },
-                  isActive: { type: 'boolean' },
-                  timeout: { type: 'number' },
+                  apiConfig: {
+                    type: 'object',
+                    properties: {
+                      url: { type: 'string' },
+                      method: { type: 'string', enum: ['GET', 'POST', 'PUT'] },
+                      headers: { type: 'object' },
+                      body: {},
+                    },
+                  },
+                  metadata: {
+                    type: 'object',
+                    properties: {
+                      createdBy: { type: 'string' },
+                      updatedBy: { type: 'string' },
+                      tags: { type: 'array', items: { type: 'string' } },
+                    },
+                  },
                   retryPolicy: {
                     type: 'object',
                     properties: {
                       maxRetries: { type: 'number' },
                       backoffMultiplier: { type: 'number' },
+                      currentRetries: { type: 'number' },
                     },
                   },
                 },
@@ -584,11 +608,25 @@ export const openApiSpec = {
         summary: 'Listar cron jobs',
         parameters: [
           {
-            name: 'company',
+            name: 'companyId',
             in: 'query',
             required: false,
-            schema: { type: 'string', enum: ['constroad', 'altavia'] },
+            schema: { type: 'string' },
             description: 'Filtrar jobs por empresa',
+          },
+          {
+            name: 'type',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['api', 'message'] },
+            description: 'Filtrar por tipo',
+          },
+          {
+            name: 'isActive',
+            in: 'query',
+            required: false,
+            schema: { type: 'boolean' },
+            description: 'Filtrar por estado',
           },
         ],
         responses: {
@@ -618,25 +656,46 @@ export const openApiSpec = {
                 type: 'object',
                 properties: {
                   name: { type: 'string' },
-                  url: { type: 'string' },
                   type: { type: 'string', enum: ['api', 'message'] },
+                  isActive: { type: 'boolean' },
+                  timeout: { type: 'number' },
+                  schedule: {
+                    type: 'object',
+                    properties: {
+                      cronExpression: { type: 'string' },
+                      timezone: { type: 'string' },
+                    },
+                  },
                   message: {
                     type: 'object',
                     properties: {
-                      sender: { type: 'string' },
                       chatId: { type: 'string' },
                       body: { type: 'string' },
+                      mentions: { type: 'array', items: { type: 'string' } },
                     },
                   },
-                  cronExpression: { type: 'string' },
-                  company: { type: 'string', enum: ['constroad', 'altavia'] },
-                  isActive: { type: 'boolean' },
-                  timeout: { type: 'number' },
+                  apiConfig: {
+                    type: 'object',
+                    properties: {
+                      url: { type: 'string' },
+                      method: { type: 'string', enum: ['GET', 'POST', 'PUT'] },
+                      headers: { type: 'object' },
+                      body: {},
+                    },
+                  },
+                  metadata: {
+                    type: 'object',
+                    properties: {
+                      updatedBy: { type: 'string' },
+                      tags: { type: 'array', items: { type: 'string' } },
+                    },
+                  },
                   retryPolicy: {
                     type: 'object',
                     properties: {
                       maxRetries: { type: 'number' },
                       backoffMultiplier: { type: 'number' },
+                      currentRetries: { type: 'number' },
                     },
                   },
                 },
@@ -660,25 +719,46 @@ export const openApiSpec = {
                 type: 'object',
                 properties: {
                   name: { type: 'string' },
-                  url: { type: 'string' },
                   type: { type: 'string', enum: ['api', 'message'] },
+                  isActive: { type: 'boolean' },
+                  timeout: { type: 'number' },
+                  schedule: {
+                    type: 'object',
+                    properties: {
+                      cronExpression: { type: 'string' },
+                      timezone: { type: 'string' },
+                    },
+                  },
                   message: {
                     type: 'object',
                     properties: {
-                      sender: { type: 'string' },
                       chatId: { type: 'string' },
                       body: { type: 'string' },
+                      mentions: { type: 'array', items: { type: 'string' } },
                     },
                   },
-                  cronExpression: { type: 'string' },
-                  company: { type: 'string', enum: ['constroad', 'altavia'] },
-                  isActive: { type: 'boolean' },
-                  timeout: { type: 'number' },
+                  apiConfig: {
+                    type: 'object',
+                    properties: {
+                      url: { type: 'string' },
+                      method: { type: 'string', enum: ['GET', 'POST', 'PUT'] },
+                      headers: { type: 'object' },
+                      body: {},
+                    },
+                  },
+                  metadata: {
+                    type: 'object',
+                    properties: {
+                      updatedBy: { type: 'string' },
+                      tags: { type: 'array', items: { type: 'string' } },
+                    },
+                  },
                   retryPolicy: {
                     type: 'object',
                     properties: {
                       maxRetries: { type: 'number' },
                       backoffMultiplier: { type: 'number' },
+                      currentRetries: { type: 'number' },
                     },
                   },
                 },

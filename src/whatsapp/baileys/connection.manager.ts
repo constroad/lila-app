@@ -865,7 +865,7 @@ export class ConnectionManager {
     sessionPhone: string,
     recipient: string,
     text: string,
-    options: { queueOnFail?: boolean } = {}
+    options: { queueOnFail?: boolean; mentions?: string[] } = {}
   ): Promise<{ queued: boolean }> {
     const isConnected = await this.ensureConnected(sessionPhone);
     const queueOnFail = options.queueOnFail !== false;

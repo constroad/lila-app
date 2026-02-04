@@ -70,41 +70,6 @@ export interface SessionConfig {
   qrTimeout: number;
 }
 
-export interface CronJobData {
-  id: string;
-  name: string;
-  url: string;
-  cronExpression: string;
-  company: 'constroad' | 'altavia';
-  isActive: boolean;
-  type?: 'api' | 'message';
-  message?: {
-    sender: string;
-    chatId: string;
-    body: string;
-  };
-  lastExecution?: string;
-  status?: 'success' | 'error';
-  history?: Array<{
-    status: 'success' | 'error';
-    timestamp: string;
-    error?: string;
-  }>;
-  metadata: {
-    createdAt: string;
-    updatedAt: string;
-    lastRun?: string;
-    nextRun?: string;
-    failureCount: number;
-    lastError?: string;
-  };
-  retryPolicy: {
-    maxRetries: number;
-    backoffMultiplier: number;
-  };
-  timeout: number;
-}
-
 export interface PDFTemplate {
   id: string;
   name: string;

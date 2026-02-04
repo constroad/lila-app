@@ -47,9 +47,16 @@ export function notFoundHandler(req: Request, res: Response, next: NextFunction)
 
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
   const startTime = Date.now();
+  const skipPaths = new Set(['/', '/health']);
 
   res.on('finish', () => {
     const duration = Date.now() - startTime;
+    if (skipPaths.has(req.path)) {
+      return;
+    }
+    if (req.path.startsWith('/docs')) {
+      return;
+    }
     logger.info(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
   });
 

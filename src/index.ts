@@ -10,13 +10,13 @@ import {
   requestLogger,
 } from './api/middlewares/errorHandler.js';
 import sessionRoutes from './api/routes/session.routes.js';
-import jobsRoutes from './api/routes/jobs.routes.js';
+import jobsRoutes from './api/routes/jobs.routes.v2.js';
 import messageRoutes from './api/routes/message.routes.js';
 import pdfRoutes from './api/routes/pdf.routes.js';
 import driveRoutes from './api/routes/drive.routes.js';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './api/docs/openapi.js';
-import jobScheduler from './jobs/scheduler.service.js';
+import jobScheduler from './jobs/scheduler.v2.instance.js';
 import pdfGenerator from './pdf/generator.service.js';
 import connectionManager from './whatsapp/baileys/connection.manager.js';
 import cron from 'node-cron';
