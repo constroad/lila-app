@@ -13,6 +13,15 @@ if (process.env.NODE_ENV === 'development' || fs.existsSync(devEnvPath)) {
   dotenv.config({ path: devEnvPath, override: true });
 }
 
+const trustProxyEnv = process.env.TRUST_PROXY;
+const resolvedTrustProxy = trustProxyEnv === undefined
+  ? (process.env.NODE_ENV === 'production' ? 1 : false)
+  : trustProxyEnv === 'true'
+    ? true
+    : trustProxyEnv === 'false'
+      ? false
+      : (Number.isNaN(Number(trustProxyEnv)) ? true : Number(trustProxyEnv));
+
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -84,6 +93,7 @@ export const config = {
     jwtSecret: process.env.JWT_SECRET || 'dev-jwt-secret',
     rateLimitWindow: process.env.RATE_LIMIT_WINDOW || '5m',
     rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '200', 10),
+    trustProxy: resolvedTrustProxy,
   },
   
   // Features

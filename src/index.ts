@@ -24,6 +24,9 @@ import fs from 'fs-extra';
 
 const app = express();
 
+// Trust proxy to honor X-Forwarded-For when behind reverse proxies
+app.set('trust proxy', config.security.trustProxy);
+
 // Middleware de seguridad
 app.use(
   helmet({

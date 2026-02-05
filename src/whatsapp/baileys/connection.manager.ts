@@ -64,8 +64,36 @@ const extractConsoleErrorPayload = (args: any[]): SignalDecryptErrorPayload => {
     stack,
   };
 };
+
+const isSignalSessionEntry = (value: any): boolean => {
+  if (!value || typeof value !== 'object') return false;
+  const hasChains = '_chains' in value;
+  const hasRatchet = 'currentRatchet' in value;
+  const hasIndexInfo = 'indexInfo' in value;
+  const hasRegistrationId = 'registrationId' in value;
+  return (
+    (hasChains && hasRatchet) ||
+    (hasChains && hasIndexInfo) ||
+    (hasRatchet && hasIndexInfo) ||
+    (hasChains && hasRegistrationId)
+  );
+};
+
+const sanitizeConsoleArgs = (args: any[]) => {
+  let mutated = false;
+  const sanitized = args.map((arg) => {
+    if (isSignalSessionEntry(arg)) {
+      mutated = true;
+      return '[redacted session]';
+    }
+    return arg;
+  });
+  return { sanitized, mutated };
+};
+
 console.log = (...args: any[]) => {
-  const message = args.join(' ');
+  const { sanitized, mutated } = sanitizeConsoleArgs(args);
+  const message = sanitized.join(' ');
   // Filtrar mensajes de Signal Protocol que ensucian la consola
   if (
     message.includes('Closing open session in favor of') ||
@@ -77,15 +105,16 @@ console.log = (...args: any[]) => {
   ) {
     return; // Silenciar estos mensajes
   }
-  originalConsoleLog.apply(console, args);
+  originalConsoleLog.apply(console, mutated ? sanitized : args);
 };
 console.error = (...args: any[]) => {
-  const payload = extractConsoleErrorPayload(args);
+  const { sanitized, mutated } = sanitizeConsoleArgs(args);
+  const payload = extractConsoleErrorPayload(mutated ? sanitized : args);
   if (signalDecryptErrorPatterns.some((pattern) => payload.message.includes(pattern))) {
     signalDecryptErrorHandler?.(payload);
     return;
   }
-  originalConsoleError.apply(console, args);
+  originalConsoleError.apply(console, mutated ? sanitized : args);
 };
 
 type BackupEntry = {
