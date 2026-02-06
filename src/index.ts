@@ -38,7 +38,27 @@ app.use(
     },
   })
 );
-app.use(cors());
+
+const corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    allowedHeaders: ['Authorization', 'x-api-key', 'Content-Type', 'x-request-id'],
+  })
+);
 
 // Middleware de parseo
 app.use(express.json({ limit: '10mb' }));

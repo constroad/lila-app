@@ -44,6 +44,7 @@ export const config = {
 
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || '',
+    errorsChatId: process.env.TELEGRAM_ERRORS_CHAT_ID || '',
   },
 
   // MongoDB (Portal connection for quotas - MongoDB only)
