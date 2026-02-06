@@ -1,3 +1,6 @@
+// 🛡️ CRITICAL: Import console hijacking FIRST to prevent logging of sensitive data
+import './utils/console-hijack.js';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
