@@ -60,7 +60,7 @@ export interface CompanyStorageStructure {
 // ============================================================================
 
 export class StoragePathService {
-  private readonly root: string;
+  private root: string;
 
   /**
    * Módulos estándar que se crean automáticamente para cada empresa
@@ -80,7 +80,40 @@ export class StoragePathService {
 
   constructor() {
     this.root = config.storage.root;
+    this.root = this.resolveWritableRoot(this.root);
     logger.info(`StoragePathService initialized with root: ${this.root}`);
+  }
+
+  private resolveWritableRoot(candidate: string): string {
+    try {
+      fs.ensureDirSync(candidate);
+      return candidate;
+    } catch (error) {
+      if (config.nodeEnv !== 'production') {
+        const fallback = path.resolve(process.cwd(), 'data', 'storage');
+        try {
+          fs.ensureDirSync(fallback);
+          logger.warn('Storage root not accessible. Falling back to local storage.', {
+            requested: candidate,
+            fallback,
+            error: String(error),
+          });
+          return fallback;
+        } catch (fallbackError) {
+          logger.error('Failed to initialize fallback storage root.', {
+            requested: candidate,
+            fallback,
+            error: String(fallbackError),
+          });
+        }
+      } else {
+        logger.error('Storage root not accessible. Check FILE_STORAGE_ROOT permissions.', {
+          requested: candidate,
+          error: String(error),
+        });
+      }
+      throw error;
+    }
   }
 
   // ==========================================================================
