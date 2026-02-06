@@ -1,6 +1,31 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../../utils/logger.js';
 import { HTTP_STATUS } from '../../config/constants.js';
+import { config } from '../../config/environment.js';
+
+const ALERT_WINDOW_MS = 5 * 60 * 1000;
+const alertCache = new Map<string, number>();
+
+const shouldSendAlert = (key: string) => {
+  const now = Date.now();
+  const last = alertCache.get(key);
+  if (last && now - last < ALERT_WINDOW_MS) return false;
+  alertCache.set(key, now);
+  return true;
+};
+
+const sendTelegramAlert = async (message: string) => {
+  if (!config.telegram.botToken || !config.telegram.errorsChatId) return;
+
+  const body = new URLSearchParams();
+  body.append('chat_id', config.telegram.errorsChatId);
+  body.append('text', message);
+
+  await fetch(`https://api.telegram.org/bot${config.telegram.botToken}/sendMessage`, {
+    method: 'POST',
+    body,
+  });
+};
 
 export interface CustomError extends Error {
   statusCode?: number;
@@ -23,6 +48,31 @@ export function errorHandler(
     method: req.method,
     details: err.details,
   });
+
+  const shouldAlert =
+    statusCode >= 500 ||
+    req.path.startsWith('/api/drive') ||
+    req.path.startsWith('/api/message');
+
+  if (shouldAlert) {
+    const alertKey = `${statusCode}:${req.path}:${message}`;
+    if (shouldSendAlert(alertKey)) {
+      const companyId = req.companyId || 'N/A';
+      const errorMessage = [
+        'LILA-APP ERROR!',
+        '---------------------',
+        `path: ${req.path}`,
+        `method: ${req.method}`,
+        `companyId: ${companyId}`,
+        `status: ${statusCode}`,
+        `message: ${message}`,
+      ].join('\n');
+
+      sendTelegramAlert(errorMessage).catch((error) => {
+        logger.warn('Failed to send Telegram alert', error);
+      });
+    }
+  }
 
   res.status(statusCode).json({
     success: false,

@@ -40,6 +40,30 @@ export interface ICompany extends Document {
   // Multi-tenant configuration
   limits: ICompanyLimits;
   isActive: boolean;
+  features?: {
+    modules?: {
+      drive?: boolean;
+    };
+  };
+
+  // API Key for lila-app direct access (FE)
+  'api-key-lila-access'?: {
+    keyHash?: string;
+    keyEncrypted?: string;
+    keyPrefix?: string;
+    last4?: string;
+    isActive?: boolean;
+    createdAt?: Date;
+    rotatedAt?: Date;
+    lastUsedAt?: Date;
+    lastUsedIp?: string;
+    allowedOrigins?: string[];
+    allowedSenders?: string[];
+    rateLimit?: {
+      limit: number;
+      windowMs: number;
+    };
+  };
 
   // Subscription (shared_db)
   subscription?: {
@@ -126,6 +150,11 @@ const CompanySchema = new Schema<ICompany>(
       required: true,
       default: () => ({}), // Usa defaults del sub-schema
     },
+    features: {
+      modules: {
+        drive: { type: Boolean, default: false },
+      },
+    },
     isActive: {
       type: Boolean,
       required: true,
@@ -137,6 +166,25 @@ const CompanySchema = new Schema<ICompany>(
       },
       usage: {
         cronJobs: { type: Number },
+      },
+    },
+
+    // API Key for lila-app direct access (FE)
+    'api-key-lila-access': {
+      keyHash: { type: String },
+      keyEncrypted: { type: String },
+      keyPrefix: { type: String },
+      last4: { type: String },
+      isActive: { type: Boolean, default: false },
+      createdAt: { type: Date },
+      rotatedAt: { type: Date },
+      lastUsedAt: { type: Date },
+      lastUsedIp: { type: String },
+      allowedOrigins: { type: [String], default: [] },
+      allowedSenders: { type: [String], default: [] },
+      rateLimit: {
+        limit: { type: Number },
+        windowMs: { type: Number },
       },
     },
   },
