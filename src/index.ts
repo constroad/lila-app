@@ -44,6 +44,27 @@ const corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const resolveStaticCorsOrigin = (origin?: string | string[] | null): string | null => {
+  if (!origin) return null;
+  const normalized = Array.isArray(origin) ? origin[0] : origin;
+  if (!normalized) return null;
+  if (corsOrigins.length === 0) return normalized;
+  if (corsOrigins.includes(normalized)) return normalized;
+  return null;
+};
+
+const setStaticCorsHeaders = (req: express.Request, res: express.Response) => {
+  const origin = resolveStaticCorsOrigin(req.headers.origin);
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization, x-api-key, x-request-id');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+};
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -95,6 +116,9 @@ app.use(
     dotfiles: 'deny',
     maxAge: '1h',
     immutable: true,
+    setHeaders: (res, _path, _stat) => {
+      setStaticCorsHeaders(res.req as express.Request, res);
+    },
   })
 );
 
@@ -106,6 +130,9 @@ app.use(
     index: false,
     dotfiles: 'deny',
     maxAge: '1h',
+    setHeaders: (res, _path, _stat) => {
+      setStaticCorsHeaders(res.req as express.Request, res);
+    },
   })
 );
 
