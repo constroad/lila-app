@@ -155,10 +155,21 @@ async function sendTelegramNotification(
   }
 }
 
+function resolveProto(req: Request): string {
+  const forwarded = req.headers['x-forwarded-proto'];
+  if (typeof forwarded === 'string' && forwarded.length > 0) {
+    return forwarded.split(',')[0].trim();
+  }
+  if (Array.isArray(forwarded) && forwarded[0]) {
+    return forwarded[0];
+  }
+  return req.protocol;
+}
+
 function buildAbsoluteUrl(req: Request, relativeUrl: string) {
-  const host = req.get('host');
+  const host = req.get('x-forwarded-host') || req.get('host');
   if (!host) return relativeUrl;
-  const proto = req.protocol;
+  const proto = resolveProto(req);
   return `${proto}://${host}${relativeUrl}`;
 }
 
