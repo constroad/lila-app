@@ -130,7 +130,10 @@ const verifySessions = (socket: any, jids: string[]): boolean => {
   return foundCount >= Math.ceil(sampleSize / 2);
 };
 
-const assertRecipientSessions = async (socket: any, recipient: string): Promise<boolean> => {
+// 🗑️ DEPRECATED: assertRecipientSessions ya no se usa con approach de notifications
+// Se mantiene comentado para referencia pero NO se usa en sendWithReconnect
+/*
+const assertRecipientSessions_OLD = async (socket: any, recipient: string): Promise<boolean> => {
   if (!socket?.assertSessions) {
     return false;
   }
@@ -316,6 +319,13 @@ const assertRecipientSessions = async (socket: any, recipient: string): Promise<
     return false;
   }
 };
+*/
+
+// Nueva versión simplificada (no hace nada en modo directo)
+const assertRecipientSessions = async (socket: any, recipient: string): Promise<boolean> => {
+  logger.warn(`⚠️ assertRecipientSessions is deprecated and no longer used in direct send mode`);
+  return false;
+};
 
 const normalizeSessionError = (error: unknown): CustomError | null => {
   if (error && typeof error === 'object' && 'statusCode' in error) {
@@ -355,102 +365,56 @@ const sendWithReconnect = async (
   options?: { recipient?: string }
 ) => {
   const socket = await getActiveSocket(sessionPhone);
+
   try {
+    // 🔧 MODO NOTIFICATIONS: Envío directo sin assertSessions
     await sendFn(socket);
     return { retried: false };
   } catch (error) {
-    // ✅ MEJORA: Handle not-acceptable with recovery attempt for groups
-    if (isNotAcceptableError(error)) {
-      // For groups, this might be a temporary sender-key sync issue
-      if (options?.recipient && isGroupJid(options.recipient)) {
-        logger.warn(
-          `⚠️ not-acceptable error for group ${options.recipient}, attempting sender-key recovery...`
-        );
+    const errorMsg = extractErrorMessage(error).toLowerCase();
 
-        try {
-          // 1. Refresh group metadata and assert sessions
-          logger.info(`🔄 Step 1: Calling assertRecipientSessions()...`);
-          const recovered = await assertRecipientSessions(socket, options.recipient);
-          logger.info(`✅ Step 1 completed: recovered=${recovered}`);
+    // CASO 1: Error de sesión → Reconectar
+    if (isSessionUnavailableError(error)) {
+      logger.warn(`Session error for ${sessionPhone}, attempting reconnect...`);
 
-          if (recovered) {
-            // 2. Wait for sender-keys to sync (critical for post-QR groups)
-            logger.info(`⏳ Step 2: Waiting 3s for sender-keys to sync after recovery...`);
-            await new Promise((resolve) => setTimeout(resolve, 3000));
+      try {
+        await connectionManager.disconnect(sessionPhone);
+        await connectionManager.createConnection(sessionPhone);
 
-            // 3. Retry send
-            logger.info(`🔄 Step 3: Retrying send after sender-key recovery...`);
-            await sendFn(socket);
-            logger.info(`✅ Send successful after sender-key recovery`);
+        const reconnected = await connectionManager.ensureConnected(sessionPhone, 10000);
+        if (reconnected) {
+          const retrySocket = connectionManager.getConnection(sessionPhone);
+          if (retrySocket) {
+            await sendFn(retrySocket);
+            logger.info(`✅ Send successful after reconnect`);
             return { retried: true };
-          } else {
-            logger.warn(`⚠️ assertRecipientSessions() returned false - cannot recover`);
           }
-        } catch (retryError) {
-          logger.warn(
-            `❌ Sender-key recovery failed: ${extractErrorMessage(retryError)} - falling through to original error`
-          );
-          // Fall through to throw original not-acceptable error
         }
+      } catch (reconnectError) {
+        logger.error(`Reconnect failed: ${extractErrorMessage(reconnectError)}`);
       }
 
-      throw buildForbiddenError(
-        'WhatsApp rejected the message. Verify the sender is a member/admin of the group.'
-      );
+      throw buildSessionUnavailableError('Session not connected after reconnect attempt');
     }
 
-    if (!isNoSessionsError(error)) {
-      const sessionError = normalizeSessionError(error);
-      if (sessionError) {
-        logger.warn(`Send failed for ${sessionPhone}, attempting reconnect...`, {
-          error: extractErrorMessage(error),
-        });
-
-        try {
-          await connectionManager.disconnect(sessionPhone);
-        } catch {
-          // ignore disconnect errors
-        }
-
-        try {
-          await connectionManager.createConnection(sessionPhone);
-          const reconnected = await connectionManager.ensureConnected(sessionPhone, 10000, 400);
-          if (reconnected) {
-            const retrySocket = connectionManager.getConnection(sessionPhone);
-            if (retrySocket) {
-              await sendFn(retrySocket);
-              return { retried: true };
-            }
-          }
-        } catch {
-          // fall through to original error
-        }
-
-        throw sessionError;
-      }
-      throw error;
-    }
-
-    if (isNoSessionsError(error) && options?.recipient) {
-      logger.warn(`No sessions for ${options.recipient}, attempting session assert...`);
-      const repaired = await assertRecipientSessions(socket, options.recipient);
-      if (repaired) {
-        try {
-          await sendFn(socket);
-          return { retried: true };
-        } catch (retryError) {
-          logger.warn(
-            `Retry after session assert failed for ${options.recipient}: ${extractErrorMessage(retryError)}`
-          );
-        }
-      } else {
-        logger.warn(`Session assert failed for ${options.recipient}`);
+    // CASO 2: Error de grupo (not a participant, forbidden, not-acceptable)
+    if (
+      errorMsg.includes('participant') ||
+      errorMsg.includes('forbidden') ||
+      errorMsg.includes('not-acceptable') ||
+      errorMsg.includes('not a member')
+    ) {
+      if (options?.recipient && isGroupJid(options.recipient)) {
+        logger.error(`Group send error: ${errorMsg}`);
+        throw buildForbiddenError(
+          `Cannot send to group. The bot may not be a member/admin of this group. Try refreshing groups with POST /api/sessions/${sessionPhone}/syncGroups`
+        );
       }
     }
-    const noSessionError = buildSessionUnavailableError(
-      'Recipient session not ready. Try again after sessions are established.'
-    );
-    throw noSessionError;
+
+    // CASO 3: Otros errores → Propagar directamente
+    logger.error(`Send error: ${errorMsg}`);
+    throw error;
   }
 };
 

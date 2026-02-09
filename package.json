@@ -11,6 +11,7 @@
     "dev:watch": "nodemon",
     "start": "node dist/index.js",
     "test": "jest",
+    "test:send": "node scripts/test-send-messages.js",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts"
   },

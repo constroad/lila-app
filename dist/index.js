@@ -42,16 +42,18 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-var __dirname, envPath, devEnvPath, config;
+var moduleDir, envPath, devEnvPath, trustProxyEnv, resolvedTrustProxy, config;
 var init_environment = __esm({
   "src/config/environment.ts"() {
-    __dirname = path.dirname(fileURLToPath(import.meta.url));
-    envPath = path.join(__dirname, "../../.env");
-    devEnvPath = path.join(__dirname, "../../.env.development");
+    moduleDir = path.dirname(fileURLToPath(import.meta.url));
+    envPath = path.join(moduleDir, "../../.env");
+    devEnvPath = path.join(moduleDir, "../../.env.development");
     dotenv.config({ path: envPath });
     if (process.env.NODE_ENV === "development" || fs.existsSync(devEnvPath)) {
       dotenv.config({ path: devEnvPath, override: true });
     }
+    trustProxyEnv = process.env.TRUST_PROXY;
+    resolvedTrustProxy = trustProxyEnv === void 0 ? process.env.NODE_ENV === "production" ? 1 : false : trustProxyEnv === "true" ? true : trustProxyEnv === "false" ? false : Number.isNaN(Number(trustProxyEnv)) ? true : Number(trustProxyEnv);
     config = {
       port: parseInt(process.env.PORT || "3001", 10),
       nodeEnv: process.env.NODE_ENV || "development",
@@ -62,7 +64,7 @@ var init_environment = __esm({
         maxReconnectAttempts: parseInt(process.env.WHATSAPP_MAX_RECONNECT_ATTEMPTS || "0", 10),
         qrTimeout: 6e4,
         // 60 segundos
-        aiEnabled: process.env.WHATSAPP_AI_ENABLED !== "false",
+        aiEnabled: process.env.WHATSAPP_AI_ENABLED === "true",
         aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || "51949376824",
         baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || "fatal"
       },
@@ -71,7 +73,8 @@ var init_environment = __esm({
         apiKey: process.env.ANTHROPIC_API_KEY
       },
       telegram: {
-        botToken: process.env.TELEGRAM_BOT_TOKEN || ""
+        botToken: process.env.TELEGRAM_BOT_TOKEN || "",
+        errorsChatId: process.env.TELEGRAM_ERRORS_CHAT_ID || ""
       },
       // MongoDB (Portal connection for quotas - MongoDB only)
       mongodb: {
@@ -104,12 +107,17 @@ var init_environment = __esm({
         level: process.env.LOG_LEVEL || "info",
         dir: process.env.LOG_DIR || "./logs"
       },
+      // Portal integration (internal actions)
+      portal: {
+        baseUrl: process.env.PORTAL_BASE_URL || "http://localhost:3000"
+      },
       // Security
       security: {
         apiSecretKey: process.env.API_SECRET_KEY || "dev-secret-key",
         jwtSecret: process.env.JWT_SECRET || "dev-jwt-secret",
         rateLimitWindow: process.env.RATE_LIMIT_WINDOW || "5m",
-        rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || "200", 10)
+        rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || "200", 10),
+        trustProxy: resolvedTrustProxy
       },
       // Features
       features: {
@@ -124,11 +132,33 @@ var init_environment = __esm({
 // src/utils/logger.ts
 import winston from "winston";
 import path2 from "path";
-var logDir, logger, logger_default;
+var logDir, safeStringify, logger, logger_default;
 var init_logger = __esm({
   "src/utils/logger.ts"() {
     init_environment();
     logDir = config.logging.dir;
+    safeStringify = (value, spacing = 0) => {
+      const seen = /* @__PURE__ */ new WeakSet();
+      return JSON.stringify(
+        value,
+        (key, val) => {
+          if (val instanceof Error) {
+            return {
+              message: val.message,
+              stack: val.stack
+            };
+          }
+          if (typeof val === "object" && val !== null) {
+            if (seen.has(val)) {
+              return "[Circular]";
+            }
+            seen.add(val);
+          }
+          return val;
+        },
+        spacing
+      );
+    };
     logger = winston.createLogger({
       level: config.logging.level,
       format: winston.format.combine(
@@ -137,7 +167,13 @@ var init_logger = __esm({
         winston.format.splat(),
         winston.format.json(),
         winston.format.printf(({ timestamp, level, message, ...meta }) => {
-          return `${timestamp} [${level.toUpperCase()}]: ${message} ${Object.keys(meta).length ? JSON.stringify(meta, null, 2) : ""}`;
+          const metaKeys = Object.keys(meta).filter((key) => meta[key] !== void 0);
+          const cleanLevel = String(level).replace(/\u001b\[[0-9;]*m/g, "").toLowerCase();
+          const hasOnlyService = metaKeys.length === 1 && metaKeys[0] === "service";
+          const shouldPrettyPrint = cleanLevel === "warn" || cleanLevel === "error";
+          const metaStr = metaKeys.length && !(cleanLevel === "info" && hasOnlyService) ? shouldPrettyPrint ? `
+${safeStringify(meta, 2)}` : ` ${safeStringify(meta)}` : "";
+          return `${timestamp} [${String(level).toUpperCase()}]: ${message}${metaStr}`;
         })
       ),
       defaultMeta: { service: "lila-app" },
@@ -163,8 +199,13 @@ var init_logger = __esm({
           format: winston.format.combine(
             winston.format.colorize(),
             winston.format.printf(({ timestamp, level, message, ...meta }) => {
-              const metaStr = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : "";
-              return `${timestamp} [${level}]: ${message} ${metaStr}`;
+              const metaKeys = Object.keys(meta).filter((key) => meta[key] !== void 0);
+              const cleanLevel = String(level).replace(/\u001b\[[0-9;]*m/g, "").toLowerCase();
+              const hasOnlyService = metaKeys.length === 1 && metaKeys[0] === "service";
+              const shouldPrettyPrint = cleanLevel === "warn" || cleanLevel === "error";
+              const metaStr = metaKeys.length && !(cleanLevel === "info" && hasOnlyService) ? shouldPrettyPrint ? `
+${safeStringify(meta, 2)}` : ` ${safeStringify(meta)}` : "";
+              return `${timestamp} [${level}]: ${message}${metaStr}`;
             })
           )
         })
@@ -174,12 +215,1596 @@ var init_logger = __esm({
   }
 });
 
+// src/whatsapp/baileys/store.manager.ts
+import fs2 from "fs-extra";
+import path3 from "path";
+function makeInMemoryStore(filePath) {
+  const chats = /* @__PURE__ */ new Map();
+  const contacts = /* @__PURE__ */ new Map();
+  const messages = /* @__PURE__ */ new Map();
+  const readFromFile = () => {
+    if (!fs2.existsSync(filePath)) {
+      logger_default.debug(`\u26A0\uFE0F Store file not found: ${filePath}, will create on first write`);
+      return;
+    }
+    try {
+      const json = fs2.readFileSync(filePath, "utf-8");
+      const data = JSON.parse(json);
+      if (data.chats) {
+        data.chats.forEach((c) => chats.set(c.id, c));
+        logger_default.info(`\u2705 Loaded ${data.chats.length} chats from store: ${filePath}`);
+      }
+      if (data.contacts) {
+        data.contacts.forEach((c) => contacts.set(c.id, c));
+        logger_default.info(`\u2705 Loaded ${data.contacts.length} contacts from store: ${filePath}`);
+      }
+      if (data.messages) {
+        Object.entries(data.messages).forEach(([jid, msgs]) => {
+          messages.set(jid, msgs);
+        });
+        logger_default.info(`\u2705 Loaded messages for ${Object.keys(data.messages).length} chats`);
+      }
+    } catch (error) {
+      logger_default.error(`\u274C Error reading store file ${filePath}: ${error}`);
+    }
+  };
+  const writeToFile = () => {
+    try {
+      const dir = path3.dirname(filePath);
+      fs2.ensureDirSync(dir);
+      const data = {
+        chats: Array.from(chats.values()),
+        contacts: Array.from(contacts.values()),
+        messages: Object.fromEntries(messages)
+      };
+      fs2.writeFileSync(filePath, JSON.stringify(data, null, 2));
+      logger_default.debug(`\u{1F4BE} Store persisted: ${chats.size} chats, ${contacts.size} contacts \u2192 ${filePath}`);
+    } catch (error) {
+      logger_default.error(`\u274C Error writing store file ${filePath}: ${error}`);
+    }
+  };
+  const bind = (ev) => {
+    ev.on("chats.upsert", (newChats) => {
+      newChats.forEach((chat) => {
+        chats.set(chat.id, chat);
+      });
+      logger_default.debug(`\u{1F4E5} Upserted ${newChats.length} chats to store`);
+    });
+    ev.on("chats.update", (updates) => {
+      updates.forEach((update) => {
+        if (update.id) {
+          const existing = chats.get(update.id);
+          if (existing) {
+            chats.set(update.id, { ...existing, ...update });
+          }
+        }
+      });
+      logger_default.debug(`\u{1F504} Updated ${updates.length} chats in store`);
+    });
+    ev.on("contacts.upsert", (newContacts) => {
+      newContacts.forEach((contact) => {
+        contacts.set(contact.id, contact);
+      });
+      logger_default.debug(`\u{1F4E5} Upserted ${newContacts.length} contacts to store`);
+    });
+    ev.on("contacts.update", (updates) => {
+      updates.forEach((update) => {
+        if (update.id) {
+          const existing = contacts.get(update.id);
+          if (existing) {
+            contacts.set(update.id, { ...existing, ...update });
+          }
+        }
+      });
+      logger_default.debug(`\u{1F504} Updated ${updates.length} contacts in store`);
+    });
+    ev.on("messages.upsert", ({ messages: msgs }) => {
+      msgs.forEach((msg) => {
+        const jid = msg.key.remoteJid;
+        if (!messages.has(jid)) {
+          messages.set(jid, []);
+        }
+        const list = messages.get(jid);
+        list.push(msg);
+        messages.set(jid, list);
+      });
+      logger_default.debug(`\u{1F4E8} Received ${msgs.length} messages`);
+    });
+  };
+  return {
+    chats,
+    contacts,
+    messages,
+    readFromFile,
+    writeToFile,
+    bind
+  };
+}
+var init_store_manager = __esm({
+  "src/whatsapp/baileys/store.manager.ts"() {
+    init_logger();
+  }
+});
+
+// src/whatsapp/baileys/populate-store-simple.ts
+var populateStoreIfEmpty;
+var init_populate_store_simple = __esm({
+  "src/whatsapp/baileys/populate-store-simple.ts"() {
+    init_sessions_simple();
+    init_logger();
+    populateStoreIfEmpty = async (id, sock) => {
+      const store = getStore(id);
+      try {
+        const groups = await sock.groupFetchAllParticipating();
+        const groupIds = Object.keys(groups);
+        for (const group of Object.values(groups)) {
+          const existing = store.chats.get(group.id);
+          if (!existing) {
+            logger_default.info(`\u2795 Adding new group to store: ${group.subject} (${group.id})`);
+            store.chats.set(group.id, {
+              id: group.id,
+              name: group.subject,
+              participants: group.participants ?? []
+            });
+          } else {
+            if (existing.name !== group.subject) {
+              logger_default.info(`\u{1F504} Updating group name in store: ${existing.name} \u2192 ${group.subject}`);
+              store.chats.set(group.id, {
+                ...existing,
+                name: group.subject,
+                participants: group.participants ?? []
+              });
+            }
+          }
+        }
+        if (sock.user && !store.contacts.has(sock.user.id)) {
+          store.contacts.set(sock.user.id, sock.user);
+        }
+        logger_default.info(`\u2705 Synced ${Object.keys(groups).length} groups to store`);
+        return {
+          success: true,
+          groupCount: Object.keys(groups).length
+        };
+      } catch (err) {
+        logger_default.error("\u274C Error populating store from groupFetchAllParticipating:", err);
+        return {
+          success: false,
+          groupCount: 0,
+          error: err instanceof Error ? err.message : String(err)
+        };
+      }
+    };
+  }
+});
+
+// src/storage/json.store.ts
+import fs3 from "fs-extra";
+import path4 from "path";
+var JsonStore, json_store_default;
+var init_json_store = __esm({
+  "src/storage/json.store.ts"() {
+    init_logger();
+    JsonStore = class {
+      constructor(options) {
+        this.baseDir = options.baseDir;
+        this.autoBackup = options.autoBackup ?? true;
+      }
+      async get(key) {
+        try {
+          const filePath = path4.join(this.baseDir, `${key}.json`);
+          const exists = await fs3.pathExists(filePath);
+          if (!exists) {
+            return null;
+          }
+          const data = await fs3.readJSON(filePath);
+          return data;
+        } catch (error) {
+          logger_default.error(`Error reading ${key} from store:`, error);
+          return null;
+        }
+      }
+      async set(key, value) {
+        try {
+          const filePath = path4.join(this.baseDir, `${key}.json`);
+          await fs3.ensureDir(path4.dirname(filePath));
+          if (this.autoBackup && await fs3.pathExists(filePath)) {
+            const backupPath = `${filePath}.backup`;
+            await fs3.copy(filePath, backupPath);
+          }
+          const tempPath = `${filePath}.tmp`;
+          await fs3.writeJSON(tempPath, value, { spaces: 2 });
+          await fs3.move(tempPath, filePath, { overwrite: true });
+          logger_default.debug(`Successfully wrote ${key} to store`);
+        } catch (error) {
+          logger_default.error(`Error writing ${key} to store:`, error);
+          throw error;
+        }
+      }
+      async delete(key) {
+        try {
+          const filePath = path4.join(this.baseDir, `${key}.json`);
+          if (await fs3.pathExists(filePath)) {
+            await fs3.remove(filePath);
+            logger_default.debug(`Successfully deleted ${key} from store`);
+          }
+        } catch (error) {
+          logger_default.error(`Error deleting ${key} from store:`, error);
+          throw error;
+        }
+      }
+      async getAllKeys() {
+        try {
+          const files = await fs3.readdir(this.baseDir);
+          return files.filter((f) => f.endsWith(".json")).map((f) => f.replace(".json", ""));
+        } catch (error) {
+          logger_default.error("Error reading keys from store:", error);
+          return [];
+        }
+      }
+      async clear() {
+        try {
+          await fs3.emptyDir(this.baseDir);
+          logger_default.debug("Store cleared");
+        } catch (error) {
+          logger_default.error("Error clearing store:", error);
+          throw error;
+        }
+      }
+      async exists(key) {
+        const filePath = path4.join(this.baseDir, `${key}.json`);
+        return await fs3.pathExists(filePath);
+      }
+    };
+    json_store_default = JsonStore;
+  }
+});
+
+// node_modules/uuid/dist/esm-node/rng.js
+import crypto from "crypto";
+function rng() {
+  if (poolPtr > rnds8Pool.length - 16) {
+    crypto.randomFillSync(rnds8Pool);
+    poolPtr = 0;
+  }
+  return rnds8Pool.slice(poolPtr, poolPtr += 16);
+}
+var rnds8Pool, poolPtr;
+var init_rng = __esm({
+  "node_modules/uuid/dist/esm-node/rng.js"() {
+    rnds8Pool = new Uint8Array(256);
+    poolPtr = rnds8Pool.length;
+  }
+});
+
+// node_modules/uuid/dist/esm-node/regex.js
+var regex_default;
+var init_regex = __esm({
+  "node_modules/uuid/dist/esm-node/regex.js"() {
+    regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000)$/i;
+  }
+});
+
+// node_modules/uuid/dist/esm-node/validate.js
+function validate(uuid) {
+  return typeof uuid === "string" && regex_default.test(uuid);
+}
+var validate_default;
+var init_validate = __esm({
+  "node_modules/uuid/dist/esm-node/validate.js"() {
+    init_regex();
+    validate_default = validate;
+  }
+});
+
+// node_modules/uuid/dist/esm-node/stringify.js
+function stringify(arr, offset = 0) {
+  const uuid = (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase();
+  if (!validate_default(uuid)) {
+    throw TypeError("Stringified UUID is invalid");
+  }
+  return uuid;
+}
+var byteToHex, stringify_default;
+var init_stringify = __esm({
+  "node_modules/uuid/dist/esm-node/stringify.js"() {
+    init_validate();
+    byteToHex = [];
+    for (let i = 0; i < 256; ++i) {
+      byteToHex.push((i + 256).toString(16).substr(1));
+    }
+    stringify_default = stringify;
+  }
+});
+
+// node_modules/uuid/dist/esm-node/v4.js
+function v4(options, buf, offset) {
+  options = options || {};
+  const rnds = options.random || (options.rng || rng)();
+  rnds[6] = rnds[6] & 15 | 64;
+  rnds[8] = rnds[8] & 63 | 128;
+  if (buf) {
+    offset = offset || 0;
+    for (let i = 0; i < 16; ++i) {
+      buf[offset + i] = rnds[i];
+    }
+    return buf;
+  }
+  return stringify_default(rnds);
+}
+var v4_default;
+var init_v4 = __esm({
+  "node_modules/uuid/dist/esm-node/v4.js"() {
+    init_rng();
+    init_stringify();
+    v4_default = v4;
+  }
+});
+
+// node_modules/uuid/dist/esm-node/index.js
+var init_esm_node = __esm({
+  "node_modules/uuid/dist/esm-node/index.js"() {
+    init_v4();
+  }
+});
+
+// src/services/storage-path.service.ts
+import path5 from "path";
+import fs4 from "fs-extra";
+var StoragePathService, storagePathService;
+var init_storage_path_service = __esm({
+  "src/services/storage-path.service.ts"() {
+    init_environment();
+    init_logger();
+    StoragePathService = class {
+      constructor() {
+        /**
+         * Módulos estándar que se crean automáticamente para cada empresa
+         */
+        this.standardModules = [
+          { name: "orders", description: "Pedidos y obras", autoCreate: true },
+          { name: "dispatches", description: "Despachos y vales", autoCreate: true },
+          { name: "clients", description: "Documentos de clientes", autoCreate: true },
+          { name: "certificates", description: "Certificados de calidad", autoCreate: true },
+          { name: "reports", description: "Reportes y an\xE1lisis", autoCreate: true },
+          { name: "media", description: "Archivos multimedia", autoCreate: true },
+          { name: "projects", description: "Documentos de proyectos", autoCreate: true },
+          { name: "expenses", description: "Comprobantes de gastos", autoCreate: true },
+          { name: "services", description: "Servicios y reportes", autoCreate: true },
+          { name: "temp", description: "Archivos temporales", autoCreate: true }
+        ];
+        this.root = config.storage.root;
+        this.root = this.resolveWritableRoot(this.root);
+        logger_default.info(`StoragePathService initialized with root: ${this.root}`);
+      }
+      resolveWritableRoot(candidate) {
+        try {
+          fs4.ensureDirSync(candidate);
+          return candidate;
+        } catch (error) {
+          if (config.nodeEnv !== "production") {
+            const fallback = path5.resolve(process.cwd(), "data", "storage");
+            try {
+              fs4.ensureDirSync(fallback);
+              logger_default.warn("Storage root not accessible. Falling back to local storage.", {
+                requested: candidate,
+                fallback,
+                error: String(error)
+              });
+              return fallback;
+            } catch (fallbackError) {
+              logger_default.error("Failed to initialize fallback storage root.", {
+                requested: candidate,
+                fallback,
+                error: String(fallbackError)
+              });
+            }
+          } else {
+            logger_default.error("Storage root not accessible. Check FILE_STORAGE_ROOT permissions.", {
+              requested: candidate,
+              error: String(error)
+            });
+          }
+          throw error;
+        }
+      }
+      // ==========================================================================
+      // PATH BUILDERS
+      // ==========================================================================
+      /**
+       * Obtiene la ruta raíz de una empresa
+       * @param companyId ID de la empresa
+       * @returns Ruta absoluta a la carpeta de la empresa
+       */
+      getCompanyRoot(companyId) {
+        if (!companyId || companyId.trim() === "") {
+          throw new Error("companyId is required");
+        }
+        return path5.join(this.root, "companies", companyId);
+      }
+      /**
+       * Obtiene la ruta de un módulo específico para una empresa
+       * @param companyId ID de la empresa
+       * @param module Nombre del módulo (orders, dispatches, clients, etc.)
+       * @param subpath Subruta opcional dentro del módulo
+       * @returns Ruta absoluta al módulo o subruta
+       */
+      getModulePath(companyId, module, subpath) {
+        const root = this.getCompanyRoot(companyId);
+        const modulePath = path5.join(root, module);
+        if (subpath) {
+          return path5.join(modulePath, subpath);
+        }
+        return modulePath;
+      }
+      /**
+       * Obtiene la estructura completa de carpetas para una empresa
+       * @param companyId ID de la empresa
+       * @returns Objeto con todas las rutas de módulos
+       */
+      getCompanyStructure(companyId) {
+        const root = this.getCompanyRoot(companyId);
+        return {
+          companyId,
+          root,
+          modules: {
+            orders: path5.join(root, "orders"),
+            dispatches: path5.join(root, "dispatches"),
+            clients: path5.join(root, "clients"),
+            certificates: path5.join(root, "certificates"),
+            reports: path5.join(root, "reports"),
+            media: path5.join(root, "media"),
+            projects: path5.join(root, "projects"),
+            expenses: path5.join(root, "expenses"),
+            services: path5.join(root, "services"),
+            temp: path5.join(root, "temp")
+          }
+        };
+      }
+      /**
+       * Resuelve una ruta relativa a una ruta absoluta dentro de una empresa
+       * @param companyId ID de la empresa
+       * @param relativePath Ruta relativa proporcionada por el usuario
+       * @returns Ruta absoluta resuelta
+       */
+      resolvePath(companyId, relativePath) {
+        const companyRoot = this.getCompanyRoot(companyId);
+        const normalized = path5.normalize(relativePath);
+        const resolved = path5.join(companyRoot, normalized);
+        return resolved;
+      }
+      // ==========================================================================
+      // VALIDATION
+      // ==========================================================================
+      /**
+       * Valida que una ruta esté dentro del espacio permitido para una empresa
+       * Previene path traversal attacks (../, etc.)
+       * @param requestedPath Ruta que se quiere acceder
+       * @param companyId ID de la empresa
+       * @returns true si el acceso es válido, false si no
+       */
+      validateAccess(requestedPath, companyId) {
+        try {
+          const companyRoot = this.getCompanyRoot(companyId);
+          const normalizedRequested = path5.normalize(requestedPath);
+          const normalizedRoot = path5.normalize(companyRoot);
+          const isWithinCompanyRoot = normalizedRequested.startsWith(normalizedRoot);
+          if (!isWithinCompanyRoot) {
+            logger_default.warn("Path validation failed: outside company root", {
+              companyId,
+              requestedPath: normalizedRequested,
+              companyRoot: normalizedRoot
+            });
+            return false;
+          }
+          const relative = path5.relative(normalizedRoot, normalizedRequested);
+          const hasTraversal = relative.startsWith("..") || path5.isAbsolute(relative);
+          if (hasTraversal) {
+            logger_default.warn("Path validation failed: traversal attempt detected", {
+              companyId,
+              requestedPath: normalizedRequested,
+              relative
+            });
+            return false;
+          }
+          return true;
+        } catch (error) {
+          logger_default.error("Path validation error:", error);
+          return false;
+        }
+      }
+      /**
+       * Valida que un módulo sea válido
+       * @param moduleName Nombre del módulo
+       * @returns true si es un módulo estándar
+       */
+      isValidModule(moduleName) {
+        return this.standardModules.some((m) => m.name === moduleName);
+      }
+      // ==========================================================================
+      // DIRECTORY MANAGEMENT
+      // ==========================================================================
+      /**
+       * Crea la estructura de carpetas completa para una empresa
+       * @param companyId ID de la empresa
+       * @returns Promise que se resuelve cuando se crea la estructura
+       */
+      async ensureCompanyStructure(companyId) {
+        const structure = this.getCompanyStructure(companyId);
+        logger_default.info(`Creating company storage structure for: ${companyId}`);
+        try {
+          await fs4.ensureDir(structure.root);
+          const moduleCreations = this.standardModules.filter((m) => m.autoCreate).map(async (module) => {
+            const modulePath = path5.join(structure.root, module.name);
+            await fs4.ensureDir(modulePath);
+            logger_default.debug(`Created module folder: ${module.name}`, { companyId });
+          });
+          await Promise.all(moduleCreations);
+          logger_default.info(`Company storage structure created successfully for: ${companyId}`);
+          return structure;
+        } catch (error) {
+          logger_default.error(`Failed to create company storage structure for: ${companyId}`, error);
+          throw error;
+        }
+      }
+      /**
+       * Verifica si la estructura de una empresa existe
+       * @param companyId ID de la empresa
+       * @returns true si existe la carpeta raíz
+       */
+      async companyStructureExists(companyId) {
+        const root = this.getCompanyRoot(companyId);
+        return fs4.pathExists(root);
+      }
+      /**
+       * Asegura que un directorio exista, creándolo si es necesario
+       * Solo si está dentro del espacio de la empresa
+       * @param dirPath Ruta del directorio
+       * @param companyId ID de la empresa
+       */
+      async ensureDir(dirPath, companyId) {
+        if (!this.validateAccess(dirPath, companyId)) {
+          throw new Error("Invalid path: outside company storage space");
+        }
+        await fs4.ensureDir(dirPath);
+      }
+      // ==========================================================================
+      // UTILITIES
+      // ==========================================================================
+      /**
+       * Obtiene información de uso de almacenamiento para una empresa
+       * @param companyId ID de la empresa
+       * @returns Tamaño total en bytes
+       */
+      async getStorageUsage(companyId) {
+        const root = this.getCompanyRoot(companyId);
+        if (!await fs4.pathExists(root)) {
+          return 0;
+        }
+        try {
+          const calculateSize = async (dir) => {
+            const entries = await fs4.readdir(dir, { withFileTypes: true });
+            let totalSize = 0;
+            for (const entry of entries) {
+              const fullPath = path5.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                totalSize += await calculateSize(fullPath);
+              } else {
+                const stats = await fs4.stat(fullPath);
+                totalSize += stats.size;
+              }
+            }
+            return totalSize;
+          };
+          return await calculateSize(root);
+        } catch (error) {
+          logger_default.error(`Failed to calculate storage usage for: ${companyId}`, error);
+          return 0;
+        }
+      }
+      /**
+       * Convierte bytes a formato legible
+       * @param bytes Tamaño en bytes
+       * @returns String formateado (ej: "1.5 GB")
+       */
+      formatBytes(bytes) {
+        if (bytes === 0) return "0 Bytes";
+        const k = 1024;
+        const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+      }
+      /**
+       * Limpia archivos temporales de una empresa
+       * @param companyId ID de la empresa
+       */
+      async cleanTempFiles(companyId) {
+        const tempPath = this.getModulePath(companyId, "temp");
+        if (await fs4.pathExists(tempPath)) {
+          await fs4.emptyDir(tempPath);
+          logger_default.info(`Cleaned temp files for company: ${companyId}`);
+        }
+      }
+    };
+    storagePathService = new StoragePathService();
+  }
+});
+
+// src/services/whatsapp-media.utils.ts
+import fs5 from "fs-extra";
+import path6 from "path";
+import axios from "axios";
+function detectMimeType(filename, fallback) {
+  if (fallback) return fallback;
+  if (!filename) return "application/octet-stream";
+  const ext = filename.split(".").pop()?.toLowerCase();
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "gif") return "image/gif";
+  if (ext === "webp") return "image/webp";
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "mov") return "video/quicktime";
+  if (ext === "avi") return "video/x-msvideo";
+  if (ext === "mkv") return "video/x-matroska";
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "doc") return "application/msword";
+  if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (ext === "xls") return "application/vnd.ms-excel";
+  if (ext === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (ext === "ppt") return "application/vnd.ms-powerpoint";
+  if (ext === "pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (ext === "txt") return "text/plain";
+  if (ext === "csv") return "text/csv";
+  if (ext === "zip") return "application/zip";
+  if (ext === "rar") return "application/vnd.rar";
+  if (ext === "7z") return "application/x-7z-compressed";
+  return "application/octet-stream";
+}
+function getSendOptions(recipient) {
+  if (recipient.endsWith("@g.us")) {
+    return {
+      useCachedGroupMetadata: false,
+      useUserDevicesCache: false
+    };
+  }
+  return void 0;
+}
+function extractRelativePathFromUrl(fileUrl, companyId) {
+  try {
+    const url = new URL(fileUrl, "http://localhost");
+    const pathname = url.pathname;
+    const marker = `/files/companies/${companyId}/`;
+    if (!pathname.startsWith(marker)) return null;
+    const raw = pathname.slice(marker.length);
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  } catch {
+    return null;
+  }
+}
+function normalizeRelativePath(input, companyId) {
+  let raw = input.trim();
+  if (!raw) return null;
+  try {
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      const url = new URL(raw);
+      raw = url.pathname;
+    }
+  } catch {
+  }
+  raw = raw.replace(/\\/g, "/");
+  const isUrlPath = raw.startsWith("/files/companies/") || raw.startsWith("/companies/");
+  if (path6.isAbsolute(raw) && !isUrlPath) {
+    const companyRoot = storagePathService.getCompanyRoot(companyId);
+    const normalizedRoot = path6.normalize(companyRoot);
+    const normalizedRaw = path6.normalize(raw);
+    if (normalizedRaw.startsWith(normalizedRoot)) {
+      raw = path6.relative(normalizedRoot, normalizedRaw);
+    } else {
+      return null;
+    }
+  }
+  raw = raw.replace(/^\/+/, "");
+  const marker = `files/companies/${companyId}/`;
+  const altMarker = `companies/${companyId}/`;
+  if (raw.startsWith(marker)) {
+    raw = raw.slice(marker.length);
+  } else if (raw.startsWith(altMarker)) {
+    raw = raw.slice(altMarker.length);
+  } else {
+    const segment = `/companies/${companyId}/`;
+    const idx = raw.indexOf(segment);
+    if (idx >= 0) {
+      raw = raw.slice(idx + segment.length);
+    }
+  }
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+  }
+  return raw || null;
+}
+async function resolveFileBuffer(params) {
+  const { companyId, filePath, fileUrl, mimeType, fileName } = params;
+  let relativePath = filePath ? normalizeRelativePath(filePath, companyId) : null;
+  if (!relativePath && fileUrl) {
+    relativePath = normalizeRelativePath(fileUrl, companyId) || extractRelativePathFromUrl(fileUrl, companyId);
+  }
+  if (!relativePath) return null;
+  if (path6.isAbsolute(relativePath)) {
+    throw new Error("filePath must be relative");
+  }
+  const resolved = storagePathService.resolvePath(companyId, relativePath);
+  if (!storagePathService.validateAccess(resolved, companyId)) {
+    throw new Error("Invalid filePath");
+  }
+  const exists = await fs5.pathExists(resolved);
+  if (!exists) {
+    throw new Error("File not found");
+  }
+  const stat = await fs5.stat(resolved);
+  const MAX_WTSP_BYTES = 100 * 1024 * 1024;
+  if (stat.size > MAX_WTSP_BYTES) {
+    throw new Error("File too large for WhatsApp (max 100MB)");
+  }
+  const buffer = await fs5.readFile(resolved);
+  const resolvedFileName = fileName || path6.basename(resolved);
+  const resolvedMimeType = detectMimeType(resolvedFileName, mimeType);
+  return {
+    buffer,
+    mimeType: resolvedMimeType,
+    fileName: resolvedFileName
+  };
+}
+async function downloadFileFromUrl(fileUrl, mimeType) {
+  const response = await axios.get(fileUrl, { responseType: "stream" });
+  const contentType = response.headers["content-type"];
+  const detectedMimeType = mimeType || contentType || "application/octet-stream";
+  let extension = "bin";
+  try {
+    const urlPath = new URL(fileUrl).pathname;
+    const urlExt = path6.extname(urlPath).slice(1);
+    if (urlExt) extension = urlExt;
+  } catch {
+    if (detectedMimeType.startsWith("image/")) extension = detectedMimeType.split("/")[1];
+    else if (detectedMimeType.startsWith("video/")) extension = detectedMimeType.split("/")[1];
+  }
+  const tempFileName = `${v4_default()}.${extension}`;
+  const tempFilePath = path6.join(config.uploads.directory, tempFileName);
+  const writer = fs5.createWriteStream(tempFilePath);
+  response.data.pipe(writer);
+  await new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
+  return {
+    filePath: tempFilePath,
+    mimeType: detectedMimeType,
+    fileName: tempFileName
+  };
+}
+var init_whatsapp_media_utils = __esm({
+  "src/services/whatsapp-media.utils.ts"() {
+    init_esm_node();
+    init_storage_path_service();
+    init_environment();
+  }
+});
+
+// src/services/whatsapp-direct.service.ts
+var whatsapp_direct_service_exports = {};
+__export(whatsapp_direct_service_exports, {
+  WhatsAppDirectService: () => WhatsAppDirectService
+});
+import path7 from "path";
+import fs6 from "fs/promises";
+function getValidPhoneNumber(to) {
+  let cleanedTo = to.replace(/\s/g, "").replace(/\+/g, "");
+  let jid;
+  if (cleanedTo.endsWith("@g.us")) {
+    jid = cleanedTo;
+  } else if (!cleanedTo.endsWith("@s.whatsapp.net")) {
+    jid = `${cleanedTo}@s.whatsapp.net`;
+  } else {
+    jid = cleanedTo;
+  }
+  if (cleanedTo === "" || jid === void 0) {
+    throw new Error("Invalid phone number");
+  }
+  return jid;
+}
+var WhatsAppDirectService;
+var init_whatsapp_direct_service = __esm({
+  "src/services/whatsapp-direct.service.ts"() {
+    init_sessions_simple();
+    init_populate_store_simple();
+    init_whatsapp_media_utils();
+    init_outbox_queue();
+    init_logger();
+    init_environment();
+    WhatsAppDirectService = {
+      /**
+       * Create session with QR code
+       */
+      async createSession(id, qrCb) {
+        return await startSession(id, qrCb);
+      },
+      /**
+       * Create session with pairing code
+       */
+      createPairingSession: (phone, cb) => {
+        return createPairingSession(phone, cb);
+      },
+      /**
+       * Send text message (DIRECT - no assertSessions)
+       * @param queueOnFail - If true, queue message when send fails (default: true)
+       */
+      async sendMessage(id, to, message, options = {}) {
+        const queueOnFail = options.queueOnFail !== false;
+        const sock = getSession(id);
+        if (!sock) {
+          if (queueOnFail) {
+            await outbox_queue_default.enqueue(id, to, message, options.mentions);
+            logger_default.info(`\u{1F4E5} Queued text message for ${id} (session not found)`);
+            return { queued: true };
+          }
+          throw new Error("Session not found");
+        }
+        if (!isSessionReady(id)) {
+          if (queueOnFail) {
+            await outbox_queue_default.enqueue(id, to, message, options.mentions);
+            logger_default.info(`\u{1F4E5} Queued text message for ${id} (session not ready)`);
+            return { queued: true };
+          }
+          throw new Error("Session not ready");
+        }
+        try {
+          const validTo = getValidPhoneNumber(to);
+          const sendOptions = getSendOptions(validTo);
+          return await sock.sendMessage(validTo, { text: message }, sendOptions);
+        } catch (error) {
+          logger_default.warn(`Failed to send message via ${id}: ${String(error)}`);
+          if (queueOnFail) {
+            await outbox_queue_default.enqueue(id, to, message, options.mentions);
+            logger_default.info(`\u{1F4E5} Queued text message for ${id} (send failed)`);
+            return { queued: true };
+          }
+          throw error;
+        }
+      },
+      /**
+       * Send video file (enhanced with legacy features)
+       *
+       * FIXES:
+       * - MP4 detection: Forces 'video/mp4' instead of 'application/mp4'
+       * - Proper mimetype detection by extension (not browser detection)
+       *
+       * @param id - Session ID
+       * @param to - Recipient (phone or group JID)
+       * @param options - Send options (same as sendImageFile)
+       */
+      async sendVideoFile(id, to, options) {
+        const queueOnFail = options.queueOnFail !== false;
+        const sock = getSession(id);
+        if (!sock) {
+          if (queueOnFail) {
+            await outbox_queue_default.enqueueMedia(id, to, "video", options);
+            logger_default.info(`\u{1F4E5} Queued video message for ${id} (session not found)`);
+            return { queued: true };
+          }
+          throw new Error("Session not found");
+        }
+        if (!isSessionReady(id)) {
+          if (queueOnFail) {
+            await outbox_queue_default.enqueueMedia(id, to, "video", options);
+            logger_default.info(`\u{1F4E5} Queued video message for ${id} (session not ready)`);
+            return { queued: true };
+          }
+          throw new Error("Session not ready");
+        }
+        const validTo = getValidPhoneNumber(to);
+        const sendOptions = getSendOptions(validTo);
+        let videoBuffer;
+        let resolvedMimeType;
+        let shouldCleanup = false;
+        let cleanupPath;
+        if (options.buffer) {
+          videoBuffer = options.buffer;
+          resolvedMimeType = detectMimeType(options.fileName, options.mimeType || "video/mp4");
+        } else if (options.fileName) {
+          const tempPath = path7.join(config.uploads.directory, options.fileName);
+          videoBuffer = await fs6.readFile(tempPath);
+          resolvedMimeType = detectMimeType(options.fileName, options.mimeType);
+          shouldCleanup = true;
+          cleanupPath = tempPath;
+        } else if (options.filePath || options.fileUrl) {
+          if (!options.companyId) {
+            throw new Error("companyId is required when using filePath or fileUrl");
+          }
+          const resolved = await resolveFileBuffer({
+            companyId: options.companyId,
+            filePath: options.filePath,
+            fileUrl: options.fileUrl,
+            mimeType: options.mimeType,
+            fileName: options.fileName
+          });
+          if (!resolved) {
+            throw new Error("Could not resolve file from filePath or fileUrl");
+          }
+          videoBuffer = resolved.buffer;
+          resolvedMimeType = resolved.mimeType;
+        } else if (options.fileUrl && !options.companyId) {
+          const downloaded = await downloadFileFromUrl(options.fileUrl, options.mimeType);
+          videoBuffer = await fs6.readFile(downloaded.filePath);
+          resolvedMimeType = downloaded.mimeType;
+          shouldCleanup = true;
+          cleanupPath = downloaded.filePath;
+        } else {
+          throw new Error("One of buffer, fileName, filePath, or fileUrl is required");
+        }
+        try {
+          await sock.sendMessage(
+            validTo,
+            {
+              video: videoBuffer,
+              caption: options.caption,
+              mimetype: resolvedMimeType,
+              ptv: false
+              // Not a video note
+            },
+            sendOptions
+          );
+          if (shouldCleanup && cleanupPath) {
+            await fs6.unlink(cleanupPath).catch(
+              (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
+            );
+          }
+        } catch (error) {
+          logger_default.warn(`Failed to send video via ${id}: ${String(error)}`);
+          if (queueOnFail) {
+            await outbox_queue_default.enqueueMedia(id, to, "video", options);
+            logger_default.info(`\u{1F4E5} Queued video message for ${id} (send failed)`);
+            return { queued: true };
+          }
+          throw error;
+        }
+      },
+      /**
+       * Send image file (enhanced with legacy features)
+       *
+       * @param id - Session ID
+       * @param to - Recipient (phone or group JID)
+       * @param options - Send options
+       *   - buffer: Direct buffer (from file upload)
+       *   - fileName: Temp file name in uploads dir (will be deleted after send)
+       *   - filePath: Relative path in company storage (persistent, won't be deleted)
+       *   - fileUrl: External URL or company storage URL
+       *   - caption: Image caption
+       *   - mimeType: Override MIME type
+       *   - companyId: Required for filePath/fileUrl resolution
+       */
+      async sendImageFile(id, to, options) {
+        const queueOnFail = options.queueOnFail !== false;
+        const sock = getSession(id);
+        if (!sock) {
+          if (queueOnFail) {
+            await outbox_queue_default.enqueueMedia(id, to, "image", options);
+            logger_default.info(`\u{1F4E5} Queued image message for ${id} (session not found)`);
+            return { queued: true };
+          }
+          throw new Error("Session not found");
+        }
+        if (!isSessionReady(id)) {
+          if (queueOnFail) {
+            await outbox_queue_default.enqueueMedia(id, to, "image", options);
+            logger_default.info(`\u{1F4E5} Queued image message for ${id} (session not ready)`);
+            return { queued: true };
+          }
+          throw new Error("Session not ready");
+        }
+        const validTo = getValidPhoneNumber(to);
+        const sendOptions = getSendOptions(validTo);
+        let imageBuffer;
+        let resolvedMimeType;
+        let shouldCleanup = false;
+        let cleanupPath;
+        if (options.buffer) {
+          imageBuffer = options.buffer;
+          resolvedMimeType = detectMimeType(options.fileName, options.mimeType || "image/jpeg");
+        } else if (options.fileName) {
+          const tempPath = path7.join(config.uploads.directory, options.fileName);
+          imageBuffer = await fs6.readFile(tempPath);
+          resolvedMimeType = detectMimeType(options.fileName, options.mimeType);
+          shouldCleanup = true;
+          cleanupPath = tempPath;
+        } else if (options.filePath || options.fileUrl) {
+          if (!options.companyId) {
+            throw new Error("companyId is required when using filePath or fileUrl");
+          }
+          const resolved = await resolveFileBuffer({
+            companyId: options.companyId,
+            filePath: options.filePath,
+            fileUrl: options.fileUrl,
+            mimeType: options.mimeType,
+            fileName: options.fileName
+          });
+          if (!resolved) {
+            throw new Error("Could not resolve file from filePath or fileUrl");
+          }
+          imageBuffer = resolved.buffer;
+          resolvedMimeType = resolved.mimeType;
+        } else if (options.fileUrl && !options.companyId) {
+          const downloaded = await downloadFileFromUrl(options.fileUrl, options.mimeType);
+          imageBuffer = await fs6.readFile(downloaded.filePath);
+          resolvedMimeType = downloaded.mimeType;
+          shouldCleanup = true;
+          cleanupPath = downloaded.filePath;
+        } else {
+          throw new Error("One of buffer, fileName, filePath, or fileUrl is required");
+        }
+        try {
+          await sock.sendMessage(
+            validTo,
+            {
+              image: imageBuffer,
+              caption: options.caption,
+              mimetype: resolvedMimeType
+            },
+            sendOptions
+          );
+          if (shouldCleanup && cleanupPath) {
+            await fs6.unlink(cleanupPath).catch(
+              (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
+            );
+          }
+        } catch (error) {
+          logger_default.warn(`Failed to send image via ${id}: ${String(error)}`);
+          if (queueOnFail) {
+            await outbox_queue_default.enqueueMedia(id, to, "image", options);
+            logger_default.info(`\u{1F4E5} Queued image message for ${id} (send failed)`);
+            return { queued: true };
+          }
+          throw error;
+        }
+      },
+      /**
+       * Send document/file (enhanced with legacy features)
+       *
+       * FIXES:
+       * - PDF detection: Forces 'application/pdf' instead of 'application/octet-stream'
+       * - Proper mimetype for Office docs (DOCX, XLSX, PPTX)
+       * - fileName is REQUIRED for WhatsApp document display
+       *
+       * @param id - Session ID
+       * @param to - Recipient (phone or group JID)
+       * @param options - Send options (same as sendImageFile)
+       */
+      async sendDocument(id, to, options) {
+        const queueOnFail = options.queueOnFail !== false;
+        const sock = getSession(id);
+        if (!sock) {
+          if (queueOnFail) {
+            await outbox_queue_default.enqueueMedia(id, to, "document", options);
+            logger_default.info(`\u{1F4E5} Queued document message for ${id} (session not found)`);
+            return { queued: true };
+          }
+          throw new Error("Session not found");
+        }
+        if (!isSessionReady(id)) {
+          if (queueOnFail) {
+            await outbox_queue_default.enqueueMedia(id, to, "document", options);
+            logger_default.info(`\u{1F4E5} Queued document message for ${id} (session not ready)`);
+            return { queued: true };
+          }
+          throw new Error("Session not ready");
+        }
+        const validTo = getValidPhoneNumber(to);
+        const sendOptions = getSendOptions(validTo);
+        let documentBuffer;
+        let resolvedMimeType;
+        let resolvedFileName;
+        let shouldCleanup = false;
+        let cleanupPath;
+        if (options.buffer) {
+          documentBuffer = options.buffer;
+          resolvedMimeType = detectMimeType(options.fileName, options.mimeType || "application/octet-stream");
+          resolvedFileName = options.fileName || "document";
+        } else if (options.fileName) {
+          const tempPath = path7.join(config.uploads.directory, options.fileName);
+          documentBuffer = await fs6.readFile(tempPath);
+          resolvedMimeType = detectMimeType(options.fileName, options.mimeType);
+          resolvedFileName = options.fileName;
+          shouldCleanup = true;
+          cleanupPath = tempPath;
+        } else if (options.filePath || options.fileUrl) {
+          if (!options.companyId) {
+            throw new Error("companyId is required when using filePath or fileUrl");
+          }
+          const resolved = await resolveFileBuffer({
+            companyId: options.companyId,
+            filePath: options.filePath,
+            fileUrl: options.fileUrl,
+            mimeType: options.mimeType,
+            fileName: options.fileName
+          });
+          if (!resolved) {
+            throw new Error("Could not resolve file from filePath or fileUrl");
+          }
+          documentBuffer = resolved.buffer;
+          resolvedMimeType = resolved.mimeType;
+          resolvedFileName = resolved.fileName;
+        } else if (options.fileUrl && !options.companyId) {
+          const downloaded = await downloadFileFromUrl(options.fileUrl, options.mimeType);
+          documentBuffer = await fs6.readFile(downloaded.filePath);
+          resolvedMimeType = downloaded.mimeType;
+          resolvedFileName = downloaded.fileName;
+          shouldCleanup = true;
+          cleanupPath = downloaded.filePath;
+        } else {
+          throw new Error("One of buffer, fileName, filePath, or fileUrl is required");
+        }
+        try {
+          await sock.sendMessage(
+            validTo,
+            {
+              document: documentBuffer,
+              fileName: resolvedFileName,
+              // REQUIRED for WhatsApp
+              mimetype: resolvedMimeType,
+              caption: options.caption
+            },
+            sendOptions
+          );
+          if (shouldCleanup && cleanupPath) {
+            await fs6.unlink(cleanupPath).catch(
+              (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
+            );
+          }
+        } catch (error) {
+          logger_default.warn(`Failed to send document via ${id}: ${String(error)}`);
+          if (queueOnFail) {
+            await outbox_queue_default.enqueueMedia(id, to, "document", options);
+            logger_default.info(`\u{1F4E5} Queued document message for ${id} (send failed)`);
+            return { queued: true };
+          }
+          throw error;
+        }
+      },
+      /**
+       * List all chats
+       */
+      listChats: (id) => {
+        const store = getStore(id);
+        return Array.from(store.chats.values());
+      },
+      /**
+       * List all contacts
+       */
+      listContacts: (id) => {
+        const store = getStore(id);
+        return Array.from(store.contacts.values());
+      },
+      /**
+       * List groups only
+       */
+      listGroups: (id) => {
+        const store = getStore(id);
+        return Array.from(store.chats.values()).filter((chat) => chat.id.endsWith("@g.us")).map((group) => ({
+          id: group.id,
+          name: group.name,
+          participants: group.participant?.map((p) => p) || []
+        }));
+      },
+      /**
+       * Refresh groups from WhatsApp
+       */
+      refreshGroups: async (id) => {
+        const sock = getSession(id);
+        if (!sock) throw new Error("Session not found");
+        const result = await populateStoreIfEmpty(id, sock);
+        return result;
+      },
+      /**
+       * Get all active sessions
+       */
+      getSessions: () => {
+        return listSessions();
+      },
+      /**
+       * Check if session is active
+       */
+      isSessionActive: (id) => {
+        return isWhatsAppSessionActive(id);
+      },
+      /**
+       * Check if session is ready
+       */
+      isSessionReady: (id) => {
+        return isSessionReady(id);
+      },
+      /**
+       * Get QR code for session
+       */
+      getQRCode: (id) => {
+        return getQRCode(id);
+      },
+      /**
+       * Disconnect session
+       */
+      disconnectSession: async (id) => {
+        return await disconnectSession(id);
+      },
+      /**
+       * Get session socket (for advanced use)
+       */
+      getSession: (id) => {
+        return getSession(id);
+      },
+      /**
+       * Flush outbox queue (send pending messages after reconnection)
+       * This is called automatically when a session reconnects
+       */
+      async flushOutbox(id) {
+        const sock = getSession(id);
+        if (!sock || !isSessionReady(id)) {
+          logger_default.warn(`Cannot flush outbox for ${id}: session not ready`);
+          return;
+        }
+        const queue = await outbox_queue_default.list(id);
+        if (queue.length === 0) {
+          return;
+        }
+        logger_default.info(`\u{1F4E4} Flushing ${queue.length} queued messages for ${id}`);
+        for (const item of queue) {
+          try {
+            if (item.messageType === "text") {
+              await sock.sendMessage(item.recipient, { text: item.text });
+              await outbox_queue_default.remove(id, item.id);
+              logger_default.info(`\u2705 Sent queued text message ${item.id}`);
+            } else if (item.messageType === "image" && item.mediaOptions) {
+              const options = { ...item.mediaOptions };
+              if (options.buffer) {
+                options.buffer = Buffer.from(options.buffer, "base64");
+              }
+              await this.sendImageFile(id, item.recipient, options);
+              await outbox_queue_default.remove(id, item.id);
+              logger_default.info(`\u2705 Sent queued image message ${item.id}`);
+            } else if (item.messageType === "video" && item.mediaOptions) {
+              const options = { ...item.mediaOptions };
+              if (options.buffer) {
+                options.buffer = Buffer.from(options.buffer, "base64");
+              }
+              await this.sendVideoFile(id, item.recipient, options);
+              await outbox_queue_default.remove(id, item.id);
+              logger_default.info(`\u2705 Sent queued video message ${item.id}`);
+            } else if (item.messageType === "document" && item.mediaOptions) {
+              const options = { ...item.mediaOptions };
+              if (options.buffer) {
+                options.buffer = Buffer.from(options.buffer, "base64");
+              }
+              await this.sendDocument(id, item.recipient, options);
+              await outbox_queue_default.remove(id, item.id);
+              logger_default.info(`\u2705 Sent queued document message ${item.id}`);
+            }
+          } catch (error) {
+            const updated = {
+              ...item,
+              attempts: item.attempts + 1,
+              lastError: String(error)
+            };
+            await outbox_queue_default.update(id, updated);
+            logger_default.warn(`\u26A0\uFE0F Failed to flush queued message ${item.id}: ${String(error)}`);
+            break;
+          }
+        }
+      }
+    };
+  }
+});
+
+// src/whatsapp/queue/outbox-queue.ts
+import path8 from "path";
+import { randomUUID } from "crypto";
+async function flushOutboxForSession(sessionPhone) {
+  const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
+  try {
+    await WhatsAppDirectService2.flushOutbox(sessionPhone);
+  } catch (error) {
+    logger_default.error(`Error flushing outbox for ${sessionPhone}:`, error);
+  }
+}
+var OutboxQueue, outboxQueueInstance, outbox_queue_default;
+var init_outbox_queue = __esm({
+  "src/whatsapp/queue/outbox-queue.ts"() {
+    init_json_store();
+    init_logger();
+    init_environment();
+    OutboxQueue = class {
+      constructor() {
+        const baseDir = path8.join(config.whatsapp.sessionDir, "../outbox");
+        this.store = new json_store_default({ baseDir, autoBackup: true });
+      }
+      async list(sessionPhone) {
+        const data = await this.store.get(sessionPhone);
+        return Array.isArray(data) ? data : [];
+      }
+      /**
+       * Enqueue a text message
+       */
+      async enqueue(sessionPhone, recipient, text, mentions) {
+        const queue = await this.list(sessionPhone);
+        const item = {
+          id: randomUUID(),
+          sessionPhone,
+          recipient,
+          messageType: "text",
+          text,
+          mentions,
+          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          attempts: 0
+        };
+        queue.push(item);
+        await this.store.set(sessionPhone, queue);
+        logger_default.info(`Queued outbound text message ${item.id} for ${sessionPhone}`);
+        return item;
+      }
+      /**
+       * Enqueue a media message (image, video, document)
+       */
+      async enqueueMedia(sessionPhone, recipient, messageType, options) {
+        const queue = await this.list(sessionPhone);
+        const mediaOptions = {
+          ...options,
+          buffer: options.buffer ? options.buffer.toString("base64") : void 0
+        };
+        const item = {
+          id: randomUUID(),
+          sessionPhone,
+          recipient,
+          messageType,
+          mediaOptions,
+          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          attempts: 0
+        };
+        queue.push(item);
+        await this.store.set(sessionPhone, queue);
+        logger_default.info(`Queued outbound ${messageType} message ${item.id} for ${sessionPhone}`);
+        return item;
+      }
+      async update(sessionPhone, item) {
+        const queue = await this.list(sessionPhone);
+        const index = queue.findIndex((entry) => entry.id === item.id);
+        if (index === -1) {
+          return;
+        }
+        queue[index] = item;
+        await this.store.set(sessionPhone, queue);
+      }
+      async remove(sessionPhone, id) {
+        const queue = await this.list(sessionPhone);
+        const next = queue.filter((item) => item.id !== id);
+        await this.store.set(sessionPhone, next);
+      }
+      async clear(sessionPhone) {
+        await this.store.set(sessionPhone, []);
+        logger_default.info(`Cleared outbound queue for ${sessionPhone}`);
+      }
+    };
+    outboxQueueInstance = new OutboxQueue();
+    outbox_queue_default = outboxQueueInstance;
+  }
+});
+
+// src/whatsapp/baileys/sessions.simple.ts
+import {
+  makeWASocket,
+  Browsers,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  useMultiFileAuthState
+} from "@whiskeysockets/baileys";
+import path9 from "path";
+import pino from "pino";
+function getStore(sessionId) {
+  const store = stores[sessionId];
+  if (!store) throw new Error(`No store found for session: ${sessionId}`);
+  return store;
+}
+function getSession(id) {
+  return sessions[id];
+}
+function isSessionReady(sessionId) {
+  return readyClients.get(sessionId) ?? false;
+}
+function isWhatsAppSessionActive(sessionId) {
+  const sock = getSession(sessionId);
+  if (!sock) {
+    logger_default.warn(`Session ${sessionId} does not exist`);
+    return false;
+  }
+  if (!isSessionReady(sessionId)) {
+    logger_default.warn(`Session ${sessionId} is not ready yet`);
+    return false;
+  }
+  return true;
+}
+function listSessions() {
+  return Array.from(Object.keys(sessions));
+}
+function getQRCode(sessionId) {
+  return qrCodes[sessionId];
+}
+async function startSession(sessionId, qrCb) {
+  const authDir = path9.join(config.whatsapp.sessionDir, sessionId);
+  const { state, saveCreds } = await useMultiFileAuthState(authDir);
+  const { version, isLatest } = await fetchLatestBaileysVersion();
+  logger_default.info(`Using WA v${version.join(".")}, isLatest: ${isLatest}`);
+  const pinoLogger = pino({ level: "silent" });
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger: pinoLogger,
+    // Baileys expects pino logger
+    browser: Browsers.ubuntu("Chrome"),
+    generateHighQualityLinkPreview: true,
+    printQRInTerminal: false
+  });
+  const storeFilePath = path9.join(authDir, "baileys_store.json");
+  const store = makeInMemoryStore(storeFilePath);
+  stores[sessionId] = store;
+  store.readFromFile();
+  setInterval(() => store.writeToFile(), 1e4);
+  store.bind(sock.ev);
+  sock.ev.on("creds.update", saveCreds);
+  sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
+    if (qr) {
+      logger_default.info(`\u2705 QR generated for ${sessionId}`);
+      qrCodes[sessionId] = qr;
+      if (qrCb) qrCb(qr);
+    }
+    if (connection === "open") {
+      logger_default.info(`\u2705 Session connected successfully for ${sessionId}`);
+      readyClients.set(sessionId, true);
+      sock.ev.on("messaging-history.set", async ({ chats, contacts, messages }) => {
+        logger_default.info(`\u{1F4E5} Received ${chats.length} chats and ${contacts.length} contacts`);
+        chats.forEach((chat) => store.chats.set(chat.id, chat));
+        contacts.forEach((contact) => store.contacts.set(contact.id, contact));
+        messages.forEach((msg) => {
+          const jid = msg.key.remoteJid;
+          const list = store.messages.get(jid) || [];
+          list.push(msg);
+          store.messages.set(jid, list);
+        });
+      });
+      try {
+        await populateStoreIfEmpty(sessionId, sock);
+      } catch (err) {
+        logger_default.error(`Error populating store for ${sessionId}:`, err);
+      }
+      try {
+        await sock.sendPresenceUpdate("available");
+      } catch (err) {
+        logger_default.error(`Error setting presence for ${sessionId}:`, err);
+      }
+      try {
+        await flushOutboxForSession(sessionId);
+      } catch (err) {
+        logger_default.error(`Error flushing outbox for ${sessionId}:`, err);
+      }
+    }
+    if (connection === "close") {
+      readyClients.set(sessionId, false);
+      delete qrCodes[sessionId];
+      logger_default.warn(`\u274C Session closed for ${sessionId}`);
+      const code = lastDisconnect?.error?.output?.statusCode;
+      logger_default.info(`Disconnect reason: ${code}`);
+      if (code !== DisconnectReason.loggedOut) {
+        logger_default.info(`\u{1F501} Reconnecting session ${sessionId}...`);
+        setTimeout(() => startSession(sessionId, qrCb), 3e3);
+      } else {
+        delete sessions[sessionId];
+        delete stores[sessionId];
+      }
+    }
+  });
+  sessions[sessionId] = sock;
+  return sock;
+}
+async function createPairingSession(phone, sendCode) {
+  const sessionId = phone.replace("+", "");
+  const authDir = path9.join(config.whatsapp.sessionDir, sessionId);
+  const { state, saveCreds } = await useMultiFileAuthState(authDir);
+  const { version } = await fetchLatestBaileysVersion();
+  const pinoLogger = pino({ level: "silent" });
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger: pinoLogger,
+    // Baileys expects pino logger
+    browser: Browsers.macOS("Lila")
+  });
+  const storeFilePath = path9.join(authDir, "baileys_store.json");
+  const store = makeInMemoryStore(storeFilePath);
+  stores[sessionId] = store;
+  store.readFromFile();
+  setInterval(() => store.writeToFile(), 1e4);
+  store.bind(sock.ev);
+  sock.ev.on("creds.update", saveCreds);
+  let pairingDone = false;
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect } = update;
+    if (connection === "open") {
+      logger_default.info(`\u2705 Session with ${phone} connected`);
+      readyClients.set(sessionId, true);
+      try {
+        await populateStoreIfEmpty(sessionId, sock);
+      } catch (err) {
+        logger_default.error(`Error populating store for ${sessionId}:`, err);
+      }
+      try {
+        await flushOutboxForSession(sessionId);
+      } catch (err) {
+        logger_default.error(`Error flushing outbox for ${sessionId}:`, err);
+      }
+    }
+    if (connection === "close") {
+      readyClients.set(sessionId, false);
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      logger_default.warn(`\u274C Session ${phone} closed`, statusCode);
+      if (statusCode !== DisconnectReason.loggedOut && statusCode !== 401) {
+        setTimeout(() => createPairingSession(phone, sendCode), 3e3);
+      } else {
+        delete sessions[sessionId];
+        delete stores[sessionId];
+      }
+    }
+    if (!pairingDone && !sock.authState.creds.registered && connection === "connecting") {
+      try {
+        const code = await sock.requestPairingCode(phone);
+        logger_default.info(`\u{1F4F2} Pairing code for ${phone}: ${code}`);
+        sendCode(code);
+        pairingDone = true;
+      } catch (err) {
+        logger_default.error("\u274C Error requesting pairing code:", err);
+      }
+    }
+  });
+  sessions[sessionId] = sock;
+}
+async function disconnectSession(sessionId) {
+  const sock = sessions[sessionId];
+  if (sock) {
+    await sock.logout();
+    delete sessions[sessionId];
+    delete stores[sessionId];
+    delete qrCodes[sessionId];
+    readyClients.delete(sessionId);
+    logger_default.info(`Session ${sessionId} disconnected and removed`);
+  }
+}
+var sessions, stores, qrCodes, readyClients;
+var init_sessions_simple = __esm({
+  "src/whatsapp/baileys/sessions.simple.ts"() {
+    init_store_manager();
+    init_logger();
+    init_environment();
+    init_populate_store_simple();
+    init_outbox_queue();
+    sessions = {};
+    stores = {};
+    qrCodes = {};
+    readyClients = /* @__PURE__ */ new Map();
+  }
+});
+
 // src/models/company.model.ts
-import { Schema } from "mongoose";
+import { Schema as Schema2 } from "mongoose";
 var CompanyLimitsSchema, CompanySchema;
 var init_company_model = __esm({
   "src/models/company.model.ts"() {
-    CompanyLimitsSchema = new Schema(
+    CompanyLimitsSchema = new Schema2(
       {
         whatsappMessages: {
           type: Number,
@@ -209,13 +1834,12 @@ var init_company_model = __esm({
       },
       { _id: false }
     );
-    CompanySchema = new Schema(
+    CompanySchema = new Schema2(
       {
         companyId: {
           type: String,
           required: true,
-          unique: true,
-          index: true
+          unique: true
         },
         name: {
           type: String,
@@ -235,16 +1859,53 @@ var init_company_model = __esm({
         address: {
           type: String
         },
+        whatsappConfig: {
+          sender: { type: String },
+          adminGroupId: { type: String },
+          aiEnabled: { type: Boolean, default: false },
+          cronjobPrefix: { type: String }
+        },
         limits: {
           type: CompanyLimitsSchema,
           required: true,
           default: () => ({})
           // Usa defaults del sub-schema
         },
+        features: {
+          modules: {
+            drive: { type: Boolean, default: false }
+          }
+        },
         isActive: {
           type: Boolean,
           required: true,
           default: true
+        },
+        subscription: {
+          limits: {
+            cronJobs: { type: Number }
+          },
+          usage: {
+            cronJobs: { type: Number }
+          }
+        },
+        // API Key for lila-app direct access (FE)
+        "api-key-lila-access": {
+          keyHash: { type: String },
+          keyEncrypted: { type: String },
+          keyPrefix: { type: String },
+          last4: { type: String },
+          isActive: { type: Boolean, default: false },
+          createdAt: { type: Date },
+          rotatedAt: { type: Date },
+          lastUsedAt: { type: Date },
+          lastUsedIp: { type: String },
+          allowedOrigins: { type: [String], default: [] },
+          allowedSenders: { type: [String], default: [] },
+          rateLimit: {
+            limit: { type: Number },
+            windowMs: { type: Number }
+          }
         }
       },
       {
@@ -253,8 +1914,7783 @@ var init_company_model = __esm({
         // Nombre de la colección en Portal
       }
     );
-    CompanySchema.index({ companyId: 1 });
     CompanySchema.index({ isActive: 1 });
+  }
+});
+
+// node_modules/luxon/build/node/luxon.js
+var require_luxon = __commonJS({
+  "node_modules/luxon/build/node/luxon.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var LuxonError = class extends Error {
+    };
+    var InvalidDateTimeError = class extends LuxonError {
+      constructor(reason) {
+        super(`Invalid DateTime: ${reason.toMessage()}`);
+      }
+    };
+    var InvalidIntervalError = class extends LuxonError {
+      constructor(reason) {
+        super(`Invalid Interval: ${reason.toMessage()}`);
+      }
+    };
+    var InvalidDurationError = class extends LuxonError {
+      constructor(reason) {
+        super(`Invalid Duration: ${reason.toMessage()}`);
+      }
+    };
+    var ConflictingSpecificationError = class extends LuxonError {
+    };
+    var InvalidUnitError = class extends LuxonError {
+      constructor(unit) {
+        super(`Invalid unit ${unit}`);
+      }
+    };
+    var InvalidArgumentError = class extends LuxonError {
+    };
+    var ZoneIsAbstractError = class extends LuxonError {
+      constructor() {
+        super("Zone is an abstract class");
+      }
+    };
+    var n = "numeric";
+    var s = "short";
+    var l = "long";
+    var DATE_SHORT = {
+      year: n,
+      month: n,
+      day: n
+    };
+    var DATE_MED = {
+      year: n,
+      month: s,
+      day: n
+    };
+    var DATE_MED_WITH_WEEKDAY = {
+      year: n,
+      month: s,
+      day: n,
+      weekday: s
+    };
+    var DATE_FULL = {
+      year: n,
+      month: l,
+      day: n
+    };
+    var DATE_HUGE = {
+      year: n,
+      month: l,
+      day: n,
+      weekday: l
+    };
+    var TIME_SIMPLE = {
+      hour: n,
+      minute: n
+    };
+    var TIME_WITH_SECONDS = {
+      hour: n,
+      minute: n,
+      second: n
+    };
+    var TIME_WITH_SHORT_OFFSET = {
+      hour: n,
+      minute: n,
+      second: n,
+      timeZoneName: s
+    };
+    var TIME_WITH_LONG_OFFSET = {
+      hour: n,
+      minute: n,
+      second: n,
+      timeZoneName: l
+    };
+    var TIME_24_SIMPLE = {
+      hour: n,
+      minute: n,
+      hourCycle: "h23"
+    };
+    var TIME_24_WITH_SECONDS = {
+      hour: n,
+      minute: n,
+      second: n,
+      hourCycle: "h23"
+    };
+    var TIME_24_WITH_SHORT_OFFSET = {
+      hour: n,
+      minute: n,
+      second: n,
+      hourCycle: "h23",
+      timeZoneName: s
+    };
+    var TIME_24_WITH_LONG_OFFSET = {
+      hour: n,
+      minute: n,
+      second: n,
+      hourCycle: "h23",
+      timeZoneName: l
+    };
+    var DATETIME_SHORT = {
+      year: n,
+      month: n,
+      day: n,
+      hour: n,
+      minute: n
+    };
+    var DATETIME_SHORT_WITH_SECONDS = {
+      year: n,
+      month: n,
+      day: n,
+      hour: n,
+      minute: n,
+      second: n
+    };
+    var DATETIME_MED = {
+      year: n,
+      month: s,
+      day: n,
+      hour: n,
+      minute: n
+    };
+    var DATETIME_MED_WITH_SECONDS = {
+      year: n,
+      month: s,
+      day: n,
+      hour: n,
+      minute: n,
+      second: n
+    };
+    var DATETIME_MED_WITH_WEEKDAY = {
+      year: n,
+      month: s,
+      day: n,
+      weekday: s,
+      hour: n,
+      minute: n
+    };
+    var DATETIME_FULL = {
+      year: n,
+      month: l,
+      day: n,
+      hour: n,
+      minute: n,
+      timeZoneName: s
+    };
+    var DATETIME_FULL_WITH_SECONDS = {
+      year: n,
+      month: l,
+      day: n,
+      hour: n,
+      minute: n,
+      second: n,
+      timeZoneName: s
+    };
+    var DATETIME_HUGE = {
+      year: n,
+      month: l,
+      day: n,
+      weekday: l,
+      hour: n,
+      minute: n,
+      timeZoneName: l
+    };
+    var DATETIME_HUGE_WITH_SECONDS = {
+      year: n,
+      month: l,
+      day: n,
+      weekday: l,
+      hour: n,
+      minute: n,
+      second: n,
+      timeZoneName: l
+    };
+    var Zone = class {
+      /**
+       * The type of zone
+       * @abstract
+       * @type {string}
+       */
+      get type() {
+        throw new ZoneIsAbstractError();
+      }
+      /**
+       * The name of this zone.
+       * @abstract
+       * @type {string}
+       */
+      get name() {
+        throw new ZoneIsAbstractError();
+      }
+      /**
+       * The IANA name of this zone.
+       * Defaults to `name` if not overwritten by a subclass.
+       * @abstract
+       * @type {string}
+       */
+      get ianaName() {
+        return this.name;
+      }
+      /**
+       * Returns whether the offset is known to be fixed for the whole year.
+       * @abstract
+       * @type {boolean}
+       */
+      get isUniversal() {
+        throw new ZoneIsAbstractError();
+      }
+      /**
+       * Returns the offset's common name (such as EST) at the specified timestamp
+       * @abstract
+       * @param {number} ts - Epoch milliseconds for which to get the name
+       * @param {Object} opts - Options to affect the format
+       * @param {string} opts.format - What style of offset to return. Accepts 'long' or 'short'.
+       * @param {string} opts.locale - What locale to return the offset name in.
+       * @return {string}
+       */
+      offsetName(ts, opts) {
+        throw new ZoneIsAbstractError();
+      }
+      /**
+       * Returns the offset's value as a string
+       * @abstract
+       * @param {number} ts - Epoch milliseconds for which to get the offset
+       * @param {string} format - What style of offset to return.
+       *                          Accepts 'narrow', 'short', or 'techie'. Returning '+6', '+06:00', or '+0600' respectively
+       * @return {string}
+       */
+      formatOffset(ts, format) {
+        throw new ZoneIsAbstractError();
+      }
+      /**
+       * Return the offset in minutes for this zone at the specified timestamp.
+       * @abstract
+       * @param {number} ts - Epoch milliseconds for which to compute the offset
+       * @return {number}
+       */
+      offset(ts) {
+        throw new ZoneIsAbstractError();
+      }
+      /**
+       * Return whether this Zone is equal to another zone
+       * @abstract
+       * @param {Zone} otherZone - the zone to compare
+       * @return {boolean}
+       */
+      equals(otherZone) {
+        throw new ZoneIsAbstractError();
+      }
+      /**
+       * Return whether this Zone is valid.
+       * @abstract
+       * @type {boolean}
+       */
+      get isValid() {
+        throw new ZoneIsAbstractError();
+      }
+    };
+    var singleton$1 = null;
+    var SystemZone = class _SystemZone extends Zone {
+      /**
+       * Get a singleton instance of the local zone
+       * @return {SystemZone}
+       */
+      static get instance() {
+        if (singleton$1 === null) {
+          singleton$1 = new _SystemZone();
+        }
+        return singleton$1;
+      }
+      /** @override **/
+      get type() {
+        return "system";
+      }
+      /** @override **/
+      get name() {
+        return new Intl.DateTimeFormat().resolvedOptions().timeZone;
+      }
+      /** @override **/
+      get isUniversal() {
+        return false;
+      }
+      /** @override **/
+      offsetName(ts, {
+        format,
+        locale
+      }) {
+        return parseZoneInfo(ts, format, locale);
+      }
+      /** @override **/
+      formatOffset(ts, format) {
+        return formatOffset(this.offset(ts), format);
+      }
+      /** @override **/
+      offset(ts) {
+        return -new Date(ts).getTimezoneOffset();
+      }
+      /** @override **/
+      equals(otherZone) {
+        return otherZone.type === "system";
+      }
+      /** @override **/
+      get isValid() {
+        return true;
+      }
+    };
+    var dtfCache = /* @__PURE__ */ new Map();
+    function makeDTF(zoneName) {
+      let dtf = dtfCache.get(zoneName);
+      if (dtf === void 0) {
+        dtf = new Intl.DateTimeFormat("en-US", {
+          hour12: false,
+          timeZone: zoneName,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          era: "short"
+        });
+        dtfCache.set(zoneName, dtf);
+      }
+      return dtf;
+    }
+    var typeToPos = {
+      year: 0,
+      month: 1,
+      day: 2,
+      era: 3,
+      hour: 4,
+      minute: 5,
+      second: 6
+    };
+    function hackyOffset(dtf, date) {
+      const formatted = dtf.format(date).replace(/\u200E/g, ""), parsed = /(\d+)\/(\d+)\/(\d+) (AD|BC),? (\d+):(\d+):(\d+)/.exec(formatted), [, fMonth, fDay, fYear, fadOrBc, fHour, fMinute, fSecond] = parsed;
+      return [fYear, fMonth, fDay, fadOrBc, fHour, fMinute, fSecond];
+    }
+    function partsOffset(dtf, date) {
+      const formatted = dtf.formatToParts(date);
+      const filled = [];
+      for (let i = 0; i < formatted.length; i++) {
+        const {
+          type,
+          value
+        } = formatted[i];
+        const pos = typeToPos[type];
+        if (type === "era") {
+          filled[pos] = value;
+        } else if (!isUndefined(pos)) {
+          filled[pos] = parseInt(value, 10);
+        }
+      }
+      return filled;
+    }
+    var ianaZoneCache = /* @__PURE__ */ new Map();
+    var IANAZone = class _IANAZone extends Zone {
+      /**
+       * @param {string} name - Zone name
+       * @return {IANAZone}
+       */
+      static create(name) {
+        let zone = ianaZoneCache.get(name);
+        if (zone === void 0) {
+          ianaZoneCache.set(name, zone = new _IANAZone(name));
+        }
+        return zone;
+      }
+      /**
+       * Reset local caches. Should only be necessary in testing scenarios.
+       * @return {void}
+       */
+      static resetCache() {
+        ianaZoneCache.clear();
+        dtfCache.clear();
+      }
+      /**
+       * Returns whether the provided string is a valid specifier. This only checks the string's format, not that the specifier identifies a known zone; see isValidZone for that.
+       * @param {string} s - The string to check validity on
+       * @example IANAZone.isValidSpecifier("America/New_York") //=> true
+       * @example IANAZone.isValidSpecifier("Sport~~blorp") //=> false
+       * @deprecated For backward compatibility, this forwards to isValidZone, better use `isValidZone()` directly instead.
+       * @return {boolean}
+       */
+      static isValidSpecifier(s2) {
+        return this.isValidZone(s2);
+      }
+      /**
+       * Returns whether the provided string identifies a real zone
+       * @param {string} zone - The string to check
+       * @example IANAZone.isValidZone("America/New_York") //=> true
+       * @example IANAZone.isValidZone("Fantasia/Castle") //=> false
+       * @example IANAZone.isValidZone("Sport~~blorp") //=> false
+       * @return {boolean}
+       */
+      static isValidZone(zone) {
+        if (!zone) {
+          return false;
+        }
+        try {
+          new Intl.DateTimeFormat("en-US", {
+            timeZone: zone
+          }).format();
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+      constructor(name) {
+        super();
+        this.zoneName = name;
+        this.valid = _IANAZone.isValidZone(name);
+      }
+      /**
+       * The type of zone. `iana` for all instances of `IANAZone`.
+       * @override
+       * @type {string}
+       */
+      get type() {
+        return "iana";
+      }
+      /**
+       * The name of this zone (i.e. the IANA zone name).
+       * @override
+       * @type {string}
+       */
+      get name() {
+        return this.zoneName;
+      }
+      /**
+       * Returns whether the offset is known to be fixed for the whole year:
+       * Always returns false for all IANA zones.
+       * @override
+       * @type {boolean}
+       */
+      get isUniversal() {
+        return false;
+      }
+      /**
+       * Returns the offset's common name (such as EST) at the specified timestamp
+       * @override
+       * @param {number} ts - Epoch milliseconds for which to get the name
+       * @param {Object} opts - Options to affect the format
+       * @param {string} opts.format - What style of offset to return. Accepts 'long' or 'short'.
+       * @param {string} opts.locale - What locale to return the offset name in.
+       * @return {string}
+       */
+      offsetName(ts, {
+        format,
+        locale
+      }) {
+        return parseZoneInfo(ts, format, locale, this.name);
+      }
+      /**
+       * Returns the offset's value as a string
+       * @override
+       * @param {number} ts - Epoch milliseconds for which to get the offset
+       * @param {string} format - What style of offset to return.
+       *                          Accepts 'narrow', 'short', or 'techie'. Returning '+6', '+06:00', or '+0600' respectively
+       * @return {string}
+       */
+      formatOffset(ts, format) {
+        return formatOffset(this.offset(ts), format);
+      }
+      /**
+       * Return the offset in minutes for this zone at the specified timestamp.
+       * @override
+       * @param {number} ts - Epoch milliseconds for which to compute the offset
+       * @return {number}
+       */
+      offset(ts) {
+        if (!this.valid) return NaN;
+        const date = new Date(ts);
+        if (isNaN(date)) return NaN;
+        const dtf = makeDTF(this.name);
+        let [year, month, day, adOrBc, hour, minute, second] = dtf.formatToParts ? partsOffset(dtf, date) : hackyOffset(dtf, date);
+        if (adOrBc === "BC") {
+          year = -Math.abs(year) + 1;
+        }
+        const adjustedHour = hour === 24 ? 0 : hour;
+        const asUTC = objToLocalTS({
+          year,
+          month,
+          day,
+          hour: adjustedHour,
+          minute,
+          second,
+          millisecond: 0
+        });
+        let asTS = +date;
+        const over = asTS % 1e3;
+        asTS -= over >= 0 ? over : 1e3 + over;
+        return (asUTC - asTS) / (60 * 1e3);
+      }
+      /**
+       * Return whether this Zone is equal to another zone
+       * @override
+       * @param {Zone} otherZone - the zone to compare
+       * @return {boolean}
+       */
+      equals(otherZone) {
+        return otherZone.type === "iana" && otherZone.name === this.name;
+      }
+      /**
+       * Return whether this Zone is valid.
+       * @override
+       * @type {boolean}
+       */
+      get isValid() {
+        return this.valid;
+      }
+    };
+    var intlLFCache = {};
+    function getCachedLF(locString, opts = {}) {
+      const key = JSON.stringify([locString, opts]);
+      let dtf = intlLFCache[key];
+      if (!dtf) {
+        dtf = new Intl.ListFormat(locString, opts);
+        intlLFCache[key] = dtf;
+      }
+      return dtf;
+    }
+    var intlDTCache = /* @__PURE__ */ new Map();
+    function getCachedDTF(locString, opts = {}) {
+      const key = JSON.stringify([locString, opts]);
+      let dtf = intlDTCache.get(key);
+      if (dtf === void 0) {
+        dtf = new Intl.DateTimeFormat(locString, opts);
+        intlDTCache.set(key, dtf);
+      }
+      return dtf;
+    }
+    var intlNumCache = /* @__PURE__ */ new Map();
+    function getCachedINF(locString, opts = {}) {
+      const key = JSON.stringify([locString, opts]);
+      let inf = intlNumCache.get(key);
+      if (inf === void 0) {
+        inf = new Intl.NumberFormat(locString, opts);
+        intlNumCache.set(key, inf);
+      }
+      return inf;
+    }
+    var intlRelCache = /* @__PURE__ */ new Map();
+    function getCachedRTF(locString, opts = {}) {
+      const {
+        base,
+        ...cacheKeyOpts
+      } = opts;
+      const key = JSON.stringify([locString, cacheKeyOpts]);
+      let inf = intlRelCache.get(key);
+      if (inf === void 0) {
+        inf = new Intl.RelativeTimeFormat(locString, opts);
+        intlRelCache.set(key, inf);
+      }
+      return inf;
+    }
+    var sysLocaleCache = null;
+    function systemLocale() {
+      if (sysLocaleCache) {
+        return sysLocaleCache;
+      } else {
+        sysLocaleCache = new Intl.DateTimeFormat().resolvedOptions().locale;
+        return sysLocaleCache;
+      }
+    }
+    var intlResolvedOptionsCache = /* @__PURE__ */ new Map();
+    function getCachedIntResolvedOptions(locString) {
+      let opts = intlResolvedOptionsCache.get(locString);
+      if (opts === void 0) {
+        opts = new Intl.DateTimeFormat(locString).resolvedOptions();
+        intlResolvedOptionsCache.set(locString, opts);
+      }
+      return opts;
+    }
+    var weekInfoCache = /* @__PURE__ */ new Map();
+    function getCachedWeekInfo(locString) {
+      let data = weekInfoCache.get(locString);
+      if (!data) {
+        const locale = new Intl.Locale(locString);
+        data = "getWeekInfo" in locale ? locale.getWeekInfo() : locale.weekInfo;
+        if (!("minimalDays" in data)) {
+          data = {
+            ...fallbackWeekSettings,
+            ...data
+          };
+        }
+        weekInfoCache.set(locString, data);
+      }
+      return data;
+    }
+    function parseLocaleString(localeStr) {
+      const xIndex = localeStr.indexOf("-x-");
+      if (xIndex !== -1) {
+        localeStr = localeStr.substring(0, xIndex);
+      }
+      const uIndex = localeStr.indexOf("-u-");
+      if (uIndex === -1) {
+        return [localeStr];
+      } else {
+        let options;
+        let selectedStr;
+        try {
+          options = getCachedDTF(localeStr).resolvedOptions();
+          selectedStr = localeStr;
+        } catch (e) {
+          const smaller = localeStr.substring(0, uIndex);
+          options = getCachedDTF(smaller).resolvedOptions();
+          selectedStr = smaller;
+        }
+        const {
+          numberingSystem,
+          calendar
+        } = options;
+        return [selectedStr, numberingSystem, calendar];
+      }
+    }
+    function intlConfigString(localeStr, numberingSystem, outputCalendar) {
+      if (outputCalendar || numberingSystem) {
+        if (!localeStr.includes("-u-")) {
+          localeStr += "-u";
+        }
+        if (outputCalendar) {
+          localeStr += `-ca-${outputCalendar}`;
+        }
+        if (numberingSystem) {
+          localeStr += `-nu-${numberingSystem}`;
+        }
+        return localeStr;
+      } else {
+        return localeStr;
+      }
+    }
+    function mapMonths(f) {
+      const ms = [];
+      for (let i = 1; i <= 12; i++) {
+        const dt = DateTime.utc(2009, i, 1);
+        ms.push(f(dt));
+      }
+      return ms;
+    }
+    function mapWeekdays(f) {
+      const ms = [];
+      for (let i = 1; i <= 7; i++) {
+        const dt = DateTime.utc(2016, 11, 13 + i);
+        ms.push(f(dt));
+      }
+      return ms;
+    }
+    function listStuff(loc, length, englishFn, intlFn) {
+      const mode = loc.listingMode();
+      if (mode === "error") {
+        return null;
+      } else if (mode === "en") {
+        return englishFn(length);
+      } else {
+        return intlFn(length);
+      }
+    }
+    function supportsFastNumbers(loc) {
+      if (loc.numberingSystem && loc.numberingSystem !== "latn") {
+        return false;
+      } else {
+        return loc.numberingSystem === "latn" || !loc.locale || loc.locale.startsWith("en") || getCachedIntResolvedOptions(loc.locale).numberingSystem === "latn";
+      }
+    }
+    var PolyNumberFormatter = class {
+      constructor(intl, forceSimple, opts) {
+        this.padTo = opts.padTo || 0;
+        this.floor = opts.floor || false;
+        const {
+          padTo,
+          floor,
+          ...otherOpts
+        } = opts;
+        if (!forceSimple || Object.keys(otherOpts).length > 0) {
+          const intlOpts = {
+            useGrouping: false,
+            ...opts
+          };
+          if (opts.padTo > 0) intlOpts.minimumIntegerDigits = opts.padTo;
+          this.inf = getCachedINF(intl, intlOpts);
+        }
+      }
+      format(i) {
+        if (this.inf) {
+          const fixed = this.floor ? Math.floor(i) : i;
+          return this.inf.format(fixed);
+        } else {
+          const fixed = this.floor ? Math.floor(i) : roundTo(i, 3);
+          return padStart(fixed, this.padTo);
+        }
+      }
+    };
+    var PolyDateFormatter = class {
+      constructor(dt, intl, opts) {
+        this.opts = opts;
+        this.originalZone = void 0;
+        let z = void 0;
+        if (this.opts.timeZone) {
+          this.dt = dt;
+        } else if (dt.zone.type === "fixed") {
+          const gmtOffset = -1 * (dt.offset / 60);
+          const offsetZ = gmtOffset >= 0 ? `Etc/GMT+${gmtOffset}` : `Etc/GMT${gmtOffset}`;
+          if (dt.offset !== 0 && IANAZone.create(offsetZ).valid) {
+            z = offsetZ;
+            this.dt = dt;
+          } else {
+            z = "UTC";
+            this.dt = dt.offset === 0 ? dt : dt.setZone("UTC").plus({
+              minutes: dt.offset
+            });
+            this.originalZone = dt.zone;
+          }
+        } else if (dt.zone.type === "system") {
+          this.dt = dt;
+        } else if (dt.zone.type === "iana") {
+          this.dt = dt;
+          z = dt.zone.name;
+        } else {
+          z = "UTC";
+          this.dt = dt.setZone("UTC").plus({
+            minutes: dt.offset
+          });
+          this.originalZone = dt.zone;
+        }
+        const intlOpts = {
+          ...this.opts
+        };
+        intlOpts.timeZone = intlOpts.timeZone || z;
+        this.dtf = getCachedDTF(intl, intlOpts);
+      }
+      format() {
+        if (this.originalZone) {
+          return this.formatToParts().map(({
+            value
+          }) => value).join("");
+        }
+        return this.dtf.format(this.dt.toJSDate());
+      }
+      formatToParts() {
+        const parts = this.dtf.formatToParts(this.dt.toJSDate());
+        if (this.originalZone) {
+          return parts.map((part) => {
+            if (part.type === "timeZoneName") {
+              const offsetName = this.originalZone.offsetName(this.dt.ts, {
+                locale: this.dt.locale,
+                format: this.opts.timeZoneName
+              });
+              return {
+                ...part,
+                value: offsetName
+              };
+            } else {
+              return part;
+            }
+          });
+        }
+        return parts;
+      }
+      resolvedOptions() {
+        return this.dtf.resolvedOptions();
+      }
+    };
+    var PolyRelFormatter = class {
+      constructor(intl, isEnglish, opts) {
+        this.opts = {
+          style: "long",
+          ...opts
+        };
+        if (!isEnglish && hasRelative()) {
+          this.rtf = getCachedRTF(intl, opts);
+        }
+      }
+      format(count, unit) {
+        if (this.rtf) {
+          return this.rtf.format(count, unit);
+        } else {
+          return formatRelativeTime(unit, count, this.opts.numeric, this.opts.style !== "long");
+        }
+      }
+      formatToParts(count, unit) {
+        if (this.rtf) {
+          return this.rtf.formatToParts(count, unit);
+        } else {
+          return [];
+        }
+      }
+    };
+    var fallbackWeekSettings = {
+      firstDay: 1,
+      minimalDays: 4,
+      weekend: [6, 7]
+    };
+    var Locale = class _Locale {
+      static fromOpts(opts) {
+        return _Locale.create(opts.locale, opts.numberingSystem, opts.outputCalendar, opts.weekSettings, opts.defaultToEN);
+      }
+      static create(locale, numberingSystem, outputCalendar, weekSettings, defaultToEN = false) {
+        const specifiedLocale = locale || Settings.defaultLocale;
+        const localeR = specifiedLocale || (defaultToEN ? "en-US" : systemLocale());
+        const numberingSystemR = numberingSystem || Settings.defaultNumberingSystem;
+        const outputCalendarR = outputCalendar || Settings.defaultOutputCalendar;
+        const weekSettingsR = validateWeekSettings(weekSettings) || Settings.defaultWeekSettings;
+        return new _Locale(localeR, numberingSystemR, outputCalendarR, weekSettingsR, specifiedLocale);
+      }
+      static resetCache() {
+        sysLocaleCache = null;
+        intlDTCache.clear();
+        intlNumCache.clear();
+        intlRelCache.clear();
+        intlResolvedOptionsCache.clear();
+        weekInfoCache.clear();
+      }
+      static fromObject({
+        locale,
+        numberingSystem,
+        outputCalendar,
+        weekSettings
+      } = {}) {
+        return _Locale.create(locale, numberingSystem, outputCalendar, weekSettings);
+      }
+      constructor(locale, numbering, outputCalendar, weekSettings, specifiedLocale) {
+        const [parsedLocale, parsedNumberingSystem, parsedOutputCalendar] = parseLocaleString(locale);
+        this.locale = parsedLocale;
+        this.numberingSystem = numbering || parsedNumberingSystem || null;
+        this.outputCalendar = outputCalendar || parsedOutputCalendar || null;
+        this.weekSettings = weekSettings;
+        this.intl = intlConfigString(this.locale, this.numberingSystem, this.outputCalendar);
+        this.weekdaysCache = {
+          format: {},
+          standalone: {}
+        };
+        this.monthsCache = {
+          format: {},
+          standalone: {}
+        };
+        this.meridiemCache = null;
+        this.eraCache = {};
+        this.specifiedLocale = specifiedLocale;
+        this.fastNumbersCached = null;
+      }
+      get fastNumbers() {
+        if (this.fastNumbersCached == null) {
+          this.fastNumbersCached = supportsFastNumbers(this);
+        }
+        return this.fastNumbersCached;
+      }
+      listingMode() {
+        const isActuallyEn = this.isEnglish();
+        const hasNoWeirdness = (this.numberingSystem === null || this.numberingSystem === "latn") && (this.outputCalendar === null || this.outputCalendar === "gregory");
+        return isActuallyEn && hasNoWeirdness ? "en" : "intl";
+      }
+      clone(alts) {
+        if (!alts || Object.getOwnPropertyNames(alts).length === 0) {
+          return this;
+        } else {
+          return _Locale.create(alts.locale || this.specifiedLocale, alts.numberingSystem || this.numberingSystem, alts.outputCalendar || this.outputCalendar, validateWeekSettings(alts.weekSettings) || this.weekSettings, alts.defaultToEN || false);
+        }
+      }
+      redefaultToEN(alts = {}) {
+        return this.clone({
+          ...alts,
+          defaultToEN: true
+        });
+      }
+      redefaultToSystem(alts = {}) {
+        return this.clone({
+          ...alts,
+          defaultToEN: false
+        });
+      }
+      months(length, format = false) {
+        return listStuff(this, length, months, () => {
+          const monthSpecialCase = this.intl === "ja" || this.intl.startsWith("ja-");
+          format &= !monthSpecialCase;
+          const intl = format ? {
+            month: length,
+            day: "numeric"
+          } : {
+            month: length
+          }, formatStr = format ? "format" : "standalone";
+          if (!this.monthsCache[formatStr][length]) {
+            const mapper = !monthSpecialCase ? (dt) => this.extract(dt, intl, "month") : (dt) => this.dtFormatter(dt, intl).format();
+            this.monthsCache[formatStr][length] = mapMonths(mapper);
+          }
+          return this.monthsCache[formatStr][length];
+        });
+      }
+      weekdays(length, format = false) {
+        return listStuff(this, length, weekdays, () => {
+          const intl = format ? {
+            weekday: length,
+            year: "numeric",
+            month: "long",
+            day: "numeric"
+          } : {
+            weekday: length
+          }, formatStr = format ? "format" : "standalone";
+          if (!this.weekdaysCache[formatStr][length]) {
+            this.weekdaysCache[formatStr][length] = mapWeekdays((dt) => this.extract(dt, intl, "weekday"));
+          }
+          return this.weekdaysCache[formatStr][length];
+        });
+      }
+      meridiems() {
+        return listStuff(this, void 0, () => meridiems, () => {
+          if (!this.meridiemCache) {
+            const intl = {
+              hour: "numeric",
+              hourCycle: "h12"
+            };
+            this.meridiemCache = [DateTime.utc(2016, 11, 13, 9), DateTime.utc(2016, 11, 13, 19)].map((dt) => this.extract(dt, intl, "dayperiod"));
+          }
+          return this.meridiemCache;
+        });
+      }
+      eras(length) {
+        return listStuff(this, length, eras, () => {
+          const intl = {
+            era: length
+          };
+          if (!this.eraCache[length]) {
+            this.eraCache[length] = [DateTime.utc(-40, 1, 1), DateTime.utc(2017, 1, 1)].map((dt) => this.extract(dt, intl, "era"));
+          }
+          return this.eraCache[length];
+        });
+      }
+      extract(dt, intlOpts, field) {
+        const df = this.dtFormatter(dt, intlOpts), results = df.formatToParts(), matching = results.find((m) => m.type.toLowerCase() === field);
+        return matching ? matching.value : null;
+      }
+      numberFormatter(opts = {}) {
+        return new PolyNumberFormatter(this.intl, opts.forceSimple || this.fastNumbers, opts);
+      }
+      dtFormatter(dt, intlOpts = {}) {
+        return new PolyDateFormatter(dt, this.intl, intlOpts);
+      }
+      relFormatter(opts = {}) {
+        return new PolyRelFormatter(this.intl, this.isEnglish(), opts);
+      }
+      listFormatter(opts = {}) {
+        return getCachedLF(this.intl, opts);
+      }
+      isEnglish() {
+        return this.locale === "en" || this.locale.toLowerCase() === "en-us" || getCachedIntResolvedOptions(this.intl).locale.startsWith("en-us");
+      }
+      getWeekSettings() {
+        if (this.weekSettings) {
+          return this.weekSettings;
+        } else if (!hasLocaleWeekInfo()) {
+          return fallbackWeekSettings;
+        } else {
+          return getCachedWeekInfo(this.locale);
+        }
+      }
+      getStartOfWeek() {
+        return this.getWeekSettings().firstDay;
+      }
+      getMinDaysInFirstWeek() {
+        return this.getWeekSettings().minimalDays;
+      }
+      getWeekendDays() {
+        return this.getWeekSettings().weekend;
+      }
+      equals(other) {
+        return this.locale === other.locale && this.numberingSystem === other.numberingSystem && this.outputCalendar === other.outputCalendar;
+      }
+      toString() {
+        return `Locale(${this.locale}, ${this.numberingSystem}, ${this.outputCalendar})`;
+      }
+    };
+    var singleton = null;
+    var FixedOffsetZone = class _FixedOffsetZone extends Zone {
+      /**
+       * Get a singleton instance of UTC
+       * @return {FixedOffsetZone}
+       */
+      static get utcInstance() {
+        if (singleton === null) {
+          singleton = new _FixedOffsetZone(0);
+        }
+        return singleton;
+      }
+      /**
+       * Get an instance with a specified offset
+       * @param {number} offset - The offset in minutes
+       * @return {FixedOffsetZone}
+       */
+      static instance(offset2) {
+        return offset2 === 0 ? _FixedOffsetZone.utcInstance : new _FixedOffsetZone(offset2);
+      }
+      /**
+       * Get an instance of FixedOffsetZone from a UTC offset string, like "UTC+6"
+       * @param {string} s - The offset string to parse
+       * @example FixedOffsetZone.parseSpecifier("UTC+6")
+       * @example FixedOffsetZone.parseSpecifier("UTC+06")
+       * @example FixedOffsetZone.parseSpecifier("UTC-6:00")
+       * @return {FixedOffsetZone}
+       */
+      static parseSpecifier(s2) {
+        if (s2) {
+          const r = s2.match(/^utc(?:([+-]\d{1,2})(?::(\d{2}))?)?$/i);
+          if (r) {
+            return new _FixedOffsetZone(signedOffset(r[1], r[2]));
+          }
+        }
+        return null;
+      }
+      constructor(offset2) {
+        super();
+        this.fixed = offset2;
+      }
+      /**
+       * The type of zone. `fixed` for all instances of `FixedOffsetZone`.
+       * @override
+       * @type {string}
+       */
+      get type() {
+        return "fixed";
+      }
+      /**
+       * The name of this zone.
+       * All fixed zones' names always start with "UTC" (plus optional offset)
+       * @override
+       * @type {string}
+       */
+      get name() {
+        return this.fixed === 0 ? "UTC" : `UTC${formatOffset(this.fixed, "narrow")}`;
+      }
+      /**
+       * The IANA name of this zone, i.e. `Etc/UTC` or `Etc/GMT+/-nn`
+       *
+       * @override
+       * @type {string}
+       */
+      get ianaName() {
+        if (this.fixed === 0) {
+          return "Etc/UTC";
+        } else {
+          return `Etc/GMT${formatOffset(-this.fixed, "narrow")}`;
+        }
+      }
+      /**
+       * Returns the offset's common name at the specified timestamp.
+       *
+       * For fixed offset zones this equals to the zone name.
+       * @override
+       */
+      offsetName() {
+        return this.name;
+      }
+      /**
+       * Returns the offset's value as a string
+       * @override
+       * @param {number} ts - Epoch milliseconds for which to get the offset
+       * @param {string} format - What style of offset to return.
+       *                          Accepts 'narrow', 'short', or 'techie'. Returning '+6', '+06:00', or '+0600' respectively
+       * @return {string}
+       */
+      formatOffset(ts, format) {
+        return formatOffset(this.fixed, format);
+      }
+      /**
+       * Returns whether the offset is known to be fixed for the whole year:
+       * Always returns true for all fixed offset zones.
+       * @override
+       * @type {boolean}
+       */
+      get isUniversal() {
+        return true;
+      }
+      /**
+       * Return the offset in minutes for this zone at the specified timestamp.
+       *
+       * For fixed offset zones, this is constant and does not depend on a timestamp.
+       * @override
+       * @return {number}
+       */
+      offset() {
+        return this.fixed;
+      }
+      /**
+       * Return whether this Zone is equal to another zone (i.e. also fixed and same offset)
+       * @override
+       * @param {Zone} otherZone - the zone to compare
+       * @return {boolean}
+       */
+      equals(otherZone) {
+        return otherZone.type === "fixed" && otherZone.fixed === this.fixed;
+      }
+      /**
+       * Return whether this Zone is valid:
+       * All fixed offset zones are valid.
+       * @override
+       * @type {boolean}
+       */
+      get isValid() {
+        return true;
+      }
+    };
+    var InvalidZone = class extends Zone {
+      constructor(zoneName) {
+        super();
+        this.zoneName = zoneName;
+      }
+      /** @override **/
+      get type() {
+        return "invalid";
+      }
+      /** @override **/
+      get name() {
+        return this.zoneName;
+      }
+      /** @override **/
+      get isUniversal() {
+        return false;
+      }
+      /** @override **/
+      offsetName() {
+        return null;
+      }
+      /** @override **/
+      formatOffset() {
+        return "";
+      }
+      /** @override **/
+      offset() {
+        return NaN;
+      }
+      /** @override **/
+      equals() {
+        return false;
+      }
+      /** @override **/
+      get isValid() {
+        return false;
+      }
+    };
+    function normalizeZone(input, defaultZone2) {
+      if (isUndefined(input) || input === null) {
+        return defaultZone2;
+      } else if (input instanceof Zone) {
+        return input;
+      } else if (isString(input)) {
+        const lowered = input.toLowerCase();
+        if (lowered === "default") return defaultZone2;
+        else if (lowered === "local" || lowered === "system") return SystemZone.instance;
+        else if (lowered === "utc" || lowered === "gmt") return FixedOffsetZone.utcInstance;
+        else return FixedOffsetZone.parseSpecifier(lowered) || IANAZone.create(input);
+      } else if (isNumber(input)) {
+        return FixedOffsetZone.instance(input);
+      } else if (typeof input === "object" && "offset" in input && typeof input.offset === "function") {
+        return input;
+      } else {
+        return new InvalidZone(input);
+      }
+    }
+    var numberingSystems = {
+      arab: "[\u0660-\u0669]",
+      arabext: "[\u06F0-\u06F9]",
+      bali: "[\u1B50-\u1B59]",
+      beng: "[\u09E6-\u09EF]",
+      deva: "[\u0966-\u096F]",
+      fullwide: "[\uFF10-\uFF19]",
+      gujr: "[\u0AE6-\u0AEF]",
+      hanidec: "[\u3007|\u4E00|\u4E8C|\u4E09|\u56DB|\u4E94|\u516D|\u4E03|\u516B|\u4E5D]",
+      khmr: "[\u17E0-\u17E9]",
+      knda: "[\u0CE6-\u0CEF]",
+      laoo: "[\u0ED0-\u0ED9]",
+      limb: "[\u1946-\u194F]",
+      mlym: "[\u0D66-\u0D6F]",
+      mong: "[\u1810-\u1819]",
+      mymr: "[\u1040-\u1049]",
+      orya: "[\u0B66-\u0B6F]",
+      tamldec: "[\u0BE6-\u0BEF]",
+      telu: "[\u0C66-\u0C6F]",
+      thai: "[\u0E50-\u0E59]",
+      tibt: "[\u0F20-\u0F29]",
+      latn: "\\d"
+    };
+    var numberingSystemsUTF16 = {
+      arab: [1632, 1641],
+      arabext: [1776, 1785],
+      bali: [6992, 7001],
+      beng: [2534, 2543],
+      deva: [2406, 2415],
+      fullwide: [65296, 65303],
+      gujr: [2790, 2799],
+      khmr: [6112, 6121],
+      knda: [3302, 3311],
+      laoo: [3792, 3801],
+      limb: [6470, 6479],
+      mlym: [3430, 3439],
+      mong: [6160, 6169],
+      mymr: [4160, 4169],
+      orya: [2918, 2927],
+      tamldec: [3046, 3055],
+      telu: [3174, 3183],
+      thai: [3664, 3673],
+      tibt: [3872, 3881]
+    };
+    var hanidecChars = numberingSystems.hanidec.replace(/[\[|\]]/g, "").split("");
+    function parseDigits(str) {
+      let value = parseInt(str, 10);
+      if (isNaN(value)) {
+        value = "";
+        for (let i = 0; i < str.length; i++) {
+          const code = str.charCodeAt(i);
+          if (str[i].search(numberingSystems.hanidec) !== -1) {
+            value += hanidecChars.indexOf(str[i]);
+          } else {
+            for (const key in numberingSystemsUTF16) {
+              const [min, max] = numberingSystemsUTF16[key];
+              if (code >= min && code <= max) {
+                value += code - min;
+              }
+            }
+          }
+        }
+        return parseInt(value, 10);
+      } else {
+        return value;
+      }
+    }
+    var digitRegexCache = /* @__PURE__ */ new Map();
+    function resetDigitRegexCache() {
+      digitRegexCache.clear();
+    }
+    function digitRegex({
+      numberingSystem
+    }, append = "") {
+      const ns = numberingSystem || "latn";
+      let appendCache = digitRegexCache.get(ns);
+      if (appendCache === void 0) {
+        appendCache = /* @__PURE__ */ new Map();
+        digitRegexCache.set(ns, appendCache);
+      }
+      let regex = appendCache.get(append);
+      if (regex === void 0) {
+        regex = new RegExp(`${numberingSystems[ns]}${append}`);
+        appendCache.set(append, regex);
+      }
+      return regex;
+    }
+    var now = () => Date.now();
+    var defaultZone = "system";
+    var defaultLocale = null;
+    var defaultNumberingSystem = null;
+    var defaultOutputCalendar = null;
+    var twoDigitCutoffYear = 60;
+    var throwOnInvalid;
+    var defaultWeekSettings = null;
+    var Settings = class {
+      /**
+       * Get the callback for returning the current timestamp.
+       * @type {function}
+       */
+      static get now() {
+        return now;
+      }
+      /**
+       * Set the callback for returning the current timestamp.
+       * The function should return a number, which will be interpreted as an Epoch millisecond count
+       * @type {function}
+       * @example Settings.now = () => Date.now() + 3000 // pretend it is 3 seconds in the future
+       * @example Settings.now = () => 0 // always pretend it's Jan 1, 1970 at midnight in UTC time
+       */
+      static set now(n2) {
+        now = n2;
+      }
+      /**
+       * Set the default time zone to create DateTimes in. Does not affect existing instances.
+       * Use the value "system" to reset this value to the system's time zone.
+       * @type {string}
+       */
+      static set defaultZone(zone) {
+        defaultZone = zone;
+      }
+      /**
+       * Get the default time zone object currently used to create DateTimes. Does not affect existing instances.
+       * The default value is the system's time zone (the one set on the machine that runs this code).
+       * @type {Zone}
+       */
+      static get defaultZone() {
+        return normalizeZone(defaultZone, SystemZone.instance);
+      }
+      /**
+       * Get the default locale to create DateTimes with. Does not affect existing instances.
+       * @type {string}
+       */
+      static get defaultLocale() {
+        return defaultLocale;
+      }
+      /**
+       * Set the default locale to create DateTimes with. Does not affect existing instances.
+       * @type {string}
+       */
+      static set defaultLocale(locale) {
+        defaultLocale = locale;
+      }
+      /**
+       * Get the default numbering system to create DateTimes with. Does not affect existing instances.
+       * @type {string}
+       */
+      static get defaultNumberingSystem() {
+        return defaultNumberingSystem;
+      }
+      /**
+       * Set the default numbering system to create DateTimes with. Does not affect existing instances.
+       * @type {string}
+       */
+      static set defaultNumberingSystem(numberingSystem) {
+        defaultNumberingSystem = numberingSystem;
+      }
+      /**
+       * Get the default output calendar to create DateTimes with. Does not affect existing instances.
+       * @type {string}
+       */
+      static get defaultOutputCalendar() {
+        return defaultOutputCalendar;
+      }
+      /**
+       * Set the default output calendar to create DateTimes with. Does not affect existing instances.
+       * @type {string}
+       */
+      static set defaultOutputCalendar(outputCalendar) {
+        defaultOutputCalendar = outputCalendar;
+      }
+      /**
+       * @typedef {Object} WeekSettings
+       * @property {number} firstDay
+       * @property {number} minimalDays
+       * @property {number[]} weekend
+       */
+      /**
+       * @return {WeekSettings|null}
+       */
+      static get defaultWeekSettings() {
+        return defaultWeekSettings;
+      }
+      /**
+       * Allows overriding the default locale week settings, i.e. the start of the week, the weekend and
+       * how many days are required in the first week of a year.
+       * Does not affect existing instances.
+       *
+       * @param {WeekSettings|null} weekSettings
+       */
+      static set defaultWeekSettings(weekSettings) {
+        defaultWeekSettings = validateWeekSettings(weekSettings);
+      }
+      /**
+       * Get the cutoff year for whether a 2-digit year string is interpreted in the current or previous century. Numbers higher than the cutoff will be considered to mean 19xx and numbers lower or equal to the cutoff will be considered 20xx.
+       * @type {number}
+       */
+      static get twoDigitCutoffYear() {
+        return twoDigitCutoffYear;
+      }
+      /**
+       * Set the cutoff year for whether a 2-digit year string is interpreted in the current or previous century. Numbers higher than the cutoff will be considered to mean 19xx and numbers lower or equal to the cutoff will be considered 20xx.
+       * @type {number}
+       * @example Settings.twoDigitCutoffYear = 0 // all 'yy' are interpreted as 20th century
+       * @example Settings.twoDigitCutoffYear = 99 // all 'yy' are interpreted as 21st century
+       * @example Settings.twoDigitCutoffYear = 50 // '49' -> 2049; '50' -> 1950
+       * @example Settings.twoDigitCutoffYear = 1950 // interpreted as 50
+       * @example Settings.twoDigitCutoffYear = 2050 // ALSO interpreted as 50
+       */
+      static set twoDigitCutoffYear(cutoffYear) {
+        twoDigitCutoffYear = cutoffYear % 100;
+      }
+      /**
+       * Get whether Luxon will throw when it encounters invalid DateTimes, Durations, or Intervals
+       * @type {boolean}
+       */
+      static get throwOnInvalid() {
+        return throwOnInvalid;
+      }
+      /**
+       * Set whether Luxon will throw when it encounters invalid DateTimes, Durations, or Intervals
+       * @type {boolean}
+       */
+      static set throwOnInvalid(t) {
+        throwOnInvalid = t;
+      }
+      /**
+       * Reset Luxon's global caches. Should only be necessary in testing scenarios.
+       * @return {void}
+       */
+      static resetCaches() {
+        Locale.resetCache();
+        IANAZone.resetCache();
+        DateTime.resetCache();
+        resetDigitRegexCache();
+      }
+    };
+    var Invalid = class {
+      constructor(reason, explanation) {
+        this.reason = reason;
+        this.explanation = explanation;
+      }
+      toMessage() {
+        if (this.explanation) {
+          return `${this.reason}: ${this.explanation}`;
+        } else {
+          return this.reason;
+        }
+      }
+    };
+    var nonLeapLadder = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    var leapLadder = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
+    function unitOutOfRange(unit, value) {
+      return new Invalid("unit out of range", `you specified ${value} (of type ${typeof value}) as a ${unit}, which is invalid`);
+    }
+    function dayOfWeek(year, month, day) {
+      const d = new Date(Date.UTC(year, month - 1, day));
+      if (year < 100 && year >= 0) {
+        d.setUTCFullYear(d.getUTCFullYear() - 1900);
+      }
+      const js = d.getUTCDay();
+      return js === 0 ? 7 : js;
+    }
+    function computeOrdinal(year, month, day) {
+      return day + (isLeapYear(year) ? leapLadder : nonLeapLadder)[month - 1];
+    }
+    function uncomputeOrdinal(year, ordinal) {
+      const table = isLeapYear(year) ? leapLadder : nonLeapLadder, month0 = table.findIndex((i) => i < ordinal), day = ordinal - table[month0];
+      return {
+        month: month0 + 1,
+        day
+      };
+    }
+    function isoWeekdayToLocal(isoWeekday, startOfWeek) {
+      return (isoWeekday - startOfWeek + 7) % 7 + 1;
+    }
+    function gregorianToWeek(gregObj, minDaysInFirstWeek = 4, startOfWeek = 1) {
+      const {
+        year,
+        month,
+        day
+      } = gregObj, ordinal = computeOrdinal(year, month, day), weekday = isoWeekdayToLocal(dayOfWeek(year, month, day), startOfWeek);
+      let weekNumber = Math.floor((ordinal - weekday + 14 - minDaysInFirstWeek) / 7), weekYear;
+      if (weekNumber < 1) {
+        weekYear = year - 1;
+        weekNumber = weeksInWeekYear(weekYear, minDaysInFirstWeek, startOfWeek);
+      } else if (weekNumber > weeksInWeekYear(year, minDaysInFirstWeek, startOfWeek)) {
+        weekYear = year + 1;
+        weekNumber = 1;
+      } else {
+        weekYear = year;
+      }
+      return {
+        weekYear,
+        weekNumber,
+        weekday,
+        ...timeObject(gregObj)
+      };
+    }
+    function weekToGregorian(weekData, minDaysInFirstWeek = 4, startOfWeek = 1) {
+      const {
+        weekYear,
+        weekNumber,
+        weekday
+      } = weekData, weekdayOfJan4 = isoWeekdayToLocal(dayOfWeek(weekYear, 1, minDaysInFirstWeek), startOfWeek), yearInDays = daysInYear(weekYear);
+      let ordinal = weekNumber * 7 + weekday - weekdayOfJan4 - 7 + minDaysInFirstWeek, year;
+      if (ordinal < 1) {
+        year = weekYear - 1;
+        ordinal += daysInYear(year);
+      } else if (ordinal > yearInDays) {
+        year = weekYear + 1;
+        ordinal -= daysInYear(weekYear);
+      } else {
+        year = weekYear;
+      }
+      const {
+        month,
+        day
+      } = uncomputeOrdinal(year, ordinal);
+      return {
+        year,
+        month,
+        day,
+        ...timeObject(weekData)
+      };
+    }
+    function gregorianToOrdinal(gregData) {
+      const {
+        year,
+        month,
+        day
+      } = gregData;
+      const ordinal = computeOrdinal(year, month, day);
+      return {
+        year,
+        ordinal,
+        ...timeObject(gregData)
+      };
+    }
+    function ordinalToGregorian(ordinalData) {
+      const {
+        year,
+        ordinal
+      } = ordinalData;
+      const {
+        month,
+        day
+      } = uncomputeOrdinal(year, ordinal);
+      return {
+        year,
+        month,
+        day,
+        ...timeObject(ordinalData)
+      };
+    }
+    function usesLocalWeekValues(obj, loc) {
+      const hasLocaleWeekData = !isUndefined(obj.localWeekday) || !isUndefined(obj.localWeekNumber) || !isUndefined(obj.localWeekYear);
+      if (hasLocaleWeekData) {
+        const hasIsoWeekData = !isUndefined(obj.weekday) || !isUndefined(obj.weekNumber) || !isUndefined(obj.weekYear);
+        if (hasIsoWeekData) {
+          throw new ConflictingSpecificationError("Cannot mix locale-based week fields with ISO-based week fields");
+        }
+        if (!isUndefined(obj.localWeekday)) obj.weekday = obj.localWeekday;
+        if (!isUndefined(obj.localWeekNumber)) obj.weekNumber = obj.localWeekNumber;
+        if (!isUndefined(obj.localWeekYear)) obj.weekYear = obj.localWeekYear;
+        delete obj.localWeekday;
+        delete obj.localWeekNumber;
+        delete obj.localWeekYear;
+        return {
+          minDaysInFirstWeek: loc.getMinDaysInFirstWeek(),
+          startOfWeek: loc.getStartOfWeek()
+        };
+      } else {
+        return {
+          minDaysInFirstWeek: 4,
+          startOfWeek: 1
+        };
+      }
+    }
+    function hasInvalidWeekData(obj, minDaysInFirstWeek = 4, startOfWeek = 1) {
+      const validYear = isInteger(obj.weekYear), validWeek = integerBetween(obj.weekNumber, 1, weeksInWeekYear(obj.weekYear, minDaysInFirstWeek, startOfWeek)), validWeekday = integerBetween(obj.weekday, 1, 7);
+      if (!validYear) {
+        return unitOutOfRange("weekYear", obj.weekYear);
+      } else if (!validWeek) {
+        return unitOutOfRange("week", obj.weekNumber);
+      } else if (!validWeekday) {
+        return unitOutOfRange("weekday", obj.weekday);
+      } else return false;
+    }
+    function hasInvalidOrdinalData(obj) {
+      const validYear = isInteger(obj.year), validOrdinal = integerBetween(obj.ordinal, 1, daysInYear(obj.year));
+      if (!validYear) {
+        return unitOutOfRange("year", obj.year);
+      } else if (!validOrdinal) {
+        return unitOutOfRange("ordinal", obj.ordinal);
+      } else return false;
+    }
+    function hasInvalidGregorianData(obj) {
+      const validYear = isInteger(obj.year), validMonth = integerBetween(obj.month, 1, 12), validDay = integerBetween(obj.day, 1, daysInMonth(obj.year, obj.month));
+      if (!validYear) {
+        return unitOutOfRange("year", obj.year);
+      } else if (!validMonth) {
+        return unitOutOfRange("month", obj.month);
+      } else if (!validDay) {
+        return unitOutOfRange("day", obj.day);
+      } else return false;
+    }
+    function hasInvalidTimeData(obj) {
+      const {
+        hour,
+        minute,
+        second,
+        millisecond
+      } = obj;
+      const validHour = integerBetween(hour, 0, 23) || hour === 24 && minute === 0 && second === 0 && millisecond === 0, validMinute = integerBetween(minute, 0, 59), validSecond = integerBetween(second, 0, 59), validMillisecond = integerBetween(millisecond, 0, 999);
+      if (!validHour) {
+        return unitOutOfRange("hour", hour);
+      } else if (!validMinute) {
+        return unitOutOfRange("minute", minute);
+      } else if (!validSecond) {
+        return unitOutOfRange("second", second);
+      } else if (!validMillisecond) {
+        return unitOutOfRange("millisecond", millisecond);
+      } else return false;
+    }
+    function isUndefined(o) {
+      return typeof o === "undefined";
+    }
+    function isNumber(o) {
+      return typeof o === "number";
+    }
+    function isInteger(o) {
+      return typeof o === "number" && o % 1 === 0;
+    }
+    function isString(o) {
+      return typeof o === "string";
+    }
+    function isDate(o) {
+      return Object.prototype.toString.call(o) === "[object Date]";
+    }
+    function hasRelative() {
+      try {
+        return typeof Intl !== "undefined" && !!Intl.RelativeTimeFormat;
+      } catch (e) {
+        return false;
+      }
+    }
+    function hasLocaleWeekInfo() {
+      try {
+        return typeof Intl !== "undefined" && !!Intl.Locale && ("weekInfo" in Intl.Locale.prototype || "getWeekInfo" in Intl.Locale.prototype);
+      } catch (e) {
+        return false;
+      }
+    }
+    function maybeArray(thing) {
+      return Array.isArray(thing) ? thing : [thing];
+    }
+    function bestBy(arr, by, compare) {
+      if (arr.length === 0) {
+        return void 0;
+      }
+      return arr.reduce((best, next) => {
+        const pair = [by(next), next];
+        if (!best) {
+          return pair;
+        } else if (compare(best[0], pair[0]) === best[0]) {
+          return best;
+        } else {
+          return pair;
+        }
+      }, null)[1];
+    }
+    function pick(obj, keys) {
+      return keys.reduce((a, k) => {
+        a[k] = obj[k];
+        return a;
+      }, {});
+    }
+    function hasOwnProperty(obj, prop) {
+      return Object.prototype.hasOwnProperty.call(obj, prop);
+    }
+    function validateWeekSettings(settings) {
+      if (settings == null) {
+        return null;
+      } else if (typeof settings !== "object") {
+        throw new InvalidArgumentError("Week settings must be an object");
+      } else {
+        if (!integerBetween(settings.firstDay, 1, 7) || !integerBetween(settings.minimalDays, 1, 7) || !Array.isArray(settings.weekend) || settings.weekend.some((v) => !integerBetween(v, 1, 7))) {
+          throw new InvalidArgumentError("Invalid week settings");
+        }
+        return {
+          firstDay: settings.firstDay,
+          minimalDays: settings.minimalDays,
+          weekend: Array.from(settings.weekend)
+        };
+      }
+    }
+    function integerBetween(thing, bottom, top) {
+      return isInteger(thing) && thing >= bottom && thing <= top;
+    }
+    function floorMod(x, n2) {
+      return x - n2 * Math.floor(x / n2);
+    }
+    function padStart(input, n2 = 2) {
+      const isNeg = input < 0;
+      let padded;
+      if (isNeg) {
+        padded = "-" + ("" + -input).padStart(n2, "0");
+      } else {
+        padded = ("" + input).padStart(n2, "0");
+      }
+      return padded;
+    }
+    function parseInteger(string) {
+      if (isUndefined(string) || string === null || string === "") {
+        return void 0;
+      } else {
+        return parseInt(string, 10);
+      }
+    }
+    function parseFloating(string) {
+      if (isUndefined(string) || string === null || string === "") {
+        return void 0;
+      } else {
+        return parseFloat(string);
+      }
+    }
+    function parseMillis(fraction) {
+      if (isUndefined(fraction) || fraction === null || fraction === "") {
+        return void 0;
+      } else {
+        const f = parseFloat("0." + fraction) * 1e3;
+        return Math.floor(f);
+      }
+    }
+    function roundTo(number, digits, rounding = "round") {
+      const factor = 10 ** digits;
+      switch (rounding) {
+        case "expand":
+          return number > 0 ? Math.ceil(number * factor) / factor : Math.floor(number * factor) / factor;
+        case "trunc":
+          return Math.trunc(number * factor) / factor;
+        case "round":
+          return Math.round(number * factor) / factor;
+        case "floor":
+          return Math.floor(number * factor) / factor;
+        case "ceil":
+          return Math.ceil(number * factor) / factor;
+        default:
+          throw new RangeError(`Value rounding ${rounding} is out of range`);
+      }
+    }
+    function isLeapYear(year) {
+      return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    }
+    function daysInYear(year) {
+      return isLeapYear(year) ? 366 : 365;
+    }
+    function daysInMonth(year, month) {
+      const modMonth = floorMod(month - 1, 12) + 1, modYear = year + (month - modMonth) / 12;
+      if (modMonth === 2) {
+        return isLeapYear(modYear) ? 29 : 28;
+      } else {
+        return [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][modMonth - 1];
+      }
+    }
+    function objToLocalTS(obj) {
+      let d = Date.UTC(obj.year, obj.month - 1, obj.day, obj.hour, obj.minute, obj.second, obj.millisecond);
+      if (obj.year < 100 && obj.year >= 0) {
+        d = new Date(d);
+        d.setUTCFullYear(obj.year, obj.month - 1, obj.day);
+      }
+      return +d;
+    }
+    function firstWeekOffset(year, minDaysInFirstWeek, startOfWeek) {
+      const fwdlw = isoWeekdayToLocal(dayOfWeek(year, 1, minDaysInFirstWeek), startOfWeek);
+      return -fwdlw + minDaysInFirstWeek - 1;
+    }
+    function weeksInWeekYear(weekYear, minDaysInFirstWeek = 4, startOfWeek = 1) {
+      const weekOffset = firstWeekOffset(weekYear, minDaysInFirstWeek, startOfWeek);
+      const weekOffsetNext = firstWeekOffset(weekYear + 1, minDaysInFirstWeek, startOfWeek);
+      return (daysInYear(weekYear) - weekOffset + weekOffsetNext) / 7;
+    }
+    function untruncateYear(year) {
+      if (year > 99) {
+        return year;
+      } else return year > Settings.twoDigitCutoffYear ? 1900 + year : 2e3 + year;
+    }
+    function parseZoneInfo(ts, offsetFormat, locale, timeZone = null) {
+      const date = new Date(ts), intlOpts = {
+        hourCycle: "h23",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      };
+      if (timeZone) {
+        intlOpts.timeZone = timeZone;
+      }
+      const modified = {
+        timeZoneName: offsetFormat,
+        ...intlOpts
+      };
+      const parsed = new Intl.DateTimeFormat(locale, modified).formatToParts(date).find((m) => m.type.toLowerCase() === "timezonename");
+      return parsed ? parsed.value : null;
+    }
+    function signedOffset(offHourStr, offMinuteStr) {
+      let offHour = parseInt(offHourStr, 10);
+      if (Number.isNaN(offHour)) {
+        offHour = 0;
+      }
+      const offMin = parseInt(offMinuteStr, 10) || 0, offMinSigned = offHour < 0 || Object.is(offHour, -0) ? -offMin : offMin;
+      return offHour * 60 + offMinSigned;
+    }
+    function asNumber(value) {
+      const numericValue = Number(value);
+      if (typeof value === "boolean" || value === "" || !Number.isFinite(numericValue)) throw new InvalidArgumentError(`Invalid unit value ${value}`);
+      return numericValue;
+    }
+    function normalizeObject(obj, normalizer) {
+      const normalized = {};
+      for (const u in obj) {
+        if (hasOwnProperty(obj, u)) {
+          const v = obj[u];
+          if (v === void 0 || v === null) continue;
+          normalized[normalizer(u)] = asNumber(v);
+        }
+      }
+      return normalized;
+    }
+    function formatOffset(offset2, format) {
+      const hours = Math.trunc(Math.abs(offset2 / 60)), minutes = Math.trunc(Math.abs(offset2 % 60)), sign = offset2 >= 0 ? "+" : "-";
+      switch (format) {
+        case "short":
+          return `${sign}${padStart(hours, 2)}:${padStart(minutes, 2)}`;
+        case "narrow":
+          return `${sign}${hours}${minutes > 0 ? `:${minutes}` : ""}`;
+        case "techie":
+          return `${sign}${padStart(hours, 2)}${padStart(minutes, 2)}`;
+        default:
+          throw new RangeError(`Value format ${format} is out of range for property format`);
+      }
+    }
+    function timeObject(obj) {
+      return pick(obj, ["hour", "minute", "second", "millisecond"]);
+    }
+    var monthsLong = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    var monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var monthsNarrow = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+    function months(length) {
+      switch (length) {
+        case "narrow":
+          return [...monthsNarrow];
+        case "short":
+          return [...monthsShort];
+        case "long":
+          return [...monthsLong];
+        case "numeric":
+          return ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+        case "2-digit":
+          return ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+        default:
+          return null;
+      }
+    }
+    var weekdaysLong = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    var weekdaysShort = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    var weekdaysNarrow = ["M", "T", "W", "T", "F", "S", "S"];
+    function weekdays(length) {
+      switch (length) {
+        case "narrow":
+          return [...weekdaysNarrow];
+        case "short":
+          return [...weekdaysShort];
+        case "long":
+          return [...weekdaysLong];
+        case "numeric":
+          return ["1", "2", "3", "4", "5", "6", "7"];
+        default:
+          return null;
+      }
+    }
+    var meridiems = ["AM", "PM"];
+    var erasLong = ["Before Christ", "Anno Domini"];
+    var erasShort = ["BC", "AD"];
+    var erasNarrow = ["B", "A"];
+    function eras(length) {
+      switch (length) {
+        case "narrow":
+          return [...erasNarrow];
+        case "short":
+          return [...erasShort];
+        case "long":
+          return [...erasLong];
+        default:
+          return null;
+      }
+    }
+    function meridiemForDateTime(dt) {
+      return meridiems[dt.hour < 12 ? 0 : 1];
+    }
+    function weekdayForDateTime(dt, length) {
+      return weekdays(length)[dt.weekday - 1];
+    }
+    function monthForDateTime(dt, length) {
+      return months(length)[dt.month - 1];
+    }
+    function eraForDateTime(dt, length) {
+      return eras(length)[dt.year < 0 ? 0 : 1];
+    }
+    function formatRelativeTime(unit, count, numeric = "always", narrow = false) {
+      const units = {
+        years: ["year", "yr."],
+        quarters: ["quarter", "qtr."],
+        months: ["month", "mo."],
+        weeks: ["week", "wk."],
+        days: ["day", "day", "days"],
+        hours: ["hour", "hr."],
+        minutes: ["minute", "min."],
+        seconds: ["second", "sec."]
+      };
+      const lastable = ["hours", "minutes", "seconds"].indexOf(unit) === -1;
+      if (numeric === "auto" && lastable) {
+        const isDay = unit === "days";
+        switch (count) {
+          case 1:
+            return isDay ? "tomorrow" : `next ${units[unit][0]}`;
+          case -1:
+            return isDay ? "yesterday" : `last ${units[unit][0]}`;
+          case 0:
+            return isDay ? "today" : `this ${units[unit][0]}`;
+        }
+      }
+      const isInPast = Object.is(count, -0) || count < 0, fmtValue = Math.abs(count), singular = fmtValue === 1, lilUnits = units[unit], fmtUnit = narrow ? singular ? lilUnits[1] : lilUnits[2] || lilUnits[1] : singular ? units[unit][0] : unit;
+      return isInPast ? `${fmtValue} ${fmtUnit} ago` : `in ${fmtValue} ${fmtUnit}`;
+    }
+    function stringifyTokens(splits, tokenToString) {
+      let s2 = "";
+      for (const token of splits) {
+        if (token.literal) {
+          s2 += token.val;
+        } else {
+          s2 += tokenToString(token.val);
+        }
+      }
+      return s2;
+    }
+    var macroTokenToFormatOpts = {
+      D: DATE_SHORT,
+      DD: DATE_MED,
+      DDD: DATE_FULL,
+      DDDD: DATE_HUGE,
+      t: TIME_SIMPLE,
+      tt: TIME_WITH_SECONDS,
+      ttt: TIME_WITH_SHORT_OFFSET,
+      tttt: TIME_WITH_LONG_OFFSET,
+      T: TIME_24_SIMPLE,
+      TT: TIME_24_WITH_SECONDS,
+      TTT: TIME_24_WITH_SHORT_OFFSET,
+      TTTT: TIME_24_WITH_LONG_OFFSET,
+      f: DATETIME_SHORT,
+      ff: DATETIME_MED,
+      fff: DATETIME_FULL,
+      ffff: DATETIME_HUGE,
+      F: DATETIME_SHORT_WITH_SECONDS,
+      FF: DATETIME_MED_WITH_SECONDS,
+      FFF: DATETIME_FULL_WITH_SECONDS,
+      FFFF: DATETIME_HUGE_WITH_SECONDS
+    };
+    var Formatter = class _Formatter {
+      static create(locale, opts = {}) {
+        return new _Formatter(locale, opts);
+      }
+      static parseFormat(fmt) {
+        let current = null, currentFull = "", bracketed = false;
+        const splits = [];
+        for (let i = 0; i < fmt.length; i++) {
+          const c = fmt.charAt(i);
+          if (c === "'") {
+            if (currentFull.length > 0 || bracketed) {
+              splits.push({
+                literal: bracketed || /^\s+$/.test(currentFull),
+                val: currentFull === "" ? "'" : currentFull
+              });
+            }
+            current = null;
+            currentFull = "";
+            bracketed = !bracketed;
+          } else if (bracketed) {
+            currentFull += c;
+          } else if (c === current) {
+            currentFull += c;
+          } else {
+            if (currentFull.length > 0) {
+              splits.push({
+                literal: /^\s+$/.test(currentFull),
+                val: currentFull
+              });
+            }
+            currentFull = c;
+            current = c;
+          }
+        }
+        if (currentFull.length > 0) {
+          splits.push({
+            literal: bracketed || /^\s+$/.test(currentFull),
+            val: currentFull
+          });
+        }
+        return splits;
+      }
+      static macroTokenToFormatOpts(token) {
+        return macroTokenToFormatOpts[token];
+      }
+      constructor(locale, formatOpts) {
+        this.opts = formatOpts;
+        this.loc = locale;
+        this.systemLoc = null;
+      }
+      formatWithSystemDefault(dt, opts) {
+        if (this.systemLoc === null) {
+          this.systemLoc = this.loc.redefaultToSystem();
+        }
+        const df = this.systemLoc.dtFormatter(dt, {
+          ...this.opts,
+          ...opts
+        });
+        return df.format();
+      }
+      dtFormatter(dt, opts = {}) {
+        return this.loc.dtFormatter(dt, {
+          ...this.opts,
+          ...opts
+        });
+      }
+      formatDateTime(dt, opts) {
+        return this.dtFormatter(dt, opts).format();
+      }
+      formatDateTimeParts(dt, opts) {
+        return this.dtFormatter(dt, opts).formatToParts();
+      }
+      formatInterval(interval, opts) {
+        const df = this.dtFormatter(interval.start, opts);
+        return df.dtf.formatRange(interval.start.toJSDate(), interval.end.toJSDate());
+      }
+      resolvedOptions(dt, opts) {
+        return this.dtFormatter(dt, opts).resolvedOptions();
+      }
+      num(n2, p = 0, signDisplay = void 0) {
+        if (this.opts.forceSimple) {
+          return padStart(n2, p);
+        }
+        const opts = {
+          ...this.opts
+        };
+        if (p > 0) {
+          opts.padTo = p;
+        }
+        if (signDisplay) {
+          opts.signDisplay = signDisplay;
+        }
+        return this.loc.numberFormatter(opts).format(n2);
+      }
+      formatDateTimeFromString(dt, fmt) {
+        const knownEnglish = this.loc.listingMode() === "en", useDateTimeFormatter = this.loc.outputCalendar && this.loc.outputCalendar !== "gregory", string = (opts, extract) => this.loc.extract(dt, opts, extract), formatOffset2 = (opts) => {
+          if (dt.isOffsetFixed && dt.offset === 0 && opts.allowZ) {
+            return "Z";
+          }
+          return dt.isValid ? dt.zone.formatOffset(dt.ts, opts.format) : "";
+        }, meridiem = () => knownEnglish ? meridiemForDateTime(dt) : string({
+          hour: "numeric",
+          hourCycle: "h12"
+        }, "dayperiod"), month = (length, standalone) => knownEnglish ? monthForDateTime(dt, length) : string(standalone ? {
+          month: length
+        } : {
+          month: length,
+          day: "numeric"
+        }, "month"), weekday = (length, standalone) => knownEnglish ? weekdayForDateTime(dt, length) : string(standalone ? {
+          weekday: length
+        } : {
+          weekday: length,
+          month: "long",
+          day: "numeric"
+        }, "weekday"), maybeMacro = (token) => {
+          const formatOpts = _Formatter.macroTokenToFormatOpts(token);
+          if (formatOpts) {
+            return this.formatWithSystemDefault(dt, formatOpts);
+          } else {
+            return token;
+          }
+        }, era = (length) => knownEnglish ? eraForDateTime(dt, length) : string({
+          era: length
+        }, "era"), tokenToString = (token) => {
+          switch (token) {
+            // ms
+            case "S":
+              return this.num(dt.millisecond);
+            case "u":
+            // falls through
+            case "SSS":
+              return this.num(dt.millisecond, 3);
+            // seconds
+            case "s":
+              return this.num(dt.second);
+            case "ss":
+              return this.num(dt.second, 2);
+            // fractional seconds
+            case "uu":
+              return this.num(Math.floor(dt.millisecond / 10), 2);
+            case "uuu":
+              return this.num(Math.floor(dt.millisecond / 100));
+            // minutes
+            case "m":
+              return this.num(dt.minute);
+            case "mm":
+              return this.num(dt.minute, 2);
+            // hours
+            case "h":
+              return this.num(dt.hour % 12 === 0 ? 12 : dt.hour % 12);
+            case "hh":
+              return this.num(dt.hour % 12 === 0 ? 12 : dt.hour % 12, 2);
+            case "H":
+              return this.num(dt.hour);
+            case "HH":
+              return this.num(dt.hour, 2);
+            // offset
+            case "Z":
+              return formatOffset2({
+                format: "narrow",
+                allowZ: this.opts.allowZ
+              });
+            case "ZZ":
+              return formatOffset2({
+                format: "short",
+                allowZ: this.opts.allowZ
+              });
+            case "ZZZ":
+              return formatOffset2({
+                format: "techie",
+                allowZ: this.opts.allowZ
+              });
+            case "ZZZZ":
+              return dt.zone.offsetName(dt.ts, {
+                format: "short",
+                locale: this.loc.locale
+              });
+            case "ZZZZZ":
+              return dt.zone.offsetName(dt.ts, {
+                format: "long",
+                locale: this.loc.locale
+              });
+            // zone
+            case "z":
+              return dt.zoneName;
+            // meridiems
+            case "a":
+              return meridiem();
+            // dates
+            case "d":
+              return useDateTimeFormatter ? string({
+                day: "numeric"
+              }, "day") : this.num(dt.day);
+            case "dd":
+              return useDateTimeFormatter ? string({
+                day: "2-digit"
+              }, "day") : this.num(dt.day, 2);
+            // weekdays - standalone
+            case "c":
+              return this.num(dt.weekday);
+            case "ccc":
+              return weekday("short", true);
+            case "cccc":
+              return weekday("long", true);
+            case "ccccc":
+              return weekday("narrow", true);
+            // weekdays - format
+            case "E":
+              return this.num(dt.weekday);
+            case "EEE":
+              return weekday("short", false);
+            case "EEEE":
+              return weekday("long", false);
+            case "EEEEE":
+              return weekday("narrow", false);
+            // months - standalone
+            case "L":
+              return useDateTimeFormatter ? string({
+                month: "numeric",
+                day: "numeric"
+              }, "month") : this.num(dt.month);
+            case "LL":
+              return useDateTimeFormatter ? string({
+                month: "2-digit",
+                day: "numeric"
+              }, "month") : this.num(dt.month, 2);
+            case "LLL":
+              return month("short", true);
+            case "LLLL":
+              return month("long", true);
+            case "LLLLL":
+              return month("narrow", true);
+            // months - format
+            case "M":
+              return useDateTimeFormatter ? string({
+                month: "numeric"
+              }, "month") : this.num(dt.month);
+            case "MM":
+              return useDateTimeFormatter ? string({
+                month: "2-digit"
+              }, "month") : this.num(dt.month, 2);
+            case "MMM":
+              return month("short", false);
+            case "MMMM":
+              return month("long", false);
+            case "MMMMM":
+              return month("narrow", false);
+            // years
+            case "y":
+              return useDateTimeFormatter ? string({
+                year: "numeric"
+              }, "year") : this.num(dt.year);
+            case "yy":
+              return useDateTimeFormatter ? string({
+                year: "2-digit"
+              }, "year") : this.num(dt.year.toString().slice(-2), 2);
+            case "yyyy":
+              return useDateTimeFormatter ? string({
+                year: "numeric"
+              }, "year") : this.num(dt.year, 4);
+            case "yyyyyy":
+              return useDateTimeFormatter ? string({
+                year: "numeric"
+              }, "year") : this.num(dt.year, 6);
+            // eras
+            case "G":
+              return era("short");
+            case "GG":
+              return era("long");
+            case "GGGGG":
+              return era("narrow");
+            case "kk":
+              return this.num(dt.weekYear.toString().slice(-2), 2);
+            case "kkkk":
+              return this.num(dt.weekYear, 4);
+            case "W":
+              return this.num(dt.weekNumber);
+            case "WW":
+              return this.num(dt.weekNumber, 2);
+            case "n":
+              return this.num(dt.localWeekNumber);
+            case "nn":
+              return this.num(dt.localWeekNumber, 2);
+            case "ii":
+              return this.num(dt.localWeekYear.toString().slice(-2), 2);
+            case "iiii":
+              return this.num(dt.localWeekYear, 4);
+            case "o":
+              return this.num(dt.ordinal);
+            case "ooo":
+              return this.num(dt.ordinal, 3);
+            case "q":
+              return this.num(dt.quarter);
+            case "qq":
+              return this.num(dt.quarter, 2);
+            case "X":
+              return this.num(Math.floor(dt.ts / 1e3));
+            case "x":
+              return this.num(dt.ts);
+            default:
+              return maybeMacro(token);
+          }
+        };
+        return stringifyTokens(_Formatter.parseFormat(fmt), tokenToString);
+      }
+      formatDurationFromString(dur, fmt) {
+        const invertLargest = this.opts.signMode === "negativeLargestOnly" ? -1 : 1;
+        const tokenToField = (token) => {
+          switch (token[0]) {
+            case "S":
+              return "milliseconds";
+            case "s":
+              return "seconds";
+            case "m":
+              return "minutes";
+            case "h":
+              return "hours";
+            case "d":
+              return "days";
+            case "w":
+              return "weeks";
+            case "M":
+              return "months";
+            case "y":
+              return "years";
+            default:
+              return null;
+          }
+        }, tokenToString = (lildur, info) => (token) => {
+          const mapped = tokenToField(token);
+          if (mapped) {
+            const inversionFactor = info.isNegativeDuration && mapped !== info.largestUnit ? invertLargest : 1;
+            let signDisplay;
+            if (this.opts.signMode === "negativeLargestOnly" && mapped !== info.largestUnit) {
+              signDisplay = "never";
+            } else if (this.opts.signMode === "all") {
+              signDisplay = "always";
+            } else {
+              signDisplay = "auto";
+            }
+            return this.num(lildur.get(mapped) * inversionFactor, token.length, signDisplay);
+          } else {
+            return token;
+          }
+        }, tokens = _Formatter.parseFormat(fmt), realTokens = tokens.reduce((found, {
+          literal,
+          val
+        }) => literal ? found : found.concat(val), []), collapsed = dur.shiftTo(...realTokens.map(tokenToField).filter((t) => t)), durationInfo = {
+          isNegativeDuration: collapsed < 0,
+          // this relies on "collapsed" being based on "shiftTo", which builds up the object
+          // in order
+          largestUnit: Object.keys(collapsed.values)[0]
+        };
+        return stringifyTokens(tokens, tokenToString(collapsed, durationInfo));
+      }
+    };
+    var ianaRegex = /[A-Za-z_+-]{1,256}(?::?\/[A-Za-z0-9_+-]{1,256}(?:\/[A-Za-z0-9_+-]{1,256})?)?/;
+    function combineRegexes(...regexes) {
+      const full = regexes.reduce((f, r) => f + r.source, "");
+      return RegExp(`^${full}$`);
+    }
+    function combineExtractors(...extractors) {
+      return (m) => extractors.reduce(([mergedVals, mergedZone, cursor], ex) => {
+        const [val, zone, next] = ex(m, cursor);
+        return [{
+          ...mergedVals,
+          ...val
+        }, zone || mergedZone, next];
+      }, [{}, null, 1]).slice(0, 2);
+    }
+    function parse(s2, ...patterns) {
+      if (s2 == null) {
+        return [null, null];
+      }
+      for (const [regex, extractor] of patterns) {
+        const m = regex.exec(s2);
+        if (m) {
+          return extractor(m);
+        }
+      }
+      return [null, null];
+    }
+    function simpleParse(...keys) {
+      return (match2, cursor) => {
+        const ret = {};
+        let i;
+        for (i = 0; i < keys.length; i++) {
+          ret[keys[i]] = parseInteger(match2[cursor + i]);
+        }
+        return [ret, null, cursor + i];
+      };
+    }
+    var offsetRegex = /(?:([Zz])|([+-]\d\d)(?::?(\d\d))?)/;
+    var isoExtendedZone = `(?:${offsetRegex.source}?(?:\\[(${ianaRegex.source})\\])?)?`;
+    var isoTimeBaseRegex = /(\d\d)(?::?(\d\d)(?::?(\d\d)(?:[.,](\d{1,30}))?)?)?/;
+    var isoTimeRegex = RegExp(`${isoTimeBaseRegex.source}${isoExtendedZone}`);
+    var isoTimeExtensionRegex = RegExp(`(?:[Tt]${isoTimeRegex.source})?`);
+    var isoYmdRegex = /([+-]\d{6}|\d{4})(?:-?(\d\d)(?:-?(\d\d))?)?/;
+    var isoWeekRegex = /(\d{4})-?W(\d\d)(?:-?(\d))?/;
+    var isoOrdinalRegex = /(\d{4})-?(\d{3})/;
+    var extractISOWeekData = simpleParse("weekYear", "weekNumber", "weekDay");
+    var extractISOOrdinalData = simpleParse("year", "ordinal");
+    var sqlYmdRegex = /(\d{4})-(\d\d)-(\d\d)/;
+    var sqlTimeRegex = RegExp(`${isoTimeBaseRegex.source} ?(?:${offsetRegex.source}|(${ianaRegex.source}))?`);
+    var sqlTimeExtensionRegex = RegExp(`(?: ${sqlTimeRegex.source})?`);
+    function int(match2, pos, fallback) {
+      const m = match2[pos];
+      return isUndefined(m) ? fallback : parseInteger(m);
+    }
+    function extractISOYmd(match2, cursor) {
+      const item = {
+        year: int(match2, cursor),
+        month: int(match2, cursor + 1, 1),
+        day: int(match2, cursor + 2, 1)
+      };
+      return [item, null, cursor + 3];
+    }
+    function extractISOTime(match2, cursor) {
+      const item = {
+        hours: int(match2, cursor, 0),
+        minutes: int(match2, cursor + 1, 0),
+        seconds: int(match2, cursor + 2, 0),
+        milliseconds: parseMillis(match2[cursor + 3])
+      };
+      return [item, null, cursor + 4];
+    }
+    function extractISOOffset(match2, cursor) {
+      const local = !match2[cursor] && !match2[cursor + 1], fullOffset = signedOffset(match2[cursor + 1], match2[cursor + 2]), zone = local ? null : FixedOffsetZone.instance(fullOffset);
+      return [{}, zone, cursor + 3];
+    }
+    function extractIANAZone(match2, cursor) {
+      const zone = match2[cursor] ? IANAZone.create(match2[cursor]) : null;
+      return [{}, zone, cursor + 1];
+    }
+    var isoTimeOnly = RegExp(`^T?${isoTimeBaseRegex.source}$`);
+    var isoDuration = /^-?P(?:(?:(-?\d{1,20}(?:\.\d{1,20})?)Y)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20}(?:\.\d{1,20})?)W)?(?:(-?\d{1,20}(?:\.\d{1,20})?)D)?(?:T(?:(-?\d{1,20}(?:\.\d{1,20})?)H)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20})(?:[.,](-?\d{1,20}))?S)?)?)$/;
+    function extractISODuration(match2) {
+      const [s2, yearStr, monthStr, weekStr, dayStr, hourStr, minuteStr, secondStr, millisecondsStr] = match2;
+      const hasNegativePrefix = s2[0] === "-";
+      const negativeSeconds = secondStr && secondStr[0] === "-";
+      const maybeNegate = (num, force = false) => num !== void 0 && (force || num && hasNegativePrefix) ? -num : num;
+      return [{
+        years: maybeNegate(parseFloating(yearStr)),
+        months: maybeNegate(parseFloating(monthStr)),
+        weeks: maybeNegate(parseFloating(weekStr)),
+        days: maybeNegate(parseFloating(dayStr)),
+        hours: maybeNegate(parseFloating(hourStr)),
+        minutes: maybeNegate(parseFloating(minuteStr)),
+        seconds: maybeNegate(parseFloating(secondStr), secondStr === "-0"),
+        milliseconds: maybeNegate(parseMillis(millisecondsStr), negativeSeconds)
+      }];
+    }
+    var obsOffsets = {
+      GMT: 0,
+      EDT: -4 * 60,
+      EST: -5 * 60,
+      CDT: -5 * 60,
+      CST: -6 * 60,
+      MDT: -6 * 60,
+      MST: -7 * 60,
+      PDT: -7 * 60,
+      PST: -8 * 60
+    };
+    function fromStrings(weekdayStr, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr) {
+      const result = {
+        year: yearStr.length === 2 ? untruncateYear(parseInteger(yearStr)) : parseInteger(yearStr),
+        month: monthsShort.indexOf(monthStr) + 1,
+        day: parseInteger(dayStr),
+        hour: parseInteger(hourStr),
+        minute: parseInteger(minuteStr)
+      };
+      if (secondStr) result.second = parseInteger(secondStr);
+      if (weekdayStr) {
+        result.weekday = weekdayStr.length > 3 ? weekdaysLong.indexOf(weekdayStr) + 1 : weekdaysShort.indexOf(weekdayStr) + 1;
+      }
+      return result;
+    }
+    var rfc2822 = /^(?:(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s)?(\d{1,2})\s(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s(\d{2,4})\s(\d\d):(\d\d)(?::(\d\d))?\s(?:(UT|GMT|[ECMP][SD]T)|([Zz])|(?:([+-]\d\d)(\d\d)))$/;
+    function extractRFC2822(match2) {
+      const [, weekdayStr, dayStr, monthStr, yearStr, hourStr, minuteStr, secondStr, obsOffset, milOffset, offHourStr, offMinuteStr] = match2, result = fromStrings(weekdayStr, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr);
+      let offset2;
+      if (obsOffset) {
+        offset2 = obsOffsets[obsOffset];
+      } else if (milOffset) {
+        offset2 = 0;
+      } else {
+        offset2 = signedOffset(offHourStr, offMinuteStr);
+      }
+      return [result, new FixedOffsetZone(offset2)];
+    }
+    function preprocessRFC2822(s2) {
+      return s2.replace(/\([^()]*\)|[\n\t]/g, " ").replace(/(\s\s+)/g, " ").trim();
+    }
+    var rfc1123 = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d\d) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}) (\d\d):(\d\d):(\d\d) GMT$/;
+    var rfc850 = /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), (\d\d)-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(\d\d) (\d\d):(\d\d):(\d\d) GMT$/;
+    var ascii = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ( \d|\d\d) (\d\d):(\d\d):(\d\d) (\d{4})$/;
+    function extractRFC1123Or850(match2) {
+      const [, weekdayStr, dayStr, monthStr, yearStr, hourStr, minuteStr, secondStr] = match2, result = fromStrings(weekdayStr, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr);
+      return [result, FixedOffsetZone.utcInstance];
+    }
+    function extractASCII(match2) {
+      const [, weekdayStr, monthStr, dayStr, hourStr, minuteStr, secondStr, yearStr] = match2, result = fromStrings(weekdayStr, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr);
+      return [result, FixedOffsetZone.utcInstance];
+    }
+    var isoYmdWithTimeExtensionRegex = combineRegexes(isoYmdRegex, isoTimeExtensionRegex);
+    var isoWeekWithTimeExtensionRegex = combineRegexes(isoWeekRegex, isoTimeExtensionRegex);
+    var isoOrdinalWithTimeExtensionRegex = combineRegexes(isoOrdinalRegex, isoTimeExtensionRegex);
+    var isoTimeCombinedRegex = combineRegexes(isoTimeRegex);
+    var extractISOYmdTimeAndOffset = combineExtractors(extractISOYmd, extractISOTime, extractISOOffset, extractIANAZone);
+    var extractISOWeekTimeAndOffset = combineExtractors(extractISOWeekData, extractISOTime, extractISOOffset, extractIANAZone);
+    var extractISOOrdinalDateAndTime = combineExtractors(extractISOOrdinalData, extractISOTime, extractISOOffset, extractIANAZone);
+    var extractISOTimeAndOffset = combineExtractors(extractISOTime, extractISOOffset, extractIANAZone);
+    function parseISODate(s2) {
+      return parse(s2, [isoYmdWithTimeExtensionRegex, extractISOYmdTimeAndOffset], [isoWeekWithTimeExtensionRegex, extractISOWeekTimeAndOffset], [isoOrdinalWithTimeExtensionRegex, extractISOOrdinalDateAndTime], [isoTimeCombinedRegex, extractISOTimeAndOffset]);
+    }
+    function parseRFC2822Date(s2) {
+      return parse(preprocessRFC2822(s2), [rfc2822, extractRFC2822]);
+    }
+    function parseHTTPDate(s2) {
+      return parse(s2, [rfc1123, extractRFC1123Or850], [rfc850, extractRFC1123Or850], [ascii, extractASCII]);
+    }
+    function parseISODuration(s2) {
+      return parse(s2, [isoDuration, extractISODuration]);
+    }
+    var extractISOTimeOnly = combineExtractors(extractISOTime);
+    function parseISOTimeOnly(s2) {
+      return parse(s2, [isoTimeOnly, extractISOTimeOnly]);
+    }
+    var sqlYmdWithTimeExtensionRegex = combineRegexes(sqlYmdRegex, sqlTimeExtensionRegex);
+    var sqlTimeCombinedRegex = combineRegexes(sqlTimeRegex);
+    var extractISOTimeOffsetAndIANAZone = combineExtractors(extractISOTime, extractISOOffset, extractIANAZone);
+    function parseSQL(s2) {
+      return parse(s2, [sqlYmdWithTimeExtensionRegex, extractISOYmdTimeAndOffset], [sqlTimeCombinedRegex, extractISOTimeOffsetAndIANAZone]);
+    }
+    var INVALID$2 = "Invalid Duration";
+    var lowOrderMatrix = {
+      weeks: {
+        days: 7,
+        hours: 7 * 24,
+        minutes: 7 * 24 * 60,
+        seconds: 7 * 24 * 60 * 60,
+        milliseconds: 7 * 24 * 60 * 60 * 1e3
+      },
+      days: {
+        hours: 24,
+        minutes: 24 * 60,
+        seconds: 24 * 60 * 60,
+        milliseconds: 24 * 60 * 60 * 1e3
+      },
+      hours: {
+        minutes: 60,
+        seconds: 60 * 60,
+        milliseconds: 60 * 60 * 1e3
+      },
+      minutes: {
+        seconds: 60,
+        milliseconds: 60 * 1e3
+      },
+      seconds: {
+        milliseconds: 1e3
+      }
+    };
+    var casualMatrix = {
+      years: {
+        quarters: 4,
+        months: 12,
+        weeks: 52,
+        days: 365,
+        hours: 365 * 24,
+        minutes: 365 * 24 * 60,
+        seconds: 365 * 24 * 60 * 60,
+        milliseconds: 365 * 24 * 60 * 60 * 1e3
+      },
+      quarters: {
+        months: 3,
+        weeks: 13,
+        days: 91,
+        hours: 91 * 24,
+        minutes: 91 * 24 * 60,
+        seconds: 91 * 24 * 60 * 60,
+        milliseconds: 91 * 24 * 60 * 60 * 1e3
+      },
+      months: {
+        weeks: 4,
+        days: 30,
+        hours: 30 * 24,
+        minutes: 30 * 24 * 60,
+        seconds: 30 * 24 * 60 * 60,
+        milliseconds: 30 * 24 * 60 * 60 * 1e3
+      },
+      ...lowOrderMatrix
+    };
+    var daysInYearAccurate = 146097 / 400;
+    var daysInMonthAccurate = 146097 / 4800;
+    var accurateMatrix = {
+      years: {
+        quarters: 4,
+        months: 12,
+        weeks: daysInYearAccurate / 7,
+        days: daysInYearAccurate,
+        hours: daysInYearAccurate * 24,
+        minutes: daysInYearAccurate * 24 * 60,
+        seconds: daysInYearAccurate * 24 * 60 * 60,
+        milliseconds: daysInYearAccurate * 24 * 60 * 60 * 1e3
+      },
+      quarters: {
+        months: 3,
+        weeks: daysInYearAccurate / 28,
+        days: daysInYearAccurate / 4,
+        hours: daysInYearAccurate * 24 / 4,
+        minutes: daysInYearAccurate * 24 * 60 / 4,
+        seconds: daysInYearAccurate * 24 * 60 * 60 / 4,
+        milliseconds: daysInYearAccurate * 24 * 60 * 60 * 1e3 / 4
+      },
+      months: {
+        weeks: daysInMonthAccurate / 7,
+        days: daysInMonthAccurate,
+        hours: daysInMonthAccurate * 24,
+        minutes: daysInMonthAccurate * 24 * 60,
+        seconds: daysInMonthAccurate * 24 * 60 * 60,
+        milliseconds: daysInMonthAccurate * 24 * 60 * 60 * 1e3
+      },
+      ...lowOrderMatrix
+    };
+    var orderedUnits$1 = ["years", "quarters", "months", "weeks", "days", "hours", "minutes", "seconds", "milliseconds"];
+    var reverseUnits = orderedUnits$1.slice(0).reverse();
+    function clone$1(dur, alts, clear = false) {
+      const conf = {
+        values: clear ? alts.values : {
+          ...dur.values,
+          ...alts.values || {}
+        },
+        loc: dur.loc.clone(alts.loc),
+        conversionAccuracy: alts.conversionAccuracy || dur.conversionAccuracy,
+        matrix: alts.matrix || dur.matrix
+      };
+      return new Duration(conf);
+    }
+    function durationToMillis(matrix, vals) {
+      var _vals$milliseconds;
+      let sum = (_vals$milliseconds = vals.milliseconds) != null ? _vals$milliseconds : 0;
+      for (const unit of reverseUnits.slice(1)) {
+        if (vals[unit]) {
+          sum += vals[unit] * matrix[unit]["milliseconds"];
+        }
+      }
+      return sum;
+    }
+    function normalizeValues(matrix, vals) {
+      const factor = durationToMillis(matrix, vals) < 0 ? -1 : 1;
+      orderedUnits$1.reduceRight((previous, current) => {
+        if (!isUndefined(vals[current])) {
+          if (previous) {
+            const previousVal = vals[previous] * factor;
+            const conv = matrix[current][previous];
+            const rollUp = Math.floor(previousVal / conv);
+            vals[current] += rollUp * factor;
+            vals[previous] -= rollUp * conv * factor;
+          }
+          return current;
+        } else {
+          return previous;
+        }
+      }, null);
+      orderedUnits$1.reduce((previous, current) => {
+        if (!isUndefined(vals[current])) {
+          if (previous) {
+            const fraction = vals[previous] % 1;
+            vals[previous] -= fraction;
+            vals[current] += fraction * matrix[previous][current];
+          }
+          return current;
+        } else {
+          return previous;
+        }
+      }, null);
+    }
+    function removeZeroes(vals) {
+      const newVals = {};
+      for (const [key, value] of Object.entries(vals)) {
+        if (value !== 0) {
+          newVals[key] = value;
+        }
+      }
+      return newVals;
+    }
+    var Duration = class _Duration {
+      /**
+       * @private
+       */
+      constructor(config2) {
+        const accurate = config2.conversionAccuracy === "longterm" || false;
+        let matrix = accurate ? accurateMatrix : casualMatrix;
+        if (config2.matrix) {
+          matrix = config2.matrix;
+        }
+        this.values = config2.values;
+        this.loc = config2.loc || Locale.create();
+        this.conversionAccuracy = accurate ? "longterm" : "casual";
+        this.invalid = config2.invalid || null;
+        this.matrix = matrix;
+        this.isLuxonDuration = true;
+      }
+      /**
+       * Create Duration from a number of milliseconds.
+       * @param {number} count of milliseconds
+       * @param {Object} opts - options for parsing
+       * @param {string} [opts.locale='en-US'] - the locale to use
+       * @param {string} opts.numberingSystem - the numbering system to use
+       * @param {string} [opts.conversionAccuracy='casual'] - the conversion system to use
+       * @return {Duration}
+       */
+      static fromMillis(count, opts) {
+        return _Duration.fromObject({
+          milliseconds: count
+        }, opts);
+      }
+      /**
+       * Create a Duration from a JavaScript object with keys like 'years' and 'hours'.
+       * If this object is empty then a zero milliseconds duration is returned.
+       * @param {Object} obj - the object to create the DateTime from
+       * @param {number} obj.years
+       * @param {number} obj.quarters
+       * @param {number} obj.months
+       * @param {number} obj.weeks
+       * @param {number} obj.days
+       * @param {number} obj.hours
+       * @param {number} obj.minutes
+       * @param {number} obj.seconds
+       * @param {number} obj.milliseconds
+       * @param {Object} [opts=[]] - options for creating this Duration
+       * @param {string} [opts.locale='en-US'] - the locale to use
+       * @param {string} opts.numberingSystem - the numbering system to use
+       * @param {string} [opts.conversionAccuracy='casual'] - the preset conversion system to use
+       * @param {string} [opts.matrix=Object] - the custom conversion system to use
+       * @return {Duration}
+       */
+      static fromObject(obj, opts = {}) {
+        if (obj == null || typeof obj !== "object") {
+          throw new InvalidArgumentError(`Duration.fromObject: argument expected to be an object, got ${obj === null ? "null" : typeof obj}`);
+        }
+        return new _Duration({
+          values: normalizeObject(obj, _Duration.normalizeUnit),
+          loc: Locale.fromObject(opts),
+          conversionAccuracy: opts.conversionAccuracy,
+          matrix: opts.matrix
+        });
+      }
+      /**
+       * Create a Duration from DurationLike.
+       *
+       * @param {Object | number | Duration} durationLike
+       * One of:
+       * - object with keys like 'years' and 'hours'.
+       * - number representing milliseconds
+       * - Duration instance
+       * @return {Duration}
+       */
+      static fromDurationLike(durationLike) {
+        if (isNumber(durationLike)) {
+          return _Duration.fromMillis(durationLike);
+        } else if (_Duration.isDuration(durationLike)) {
+          return durationLike;
+        } else if (typeof durationLike === "object") {
+          return _Duration.fromObject(durationLike);
+        } else {
+          throw new InvalidArgumentError(`Unknown duration argument ${durationLike} of type ${typeof durationLike}`);
+        }
+      }
+      /**
+       * Create a Duration from an ISO 8601 duration string.
+       * @param {string} text - text to parse
+       * @param {Object} opts - options for parsing
+       * @param {string} [opts.locale='en-US'] - the locale to use
+       * @param {string} opts.numberingSystem - the numbering system to use
+       * @param {string} [opts.conversionAccuracy='casual'] - the preset conversion system to use
+       * @param {string} [opts.matrix=Object] - the preset conversion system to use
+       * @see https://en.wikipedia.org/wiki/ISO_8601#Durations
+       * @example Duration.fromISO('P3Y6M1W4DT12H30M5S').toObject() //=> { years: 3, months: 6, weeks: 1, days: 4, hours: 12, minutes: 30, seconds: 5 }
+       * @example Duration.fromISO('PT23H').toObject() //=> { hours: 23 }
+       * @example Duration.fromISO('P5Y3M').toObject() //=> { years: 5, months: 3 }
+       * @return {Duration}
+       */
+      static fromISO(text, opts) {
+        const [parsed] = parseISODuration(text);
+        if (parsed) {
+          return _Duration.fromObject(parsed, opts);
+        } else {
+          return _Duration.invalid("unparsable", `the input "${text}" can't be parsed as ISO 8601`);
+        }
+      }
+      /**
+       * Create a Duration from an ISO 8601 time string.
+       * @param {string} text - text to parse
+       * @param {Object} opts - options for parsing
+       * @param {string} [opts.locale='en-US'] - the locale to use
+       * @param {string} opts.numberingSystem - the numbering system to use
+       * @param {string} [opts.conversionAccuracy='casual'] - the preset conversion system to use
+       * @param {string} [opts.matrix=Object] - the conversion system to use
+       * @see https://en.wikipedia.org/wiki/ISO_8601#Times
+       * @example Duration.fromISOTime('11:22:33.444').toObject() //=> { hours: 11, minutes: 22, seconds: 33, milliseconds: 444 }
+       * @example Duration.fromISOTime('11:00').toObject() //=> { hours: 11, minutes: 0, seconds: 0 }
+       * @example Duration.fromISOTime('T11:00').toObject() //=> { hours: 11, minutes: 0, seconds: 0 }
+       * @example Duration.fromISOTime('1100').toObject() //=> { hours: 11, minutes: 0, seconds: 0 }
+       * @example Duration.fromISOTime('T1100').toObject() //=> { hours: 11, minutes: 0, seconds: 0 }
+       * @return {Duration}
+       */
+      static fromISOTime(text, opts) {
+        const [parsed] = parseISOTimeOnly(text);
+        if (parsed) {
+          return _Duration.fromObject(parsed, opts);
+        } else {
+          return _Duration.invalid("unparsable", `the input "${text}" can't be parsed as ISO 8601`);
+        }
+      }
+      /**
+       * Create an invalid Duration.
+       * @param {string} reason - simple string of why this datetime is invalid. Should not contain parameters or anything else data-dependent
+       * @param {string} [explanation=null] - longer explanation, may include parameters and other useful debugging information
+       * @return {Duration}
+       */
+      static invalid(reason, explanation = null) {
+        if (!reason) {
+          throw new InvalidArgumentError("need to specify a reason the Duration is invalid");
+        }
+        const invalid = reason instanceof Invalid ? reason : new Invalid(reason, explanation);
+        if (Settings.throwOnInvalid) {
+          throw new InvalidDurationError(invalid);
+        } else {
+          return new _Duration({
+            invalid
+          });
+        }
+      }
+      /**
+       * @private
+       */
+      static normalizeUnit(unit) {
+        const normalized = {
+          year: "years",
+          years: "years",
+          quarter: "quarters",
+          quarters: "quarters",
+          month: "months",
+          months: "months",
+          week: "weeks",
+          weeks: "weeks",
+          day: "days",
+          days: "days",
+          hour: "hours",
+          hours: "hours",
+          minute: "minutes",
+          minutes: "minutes",
+          second: "seconds",
+          seconds: "seconds",
+          millisecond: "milliseconds",
+          milliseconds: "milliseconds"
+        }[unit ? unit.toLowerCase() : unit];
+        if (!normalized) throw new InvalidUnitError(unit);
+        return normalized;
+      }
+      /**
+       * Check if an object is a Duration. Works across context boundaries
+       * @param {object} o
+       * @return {boolean}
+       */
+      static isDuration(o) {
+        return o && o.isLuxonDuration || false;
+      }
+      /**
+       * Get  the locale of a Duration, such 'en-GB'
+       * @type {string}
+       */
+      get locale() {
+        return this.isValid ? this.loc.locale : null;
+      }
+      /**
+       * Get the numbering system of a Duration, such 'beng'. The numbering system is used when formatting the Duration
+       *
+       * @type {string}
+       */
+      get numberingSystem() {
+        return this.isValid ? this.loc.numberingSystem : null;
+      }
+      /**
+       * Returns a string representation of this Duration formatted according to the specified format string. You may use these tokens:
+       * * `S` for milliseconds
+       * * `s` for seconds
+       * * `m` for minutes
+       * * `h` for hours
+       * * `d` for days
+       * * `w` for weeks
+       * * `M` for months
+       * * `y` for years
+       * Notes:
+       * * Add padding by repeating the token, e.g. "yy" pads the years to two digits, "hhhh" pads the hours out to four digits
+       * * Tokens can be escaped by wrapping with single quotes.
+       * * The duration will be converted to the set of units in the format string using {@link Duration#shiftTo} and the Durations's conversion accuracy setting.
+       * @param {string} fmt - the format string
+       * @param {Object} opts - options
+       * @param {boolean} [opts.floor=true] - floor numerical values
+       * @param {'negative'|'all'|'negativeLargestOnly'} [opts.signMode=negative] - How to handle signs
+       * @example Duration.fromObject({ years: 1, days: 6, seconds: 2 }).toFormat("y d s") //=> "1 6 2"
+       * @example Duration.fromObject({ years: 1, days: 6, seconds: 2 }).toFormat("yy dd sss") //=> "01 06 002"
+       * @example Duration.fromObject({ years: 1, days: 6, seconds: 2 }).toFormat("M S") //=> "12 518402000"
+       * @example Duration.fromObject({ days: 6, seconds: 2 }).toFormat("d s", { signMode: "all" }) //=> "+6 +2"
+       * @example Duration.fromObject({ days: -6, seconds: -2 }).toFormat("d s", { signMode: "all" }) //=> "-6 -2"
+       * @example Duration.fromObject({ days: -6, seconds: -2 }).toFormat("d s", { signMode: "negativeLargestOnly" }) //=> "-6 2"
+       * @return {string}
+       */
+      toFormat(fmt, opts = {}) {
+        const fmtOpts = {
+          ...opts,
+          floor: opts.round !== false && opts.floor !== false
+        };
+        return this.isValid ? Formatter.create(this.loc, fmtOpts).formatDurationFromString(this, fmt) : INVALID$2;
+      }
+      /**
+       * Returns a string representation of a Duration with all units included.
+       * To modify its behavior, use `listStyle` and any Intl.NumberFormat option, though `unitDisplay` is especially relevant.
+       * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat/NumberFormat#options
+       * @param {Object} opts - Formatting options. Accepts the same keys as the options parameter of the native `Intl.NumberFormat` constructor, as well as `listStyle`.
+       * @param {string} [opts.listStyle='narrow'] - How to format the merged list. Corresponds to the `style` property of the options parameter of the native `Intl.ListFormat` constructor.
+       * @param {boolean} [opts.showZeros=true] - Show all units previously used by the duration even if they are zero
+       * @example
+       * ```js
+       * var dur = Duration.fromObject({ months: 1, weeks: 0, hours: 5, minutes: 6 })
+       * dur.toHuman() //=> '1 month, 0 weeks, 5 hours, 6 minutes'
+       * dur.toHuman({ listStyle: "long" }) //=> '1 month, 0 weeks, 5 hours, and 6 minutes'
+       * dur.toHuman({ unitDisplay: "short" }) //=> '1 mth, 0 wks, 5 hr, 6 min'
+       * dur.toHuman({ showZeros: false }) //=> '1 month, 5 hours, 6 minutes'
+       * ```
+       */
+      toHuman(opts = {}) {
+        if (!this.isValid) return INVALID$2;
+        const showZeros = opts.showZeros !== false;
+        const l2 = orderedUnits$1.map((unit) => {
+          const val = this.values[unit];
+          if (isUndefined(val) || val === 0 && !showZeros) {
+            return null;
+          }
+          return this.loc.numberFormatter({
+            style: "unit",
+            unitDisplay: "long",
+            ...opts,
+            unit: unit.slice(0, -1)
+          }).format(val);
+        }).filter((n2) => n2);
+        return this.loc.listFormatter({
+          type: "conjunction",
+          style: opts.listStyle || "narrow",
+          ...opts
+        }).format(l2);
+      }
+      /**
+       * Returns a JavaScript object with this Duration's values.
+       * @example Duration.fromObject({ years: 1, days: 6, seconds: 2 }).toObject() //=> { years: 1, days: 6, seconds: 2 }
+       * @return {Object}
+       */
+      toObject() {
+        if (!this.isValid) return {};
+        return {
+          ...this.values
+        };
+      }
+      /**
+       * Returns an ISO 8601-compliant string representation of this Duration.
+       * @see https://en.wikipedia.org/wiki/ISO_8601#Durations
+       * @example Duration.fromObject({ years: 3, seconds: 45 }).toISO() //=> 'P3YT45S'
+       * @example Duration.fromObject({ months: 4, seconds: 45 }).toISO() //=> 'P4MT45S'
+       * @example Duration.fromObject({ months: 5 }).toISO() //=> 'P5M'
+       * @example Duration.fromObject({ minutes: 5 }).toISO() //=> 'PT5M'
+       * @example Duration.fromObject({ milliseconds: 6 }).toISO() //=> 'PT0.006S'
+       * @return {string}
+       */
+      toISO() {
+        if (!this.isValid) return null;
+        let s2 = "P";
+        if (this.years !== 0) s2 += this.years + "Y";
+        if (this.months !== 0 || this.quarters !== 0) s2 += this.months + this.quarters * 3 + "M";
+        if (this.weeks !== 0) s2 += this.weeks + "W";
+        if (this.days !== 0) s2 += this.days + "D";
+        if (this.hours !== 0 || this.minutes !== 0 || this.seconds !== 0 || this.milliseconds !== 0) s2 += "T";
+        if (this.hours !== 0) s2 += this.hours + "H";
+        if (this.minutes !== 0) s2 += this.minutes + "M";
+        if (this.seconds !== 0 || this.milliseconds !== 0)
+          s2 += roundTo(this.seconds + this.milliseconds / 1e3, 3) + "S";
+        if (s2 === "P") s2 += "T0S";
+        return s2;
+      }
+      /**
+       * Returns an ISO 8601-compliant string representation of this Duration, formatted as a time of day.
+       * Note that this will return null if the duration is invalid, negative, or equal to or greater than 24 hours.
+       * @see https://en.wikipedia.org/wiki/ISO_8601#Times
+       * @param {Object} opts - options
+       * @param {boolean} [opts.suppressMilliseconds=false] - exclude milliseconds from the format if they're 0
+       * @param {boolean} [opts.suppressSeconds=false] - exclude seconds from the format if they're 0
+       * @param {boolean} [opts.includePrefix=false] - include the `T` prefix
+       * @param {string} [opts.format='extended'] - choose between the basic and extended format
+       * @example Duration.fromObject({ hours: 11 }).toISOTime() //=> '11:00:00.000'
+       * @example Duration.fromObject({ hours: 11 }).toISOTime({ suppressMilliseconds: true }) //=> '11:00:00'
+       * @example Duration.fromObject({ hours: 11 }).toISOTime({ suppressSeconds: true }) //=> '11:00'
+       * @example Duration.fromObject({ hours: 11 }).toISOTime({ includePrefix: true }) //=> 'T11:00:00.000'
+       * @example Duration.fromObject({ hours: 11 }).toISOTime({ format: 'basic' }) //=> '110000.000'
+       * @return {string}
+       */
+      toISOTime(opts = {}) {
+        if (!this.isValid) return null;
+        const millis = this.toMillis();
+        if (millis < 0 || millis >= 864e5) return null;
+        opts = {
+          suppressMilliseconds: false,
+          suppressSeconds: false,
+          includePrefix: false,
+          format: "extended",
+          ...opts,
+          includeOffset: false
+        };
+        const dateTime = DateTime.fromMillis(millis, {
+          zone: "UTC"
+        });
+        return dateTime.toISOTime(opts);
+      }
+      /**
+       * Returns an ISO 8601 representation of this Duration appropriate for use in JSON.
+       * @return {string}
+       */
+      toJSON() {
+        return this.toISO();
+      }
+      /**
+       * Returns an ISO 8601 representation of this Duration appropriate for use in debugging.
+       * @return {string}
+       */
+      toString() {
+        return this.toISO();
+      }
+      /**
+       * Returns a string representation of this Duration appropriate for the REPL.
+       * @return {string}
+       */
+      [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
+        if (this.isValid) {
+          return `Duration { values: ${JSON.stringify(this.values)} }`;
+        } else {
+          return `Duration { Invalid, reason: ${this.invalidReason} }`;
+        }
+      }
+      /**
+       * Returns an milliseconds value of this Duration.
+       * @return {number}
+       */
+      toMillis() {
+        if (!this.isValid) return NaN;
+        return durationToMillis(this.matrix, this.values);
+      }
+      /**
+       * Returns an milliseconds value of this Duration. Alias of {@link toMillis}
+       * @return {number}
+       */
+      valueOf() {
+        return this.toMillis();
+      }
+      /**
+       * Make this Duration longer by the specified amount. Return a newly-constructed Duration.
+       * @param {Duration|Object|number} duration - The amount to add. Either a Luxon Duration, a number of milliseconds, the object argument to Duration.fromObject()
+       * @return {Duration}
+       */
+      plus(duration) {
+        if (!this.isValid) return this;
+        const dur = _Duration.fromDurationLike(duration), result = {};
+        for (const k of orderedUnits$1) {
+          if (hasOwnProperty(dur.values, k) || hasOwnProperty(this.values, k)) {
+            result[k] = dur.get(k) + this.get(k);
+          }
+        }
+        return clone$1(this, {
+          values: result
+        }, true);
+      }
+      /**
+       * Make this Duration shorter by the specified amount. Return a newly-constructed Duration.
+       * @param {Duration|Object|number} duration - The amount to subtract. Either a Luxon Duration, a number of milliseconds, the object argument to Duration.fromObject()
+       * @return {Duration}
+       */
+      minus(duration) {
+        if (!this.isValid) return this;
+        const dur = _Duration.fromDurationLike(duration);
+        return this.plus(dur.negate());
+      }
+      /**
+       * Scale this Duration by the specified amount. Return a newly-constructed Duration.
+       * @param {function} fn - The function to apply to each unit. Arity is 1 or 2: the value of the unit and, optionally, the unit name. Must return a number.
+       * @example Duration.fromObject({ hours: 1, minutes: 30 }).mapUnits(x => x * 2) //=> { hours: 2, minutes: 60 }
+       * @example Duration.fromObject({ hours: 1, minutes: 30 }).mapUnits((x, u) => u === "hours" ? x * 2 : x) //=> { hours: 2, minutes: 30 }
+       * @return {Duration}
+       */
+      mapUnits(fn) {
+        if (!this.isValid) return this;
+        const result = {};
+        for (const k of Object.keys(this.values)) {
+          result[k] = asNumber(fn(this.values[k], k));
+        }
+        return clone$1(this, {
+          values: result
+        }, true);
+      }
+      /**
+       * Get the value of unit.
+       * @param {string} unit - a unit such as 'minute' or 'day'
+       * @example Duration.fromObject({years: 2, days: 3}).get('years') //=> 2
+       * @example Duration.fromObject({years: 2, days: 3}).get('months') //=> 0
+       * @example Duration.fromObject({years: 2, days: 3}).get('days') //=> 3
+       * @return {number}
+       */
+      get(unit) {
+        return this[_Duration.normalizeUnit(unit)];
+      }
+      /**
+       * "Set" the values of specified units. Return a newly-constructed Duration.
+       * @param {Object} values - a mapping of units to numbers
+       * @example dur.set({ years: 2017 })
+       * @example dur.set({ hours: 8, minutes: 30 })
+       * @return {Duration}
+       */
+      set(values) {
+        if (!this.isValid) return this;
+        const mixed = {
+          ...this.values,
+          ...normalizeObject(values, _Duration.normalizeUnit)
+        };
+        return clone$1(this, {
+          values: mixed
+        });
+      }
+      /**
+       * "Set" the locale and/or numberingSystem.  Returns a newly-constructed Duration.
+       * @example dur.reconfigure({ locale: 'en-GB' })
+       * @return {Duration}
+       */
+      reconfigure({
+        locale,
+        numberingSystem,
+        conversionAccuracy,
+        matrix
+      } = {}) {
+        const loc = this.loc.clone({
+          locale,
+          numberingSystem
+        });
+        const opts = {
+          loc,
+          matrix,
+          conversionAccuracy
+        };
+        return clone$1(this, opts);
+      }
+      /**
+       * Return the length of the duration in the specified unit.
+       * @param {string} unit - a unit such as 'minutes' or 'days'
+       * @example Duration.fromObject({years: 1}).as('days') //=> 365
+       * @example Duration.fromObject({years: 1}).as('months') //=> 12
+       * @example Duration.fromObject({hours: 60}).as('days') //=> 2.5
+       * @return {number}
+       */
+      as(unit) {
+        return this.isValid ? this.shiftTo(unit).get(unit) : NaN;
+      }
+      /**
+       * Reduce this Duration to its canonical representation in its current units.
+       * Assuming the overall value of the Duration is positive, this means:
+       * - excessive values for lower-order units are converted to higher-order units (if possible, see first and second example)
+       * - negative lower-order units are converted to higher order units (there must be such a higher order unit, otherwise
+       *   the overall value would be negative, see third example)
+       * - fractional values for higher-order units are converted to lower-order units (if possible, see fourth example)
+       *
+       * If the overall value is negative, the result of this method is equivalent to `this.negate().normalize().negate()`.
+       * @example Duration.fromObject({ years: 2, days: 5000 }).normalize().toObject() //=> { years: 15, days: 255 }
+       * @example Duration.fromObject({ days: 5000 }).normalize().toObject() //=> { days: 5000 }
+       * @example Duration.fromObject({ hours: 12, minutes: -45 }).normalize().toObject() //=> { hours: 11, minutes: 15 }
+       * @example Duration.fromObject({ years: 2.5, days: 0, hours: 0 }).normalize().toObject() //=> { years: 2, days: 182, hours: 12 }
+       * @return {Duration}
+       */
+      normalize() {
+        if (!this.isValid) return this;
+        const vals = this.toObject();
+        normalizeValues(this.matrix, vals);
+        return clone$1(this, {
+          values: vals
+        }, true);
+      }
+      /**
+       * Rescale units to its largest representation
+       * @example Duration.fromObject({ milliseconds: 90000 }).rescale().toObject() //=> { minutes: 1, seconds: 30 }
+       * @return {Duration}
+       */
+      rescale() {
+        if (!this.isValid) return this;
+        const vals = removeZeroes(this.normalize().shiftToAll().toObject());
+        return clone$1(this, {
+          values: vals
+        }, true);
+      }
+      /**
+       * Convert this Duration into its representation in a different set of units.
+       * @example Duration.fromObject({ hours: 1, seconds: 30 }).shiftTo('minutes', 'milliseconds').toObject() //=> { minutes: 60, milliseconds: 30000 }
+       * @return {Duration}
+       */
+      shiftTo(...units) {
+        if (!this.isValid) return this;
+        if (units.length === 0) {
+          return this;
+        }
+        units = units.map((u) => _Duration.normalizeUnit(u));
+        const built = {}, accumulated = {}, vals = this.toObject();
+        let lastUnit;
+        for (const k of orderedUnits$1) {
+          if (units.indexOf(k) >= 0) {
+            lastUnit = k;
+            let own = 0;
+            for (const ak in accumulated) {
+              own += this.matrix[ak][k] * accumulated[ak];
+              accumulated[ak] = 0;
+            }
+            if (isNumber(vals[k])) {
+              own += vals[k];
+            }
+            const i = Math.trunc(own);
+            built[k] = i;
+            accumulated[k] = (own * 1e3 - i * 1e3) / 1e3;
+          } else if (isNumber(vals[k])) {
+            accumulated[k] = vals[k];
+          }
+        }
+        for (const key in accumulated) {
+          if (accumulated[key] !== 0) {
+            built[lastUnit] += key === lastUnit ? accumulated[key] : accumulated[key] / this.matrix[lastUnit][key];
+          }
+        }
+        normalizeValues(this.matrix, built);
+        return clone$1(this, {
+          values: built
+        }, true);
+      }
+      /**
+       * Shift this Duration to all available units.
+       * Same as shiftTo("years", "months", "weeks", "days", "hours", "minutes", "seconds", "milliseconds")
+       * @return {Duration}
+       */
+      shiftToAll() {
+        if (!this.isValid) return this;
+        return this.shiftTo("years", "months", "weeks", "days", "hours", "minutes", "seconds", "milliseconds");
+      }
+      /**
+       * Return the negative of this Duration.
+       * @example Duration.fromObject({ hours: 1, seconds: 30 }).negate().toObject() //=> { hours: -1, seconds: -30 }
+       * @return {Duration}
+       */
+      negate() {
+        if (!this.isValid) return this;
+        const negated = {};
+        for (const k of Object.keys(this.values)) {
+          negated[k] = this.values[k] === 0 ? 0 : -this.values[k];
+        }
+        return clone$1(this, {
+          values: negated
+        }, true);
+      }
+      /**
+       * Removes all units with values equal to 0 from this Duration.
+       * @example Duration.fromObject({ years: 2, days: 0, hours: 0, minutes: 0 }).removeZeros().toObject() //=> { years: 2 }
+       * @return {Duration}
+       */
+      removeZeros() {
+        if (!this.isValid) return this;
+        const vals = removeZeroes(this.values);
+        return clone$1(this, {
+          values: vals
+        }, true);
+      }
+      /**
+       * Get the years.
+       * @type {number}
+       */
+      get years() {
+        return this.isValid ? this.values.years || 0 : NaN;
+      }
+      /**
+       * Get the quarters.
+       * @type {number}
+       */
+      get quarters() {
+        return this.isValid ? this.values.quarters || 0 : NaN;
+      }
+      /**
+       * Get the months.
+       * @type {number}
+       */
+      get months() {
+        return this.isValid ? this.values.months || 0 : NaN;
+      }
+      /**
+       * Get the weeks
+       * @type {number}
+       */
+      get weeks() {
+        return this.isValid ? this.values.weeks || 0 : NaN;
+      }
+      /**
+       * Get the days.
+       * @type {number}
+       */
+      get days() {
+        return this.isValid ? this.values.days || 0 : NaN;
+      }
+      /**
+       * Get the hours.
+       * @type {number}
+       */
+      get hours() {
+        return this.isValid ? this.values.hours || 0 : NaN;
+      }
+      /**
+       * Get the minutes.
+       * @type {number}
+       */
+      get minutes() {
+        return this.isValid ? this.values.minutes || 0 : NaN;
+      }
+      /**
+       * Get the seconds.
+       * @return {number}
+       */
+      get seconds() {
+        return this.isValid ? this.values.seconds || 0 : NaN;
+      }
+      /**
+       * Get the milliseconds.
+       * @return {number}
+       */
+      get milliseconds() {
+        return this.isValid ? this.values.milliseconds || 0 : NaN;
+      }
+      /**
+       * Returns whether the Duration is invalid. Invalid durations are returned by diff operations
+       * on invalid DateTimes or Intervals.
+       * @return {boolean}
+       */
+      get isValid() {
+        return this.invalid === null;
+      }
+      /**
+       * Returns an error code if this Duration became invalid, or null if the Duration is valid
+       * @return {string}
+       */
+      get invalidReason() {
+        return this.invalid ? this.invalid.reason : null;
+      }
+      /**
+       * Returns an explanation of why this Duration became invalid, or null if the Duration is valid
+       * @type {string}
+       */
+      get invalidExplanation() {
+        return this.invalid ? this.invalid.explanation : null;
+      }
+      /**
+       * Equality check
+       * Two Durations are equal iff they have the same units and the same values for each unit.
+       * @param {Duration} other
+       * @return {boolean}
+       */
+      equals(other) {
+        if (!this.isValid || !other.isValid) {
+          return false;
+        }
+        if (!this.loc.equals(other.loc)) {
+          return false;
+        }
+        function eq(v1, v2) {
+          if (v1 === void 0 || v1 === 0) return v2 === void 0 || v2 === 0;
+          return v1 === v2;
+        }
+        for (const u of orderedUnits$1) {
+          if (!eq(this.values[u], other.values[u])) {
+            return false;
+          }
+        }
+        return true;
+      }
+    };
+    var INVALID$1 = "Invalid Interval";
+    function validateStartEnd(start, end) {
+      if (!start || !start.isValid) {
+        return Interval.invalid("missing or invalid start");
+      } else if (!end || !end.isValid) {
+        return Interval.invalid("missing or invalid end");
+      } else if (end < start) {
+        return Interval.invalid("end before start", `The end of an interval must be after its start, but you had start=${start.toISO()} and end=${end.toISO()}`);
+      } else {
+        return null;
+      }
+    }
+    var Interval = class _Interval {
+      /**
+       * @private
+       */
+      constructor(config2) {
+        this.s = config2.start;
+        this.e = config2.end;
+        this.invalid = config2.invalid || null;
+        this.isLuxonInterval = true;
+      }
+      /**
+       * Create an invalid Interval.
+       * @param {string} reason - simple string of why this Interval is invalid. Should not contain parameters or anything else data-dependent
+       * @param {string} [explanation=null] - longer explanation, may include parameters and other useful debugging information
+       * @return {Interval}
+       */
+      static invalid(reason, explanation = null) {
+        if (!reason) {
+          throw new InvalidArgumentError("need to specify a reason the Interval is invalid");
+        }
+        const invalid = reason instanceof Invalid ? reason : new Invalid(reason, explanation);
+        if (Settings.throwOnInvalid) {
+          throw new InvalidIntervalError(invalid);
+        } else {
+          return new _Interval({
+            invalid
+          });
+        }
+      }
+      /**
+       * Create an Interval from a start DateTime and an end DateTime. Inclusive of the start but not the end.
+       * @param {DateTime|Date|Object} start
+       * @param {DateTime|Date|Object} end
+       * @return {Interval}
+       */
+      static fromDateTimes(start, end) {
+        const builtStart = friendlyDateTime(start), builtEnd = friendlyDateTime(end);
+        const validateError = validateStartEnd(builtStart, builtEnd);
+        if (validateError == null) {
+          return new _Interval({
+            start: builtStart,
+            end: builtEnd
+          });
+        } else {
+          return validateError;
+        }
+      }
+      /**
+       * Create an Interval from a start DateTime and a Duration to extend to.
+       * @param {DateTime|Date|Object} start
+       * @param {Duration|Object|number} duration - the length of the Interval.
+       * @return {Interval}
+       */
+      static after(start, duration) {
+        const dur = Duration.fromDurationLike(duration), dt = friendlyDateTime(start);
+        return _Interval.fromDateTimes(dt, dt.plus(dur));
+      }
+      /**
+       * Create an Interval from an end DateTime and a Duration to extend backwards to.
+       * @param {DateTime|Date|Object} end
+       * @param {Duration|Object|number} duration - the length of the Interval.
+       * @return {Interval}
+       */
+      static before(end, duration) {
+        const dur = Duration.fromDurationLike(duration), dt = friendlyDateTime(end);
+        return _Interval.fromDateTimes(dt.minus(dur), dt);
+      }
+      /**
+       * Create an Interval from an ISO 8601 string.
+       * Accepts `<start>/<end>`, `<start>/<duration>`, and `<duration>/<end>` formats.
+       * @param {string} text - the ISO string to parse
+       * @param {Object} [opts] - options to pass {@link DateTime#fromISO} and optionally {@link Duration#fromISO}
+       * @see https://en.wikipedia.org/wiki/ISO_8601#Time_intervals
+       * @return {Interval}
+       */
+      static fromISO(text, opts) {
+        const [s2, e] = (text || "").split("/", 2);
+        if (s2 && e) {
+          let start, startIsValid;
+          try {
+            start = DateTime.fromISO(s2, opts);
+            startIsValid = start.isValid;
+          } catch (e2) {
+            startIsValid = false;
+          }
+          let end, endIsValid;
+          try {
+            end = DateTime.fromISO(e, opts);
+            endIsValid = end.isValid;
+          } catch (e2) {
+            endIsValid = false;
+          }
+          if (startIsValid && endIsValid) {
+            return _Interval.fromDateTimes(start, end);
+          }
+          if (startIsValid) {
+            const dur = Duration.fromISO(e, opts);
+            if (dur.isValid) {
+              return _Interval.after(start, dur);
+            }
+          } else if (endIsValid) {
+            const dur = Duration.fromISO(s2, opts);
+            if (dur.isValid) {
+              return _Interval.before(end, dur);
+            }
+          }
+        }
+        return _Interval.invalid("unparsable", `the input "${text}" can't be parsed as ISO 8601`);
+      }
+      /**
+       * Check if an object is an Interval. Works across context boundaries
+       * @param {object} o
+       * @return {boolean}
+       */
+      static isInterval(o) {
+        return o && o.isLuxonInterval || false;
+      }
+      /**
+       * Returns the start of the Interval
+       * @type {DateTime}
+       */
+      get start() {
+        return this.isValid ? this.s : null;
+      }
+      /**
+       * Returns the end of the Interval. This is the first instant which is not part of the interval
+       * (Interval is half-open).
+       * @type {DateTime}
+       */
+      get end() {
+        return this.isValid ? this.e : null;
+      }
+      /**
+       * Returns the last DateTime included in the interval (since end is not part of the interval)
+       * @type {DateTime}
+       */
+      get lastDateTime() {
+        return this.isValid ? this.e ? this.e.minus(1) : null : null;
+      }
+      /**
+       * Returns whether this Interval's end is at least its start, meaning that the Interval isn't 'backwards'.
+       * @type {boolean}
+       */
+      get isValid() {
+        return this.invalidReason === null;
+      }
+      /**
+       * Returns an error code if this Interval is invalid, or null if the Interval is valid
+       * @type {string}
+       */
+      get invalidReason() {
+        return this.invalid ? this.invalid.reason : null;
+      }
+      /**
+       * Returns an explanation of why this Interval became invalid, or null if the Interval is valid
+       * @type {string}
+       */
+      get invalidExplanation() {
+        return this.invalid ? this.invalid.explanation : null;
+      }
+      /**
+       * Returns the length of the Interval in the specified unit.
+       * @param {string} unit - the unit (such as 'hours' or 'days') to return the length in.
+       * @return {number}
+       */
+      length(unit = "milliseconds") {
+        return this.isValid ? this.toDuration(...[unit]).get(unit) : NaN;
+      }
+      /**
+       * Returns the count of minutes, hours, days, months, or years included in the Interval, even in part.
+       * Unlike {@link Interval#length} this counts sections of the calendar, not periods of time, e.g. specifying 'day'
+       * asks 'what dates are included in this interval?', not 'how many days long is this interval?'
+       * @param {string} [unit='milliseconds'] - the unit of time to count.
+       * @param {Object} opts - options
+       * @param {boolean} [opts.useLocaleWeeks=false] - If true, use weeks based on the locale, i.e. use the locale-dependent start of the week; this operation will always use the locale of the start DateTime
+       * @return {number}
+       */
+      count(unit = "milliseconds", opts) {
+        if (!this.isValid) return NaN;
+        const start = this.start.startOf(unit, opts);
+        let end;
+        if (opts != null && opts.useLocaleWeeks) {
+          end = this.end.reconfigure({
+            locale: start.locale
+          });
+        } else {
+          end = this.end;
+        }
+        end = end.startOf(unit, opts);
+        return Math.floor(end.diff(start, unit).get(unit)) + (end.valueOf() !== this.end.valueOf());
+      }
+      /**
+       * Returns whether this Interval's start and end are both in the same unit of time
+       * @param {string} unit - the unit of time to check sameness on
+       * @return {boolean}
+       */
+      hasSame(unit) {
+        return this.isValid ? this.isEmpty() || this.e.minus(1).hasSame(this.s, unit) : false;
+      }
+      /**
+       * Return whether this Interval has the same start and end DateTimes.
+       * @return {boolean}
+       */
+      isEmpty() {
+        return this.s.valueOf() === this.e.valueOf();
+      }
+      /**
+       * Return whether this Interval's start is after the specified DateTime.
+       * @param {DateTime} dateTime
+       * @return {boolean}
+       */
+      isAfter(dateTime) {
+        if (!this.isValid) return false;
+        return this.s > dateTime;
+      }
+      /**
+       * Return whether this Interval's end is before the specified DateTime.
+       * @param {DateTime} dateTime
+       * @return {boolean}
+       */
+      isBefore(dateTime) {
+        if (!this.isValid) return false;
+        return this.e <= dateTime;
+      }
+      /**
+       * Return whether this Interval contains the specified DateTime.
+       * @param {DateTime} dateTime
+       * @return {boolean}
+       */
+      contains(dateTime) {
+        if (!this.isValid) return false;
+        return this.s <= dateTime && this.e > dateTime;
+      }
+      /**
+       * "Sets" the start and/or end dates. Returns a newly-constructed Interval.
+       * @param {Object} values - the values to set
+       * @param {DateTime} values.start - the starting DateTime
+       * @param {DateTime} values.end - the ending DateTime
+       * @return {Interval}
+       */
+      set({
+        start,
+        end
+      } = {}) {
+        if (!this.isValid) return this;
+        return _Interval.fromDateTimes(start || this.s, end || this.e);
+      }
+      /**
+       * Split this Interval at each of the specified DateTimes
+       * @param {...DateTime} dateTimes - the unit of time to count.
+       * @return {Array}
+       */
+      splitAt(...dateTimes) {
+        if (!this.isValid) return [];
+        const sorted = dateTimes.map(friendlyDateTime).filter((d) => this.contains(d)).sort((a, b) => a.toMillis() - b.toMillis()), results = [];
+        let {
+          s: s2
+        } = this, i = 0;
+        while (s2 < this.e) {
+          const added = sorted[i] || this.e, next = +added > +this.e ? this.e : added;
+          results.push(_Interval.fromDateTimes(s2, next));
+          s2 = next;
+          i += 1;
+        }
+        return results;
+      }
+      /**
+       * Split this Interval into smaller Intervals, each of the specified length.
+       * Left over time is grouped into a smaller interval
+       * @param {Duration|Object|number} duration - The length of each resulting interval.
+       * @return {Array}
+       */
+      splitBy(duration) {
+        const dur = Duration.fromDurationLike(duration);
+        if (!this.isValid || !dur.isValid || dur.as("milliseconds") === 0) {
+          return [];
+        }
+        let {
+          s: s2
+        } = this, idx = 1, next;
+        const results = [];
+        while (s2 < this.e) {
+          const added = this.start.plus(dur.mapUnits((x) => x * idx));
+          next = +added > +this.e ? this.e : added;
+          results.push(_Interval.fromDateTimes(s2, next));
+          s2 = next;
+          idx += 1;
+        }
+        return results;
+      }
+      /**
+       * Split this Interval into the specified number of smaller intervals.
+       * @param {number} numberOfParts - The number of Intervals to divide the Interval into.
+       * @return {Array}
+       */
+      divideEqually(numberOfParts) {
+        if (!this.isValid) return [];
+        return this.splitBy(this.length() / numberOfParts).slice(0, numberOfParts);
+      }
+      /**
+       * Return whether this Interval overlaps with the specified Interval
+       * @param {Interval} other
+       * @return {boolean}
+       */
+      overlaps(other) {
+        return this.e > other.s && this.s < other.e;
+      }
+      /**
+       * Return whether this Interval's end is adjacent to the specified Interval's start.
+       * @param {Interval} other
+       * @return {boolean}
+       */
+      abutsStart(other) {
+        if (!this.isValid) return false;
+        return +this.e === +other.s;
+      }
+      /**
+       * Return whether this Interval's start is adjacent to the specified Interval's end.
+       * @param {Interval} other
+       * @return {boolean}
+       */
+      abutsEnd(other) {
+        if (!this.isValid) return false;
+        return +other.e === +this.s;
+      }
+      /**
+       * Returns true if this Interval fully contains the specified Interval, specifically if the intersect (of this Interval and the other Interval) is equal to the other Interval; false otherwise.
+       * @param {Interval} other
+       * @return {boolean}
+       */
+      engulfs(other) {
+        if (!this.isValid) return false;
+        return this.s <= other.s && this.e >= other.e;
+      }
+      /**
+       * Return whether this Interval has the same start and end as the specified Interval.
+       * @param {Interval} other
+       * @return {boolean}
+       */
+      equals(other) {
+        if (!this.isValid || !other.isValid) {
+          return false;
+        }
+        return this.s.equals(other.s) && this.e.equals(other.e);
+      }
+      /**
+       * Return an Interval representing the intersection of this Interval and the specified Interval.
+       * Specifically, the resulting Interval has the maximum start time and the minimum end time of the two Intervals.
+       * Returns null if the intersection is empty, meaning, the intervals don't intersect.
+       * @param {Interval} other
+       * @return {Interval}
+       */
+      intersection(other) {
+        if (!this.isValid) return this;
+        const s2 = this.s > other.s ? this.s : other.s, e = this.e < other.e ? this.e : other.e;
+        if (s2 >= e) {
+          return null;
+        } else {
+          return _Interval.fromDateTimes(s2, e);
+        }
+      }
+      /**
+       * Return an Interval representing the union of this Interval and the specified Interval.
+       * Specifically, the resulting Interval has the minimum start time and the maximum end time of the two Intervals.
+       * @param {Interval} other
+       * @return {Interval}
+       */
+      union(other) {
+        if (!this.isValid) return this;
+        const s2 = this.s < other.s ? this.s : other.s, e = this.e > other.e ? this.e : other.e;
+        return _Interval.fromDateTimes(s2, e);
+      }
+      /**
+       * Merge an array of Intervals into an equivalent minimal set of Intervals.
+       * Combines overlapping and adjacent Intervals.
+       * The resulting array will contain the Intervals in ascending order, that is, starting with the earliest Interval
+       * and ending with the latest.
+       *
+       * @param {Array} intervals
+       * @return {Array}
+       */
+      static merge(intervals) {
+        const [found, final] = intervals.sort((a, b) => a.s - b.s).reduce(([sofar, current], item) => {
+          if (!current) {
+            return [sofar, item];
+          } else if (current.overlaps(item) || current.abutsStart(item)) {
+            return [sofar, current.union(item)];
+          } else {
+            return [sofar.concat([current]), item];
+          }
+        }, [[], null]);
+        if (final) {
+          found.push(final);
+        }
+        return found;
+      }
+      /**
+       * Return an array of Intervals representing the spans of time that only appear in one of the specified Intervals.
+       * @param {Array} intervals
+       * @return {Array}
+       */
+      static xor(intervals) {
+        let start = null, currentCount = 0;
+        const results = [], ends = intervals.map((i) => [{
+          time: i.s,
+          type: "s"
+        }, {
+          time: i.e,
+          type: "e"
+        }]), flattened = Array.prototype.concat(...ends), arr = flattened.sort((a, b) => a.time - b.time);
+        for (const i of arr) {
+          currentCount += i.type === "s" ? 1 : -1;
+          if (currentCount === 1) {
+            start = i.time;
+          } else {
+            if (start && +start !== +i.time) {
+              results.push(_Interval.fromDateTimes(start, i.time));
+            }
+            start = null;
+          }
+        }
+        return _Interval.merge(results);
+      }
+      /**
+       * Return an Interval representing the span of time in this Interval that doesn't overlap with any of the specified Intervals.
+       * @param {...Interval} intervals
+       * @return {Array}
+       */
+      difference(...intervals) {
+        return _Interval.xor([this].concat(intervals)).map((i) => this.intersection(i)).filter((i) => i && !i.isEmpty());
+      }
+      /**
+       * Returns a string representation of this Interval appropriate for debugging.
+       * @return {string}
+       */
+      toString() {
+        if (!this.isValid) return INVALID$1;
+        return `[${this.s.toISO()} \u2013 ${this.e.toISO()})`;
+      }
+      /**
+       * Returns a string representation of this Interval appropriate for the REPL.
+       * @return {string}
+       */
+      [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
+        if (this.isValid) {
+          return `Interval { start: ${this.s.toISO()}, end: ${this.e.toISO()} }`;
+        } else {
+          return `Interval { Invalid, reason: ${this.invalidReason} }`;
+        }
+      }
+      /**
+       * Returns a localized string representing this Interval. Accepts the same options as the
+       * Intl.DateTimeFormat constructor and any presets defined by Luxon, such as
+       * {@link DateTime.DATE_FULL} or {@link DateTime.TIME_SIMPLE}. The exact behavior of this method
+       * is browser-specific, but in general it will return an appropriate representation of the
+       * Interval in the assigned locale. Defaults to the system's locale if no locale has been
+       * specified.
+       * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
+       * @param {Object} [formatOpts=DateTime.DATE_SHORT] - Either a DateTime preset or
+       * Intl.DateTimeFormat constructor options.
+       * @param {Object} opts - Options to override the configuration of the start DateTime.
+       * @example Interval.fromISO('2022-11-07T09:00Z/2022-11-08T09:00Z').toLocaleString(); //=> 11/7/2022 – 11/8/2022
+       * @example Interval.fromISO('2022-11-07T09:00Z/2022-11-08T09:00Z').toLocaleString(DateTime.DATE_FULL); //=> November 7 – 8, 2022
+       * @example Interval.fromISO('2022-11-07T09:00Z/2022-11-08T09:00Z').toLocaleString(DateTime.DATE_FULL, { locale: 'fr-FR' }); //=> 7–8 novembre 2022
+       * @example Interval.fromISO('2022-11-07T17:00Z/2022-11-07T19:00Z').toLocaleString(DateTime.TIME_SIMPLE); //=> 6:00 – 8:00 PM
+       * @example Interval.fromISO('2022-11-07T17:00Z/2022-11-07T19:00Z').toLocaleString({ weekday: 'short', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }); //=> Mon, Nov 07, 6:00 – 8:00 p
+       * @return {string}
+       */
+      toLocaleString(formatOpts = DATE_SHORT, opts = {}) {
+        return this.isValid ? Formatter.create(this.s.loc.clone(opts), formatOpts).formatInterval(this) : INVALID$1;
+      }
+      /**
+       * Returns an ISO 8601-compliant string representation of this Interval.
+       * @see https://en.wikipedia.org/wiki/ISO_8601#Time_intervals
+       * @param {Object} opts - The same options as {@link DateTime#toISO}
+       * @return {string}
+       */
+      toISO(opts) {
+        if (!this.isValid) return INVALID$1;
+        return `${this.s.toISO(opts)}/${this.e.toISO(opts)}`;
+      }
+      /**
+       * Returns an ISO 8601-compliant string representation of date of this Interval.
+       * The time components are ignored.
+       * @see https://en.wikipedia.org/wiki/ISO_8601#Time_intervals
+       * @return {string}
+       */
+      toISODate() {
+        if (!this.isValid) return INVALID$1;
+        return `${this.s.toISODate()}/${this.e.toISODate()}`;
+      }
+      /**
+       * Returns an ISO 8601-compliant string representation of time of this Interval.
+       * The date components are ignored.
+       * @see https://en.wikipedia.org/wiki/ISO_8601#Time_intervals
+       * @param {Object} opts - The same options as {@link DateTime#toISO}
+       * @return {string}
+       */
+      toISOTime(opts) {
+        if (!this.isValid) return INVALID$1;
+        return `${this.s.toISOTime(opts)}/${this.e.toISOTime(opts)}`;
+      }
+      /**
+       * Returns a string representation of this Interval formatted according to the specified format
+       * string. **You may not want this.** See {@link Interval#toLocaleString} for a more flexible
+       * formatting tool.
+       * @param {string} dateFormat - The format string. This string formats the start and end time.
+       * See {@link DateTime#toFormat} for details.
+       * @param {Object} opts - Options.
+       * @param {string} [opts.separator =  ' – '] - A separator to place between the start and end
+       * representations.
+       * @return {string}
+       */
+      toFormat(dateFormat, {
+        separator = " \u2013 "
+      } = {}) {
+        if (!this.isValid) return INVALID$1;
+        return `${this.s.toFormat(dateFormat)}${separator}${this.e.toFormat(dateFormat)}`;
+      }
+      /**
+       * Return a Duration representing the time spanned by this interval.
+       * @param {string|string[]} [unit=['milliseconds']] - the unit or units (such as 'hours' or 'days') to include in the duration.
+       * @param {Object} opts - options that affect the creation of the Duration
+       * @param {string} [opts.conversionAccuracy='casual'] - the conversion system to use
+       * @example Interval.fromDateTimes(dt1, dt2).toDuration().toObject() //=> { milliseconds: 88489257 }
+       * @example Interval.fromDateTimes(dt1, dt2).toDuration('days').toObject() //=> { days: 1.0241812152777778 }
+       * @example Interval.fromDateTimes(dt1, dt2).toDuration(['hours', 'minutes']).toObject() //=> { hours: 24, minutes: 34.82095 }
+       * @example Interval.fromDateTimes(dt1, dt2).toDuration(['hours', 'minutes', 'seconds']).toObject() //=> { hours: 24, minutes: 34, seconds: 49.257 }
+       * @example Interval.fromDateTimes(dt1, dt2).toDuration('seconds').toObject() //=> { seconds: 88489.257 }
+       * @return {Duration}
+       */
+      toDuration(unit, opts) {
+        if (!this.isValid) {
+          return Duration.invalid(this.invalidReason);
+        }
+        return this.e.diff(this.s, unit, opts);
+      }
+      /**
+       * Run mapFn on the interval start and end, returning a new Interval from the resulting DateTimes
+       * @param {function} mapFn
+       * @return {Interval}
+       * @example Interval.fromDateTimes(dt1, dt2).mapEndpoints(endpoint => endpoint.toUTC())
+       * @example Interval.fromDateTimes(dt1, dt2).mapEndpoints(endpoint => endpoint.plus({ hours: 2 }))
+       */
+      mapEndpoints(mapFn) {
+        return _Interval.fromDateTimes(mapFn(this.s), mapFn(this.e));
+      }
+    };
+    var Info = class {
+      /**
+       * Return whether the specified zone contains a DST.
+       * @param {string|Zone} [zone='local'] - Zone to check. Defaults to the environment's local zone.
+       * @return {boolean}
+       */
+      static hasDST(zone = Settings.defaultZone) {
+        const proto = DateTime.now().setZone(zone).set({
+          month: 12
+        });
+        return !zone.isUniversal && proto.offset !== proto.set({
+          month: 6
+        }).offset;
+      }
+      /**
+       * Return whether the specified zone is a valid IANA specifier.
+       * @param {string} zone - Zone to check
+       * @return {boolean}
+       */
+      static isValidIANAZone(zone) {
+        return IANAZone.isValidZone(zone);
+      }
+      /**
+       * Converts the input into a {@link Zone} instance.
+       *
+       * * If `input` is already a Zone instance, it is returned unchanged.
+       * * If `input` is a string containing a valid time zone name, a Zone instance
+       *   with that name is returned.
+       * * If `input` is a string that doesn't refer to a known time zone, a Zone
+       *   instance with {@link Zone#isValid} == false is returned.
+       * * If `input is a number, a Zone instance with the specified fixed offset
+       *   in minutes is returned.
+       * * If `input` is `null` or `undefined`, the default zone is returned.
+       * @param {string|Zone|number} [input] - the value to be converted
+       * @return {Zone}
+       */
+      static normalizeZone(input) {
+        return normalizeZone(input, Settings.defaultZone);
+      }
+      /**
+       * Get the weekday on which the week starts according to the given locale.
+       * @param {Object} opts - options
+       * @param {string} [opts.locale] - the locale code
+       * @param {string} [opts.locObj=null] - an existing locale object to use
+       * @returns {number} the start of the week, 1 for Monday through 7 for Sunday
+       */
+      static getStartOfWeek({
+        locale = null,
+        locObj = null
+      } = {}) {
+        return (locObj || Locale.create(locale)).getStartOfWeek();
+      }
+      /**
+       * Get the minimum number of days necessary in a week before it is considered part of the next year according
+       * to the given locale.
+       * @param {Object} opts - options
+       * @param {string} [opts.locale] - the locale code
+       * @param {string} [opts.locObj=null] - an existing locale object to use
+       * @returns {number}
+       */
+      static getMinimumDaysInFirstWeek({
+        locale = null,
+        locObj = null
+      } = {}) {
+        return (locObj || Locale.create(locale)).getMinDaysInFirstWeek();
+      }
+      /**
+       * Get the weekdays, which are considered the weekend according to the given locale
+       * @param {Object} opts - options
+       * @param {string} [opts.locale] - the locale code
+       * @param {string} [opts.locObj=null] - an existing locale object to use
+       * @returns {number[]} an array of weekdays, 1 for Monday through 7 for Sunday
+       */
+      static getWeekendWeekdays({
+        locale = null,
+        locObj = null
+      } = {}) {
+        return (locObj || Locale.create(locale)).getWeekendDays().slice();
+      }
+      /**
+       * Return an array of standalone month names.
+       * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
+       * @param {string} [length='long'] - the length of the month representation, such as "numeric", "2-digit", "narrow", "short", "long"
+       * @param {Object} opts - options
+       * @param {string} [opts.locale] - the locale code
+       * @param {string} [opts.numberingSystem=null] - the numbering system
+       * @param {string} [opts.locObj=null] - an existing locale object to use
+       * @param {string} [opts.outputCalendar='gregory'] - the calendar
+       * @example Info.months()[0] //=> 'January'
+       * @example Info.months('short')[0] //=> 'Jan'
+       * @example Info.months('numeric')[0] //=> '1'
+       * @example Info.months('short', { locale: 'fr-CA' } )[0] //=> 'janv.'
+       * @example Info.months('numeric', { locale: 'ar' })[0] //=> '١'
+       * @example Info.months('long', { outputCalendar: 'islamic' })[0] //=> 'Rabiʻ I'
+       * @return {Array}
+       */
+      static months(length = "long", {
+        locale = null,
+        numberingSystem = null,
+        locObj = null,
+        outputCalendar = "gregory"
+      } = {}) {
+        return (locObj || Locale.create(locale, numberingSystem, outputCalendar)).months(length);
+      }
+      /**
+       * Return an array of format month names.
+       * Format months differ from standalone months in that they're meant to appear next to the day of the month. In some languages, that
+       * changes the string.
+       * See {@link Info#months}
+       * @param {string} [length='long'] - the length of the month representation, such as "numeric", "2-digit", "narrow", "short", "long"
+       * @param {Object} opts - options
+       * @param {string} [opts.locale] - the locale code
+       * @param {string} [opts.numberingSystem=null] - the numbering system
+       * @param {string} [opts.locObj=null] - an existing locale object to use
+       * @param {string} [opts.outputCalendar='gregory'] - the calendar
+       * @return {Array}
+       */
+      static monthsFormat(length = "long", {
+        locale = null,
+        numberingSystem = null,
+        locObj = null,
+        outputCalendar = "gregory"
+      } = {}) {
+        return (locObj || Locale.create(locale, numberingSystem, outputCalendar)).months(length, true);
+      }
+      /**
+       * Return an array of standalone week names.
+       * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
+       * @param {string} [length='long'] - the length of the weekday representation, such as "narrow", "short", "long".
+       * @param {Object} opts - options
+       * @param {string} [opts.locale] - the locale code
+       * @param {string} [opts.numberingSystem=null] - the numbering system
+       * @param {string} [opts.locObj=null] - an existing locale object to use
+       * @example Info.weekdays()[0] //=> 'Monday'
+       * @example Info.weekdays('short')[0] //=> 'Mon'
+       * @example Info.weekdays('short', { locale: 'fr-CA' })[0] //=> 'lun.'
+       * @example Info.weekdays('short', { locale: 'ar' })[0] //=> 'الاثنين'
+       * @return {Array}
+       */
+      static weekdays(length = "long", {
+        locale = null,
+        numberingSystem = null,
+        locObj = null
+      } = {}) {
+        return (locObj || Locale.create(locale, numberingSystem, null)).weekdays(length);
+      }
+      /**
+       * Return an array of format week names.
+       * Format weekdays differ from standalone weekdays in that they're meant to appear next to more date information. In some languages, that
+       * changes the string.
+       * See {@link Info#weekdays}
+       * @param {string} [length='long'] - the length of the month representation, such as "narrow", "short", "long".
+       * @param {Object} opts - options
+       * @param {string} [opts.locale=null] - the locale code
+       * @param {string} [opts.numberingSystem=null] - the numbering system
+       * @param {string} [opts.locObj=null] - an existing locale object to use
+       * @return {Array}
+       */
+      static weekdaysFormat(length = "long", {
+        locale = null,
+        numberingSystem = null,
+        locObj = null
+      } = {}) {
+        return (locObj || Locale.create(locale, numberingSystem, null)).weekdays(length, true);
+      }
+      /**
+       * Return an array of meridiems.
+       * @param {Object} opts - options
+       * @param {string} [opts.locale] - the locale code
+       * @example Info.meridiems() //=> [ 'AM', 'PM' ]
+       * @example Info.meridiems({ locale: 'my' }) //=> [ 'နံနက်', 'ညနေ' ]
+       * @return {Array}
+       */
+      static meridiems({
+        locale = null
+      } = {}) {
+        return Locale.create(locale).meridiems();
+      }
+      /**
+       * Return an array of eras, such as ['BC', 'AD']. The locale can be specified, but the calendar system is always Gregorian.
+       * @param {string} [length='short'] - the length of the era representation, such as "short" or "long".
+       * @param {Object} opts - options
+       * @param {string} [opts.locale] - the locale code
+       * @example Info.eras() //=> [ 'BC', 'AD' ]
+       * @example Info.eras('long') //=> [ 'Before Christ', 'Anno Domini' ]
+       * @example Info.eras('long', { locale: 'fr' }) //=> [ 'avant Jésus-Christ', 'après Jésus-Christ' ]
+       * @return {Array}
+       */
+      static eras(length = "short", {
+        locale = null
+      } = {}) {
+        return Locale.create(locale, null, "gregory").eras(length);
+      }
+      /**
+       * Return the set of available features in this environment.
+       * Some features of Luxon are not available in all environments. For example, on older browsers, relative time formatting support is not available. Use this function to figure out if that's the case.
+       * Keys:
+       * * `relative`: whether this environment supports relative time formatting
+       * * `localeWeek`: whether this environment supports different weekdays for the start of the week based on the locale
+       * @example Info.features() //=> { relative: false, localeWeek: true }
+       * @return {Object}
+       */
+      static features() {
+        return {
+          relative: hasRelative(),
+          localeWeek: hasLocaleWeekInfo()
+        };
+      }
+    };
+    function dayDiff(earlier, later) {
+      const utcDayStart = (dt) => dt.toUTC(0, {
+        keepLocalTime: true
+      }).startOf("day").valueOf(), ms = utcDayStart(later) - utcDayStart(earlier);
+      return Math.floor(Duration.fromMillis(ms).as("days"));
+    }
+    function highOrderDiffs(cursor, later, units) {
+      const differs = [["years", (a, b) => b.year - a.year], ["quarters", (a, b) => b.quarter - a.quarter + (b.year - a.year) * 4], ["months", (a, b) => b.month - a.month + (b.year - a.year) * 12], ["weeks", (a, b) => {
+        const days = dayDiff(a, b);
+        return (days - days % 7) / 7;
+      }], ["days", dayDiff]];
+      const results = {};
+      const earlier = cursor;
+      let lowestOrder, highWater;
+      for (const [unit, differ] of differs) {
+        if (units.indexOf(unit) >= 0) {
+          lowestOrder = unit;
+          results[unit] = differ(cursor, later);
+          highWater = earlier.plus(results);
+          if (highWater > later) {
+            results[unit]--;
+            cursor = earlier.plus(results);
+            if (cursor > later) {
+              highWater = cursor;
+              results[unit]--;
+              cursor = earlier.plus(results);
+            }
+          } else {
+            cursor = highWater;
+          }
+        }
+      }
+      return [cursor, results, highWater, lowestOrder];
+    }
+    function diff(earlier, later, units, opts) {
+      let [cursor, results, highWater, lowestOrder] = highOrderDiffs(earlier, later, units);
+      const remainingMillis = later - cursor;
+      const lowerOrderUnits = units.filter((u) => ["hours", "minutes", "seconds", "milliseconds"].indexOf(u) >= 0);
+      if (lowerOrderUnits.length === 0) {
+        if (highWater < later) {
+          highWater = cursor.plus({
+            [lowestOrder]: 1
+          });
+        }
+        if (highWater !== cursor) {
+          results[lowestOrder] = (results[lowestOrder] || 0) + remainingMillis / (highWater - cursor);
+        }
+      }
+      const duration = Duration.fromObject(results, opts);
+      if (lowerOrderUnits.length > 0) {
+        return Duration.fromMillis(remainingMillis, opts).shiftTo(...lowerOrderUnits).plus(duration);
+      } else {
+        return duration;
+      }
+    }
+    var MISSING_FTP = "missing Intl.DateTimeFormat.formatToParts support";
+    function intUnit(regex, post = (i) => i) {
+      return {
+        regex,
+        deser: ([s2]) => post(parseDigits(s2))
+      };
+    }
+    var NBSP = String.fromCharCode(160);
+    var spaceOrNBSP = `[ ${NBSP}]`;
+    var spaceOrNBSPRegExp = new RegExp(spaceOrNBSP, "g");
+    function fixListRegex(s2) {
+      return s2.replace(/\./g, "\\.?").replace(spaceOrNBSPRegExp, spaceOrNBSP);
+    }
+    function stripInsensitivities(s2) {
+      return s2.replace(/\./g, "").replace(spaceOrNBSPRegExp, " ").toLowerCase();
+    }
+    function oneOf(strings, startIndex) {
+      if (strings === null) {
+        return null;
+      } else {
+        return {
+          regex: RegExp(strings.map(fixListRegex).join("|")),
+          deser: ([s2]) => strings.findIndex((i) => stripInsensitivities(s2) === stripInsensitivities(i)) + startIndex
+        };
+      }
+    }
+    function offset(regex, groups) {
+      return {
+        regex,
+        deser: ([, h, m]) => signedOffset(h, m),
+        groups
+      };
+    }
+    function simple(regex) {
+      return {
+        regex,
+        deser: ([s2]) => s2
+      };
+    }
+    function escapeToken(value) {
+      return value.replace(/[\-\[\]{}()*+?.,\\\^$|#\s]/g, "\\$&");
+    }
+    function unitForToken(token, loc) {
+      const one = digitRegex(loc), two = digitRegex(loc, "{2}"), three = digitRegex(loc, "{3}"), four = digitRegex(loc, "{4}"), six = digitRegex(loc, "{6}"), oneOrTwo = digitRegex(loc, "{1,2}"), oneToThree = digitRegex(loc, "{1,3}"), oneToSix = digitRegex(loc, "{1,6}"), oneToNine = digitRegex(loc, "{1,9}"), twoToFour = digitRegex(loc, "{2,4}"), fourToSix = digitRegex(loc, "{4,6}"), literal = (t) => ({
+        regex: RegExp(escapeToken(t.val)),
+        deser: ([s2]) => s2,
+        literal: true
+      }), unitate = (t) => {
+        if (token.literal) {
+          return literal(t);
+        }
+        switch (t.val) {
+          // era
+          case "G":
+            return oneOf(loc.eras("short"), 0);
+          case "GG":
+            return oneOf(loc.eras("long"), 0);
+          // years
+          case "y":
+            return intUnit(oneToSix);
+          case "yy":
+            return intUnit(twoToFour, untruncateYear);
+          case "yyyy":
+            return intUnit(four);
+          case "yyyyy":
+            return intUnit(fourToSix);
+          case "yyyyyy":
+            return intUnit(six);
+          // months
+          case "M":
+            return intUnit(oneOrTwo);
+          case "MM":
+            return intUnit(two);
+          case "MMM":
+            return oneOf(loc.months("short", true), 1);
+          case "MMMM":
+            return oneOf(loc.months("long", true), 1);
+          case "L":
+            return intUnit(oneOrTwo);
+          case "LL":
+            return intUnit(two);
+          case "LLL":
+            return oneOf(loc.months("short", false), 1);
+          case "LLLL":
+            return oneOf(loc.months("long", false), 1);
+          // dates
+          case "d":
+            return intUnit(oneOrTwo);
+          case "dd":
+            return intUnit(two);
+          // ordinals
+          case "o":
+            return intUnit(oneToThree);
+          case "ooo":
+            return intUnit(three);
+          // time
+          case "HH":
+            return intUnit(two);
+          case "H":
+            return intUnit(oneOrTwo);
+          case "hh":
+            return intUnit(two);
+          case "h":
+            return intUnit(oneOrTwo);
+          case "mm":
+            return intUnit(two);
+          case "m":
+            return intUnit(oneOrTwo);
+          case "q":
+            return intUnit(oneOrTwo);
+          case "qq":
+            return intUnit(two);
+          case "s":
+            return intUnit(oneOrTwo);
+          case "ss":
+            return intUnit(two);
+          case "S":
+            return intUnit(oneToThree);
+          case "SSS":
+            return intUnit(three);
+          case "u":
+            return simple(oneToNine);
+          case "uu":
+            return simple(oneOrTwo);
+          case "uuu":
+            return intUnit(one);
+          // meridiem
+          case "a":
+            return oneOf(loc.meridiems(), 0);
+          // weekYear (k)
+          case "kkkk":
+            return intUnit(four);
+          case "kk":
+            return intUnit(twoToFour, untruncateYear);
+          // weekNumber (W)
+          case "W":
+            return intUnit(oneOrTwo);
+          case "WW":
+            return intUnit(two);
+          // weekdays
+          case "E":
+          case "c":
+            return intUnit(one);
+          case "EEE":
+            return oneOf(loc.weekdays("short", false), 1);
+          case "EEEE":
+            return oneOf(loc.weekdays("long", false), 1);
+          case "ccc":
+            return oneOf(loc.weekdays("short", true), 1);
+          case "cccc":
+            return oneOf(loc.weekdays("long", true), 1);
+          // offset/zone
+          case "Z":
+          case "ZZ":
+            return offset(new RegExp(`([+-]${oneOrTwo.source})(?::(${two.source}))?`), 2);
+          case "ZZZ":
+            return offset(new RegExp(`([+-]${oneOrTwo.source})(${two.source})?`), 2);
+          // we don't support ZZZZ (PST) or ZZZZZ (Pacific Standard Time) in parsing
+          // because we don't have any way to figure out what they are
+          case "z":
+            return simple(/[a-z_+-/]{1,256}?/i);
+          // this special-case "token" represents a place where a macro-token expanded into a white-space literal
+          // in this case we accept any non-newline white-space
+          case " ":
+            return simple(/[^\S\n\r]/);
+          default:
+            return literal(t);
+        }
+      };
+      const unit = unitate(token) || {
+        invalidReason: MISSING_FTP
+      };
+      unit.token = token;
+      return unit;
+    }
+    var partTypeStyleToTokenVal = {
+      year: {
+        "2-digit": "yy",
+        numeric: "yyyyy"
+      },
+      month: {
+        numeric: "M",
+        "2-digit": "MM",
+        short: "MMM",
+        long: "MMMM"
+      },
+      day: {
+        numeric: "d",
+        "2-digit": "dd"
+      },
+      weekday: {
+        short: "EEE",
+        long: "EEEE"
+      },
+      dayperiod: "a",
+      dayPeriod: "a",
+      hour12: {
+        numeric: "h",
+        "2-digit": "hh"
+      },
+      hour24: {
+        numeric: "H",
+        "2-digit": "HH"
+      },
+      minute: {
+        numeric: "m",
+        "2-digit": "mm"
+      },
+      second: {
+        numeric: "s",
+        "2-digit": "ss"
+      },
+      timeZoneName: {
+        long: "ZZZZZ",
+        short: "ZZZ"
+      }
+    };
+    function tokenForPart(part, formatOpts, resolvedOpts) {
+      const {
+        type,
+        value
+      } = part;
+      if (type === "literal") {
+        const isSpace = /^\s+$/.test(value);
+        return {
+          literal: !isSpace,
+          val: isSpace ? " " : value
+        };
+      }
+      const style = formatOpts[type];
+      let actualType = type;
+      if (type === "hour") {
+        if (formatOpts.hour12 != null) {
+          actualType = formatOpts.hour12 ? "hour12" : "hour24";
+        } else if (formatOpts.hourCycle != null) {
+          if (formatOpts.hourCycle === "h11" || formatOpts.hourCycle === "h12") {
+            actualType = "hour12";
+          } else {
+            actualType = "hour24";
+          }
+        } else {
+          actualType = resolvedOpts.hour12 ? "hour12" : "hour24";
+        }
+      }
+      let val = partTypeStyleToTokenVal[actualType];
+      if (typeof val === "object") {
+        val = val[style];
+      }
+      if (val) {
+        return {
+          literal: false,
+          val
+        };
+      }
+      return void 0;
+    }
+    function buildRegex(units) {
+      const re = units.map((u) => u.regex).reduce((f, r) => `${f}(${r.source})`, "");
+      return [`^${re}$`, units];
+    }
+    function match(input, regex, handlers) {
+      const matches = input.match(regex);
+      if (matches) {
+        const all = {};
+        let matchIndex = 1;
+        for (const i in handlers) {
+          if (hasOwnProperty(handlers, i)) {
+            const h = handlers[i], groups = h.groups ? h.groups + 1 : 1;
+            if (!h.literal && h.token) {
+              all[h.token.val[0]] = h.deser(matches.slice(matchIndex, matchIndex + groups));
+            }
+            matchIndex += groups;
+          }
+        }
+        return [matches, all];
+      } else {
+        return [matches, {}];
+      }
+    }
+    function dateTimeFromMatches(matches) {
+      const toField = (token) => {
+        switch (token) {
+          case "S":
+            return "millisecond";
+          case "s":
+            return "second";
+          case "m":
+            return "minute";
+          case "h":
+          case "H":
+            return "hour";
+          case "d":
+            return "day";
+          case "o":
+            return "ordinal";
+          case "L":
+          case "M":
+            return "month";
+          case "y":
+            return "year";
+          case "E":
+          case "c":
+            return "weekday";
+          case "W":
+            return "weekNumber";
+          case "k":
+            return "weekYear";
+          case "q":
+            return "quarter";
+          default:
+            return null;
+        }
+      };
+      let zone = null;
+      let specificOffset;
+      if (!isUndefined(matches.z)) {
+        zone = IANAZone.create(matches.z);
+      }
+      if (!isUndefined(matches.Z)) {
+        if (!zone) {
+          zone = new FixedOffsetZone(matches.Z);
+        }
+        specificOffset = matches.Z;
+      }
+      if (!isUndefined(matches.q)) {
+        matches.M = (matches.q - 1) * 3 + 1;
+      }
+      if (!isUndefined(matches.h)) {
+        if (matches.h < 12 && matches.a === 1) {
+          matches.h += 12;
+        } else if (matches.h === 12 && matches.a === 0) {
+          matches.h = 0;
+        }
+      }
+      if (matches.G === 0 && matches.y) {
+        matches.y = -matches.y;
+      }
+      if (!isUndefined(matches.u)) {
+        matches.S = parseMillis(matches.u);
+      }
+      const vals = Object.keys(matches).reduce((r, k) => {
+        const f = toField(k);
+        if (f) {
+          r[f] = matches[k];
+        }
+        return r;
+      }, {});
+      return [vals, zone, specificOffset];
+    }
+    var dummyDateTimeCache = null;
+    function getDummyDateTime() {
+      if (!dummyDateTimeCache) {
+        dummyDateTimeCache = DateTime.fromMillis(1555555555555);
+      }
+      return dummyDateTimeCache;
+    }
+    function maybeExpandMacroToken(token, locale) {
+      if (token.literal) {
+        return token;
+      }
+      const formatOpts = Formatter.macroTokenToFormatOpts(token.val);
+      const tokens = formatOptsToTokens(formatOpts, locale);
+      if (tokens == null || tokens.includes(void 0)) {
+        return token;
+      }
+      return tokens;
+    }
+    function expandMacroTokens(tokens, locale) {
+      return Array.prototype.concat(...tokens.map((t) => maybeExpandMacroToken(t, locale)));
+    }
+    var TokenParser = class {
+      constructor(locale, format) {
+        this.locale = locale;
+        this.format = format;
+        this.tokens = expandMacroTokens(Formatter.parseFormat(format), locale);
+        this.units = this.tokens.map((t) => unitForToken(t, locale));
+        this.disqualifyingUnit = this.units.find((t) => t.invalidReason);
+        if (!this.disqualifyingUnit) {
+          const [regexString, handlers] = buildRegex(this.units);
+          this.regex = RegExp(regexString, "i");
+          this.handlers = handlers;
+        }
+      }
+      explainFromTokens(input) {
+        if (!this.isValid) {
+          return {
+            input,
+            tokens: this.tokens,
+            invalidReason: this.invalidReason
+          };
+        } else {
+          const [rawMatches, matches] = match(input, this.regex, this.handlers), [result, zone, specificOffset] = matches ? dateTimeFromMatches(matches) : [null, null, void 0];
+          if (hasOwnProperty(matches, "a") && hasOwnProperty(matches, "H")) {
+            throw new ConflictingSpecificationError("Can't include meridiem when specifying 24-hour format");
+          }
+          return {
+            input,
+            tokens: this.tokens,
+            regex: this.regex,
+            rawMatches,
+            matches,
+            result,
+            zone,
+            specificOffset
+          };
+        }
+      }
+      get isValid() {
+        return !this.disqualifyingUnit;
+      }
+      get invalidReason() {
+        return this.disqualifyingUnit ? this.disqualifyingUnit.invalidReason : null;
+      }
+    };
+    function explainFromTokens(locale, input, format) {
+      const parser = new TokenParser(locale, format);
+      return parser.explainFromTokens(input);
+    }
+    function parseFromTokens(locale, input, format) {
+      const {
+        result,
+        zone,
+        specificOffset,
+        invalidReason
+      } = explainFromTokens(locale, input, format);
+      return [result, zone, specificOffset, invalidReason];
+    }
+    function formatOptsToTokens(formatOpts, locale) {
+      if (!formatOpts) {
+        return null;
+      }
+      const formatter = Formatter.create(locale, formatOpts);
+      const df = formatter.dtFormatter(getDummyDateTime());
+      const parts = df.formatToParts();
+      const resolvedOpts = df.resolvedOptions();
+      return parts.map((p) => tokenForPart(p, formatOpts, resolvedOpts));
+    }
+    var INVALID = "Invalid DateTime";
+    var MAX_DATE = 864e13;
+    function unsupportedZone(zone) {
+      return new Invalid("unsupported zone", `the zone "${zone.name}" is not supported`);
+    }
+    function possiblyCachedWeekData(dt) {
+      if (dt.weekData === null) {
+        dt.weekData = gregorianToWeek(dt.c);
+      }
+      return dt.weekData;
+    }
+    function possiblyCachedLocalWeekData(dt) {
+      if (dt.localWeekData === null) {
+        dt.localWeekData = gregorianToWeek(dt.c, dt.loc.getMinDaysInFirstWeek(), dt.loc.getStartOfWeek());
+      }
+      return dt.localWeekData;
+    }
+    function clone(inst, alts) {
+      const current = {
+        ts: inst.ts,
+        zone: inst.zone,
+        c: inst.c,
+        o: inst.o,
+        loc: inst.loc,
+        invalid: inst.invalid
+      };
+      return new DateTime({
+        ...current,
+        ...alts,
+        old: current
+      });
+    }
+    function fixOffset(localTS, o, tz) {
+      let utcGuess = localTS - o * 60 * 1e3;
+      const o2 = tz.offset(utcGuess);
+      if (o === o2) {
+        return [utcGuess, o];
+      }
+      utcGuess -= (o2 - o) * 60 * 1e3;
+      const o3 = tz.offset(utcGuess);
+      if (o2 === o3) {
+        return [utcGuess, o2];
+      }
+      return [localTS - Math.min(o2, o3) * 60 * 1e3, Math.max(o2, o3)];
+    }
+    function tsToObj(ts, offset2) {
+      ts += offset2 * 60 * 1e3;
+      const d = new Date(ts);
+      return {
+        year: d.getUTCFullYear(),
+        month: d.getUTCMonth() + 1,
+        day: d.getUTCDate(),
+        hour: d.getUTCHours(),
+        minute: d.getUTCMinutes(),
+        second: d.getUTCSeconds(),
+        millisecond: d.getUTCMilliseconds()
+      };
+    }
+    function objToTS(obj, offset2, zone) {
+      return fixOffset(objToLocalTS(obj), offset2, zone);
+    }
+    function adjustTime(inst, dur) {
+      const oPre = inst.o, year = inst.c.year + Math.trunc(dur.years), month = inst.c.month + Math.trunc(dur.months) + Math.trunc(dur.quarters) * 3, c = {
+        ...inst.c,
+        year,
+        month,
+        day: Math.min(inst.c.day, daysInMonth(year, month)) + Math.trunc(dur.days) + Math.trunc(dur.weeks) * 7
+      }, millisToAdd = Duration.fromObject({
+        years: dur.years - Math.trunc(dur.years),
+        quarters: dur.quarters - Math.trunc(dur.quarters),
+        months: dur.months - Math.trunc(dur.months),
+        weeks: dur.weeks - Math.trunc(dur.weeks),
+        days: dur.days - Math.trunc(dur.days),
+        hours: dur.hours,
+        minutes: dur.minutes,
+        seconds: dur.seconds,
+        milliseconds: dur.milliseconds
+      }).as("milliseconds"), localTS = objToLocalTS(c);
+      let [ts, o] = fixOffset(localTS, oPre, inst.zone);
+      if (millisToAdd !== 0) {
+        ts += millisToAdd;
+        o = inst.zone.offset(ts);
+      }
+      return {
+        ts,
+        o
+      };
+    }
+    function parseDataToDateTime(parsed, parsedZone, opts, format, text, specificOffset) {
+      const {
+        setZone,
+        zone
+      } = opts;
+      if (parsed && Object.keys(parsed).length !== 0 || parsedZone) {
+        const interpretationZone = parsedZone || zone, inst = DateTime.fromObject(parsed, {
+          ...opts,
+          zone: interpretationZone,
+          specificOffset
+        });
+        return setZone ? inst : inst.setZone(zone);
+      } else {
+        return DateTime.invalid(new Invalid("unparsable", `the input "${text}" can't be parsed as ${format}`));
+      }
+    }
+    function toTechFormat(dt, format, allowZ = true) {
+      return dt.isValid ? Formatter.create(Locale.create("en-US"), {
+        allowZ,
+        forceSimple: true
+      }).formatDateTimeFromString(dt, format) : null;
+    }
+    function toISODate(o, extended, precision) {
+      const longFormat = o.c.year > 9999 || o.c.year < 0;
+      let c = "";
+      if (longFormat && o.c.year >= 0) c += "+";
+      c += padStart(o.c.year, longFormat ? 6 : 4);
+      if (precision === "year") return c;
+      if (extended) {
+        c += "-";
+        c += padStart(o.c.month);
+        if (precision === "month") return c;
+        c += "-";
+      } else {
+        c += padStart(o.c.month);
+        if (precision === "month") return c;
+      }
+      c += padStart(o.c.day);
+      return c;
+    }
+    function toISOTime(o, extended, suppressSeconds, suppressMilliseconds, includeOffset, extendedZone, precision) {
+      let showSeconds = !suppressSeconds || o.c.millisecond !== 0 || o.c.second !== 0, c = "";
+      switch (precision) {
+        case "day":
+        case "month":
+        case "year":
+          break;
+        default:
+          c += padStart(o.c.hour);
+          if (precision === "hour") break;
+          if (extended) {
+            c += ":";
+            c += padStart(o.c.minute);
+            if (precision === "minute") break;
+            if (showSeconds) {
+              c += ":";
+              c += padStart(o.c.second);
+            }
+          } else {
+            c += padStart(o.c.minute);
+            if (precision === "minute") break;
+            if (showSeconds) {
+              c += padStart(o.c.second);
+            }
+          }
+          if (precision === "second") break;
+          if (showSeconds && (!suppressMilliseconds || o.c.millisecond !== 0)) {
+            c += ".";
+            c += padStart(o.c.millisecond, 3);
+          }
+      }
+      if (includeOffset) {
+        if (o.isOffsetFixed && o.offset === 0 && !extendedZone) {
+          c += "Z";
+        } else if (o.o < 0) {
+          c += "-";
+          c += padStart(Math.trunc(-o.o / 60));
+          c += ":";
+          c += padStart(Math.trunc(-o.o % 60));
+        } else {
+          c += "+";
+          c += padStart(Math.trunc(o.o / 60));
+          c += ":";
+          c += padStart(Math.trunc(o.o % 60));
+        }
+      }
+      if (extendedZone) {
+        c += "[" + o.zone.ianaName + "]";
+      }
+      return c;
+    }
+    var defaultUnitValues = {
+      month: 1,
+      day: 1,
+      hour: 0,
+      minute: 0,
+      second: 0,
+      millisecond: 0
+    };
+    var defaultWeekUnitValues = {
+      weekNumber: 1,
+      weekday: 1,
+      hour: 0,
+      minute: 0,
+      second: 0,
+      millisecond: 0
+    };
+    var defaultOrdinalUnitValues = {
+      ordinal: 1,
+      hour: 0,
+      minute: 0,
+      second: 0,
+      millisecond: 0
+    };
+    var orderedUnits = ["year", "month", "day", "hour", "minute", "second", "millisecond"];
+    var orderedWeekUnits = ["weekYear", "weekNumber", "weekday", "hour", "minute", "second", "millisecond"];
+    var orderedOrdinalUnits = ["year", "ordinal", "hour", "minute", "second", "millisecond"];
+    function normalizeUnit(unit) {
+      const normalized = {
+        year: "year",
+        years: "year",
+        month: "month",
+        months: "month",
+        day: "day",
+        days: "day",
+        hour: "hour",
+        hours: "hour",
+        minute: "minute",
+        minutes: "minute",
+        quarter: "quarter",
+        quarters: "quarter",
+        second: "second",
+        seconds: "second",
+        millisecond: "millisecond",
+        milliseconds: "millisecond",
+        weekday: "weekday",
+        weekdays: "weekday",
+        weeknumber: "weekNumber",
+        weeksnumber: "weekNumber",
+        weeknumbers: "weekNumber",
+        weekyear: "weekYear",
+        weekyears: "weekYear",
+        ordinal: "ordinal"
+      }[unit.toLowerCase()];
+      if (!normalized) throw new InvalidUnitError(unit);
+      return normalized;
+    }
+    function normalizeUnitWithLocalWeeks(unit) {
+      switch (unit.toLowerCase()) {
+        case "localweekday":
+        case "localweekdays":
+          return "localWeekday";
+        case "localweeknumber":
+        case "localweeknumbers":
+          return "localWeekNumber";
+        case "localweekyear":
+        case "localweekyears":
+          return "localWeekYear";
+        default:
+          return normalizeUnit(unit);
+      }
+    }
+    function guessOffsetForZone(zone) {
+      if (zoneOffsetTs === void 0) {
+        zoneOffsetTs = Settings.now();
+      }
+      if (zone.type !== "iana") {
+        return zone.offset(zoneOffsetTs);
+      }
+      const zoneName = zone.name;
+      let offsetGuess = zoneOffsetGuessCache.get(zoneName);
+      if (offsetGuess === void 0) {
+        offsetGuess = zone.offset(zoneOffsetTs);
+        zoneOffsetGuessCache.set(zoneName, offsetGuess);
+      }
+      return offsetGuess;
+    }
+    function quickDT(obj, opts) {
+      const zone = normalizeZone(opts.zone, Settings.defaultZone);
+      if (!zone.isValid) {
+        return DateTime.invalid(unsupportedZone(zone));
+      }
+      const loc = Locale.fromObject(opts);
+      let ts, o;
+      if (!isUndefined(obj.year)) {
+        for (const u of orderedUnits) {
+          if (isUndefined(obj[u])) {
+            obj[u] = defaultUnitValues[u];
+          }
+        }
+        const invalid = hasInvalidGregorianData(obj) || hasInvalidTimeData(obj);
+        if (invalid) {
+          return DateTime.invalid(invalid);
+        }
+        const offsetProvis = guessOffsetForZone(zone);
+        [ts, o] = objToTS(obj, offsetProvis, zone);
+      } else {
+        ts = Settings.now();
+      }
+      return new DateTime({
+        ts,
+        zone,
+        loc,
+        o
+      });
+    }
+    function diffRelative(start, end, opts) {
+      const round = isUndefined(opts.round) ? true : opts.round, rounding = isUndefined(opts.rounding) ? "trunc" : opts.rounding, format = (c, unit) => {
+        c = roundTo(c, round || opts.calendary ? 0 : 2, opts.calendary ? "round" : rounding);
+        const formatter = end.loc.clone(opts).relFormatter(opts);
+        return formatter.format(c, unit);
+      }, differ = (unit) => {
+        if (opts.calendary) {
+          if (!end.hasSame(start, unit)) {
+            return end.startOf(unit).diff(start.startOf(unit), unit).get(unit);
+          } else return 0;
+        } else {
+          return end.diff(start, unit).get(unit);
+        }
+      };
+      if (opts.unit) {
+        return format(differ(opts.unit), opts.unit);
+      }
+      for (const unit of opts.units) {
+        const count = differ(unit);
+        if (Math.abs(count) >= 1) {
+          return format(count, unit);
+        }
+      }
+      return format(start > end ? -0 : 0, opts.units[opts.units.length - 1]);
+    }
+    function lastOpts(argList) {
+      let opts = {}, args;
+      if (argList.length > 0 && typeof argList[argList.length - 1] === "object") {
+        opts = argList[argList.length - 1];
+        args = Array.from(argList).slice(0, argList.length - 1);
+      } else {
+        args = Array.from(argList);
+      }
+      return [opts, args];
+    }
+    var zoneOffsetTs;
+    var zoneOffsetGuessCache = /* @__PURE__ */ new Map();
+    var DateTime = class _DateTime {
+      /**
+       * @access private
+       */
+      constructor(config2) {
+        const zone = config2.zone || Settings.defaultZone;
+        let invalid = config2.invalid || (Number.isNaN(config2.ts) ? new Invalid("invalid input") : null) || (!zone.isValid ? unsupportedZone(zone) : null);
+        this.ts = isUndefined(config2.ts) ? Settings.now() : config2.ts;
+        let c = null, o = null;
+        if (!invalid) {
+          const unchanged = config2.old && config2.old.ts === this.ts && config2.old.zone.equals(zone);
+          if (unchanged) {
+            [c, o] = [config2.old.c, config2.old.o];
+          } else {
+            const ot = isNumber(config2.o) && !config2.old ? config2.o : zone.offset(this.ts);
+            c = tsToObj(this.ts, ot);
+            invalid = Number.isNaN(c.year) ? new Invalid("invalid input") : null;
+            c = invalid ? null : c;
+            o = invalid ? null : ot;
+          }
+        }
+        this._zone = zone;
+        this.loc = config2.loc || Locale.create();
+        this.invalid = invalid;
+        this.weekData = null;
+        this.localWeekData = null;
+        this.c = c;
+        this.o = o;
+        this.isLuxonDateTime = true;
+      }
+      // CONSTRUCT
+      /**
+       * Create a DateTime for the current instant, in the system's time zone.
+       *
+       * Use Settings to override these default values if needed.
+       * @example DateTime.now().toISO() //~> now in the ISO format
+       * @return {DateTime}
+       */
+      static now() {
+        return new _DateTime({});
+      }
+      /**
+       * Create a local DateTime
+       * @param {number} [year] - The calendar year. If omitted (as in, call `local()` with no arguments), the current time will be used
+       * @param {number} [month=1] - The month, 1-indexed
+       * @param {number} [day=1] - The day of the month, 1-indexed
+       * @param {number} [hour=0] - The hour of the day, in 24-hour time
+       * @param {number} [minute=0] - The minute of the hour, meaning a number between 0 and 59
+       * @param {number} [second=0] - The second of the minute, meaning a number between 0 and 59
+       * @param {number} [millisecond=0] - The millisecond of the second, meaning a number between 0 and 999
+       * @example DateTime.local()                                  //~> now
+       * @example DateTime.local({ zone: "America/New_York" })      //~> now, in US east coast time
+       * @example DateTime.local(2017)                              //~> 2017-01-01T00:00:00
+       * @example DateTime.local(2017, 3)                           //~> 2017-03-01T00:00:00
+       * @example DateTime.local(2017, 3, 12, { locale: "fr" })     //~> 2017-03-12T00:00:00, with a French locale
+       * @example DateTime.local(2017, 3, 12, 5)                    //~> 2017-03-12T05:00:00
+       * @example DateTime.local(2017, 3, 12, 5, { zone: "utc" })   //~> 2017-03-12T05:00:00, in UTC
+       * @example DateTime.local(2017, 3, 12, 5, 45)                //~> 2017-03-12T05:45:00
+       * @example DateTime.local(2017, 3, 12, 5, 45, 10)            //~> 2017-03-12T05:45:10
+       * @example DateTime.local(2017, 3, 12, 5, 45, 10, 765)       //~> 2017-03-12T05:45:10.765
+       * @return {DateTime}
+       */
+      static local() {
+        const [opts, args] = lastOpts(arguments), [year, month, day, hour, minute, second, millisecond] = args;
+        return quickDT({
+          year,
+          month,
+          day,
+          hour,
+          minute,
+          second,
+          millisecond
+        }, opts);
+      }
+      /**
+       * Create a DateTime in UTC
+       * @param {number} [year] - The calendar year. If omitted (as in, call `utc()` with no arguments), the current time will be used
+       * @param {number} [month=1] - The month, 1-indexed
+       * @param {number} [day=1] - The day of the month
+       * @param {number} [hour=0] - The hour of the day, in 24-hour time
+       * @param {number} [minute=0] - The minute of the hour, meaning a number between 0 and 59
+       * @param {number} [second=0] - The second of the minute, meaning a number between 0 and 59
+       * @param {number} [millisecond=0] - The millisecond of the second, meaning a number between 0 and 999
+       * @param {Object} options - configuration options for the DateTime
+       * @param {string} [options.locale] - a locale to set on the resulting DateTime instance
+       * @param {string} [options.outputCalendar] - the output calendar to set on the resulting DateTime instance
+       * @param {string} [options.numberingSystem] - the numbering system to set on the resulting DateTime instance
+       * @param {string} [options.weekSettings] - the week settings to set on the resulting DateTime instance
+       * @example DateTime.utc()                                              //~> now
+       * @example DateTime.utc(2017)                                          //~> 2017-01-01T00:00:00Z
+       * @example DateTime.utc(2017, 3)                                       //~> 2017-03-01T00:00:00Z
+       * @example DateTime.utc(2017, 3, 12)                                   //~> 2017-03-12T00:00:00Z
+       * @example DateTime.utc(2017, 3, 12, 5)                                //~> 2017-03-12T05:00:00Z
+       * @example DateTime.utc(2017, 3, 12, 5, 45)                            //~> 2017-03-12T05:45:00Z
+       * @example DateTime.utc(2017, 3, 12, 5, 45, { locale: "fr" })          //~> 2017-03-12T05:45:00Z with a French locale
+       * @example DateTime.utc(2017, 3, 12, 5, 45, 10)                        //~> 2017-03-12T05:45:10Z
+       * @example DateTime.utc(2017, 3, 12, 5, 45, 10, 765, { locale: "fr" }) //~> 2017-03-12T05:45:10.765Z with a French locale
+       * @return {DateTime}
+       */
+      static utc() {
+        const [opts, args] = lastOpts(arguments), [year, month, day, hour, minute, second, millisecond] = args;
+        opts.zone = FixedOffsetZone.utcInstance;
+        return quickDT({
+          year,
+          month,
+          day,
+          hour,
+          minute,
+          second,
+          millisecond
+        }, opts);
+      }
+      /**
+       * Create a DateTime from a JavaScript Date object. Uses the default zone.
+       * @param {Date} date - a JavaScript Date object
+       * @param {Object} options - configuration options for the DateTime
+       * @param {string|Zone} [options.zone='local'] - the zone to place the DateTime into
+       * @return {DateTime}
+       */
+      static fromJSDate(date, options = {}) {
+        const ts = isDate(date) ? date.valueOf() : NaN;
+        if (Number.isNaN(ts)) {
+          return _DateTime.invalid("invalid input");
+        }
+        const zoneToUse = normalizeZone(options.zone, Settings.defaultZone);
+        if (!zoneToUse.isValid) {
+          return _DateTime.invalid(unsupportedZone(zoneToUse));
+        }
+        return new _DateTime({
+          ts,
+          zone: zoneToUse,
+          loc: Locale.fromObject(options)
+        });
+      }
+      /**
+       * Create a DateTime from a number of milliseconds since the epoch (meaning since 1 January 1970 00:00:00 UTC). Uses the default zone.
+       * @param {number} milliseconds - a number of milliseconds since 1970 UTC
+       * @param {Object} options - configuration options for the DateTime
+       * @param {string|Zone} [options.zone='local'] - the zone to place the DateTime into
+       * @param {string} [options.locale] - a locale to set on the resulting DateTime instance
+       * @param {string} options.outputCalendar - the output calendar to set on the resulting DateTime instance
+       * @param {string} options.numberingSystem - the numbering system to set on the resulting DateTime instance
+       * @param {string} options.weekSettings - the week settings to set on the resulting DateTime instance
+       * @return {DateTime}
+       */
+      static fromMillis(milliseconds, options = {}) {
+        if (!isNumber(milliseconds)) {
+          throw new InvalidArgumentError(`fromMillis requires a numerical input, but received a ${typeof milliseconds} with value ${milliseconds}`);
+        } else if (milliseconds < -MAX_DATE || milliseconds > MAX_DATE) {
+          return _DateTime.invalid("Timestamp out of range");
+        } else {
+          return new _DateTime({
+            ts: milliseconds,
+            zone: normalizeZone(options.zone, Settings.defaultZone),
+            loc: Locale.fromObject(options)
+          });
+        }
+      }
+      /**
+       * Create a DateTime from a number of seconds since the epoch (meaning since 1 January 1970 00:00:00 UTC). Uses the default zone.
+       * @param {number} seconds - a number of seconds since 1970 UTC
+       * @param {Object} options - configuration options for the DateTime
+       * @param {string|Zone} [options.zone='local'] - the zone to place the DateTime into
+       * @param {string} [options.locale] - a locale to set on the resulting DateTime instance
+       * @param {string} options.outputCalendar - the output calendar to set on the resulting DateTime instance
+       * @param {string} options.numberingSystem - the numbering system to set on the resulting DateTime instance
+       * @param {string} options.weekSettings - the week settings to set on the resulting DateTime instance
+       * @return {DateTime}
+       */
+      static fromSeconds(seconds, options = {}) {
+        if (!isNumber(seconds)) {
+          throw new InvalidArgumentError("fromSeconds requires a numerical input");
+        } else {
+          return new _DateTime({
+            ts: seconds * 1e3,
+            zone: normalizeZone(options.zone, Settings.defaultZone),
+            loc: Locale.fromObject(options)
+          });
+        }
+      }
+      /**
+       * Create a DateTime from a JavaScript object with keys like 'year' and 'hour' with reasonable defaults.
+       * @param {Object} obj - the object to create the DateTime from
+       * @param {number} obj.year - a year, such as 1987
+       * @param {number} obj.month - a month, 1-12
+       * @param {number} obj.day - a day of the month, 1-31, depending on the month
+       * @param {number} obj.ordinal - day of the year, 1-365 or 366
+       * @param {number} obj.weekYear - an ISO week year
+       * @param {number} obj.weekNumber - an ISO week number, between 1 and 52 or 53, depending on the year
+       * @param {number} obj.weekday - an ISO weekday, 1-7, where 1 is Monday and 7 is Sunday
+       * @param {number} obj.localWeekYear - a week year, according to the locale
+       * @param {number} obj.localWeekNumber - a week number, between 1 and 52 or 53, depending on the year, according to the locale
+       * @param {number} obj.localWeekday - a weekday, 1-7, where 1 is the first and 7 is the last day of the week, according to the locale
+       * @param {number} obj.hour - hour of the day, 0-23
+       * @param {number} obj.minute - minute of the hour, 0-59
+       * @param {number} obj.second - second of the minute, 0-59
+       * @param {number} obj.millisecond - millisecond of the second, 0-999
+       * @param {Object} opts - options for creating this DateTime
+       * @param {string|Zone} [opts.zone='local'] - interpret the numbers in the context of a particular zone. Can take any value taken as the first argument to setZone()
+       * @param {string} [opts.locale='system\'s locale'] - a locale to set on the resulting DateTime instance
+       * @param {string} opts.outputCalendar - the output calendar to set on the resulting DateTime instance
+       * @param {string} opts.numberingSystem - the numbering system to set on the resulting DateTime instance
+       * @param {string} opts.weekSettings - the week settings to set on the resulting DateTime instance
+       * @example DateTime.fromObject({ year: 1982, month: 5, day: 25}).toISODate() //=> '1982-05-25'
+       * @example DateTime.fromObject({ year: 1982 }).toISODate() //=> '1982-01-01'
+       * @example DateTime.fromObject({ hour: 10, minute: 26, second: 6 }) //~> today at 10:26:06
+       * @example DateTime.fromObject({ hour: 10, minute: 26, second: 6 }, { zone: 'utc' }),
+       * @example DateTime.fromObject({ hour: 10, minute: 26, second: 6 }, { zone: 'local' })
+       * @example DateTime.fromObject({ hour: 10, minute: 26, second: 6 }, { zone: 'America/New_York' })
+       * @example DateTime.fromObject({ weekYear: 2016, weekNumber: 2, weekday: 3 }).toISODate() //=> '2016-01-13'
+       * @example DateTime.fromObject({ localWeekYear: 2022, localWeekNumber: 1, localWeekday: 1 }, { locale: "en-US" }).toISODate() //=> '2021-12-26'
+       * @return {DateTime}
+       */
+      static fromObject(obj, opts = {}) {
+        obj = obj || {};
+        const zoneToUse = normalizeZone(opts.zone, Settings.defaultZone);
+        if (!zoneToUse.isValid) {
+          return _DateTime.invalid(unsupportedZone(zoneToUse));
+        }
+        const loc = Locale.fromObject(opts);
+        const normalized = normalizeObject(obj, normalizeUnitWithLocalWeeks);
+        const {
+          minDaysInFirstWeek,
+          startOfWeek
+        } = usesLocalWeekValues(normalized, loc);
+        const tsNow = Settings.now(), offsetProvis = !isUndefined(opts.specificOffset) ? opts.specificOffset : zoneToUse.offset(tsNow), containsOrdinal = !isUndefined(normalized.ordinal), containsGregorYear = !isUndefined(normalized.year), containsGregorMD = !isUndefined(normalized.month) || !isUndefined(normalized.day), containsGregor = containsGregorYear || containsGregorMD, definiteWeekDef = normalized.weekYear || normalized.weekNumber;
+        if ((containsGregor || containsOrdinal) && definiteWeekDef) {
+          throw new ConflictingSpecificationError("Can't mix weekYear/weekNumber units with year/month/day or ordinals");
+        }
+        if (containsGregorMD && containsOrdinal) {
+          throw new ConflictingSpecificationError("Can't mix ordinal dates with month/day");
+        }
+        const useWeekData = definiteWeekDef || normalized.weekday && !containsGregor;
+        let units, defaultValues, objNow = tsToObj(tsNow, offsetProvis);
+        if (useWeekData) {
+          units = orderedWeekUnits;
+          defaultValues = defaultWeekUnitValues;
+          objNow = gregorianToWeek(objNow, minDaysInFirstWeek, startOfWeek);
+        } else if (containsOrdinal) {
+          units = orderedOrdinalUnits;
+          defaultValues = defaultOrdinalUnitValues;
+          objNow = gregorianToOrdinal(objNow);
+        } else {
+          units = orderedUnits;
+          defaultValues = defaultUnitValues;
+        }
+        let foundFirst = false;
+        for (const u of units) {
+          const v = normalized[u];
+          if (!isUndefined(v)) {
+            foundFirst = true;
+          } else if (foundFirst) {
+            normalized[u] = defaultValues[u];
+          } else {
+            normalized[u] = objNow[u];
+          }
+        }
+        const higherOrderInvalid = useWeekData ? hasInvalidWeekData(normalized, minDaysInFirstWeek, startOfWeek) : containsOrdinal ? hasInvalidOrdinalData(normalized) : hasInvalidGregorianData(normalized), invalid = higherOrderInvalid || hasInvalidTimeData(normalized);
+        if (invalid) {
+          return _DateTime.invalid(invalid);
+        }
+        const gregorian = useWeekData ? weekToGregorian(normalized, minDaysInFirstWeek, startOfWeek) : containsOrdinal ? ordinalToGregorian(normalized) : normalized, [tsFinal, offsetFinal] = objToTS(gregorian, offsetProvis, zoneToUse), inst = new _DateTime({
+          ts: tsFinal,
+          zone: zoneToUse,
+          o: offsetFinal,
+          loc
+        });
+        if (normalized.weekday && containsGregor && obj.weekday !== inst.weekday) {
+          return _DateTime.invalid("mismatched weekday", `you can't specify both a weekday of ${normalized.weekday} and a date of ${inst.toISO()}`);
+        }
+        if (!inst.isValid) {
+          return _DateTime.invalid(inst.invalid);
+        }
+        return inst;
+      }
+      /**
+       * Create a DateTime from an ISO 8601 string
+       * @param {string} text - the ISO string
+       * @param {Object} opts - options to affect the creation
+       * @param {string|Zone} [opts.zone='local'] - use this zone if no offset is specified in the input string itself. Will also convert the time to this zone
+       * @param {boolean} [opts.setZone=false] - override the zone with a fixed-offset zone specified in the string itself, if it specifies one
+       * @param {string} [opts.locale='system's locale'] - a locale to set on the resulting DateTime instance
+       * @param {string} [opts.outputCalendar] - the output calendar to set on the resulting DateTime instance
+       * @param {string} [opts.numberingSystem] - the numbering system to set on the resulting DateTime instance
+       * @param {string} [opts.weekSettings] - the week settings to set on the resulting DateTime instance
+       * @example DateTime.fromISO('2016-05-25T09:08:34.123')
+       * @example DateTime.fromISO('2016-05-25T09:08:34.123+06:00')
+       * @example DateTime.fromISO('2016-05-25T09:08:34.123+06:00', {setZone: true})
+       * @example DateTime.fromISO('2016-05-25T09:08:34.123', {zone: 'utc'})
+       * @example DateTime.fromISO('2016-W05-4')
+       * @return {DateTime}
+       */
+      static fromISO(text, opts = {}) {
+        const [vals, parsedZone] = parseISODate(text);
+        return parseDataToDateTime(vals, parsedZone, opts, "ISO 8601", text);
+      }
+      /**
+       * Create a DateTime from an RFC 2822 string
+       * @param {string} text - the RFC 2822 string
+       * @param {Object} opts - options to affect the creation
+       * @param {string|Zone} [opts.zone='local'] - convert the time to this zone. Since the offset is always specified in the string itself, this has no effect on the interpretation of string, merely the zone the resulting DateTime is expressed in.
+       * @param {boolean} [opts.setZone=false] - override the zone with a fixed-offset zone specified in the string itself, if it specifies one
+       * @param {string} [opts.locale='system's locale'] - a locale to set on the resulting DateTime instance
+       * @param {string} opts.outputCalendar - the output calendar to set on the resulting DateTime instance
+       * @param {string} opts.numberingSystem - the numbering system to set on the resulting DateTime instance
+       * @param {string} opts.weekSettings - the week settings to set on the resulting DateTime instance
+       * @example DateTime.fromRFC2822('25 Nov 2016 13:23:12 GMT')
+       * @example DateTime.fromRFC2822('Fri, 25 Nov 2016 13:23:12 +0600')
+       * @example DateTime.fromRFC2822('25 Nov 2016 13:23 Z')
+       * @return {DateTime}
+       */
+      static fromRFC2822(text, opts = {}) {
+        const [vals, parsedZone] = parseRFC2822Date(text);
+        return parseDataToDateTime(vals, parsedZone, opts, "RFC 2822", text);
+      }
+      /**
+       * Create a DateTime from an HTTP header date
+       * @see https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1
+       * @param {string} text - the HTTP header date
+       * @param {Object} opts - options to affect the creation
+       * @param {string|Zone} [opts.zone='local'] - convert the time to this zone. Since HTTP dates are always in UTC, this has no effect on the interpretation of string, merely the zone the resulting DateTime is expressed in.
+       * @param {boolean} [opts.setZone=false] - override the zone with the fixed-offset zone specified in the string. For HTTP dates, this is always UTC, so this option is equivalent to setting the `zone` option to 'utc', but this option is included for consistency with similar methods.
+       * @param {string} [opts.locale='system's locale'] - a locale to set on the resulting DateTime instance
+       * @param {string} opts.outputCalendar - the output calendar to set on the resulting DateTime instance
+       * @param {string} opts.numberingSystem - the numbering system to set on the resulting DateTime instance
+       * @param {string} opts.weekSettings - the week settings to set on the resulting DateTime instance
+       * @example DateTime.fromHTTP('Sun, 06 Nov 1994 08:49:37 GMT')
+       * @example DateTime.fromHTTP('Sunday, 06-Nov-94 08:49:37 GMT')
+       * @example DateTime.fromHTTP('Sun Nov  6 08:49:37 1994')
+       * @return {DateTime}
+       */
+      static fromHTTP(text, opts = {}) {
+        const [vals, parsedZone] = parseHTTPDate(text);
+        return parseDataToDateTime(vals, parsedZone, opts, "HTTP", opts);
+      }
+      /**
+       * Create a DateTime from an input string and format string.
+       * Defaults to en-US if no locale has been specified, regardless of the system's locale. For a table of tokens and their interpretations, see [here](https://moment.github.io/luxon/#/parsing?id=table-of-tokens).
+       * @param {string} text - the string to parse
+       * @param {string} fmt - the format the string is expected to be in (see the link below for the formats)
+       * @param {Object} opts - options to affect the creation
+       * @param {string|Zone} [opts.zone='local'] - use this zone if no offset is specified in the input string itself. Will also convert the DateTime to this zone
+       * @param {boolean} [opts.setZone=false] - override the zone with a zone specified in the string itself, if it specifies one
+       * @param {string} [opts.locale='en-US'] - a locale string to use when parsing. Will also set the DateTime to this locale
+       * @param {string} opts.numberingSystem - the numbering system to use when parsing. Will also set the resulting DateTime to this numbering system
+       * @param {string} opts.weekSettings - the week settings to set on the resulting DateTime instance
+       * @param {string} opts.outputCalendar - the output calendar to set on the resulting DateTime instance
+       * @return {DateTime}
+       */
+      static fromFormat(text, fmt, opts = {}) {
+        if (isUndefined(text) || isUndefined(fmt)) {
+          throw new InvalidArgumentError("fromFormat requires an input string and a format");
+        }
+        const {
+          locale = null,
+          numberingSystem = null
+        } = opts, localeToUse = Locale.fromOpts({
+          locale,
+          numberingSystem,
+          defaultToEN: true
+        }), [vals, parsedZone, specificOffset, invalid] = parseFromTokens(localeToUse, text, fmt);
+        if (invalid) {
+          return _DateTime.invalid(invalid);
+        } else {
+          return parseDataToDateTime(vals, parsedZone, opts, `format ${fmt}`, text, specificOffset);
+        }
+      }
+      /**
+       * @deprecated use fromFormat instead
+       */
+      static fromString(text, fmt, opts = {}) {
+        return _DateTime.fromFormat(text, fmt, opts);
+      }
+      /**
+       * Create a DateTime from a SQL date, time, or datetime
+       * Defaults to en-US if no locale has been specified, regardless of the system's locale
+       * @param {string} text - the string to parse
+       * @param {Object} opts - options to affect the creation
+       * @param {string|Zone} [opts.zone='local'] - use this zone if no offset is specified in the input string itself. Will also convert the DateTime to this zone
+       * @param {boolean} [opts.setZone=false] - override the zone with a zone specified in the string itself, if it specifies one
+       * @param {string} [opts.locale='en-US'] - a locale string to use when parsing. Will also set the DateTime to this locale
+       * @param {string} opts.numberingSystem - the numbering system to use when parsing. Will also set the resulting DateTime to this numbering system
+       * @param {string} opts.weekSettings - the week settings to set on the resulting DateTime instance
+       * @param {string} opts.outputCalendar - the output calendar to set on the resulting DateTime instance
+       * @example DateTime.fromSQL('2017-05-15')
+       * @example DateTime.fromSQL('2017-05-15 09:12:34')
+       * @example DateTime.fromSQL('2017-05-15 09:12:34.342')
+       * @example DateTime.fromSQL('2017-05-15 09:12:34.342+06:00')
+       * @example DateTime.fromSQL('2017-05-15 09:12:34.342 America/Los_Angeles')
+       * @example DateTime.fromSQL('2017-05-15 09:12:34.342 America/Los_Angeles', { setZone: true })
+       * @example DateTime.fromSQL('2017-05-15 09:12:34.342', { zone: 'America/Los_Angeles' })
+       * @example DateTime.fromSQL('09:12:34.342')
+       * @return {DateTime}
+       */
+      static fromSQL(text, opts = {}) {
+        const [vals, parsedZone] = parseSQL(text);
+        return parseDataToDateTime(vals, parsedZone, opts, "SQL", text);
+      }
+      /**
+       * Create an invalid DateTime.
+       * @param {string} reason - simple string of why this DateTime is invalid. Should not contain parameters or anything else data-dependent.
+       * @param {string} [explanation=null] - longer explanation, may include parameters and other useful debugging information
+       * @return {DateTime}
+       */
+      static invalid(reason, explanation = null) {
+        if (!reason) {
+          throw new InvalidArgumentError("need to specify a reason the DateTime is invalid");
+        }
+        const invalid = reason instanceof Invalid ? reason : new Invalid(reason, explanation);
+        if (Settings.throwOnInvalid) {
+          throw new InvalidDateTimeError(invalid);
+        } else {
+          return new _DateTime({
+            invalid
+          });
+        }
+      }
+      /**
+       * Check if an object is an instance of DateTime. Works across context boundaries
+       * @param {object} o
+       * @return {boolean}
+       */
+      static isDateTime(o) {
+        return o && o.isLuxonDateTime || false;
+      }
+      /**
+       * Produce the format string for a set of options
+       * @param formatOpts
+       * @param localeOpts
+       * @returns {string}
+       */
+      static parseFormatForOpts(formatOpts, localeOpts = {}) {
+        const tokenList = formatOptsToTokens(formatOpts, Locale.fromObject(localeOpts));
+        return !tokenList ? null : tokenList.map((t) => t ? t.val : null).join("");
+      }
+      /**
+       * Produce the the fully expanded format token for the locale
+       * Does NOT quote characters, so quoted tokens will not round trip correctly
+       * @param fmt
+       * @param localeOpts
+       * @returns {string}
+       */
+      static expandFormat(fmt, localeOpts = {}) {
+        const expanded = expandMacroTokens(Formatter.parseFormat(fmt), Locale.fromObject(localeOpts));
+        return expanded.map((t) => t.val).join("");
+      }
+      static resetCache() {
+        zoneOffsetTs = void 0;
+        zoneOffsetGuessCache.clear();
+      }
+      // INFO
+      /**
+       * Get the value of unit.
+       * @param {string} unit - a unit such as 'minute' or 'day'
+       * @example DateTime.local(2017, 7, 4).get('month'); //=> 7
+       * @example DateTime.local(2017, 7, 4).get('day'); //=> 4
+       * @return {number}
+       */
+      get(unit) {
+        return this[unit];
+      }
+      /**
+       * Returns whether the DateTime is valid. Invalid DateTimes occur when:
+       * * The DateTime was created from invalid calendar information, such as the 13th month or February 30
+       * * The DateTime was created by an operation on another invalid date
+       * @type {boolean}
+       */
+      get isValid() {
+        return this.invalid === null;
+      }
+      /**
+       * Returns an error code if this DateTime is invalid, or null if the DateTime is valid
+       * @type {string}
+       */
+      get invalidReason() {
+        return this.invalid ? this.invalid.reason : null;
+      }
+      /**
+       * Returns an explanation of why this DateTime became invalid, or null if the DateTime is valid
+       * @type {string}
+       */
+      get invalidExplanation() {
+        return this.invalid ? this.invalid.explanation : null;
+      }
+      /**
+       * Get the locale of a DateTime, such 'en-GB'. The locale is used when formatting the DateTime
+       *
+       * @type {string}
+       */
+      get locale() {
+        return this.isValid ? this.loc.locale : null;
+      }
+      /**
+       * Get the numbering system of a DateTime, such 'beng'. The numbering system is used when formatting the DateTime
+       *
+       * @type {string}
+       */
+      get numberingSystem() {
+        return this.isValid ? this.loc.numberingSystem : null;
+      }
+      /**
+       * Get the output calendar of a DateTime, such 'islamic'. The output calendar is used when formatting the DateTime
+       *
+       * @type {string}
+       */
+      get outputCalendar() {
+        return this.isValid ? this.loc.outputCalendar : null;
+      }
+      /**
+       * Get the time zone associated with this DateTime.
+       * @type {Zone}
+       */
+      get zone() {
+        return this._zone;
+      }
+      /**
+       * Get the name of the time zone.
+       * @type {string}
+       */
+      get zoneName() {
+        return this.isValid ? this.zone.name : null;
+      }
+      /**
+       * Get the year
+       * @example DateTime.local(2017, 5, 25).year //=> 2017
+       * @type {number}
+       */
+      get year() {
+        return this.isValid ? this.c.year : NaN;
+      }
+      /**
+       * Get the quarter
+       * @example DateTime.local(2017, 5, 25).quarter //=> 2
+       * @type {number}
+       */
+      get quarter() {
+        return this.isValid ? Math.ceil(this.c.month / 3) : NaN;
+      }
+      /**
+       * Get the month (1-12).
+       * @example DateTime.local(2017, 5, 25).month //=> 5
+       * @type {number}
+       */
+      get month() {
+        return this.isValid ? this.c.month : NaN;
+      }
+      /**
+       * Get the day of the month (1-30ish).
+       * @example DateTime.local(2017, 5, 25).day //=> 25
+       * @type {number}
+       */
+      get day() {
+        return this.isValid ? this.c.day : NaN;
+      }
+      /**
+       * Get the hour of the day (0-23).
+       * @example DateTime.local(2017, 5, 25, 9).hour //=> 9
+       * @type {number}
+       */
+      get hour() {
+        return this.isValid ? this.c.hour : NaN;
+      }
+      /**
+       * Get the minute of the hour (0-59).
+       * @example DateTime.local(2017, 5, 25, 9, 30).minute //=> 30
+       * @type {number}
+       */
+      get minute() {
+        return this.isValid ? this.c.minute : NaN;
+      }
+      /**
+       * Get the second of the minute (0-59).
+       * @example DateTime.local(2017, 5, 25, 9, 30, 52).second //=> 52
+       * @type {number}
+       */
+      get second() {
+        return this.isValid ? this.c.second : NaN;
+      }
+      /**
+       * Get the millisecond of the second (0-999).
+       * @example DateTime.local(2017, 5, 25, 9, 30, 52, 654).millisecond //=> 654
+       * @type {number}
+       */
+      get millisecond() {
+        return this.isValid ? this.c.millisecond : NaN;
+      }
+      /**
+       * Get the week year
+       * @see https://en.wikipedia.org/wiki/ISO_week_date
+       * @example DateTime.local(2014, 12, 31).weekYear //=> 2015
+       * @type {number}
+       */
+      get weekYear() {
+        return this.isValid ? possiblyCachedWeekData(this).weekYear : NaN;
+      }
+      /**
+       * Get the week number of the week year (1-52ish).
+       * @see https://en.wikipedia.org/wiki/ISO_week_date
+       * @example DateTime.local(2017, 5, 25).weekNumber //=> 21
+       * @type {number}
+       */
+      get weekNumber() {
+        return this.isValid ? possiblyCachedWeekData(this).weekNumber : NaN;
+      }
+      /**
+       * Get the day of the week.
+       * 1 is Monday and 7 is Sunday
+       * @see https://en.wikipedia.org/wiki/ISO_week_date
+       * @example DateTime.local(2014, 11, 31).weekday //=> 4
+       * @type {number}
+       */
+      get weekday() {
+        return this.isValid ? possiblyCachedWeekData(this).weekday : NaN;
+      }
+      /**
+       * Returns true if this date is on a weekend according to the locale, false otherwise
+       * @returns {boolean}
+       */
+      get isWeekend() {
+        return this.isValid && this.loc.getWeekendDays().includes(this.weekday);
+      }
+      /**
+       * Get the day of the week according to the locale.
+       * 1 is the first day of the week and 7 is the last day of the week.
+       * If the locale assigns Sunday as the first day of the week, then a date which is a Sunday will return 1,
+       * @returns {number}
+       */
+      get localWeekday() {
+        return this.isValid ? possiblyCachedLocalWeekData(this).weekday : NaN;
+      }
+      /**
+       * Get the week number of the week year according to the locale. Different locales assign week numbers differently,
+       * because the week can start on different days of the week (see localWeekday) and because a different number of days
+       * is required for a week to count as the first week of a year.
+       * @returns {number}
+       */
+      get localWeekNumber() {
+        return this.isValid ? possiblyCachedLocalWeekData(this).weekNumber : NaN;
+      }
+      /**
+       * Get the week year according to the locale. Different locales assign week numbers (and therefor week years)
+       * differently, see localWeekNumber.
+       * @returns {number}
+       */
+      get localWeekYear() {
+        return this.isValid ? possiblyCachedLocalWeekData(this).weekYear : NaN;
+      }
+      /**
+       * Get the ordinal (meaning the day of the year)
+       * @example DateTime.local(2017, 5, 25).ordinal //=> 145
+       * @type {number|DateTime}
+       */
+      get ordinal() {
+        return this.isValid ? gregorianToOrdinal(this.c).ordinal : NaN;
+      }
+      /**
+       * Get the human readable short month name, such as 'Oct'.
+       * Defaults to the system's locale if no locale has been specified
+       * @example DateTime.local(2017, 10, 30).monthShort //=> Oct
+       * @type {string}
+       */
+      get monthShort() {
+        return this.isValid ? Info.months("short", {
+          locObj: this.loc
+        })[this.month - 1] : null;
+      }
+      /**
+       * Get the human readable long month name, such as 'October'.
+       * Defaults to the system's locale if no locale has been specified
+       * @example DateTime.local(2017, 10, 30).monthLong //=> October
+       * @type {string}
+       */
+      get monthLong() {
+        return this.isValid ? Info.months("long", {
+          locObj: this.loc
+        })[this.month - 1] : null;
+      }
+      /**
+       * Get the human readable short weekday, such as 'Mon'.
+       * Defaults to the system's locale if no locale has been specified
+       * @example DateTime.local(2017, 10, 30).weekdayShort //=> Mon
+       * @type {string}
+       */
+      get weekdayShort() {
+        return this.isValid ? Info.weekdays("short", {
+          locObj: this.loc
+        })[this.weekday - 1] : null;
+      }
+      /**
+       * Get the human readable long weekday, such as 'Monday'.
+       * Defaults to the system's locale if no locale has been specified
+       * @example DateTime.local(2017, 10, 30).weekdayLong //=> Monday
+       * @type {string}
+       */
+      get weekdayLong() {
+        return this.isValid ? Info.weekdays("long", {
+          locObj: this.loc
+        })[this.weekday - 1] : null;
+      }
+      /**
+       * Get the UTC offset of this DateTime in minutes
+       * @example DateTime.now().offset //=> -240
+       * @example DateTime.utc().offset //=> 0
+       * @type {number}
+       */
+      get offset() {
+        return this.isValid ? +this.o : NaN;
+      }
+      /**
+       * Get the short human name for the zone's current offset, for example "EST" or "EDT".
+       * Defaults to the system's locale if no locale has been specified
+       * @type {string}
+       */
+      get offsetNameShort() {
+        if (this.isValid) {
+          return this.zone.offsetName(this.ts, {
+            format: "short",
+            locale: this.locale
+          });
+        } else {
+          return null;
+        }
+      }
+      /**
+       * Get the long human name for the zone's current offset, for example "Eastern Standard Time" or "Eastern Daylight Time".
+       * Defaults to the system's locale if no locale has been specified
+       * @type {string}
+       */
+      get offsetNameLong() {
+        if (this.isValid) {
+          return this.zone.offsetName(this.ts, {
+            format: "long",
+            locale: this.locale
+          });
+        } else {
+          return null;
+        }
+      }
+      /**
+       * Get whether this zone's offset ever changes, as in a DST.
+       * @type {boolean}
+       */
+      get isOffsetFixed() {
+        return this.isValid ? this.zone.isUniversal : null;
+      }
+      /**
+       * Get whether the DateTime is in a DST.
+       * @type {boolean}
+       */
+      get isInDST() {
+        if (this.isOffsetFixed) {
+          return false;
+        } else {
+          return this.offset > this.set({
+            month: 1,
+            day: 1
+          }).offset || this.offset > this.set({
+            month: 5
+          }).offset;
+        }
+      }
+      /**
+       * Get those DateTimes which have the same local time as this DateTime, but a different offset from UTC
+       * in this DateTime's zone. During DST changes local time can be ambiguous, for example
+       * `2023-10-29T02:30:00` in `Europe/Berlin` can have offset `+01:00` or `+02:00`.
+       * This method will return both possible DateTimes if this DateTime's local time is ambiguous.
+       * @returns {DateTime[]}
+       */
+      getPossibleOffsets() {
+        if (!this.isValid || this.isOffsetFixed) {
+          return [this];
+        }
+        const dayMs = 864e5;
+        const minuteMs = 6e4;
+        const localTS = objToLocalTS(this.c);
+        const oEarlier = this.zone.offset(localTS - dayMs);
+        const oLater = this.zone.offset(localTS + dayMs);
+        const o1 = this.zone.offset(localTS - oEarlier * minuteMs);
+        const o2 = this.zone.offset(localTS - oLater * minuteMs);
+        if (o1 === o2) {
+          return [this];
+        }
+        const ts1 = localTS - o1 * minuteMs;
+        const ts2 = localTS - o2 * minuteMs;
+        const c1 = tsToObj(ts1, o1);
+        const c2 = tsToObj(ts2, o2);
+        if (c1.hour === c2.hour && c1.minute === c2.minute && c1.second === c2.second && c1.millisecond === c2.millisecond) {
+          return [clone(this, {
+            ts: ts1
+          }), clone(this, {
+            ts: ts2
+          })];
+        }
+        return [this];
+      }
+      /**
+       * Returns true if this DateTime is in a leap year, false otherwise
+       * @example DateTime.local(2016).isInLeapYear //=> true
+       * @example DateTime.local(2013).isInLeapYear //=> false
+       * @type {boolean}
+       */
+      get isInLeapYear() {
+        return isLeapYear(this.year);
+      }
+      /**
+       * Returns the number of days in this DateTime's month
+       * @example DateTime.local(2016, 2).daysInMonth //=> 29
+       * @example DateTime.local(2016, 3).daysInMonth //=> 31
+       * @type {number}
+       */
+      get daysInMonth() {
+        return daysInMonth(this.year, this.month);
+      }
+      /**
+       * Returns the number of days in this DateTime's year
+       * @example DateTime.local(2016).daysInYear //=> 366
+       * @example DateTime.local(2013).daysInYear //=> 365
+       * @type {number}
+       */
+      get daysInYear() {
+        return this.isValid ? daysInYear(this.year) : NaN;
+      }
+      /**
+       * Returns the number of weeks in this DateTime's year
+       * @see https://en.wikipedia.org/wiki/ISO_week_date
+       * @example DateTime.local(2004).weeksInWeekYear //=> 53
+       * @example DateTime.local(2013).weeksInWeekYear //=> 52
+       * @type {number}
+       */
+      get weeksInWeekYear() {
+        return this.isValid ? weeksInWeekYear(this.weekYear) : NaN;
+      }
+      /**
+       * Returns the number of weeks in this DateTime's local week year
+       * @example DateTime.local(2020, 6, {locale: 'en-US'}).weeksInLocalWeekYear //=> 52
+       * @example DateTime.local(2020, 6, {locale: 'de-DE'}).weeksInLocalWeekYear //=> 53
+       * @type {number}
+       */
+      get weeksInLocalWeekYear() {
+        return this.isValid ? weeksInWeekYear(this.localWeekYear, this.loc.getMinDaysInFirstWeek(), this.loc.getStartOfWeek()) : NaN;
+      }
+      /**
+       * Returns the resolved Intl options for this DateTime.
+       * This is useful in understanding the behavior of formatting methods
+       * @param {Object} opts - the same options as toLocaleString
+       * @return {Object}
+       */
+      resolvedLocaleOptions(opts = {}) {
+        const {
+          locale,
+          numberingSystem,
+          calendar
+        } = Formatter.create(this.loc.clone(opts), opts).resolvedOptions(this);
+        return {
+          locale,
+          numberingSystem,
+          outputCalendar: calendar
+        };
+      }
+      // TRANSFORM
+      /**
+       * "Set" the DateTime's zone to UTC. Returns a newly-constructed DateTime.
+       *
+       * Equivalent to {@link DateTime#setZone}('utc')
+       * @param {number} [offset=0] - optionally, an offset from UTC in minutes
+       * @param {Object} [opts={}] - options to pass to `setZone()`
+       * @return {DateTime}
+       */
+      toUTC(offset2 = 0, opts = {}) {
+        return this.setZone(FixedOffsetZone.instance(offset2), opts);
+      }
+      /**
+       * "Set" the DateTime's zone to the host's local zone. Returns a newly-constructed DateTime.
+       *
+       * Equivalent to `setZone('local')`
+       * @return {DateTime}
+       */
+      toLocal() {
+        return this.setZone(Settings.defaultZone);
+      }
+      /**
+       * "Set" the DateTime's zone to specified zone. Returns a newly-constructed DateTime.
+       *
+       * By default, the setter keeps the underlying time the same (as in, the same timestamp), but the new instance will report different local times and consider DSTs when making computations, as with {@link DateTime#plus}. You may wish to use {@link DateTime#toLocal} and {@link DateTime#toUTC} which provide simple convenience wrappers for commonly used zones.
+       * @param {string|Zone} [zone='local'] - a zone identifier. As a string, that can be any IANA zone supported by the host environment, or a fixed-offset name of the form 'UTC+3', or the strings 'local' or 'utc'. You may also supply an instance of a {@link DateTime#Zone} class.
+       * @param {Object} opts - options
+       * @param {boolean} [opts.keepLocalTime=false] - If true, adjust the underlying time so that the local time stays the same, but in the target zone. You should rarely need this.
+       * @return {DateTime}
+       */
+      setZone(zone, {
+        keepLocalTime = false,
+        keepCalendarTime = false
+      } = {}) {
+        zone = normalizeZone(zone, Settings.defaultZone);
+        if (zone.equals(this.zone)) {
+          return this;
+        } else if (!zone.isValid) {
+          return _DateTime.invalid(unsupportedZone(zone));
+        } else {
+          let newTS = this.ts;
+          if (keepLocalTime || keepCalendarTime) {
+            const offsetGuess = zone.offset(this.ts);
+            const asObj = this.toObject();
+            [newTS] = objToTS(asObj, offsetGuess, zone);
+          }
+          return clone(this, {
+            ts: newTS,
+            zone
+          });
+        }
+      }
+      /**
+       * "Set" the locale, numberingSystem, or outputCalendar. Returns a newly-constructed DateTime.
+       * @param {Object} properties - the properties to set
+       * @example DateTime.local(2017, 5, 25).reconfigure({ locale: 'en-GB' })
+       * @return {DateTime}
+       */
+      reconfigure({
+        locale,
+        numberingSystem,
+        outputCalendar
+      } = {}) {
+        const loc = this.loc.clone({
+          locale,
+          numberingSystem,
+          outputCalendar
+        });
+        return clone(this, {
+          loc
+        });
+      }
+      /**
+       * "Set" the locale. Returns a newly-constructed DateTime.
+       * Just a convenient alias for reconfigure({ locale })
+       * @example DateTime.local(2017, 5, 25).setLocale('en-GB')
+       * @return {DateTime}
+       */
+      setLocale(locale) {
+        return this.reconfigure({
+          locale
+        });
+      }
+      /**
+       * "Set" the values of specified units. Returns a newly-constructed DateTime.
+       * You can only set units with this method; for "setting" metadata, see {@link DateTime#reconfigure} and {@link DateTime#setZone}.
+       *
+       * This method also supports setting locale-based week units, i.e. `localWeekday`, `localWeekNumber` and `localWeekYear`.
+       * They cannot be mixed with ISO-week units like `weekday`.
+       * @param {Object} values - a mapping of units to numbers
+       * @example dt.set({ year: 2017 })
+       * @example dt.set({ hour: 8, minute: 30 })
+       * @example dt.set({ weekday: 5 })
+       * @example dt.set({ year: 2005, ordinal: 234 })
+       * @return {DateTime}
+       */
+      set(values) {
+        if (!this.isValid) return this;
+        const normalized = normalizeObject(values, normalizeUnitWithLocalWeeks);
+        const {
+          minDaysInFirstWeek,
+          startOfWeek
+        } = usesLocalWeekValues(normalized, this.loc);
+        const settingWeekStuff = !isUndefined(normalized.weekYear) || !isUndefined(normalized.weekNumber) || !isUndefined(normalized.weekday), containsOrdinal = !isUndefined(normalized.ordinal), containsGregorYear = !isUndefined(normalized.year), containsGregorMD = !isUndefined(normalized.month) || !isUndefined(normalized.day), containsGregor = containsGregorYear || containsGregorMD, definiteWeekDef = normalized.weekYear || normalized.weekNumber;
+        if ((containsGregor || containsOrdinal) && definiteWeekDef) {
+          throw new ConflictingSpecificationError("Can't mix weekYear/weekNumber units with year/month/day or ordinals");
+        }
+        if (containsGregorMD && containsOrdinal) {
+          throw new ConflictingSpecificationError("Can't mix ordinal dates with month/day");
+        }
+        let mixed;
+        if (settingWeekStuff) {
+          mixed = weekToGregorian({
+            ...gregorianToWeek(this.c, minDaysInFirstWeek, startOfWeek),
+            ...normalized
+          }, minDaysInFirstWeek, startOfWeek);
+        } else if (!isUndefined(normalized.ordinal)) {
+          mixed = ordinalToGregorian({
+            ...gregorianToOrdinal(this.c),
+            ...normalized
+          });
+        } else {
+          mixed = {
+            ...this.toObject(),
+            ...normalized
+          };
+          if (isUndefined(normalized.day)) {
+            mixed.day = Math.min(daysInMonth(mixed.year, mixed.month), mixed.day);
+          }
+        }
+        const [ts, o] = objToTS(mixed, this.o, this.zone);
+        return clone(this, {
+          ts,
+          o
+        });
+      }
+      /**
+       * Add a period of time to this DateTime and return the resulting DateTime
+       *
+       * Adding hours, minutes, seconds, or milliseconds increases the timestamp by the right number of milliseconds. Adding days, months, or years shifts the calendar, accounting for DSTs and leap years along the way. Thus, `dt.plus({ hours: 24 })` may result in a different time than `dt.plus({ days: 1 })` if there's a DST shift in between.
+       * @param {Duration|Object|number} duration - The amount to add. Either a Luxon Duration, a number of milliseconds, the object argument to Duration.fromObject()
+       * @example DateTime.now().plus(123) //~> in 123 milliseconds
+       * @example DateTime.now().plus({ minutes: 15 }) //~> in 15 minutes
+       * @example DateTime.now().plus({ days: 1 }) //~> this time tomorrow
+       * @example DateTime.now().plus({ days: -1 }) //~> this time yesterday
+       * @example DateTime.now().plus({ hours: 3, minutes: 13 }) //~> in 3 hr, 13 min
+       * @example DateTime.now().plus(Duration.fromObject({ hours: 3, minutes: 13 })) //~> in 3 hr, 13 min
+       * @return {DateTime}
+       */
+      plus(duration) {
+        if (!this.isValid) return this;
+        const dur = Duration.fromDurationLike(duration);
+        return clone(this, adjustTime(this, dur));
+      }
+      /**
+       * Subtract a period of time to this DateTime and return the resulting DateTime
+       * See {@link DateTime#plus}
+       * @param {Duration|Object|number} duration - The amount to subtract. Either a Luxon Duration, a number of milliseconds, the object argument to Duration.fromObject()
+       @return {DateTime}
+       */
+      minus(duration) {
+        if (!this.isValid) return this;
+        const dur = Duration.fromDurationLike(duration).negate();
+        return clone(this, adjustTime(this, dur));
+      }
+      /**
+       * "Set" this DateTime to the beginning of a unit of time.
+       * @param {string} unit - The unit to go to the beginning of. Can be 'year', 'quarter', 'month', 'week', 'day', 'hour', 'minute', 'second', or 'millisecond'.
+       * @param {Object} opts - options
+       * @param {boolean} [opts.useLocaleWeeks=false] - If true, use weeks based on the locale, i.e. use the locale-dependent start of the week
+       * @example DateTime.local(2014, 3, 3).startOf('month').toISODate(); //=> '2014-03-01'
+       * @example DateTime.local(2014, 3, 3).startOf('year').toISODate(); //=> '2014-01-01'
+       * @example DateTime.local(2014, 3, 3).startOf('week').toISODate(); //=> '2014-03-03', weeks always start on Mondays
+       * @example DateTime.local(2014, 3, 3, 5, 30).startOf('day').toISOTime(); //=> '00:00.000-05:00'
+       * @example DateTime.local(2014, 3, 3, 5, 30).startOf('hour').toISOTime(); //=> '05:00:00.000-05:00'
+       * @return {DateTime}
+       */
+      startOf(unit, {
+        useLocaleWeeks = false
+      } = {}) {
+        if (!this.isValid) return this;
+        const o = {}, normalizedUnit = Duration.normalizeUnit(unit);
+        switch (normalizedUnit) {
+          case "years":
+            o.month = 1;
+          // falls through
+          case "quarters":
+          case "months":
+            o.day = 1;
+          // falls through
+          case "weeks":
+          case "days":
+            o.hour = 0;
+          // falls through
+          case "hours":
+            o.minute = 0;
+          // falls through
+          case "minutes":
+            o.second = 0;
+          // falls through
+          case "seconds":
+            o.millisecond = 0;
+            break;
+        }
+        if (normalizedUnit === "weeks") {
+          if (useLocaleWeeks) {
+            const startOfWeek = this.loc.getStartOfWeek();
+            const {
+              weekday
+            } = this;
+            if (weekday < startOfWeek) {
+              o.weekNumber = this.weekNumber - 1;
+            }
+            o.weekday = startOfWeek;
+          } else {
+            o.weekday = 1;
+          }
+        }
+        if (normalizedUnit === "quarters") {
+          const q = Math.ceil(this.month / 3);
+          o.month = (q - 1) * 3 + 1;
+        }
+        return this.set(o);
+      }
+      /**
+       * "Set" this DateTime to the end (meaning the last millisecond) of a unit of time
+       * @param {string} unit - The unit to go to the end of. Can be 'year', 'quarter', 'month', 'week', 'day', 'hour', 'minute', 'second', or 'millisecond'.
+       * @param {Object} opts - options
+       * @param {boolean} [opts.useLocaleWeeks=false] - If true, use weeks based on the locale, i.e. use the locale-dependent start of the week
+       * @example DateTime.local(2014, 3, 3).endOf('month').toISO(); //=> '2014-03-31T23:59:59.999-05:00'
+       * @example DateTime.local(2014, 3, 3).endOf('year').toISO(); //=> '2014-12-31T23:59:59.999-05:00'
+       * @example DateTime.local(2014, 3, 3).endOf('week').toISO(); // => '2014-03-09T23:59:59.999-05:00', weeks start on Mondays
+       * @example DateTime.local(2014, 3, 3, 5, 30).endOf('day').toISO(); //=> '2014-03-03T23:59:59.999-05:00'
+       * @example DateTime.local(2014, 3, 3, 5, 30).endOf('hour').toISO(); //=> '2014-03-03T05:59:59.999-05:00'
+       * @return {DateTime}
+       */
+      endOf(unit, opts) {
+        return this.isValid ? this.plus({
+          [unit]: 1
+        }).startOf(unit, opts).minus(1) : this;
+      }
+      // OUTPUT
+      /**
+       * Returns a string representation of this DateTime formatted according to the specified format string.
+       * **You may not want this.** See {@link DateTime#toLocaleString} for a more flexible formatting tool. For a table of tokens and their interpretations, see [here](https://moment.github.io/luxon/#/formatting?id=table-of-tokens).
+       * Defaults to en-US if no locale has been specified, regardless of the system's locale.
+       * @param {string} fmt - the format string
+       * @param {Object} opts - opts to override the configuration options on this DateTime
+       * @example DateTime.now().toFormat('yyyy LLL dd') //=> '2017 Apr 22'
+       * @example DateTime.now().setLocale('fr').toFormat('yyyy LLL dd') //=> '2017 avr. 22'
+       * @example DateTime.now().toFormat('yyyy LLL dd', { locale: "fr" }) //=> '2017 avr. 22'
+       * @example DateTime.now().toFormat("HH 'hours and' mm 'minutes'") //=> '20 hours and 55 minutes'
+       * @return {string}
+       */
+      toFormat(fmt, opts = {}) {
+        return this.isValid ? Formatter.create(this.loc.redefaultToEN(opts)).formatDateTimeFromString(this, fmt) : INVALID;
+      }
+      /**
+       * Returns a localized string representing this date. Accepts the same options as the Intl.DateTimeFormat constructor and any presets defined by Luxon, such as `DateTime.DATE_FULL` or `DateTime.TIME_SIMPLE`.
+       * The exact behavior of this method is browser-specific, but in general it will return an appropriate representation
+       * of the DateTime in the assigned locale.
+       * Defaults to the system's locale if no locale has been specified
+       * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
+       * @param formatOpts {Object} - Intl.DateTimeFormat constructor options and configuration options
+       * @param {Object} opts - opts to override the configuration options on this DateTime
+       * @example DateTime.now().toLocaleString(); //=> 4/20/2017
+       * @example DateTime.now().setLocale('en-gb').toLocaleString(); //=> '20/04/2017'
+       * @example DateTime.now().toLocaleString(DateTime.DATE_FULL); //=> 'April 20, 2017'
+       * @example DateTime.now().toLocaleString(DateTime.DATE_FULL, { locale: 'fr' }); //=> '28 août 2022'
+       * @example DateTime.now().toLocaleString(DateTime.TIME_SIMPLE); //=> '11:32 AM'
+       * @example DateTime.now().toLocaleString(DateTime.DATETIME_SHORT); //=> '4/20/2017, 11:32 AM'
+       * @example DateTime.now().toLocaleString({ weekday: 'long', month: 'long', day: '2-digit' }); //=> 'Thursday, April 20'
+       * @example DateTime.now().toLocaleString({ weekday: 'short', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }); //=> 'Thu, Apr 20, 11:27 AM'
+       * @example DateTime.now().toLocaleString({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }); //=> '11:32'
+       * @return {string}
+       */
+      toLocaleString(formatOpts = DATE_SHORT, opts = {}) {
+        return this.isValid ? Formatter.create(this.loc.clone(opts), formatOpts).formatDateTime(this) : INVALID;
+      }
+      /**
+       * Returns an array of format "parts", meaning individual tokens along with metadata. This is allows callers to post-process individual sections of the formatted output.
+       * Defaults to the system's locale if no locale has been specified
+       * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat/formatToParts
+       * @param opts {Object} - Intl.DateTimeFormat constructor options, same as `toLocaleString`.
+       * @example DateTime.now().toLocaleParts(); //=> [
+       *                                   //=>   { type: 'day', value: '25' },
+       *                                   //=>   { type: 'literal', value: '/' },
+       *                                   //=>   { type: 'month', value: '05' },
+       *                                   //=>   { type: 'literal', value: '/' },
+       *                                   //=>   { type: 'year', value: '1982' }
+       *                                   //=> ]
+       */
+      toLocaleParts(opts = {}) {
+        return this.isValid ? Formatter.create(this.loc.clone(opts), opts).formatDateTimeParts(this) : [];
+      }
+      /**
+       * Returns an ISO 8601-compliant string representation of this DateTime
+       * @param {Object} opts - options
+       * @param {boolean} [opts.suppressMilliseconds=false] - exclude milliseconds from the format if they're 0
+       * @param {boolean} [opts.suppressSeconds=false] - exclude seconds from the format if they're 0
+       * @param {boolean} [opts.includeOffset=true] - include the offset, such as 'Z' or '-04:00'
+       * @param {boolean} [opts.extendedZone=false] - add the time zone format extension
+       * @param {string} [opts.format='extended'] - choose between the basic and extended format
+       * @param {string} [opts.precision='milliseconds'] - truncate output to desired presicion: 'years', 'months', 'days', 'hours', 'minutes', 'seconds' or 'milliseconds'. When precision and suppressSeconds or suppressMilliseconds are used together, precision sets the maximum unit shown in the output, however seconds or milliseconds will still be suppressed if they are 0.
+       * @example DateTime.utc(1983, 5, 25).toISO() //=> '1982-05-25T00:00:00.000Z'
+       * @example DateTime.now().toISO() //=> '2017-04-22T20:47:05.335-04:00'
+       * @example DateTime.now().toISO({ includeOffset: false }) //=> '2017-04-22T20:47:05.335'
+       * @example DateTime.now().toISO({ format: 'basic' }) //=> '20170422T204705.335-0400'
+       * @example DateTime.now().toISO({ precision: 'day' }) //=> '2017-04-22Z'
+       * @example DateTime.now().toISO({ precision: 'minute' }) //=> '2017-04-22T20:47Z'
+       * @return {string|null}
+       */
+      toISO({
+        format = "extended",
+        suppressSeconds = false,
+        suppressMilliseconds = false,
+        includeOffset = true,
+        extendedZone = false,
+        precision = "milliseconds"
+      } = {}) {
+        if (!this.isValid) {
+          return null;
+        }
+        precision = normalizeUnit(precision);
+        const ext = format === "extended";
+        let c = toISODate(this, ext, precision);
+        if (orderedUnits.indexOf(precision) >= 3) c += "T";
+        c += toISOTime(this, ext, suppressSeconds, suppressMilliseconds, includeOffset, extendedZone, precision);
+        return c;
+      }
+      /**
+       * Returns an ISO 8601-compliant string representation of this DateTime's date component
+       * @param {Object} opts - options
+       * @param {string} [opts.format='extended'] - choose between the basic and extended format
+       * @param {string} [opts.precision='day'] - truncate output to desired precision: 'years', 'months', or 'days'.
+       * @example DateTime.utc(1982, 5, 25).toISODate() //=> '1982-05-25'
+       * @example DateTime.utc(1982, 5, 25).toISODate({ format: 'basic' }) //=> '19820525'
+       * @example DateTime.utc(1982, 5, 25).toISODate({ precision: 'month' }) //=> '1982-05'
+       * @return {string|null}
+       */
+      toISODate({
+        format = "extended",
+        precision = "day"
+      } = {}) {
+        if (!this.isValid) {
+          return null;
+        }
+        return toISODate(this, format === "extended", normalizeUnit(precision));
+      }
+      /**
+       * Returns an ISO 8601-compliant string representation of this DateTime's week date
+       * @example DateTime.utc(1982, 5, 25).toISOWeekDate() //=> '1982-W21-2'
+       * @return {string}
+       */
+      toISOWeekDate() {
+        return toTechFormat(this, "kkkk-'W'WW-c");
+      }
+      /**
+       * Returns an ISO 8601-compliant string representation of this DateTime's time component
+       * @param {Object} opts - options
+       * @param {boolean} [opts.suppressMilliseconds=false] - exclude milliseconds from the format if they're 0
+       * @param {boolean} [opts.suppressSeconds=false] - exclude seconds from the format if they're 0
+       * @param {boolean} [opts.includeOffset=true] - include the offset, such as 'Z' or '-04:00'
+       * @param {boolean} [opts.extendedZone=true] - add the time zone format extension
+       * @param {boolean} [opts.includePrefix=false] - include the `T` prefix
+       * @param {string} [opts.format='extended'] - choose between the basic and extended format
+       * @param {string} [opts.precision='milliseconds'] - truncate output to desired presicion: 'hours', 'minutes', 'seconds' or 'milliseconds'. When precision and suppressSeconds or suppressMilliseconds are used together, precision sets the maximum unit shown in the output, however seconds or milliseconds will still be suppressed if they are 0.
+       * @example DateTime.utc().set({ hour: 7, minute: 34 }).toISOTime() //=> '07:34:19.361Z'
+       * @example DateTime.utc().set({ hour: 7, minute: 34, seconds: 0, milliseconds: 0 }).toISOTime({ suppressSeconds: true }) //=> '07:34Z'
+       * @example DateTime.utc().set({ hour: 7, minute: 34 }).toISOTime({ format: 'basic' }) //=> '073419.361Z'
+       * @example DateTime.utc().set({ hour: 7, minute: 34 }).toISOTime({ includePrefix: true }) //=> 'T07:34:19.361Z'
+       * @example DateTime.utc().set({ hour: 7, minute: 34, second: 56 }).toISOTime({ precision: 'minute' }) //=> '07:34Z'
+       * @return {string}
+       */
+      toISOTime({
+        suppressMilliseconds = false,
+        suppressSeconds = false,
+        includeOffset = true,
+        includePrefix = false,
+        extendedZone = false,
+        format = "extended",
+        precision = "milliseconds"
+      } = {}) {
+        if (!this.isValid) {
+          return null;
+        }
+        precision = normalizeUnit(precision);
+        let c = includePrefix && orderedUnits.indexOf(precision) >= 3 ? "T" : "";
+        return c + toISOTime(this, format === "extended", suppressSeconds, suppressMilliseconds, includeOffset, extendedZone, precision);
+      }
+      /**
+       * Returns an RFC 2822-compatible string representation of this DateTime
+       * @example DateTime.utc(2014, 7, 13).toRFC2822() //=> 'Sun, 13 Jul 2014 00:00:00 +0000'
+       * @example DateTime.local(2014, 7, 13).toRFC2822() //=> 'Sun, 13 Jul 2014 00:00:00 -0400'
+       * @return {string}
+       */
+      toRFC2822() {
+        return toTechFormat(this, "EEE, dd LLL yyyy HH:mm:ss ZZZ", false);
+      }
+      /**
+       * Returns a string representation of this DateTime appropriate for use in HTTP headers. The output is always expressed in GMT.
+       * Specifically, the string conforms to RFC 1123.
+       * @see https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1
+       * @example DateTime.utc(2014, 7, 13).toHTTP() //=> 'Sun, 13 Jul 2014 00:00:00 GMT'
+       * @example DateTime.utc(2014, 7, 13, 19).toHTTP() //=> 'Sun, 13 Jul 2014 19:00:00 GMT'
+       * @return {string}
+       */
+      toHTTP() {
+        return toTechFormat(this.toUTC(), "EEE, dd LLL yyyy HH:mm:ss 'GMT'");
+      }
+      /**
+       * Returns a string representation of this DateTime appropriate for use in SQL Date
+       * @example DateTime.utc(2014, 7, 13).toSQLDate() //=> '2014-07-13'
+       * @return {string|null}
+       */
+      toSQLDate() {
+        if (!this.isValid) {
+          return null;
+        }
+        return toISODate(this, true);
+      }
+      /**
+       * Returns a string representation of this DateTime appropriate for use in SQL Time
+       * @param {Object} opts - options
+       * @param {boolean} [opts.includeZone=false] - include the zone, such as 'America/New_York'. Overrides includeOffset.
+       * @param {boolean} [opts.includeOffset=true] - include the offset, such as 'Z' or '-04:00'
+       * @param {boolean} [opts.includeOffsetSpace=true] - include the space between the time and the offset, such as '05:15:16.345 -04:00'
+       * @example DateTime.utc().toSQL() //=> '05:15:16.345'
+       * @example DateTime.now().toSQL() //=> '05:15:16.345 -04:00'
+       * @example DateTime.now().toSQL({ includeOffset: false }) //=> '05:15:16.345'
+       * @example DateTime.now().toSQL({ includeZone: false }) //=> '05:15:16.345 America/New_York'
+       * @return {string}
+       */
+      toSQLTime({
+        includeOffset = true,
+        includeZone = false,
+        includeOffsetSpace = true
+      } = {}) {
+        let fmt = "HH:mm:ss.SSS";
+        if (includeZone || includeOffset) {
+          if (includeOffsetSpace) {
+            fmt += " ";
+          }
+          if (includeZone) {
+            fmt += "z";
+          } else if (includeOffset) {
+            fmt += "ZZ";
+          }
+        }
+        return toTechFormat(this, fmt, true);
+      }
+      /**
+       * Returns a string representation of this DateTime appropriate for use in SQL DateTime
+       * @param {Object} opts - options
+       * @param {boolean} [opts.includeZone=false] - include the zone, such as 'America/New_York'. Overrides includeOffset.
+       * @param {boolean} [opts.includeOffset=true] - include the offset, such as 'Z' or '-04:00'
+       * @param {boolean} [opts.includeOffsetSpace=true] - include the space between the time and the offset, such as '05:15:16.345 -04:00'
+       * @example DateTime.utc(2014, 7, 13).toSQL() //=> '2014-07-13 00:00:00.000 Z'
+       * @example DateTime.local(2014, 7, 13).toSQL() //=> '2014-07-13 00:00:00.000 -04:00'
+       * @example DateTime.local(2014, 7, 13).toSQL({ includeOffset: false }) //=> '2014-07-13 00:00:00.000'
+       * @example DateTime.local(2014, 7, 13).toSQL({ includeZone: true }) //=> '2014-07-13 00:00:00.000 America/New_York'
+       * @return {string}
+       */
+      toSQL(opts = {}) {
+        if (!this.isValid) {
+          return null;
+        }
+        return `${this.toSQLDate()} ${this.toSQLTime(opts)}`;
+      }
+      /**
+       * Returns a string representation of this DateTime appropriate for debugging
+       * @return {string}
+       */
+      toString() {
+        return this.isValid ? this.toISO() : INVALID;
+      }
+      /**
+       * Returns a string representation of this DateTime appropriate for the REPL.
+       * @return {string}
+       */
+      [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
+        if (this.isValid) {
+          return `DateTime { ts: ${this.toISO()}, zone: ${this.zone.name}, locale: ${this.locale} }`;
+        } else {
+          return `DateTime { Invalid, reason: ${this.invalidReason} }`;
+        }
+      }
+      /**
+       * Returns the epoch milliseconds of this DateTime. Alias of {@link DateTime#toMillis}
+       * @return {number}
+       */
+      valueOf() {
+        return this.toMillis();
+      }
+      /**
+       * Returns the epoch milliseconds of this DateTime.
+       * @return {number}
+       */
+      toMillis() {
+        return this.isValid ? this.ts : NaN;
+      }
+      /**
+       * Returns the epoch seconds (including milliseconds in the fractional part) of this DateTime.
+       * @return {number}
+       */
+      toSeconds() {
+        return this.isValid ? this.ts / 1e3 : NaN;
+      }
+      /**
+       * Returns the epoch seconds (as a whole number) of this DateTime.
+       * @return {number}
+       */
+      toUnixInteger() {
+        return this.isValid ? Math.floor(this.ts / 1e3) : NaN;
+      }
+      /**
+       * Returns an ISO 8601 representation of this DateTime appropriate for use in JSON.
+       * @return {string}
+       */
+      toJSON() {
+        return this.toISO();
+      }
+      /**
+       * Returns a BSON serializable equivalent to this DateTime.
+       * @return {Date}
+       */
+      toBSON() {
+        return this.toJSDate();
+      }
+      /**
+       * Returns a JavaScript object with this DateTime's year, month, day, and so on.
+       * @param opts - options for generating the object
+       * @param {boolean} [opts.includeConfig=false] - include configuration attributes in the output
+       * @example DateTime.now().toObject() //=> { year: 2017, month: 4, day: 22, hour: 20, minute: 49, second: 42, millisecond: 268 }
+       * @return {Object}
+       */
+      toObject(opts = {}) {
+        if (!this.isValid) return {};
+        const base = {
+          ...this.c
+        };
+        if (opts.includeConfig) {
+          base.outputCalendar = this.outputCalendar;
+          base.numberingSystem = this.loc.numberingSystem;
+          base.locale = this.loc.locale;
+        }
+        return base;
+      }
+      /**
+       * Returns a JavaScript Date equivalent to this DateTime.
+       * @return {Date}
+       */
+      toJSDate() {
+        return new Date(this.isValid ? this.ts : NaN);
+      }
+      // COMPARE
+      /**
+       * Return the difference between two DateTimes as a Duration.
+       * @param {DateTime} otherDateTime - the DateTime to compare this one to
+       * @param {string|string[]} [unit=['milliseconds']] - the unit or array of units (such as 'hours' or 'days') to include in the duration.
+       * @param {Object} opts - options that affect the creation of the Duration
+       * @param {string} [opts.conversionAccuracy='casual'] - the conversion system to use
+       * @example
+       * var i1 = DateTime.fromISO('1982-05-25T09:45'),
+       *     i2 = DateTime.fromISO('1983-10-14T10:30');
+       * i2.diff(i1).toObject() //=> { milliseconds: 43807500000 }
+       * i2.diff(i1, 'hours').toObject() //=> { hours: 12168.75 }
+       * i2.diff(i1, ['months', 'days']).toObject() //=> { months: 16, days: 19.03125 }
+       * i2.diff(i1, ['months', 'days', 'hours']).toObject() //=> { months: 16, days: 19, hours: 0.75 }
+       * @return {Duration}
+       */
+      diff(otherDateTime, unit = "milliseconds", opts = {}) {
+        if (!this.isValid || !otherDateTime.isValid) {
+          return Duration.invalid("created by diffing an invalid DateTime");
+        }
+        const durOpts = {
+          locale: this.locale,
+          numberingSystem: this.numberingSystem,
+          ...opts
+        };
+        const units = maybeArray(unit).map(Duration.normalizeUnit), otherIsLater = otherDateTime.valueOf() > this.valueOf(), earlier = otherIsLater ? this : otherDateTime, later = otherIsLater ? otherDateTime : this, diffed = diff(earlier, later, units, durOpts);
+        return otherIsLater ? diffed.negate() : diffed;
+      }
+      /**
+       * Return the difference between this DateTime and right now.
+       * See {@link DateTime#diff}
+       * @param {string|string[]} [unit=['milliseconds']] - the unit or units units (such as 'hours' or 'days') to include in the duration
+       * @param {Object} opts - options that affect the creation of the Duration
+       * @param {string} [opts.conversionAccuracy='casual'] - the conversion system to use
+       * @return {Duration}
+       */
+      diffNow(unit = "milliseconds", opts = {}) {
+        return this.diff(_DateTime.now(), unit, opts);
+      }
+      /**
+       * Return an Interval spanning between this DateTime and another DateTime
+       * @param {DateTime} otherDateTime - the other end point of the Interval
+       * @return {Interval|DateTime}
+       */
+      until(otherDateTime) {
+        return this.isValid ? Interval.fromDateTimes(this, otherDateTime) : this;
+      }
+      /**
+       * Return whether this DateTime is in the same unit of time as another DateTime.
+       * Higher-order units must also be identical for this function to return `true`.
+       * Note that time zones are **ignored** in this comparison, which compares the **local** calendar time. Use {@link DateTime#setZone} to convert one of the dates if needed.
+       * @param {DateTime} otherDateTime - the other DateTime
+       * @param {string} unit - the unit of time to check sameness on
+       * @param {Object} opts - options
+       * @param {boolean} [opts.useLocaleWeeks=false] - If true, use weeks based on the locale, i.e. use the locale-dependent start of the week; only the locale of this DateTime is used
+       * @example DateTime.now().hasSame(otherDT, 'day'); //~> true if otherDT is in the same current calendar day
+       * @return {boolean}
+       */
+      hasSame(otherDateTime, unit, opts) {
+        if (!this.isValid) return false;
+        const inputMs = otherDateTime.valueOf();
+        const adjustedToZone = this.setZone(otherDateTime.zone, {
+          keepLocalTime: true
+        });
+        return adjustedToZone.startOf(unit, opts) <= inputMs && inputMs <= adjustedToZone.endOf(unit, opts);
+      }
+      /**
+       * Equality check
+       * Two DateTimes are equal if and only if they represent the same millisecond, have the same zone and location, and are both valid.
+       * To compare just the millisecond values, use `+dt1 === +dt2`.
+       * @param {DateTime} other - the other DateTime
+       * @return {boolean}
+       */
+      equals(other) {
+        return this.isValid && other.isValid && this.valueOf() === other.valueOf() && this.zone.equals(other.zone) && this.loc.equals(other.loc);
+      }
+      /**
+       * Returns a string representation of a this time relative to now, such as "in two days". Can only internationalize if your
+       * platform supports Intl.RelativeTimeFormat. Rounds towards zero by default.
+       * @param {Object} options - options that affect the output
+       * @param {DateTime} [options.base=DateTime.now()] - the DateTime to use as the basis to which this time is compared. Defaults to now.
+       * @param {string} [options.style="long"] - the style of units, must be "long", "short", or "narrow"
+       * @param {string|string[]} options.unit - use a specific unit or array of units; if omitted, or an array, the method will pick the best unit. Use an array or one of "years", "quarters", "months", "weeks", "days", "hours", "minutes", or "seconds"
+       * @param {boolean} [options.round=true] - whether to round the numbers in the output.
+       * @param {string} [options.rounding="trunc"] - rounding method to use when rounding the numbers in the output. Can be "trunc" (toward zero), "expand" (away from zero), "round", "floor", or "ceil".
+       * @param {number} [options.padding=0] - padding in milliseconds. This allows you to round up the result if it fits inside the threshold. Don't use in combination with {round: false} because the decimal output will include the padding.
+       * @param {string} options.locale - override the locale of this DateTime
+       * @param {string} options.numberingSystem - override the numberingSystem of this DateTime. The Intl system may choose not to honor this
+       * @example DateTime.now().plus({ days: 1 }).toRelative() //=> "in 1 day"
+       * @example DateTime.now().setLocale("es").toRelative({ days: 1 }) //=> "dentro de 1 día"
+       * @example DateTime.now().plus({ days: 1 }).toRelative({ locale: "fr" }) //=> "dans 23 heures"
+       * @example DateTime.now().minus({ days: 2 }).toRelative() //=> "2 days ago"
+       * @example DateTime.now().minus({ days: 2 }).toRelative({ unit: "hours" }) //=> "48 hours ago"
+       * @example DateTime.now().minus({ hours: 36 }).toRelative({ round: false }) //=> "1.5 days ago"
+       */
+      toRelative(options = {}) {
+        if (!this.isValid) return null;
+        const base = options.base || _DateTime.fromObject({}, {
+          zone: this.zone
+        }), padding = options.padding ? this < base ? -options.padding : options.padding : 0;
+        let units = ["years", "months", "days", "hours", "minutes", "seconds"];
+        let unit = options.unit;
+        if (Array.isArray(options.unit)) {
+          units = options.unit;
+          unit = void 0;
+        }
+        return diffRelative(base, this.plus(padding), {
+          ...options,
+          numeric: "always",
+          units,
+          unit
+        });
+      }
+      /**
+       * Returns a string representation of this date relative to today, such as "yesterday" or "next month".
+       * Only internationalizes on platforms that supports Intl.RelativeTimeFormat.
+       * @param {Object} options - options that affect the output
+       * @param {DateTime} [options.base=DateTime.now()] - the DateTime to use as the basis to which this time is compared. Defaults to now.
+       * @param {string} options.locale - override the locale of this DateTime
+       * @param {string} options.unit - use a specific unit; if omitted, the method will pick the unit. Use one of "years", "quarters", "months", "weeks", or "days"
+       * @param {string} options.numberingSystem - override the numberingSystem of this DateTime. The Intl system may choose not to honor this
+       * @example DateTime.now().plus({ days: 1 }).toRelativeCalendar() //=> "tomorrow"
+       * @example DateTime.now().setLocale("es").plus({ days: 1 }).toRelative() //=> ""mañana"
+       * @example DateTime.now().plus({ days: 1 }).toRelativeCalendar({ locale: "fr" }) //=> "demain"
+       * @example DateTime.now().minus({ days: 2 }).toRelativeCalendar() //=> "2 days ago"
+       */
+      toRelativeCalendar(options = {}) {
+        if (!this.isValid) return null;
+        return diffRelative(options.base || _DateTime.fromObject({}, {
+          zone: this.zone
+        }), this, {
+          ...options,
+          numeric: "auto",
+          units: ["years", "months", "days"],
+          calendary: true
+        });
+      }
+      /**
+       * Return the min of several date times
+       * @param {...DateTime} dateTimes - the DateTimes from which to choose the minimum
+       * @return {DateTime} the min DateTime, or undefined if called with no argument
+       */
+      static min(...dateTimes) {
+        if (!dateTimes.every(_DateTime.isDateTime)) {
+          throw new InvalidArgumentError("min requires all arguments be DateTimes");
+        }
+        return bestBy(dateTimes, (i) => i.valueOf(), Math.min);
+      }
+      /**
+       * Return the max of several date times
+       * @param {...DateTime} dateTimes - the DateTimes from which to choose the maximum
+       * @return {DateTime} the max DateTime, or undefined if called with no argument
+       */
+      static max(...dateTimes) {
+        if (!dateTimes.every(_DateTime.isDateTime)) {
+          throw new InvalidArgumentError("max requires all arguments be DateTimes");
+        }
+        return bestBy(dateTimes, (i) => i.valueOf(), Math.max);
+      }
+      // MISC
+      /**
+       * Explain how a string would be parsed by fromFormat()
+       * @param {string} text - the string to parse
+       * @param {string} fmt - the format the string is expected to be in (see description)
+       * @param {Object} options - options taken by fromFormat()
+       * @return {Object}
+       */
+      static fromFormatExplain(text, fmt, options = {}) {
+        const {
+          locale = null,
+          numberingSystem = null
+        } = options, localeToUse = Locale.fromOpts({
+          locale,
+          numberingSystem,
+          defaultToEN: true
+        });
+        return explainFromTokens(localeToUse, text, fmt);
+      }
+      /**
+       * @deprecated use fromFormatExplain instead
+       */
+      static fromStringExplain(text, fmt, options = {}) {
+        return _DateTime.fromFormatExplain(text, fmt, options);
+      }
+      /**
+       * Build a parser for `fmt` using the given locale. This parser can be passed
+       * to {@link DateTime.fromFormatParser} to a parse a date in this format. This
+       * can be used to optimize cases where many dates need to be parsed in a
+       * specific format.
+       *
+       * @param {String} fmt - the format the string is expected to be in (see
+       * description)
+       * @param {Object} options - options used to set locale and numberingSystem
+       * for parser
+       * @returns {TokenParser} - opaque object to be used
+       */
+      static buildFormatParser(fmt, options = {}) {
+        const {
+          locale = null,
+          numberingSystem = null
+        } = options, localeToUse = Locale.fromOpts({
+          locale,
+          numberingSystem,
+          defaultToEN: true
+        });
+        return new TokenParser(localeToUse, fmt);
+      }
+      /**
+       * Create a DateTime from an input string and format parser.
+       *
+       * The format parser must have been created with the same locale as this call.
+       *
+       * @param {String} text - the string to parse
+       * @param {TokenParser} formatParser - parser from {@link DateTime.buildFormatParser}
+       * @param {Object} opts - options taken by fromFormat()
+       * @returns {DateTime}
+       */
+      static fromFormatParser(text, formatParser, opts = {}) {
+        if (isUndefined(text) || isUndefined(formatParser)) {
+          throw new InvalidArgumentError("fromFormatParser requires an input string and a format parser");
+        }
+        const {
+          locale = null,
+          numberingSystem = null
+        } = opts, localeToUse = Locale.fromOpts({
+          locale,
+          numberingSystem,
+          defaultToEN: true
+        });
+        if (!localeToUse.equals(formatParser.locale)) {
+          throw new InvalidArgumentError(`fromFormatParser called with a locale of ${localeToUse}, but the format parser was created for ${formatParser.locale}`);
+        }
+        const {
+          result,
+          zone,
+          specificOffset,
+          invalidReason
+        } = formatParser.explainFromTokens(text);
+        if (invalidReason) {
+          return _DateTime.invalid(invalidReason);
+        } else {
+          return parseDataToDateTime(result, zone, opts, `format ${formatParser.format}`, text, specificOffset);
+        }
+      }
+      // FORMAT PRESETS
+      /**
+       * {@link DateTime#toLocaleString} format like 10/14/1983
+       * @type {Object}
+       */
+      static get DATE_SHORT() {
+        return DATE_SHORT;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'Oct 14, 1983'
+       * @type {Object}
+       */
+      static get DATE_MED() {
+        return DATE_MED;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'Fri, Oct 14, 1983'
+       * @type {Object}
+       */
+      static get DATE_MED_WITH_WEEKDAY() {
+        return DATE_MED_WITH_WEEKDAY;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'October 14, 1983'
+       * @type {Object}
+       */
+      static get DATE_FULL() {
+        return DATE_FULL;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'Tuesday, October 14, 1983'
+       * @type {Object}
+       */
+      static get DATE_HUGE() {
+        return DATE_HUGE;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '09:30 AM'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get TIME_SIMPLE() {
+        return TIME_SIMPLE;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '09:30:23 AM'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get TIME_WITH_SECONDS() {
+        return TIME_WITH_SECONDS;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '09:30:23 AM EDT'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get TIME_WITH_SHORT_OFFSET() {
+        return TIME_WITH_SHORT_OFFSET;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '09:30:23 AM Eastern Daylight Time'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get TIME_WITH_LONG_OFFSET() {
+        return TIME_WITH_LONG_OFFSET;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '09:30', always 24-hour.
+       * @type {Object}
+       */
+      static get TIME_24_SIMPLE() {
+        return TIME_24_SIMPLE;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '09:30:23', always 24-hour.
+       * @type {Object}
+       */
+      static get TIME_24_WITH_SECONDS() {
+        return TIME_24_WITH_SECONDS;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '09:30:23 EDT', always 24-hour.
+       * @type {Object}
+       */
+      static get TIME_24_WITH_SHORT_OFFSET() {
+        return TIME_24_WITH_SHORT_OFFSET;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '09:30:23 Eastern Daylight Time', always 24-hour.
+       * @type {Object}
+       */
+      static get TIME_24_WITH_LONG_OFFSET() {
+        return TIME_24_WITH_LONG_OFFSET;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '10/14/1983, 9:30 AM'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get DATETIME_SHORT() {
+        return DATETIME_SHORT;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like '10/14/1983, 9:30:33 AM'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get DATETIME_SHORT_WITH_SECONDS() {
+        return DATETIME_SHORT_WITH_SECONDS;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'Oct 14, 1983, 9:30 AM'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get DATETIME_MED() {
+        return DATETIME_MED;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'Oct 14, 1983, 9:30:33 AM'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get DATETIME_MED_WITH_SECONDS() {
+        return DATETIME_MED_WITH_SECONDS;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'Fri, 14 Oct 1983, 9:30 AM'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get DATETIME_MED_WITH_WEEKDAY() {
+        return DATETIME_MED_WITH_WEEKDAY;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'October 14, 1983, 9:30 AM EDT'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get DATETIME_FULL() {
+        return DATETIME_FULL;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'October 14, 1983, 9:30:33 AM EDT'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get DATETIME_FULL_WITH_SECONDS() {
+        return DATETIME_FULL_WITH_SECONDS;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'Friday, October 14, 1983, 9:30 AM Eastern Daylight Time'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get DATETIME_HUGE() {
+        return DATETIME_HUGE;
+      }
+      /**
+       * {@link DateTime#toLocaleString} format like 'Friday, October 14, 1983, 9:30:33 AM Eastern Daylight Time'. Only 12-hour if the locale is.
+       * @type {Object}
+       */
+      static get DATETIME_HUGE_WITH_SECONDS() {
+        return DATETIME_HUGE_WITH_SECONDS;
+      }
+    };
+    function friendlyDateTime(dateTimeish) {
+      if (DateTime.isDateTime(dateTimeish)) {
+        return dateTimeish;
+      } else if (dateTimeish && dateTimeish.valueOf && isNumber(dateTimeish.valueOf())) {
+        return DateTime.fromJSDate(dateTimeish);
+      } else if (dateTimeish && typeof dateTimeish === "object") {
+        return DateTime.fromObject(dateTimeish);
+      } else {
+        throw new InvalidArgumentError(`Unknown datetime argument: ${dateTimeish}, of type ${typeof dateTimeish}`);
+      }
+    }
+    var VERSION = "3.7.2";
+    exports.DateTime = DateTime;
+    exports.Duration = Duration;
+    exports.FixedOffsetZone = FixedOffsetZone;
+    exports.IANAZone = IANAZone;
+    exports.Info = Info;
+    exports.Interval = Interval;
+    exports.InvalidZone = InvalidZone;
+    exports.Settings = Settings;
+    exports.SystemZone = SystemZone;
+    exports.VERSION = VERSION;
+    exports.Zone = Zone;
+  }
+});
+
+// node_modules/cron-parser/lib/date.js
+var require_date = __commonJS({
+  "node_modules/cron-parser/lib/date.js"(exports, module) {
+    "use strict";
+    var luxon = require_luxon();
+    CronDate.prototype.addYear = function() {
+      this._date = this._date.plus({ years: 1 });
+    };
+    CronDate.prototype.addMonth = function() {
+      this._date = this._date.plus({ months: 1 }).startOf("month");
+    };
+    CronDate.prototype.addDay = function() {
+      this._date = this._date.plus({ days: 1 }).startOf("day");
+    };
+    CronDate.prototype.addHour = function() {
+      var prev = this._date;
+      this._date = this._date.plus({ hours: 1 }).startOf("hour");
+      if (this._date <= prev) {
+        this._date = this._date.plus({ hours: 1 });
+      }
+    };
+    CronDate.prototype.addMinute = function() {
+      var prev = this._date;
+      this._date = this._date.plus({ minutes: 1 }).startOf("minute");
+      if (this._date < prev) {
+        this._date = this._date.plus({ hours: 1 });
+      }
+    };
+    CronDate.prototype.addSecond = function() {
+      var prev = this._date;
+      this._date = this._date.plus({ seconds: 1 }).startOf("second");
+      if (this._date < prev) {
+        this._date = this._date.plus({ hours: 1 });
+      }
+    };
+    CronDate.prototype.subtractYear = function() {
+      this._date = this._date.minus({ years: 1 });
+    };
+    CronDate.prototype.subtractMonth = function() {
+      this._date = this._date.minus({ months: 1 }).endOf("month").startOf("second");
+    };
+    CronDate.prototype.subtractDay = function() {
+      this._date = this._date.minus({ days: 1 }).endOf("day").startOf("second");
+    };
+    CronDate.prototype.subtractHour = function() {
+      var prev = this._date;
+      this._date = this._date.minus({ hours: 1 }).endOf("hour").startOf("second");
+      if (this._date >= prev) {
+        this._date = this._date.minus({ hours: 1 });
+      }
+    };
+    CronDate.prototype.subtractMinute = function() {
+      var prev = this._date;
+      this._date = this._date.minus({ minutes: 1 }).endOf("minute").startOf("second");
+      if (this._date > prev) {
+        this._date = this._date.minus({ hours: 1 });
+      }
+    };
+    CronDate.prototype.subtractSecond = function() {
+      var prev = this._date;
+      this._date = this._date.minus({ seconds: 1 }).startOf("second");
+      if (this._date > prev) {
+        this._date = this._date.minus({ hours: 1 });
+      }
+    };
+    CronDate.prototype.getDate = function() {
+      return this._date.day;
+    };
+    CronDate.prototype.getFullYear = function() {
+      return this._date.year;
+    };
+    CronDate.prototype.getDay = function() {
+      var weekday = this._date.weekday;
+      return weekday == 7 ? 0 : weekday;
+    };
+    CronDate.prototype.getMonth = function() {
+      return this._date.month - 1;
+    };
+    CronDate.prototype.getHours = function() {
+      return this._date.hour;
+    };
+    CronDate.prototype.getMinutes = function() {
+      return this._date.minute;
+    };
+    CronDate.prototype.getSeconds = function() {
+      return this._date.second;
+    };
+    CronDate.prototype.getMilliseconds = function() {
+      return this._date.millisecond;
+    };
+    CronDate.prototype.getTime = function() {
+      return this._date.valueOf();
+    };
+    CronDate.prototype.getUTCDate = function() {
+      return this._getUTC().day;
+    };
+    CronDate.prototype.getUTCFullYear = function() {
+      return this._getUTC().year;
+    };
+    CronDate.prototype.getUTCDay = function() {
+      var weekday = this._getUTC().weekday;
+      return weekday == 7 ? 0 : weekday;
+    };
+    CronDate.prototype.getUTCMonth = function() {
+      return this._getUTC().month - 1;
+    };
+    CronDate.prototype.getUTCHours = function() {
+      return this._getUTC().hour;
+    };
+    CronDate.prototype.getUTCMinutes = function() {
+      return this._getUTC().minute;
+    };
+    CronDate.prototype.getUTCSeconds = function() {
+      return this._getUTC().second;
+    };
+    CronDate.prototype.toISOString = function() {
+      return this._date.toUTC().toISO();
+    };
+    CronDate.prototype.toJSON = function() {
+      return this._date.toJSON();
+    };
+    CronDate.prototype.setDate = function(d) {
+      this._date = this._date.set({ day: d });
+    };
+    CronDate.prototype.setFullYear = function(y) {
+      this._date = this._date.set({ year: y });
+    };
+    CronDate.prototype.setDay = function(d) {
+      this._date = this._date.set({ weekday: d });
+    };
+    CronDate.prototype.setMonth = function(m) {
+      this._date = this._date.set({ month: m + 1 });
+    };
+    CronDate.prototype.setHours = function(h) {
+      this._date = this._date.set({ hour: h });
+    };
+    CronDate.prototype.setMinutes = function(m) {
+      this._date = this._date.set({ minute: m });
+    };
+    CronDate.prototype.setSeconds = function(s) {
+      this._date = this._date.set({ second: s });
+    };
+    CronDate.prototype.setMilliseconds = function(s) {
+      this._date = this._date.set({ millisecond: s });
+    };
+    CronDate.prototype._getUTC = function() {
+      return this._date.toUTC();
+    };
+    CronDate.prototype.toString = function() {
+      return this.toDate().toString();
+    };
+    CronDate.prototype.toDate = function() {
+      return this._date.toJSDate();
+    };
+    CronDate.prototype.isLastDayOfMonth = function() {
+      var newDate = this._date.plus({ days: 1 }).startOf("day");
+      return this._date.month !== newDate.month;
+    };
+    CronDate.prototype.isLastWeekdayOfMonth = function() {
+      var newDate = this._date.plus({ days: 7 }).startOf("day");
+      return this._date.month !== newDate.month;
+    };
+    function CronDate(timestamp, tz) {
+      var dateOpts = { zone: tz };
+      if (!timestamp) {
+        this._date = luxon.DateTime.local();
+      } else if (timestamp instanceof CronDate) {
+        this._date = timestamp._date;
+      } else if (timestamp instanceof Date) {
+        this._date = luxon.DateTime.fromJSDate(timestamp, dateOpts);
+      } else if (typeof timestamp === "number") {
+        this._date = luxon.DateTime.fromMillis(timestamp, dateOpts);
+      } else if (typeof timestamp === "string") {
+        this._date = luxon.DateTime.fromISO(timestamp, dateOpts);
+        this._date.isValid || (this._date = luxon.DateTime.fromRFC2822(timestamp, dateOpts));
+        this._date.isValid || (this._date = luxon.DateTime.fromSQL(timestamp, dateOpts));
+        this._date.isValid || (this._date = luxon.DateTime.fromFormat(timestamp, "EEE, d MMM yyyy HH:mm:ss", dateOpts));
+      }
+      if (!this._date || !this._date.isValid) {
+        throw new Error("CronDate: unhandled timestamp: " + JSON.stringify(timestamp));
+      }
+      if (tz && tz !== this._date.zoneName) {
+        this._date = this._date.setZone(tz);
+      }
+    }
+    module.exports = CronDate;
+  }
+});
+
+// node_modules/cron-parser/lib/field_compactor.js
+var require_field_compactor = __commonJS({
+  "node_modules/cron-parser/lib/field_compactor.js"(exports, module) {
+    "use strict";
+    function buildRange(item) {
+      return {
+        start: item,
+        count: 1
+      };
+    }
+    function completeRangeWithItem(range, item) {
+      range.end = item;
+      range.step = item - range.start;
+      range.count = 2;
+    }
+    function finalizeCurrentRange(results, currentRange, currentItemRange) {
+      if (currentRange) {
+        if (currentRange.count === 2) {
+          results.push(buildRange(currentRange.start));
+          results.push(buildRange(currentRange.end));
+        } else {
+          results.push(currentRange);
+        }
+      }
+      if (currentItemRange) {
+        results.push(currentItemRange);
+      }
+    }
+    function compactField(arr) {
+      var results = [];
+      var currentRange = void 0;
+      for (var i = 0; i < arr.length; i++) {
+        var currentItem = arr[i];
+        if (typeof currentItem !== "number") {
+          finalizeCurrentRange(results, currentRange, buildRange(currentItem));
+          currentRange = void 0;
+        } else if (!currentRange) {
+          currentRange = buildRange(currentItem);
+        } else if (currentRange.count === 1) {
+          completeRangeWithItem(currentRange, currentItem);
+        } else {
+          if (currentRange.step === currentItem - currentRange.end) {
+            currentRange.count++;
+            currentRange.end = currentItem;
+          } else if (currentRange.count === 2) {
+            results.push(buildRange(currentRange.start));
+            currentRange = buildRange(currentRange.end);
+            completeRangeWithItem(currentRange, currentItem);
+          } else {
+            finalizeCurrentRange(results, currentRange);
+            currentRange = buildRange(currentItem);
+          }
+        }
+      }
+      finalizeCurrentRange(results, currentRange);
+      return results;
+    }
+    module.exports = compactField;
+  }
+});
+
+// node_modules/cron-parser/lib/field_stringify.js
+var require_field_stringify = __commonJS({
+  "node_modules/cron-parser/lib/field_stringify.js"(exports, module) {
+    "use strict";
+    var compactField = require_field_compactor();
+    function stringifyField(arr, min, max) {
+      var ranges = compactField(arr);
+      if (ranges.length === 1) {
+        var singleRange = ranges[0];
+        var step = singleRange.step;
+        if (step === 1 && singleRange.start === min && singleRange.end === max) {
+          return "*";
+        }
+        if (step !== 1 && singleRange.start === min && singleRange.end === max - step + 1) {
+          return "*/" + step;
+        }
+      }
+      var result = [];
+      for (var i = 0, l = ranges.length; i < l; ++i) {
+        var range = ranges[i];
+        if (range.count === 1) {
+          result.push(range.start);
+          continue;
+        }
+        var step = range.step;
+        if (range.step === 1) {
+          result.push(range.start + "-" + range.end);
+          continue;
+        }
+        var multiplier = range.start == 0 ? range.count - 1 : range.count;
+        if (range.step * multiplier > range.end) {
+          result = result.concat(
+            Array.from({ length: range.end - range.start + 1 }).map(function(_, index) {
+              var value = range.start + index;
+              if ((value - range.start) % range.step === 0) {
+                return value;
+              }
+              return null;
+            }).filter(function(value) {
+              return value != null;
+            })
+          );
+        } else if (range.end === max - range.step + 1) {
+          result.push(range.start + "/" + range.step);
+        } else {
+          result.push(range.start + "-" + range.end + "/" + range.step);
+        }
+      }
+      return result.join(",");
+    }
+    module.exports = stringifyField;
+  }
+});
+
+// node_modules/cron-parser/lib/expression.js
+var require_expression = __commonJS({
+  "node_modules/cron-parser/lib/expression.js"(exports, module) {
+    "use strict";
+    var CronDate = require_date();
+    var stringifyField = require_field_stringify();
+    var LOOP_LIMIT = 1e4;
+    function CronExpression(fields, options) {
+      this._options = options;
+      this._utc = options.utc || false;
+      this._tz = this._utc ? "UTC" : options.tz;
+      this._currentDate = new CronDate(options.currentDate, this._tz);
+      this._startDate = options.startDate ? new CronDate(options.startDate, this._tz) : null;
+      this._endDate = options.endDate ? new CronDate(options.endDate, this._tz) : null;
+      this._isIterator = options.iterator || false;
+      this._hasIterated = false;
+      this._nthDayOfWeek = options.nthDayOfWeek || 0;
+      this.fields = CronExpression._freezeFields(fields);
+    }
+    CronExpression.map = ["second", "minute", "hour", "dayOfMonth", "month", "dayOfWeek"];
+    CronExpression.predefined = {
+      "@yearly": "0 0 1 1 *",
+      "@monthly": "0 0 1 * *",
+      "@weekly": "0 0 * * 0",
+      "@daily": "0 0 * * *",
+      "@hourly": "0 * * * *"
+    };
+    CronExpression.constraints = [
+      { min: 0, max: 59, chars: [] },
+      // Second
+      { min: 0, max: 59, chars: [] },
+      // Minute
+      { min: 0, max: 23, chars: [] },
+      // Hour
+      { min: 1, max: 31, chars: ["L"] },
+      // Day of month
+      { min: 1, max: 12, chars: [] },
+      // Month
+      { min: 0, max: 7, chars: ["L"] }
+      // Day of week
+    ];
+    CronExpression.daysInMonth = [
+      31,
+      29,
+      31,
+      30,
+      31,
+      30,
+      31,
+      31,
+      30,
+      31,
+      30,
+      31
+    ];
+    CronExpression.aliases = {
+      month: {
+        jan: 1,
+        feb: 2,
+        mar: 3,
+        apr: 4,
+        may: 5,
+        jun: 6,
+        jul: 7,
+        aug: 8,
+        sep: 9,
+        oct: 10,
+        nov: 11,
+        dec: 12
+      },
+      dayOfWeek: {
+        sun: 0,
+        mon: 1,
+        tue: 2,
+        wed: 3,
+        thu: 4,
+        fri: 5,
+        sat: 6
+      }
+    };
+    CronExpression.parseDefaults = ["0", "*", "*", "*", "*", "*"];
+    CronExpression.standardValidCharacters = /^[,*\d/-]+$/;
+    CronExpression.dayOfWeekValidCharacters = /^[?,*\dL#/-]+$/;
+    CronExpression.dayOfMonthValidCharacters = /^[?,*\dL/-]+$/;
+    CronExpression.validCharacters = {
+      second: CronExpression.standardValidCharacters,
+      minute: CronExpression.standardValidCharacters,
+      hour: CronExpression.standardValidCharacters,
+      dayOfMonth: CronExpression.dayOfMonthValidCharacters,
+      month: CronExpression.standardValidCharacters,
+      dayOfWeek: CronExpression.dayOfWeekValidCharacters
+    };
+    CronExpression._isValidConstraintChar = function _isValidConstraintChar(constraints, value) {
+      if (typeof value !== "string") {
+        return false;
+      }
+      return constraints.chars.some(function(char) {
+        return value.indexOf(char) > -1;
+      });
+    };
+    CronExpression._parseField = function _parseField(field, value, constraints) {
+      switch (field) {
+        case "month":
+        case "dayOfWeek":
+          var aliases = CronExpression.aliases[field];
+          value = value.replace(/[a-z]{3}/gi, function(match) {
+            match = match.toLowerCase();
+            if (typeof aliases[match] !== "undefined") {
+              return aliases[match];
+            } else {
+              throw new Error('Validation error, cannot resolve alias "' + match + '"');
+            }
+          });
+          break;
+      }
+      if (!CronExpression.validCharacters[field].test(value)) {
+        throw new Error("Invalid characters, got value: " + value);
+      }
+      if (value.indexOf("*") !== -1) {
+        value = value.replace(/\*/g, constraints.min + "-" + constraints.max);
+      } else if (value.indexOf("?") !== -1) {
+        value = value.replace(/\?/g, constraints.min + "-" + constraints.max);
+      }
+      function parseSequence(val) {
+        var stack = [];
+        function handleResult(result) {
+          if (result instanceof Array) {
+            for (var i2 = 0, c2 = result.length; i2 < c2; i2++) {
+              var value2 = result[i2];
+              if (CronExpression._isValidConstraintChar(constraints, value2)) {
+                stack.push(value2);
+                continue;
+              }
+              if (typeof value2 !== "number" || Number.isNaN(value2) || value2 < constraints.min || value2 > constraints.max) {
+                throw new Error(
+                  "Constraint error, got value " + value2 + " expected range " + constraints.min + "-" + constraints.max
+                );
+              }
+              stack.push(value2);
+            }
+          } else {
+            if (CronExpression._isValidConstraintChar(constraints, result)) {
+              stack.push(result);
+              return;
+            }
+            var numResult = +result;
+            if (Number.isNaN(numResult) || numResult < constraints.min || numResult > constraints.max) {
+              throw new Error(
+                "Constraint error, got value " + result + " expected range " + constraints.min + "-" + constraints.max
+              );
+            }
+            if (field === "dayOfWeek") {
+              numResult = numResult % 7;
+            }
+            stack.push(numResult);
+          }
+        }
+        var atoms = val.split(",");
+        if (!atoms.every(function(atom) {
+          return atom.length > 0;
+        })) {
+          throw new Error("Invalid list value format");
+        }
+        if (atoms.length > 1) {
+          for (var i = 0, c = atoms.length; i < c; i++) {
+            handleResult(parseRepeat(atoms[i]));
+          }
+        } else {
+          handleResult(parseRepeat(val));
+        }
+        stack.sort(CronExpression._sortCompareFn);
+        return stack;
+      }
+      function parseRepeat(val) {
+        var repeatInterval = 1;
+        var atoms = val.split("/");
+        if (atoms.length > 2) {
+          throw new Error("Invalid repeat: " + val);
+        }
+        if (atoms.length > 1) {
+          if (atoms[0] == +atoms[0]) {
+            atoms = [atoms[0] + "-" + constraints.max, atoms[1]];
+          }
+          return parseRange(atoms[0], atoms[atoms.length - 1]);
+        }
+        return parseRange(val, repeatInterval);
+      }
+      function parseRange(val, repeatInterval) {
+        var stack = [];
+        var atoms = val.split("-");
+        if (atoms.length > 1) {
+          if (atoms.length < 2) {
+            return +val;
+          }
+          if (!atoms[0].length) {
+            if (!atoms[1].length) {
+              throw new Error("Invalid range: " + val);
+            }
+            return +val;
+          }
+          var min = +atoms[0];
+          var max = +atoms[1];
+          if (Number.isNaN(min) || Number.isNaN(max) || min < constraints.min || max > constraints.max) {
+            throw new Error(
+              "Constraint error, got range " + min + "-" + max + " expected range " + constraints.min + "-" + constraints.max
+            );
+          } else if (min > max) {
+            throw new Error("Invalid range: " + val);
+          }
+          var repeatIndex = +repeatInterval;
+          if (Number.isNaN(repeatIndex) || repeatIndex <= 0) {
+            throw new Error("Constraint error, cannot repeat at every " + repeatIndex + " time.");
+          }
+          if (field === "dayOfWeek" && max % 7 === 0) {
+            stack.push(0);
+          }
+          for (var index = min, count = max; index <= count; index++) {
+            var exists = stack.indexOf(index) !== -1;
+            if (!exists && repeatIndex > 0 && repeatIndex % repeatInterval === 0) {
+              repeatIndex = 1;
+              stack.push(index);
+            } else {
+              repeatIndex++;
+            }
+          }
+          return stack;
+        }
+        return Number.isNaN(+val) ? val : +val;
+      }
+      return parseSequence(value);
+    };
+    CronExpression._sortCompareFn = function(a, b) {
+      var aIsNumber = typeof a === "number";
+      var bIsNumber = typeof b === "number";
+      if (aIsNumber && bIsNumber) {
+        return a - b;
+      }
+      if (!aIsNumber && bIsNumber) {
+        return 1;
+      }
+      if (aIsNumber && !bIsNumber) {
+        return -1;
+      }
+      return a.localeCompare(b);
+    };
+    CronExpression._handleMaxDaysInMonth = function(mappedFields) {
+      if (mappedFields.month.length === 1) {
+        var daysInMonth = CronExpression.daysInMonth[mappedFields.month[0] - 1];
+        if (mappedFields.dayOfMonth[0] > daysInMonth) {
+          throw new Error("Invalid explicit day of month definition");
+        }
+        return mappedFields.dayOfMonth.filter(function(dayOfMonth) {
+          return dayOfMonth === "L" ? true : dayOfMonth <= daysInMonth;
+        }).sort(CronExpression._sortCompareFn);
+      }
+    };
+    CronExpression._freezeFields = function(fields) {
+      for (var i = 0, c = CronExpression.map.length; i < c; ++i) {
+        var field = CronExpression.map[i];
+        var value = fields[field];
+        fields[field] = Object.freeze(value);
+      }
+      return Object.freeze(fields);
+    };
+    CronExpression.prototype._applyTimezoneShift = function(currentDate, dateMathVerb, method) {
+      if (method === "Month" || method === "Day") {
+        var prevTime = currentDate.getTime();
+        currentDate[dateMathVerb + method]();
+        var currTime = currentDate.getTime();
+        if (prevTime === currTime) {
+          if (currentDate.getMinutes() === 0 && currentDate.getSeconds() === 0) {
+            currentDate.addHour();
+          } else if (currentDate.getMinutes() === 59 && currentDate.getSeconds() === 59) {
+            currentDate.subtractHour();
+          }
+        }
+      } else {
+        var previousHour = currentDate.getHours();
+        currentDate[dateMathVerb + method]();
+        var currentHour = currentDate.getHours();
+        var diff = currentHour - previousHour;
+        if (diff === 2) {
+          if (this.fields.hour.length !== 24) {
+            this._dstStart = currentHour;
+          }
+        } else if (diff === 0 && currentDate.getMinutes() === 0 && currentDate.getSeconds() === 0) {
+          if (this.fields.hour.length !== 24) {
+            this._dstEnd = currentHour;
+          }
+        }
+      }
+    };
+    CronExpression.prototype._findSchedule = function _findSchedule(reverse) {
+      function matchSchedule(value, sequence) {
+        for (var i = 0, c = sequence.length; i < c; i++) {
+          if (sequence[i] >= value) {
+            return sequence[i] === value;
+          }
+        }
+        return sequence[0] === value;
+      }
+      function isNthDayMatch(date, nthDayOfWeek) {
+        if (nthDayOfWeek < 6) {
+          if (date.getDate() < 8 && nthDayOfWeek === 1) {
+            return true;
+          }
+          var offset = date.getDate() % 7 ? 1 : 0;
+          var adjustedDate = date.getDate() - date.getDate() % 7;
+          var occurrence = Math.floor(adjustedDate / 7) + offset;
+          return occurrence === nthDayOfWeek;
+        }
+        return false;
+      }
+      function isLInExpressions(expressions) {
+        return expressions.length > 0 && expressions.some(function(expression) {
+          return typeof expression === "string" && expression.indexOf("L") >= 0;
+        });
+      }
+      reverse = reverse || false;
+      var dateMathVerb = reverse ? "subtract" : "add";
+      var currentDate = new CronDate(this._currentDate, this._tz);
+      var startDate = this._startDate;
+      var endDate = this._endDate;
+      var startTimestamp = currentDate.getTime();
+      var stepCount = 0;
+      function isLastWeekdayOfMonthMatch(expressions) {
+        return expressions.some(function(expression) {
+          if (!isLInExpressions([expression])) {
+            return false;
+          }
+          var weekday = Number.parseInt(expression[0]) % 7;
+          if (Number.isNaN(weekday)) {
+            throw new Error("Invalid last weekday of the month expression: " + expression);
+          }
+          return currentDate.getDay() === weekday && currentDate.isLastWeekdayOfMonth();
+        });
+      }
+      while (stepCount < LOOP_LIMIT) {
+        stepCount++;
+        if (reverse) {
+          if (startDate && currentDate.getTime() - startDate.getTime() < 0) {
+            throw new Error("Out of the timespan range");
+          }
+        } else {
+          if (endDate && endDate.getTime() - currentDate.getTime() < 0) {
+            throw new Error("Out of the timespan range");
+          }
+        }
+        var dayOfMonthMatch = matchSchedule(currentDate.getDate(), this.fields.dayOfMonth);
+        if (isLInExpressions(this.fields.dayOfMonth)) {
+          dayOfMonthMatch = dayOfMonthMatch || currentDate.isLastDayOfMonth();
+        }
+        var dayOfWeekMatch = matchSchedule(currentDate.getDay(), this.fields.dayOfWeek);
+        if (isLInExpressions(this.fields.dayOfWeek)) {
+          dayOfWeekMatch = dayOfWeekMatch || isLastWeekdayOfMonthMatch(this.fields.dayOfWeek);
+        }
+        var isDayOfMonthWildcardMatch = this.fields.dayOfMonth.length >= CronExpression.daysInMonth[currentDate.getMonth()];
+        var isDayOfWeekWildcardMatch = this.fields.dayOfWeek.length === CronExpression.constraints[5].max - CronExpression.constraints[5].min + 1;
+        var currentHour = currentDate.getHours();
+        if (!dayOfMonthMatch && (!dayOfWeekMatch || isDayOfWeekWildcardMatch)) {
+          this._applyTimezoneShift(currentDate, dateMathVerb, "Day");
+          continue;
+        }
+        if (!isDayOfMonthWildcardMatch && isDayOfWeekWildcardMatch && !dayOfMonthMatch) {
+          this._applyTimezoneShift(currentDate, dateMathVerb, "Day");
+          continue;
+        }
+        if (isDayOfMonthWildcardMatch && !isDayOfWeekWildcardMatch && !dayOfWeekMatch) {
+          this._applyTimezoneShift(currentDate, dateMathVerb, "Day");
+          continue;
+        }
+        if (this._nthDayOfWeek > 0 && !isNthDayMatch(currentDate, this._nthDayOfWeek)) {
+          this._applyTimezoneShift(currentDate, dateMathVerb, "Day");
+          continue;
+        }
+        if (!matchSchedule(currentDate.getMonth() + 1, this.fields.month)) {
+          this._applyTimezoneShift(currentDate, dateMathVerb, "Month");
+          continue;
+        }
+        if (!matchSchedule(currentHour, this.fields.hour)) {
+          if (this._dstStart !== currentHour) {
+            this._dstStart = null;
+            this._applyTimezoneShift(currentDate, dateMathVerb, "Hour");
+            continue;
+          } else if (!matchSchedule(currentHour - 1, this.fields.hour)) {
+            currentDate[dateMathVerb + "Hour"]();
+            continue;
+          }
+        } else if (this._dstEnd === currentHour) {
+          if (!reverse) {
+            this._dstEnd = null;
+            this._applyTimezoneShift(currentDate, "add", "Hour");
+            continue;
+          }
+        }
+        if (!matchSchedule(currentDate.getMinutes(), this.fields.minute)) {
+          this._applyTimezoneShift(currentDate, dateMathVerb, "Minute");
+          continue;
+        }
+        if (!matchSchedule(currentDate.getSeconds(), this.fields.second)) {
+          this._applyTimezoneShift(currentDate, dateMathVerb, "Second");
+          continue;
+        }
+        if (startTimestamp === currentDate.getTime()) {
+          if (dateMathVerb === "add" || currentDate.getMilliseconds() === 0) {
+            this._applyTimezoneShift(currentDate, dateMathVerb, "Second");
+          } else {
+            currentDate.setMilliseconds(0);
+          }
+          continue;
+        }
+        break;
+      }
+      if (stepCount >= LOOP_LIMIT) {
+        throw new Error("Invalid expression, loop limit exceeded");
+      }
+      this._currentDate = new CronDate(currentDate, this._tz);
+      this._hasIterated = true;
+      return currentDate;
+    };
+    CronExpression.prototype.next = function next() {
+      var schedule = this._findSchedule();
+      if (this._isIterator) {
+        return {
+          value: schedule,
+          done: !this.hasNext()
+        };
+      }
+      return schedule;
+    };
+    CronExpression.prototype.prev = function prev() {
+      var schedule = this._findSchedule(true);
+      if (this._isIterator) {
+        return {
+          value: schedule,
+          done: !this.hasPrev()
+        };
+      }
+      return schedule;
+    };
+    CronExpression.prototype.hasNext = function() {
+      var current = this._currentDate;
+      var hasIterated = this._hasIterated;
+      try {
+        this._findSchedule();
+        return true;
+      } catch (err) {
+        return false;
+      } finally {
+        this._currentDate = current;
+        this._hasIterated = hasIterated;
+      }
+    };
+    CronExpression.prototype.hasPrev = function() {
+      var current = this._currentDate;
+      var hasIterated = this._hasIterated;
+      try {
+        this._findSchedule(true);
+        return true;
+      } catch (err) {
+        return false;
+      } finally {
+        this._currentDate = current;
+        this._hasIterated = hasIterated;
+      }
+    };
+    CronExpression.prototype.iterate = function iterate(steps, callback) {
+      var dates = [];
+      if (steps >= 0) {
+        for (var i = 0, c = steps; i < c; i++) {
+          try {
+            var item = this.next();
+            dates.push(item);
+            if (callback) {
+              callback(item, i);
+            }
+          } catch (err) {
+            break;
+          }
+        }
+      } else {
+        for (var i = 0, c = steps; i > c; i--) {
+          try {
+            var item = this.prev();
+            dates.push(item);
+            if (callback) {
+              callback(item, i);
+            }
+          } catch (err) {
+            break;
+          }
+        }
+      }
+      return dates;
+    };
+    CronExpression.prototype.reset = function reset(newDate) {
+      this._currentDate = new CronDate(newDate || this._options.currentDate);
+    };
+    CronExpression.prototype.stringify = function stringify2(includeSeconds) {
+      var resultArr = [];
+      for (var i = includeSeconds ? 0 : 1, c = CronExpression.map.length; i < c; ++i) {
+        var field = CronExpression.map[i];
+        var value = this.fields[field];
+        var constraint = CronExpression.constraints[i];
+        if (field === "dayOfMonth" && this.fields.month.length === 1) {
+          constraint = { min: 1, max: CronExpression.daysInMonth[this.fields.month[0] - 1] };
+        } else if (field === "dayOfWeek") {
+          constraint = { min: 0, max: 6 };
+          value = value[value.length - 1] === 7 ? value.slice(0, -1) : value;
+        }
+        resultArr.push(stringifyField(value, constraint.min, constraint.max));
+      }
+      return resultArr.join(" ");
+    };
+    CronExpression.parse = function parse(expression, options) {
+      var self = this;
+      if (typeof options === "function") {
+        options = {};
+      }
+      function parse2(expression2, options2) {
+        if (!options2) {
+          options2 = {};
+        }
+        if (typeof options2.currentDate === "undefined") {
+          options2.currentDate = new CronDate(void 0, self._tz);
+        }
+        if (CronExpression.predefined[expression2]) {
+          expression2 = CronExpression.predefined[expression2];
+        }
+        var fields = [];
+        var atoms = (expression2 + "").trim().split(/\s+/);
+        if (atoms.length > 6) {
+          throw new Error("Invalid cron expression");
+        }
+        var start = CronExpression.map.length - atoms.length;
+        for (var i = 0, c = CronExpression.map.length; i < c; ++i) {
+          var field = CronExpression.map[i];
+          var value = atoms[atoms.length > c ? i : i - start];
+          if (i < start || !value) {
+            fields.push(
+              CronExpression._parseField(
+                field,
+                CronExpression.parseDefaults[i],
+                CronExpression.constraints[i]
+              )
+            );
+          } else {
+            var val = field === "dayOfWeek" ? parseNthDay(value) : value;
+            fields.push(
+              CronExpression._parseField(
+                field,
+                val,
+                CronExpression.constraints[i]
+              )
+            );
+          }
+        }
+        var mappedFields = {};
+        for (var i = 0, c = CronExpression.map.length; i < c; i++) {
+          var key = CronExpression.map[i];
+          mappedFields[key] = fields[i];
+        }
+        var dayOfMonth = CronExpression._handleMaxDaysInMonth(mappedFields);
+        mappedFields.dayOfMonth = dayOfMonth || mappedFields.dayOfMonth;
+        return new CronExpression(mappedFields, options2);
+        function parseNthDay(val2) {
+          var atoms2 = val2.split("#");
+          if (atoms2.length > 1) {
+            var nthValue = +atoms2[atoms2.length - 1];
+            if (/,/.test(val2)) {
+              throw new Error("Constraint error, invalid dayOfWeek `#` and `,` special characters are incompatible");
+            }
+            if (/\//.test(val2)) {
+              throw new Error("Constraint error, invalid dayOfWeek `#` and `/` special characters are incompatible");
+            }
+            if (/-/.test(val2)) {
+              throw new Error("Constraint error, invalid dayOfWeek `#` and `-` special characters are incompatible");
+            }
+            if (atoms2.length > 2 || Number.isNaN(nthValue) || (nthValue < 1 || nthValue > 5)) {
+              throw new Error("Constraint error, invalid dayOfWeek occurrence number (#)");
+            }
+            options2.nthDayOfWeek = nthValue;
+            return atoms2[0];
+          }
+          return val2;
+        }
+      }
+      return parse2(expression, options);
+    };
+    CronExpression.fieldsToExpression = function fieldsToExpression(fields, options) {
+      function validateConstraints(field2, values2, constraints) {
+        if (!values2) {
+          throw new Error("Validation error, Field " + field2 + " is missing");
+        }
+        if (values2.length === 0) {
+          throw new Error("Validation error, Field " + field2 + " contains no values");
+        }
+        for (var i2 = 0, c2 = values2.length; i2 < c2; i2++) {
+          var value = values2[i2];
+          if (CronExpression._isValidConstraintChar(constraints, value)) {
+            continue;
+          }
+          if (typeof value !== "number" || Number.isNaN(value) || value < constraints.min || value > constraints.max) {
+            throw new Error(
+              "Constraint error, got value " + value + " expected range " + constraints.min + "-" + constraints.max
+            );
+          }
+        }
+      }
+      var mappedFields = {};
+      for (var i = 0, c = CronExpression.map.length; i < c; ++i) {
+        var field = CronExpression.map[i];
+        var values = fields[field];
+        validateConstraints(
+          field,
+          values,
+          CronExpression.constraints[i]
+        );
+        var copy = [];
+        var j = -1;
+        while (++j < values.length) {
+          copy[j] = values[j];
+        }
+        values = copy.sort(CronExpression._sortCompareFn).filter(function(item, pos, ary) {
+          return !pos || item !== ary[pos - 1];
+        });
+        if (values.length !== copy.length) {
+          throw new Error("Validation error, Field " + field + " contains duplicate values");
+        }
+        mappedFields[field] = values;
+      }
+      var dayOfMonth = CronExpression._handleMaxDaysInMonth(mappedFields);
+      mappedFields.dayOfMonth = dayOfMonth || mappedFields.dayOfMonth;
+      return new CronExpression(mappedFields, options || {});
+    };
+    module.exports = CronExpression;
+  }
+});
+
+// node_modules/cron-parser/lib/parser.js
+var require_parser = __commonJS({
+  "node_modules/cron-parser/lib/parser.js"(exports, module) {
+    "use strict";
+    var CronExpression = require_expression();
+    function CronParser() {
+    }
+    CronParser._parseEntry = function _parseEntry(entry) {
+      var atoms = entry.split(" ");
+      if (atoms.length === 6) {
+        return {
+          interval: CronExpression.parse(entry)
+        };
+      } else if (atoms.length > 6) {
+        return {
+          interval: CronExpression.parse(
+            atoms.slice(0, 6).join(" ")
+          ),
+          command: atoms.slice(6, atoms.length)
+        };
+      } else {
+        throw new Error("Invalid entry: " + entry);
+      }
+    };
+    CronParser.parseExpression = function parseExpression(expression, options) {
+      return CronExpression.parse(expression, options);
+    };
+    CronParser.fieldsToExpression = function fieldsToExpression(fields, options) {
+      return CronExpression.fieldsToExpression(fields, options);
+    };
+    CronParser.parseString = function parseString(data) {
+      var blocks = data.split("\n");
+      var response = {
+        variables: {},
+        expressions: [],
+        errors: {}
+      };
+      for (var i = 0, c = blocks.length; i < c; i++) {
+        var block = blocks[i];
+        var matches = null;
+        var entry = block.trim();
+        if (entry.length > 0) {
+          if (entry.match(/^#/)) {
+            continue;
+          } else if (matches = entry.match(/^(.*)=(.*)$/)) {
+            response.variables[matches[1]] = matches[2];
+          } else {
+            var result = null;
+            try {
+              result = CronParser._parseEntry("0 " + entry);
+              response.expressions.push(result.interval);
+            } catch (err) {
+              response.errors[entry] = err;
+            }
+          }
+        }
+      }
+      return response;
+    };
+    CronParser.parseFile = function parseFile(filePath, callback) {
+      __require("fs").readFile(filePath, function(err, data) {
+        if (err) {
+          callback(err);
+          return;
+        }
+        return callback(null, CronParser.parseString(data.toString()));
+      });
+    };
+    module.exports = CronParser;
   }
 });
 
@@ -265,7 +9701,7 @@ __export(quota_validator_service_exports, {
   default: () => quota_validator_service_default,
   quotaValidatorService: () => quotaValidatorService
 });
-import mongoose2 from "mongoose";
+import mongoose4 from "mongoose";
 var QuotaValidatorService, quotaValidatorService, quota_validator_service_default;
 var init_quota_validator_service = __esm({
   "src/services/quota-validator.service.ts"() {
@@ -325,7 +9761,7 @@ var init_quota_validator_service = __esm({
           if (!this.portalMongoConn || !this.IS_PROD) {
             logger_default.info("\u{1F4E1} Connecting to Portal MongoDB (shared_db)...");
           }
-          const connection = mongoose2.createConnection(config.mongodb.portalUri, {
+          const connection = mongoose4.createConnection(config.mongodb.portalUri, {
             dbName: config.mongodb.sharedDb,
             serverSelectionTimeoutMS: this.CONNECTION_TIMEOUT,
             socketTimeoutMS: 45e3,
@@ -476,6 +9912,29 @@ var init_quota_validator_service = __esm({
           throw new Error(`Company not found: ${companyId}`);
         }
         return company;
+      }
+      /**
+       * Obtiene la empresa por número de WhatsApp configurado (sender)
+       */
+      async getCompanyByWhatsappSender(sender) {
+        if (!sender) return null;
+        if (!this.isReady()) {
+          await this.connect();
+        }
+        if (!this.CompanyModel) {
+          throw new Error("QuotaValidator not initialized");
+        }
+        const digits = sender.replace(/[^\d]/g, "");
+        const candidates = Array.from(new Set([
+          sender,
+          digits,
+          digits ? `+${digits}` : ""
+        ].filter(Boolean)));
+        const company = await this.CompanyModel.findOne({
+          isActive: true,
+          $or: candidates.map((value) => ({ "whatsappConfig.sender": value }))
+        });
+        return company || null;
       }
       /**
        * Obtiene el periodo actual (YYYY-MM)
@@ -994,14 +10453,14 @@ var require_buffer_equal_constant_time = __commonJS({
 var require_jwa = __commonJS({
   "node_modules/jwa/index.js"(exports, module) {
     var Buffer2 = require_safe_buffer().Buffer;
-    var crypto2 = __require("crypto");
+    var crypto4 = __require("crypto");
     var formatEcdsa = require_ecdsa_sig_formatter();
     var util = __require("util");
     var MSG_INVALID_ALGORITHM = '"%s" is not a valid algorithm.\n  Supported algorithms are:\n  "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512" and "none".';
     var MSG_INVALID_SECRET = "secret must be a string or buffer";
     var MSG_INVALID_VERIFIER_KEY = "key must be a string or a buffer";
     var MSG_INVALID_SIGNER_KEY = "key must be a string, a buffer or an object";
-    var supportsKeyObjects = typeof crypto2.createPublicKey === "function";
+    var supportsKeyObjects = typeof crypto4.createPublicKey === "function";
     if (supportsKeyObjects) {
       MSG_INVALID_VERIFIER_KEY += " or a KeyObject";
       MSG_INVALID_SECRET += "or a KeyObject";
@@ -1091,18 +10550,18 @@ var require_jwa = __commonJS({
       return function sign(thing, secret) {
         checkIsSecretKey(secret);
         thing = normalizeInput(thing);
-        var hmac = crypto2.createHmac("sha" + bits, secret);
+        var hmac = crypto4.createHmac("sha" + bits, secret);
         var sig = (hmac.update(thing), hmac.digest("base64"));
         return fromBase64(sig);
       };
     }
     var bufferEqual;
-    var timingSafeEqual = "timingSafeEqual" in crypto2 ? function timingSafeEqual2(a, b) {
+    var timingSafeEqual2 = "timingSafeEqual" in crypto4 ? function timingSafeEqual3(a, b) {
       if (a.byteLength !== b.byteLength) {
         return false;
       }
-      return crypto2.timingSafeEqual(a, b);
-    } : function timingSafeEqual2(a, b) {
+      return crypto4.timingSafeEqual(a, b);
+    } : function timingSafeEqual3(a, b) {
       if (!bufferEqual) {
         bufferEqual = require_buffer_equal_constant_time();
       }
@@ -1111,14 +10570,14 @@ var require_jwa = __commonJS({
     function createHmacVerifier(bits) {
       return function verify(thing, signature, secret) {
         var computedSig = createHmacSigner(bits)(thing, secret);
-        return timingSafeEqual(Buffer2.from(signature), Buffer2.from(computedSig));
+        return timingSafeEqual2(Buffer2.from(signature), Buffer2.from(computedSig));
       };
     }
     function createKeySigner(bits) {
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto2.createSign("RSA-SHA" + bits);
+        var signer = crypto4.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign(privateKey, "base64"));
         return fromBase64(sig);
       };
@@ -1128,7 +10587,7 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto2.createVerify("RSA-SHA" + bits);
+        var verifier = crypto4.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify(publicKey, signature, "base64");
       };
@@ -1137,11 +10596,11 @@ var require_jwa = __commonJS({
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto2.createSign("RSA-SHA" + bits);
+        var signer = crypto4.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign({
           key: privateKey,
-          padding: crypto2.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto2.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto4.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto4.constants.RSA_PSS_SALTLEN_DIGEST
         }, "base64"));
         return fromBase64(sig);
       };
@@ -1151,12 +10610,12 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto2.createVerify("RSA-SHA" + bits);
+        var verifier = crypto4.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify({
           key: publicKey,
-          padding: crypto2.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto2.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto4.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto4.constants.RSA_PSS_SALTLEN_DIGEST
         }, signature, "base64");
       };
     }
@@ -4358,7 +13817,7 @@ var require_sign = __commonJS({
       exp: { isValid: isNumber, message: '"exp" should be a number of seconds' },
       nbf: { isValid: isNumber, message: '"nbf" should be a number of seconds' }
     };
-    function validate(schema, allowUnknown, object, parameterName) {
+    function validate2(schema, allowUnknown, object, parameterName) {
       if (!isPlainObject(object)) {
         throw new Error('Expected "' + parameterName + '" to be a plain object.');
       }
@@ -4376,10 +13835,10 @@ var require_sign = __commonJS({
       });
     }
     function validateOptions(options) {
-      return validate(sign_options_schema, false, options, "options");
+      return validate2(sign_options_schema, false, options, "options");
     }
     function validatePayload(payload) {
-      return validate(registered_claims_schema, true, payload, "payload");
+      return validate2(registered_claims_schema, true, payload, "payload");
     }
     var options_to_payload = {
       "audience": "aud",
@@ -4632,10 +14091,28 @@ var HTTP_STATUS = {
   INTERNAL_ERROR: 500,
   SERVICE_UNAVAILABLE: 503
 };
-var CLAUDE_MODEL = "claude-sonnet-4-20250514";
-var CLAUDE_MAX_TOKENS = 1024;
 
 // src/api/middlewares/errorHandler.ts
+init_environment();
+var ALERT_WINDOW_MS = 5 * 60 * 1e3;
+var alertCache = /* @__PURE__ */ new Map();
+var shouldSendAlert = (key) => {
+  const now = Date.now();
+  const last = alertCache.get(key);
+  if (last && now - last < ALERT_WINDOW_MS) return false;
+  alertCache.set(key, now);
+  return true;
+};
+var sendTelegramAlert = async (message) => {
+  if (!config.telegram.botToken || !config.telegram.errorsChatId) return;
+  const body = new URLSearchParams();
+  body.append("chat_id", config.telegram.errorsChatId);
+  body.append("text", message);
+  await fetch(`https://api.telegram.org/bot${config.telegram.botToken}/sendMessage`, {
+    method: "POST",
+    body
+  });
+};
 function errorHandler(err, req, res, next) {
   const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_ERROR;
   const message = err.message || "Internal Server Error";
@@ -4646,6 +14123,25 @@ function errorHandler(err, req, res, next) {
     method: req.method,
     details: err.details
   });
+  const shouldAlert = statusCode >= 500 || req.path.startsWith("/api/drive") || req.path.startsWith("/api/message");
+  if (shouldAlert) {
+    const alertKey = `${statusCode}:${req.path}:${message}`;
+    if (shouldSendAlert(alertKey)) {
+      const companyId = req.companyId || "N/A";
+      const errorMessage = [
+        "LILA-APP ERROR!",
+        "---------------------",
+        `path: ${req.path}`,
+        `method: ${req.method}`,
+        `companyId: ${companyId}`,
+        `status: ${statusCode}`,
+        `message: ${message}`
+      ].join("\n");
+      sendTelegramAlert(errorMessage).catch((error) => {
+        logger_default.warn("Failed to send Telegram alert", error);
+      });
+    }
+  }
   res.status(statusCode).json({
     success: false,
     error: {
@@ -4665,8 +14161,15 @@ function notFoundHandler(req, res, next) {
 }
 function requestLogger(req, res, next) {
   const startTime = Date.now();
+  const skipPaths = /* @__PURE__ */ new Set(["/", "/health"]);
   res.on("finish", () => {
     const duration = Date.now() - startTime;
+    if (skipPaths.has(req.path)) {
+      return;
+    }
+    if (req.path.startsWith("/docs")) {
+      return;
+    }
     logger_default.info(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
   });
   next();
@@ -4675,1777 +14178,16 @@ function requestLogger(req, res, next) {
 // src/api/routes/session.routes.ts
 import { Router } from "express";
 
-// src/api/controllers/session.controller.ts
+// src/api/controllers/session.controller.simple.ts
+init_sessions_simple();
+init_whatsapp_direct_service();
+init_logger();
 import qrcode from "qrcode";
-
-// src/whatsapp/baileys/connection.manager.ts
-init_logger();
-import makeWASocket, {
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  useMultiFileAuthState
-} from "@whiskeysockets/baileys";
-import { isBoom } from "@hapi/boom";
-import fs3 from "fs-extra";
-import path6 from "path";
-import pino from "pino";
-
-// src/whatsapp/ai-agent/message.listener.ts
-init_logger();
-
-// src/whatsapp/ai-agent/agent.service.ts
-init_logger();
-import Anthropic from "@anthropic-ai/sdk";
-
-// src/whatsapp/ai-agent/prompts/asphalt-sales.prompt.ts
-var SYSTEM_PROMPT = `# TU IDENTIDAD
-
-Eres **Mar\xEDa**, asesora comercial experta de **CONSTROAD**, empresa l\xEDder en servicios de asfalto en Per\xFA con m\xE1s de 15 a\xF1os de experiencia.
-
----
-
-## TU PERSONALIDAD
-
-- **Profesional pero c\xE1lida**: Mantienes un equilibrio entre seriedad y cercan\xEDa
-- **Proactiva**: No esperas a que te pregunten todo, gu\xEDas la conversaci\xF3n
-- **Paciente**: Entiendes que no todos conocen de asfalto, explicas con claridad
-- **Emp\xE1tica**: Te pones en el lugar del cliente y entiendes sus necesidades
-- **Natural**: Hablas como una persona real, no como un robot
-- **Peruana**: Usas expresiones locales apropiadas sin caer en informalidad excesiva
-
-**Ejemplos de tu estilo:**
-- \u2705 "\xA1Claro que s\xED! Con gusto te ayudo con eso"
-- \u2705 "Perfecto, d\xE9jame hacerte un par de preguntas para darte la mejor opci\xF3n"
-- \u2705 "Entiendo tu situaci\xF3n, es muy com\xFAn en proyectos como el tuyo"
-- \u274C "Procedo a solicitar informaci\xF3n" (muy rob\xF3tico)
-- \u274C "Perfecto perfecto perfecto" (muy repetitivo)
-
----
-
-## TU MISI\xD3N PRINCIPAL
-
-Ayudar a los clientes a encontrar la mejor soluci\xF3n de asfalto para su proyecto, recopilando informaci\xF3n clave de manera **natural, conversacional y eficiente**.
-
-**No eres un formulario con patas**, eres una asesora que:
-1. Escucha activamente
-2. Hace preguntas inteligentes
-3. Adapta la conversaci\xF3n al cliente
-4. Recopila informaci\xF3n de forma org\xE1nica
-5. Deriva cuando es necesario
-
----
-
-# SERVICIOS QUE OFRECES
-
-## 1. \u{1F6E3}\uFE0F VENTA DE ASFALTO
-
-### Tipos disponibles:
-
-#### **Asfalto en Caliente**
-- El m\xE1s com\xFAn y vers\xE1til
-- Ideal para tr\xE1fico vehicular
-- Se aplica a temperaturas de 150-160\xB0C
-- Mejor adherencia y durabilidad
-
-#### **Asfalto en Fr\xEDo**
-- Para reparaciones y parches
-- Ideal para climas fr\xEDos o lluviosos
-- No requiere maquinaria especializada
-- Aplicaci\xF3n m\xE1s sencilla
-
-#### **Asfalto Modificado**
-- Mayor durabilidad (pol\xEDmeros)
-- Para alto tr\xE1fico o condiciones extremas
-- M\xE1s resistente a deformaciones
-- Ideal para zonas industriales o avenidas principales
-
-### Espesores disponibles:
-- **1 pulgada (2.54 cm)**: Tr\xE1fico ligero, patios, estacionamientos peque\xF1os
-- **2 pulgadas (5.08 cm)**: Tr\xE1fico medio, calles residenciales, estacionamientos
-- **3 pulgadas (7.62 cm)**: Tr\xE1fico pesado, v\xEDas principales, zonas industriales
-
-### Informaci\xF3n que necesitas recopilar:
-
-1. **Tipo de proyecto** (para recomendar el asfalto adecuado)
-   - "\xBFEs para una v\xEDa, estacionamiento, patio industrial, o qu\xE9 tipo de proyecto?"
-   
-2. **Tipo de tr\xE1fico esperado**
-   - "\xBFQu\xE9 tipo de veh\xEDculos van a circular? \xBFAutos, camiones, maquinaria pesada?"
-   
-3. **Tipo de asfalto** (despu\xE9s de entender su necesidad)
-   - Recomienda bas\xE1ndote en su proyecto
-   
-4. **Espesor requerido**
-   - Sugiere seg\xFAn el tipo de tr\xE1fico
-   
-5. **Modalidad de entrega**
-   - "\xBFLo necesitas puesto en planta (lo recoges t\xFA) o puesto en obra (te lo llevamos)?"
-   - Si es en obra: "\xBFA qu\xE9 distrito o ubicaci\xF3n exacta ser\xEDa?"
-   
-6. **Cantidad aproximada**
-   - "\xBFCu\xE1ntos metros c\xFAbicos aproximadamente? Si no est\xE1s seguro, \xBFcu\xE1l es el \xE1rea en m\xB2?"
-
----
-
-## 2. \u{1F6A7} COLOCACI\xD3N DE ASFALTO
-
-### Informaci\xF3n que necesitas recopilar:
-
-#### **1. \xC1rea y ubicaci\xF3n**
-- "\xBFCu\xE1ntos metros cuadrados necesitas asfaltar?"
-- "\xBFEn qu\xE9 distrito o ubicaci\xF3n exacta ser\xEDa la obra?"
-
-#### **2. Espesor del asfalto**
-- Sugiere seg\xFAn el uso
-
-#### **3. Estado de la base**
-- "\xBFYa cuentas con la base preparada o es terreno natural?"
-- "\xBFEs una base nueva o es un pavimento existente que quieres recubrir?"
-
-#### **4. Imprimaci\xF3n (preparaci\xF3n de superficie)**
-
- - "\xBFDeseas realizar imprimaci\xF3n en la obra?"
-**Si es base nueva:**
-- Se requiere imprimaci\xF3n con **MC-30** (asfalto l\xEDquido de curado medio)
-- "Para bases nuevas necesitamos aplicar MC-30 como imprimante"
-
-**Si es pavimento existente:**
-- Se requiere **riego de liga** (emulsi\xF3n asf\xE1ltica)
-- "Como es sobre pavimento existente, aplicaremos riego de liga para que adhiera mejor"
- - Pregunta si desea aplicar con **bast\xF3n** o **barra** (la barra se usa cuando piden control de tasa de dosificaci\xF3n)
-
-#### **5. Fresado (opcional)**
-- "\xBFNecesitas que removamos el asfalto viejo antes?"
-
-#### **6. Tipo de terreno**
-- "\xBFC\xF3mo es el \xE1rea? \xBFEs una pendiente, es plano tiro largo o son calles?"
-
----
-
-## 3. \u{1F69B} SERVICIO DE TRANSPORTE
-
-### Informaci\xF3n que necesitas:
-
-1. **Punto de carga**: "\xBFDe d\xF3nde necesitas que recojamos el asfalto?"
-2. **Punto de descarga**: "\xBFA d\xF3nde hay que llevarlo?"
-3. **Tipo de asfalto**: "\xBFQu\xE9 tipo de asfalto vamos a transportar?"
-4. **Cantidad**: "\xBFCu\xE1ntos metros c\xFAbicos (m3) son?"
-5. **Consideraciones**: "\xBFHay restricci\xF3n de horario o zona de dif\xEDcil acceso?"
-
----
-
-## 4. \u{1F3ED} SERVICIO DE FABRICACI\xD3N
-
-**Para este servicio especializado, deriva INMEDIATAMENTE a un ingeniero.**
-
----
-
-# REGLAS DE CONVERSACI\xD3N
-
-## \u2705 SIEMPRE DEBES:
-
-1. **Hacer preguntas inteligentes y contextuales**
-   - M\xE1ximo 2-3 preguntas por mensaje
-   - Adapta las preguntas seg\xFAn las respuestas previas
-
-2. **Confirmar informaci\xF3n importante**
-   - "Perfecto, entonces son 500 m\xB2 en San Isidro. \xBFEs correcto?"
-
-3. **Celebrar el progreso**
-   - "\xA1Perfecto!", "\xA1Excelente!", "\xA1Genial, vamos bien!"
-
-4. **Adaptar tu lenguaje al cliente**
-   - Cliente t\xE9cnico \u2192 M\xE1s t\xE9rminos especializados
-   - Cliente general \u2192 Explicaciones simples
-
----
-
-## \u274C NUNCA DEBES:
-
-1. **Inventar informaci\xF3n**
-   - \u274C No des precios espec\xEDficos
-   - \u274C No prometas fechas exactas
-   - \u274C No ofrezcas descuentos
-
-2. **Ser rob\xF3tico**
-   - \u274C "Procedo a recopilar datos"
-   - \u2705 "Perfecto, d\xE9jame hacerte un par de preguntas"
-
-3. **Abrumar con preguntas**
-   - \u274C 5-6 preguntas en un mensaje
-   - \u2705 2-3 preguntas m\xE1ximo
-
-4. **Ignorar el contexto previo**
-   - Si el cliente ya dijo algo, no lo vuelvas a preguntar
-
----
-
-# DERIVACI\xD3N A HUMANO
-
-## \u{1F6A8} Deriva INMEDIATAMENTE si:
-
-1. El cliente lo pide expl\xEDcitamente
-2. El cliente est\xE1 molesto o insatisfecho
-3. Preguntas muy t\xE9cnicas o legales
-4. Temas fuera de tu alcance
-5. Servicios especializados (fabricaci\xF3n)
-
-**Frase de derivaci\xF3n:**
-"Entiendo tu situaci\xF3n. Perm\xEDteme conectarte con un supervisor que te podr\xE1 ayudar mejor. \xBFMe compartes tu n\xFAmero de contacto?"
-
----
-
-# HORARIOS Y DISPONIBILIDAD
-
-## Horario de atenci\xF3n:
-- **Lunes a Viernes**: 8:00 AM - 6:00 PM
-- **S\xE1bados**: 8:00 AM - 1:00 PM
-- **Domingos**: Cerrado
-
-**Mensaje fuera de horario:**
-"\xA1Hola! Gracias por contactar a CONSTROAD \u{1F60A}. Te escribo fuera de nuestro horario de atenci\xF3n (Lunes a Viernes 8 AM - 6 PM, S\xE1bados 8 AM - 1 PM). Te responder\xE9 en cuanto abramos ma\xF1ana. \xA1Que tengas excelente [noche/fin de semana]!"
-
----
-
-# FLUJO CONVERSACIONAL
-
-## Fase 1: SALUDO Y APERTURA
-
-"\xA1Hola! Soy Mar\xEDa de CONSTROAD \u{1F44B} \xBFEn qu\xE9 te puedo ayudar hoy? Trabajamos en venta de asfalto, colocaci\xF3n, transporte y fabricaci\xF3n de mezclas."
-
-## Fase 2: IDENTIFICACI\xD3N DEL SERVICIO
-
-Escucha y confirma: "Perfecto, veo que necesitas [servicio]. Te voy a hacer algunas preguntas para que el equipo te prepare la mejor cotizaci\xF3n."
-
-## Fase 3: RECOPILACI\xD3N DE INFORMACI\xD3N
-
-- 2-3 preguntas m\xE1ximo por mensaje
-- Pregunta lo m\xE1s relevante primero
-- Adapta seg\xFAn las respuestas
-- Confirma informaci\xF3n importante
-
-## Fase 4: RESUMEN Y CONFIRMACI\xD3N
-
-"Perfecto, d\xE9jame confirmar que tengo todo claro: \u2705 [Resumen]. \xBFEs correcto? \xBFAlgo m\xE1s?"
-
-## Fase 5: CIERRE
-
-"\xA1Excelente! Con esta informaci\xF3n nuestro equipo te preparar\xE1 una cotizaci\xF3n. Un asesor se contactar\xE1 en las pr\xF3ximas 2 horas. \xBFTe parece?"
-
----
-
-# RECUERDA:
-
-Eres Mar\xEDa, eres humana, eres emp\xE1tica, eres experta, y est\xE1s aqu\xED para AYUDAR. No solo recopiles datos, crea una conexi\xF3n con el cliente. S\xE9 natural, s\xE9 c\xE1lida, s\xE9 profesional.`;
-function getUserContextPrompt(conversation) {
-  const progress = getProgressSummary(conversation);
-  const recentMessages = conversation.messageHistory.slice(-6).map((m) => `${m.role === "user" ? "Cliente" : "T\xFA"}: ${m.content}`).join("\n");
-  return `
-## CONTEXTO DE LA CONVERSACI\xD3N ACTUAL:
-
-**Cliente:** ${conversation.chatId}
-**Servicio identificado:** ${conversation.service || "No identificado a\xFAn"}
-**Estado:** ${conversation.state}
-
-**Informaci\xF3n recopilada:**
-${JSON.stringify(conversation.collectedData, null, 2)}
-
-**Progreso:** ${progress}
-
-**\xDAltimos mensajes:**
-${recentMessages}
-
----
-
-Bas\xE1ndote en este contexto, responde al \xFAltimo mensaje del cliente de manera natural y contin\xFAa recopilando la informaci\xF3n que falta. Recuerda: \xA1Eres Mar\xEDa! S\xE9 natural, emp\xE1tica y profesional.
-`;
-}
-function getProgressSummary(conversation) {
-  const data = conversation.collectedData;
-  const service = conversation.service;
-  if (!service) return "A\xFAn no se identific\xF3 el servicio";
-  const required = getRequiredFields(service);
-  const collected = Object.keys(data).filter((k) => data[k]).length;
-  const total = required.length;
-  return `${collected}/${total} datos recopilados`;
-}
-function getRequiredFields(service) {
-  const fields = {
-    venta: ["tipoAsfalto", "espesor", "ubicacion", "cantidad"],
-    colocacion: ["espesor", "ubicacion", "area", "imprimacion", "tipoTerreno"],
-    transporte: ["puntoCarga", "puntoDescarga", "tipoAsfalto", "cantidad"],
-    fabricacion: ["nombreContacto", "telefono"]
-  };
-  return fields[service] || [];
-}
-
-// src/whatsapp/ai-agent/agent.service.ts
-var AgentService = class {
-  constructor() {
-    this.client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY
-    });
-  }
-  async generateResponse(conversation, userMessage) {
-    try {
-      logger_default.debug(`Generating response for conversation ${conversation.chatId}`);
-      const messages = this.prepareMessages(conversation, userMessage);
-      const response = await this.client.messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: CLAUDE_MAX_TOKENS,
-        system: SYSTEM_PROMPT + "\n\n" + getUserContextPrompt(conversation),
-        messages
-      });
-      const assistantMessage = response.content[0].type === "text" ? response.content[0].text : "";
-      if (!assistantMessage) {
-        throw new Error("No text in response from Claude");
-      }
-      const analysis = this.analyzeResponse(assistantMessage, conversation);
-      logger_default.debug(
-        `Response generated. Next state: ${analysis.nextState}, Handoff: ${analysis.shouldHandoff}`
-      );
-      return {
-        text: assistantMessage,
-        nextState: analysis.nextState,
-        shouldHandoff: analysis.shouldHandoff
-      };
-    } catch (error) {
-      logger_default.error("Error calling Claude API:", error);
-      throw error;
-    }
-  }
-  prepareMessages(conversation, newMessage) {
-    const recentMessages = conversation.messageHistory.slice(-10);
-    const messages = recentMessages.map((msg) => ({
-      role: msg.role,
-      content: msg.content
-    }));
-    messages.push({
-      role: "user",
-      content: newMessage
-    });
-    return messages;
-  }
-  analyzeResponse(text, conversation) {
-    const handoffKeywords = [
-      "conectarte con un supervisor",
-      "derivar",
-      "hablar con un especialista",
-      "ingeniero especializado",
-      "perm\xEDteme conectarte",
-      "d\xE9jame conectarte"
-    ];
-    const shouldHandoff = handoffKeywords.some(
-      (keyword) => text.toLowerCase().includes(keyword)
-    );
-    const completionKeywords = [
-      "con esta informaci\xF3n",
-      "te contactar\xE1",
-      "preparar\xE1 una cotizaci\xF3n",
-      "pr\xF3ximas 2 horas"
-    ];
-    const isComplete = completionKeywords.some(
-      (keyword) => text.toLowerCase().includes(keyword)
-    );
-    let nextState = conversation.state;
-    if (shouldHandoff) {
-      nextState = "waiting_human";
-    } else if (isComplete) {
-      nextState = "closed";
-    }
-    return { nextState, shouldHandoff };
-  }
-};
-var agent_service_default = new AgentService();
-
-// src/whatsapp/ai-agent/conversation.manager.ts
-init_logger();
-import path4 from "path";
-
-// src/storage/json.store.ts
-init_logger();
-import fs2 from "fs-extra";
-import path3 from "path";
-var JsonStore = class {
-  constructor(options) {
-    this.baseDir = options.baseDir;
-    this.autoBackup = options.autoBackup ?? true;
-  }
-  async get(key) {
-    try {
-      const filePath = path3.join(this.baseDir, `${key}.json`);
-      const exists = await fs2.pathExists(filePath);
-      if (!exists) {
-        return null;
-      }
-      const data = await fs2.readJSON(filePath);
-      return data;
-    } catch (error) {
-      logger_default.error(`Error reading ${key} from store:`, error);
-      return null;
-    }
-  }
-  async set(key, value) {
-    try {
-      const filePath = path3.join(this.baseDir, `${key}.json`);
-      await fs2.ensureDir(path3.dirname(filePath));
-      if (this.autoBackup && await fs2.pathExists(filePath)) {
-        const backupPath = `${filePath}.backup`;
-        await fs2.copy(filePath, backupPath);
-      }
-      const tempPath = `${filePath}.tmp`;
-      await fs2.writeJSON(tempPath, value, { spaces: 2 });
-      await fs2.move(tempPath, filePath, { overwrite: true });
-      logger_default.debug(`Successfully wrote ${key} to store`);
-    } catch (error) {
-      logger_default.error(`Error writing ${key} to store:`, error);
-      throw error;
-    }
-  }
-  async delete(key) {
-    try {
-      const filePath = path3.join(this.baseDir, `${key}.json`);
-      if (await fs2.pathExists(filePath)) {
-        await fs2.remove(filePath);
-        logger_default.debug(`Successfully deleted ${key} from store`);
-      }
-    } catch (error) {
-      logger_default.error(`Error deleting ${key} from store:`, error);
-      throw error;
-    }
-  }
-  async getAllKeys() {
-    try {
-      const files = await fs2.readdir(this.baseDir);
-      return files.filter((f) => f.endsWith(".json")).map((f) => f.replace(".json", ""));
-    } catch (error) {
-      logger_default.error("Error reading keys from store:", error);
-      return [];
-    }
-  }
-  async clear() {
-    try {
-      await fs2.emptyDir(this.baseDir);
-      logger_default.debug("Store cleared");
-    } catch (error) {
-      logger_default.error("Error clearing store:", error);
-      throw error;
-    }
-  }
-  async exists(key) {
-    const filePath = path3.join(this.baseDir, `${key}.json`);
-    return await fs2.pathExists(filePath);
-  }
-};
-var json_store_default = JsonStore;
-
-// src/whatsapp/ai-agent/conversation.manager.ts
-init_environment();
-var ConversationManager = class {
-  constructor() {
-    this.conversationsDir = path4.join(config.whatsapp.sessionDir, "../conversations");
-    this.store = new json_store_default({
-      baseDir: this.conversationsDir,
-      autoBackup: true
-    });
-  }
-  async getOrCreate(chatId, sessionPhone) {
-    const key = this.getConversationKey(sessionPhone, chatId);
-    const existing = await this.store.get(key);
-    if (existing) {
-      return existing;
-    }
-    const conversation = {
-      chatId,
-      phoneNumber: this.extractPhoneNumber(chatId),
-      sessionPhone,
-      state: "active",
-      service: null,
-      collectedData: {},
-      messageHistory: [],
-      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      lastMessageAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    await this.save(conversation);
-    logger_default.info(`Created new conversation: ${key}`);
-    return conversation;
-  }
-  async save(conversation) {
-    try {
-      const key = this.getConversationKey(
-        conversation.sessionPhone,
-        conversation.chatId
-      );
-      conversation.lastMessageAt = (/* @__PURE__ */ new Date()).toISOString();
-      await this.store.set(key, conversation);
-      logger_default.debug(`Conversation saved: ${key}`);
-    } catch (error) {
-      logger_default.error("Error saving conversation:", error);
-      throw error;
-    }
-  }
-  async get(chatId, sessionPhone) {
-    const key = this.getConversationKey(sessionPhone, chatId);
-    return await this.store.get(key);
-  }
-  async delete(chatId, sessionPhone) {
-    const key = this.getConversationKey(sessionPhone, chatId);
-    await this.store.delete(key);
-    logger_default.debug(`Conversation deleted: ${key}`);
-  }
-  async getAllForSession(sessionPhone) {
-    const keys = await this.store.getAllKeys();
-    const conversations = [];
-    for (const key of keys) {
-      if (key.startsWith(`${sessionPhone}:`)) {
-        const conv = await this.store.get(key);
-        if (conv) {
-          conversations.push(conv);
-        }
-      }
-    }
-    return conversations;
-  }
-  async closeConversation(chatId, sessionPhone) {
-    const conversation = await this.get(chatId, sessionPhone);
-    if (conversation) {
-      conversation.state = "closed";
-      await this.save(conversation);
-      logger_default.info(`Conversation closed: ${chatId}`);
-    }
-  }
-  getConversationKey(sessionPhone, chatId) {
-    return `${sessionPhone}:${chatId}`;
-  }
-  extractPhoneNumber(chatId) {
-    return chatId.replace(/@[sg]\.whatsapp\.net|@g\.us/, "");
-  }
-};
-var conversation_manager_default = new ConversationManager();
-
-// src/utils/retry.ts
-init_logger();
-async function retry(fn, maxAttempts = 3, delayMs = 1e3, multiplier = 2) {
-  let lastError = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error;
-      logger_default.warn(`Attempt ${attempt}/${maxAttempts} failed: ${lastError.message}`);
-      if (attempt < maxAttempts) {
-        const delay2 = delayMs * Math.pow(multiplier, attempt - 1);
-        await new Promise((resolve) => setTimeout(resolve, delay2));
-      }
-    }
-  }
-  throw new Error(`Failed after ${maxAttempts} attempts: ${lastError?.message}`);
-}
-function calculateTypingDelay(text) {
-  const wordsPerMinute = 40;
-  const words = text.split(" ").length;
-  const baseTime = words / wordsPerMinute * 60 * 1e3;
-  const variability = 0.2;
-  const delay2 = baseTime * (1 + (Math.random() - 0.5) * variability);
-  return Math.min(Math.max(delay2, 1e3), 8e3);
-}
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// src/whatsapp/ai-agent/typing-simulator.ts
-init_logger();
-var TypingSimulator = class {
-  /**
-   * Simula el tiempo que tardaría una persona escribiendo el texto
-   * @param text Texto a "escribir"
-   * @returns Promesa que se resuelve después del tiempo simulado
-   */
-  async simulateTyping(text) {
-    const delayMs = calculateTypingDelay(text);
-    logger_default.debug(`Simulating typing delay: ${delayMs}ms for ${text.length} chars`);
-    await delay(delayMs);
-  }
-  /**
-   * Calcula el delay de escritura sin esperar
-   * @param text Texto a evaluar
-   * @returns Delay en milisegundos
-   */
-  getTypingDelay(text) {
-    return calculateTypingDelay(text);
-  }
-};
-var typing_simulator_default = new TypingSimulator();
-
-// src/utils/validators.ts
-init_logger();
-import Joi from "joi";
-function validateCronExpression(cron3) {
-  const cronRegex = /^((\d+,)*\d+|\*)(\/\d+)?( ((\d+,)*\d+|\*)(\/\d+)?){4}$/;
-  return cronRegex.test(cron3);
-}
-function validateCronJob(data) {
-  const schema = Joi.object({
-    name: Joi.string().required().min(3).max(100),
-    type: Joi.string().valid("api", "message").default("api"),
-    url: Joi.string().when("type", {
-      is: "api",
-      then: Joi.string().required().uri(),
-      otherwise: Joi.string().allow("").optional()
-    }),
-    message: Joi.object({
-      sender: Joi.string().required(),
-      chatId: Joi.string().required(),
-      body: Joi.string().required().min(1)
-    }).when("type", {
-      is: "message",
-      then: Joi.required(),
-      otherwise: Joi.optional()
-    }),
-    cronExpression: Joi.string().required().custom((value, helpers) => {
-      if (!validateCronExpression(value)) {
-        return helpers.error("any.invalid");
-      }
-      return value;
-    }).messages({ "any.invalid": "Expresi\xF3n cron inv\xE1lida" }),
-    company: Joi.string().valid("constroad", "altavia").required(),
-    isActive: Joi.boolean().default(true),
-    timeout: Joi.number().default(3e4).min(5e3).max(3e5),
-    retryPolicy: Joi.object({
-      maxRetries: Joi.number().default(3).min(0).max(10),
-      backoffMultiplier: Joi.number().default(2).min(1).max(5)
-    })
-  });
-  try {
-    const { error, value } = schema.validate(data, { abortEarly: false });
-    if (error) {
-      const errors = error.details.map((detail) => ({
-        field: detail.path.join("."),
-        message: detail.message
-      }));
-      return { valid: false, errors };
-    }
-    return { valid: true };
-  } catch (err) {
-    logger_default.error("Validation error:", err);
-    return { valid: false };
-  }
-}
-function validateCronJobUpdate(data) {
-  const schema = Joi.object({
-    name: Joi.string().min(3).max(100),
-    type: Joi.string().valid("api", "message"),
-    url: Joi.string().allow("").uri(),
-    message: Joi.object({
-      sender: Joi.string().required(),
-      chatId: Joi.string().required(),
-      body: Joi.string().required().min(1)
-    }),
-    cronExpression: Joi.string().custom((value, helpers) => {
-      if (!validateCronExpression(value)) {
-        return helpers.error("any.invalid");
-      }
-      return value;
-    }).messages({ "any.invalid": "Expresi\xF3n cron inv\xE1lida" }),
-    company: Joi.string().valid("constroad", "altavia"),
-    isActive: Joi.boolean(),
-    timeout: Joi.number().min(5e3).max(3e5),
-    retryPolicy: Joi.object({
-      maxRetries: Joi.number().min(0).max(10),
-      backoffMultiplier: Joi.number().min(1).max(5)
-    })
-  }).min(1);
-  try {
-    const { error } = schema.validate(data, { abortEarly: false });
-    if (error) {
-      const errors = error.details.map((detail) => ({
-        field: detail.path.join("."),
-        message: detail.message
-      }));
-      return { valid: false, errors };
-    }
-    return { valid: true };
-  } catch (err) {
-    logger_default.error("Validation error:", err);
-    return { valid: false };
-  }
-}
-function validateMessage(message) {
-  return message && typeof message === "object" && (message.conversation || message.extendedTextMessage?.text);
-}
-
-// src/whatsapp/ai-agent/message.listener.ts
-init_environment();
-var MessageListener = class {
-  constructor() {
-    this.activeConversations = /* @__PURE__ */ new Map();
-  }
-  async handleIncomingMessage(message, sessionPhone, whatsAppClient) {
-    try {
-      return;
-      if (message.key.fromMe) {
-        return;
-      }
-      if (!validateMessage(message.message)) {
-        logger_default.debug(`Skipping non-text message from ${message.key.remoteJid}`);
-        return;
-      }
-      const chatId = message.key.remoteJid;
-      const messageText = message.message?.conversation || message.message?.extendedTextMessage?.text || "";
-      if (!messageText.trim()) {
-        return;
-      }
-      const isGroup = chatId.endsWith("@g.us");
-      if (isGroup && !this.isGroupEnabled(chatId)) {
-        logger_default.debug(`Group ${chatId} not enabled for bot`);
-        return;
-      }
-      if (!this.isAiAllowed(chatId, isGroup)) {
-        logger_default.debug(`AI disabled or not allowed for ${chatId}`);
-        return;
-      }
-      logger_default.info(
-        `Incoming message from ${chatId} (session: ${sessionPhone}): ${messageText.substring(0, 50)}`
-      );
-      const conversation = await conversation_manager_default.getOrCreate(chatId, sessionPhone);
-      if (conversation.state === "waiting_human") {
-        await this.notifyHumanAgent(conversation, messageText);
-        return;
-      }
-      conversation.messageHistory.push({
-        role: "user",
-        content: messageText,
-        timestamp: (/* @__PURE__ */ new Date()).toISOString()
-      });
-      await this.processWithAI(conversation, messageText, whatsAppClient);
-    } catch (error) {
-      logger_default.error("Error handling incoming message:", error);
-    }
-  }
-  async processWithAI(conversation, message, whatsAppClient) {
-    try {
-      await whatsAppClient.sendPresenceUpdate("composing", conversation.chatId);
-      const response = await agent_service_default.generateResponse(conversation, message);
-      await typing_simulator_default.simulateTyping(response.text);
-      await whatsAppClient.sendMessage(conversation.chatId, {
-        text: response.text
-      });
-      logger_default.info(
-        `Response sent to ${conversation.chatId}: ${response.text.substring(0, 50)}`
-      );
-      conversation.messageHistory.push({
-        role: "assistant",
-        content: response.text,
-        timestamp: (/* @__PURE__ */ new Date()).toISOString()
-      });
-      conversation.lastMessageAt = (/* @__PURE__ */ new Date()).toISOString();
-      if (response.nextState) {
-        conversation.state = response.nextState;
-      }
-      await conversation_manager_default.save(conversation);
-      await whatsAppClient.sendPresenceUpdate("paused", conversation.chatId);
-    } catch (error) {
-      logger_default.error("Error processing message with AI:", error);
-      await this.sendErrorMessage(conversation.chatId, whatsAppClient);
-    }
-  }
-  isGroupEnabled(groupId) {
-    return true;
-  }
-  isAiAllowed(chatId, isGroup) {
-    if (config.whatsapp.aiEnabled) {
-      return true;
-    }
-    if (isGroup) {
-      return false;
-    }
-    const raw = chatId.split("@")[0] || "";
-    const phone = raw.replace(/[^\d]/g, "");
-    return phone === config.whatsapp.aiTestNumber;
-  }
-  async notifyHumanAgent(conversation, message) {
-    logger_default.info(
-      `New message for human agent in conversation ${conversation.chatId}: ${message}`
-    );
-  }
-  async sendErrorMessage(chatId, whatsAppClient) {
-    try {
-      await whatsAppClient.sendMessage(chatId, {
-        text: "Disculpa, tuve un problema procesando tu mensaje. \xBFPodr\xEDas repetirlo?"
-      });
-    } catch (error) {
-      logger_default.error("Error sending error message:", error);
-    }
-  }
-};
-var message_listener_default = new MessageListener();
-
-// src/whatsapp/baileys/connection.manager.ts
-init_environment();
-
-// src/whatsapp/queue/outbox-queue.ts
-import path5 from "path";
-import { randomUUID } from "crypto";
-init_logger();
-init_environment();
-var OutboxQueue = class {
-  constructor() {
-    const baseDir = path5.join(config.whatsapp.sessionDir, "../outbox");
-    this.store = new json_store_default({ baseDir, autoBackup: true });
-  }
-  async list(sessionPhone) {
-    const data = await this.store.get(sessionPhone);
-    return Array.isArray(data) ? data : [];
-  }
-  async enqueue(sessionPhone, recipient, text) {
-    const queue = await this.list(sessionPhone);
-    const item = {
-      id: randomUUID(),
-      sessionPhone,
-      recipient,
-      text,
-      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      attempts: 0
-    };
-    queue.push(item);
-    await this.store.set(sessionPhone, queue);
-    logger_default.info(`Queued outbound message ${item.id} for ${sessionPhone}`);
-    return item;
-  }
-  async update(sessionPhone, item) {
-    const queue = await this.list(sessionPhone);
-    const index = queue.findIndex((entry) => entry.id === item.id);
-    if (index === -1) {
-      return;
-    }
-    queue[index] = item;
-    await this.store.set(sessionPhone, queue);
-  }
-  async remove(sessionPhone, id) {
-    const queue = await this.list(sessionPhone);
-    const next = queue.filter((item) => item.id !== id);
-    await this.store.set(sessionPhone, next);
-  }
-};
-var outbox_queue_default = new OutboxQueue();
-
-// src/whatsapp/baileys/connection.manager.ts
-var originalConsoleLog = console.log;
-console.log = (...args) => {
-  const message = args.join(" ");
-  if (message.includes("Closing open session in favor of") || message.includes("Closing session: SessionEntry") || message.includes("_chains:") || message.includes("registrationId:") || message.includes("currentRatchet:")) {
-    return;
-  }
-  originalConsoleLog.apply(console, args);
-};
-var ConnectionManager = class {
-  constructor() {
-    this.connections = /* @__PURE__ */ new Map();
-    this.connectionStates = /* @__PURE__ */ new Map();
-    this.qrCodes = /* @__PURE__ */ new Map();
-    this.contactsBySession = /* @__PURE__ */ new Map();
-    this.groupsCache = /* @__PURE__ */ new Map();
-    this.groupsInFlight = /* @__PURE__ */ new Map();
-    this.connectInFlight = /* @__PURE__ */ new Map();
-    this.reconnectTimers = /* @__PURE__ */ new Map();
-    this.reconnectAttempts = /* @__PURE__ */ new Map();
-    this.connectWatchdogs = /* @__PURE__ */ new Map();
-    this.sessionRecoveryWatchdog = null;
-  }
-  async createConnection(sessionPhone) {
-    const existing = this.connections.get(sessionPhone);
-    if (existing) {
-      logger_default.debug(`Connection already exists for ${sessionPhone}`);
-      return existing;
-    }
-    const inFlight = this.connectInFlight.get(sessionPhone);
-    if (inFlight) {
-      return await inFlight;
-    }
-    const connectPromise = (async () => {
-      try {
-        logger_default.info(`Creating WhatsApp connection for ${sessionPhone}`);
-        this.connectionStates.set(sessionPhone, "connecting");
-        const sessionDir = path6.join(config.whatsapp.sessionDir, sessionPhone);
-        const credsPath = path6.join(sessionDir, "creds.json");
-        const hasCredentials = await fs3.pathExists(credsPath);
-        if (!hasCredentials) {
-          logger_default.warn(`\u26A0\uFE0F No credentials found for ${sessionPhone}, attempting auto-recovery from backup`);
-          const recovered = await this.autoRecoverSession(sessionPhone);
-          if (recovered) {
-            logger_default.info(`\u2705 Successfully auto-recovered session ${sessionPhone} from backup`);
-          } else {
-            logger_default.warn(`\u26A0\uFE0F No valid backup found for ${sessionPhone}, will generate new QR`);
-          }
-        }
-        const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-        const { version } = await fetchLatestBaileysVersion();
-        const socket = makeWASocket({
-          auth: state,
-          version,
-          syncFullHistory: false,
-          shouldIgnoreJid: (jid) => /status@broadcast/.test(jid),
-          printQRInTerminal: false,
-          logger: pino({ level: config.whatsapp.baileysLogLevel })
-        });
-        this.contactsBySession.set(sessionPhone, /* @__PURE__ */ new Map());
-        this.connections.set(sessionPhone, socket);
-        this.setupListeners(socket, sessionPhone, sessionDir, saveCreds);
-        return socket;
-      } catch (error) {
-        logger_default.error(`Error creating connection for ${sessionPhone}:`, error);
-        throw error;
-      }
-    })();
-    this.connectInFlight.set(sessionPhone, connectPromise);
-    try {
-      return await connectPromise;
-    } finally {
-      this.connectInFlight.delete(sessionPhone);
-    }
-  }
-  async ensureConnected(sessionPhone, timeoutMs = 15e3, intervalMs = 300) {
-    if (!this.connections.has(sessionPhone)) {
-      try {
-        await this.createConnection(sessionPhone);
-      } catch (error) {
-        logger_default.warn(`Failed to create connection for ${sessionPhone}, will schedule reconnect: ${error}`);
-        this.scheduleReconnect(sessionPhone, error);
-        return false;
-      }
-    }
-    if (this.isConnected(sessionPhone)) {
-      return true;
-    }
-    const start = Date.now();
-    const connected = await new Promise((resolve) => {
-      const timer = setInterval(() => {
-        if (this.isConnected(sessionPhone)) {
-          clearInterval(timer);
-          resolve(true);
-          return;
-        }
-        if (Date.now() - start >= timeoutMs) {
-          clearInterval(timer);
-          resolve(false);
-        }
-      }, intervalMs);
-    });
-    if (!connected) {
-      logger_default.warn(`Connection timeout for ${sessionPhone} after ${timeoutMs}ms`);
-      this.cleanupSession(sessionPhone, { clearQr: false });
-      this.scheduleReconnect(sessionPhone);
-    }
-    return connected;
-  }
-  async reconnectSavedSessions() {
-    const baseDir = path6.resolve(config.whatsapp.sessionDir);
-    if (!await fs3.pathExists(baseDir)) {
-      return;
-    }
-    const entries = await fs3.readdir(baseDir);
-    const sessionDirs = await Promise.all(
-      entries.map(async (entry) => {
-        const fullPath = path6.join(baseDir, entry);
-        const stat = await fs3.stat(fullPath);
-        return stat.isDirectory() && entry !== "backups" ? entry : null;
-      })
-    );
-    const sessionsWithCreds = [];
-    for (const sessionPhone of sessionDirs.filter(Boolean)) {
-      const credsPath = path6.join(baseDir, sessionPhone, "creds.json");
-      if (await fs3.pathExists(credsPath)) {
-        sessionsWithCreds.push(sessionPhone);
-        try {
-          await this.createConnection(sessionPhone);
-          logger_default.info(`\u2705 Reconnected session ${sessionPhone}`);
-        } catch (error) {
-          logger_default.warn(`Failed to reconnect session ${sessionPhone}: ${String(error)}`);
-        }
-      }
-    }
-    const backupBaseDir = path6.join(baseDir, "backups");
-    if (await fs3.pathExists(backupBaseDir)) {
-      const backupEntries = await fs3.readdir(backupBaseDir);
-      for (const sessionPhone of backupEntries) {
-        if (sessionsWithCreds.includes(sessionPhone)) {
-          continue;
-        }
-        const backupDir = path6.join(backupBaseDir, sessionPhone);
-        const stat = await fs3.stat(backupDir);
-        if (!stat.isDirectory()) {
-          continue;
-        }
-        logger_default.info(`\u{1F50D} Found session ${sessionPhone} with backups but no active credentials, attempting auto-recovery`);
-        try {
-          const recovered = await this.autoRecoverSession(sessionPhone);
-          if (recovered) {
-            await this.createConnection(sessionPhone);
-            logger_default.info(`\u2705 Auto-recovered and reconnected session ${sessionPhone}`);
-          }
-        } catch (error) {
-          logger_default.warn(`Failed to auto-recover session ${sessionPhone}: ${String(error)}`);
-        }
-      }
-    }
-  }
-  setupListeners(socket, sessionPhone, sessionDir, saveCreds) {
-    socket.ev.on("connection.update", async (update) => {
-      const { connection, lastDisconnect, qr } = update;
-      if (connection) {
-        this.connectionStates.set(sessionPhone, connection);
-      }
-      if (qr) {
-        const qrText = typeof qr === "string" ? qr : String(qr);
-        logger_default.info(`QR Code for ${sessionPhone}`);
-        this.qrCodes.set(sessionPhone, qrText);
-      }
-      if (connection === "close") {
-        this.clearConnectWatchdog(sessionPhone);
-        const reason = this.getDisconnectReason(lastDisconnect?.error);
-        const errorMessage = lastDisconnect?.error ? String(lastDisconnect.error) : "";
-        const reasonName = this.getDisconnectReasonName(reason);
-        logger_default.warn(`Connection closed for ${sessionPhone}, reason: ${reason} (${reasonName}), error: ${errorMessage}`);
-        const isNetworkError = errorMessage.includes("Stream Errored") || errorMessage.includes("Connection Failure") || errorMessage.includes("Socket hang up") || errorMessage.includes("ECONNRESET") || errorMessage.includes("ETIMEDOUT") || errorMessage.includes("ENOTFOUND") || errorMessage.includes("timeout") || errorMessage.includes("timed out") || reason === 408 || // timedOut
-        reason === 428 || // connectionLost
-        reason === 500 || // restartRequired (no es 515!)
-        reason === 503;
-        if (isNetworkError) {
-          logger_default.warn(`\u{1F310} Network/Stream error detected for ${sessionPhone}, preserving auth state and reconnecting`);
-          this.cleanupSession(sessionPhone, { clearQr: false });
-          this.scheduleReconnect(sessionPhone);
-          return;
-        }
-        if (reason === DisconnectReason.loggedOut || reason === 401) {
-          logger_default.warn(`\u{1F534} User manually logged out ${sessionPhone}, clearing auth state`);
-          await this.backupAndResetAuthState(sessionPhone, sessionDir);
-          this.cleanupSession(sessionPhone, { clearQr: true });
-          this.scheduleReconnect(sessionPhone);
-          return;
-        }
-        if (reason === DisconnectReason.badSession || reason === 403) {
-          let backupRestored = await this.tryRestoreRecentBackup(sessionPhone);
-          if (backupRestored) {
-            logger_default.info(`\u2705 Restored recent backup for ${sessionPhone}, attempting reconnect`);
-            this.cleanupSession(sessionPhone, { clearQr: false });
-            this.scheduleReconnect(sessionPhone);
-            return;
-          }
-          logger_default.warn(`\u26A0\uFE0F No recent backup for ${sessionPhone}, trying full auto-recovery`);
-          backupRestored = await this.autoRecoverSession(sessionPhone);
-          if (backupRestored) {
-            logger_default.info(`\u2705 Full auto-recovery successful for ${sessionPhone}, attempting reconnect`);
-            this.cleanupSession(sessionPhone, { clearQr: false });
-            this.scheduleReconnect(sessionPhone);
-            return;
-          }
-          logger_default.warn(`\u{1F534} Bad session detected for ${sessionPhone} (no backups available), clearing auth state`);
-          await this.backupAndResetAuthState(sessionPhone, sessionDir);
-          this.cleanupSession(sessionPhone, { clearQr: true });
-          this.scheduleReconnect(sessionPhone);
-          return;
-        }
-        const shouldReconnect = reason === DisconnectReason.connectionClosed || reason === DisconnectReason.connectionLost || reason === DisconnectReason.timedOut || reason === DisconnectReason.restartRequired || reason === DisconnectReason.connectionReplaced || reason === 411 || // connectionClosed
-        reason === 428 || // connectionLost
-        reason === 440 || // connectionReplaced
-        reason === 515;
-        if (shouldReconnect) {
-          logger_default.info(`\u267B\uFE0F Reconnectable disconnect for ${sessionPhone}, preserving credentials`);
-          this.cleanupSession(sessionPhone, { clearQr: false });
-          this.scheduleReconnect(sessionPhone);
-        } else {
-          logger_default.warn(`\u26A0\uFE0F Unknown disconnect reason ${reason} for ${sessionPhone}, preserving credentials and reconnecting`);
-          this.cleanupSession(sessionPhone, { clearQr: false });
-          this.scheduleReconnect(sessionPhone);
-        }
-      } else if (connection === "open") {
-        this.clearConnectWatchdog(sessionPhone);
-        logger_default.info(`\u2705 Connection established for ${sessionPhone}`);
-        this.qrCodes.delete(sessionPhone);
-        this.resetReconnectState(sessionPhone);
-        await this.flushOutbox(sessionPhone);
-      } else if (connection === "connecting") {
-        this.scheduleConnectWatchdog(sessionPhone);
-      }
-    });
-    socket.ev.on("messaging-history.set", (data) => {
-      const store = this.contactsBySession.get(sessionPhone);
-      if (!store || !data?.contacts) {
-        return;
-      }
-      data.contacts.forEach((contact) => {
-        if (contact?.id) {
-          store.set(contact.id, contact);
-        }
-      });
-    });
-    socket.ev.on("contacts.upsert", (contacts) => {
-      const store = this.contactsBySession.get(sessionPhone);
-      if (!store) {
-        return;
-      }
-      contacts.forEach((contact) => {
-        if (contact?.id) {
-          store.set(contact.id, contact);
-        }
-      });
-    });
-    socket.ev.on("contacts.update", (updates) => {
-      const store = this.contactsBySession.get(sessionPhone);
-      if (!store) {
-        return;
-      }
-      updates.forEach((update) => {
-        if (!update?.id) {
-          return;
-        }
-        const existing = store.get(update.id) || {};
-        store.set(update.id, { ...existing, ...update });
-      });
-    });
-    socket.ev.on("creds.update", saveCreds);
-    socket.ev.on("messages.upsert", async (m) => {
-      for (const message of m.messages) {
-        await message_listener_default.handleIncomingMessage(message, sessionPhone, socket);
-      }
-    });
-  }
-  async disconnect(sessionPhone) {
-    try {
-      this.resetReconnectState(sessionPhone);
-      const socket = this.connections.get(sessionPhone);
-      if (socket) {
-        await socket.end({
-          cancel: true
-        });
-        this.cleanupSession(sessionPhone, { clearQr: true });
-        logger_default.info(`Disconnected ${sessionPhone}`);
-      }
-    } catch (error) {
-      logger_default.error(`Error disconnecting ${sessionPhone}:`, error);
-      this.cleanupSession(sessionPhone, { clearQr: true });
-    }
-  }
-  async disconnectAll() {
-    this.stopSessionRecoveryWatchdog();
-    for (const [sessionPhone] of this.connections) {
-      await this.disconnect(sessionPhone);
-    }
-  }
-  /**
-   * 🛡️ WATCHDOG DE RECUPERACIÓN AUTOMÁTICA
-   * Ejecuta verificación periódica cada 5 minutos para:
-   * 1. Detectar sesiones perdidas (sin conexión pero con backups disponibles)
-   * 2. Recuperar automáticamente desde backups
-   * 3. Intentar reconectar sesiones caídas
-   *
-   * Esto es una capa adicional de resiliencia que funciona incluso si
-   * los otros mecanismos de auto-recuperación fallan.
-   */
-  startSessionRecoveryWatchdog() {
-    if (this.sessionRecoveryWatchdog) {
-      return;
-    }
-    const runRecoveryCheck = async () => {
-      try {
-        logger_default.debug("\u{1F50D} Running session recovery watchdog check...");
-        const baseDir = path6.resolve(config.whatsapp.sessionDir);
-        const backupBaseDir = path6.join(baseDir, "backups");
-        if (!await fs3.pathExists(backupBaseDir)) {
-          return;
-        }
-        const backupEntries = await fs3.readdir(backupBaseDir);
-        for (const sessionPhone of backupEntries) {
-          const backupDir = path6.join(backupBaseDir, sessionPhone);
-          const stat = await fs3.stat(backupDir);
-          if (!stat.isDirectory()) {
-            continue;
-          }
-          const isConnected = this.isConnected(sessionPhone);
-          const hasConnection = this.connections.has(sessionPhone);
-          const isReconnecting = this.reconnectTimers.has(sessionPhone);
-          if (isConnected || isReconnecting) {
-            continue;
-          }
-          if (hasConnection && !isConnected) {
-            continue;
-          }
-          const sessionDir = path6.join(baseDir, sessionPhone);
-          const credsPath = path6.join(sessionDir, "creds.json");
-          const hasCredentials = await fs3.pathExists(credsPath);
-          if (!hasCredentials) {
-            logger_default.info(`\u{1F6A8} Watchdog detected lost session ${sessionPhone} with backups, attempting auto-recovery`);
-            const recovered = await this.autoRecoverSession(sessionPhone);
-            if (recovered) {
-              logger_default.info(`\u2705 Watchdog successfully recovered ${sessionPhone}, initiating reconnect`);
-              try {
-                await this.createConnection(sessionPhone);
-              } catch (error) {
-                logger_default.warn(`Watchdog recovery connect failed for ${sessionPhone}: ${error}`);
-                this.scheduleReconnect(sessionPhone, error);
-              }
-            } else {
-              logger_default.warn(`\u26A0\uFE0F Watchdog could not recover ${sessionPhone}, no valid backups`);
-            }
-          }
-        }
-      } catch (error) {
-        logger_default.error(`Session recovery watchdog error: ${error}`);
-      }
-    };
-    const intervalMs = 5 * 60 * 1e3;
-    const scheduleNext = () => {
-      this.sessionRecoveryWatchdog = setTimeout(async () => {
-        await runRecoveryCheck();
-        scheduleNext();
-      }, intervalMs);
-    };
-    scheduleNext();
-    logger_default.info("\u2705 Session recovery watchdog started (checking every 5 minutes)");
-  }
-  /**
-   * Detener el watchdog de recuperación
-   */
-  stopSessionRecoveryWatchdog() {
-    if (this.sessionRecoveryWatchdog) {
-      clearTimeout(this.sessionRecoveryWatchdog);
-      this.sessionRecoveryWatchdog = null;
-      logger_default.info("Session recovery watchdog stopped");
-    }
-  }
-  async sendTextMessage(sessionPhone, recipient, text, options = {}) {
-    const isConnected = await this.ensureConnected(sessionPhone);
-    const queueOnFail = options.queueOnFail !== false;
-    if (!isConnected) {
-      if (queueOnFail) {
-        await outbox_queue_default.enqueue(sessionPhone, recipient, text);
-        return { queued: true };
-      }
-      throw new Error("Session not connected");
-    }
-    const socket = this.connections.get(sessionPhone);
-    if (!socket) {
-      if (queueOnFail) {
-        await outbox_queue_default.enqueue(sessionPhone, recipient, text);
-        return { queued: true };
-      }
-      throw new Error("Session not connected");
-    }
-    try {
-      await socket.sendMessage(recipient, { text });
-      return { queued: false };
-    } catch (error) {
-      logger_default.warn(`Failed to send message via ${sessionPhone}: ${String(error)}`);
-      await this.disconnect(sessionPhone);
-      this.scheduleReconnect(sessionPhone, error);
-      if (queueOnFail) {
-        await outbox_queue_default.enqueue(sessionPhone, recipient, text);
-        return { queued: true };
-      }
-      throw error;
-    }
-  }
-  getConnection(sessionPhone) {
-    return this.connections.get(sessionPhone);
-  }
-  getAllConnections() {
-    return this.connections;
-  }
-  getQRCode(sessionPhone) {
-    return this.qrCodes.get(sessionPhone);
-  }
-  isConnected(sessionPhone) {
-    return this.connectionStates.get(sessionPhone) === "open";
-  }
-  getConnectionStatus(sessionPhone) {
-    const state = this.connectionStates.get(sessionPhone);
-    if (state === "open") return "connected";
-    if (this.qrCodes.has(sessionPhone)) return "waiting_qr";
-    if (state === "connecting") return "connecting";
-    return "disconnected";
-  }
-  async getGroups(sessionPhone) {
-    const socket = this.connections.get(sessionPhone);
-    if (!socket) {
-      throw new Error("Session not connected");
-    }
-    const cacheTtlMs = 60 * 1e3;
-    const cached = this.groupsCache.get(sessionPhone);
-    if (cached && Date.now() - cached.ts < cacheTtlMs) {
-      return cached.data;
-    }
-    const inFlight = this.groupsInFlight.get(sessionPhone);
-    if (inFlight) {
-      return await inFlight;
-    }
-    const fetchPromise = (async () => {
-      try {
-        const groups = await socket.groupFetchAllParticipating();
-        const data = Object.values(groups || {}).map((group) => ({
-          id: group.id,
-          name: group.subject
-        }));
-        this.groupsCache.set(sessionPhone, { ts: Date.now(), data });
-        return data;
-      } catch (error) {
-        const message = String(error);
-        if (message.includes("rate-overlimit") && cached) {
-          logger_default.warn(`Using cached groups for ${sessionPhone} after rate limit`);
-          return cached.data;
-        }
-        throw error;
-      } finally {
-        this.groupsInFlight.delete(sessionPhone);
-      }
-    })();
-    this.groupsInFlight.set(sessionPhone, fetchPromise);
-    return await fetchPromise;
-  }
-  async getContacts(sessionPhone) {
-    const socket = this.connections.get(sessionPhone);
-    if (!socket) {
-      throw new Error("Session not connected");
-    }
-    const store = this.contactsBySession.get(sessionPhone);
-    const storeContacts = store ? Array.from(store.values()) : [];
-    const socketContacts = Object.values(socket.contacts || {});
-    const contacts = storeContacts.length > 0 ? storeContacts : socketContacts;
-    return contacts.map((contact) => ({
-      id: contact.id,
-      name: contact.name || contact.notify || null,
-      number: contact.id ? contact.id.split("@")[0] : null,
-      isBusiness: Boolean(contact.isBusiness),
-      isMyContact: Boolean(contact.isMyContact)
-    }));
-  }
-  cleanupSession(sessionPhone, options = {}) {
-    this.connections.delete(sessionPhone);
-    this.connectionStates.set(sessionPhone, "close");
-    this.contactsBySession.delete(sessionPhone);
-    this.groupsCache.delete(sessionPhone);
-    this.groupsInFlight.delete(sessionPhone);
-    this.clearConnectWatchdog(sessionPhone);
-    if (options.clearQr) {
-      this.qrCodes.delete(sessionPhone);
-    }
-  }
-  resetReconnectState(sessionPhone) {
-    const timer = this.reconnectTimers.get(sessionPhone);
-    if (timer) {
-      clearTimeout(timer);
-      this.reconnectTimers.delete(sessionPhone);
-    }
-    this.reconnectAttempts.delete(sessionPhone);
-  }
-  scheduleReconnect(sessionPhone, error) {
-    if (!config.whatsapp.autoReconnect) {
-      return;
-    }
-    if (this.reconnectTimers.has(sessionPhone)) {
-      return;
-    }
-    const currentAttempts = this.reconnectAttempts.get(sessionPhone) || 0;
-    const nextAttempt = currentAttempts + 1;
-    this.reconnectAttempts.set(sessionPhone, nextAttempt);
-    const maxAttempts = config.whatsapp.maxReconnectAttempts;
-    if (maxAttempts > 0 && nextAttempt > maxAttempts) {
-      logger_default.error(`Reconnect attempts exhausted for ${sessionPhone} after ${maxAttempts} attempts`);
-      (async () => {
-        const hasBackup = await this.hasAvailableBackup(sessionPhone);
-        if (hasBackup) {
-          logger_default.info(`\u{1F4A1} Found backup for ${sessionPhone}, attempting final auto-recovery`);
-          const recovered = await this.autoRecoverSession(sessionPhone);
-          if (recovered) {
-            logger_default.info(`\u2705 Final auto-recovery successful for ${sessionPhone}, resetting reconnect attempts`);
-            this.reconnectAttempts.delete(sessionPhone);
-            this.scheduleReconnect(sessionPhone);
-          }
-        } else {
-          logger_default.info(`\u{1F4A1} No backups available for ${sessionPhone}, manual QR scan required`);
-        }
-      })();
-      return;
-    }
-    const delayMs = Math.min(6e4, 2e3 * Math.pow(2, nextAttempt - 1));
-    const message = `Scheduling reconnect for ${sessionPhone} in ${delayMs}ms (attempt ${nextAttempt}/${maxAttempts || "\u221E"})`;
-    if (error) {
-      logger_default.warn(message, { error: String(error) });
-    } else {
-      logger_default.warn(message);
-    }
-    const timer = setTimeout(async () => {
-      this.reconnectTimers.delete(sessionPhone);
-      const sessionDir = path6.join(config.whatsapp.sessionDir, sessionPhone);
-      const credsPath = path6.join(sessionDir, "creds.json");
-      const hasCredentials = await fs3.pathExists(credsPath);
-      if (!hasCredentials) {
-        logger_default.warn(`\u26A0\uFE0F No credentials found for ${sessionPhone}, attempting auto-recovery from backup`);
-        const recovered = await this.autoRecoverSession(sessionPhone);
-        if (!recovered) {
-          logger_default.error(`\u274C Auto-recovery failed for ${sessionPhone}, no valid backups found`);
-          this.scheduleReconnect(sessionPhone);
-          return;
-        }
-        logger_default.info(`\u2705 Auto-recovered credentials for ${sessionPhone}, proceeding with reconnect`);
-      }
-      try {
-        logger_default.info(`\u{1F504} Attempting reconnect ${nextAttempt}/${maxAttempts || "\u221E"} for ${sessionPhone}...`);
-        await this.createConnection(sessionPhone);
-      } catch (err) {
-        logger_default.warn(`Reconnect failed for ${sessionPhone}: ${String(err)}`);
-        this.scheduleReconnect(sessionPhone, err);
-      }
-    }, delayMs);
-    this.reconnectTimers.set(sessionPhone, timer);
-  }
-  /**
-   * 🛡️ PROTECCIÓN: Backup antes de eliminar credenciales
-   * Crea un backup timestamped de las credenciales antes de borrarlas
-   * para permitir recuperación manual si es necesario
-   */
-  async backupAndResetAuthState(sessionPhone, sessionDir) {
-    try {
-      const credsPath = path6.join(sessionDir, "creds.json");
-      const credsExist = await fs3.pathExists(credsPath);
-      if (credsExist) {
-        const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-        const backupDir = path6.join(sessionDir, "..", "backups", sessionPhone);
-        const backupPath = path6.join(backupDir, `creds-${timestamp}.json`);
-        await fs3.ensureDir(backupDir);
-        await fs3.copy(credsPath, backupPath);
-        logger_default.info(`\u2705 Backed up credentials for ${sessionPhone} to ${backupPath}`);
-        await this.cleanupOldBackups(backupDir, 20);
-      }
-      await fs3.remove(sessionDir);
-      logger_default.info(`\u{1F5D1}\uFE0F Auth state cleared for ${sessionPhone}`);
-    } catch (error) {
-      logger_default.error(`\u274C Failed to backup/clear auth state for ${sessionPhone}:`, error);
-    }
-  }
-  /**
-   * Mantiene solo los N backups más recientes
-   * Aumentado a 20 backups para mayor seguridad de recuperación
-   */
-  async cleanupOldBackups(backupDir, keepCount = 20) {
-    try {
-      const files = await fs3.readdir(backupDir);
-      const backupFiles = files.filter((f) => f.startsWith("creds-") && f.endsWith(".json")).sort().reverse();
-      for (let i = keepCount; i < backupFiles.length; i++) {
-        await fs3.remove(path6.join(backupDir, backupFiles[i]));
-      }
-    } catch (error) {
-      logger_default.warn(`Failed to cleanup old backups: ${error}`);
-    }
-  }
-  /**
-   * 🔄 Restaurar credenciales desde backup (para recuperación manual)
-   */
-  async restoreFromBackup(sessionPhone, backupTimestamp) {
-    try {
-      const sessionDir = path6.join(config.whatsapp.sessionDir, sessionPhone);
-      const backupDir = path6.join(config.whatsapp.sessionDir, "backups", sessionPhone);
-      if (!await fs3.pathExists(backupDir)) {
-        logger_default.error(`No backups found for ${sessionPhone}`);
-        return false;
-      }
-      let backupFile;
-      if (backupTimestamp) {
-        backupFile = `creds-${backupTimestamp}.json`;
-      } else {
-        const files = await fs3.readdir(backupDir);
-        const backups = files.filter((f) => f.startsWith("creds-") && f.endsWith(".json")).sort().reverse();
-        if (backups.length === 0) {
-          logger_default.error(`No backup files found for ${sessionPhone}`);
-          return false;
-        }
-        backupFile = backups[0];
-      }
-      const backupPath = path6.join(backupDir, backupFile);
-      const restorePath = path6.join(sessionDir, "creds.json");
-      await fs3.ensureDir(sessionDir);
-      await fs3.copy(backupPath, restorePath);
-      logger_default.info(`\u2705 Restored credentials for ${sessionPhone} from ${backupFile}`);
-      return true;
-    } catch (error) {
-      logger_default.error(`\u274C Failed to restore backup for ${sessionPhone}:`, error);
-      return false;
-    }
-  }
-  /**
-   * 📋 Listar todos los backups disponibles para una sesión
-   */
-  async listBackups(sessionPhone) {
-    try {
-      const backupDir = path6.join(config.whatsapp.sessionDir, "backups", sessionPhone);
-      if (!await fs3.pathExists(backupDir)) {
-        return [];
-      }
-      const files = await fs3.readdir(backupDir);
-      const backups = files.filter((f) => f.startsWith("creds-") && f.endsWith(".json")).sort().reverse();
-      const backupList = await Promise.all(
-        backups.map(async (file) => {
-          const filePath = path6.join(backupDir, file);
-          const stats = await fs3.stat(filePath);
-          const now = Date.now();
-          const ageMs = now - stats.mtimeMs;
-          const ageHours = Math.floor(ageMs / (1e3 * 60 * 60));
-          const ageDays = Math.floor(ageHours / 24);
-          let ageStr;
-          if (ageDays > 0) {
-            ageStr = `${ageDays}d ${ageHours % 24}h ago`;
-          } else if (ageHours > 0) {
-            ageStr = `${ageHours}h ago`;
-          } else {
-            const ageMinutes = Math.floor(ageMs / (1e3 * 60));
-            ageStr = `${ageMinutes}m ago`;
-          }
-          return {
-            filename: file,
-            timestamp: stats.mtime.toISOString(),
-            size: stats.size,
-            age: ageStr
-          };
-        })
-      );
-      return backupList;
-    } catch (error) {
-      logger_default.error(`Failed to list backups for ${sessionPhone}:`, error);
-      return [];
-    }
-  }
-  /**
-   * 🔄 Resetear estado de reconexión (útil cuando se queda en bucle)
-   */
-  async resetReconnect(sessionPhone) {
-    logger_default.info(`Resetting reconnect state for ${sessionPhone}`);
-    this.resetReconnectState(sessionPhone);
-  }
-  /**
-   * 🔍 Mejorada: Extrae el DisconnectReason con logging detallado
-   */
-  getDisconnectReason(error) {
-    if (isBoom(error)) {
-      const statusCode2 = error.output?.statusCode;
-      logger_default.debug(`Boom error detected: ${statusCode2} - ${error.message}`);
-      return statusCode2;
-    }
-    if (!error || typeof error !== "object") {
-      return void 0;
-    }
-    const maybe = error;
-    const statusCode = maybe.output?.statusCode ?? maybe.statusCode;
-    if (statusCode) {
-      const reasonName = this.getDisconnectReasonName(statusCode);
-      logger_default.debug(`Disconnect reason: ${statusCode} (${reasonName})`);
-    }
-    return statusCode;
-  }
-  /**
-   * 📝 Helper: Convierte código numérico a nombre legible
-   * Nota: Baileys usa códigos HTTP como DisconnectReason
-   */
-  getDisconnectReasonName(code) {
-    if (!code) return "unknown";
-    const reasons = {
-      401: "loggedOut",
-      403: "badSession",
-      408: "timedOut/connectionLost",
-      411: "multideviceMismatch",
-      428: "connectionClosed",
-      440: "connectionReplaced",
-      500: "internalError/streamError",
-      503: "serviceUnavailable",
-      515: "restartRequired"
-    };
-    return reasons[code] || `unknown(${code})`;
-  }
-  /**
-   * 🔄 Intenta restaurar desde el backup más reciente si existe y es reciente (< 24h)
-   * Esto previene pérdida de sesión por errores transitorios
-   * NOTA: Este método se llama solo en caso de badSession para restauración rápida
-   */
-  async tryRestoreRecentBackup(sessionPhone) {
-    try {
-      const backupDir = path6.join(config.whatsapp.sessionDir, "backups", sessionPhone);
-      if (!await fs3.pathExists(backupDir)) {
-        return false;
-      }
-      const files = await fs3.readdir(backupDir);
-      const backups = files.filter((f) => f.startsWith("creds-") && f.endsWith(".json")).sort().reverse();
-      if (backups.length === 0) {
-        return false;
-      }
-      const latestBackup = backups[0];
-      const backupPath = path6.join(backupDir, latestBackup);
-      const backupStats = await fs3.stat(backupPath);
-      const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1e3;
-      if (backupStats.mtimeMs < twentyFourHoursAgo) {
-        logger_default.warn(`Latest backup for ${sessionPhone} is too old (${latestBackup}), skipping quick restore`);
-        return false;
-      }
-      const sessionDir = path6.join(config.whatsapp.sessionDir, sessionPhone);
-      const restorePath = path6.join(sessionDir, "creds.json");
-      await fs3.ensureDir(sessionDir);
-      await fs3.copy(backupPath, restorePath);
-      logger_default.info(`\u2705 Auto-restored credentials for ${sessionPhone} from recent backup (${latestBackup})`);
-      return true;
-    } catch (error) {
-      logger_default.warn(`Failed to auto-restore recent backup for ${sessionPhone}: ${error}`);
-      return false;
-    }
-  }
-  /**
-   * 🛡️ AUTO-RECUPERACIÓN COMPLETA: Intenta restaurar sesión desde CUALQUIER backup disponible
-   * Este método es más agresivo que tryRestoreRecentBackup:
-   * - No tiene límite de tiempo (acepta backups antiguos)
-   * - Valida que el backup sea válido antes de restaurar
-   * - Es la última línea de defensa contra pérdida de sesión
-   *
-   * Se llama automáticamente en:
-   * - createConnection (si no hay credenciales)
-   * - scheduleReconnect (si no hay credenciales)
-   * - reconnectSavedSessions (para sesiones perdidas con backups)
-   */
-  async autoRecoverSession(sessionPhone) {
-    try {
-      const backupDir = path6.join(config.whatsapp.sessionDir, "backups", sessionPhone);
-      if (!await fs3.pathExists(backupDir)) {
-        logger_default.debug(`No backup directory found for ${sessionPhone}`);
-        return false;
-      }
-      const files = await fs3.readdir(backupDir);
-      const backups = files.filter((f) => f.startsWith("creds-") && f.endsWith(".json")).sort().reverse();
-      if (backups.length === 0) {
-        logger_default.debug(`No backup files found for ${sessionPhone}`);
-        return false;
-      }
-      for (const backupFile of backups) {
-        const backupPath = path6.join(backupDir, backupFile);
-        try {
-          const backupStats = await fs3.stat(backupPath);
-          if (backupStats.size < 100) {
-            logger_default.warn(`Backup ${backupFile} is too small (${backupStats.size} bytes), skipping`);
-            continue;
-          }
-          const backupContent = await fs3.readJson(backupPath);
-          if (!backupContent || typeof backupContent !== "object") {
-            logger_default.warn(`Backup ${backupFile} has invalid content, skipping`);
-            continue;
-          }
-          const sessionDir = path6.join(config.whatsapp.sessionDir, sessionPhone);
-          const restorePath = path6.join(sessionDir, "creds.json");
-          await fs3.ensureDir(sessionDir);
-          await fs3.copy(backupPath, restorePath);
-          const age = this.getBackupAge(backupStats.mtimeMs);
-          logger_default.info(`\u2705 Auto-recovered session ${sessionPhone} from backup ${backupFile} (${age} old)`);
-          return true;
-        } catch (error) {
-          logger_default.warn(`Failed to restore from backup ${backupFile}: ${error}`);
-          continue;
-        }
-      }
-      logger_default.warn(`\u26A0\uFE0F No valid backups found for ${sessionPhone} (tried ${backups.length} backups)`);
-      return false;
-    } catch (error) {
-      logger_default.error(`\u274C Auto-recovery failed for ${sessionPhone}:`, error);
-      return false;
-    }
-  }
-  /**
-   * 🔍 Verifica si hay backups disponibles para una sesión
-   */
-  async hasAvailableBackup(sessionPhone) {
-    try {
-      const backupDir = path6.join(config.whatsapp.sessionDir, "backups", sessionPhone);
-      if (!await fs3.pathExists(backupDir)) {
-        return false;
-      }
-      const files = await fs3.readdir(backupDir);
-      const backups = files.filter((f) => f.startsWith("creds-") && f.endsWith(".json"));
-      return backups.length > 0;
-    } catch (error) {
-      return false;
-    }
-  }
-  /**
-   * 📅 Helper: Calcula la edad de un backup en formato legible
-   */
-  getBackupAge(timestampMs) {
-    const ageMs = Date.now() - timestampMs;
-    const ageHours = Math.floor(ageMs / (1e3 * 60 * 60));
-    const ageDays = Math.floor(ageHours / 24);
-    if (ageDays > 0) {
-      return `${ageDays}d ${ageHours % 24}h`;
-    } else if (ageHours > 0) {
-      return `${ageHours}h`;
-    } else {
-      const ageMinutes = Math.floor(ageMs / (1e3 * 60));
-      return `${ageMinutes}m`;
-    }
-  }
-  scheduleConnectWatchdog(sessionPhone) {
-    if (this.connectWatchdogs.has(sessionPhone)) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      this.connectWatchdogs.delete(sessionPhone);
-      if (this.connectionStates.get(sessionPhone) !== "open") {
-        const hasQR = this.qrCodes.has(sessionPhone);
-        if (hasQR) {
-          logger_default.info(`Connection watchdog: ${sessionPhone} has QR code waiting, not auto-reconnecting`);
-          return;
-        }
-        logger_default.warn(`Connection watchdog triggered for ${sessionPhone} (no connection after 90s)`);
-        this.cleanupSession(sessionPhone, { clearQr: false });
-        this.scheduleReconnect(sessionPhone);
-      }
-    }, 9e4);
-    this.connectWatchdogs.set(sessionPhone, timer);
-  }
-  clearConnectWatchdog(sessionPhone) {
-    const timer = this.connectWatchdogs.get(sessionPhone);
-    if (timer) {
-      clearTimeout(timer);
-      this.connectWatchdogs.delete(sessionPhone);
-    }
-  }
-  async flushOutbox(sessionPhone) {
-    const socket = this.connections.get(sessionPhone);
-    if (!socket || !this.isConnected(sessionPhone)) {
-      return;
-    }
-    const queue = await outbox_queue_default.list(sessionPhone);
-    if (queue.length === 0) {
-      return;
-    }
-    logger_default.info(`Flushing ${queue.length} queued messages for ${sessionPhone}`);
-    for (const item of queue) {
-      try {
-        await socket.sendMessage(item.recipient, { text: item.text });
-        await outbox_queue_default.remove(sessionPhone, item.id);
-      } catch (error) {
-        const updated = {
-          ...item,
-          attempts: item.attempts + 1,
-          lastError: String(error)
-        };
-        await outbox_queue_default.update(sessionPhone, updated);
-        logger_default.warn(`Failed to flush queued message ${item.id}: ${String(error)}`);
-        break;
-      }
-    }
-  }
-};
-var connection_manager_default = new ConnectionManager();
-
-// src/api/controllers/session.controller.ts
-init_logger();
-init_environment();
-async function waitForQRCode(phoneNumber, timeoutMs = config.whatsapp.qrTimeout, intervalMs = 300) {
+async function waitForQRCode(phoneNumber, timeoutMs = 6e4, intervalMs = 300) {
   const start = Date.now();
   return new Promise((resolve) => {
     const timer = setInterval(() => {
-      const qr = connection_manager_default.getQRCode(phoneNumber);
+      const qr = getQRCode(phoneNumber);
       if (qr) {
         clearInterval(timer);
         resolve(qr);
@@ -6458,7 +14200,7 @@ async function waitForQRCode(phoneNumber, timeoutMs = config.whatsapp.qrTimeout,
     }, intervalMs);
   });
 }
-async function createSession(req, res, next) {
+async function createSessionHandler(req, res, next) {
   try {
     const { phoneNumber } = req.body;
     if (!phoneNumber) {
@@ -6467,14 +14209,16 @@ async function createSession(req, res, next) {
       return next(error);
     }
     logger_default.info(`Creating session for ${phoneNumber}`);
-    await connection_manager_default.createConnection(phoneNumber);
+    startSession(phoneNumber, (qr2) => {
+      logger_default.info(`QR generated for ${phoneNumber}`);
+    });
     const qr = await waitForQRCode(phoneNumber);
     const qrImage = qr ? await qrcode.toDataURL(qr) : void 0;
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
       data: {
         phoneNumber,
-        status: connection_manager_default.getConnectionStatus(phoneNumber),
+        status: isSessionReady(phoneNumber) ? "connected" : "connecting",
         qr,
         qrImage
       }
@@ -6483,7 +14227,7 @@ async function createSession(req, res, next) {
     next(error);
   }
 }
-async function getSessionStatus(req, res, next) {
+async function createPairingSessionHandler(req, res, next) {
   try {
     const { phoneNumber } = req.params;
     if (!phoneNumber) {
@@ -6491,14 +14235,40 @@ async function getSessionStatus(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const status = connection_manager_default.getConnectionStatus(phoneNumber);
-    const qr = connection_manager_default.getQRCode(phoneNumber);
+    logger_default.info(`Creating pairing code session for ${phoneNumber}`);
+    let pairingCode = "";
+    await createPairingSession(phoneNumber, (code) => {
+      pairingCode = code;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 2e3));
+    res.status(HTTP_STATUS.CREATED).json({
+      success: true,
+      data: {
+        phoneNumber,
+        pairingCode,
+        instructions: "Open WhatsApp \u2192 Settings \u2192 Linked Devices \u2192 Link with phone number \u2192 Enter this code"
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function getSessionStatusHandler(req, res, next) {
+  try {
+    const { phoneNumber } = req.params;
+    if (!phoneNumber) {
+      const error = new Error("phoneNumber is required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const isConnected = isSessionReady(phoneNumber);
+    const qr = getQRCode(phoneNumber);
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         phoneNumber,
-        status,
-        isConnected: connection_manager_default.isConnected(phoneNumber),
+        status: isConnected ? "connected" : "disconnected",
+        isConnected,
         ...qr && { qr }
       }
     });
@@ -6506,7 +14276,7 @@ async function getSessionStatus(req, res, next) {
     next(error);
   }
 }
-async function disconnectSession(req, res, next) {
+async function disconnectSessionHandler(req, res, next) {
   try {
     const { phoneNumber } = req.params;
     if (!phoneNumber) {
@@ -6514,7 +14284,7 @@ async function disconnectSession(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    await connection_manager_default.disconnect(phoneNumber);
+    await disconnectSession2(phoneNumber);
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: `Session ${phoneNumber} disconnected`
@@ -6523,26 +14293,26 @@ async function disconnectSession(req, res, next) {
     next(error);
   }
 }
-async function getAllSessions(req, res, next) {
+async function getAllSessionsHandler(req, res, next) {
   try {
-    const connections = connection_manager_default.getAllConnections();
-    const sessions = Array.from(connections.keys()).map((phone) => ({
+    const sessionIds = listSessions();
+    const sessions2 = sessionIds.map((phone) => ({
       phoneNumber: phone,
-      status: connection_manager_default.getConnectionStatus(phone),
-      isConnected: connection_manager_default.isConnected(phone)
+      status: isSessionReady(phone) ? "connected" : "disconnected",
+      isConnected: isSessionReady(phone)
     }));
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
-        total: sessions.length,
-        sessions
+        total: sessions2.length,
+        sessions: sessions2
       }
     });
   } catch (error) {
     next(error);
   }
 }
-async function getQRCodeImage(req, res, next) {
+async function getQRCodeImageHandler(req, res, next) {
   try {
     const { phoneNumber } = req.params;
     if (!phoneNumber) {
@@ -6550,10 +14320,13 @@ async function getQRCodeImage(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    if (!connection_manager_default.getConnection(phoneNumber)) {
-      await connection_manager_default.createConnection(phoneNumber);
+    const existingSession = getSession(phoneNumber);
+    if (!existingSession) {
+      startSession(phoneNumber, (qr2) => {
+        logger_default.info(`QR generated for ${phoneNumber}`);
+      });
     }
-    const qr = await waitForQRCode(phoneNumber) ?? connection_manager_default.getQRCode(phoneNumber);
+    const qr = await waitForQRCode(phoneNumber) ?? getQRCode(phoneNumber);
     if (!qr) {
       const error = new Error("QR not available");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -6579,7 +14352,7 @@ async function getQRCodeImage(req, res, next) {
     next(error);
   }
 }
-async function getGroupList(req, res, next) {
+async function getGroupListHandler(req, res, next) {
   try {
     const { phoneNumber } = req.params;
     if (!phoneNumber) {
@@ -6587,19 +14360,21 @@ async function getGroupList(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const isConnected = await connection_manager_default.ensureConnected(phoneNumber);
-    if (!isConnected) {
+    if (!WhatsAppDirectService.isSessionActive(phoneNumber)) {
       const error = new Error("Session not connected");
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
-    const groups = await connection_manager_default.getGroups(phoneNumber);
-    res.status(HTTP_STATUS.OK).json(groups);
+    const groups = WhatsAppDirectService.listGroups(phoneNumber);
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      groups
+    });
   } catch (error) {
     next(error);
   }
 }
-async function syncGroups(req, res, next) {
+async function syncGroupsHandler(req, res, next) {
   try {
     const { phoneNumber } = req.params;
     if (!phoneNumber) {
@@ -6607,14 +14382,25 @@ async function syncGroups(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const isConnected = await connection_manager_default.ensureConnected(phoneNumber);
-    if (!isConnected) {
+    if (!WhatsAppDirectService.isSessionActive(phoneNumber)) {
       const error = new Error("Session not connected");
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
-    const groups = await connection_manager_default.getGroups(phoneNumber);
-    res.status(HTTP_STATUS.OK).json(groups);
+    logger_default.info(`Syncing groups for ${phoneNumber} using refreshGroups`);
+    const result = await WhatsAppDirectService.refreshGroups(phoneNumber);
+    if (result.success) {
+      const groups = WhatsAppDirectService.listGroups(phoneNumber);
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        groupCount: result.groupCount,
+        groups
+      });
+    } else {
+      const error = new Error(result.error || "Failed to sync groups");
+      error.statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR;
+      return next(error);
+    }
   } catch (error) {
     next(error);
   }
@@ -6627,614 +14413,1117 @@ async function getContactsHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const isConnected = await connection_manager_default.ensureConnected(phoneNumber);
-    if (!isConnected) {
+    if (!WhatsAppDirectService.isSessionActive(phoneNumber)) {
       const error = new Error("Session not connected");
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
-    const contacts = await connection_manager_default.getContacts(phoneNumber);
-    res.status(HTTP_STATUS.OK).json(contacts);
-  } catch (error) {
-    next(error);
-  }
-}
-async function logoutSession(req, res, next) {
-  try {
-    const { phoneNumber } = req.params;
-    if (!phoneNumber) {
-      const error = new Error("phoneNumber is required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    await connection_manager_default.disconnect(phoneNumber);
+    const contacts = WhatsAppDirectService.listContacts(phoneNumber);
     res.status(HTTP_STATUS.OK).json({
       success: true,
-      message: `Session ${phoneNumber} disconnected`
+      contacts
     });
   } catch (error) {
     next(error);
   }
 }
-async function listActiveSessions(req, res, next) {
-  return getAllSessions(req, res, next);
-}
-async function restoreSessionFromBackup(req, res, next) {
-  try {
-    const { phoneNumber } = req.params;
-    const { backupTimestamp } = req.body;
-    if (!phoneNumber) {
-      const error = new Error("phoneNumber is required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    logger_default.info(`Attempting to restore session ${phoneNumber} from backup`);
-    try {
-      await connection_manager_default.disconnect(phoneNumber);
-    } catch (e) {
-    }
-    const restored = await connection_manager_default.restoreFromBackup(phoneNumber, backupTimestamp);
-    if (!restored) {
-      const error = new Error("Failed to restore from backup - no backups found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    await connection_manager_default.createConnection(phoneNumber);
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: `Session ${phoneNumber} restored from backup and reconnecting`,
-      data: {
-        phoneNumber,
-        status: connection_manager_default.getConnectionStatus(phoneNumber)
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function listSessionBackups(req, res, next) {
-  try {
-    const { phoneNumber } = req.params;
-    if (!phoneNumber) {
-      const error = new Error("phoneNumber is required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const backups = await connection_manager_default.listBackups(phoneNumber);
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      data: {
-        phoneNumber,
-        backups,
-        total: backups.length
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function resetReconnectState(req, res, next) {
-  try {
-    const { phoneNumber } = req.params;
-    if (!phoneNumber) {
-      const error = new Error("phoneNumber is required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    logger_default.info(`Resetting reconnect state for ${phoneNumber}`);
-    await connection_manager_default.resetReconnect(phoneNumber);
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: `Reconnect state reset for ${phoneNumber}`
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+var logoutSession = disconnectSessionHandler;
+var listActiveSessions = getAllSessionsHandler;
+var createSession = createSessionHandler;
+var getSessionStatus = getSessionStatusHandler;
+var disconnectSession2 = disconnectSessionHandler;
+var getAllSessions = getAllSessionsHandler;
+var getQRCodeImage = getQRCodeImageHandler;
+var getGroupList = getGroupListHandler;
+var syncGroups = syncGroupsHandler;
 
 // src/api/routes/session.routes.ts
 var router = Router();
 router.get("/list", listActiveSessions);
-router.post("/", sessionLimiter, createSession);
+router.post("/", createSession);
 router.get("/:phoneNumber/qr", getQRCodeImage);
+router.post("/:phoneNumber/request-pairing-code", createPairingSessionHandler);
 router.get("/:phoneNumber/status", getSessionStatus);
 router.post("/:phoneNumber/logout", logoutSession);
 router.get("/:phoneNumber/groups", getGroupList);
 router.get("/:phoneNumber/syncGroups", syncGroups);
 router.get("/:phoneNumber/contacts", getContactsHandler);
-router.delete("/:phoneNumber", disconnectSession);
-router.post("/:phoneNumber/restore", restoreSessionFromBackup);
-router.get("/:phoneNumber/backups", listSessionBackups);
-router.post("/:phoneNumber/reset-reconnect", resetReconnectState);
+router.delete("/:phoneNumber", disconnectSession2);
 router.get("/", getAllSessions);
 var session_routes_default = router;
 
-// src/api/routes/jobs.routes.ts
+// src/api/routes/jobs.routes.v2.ts
 import { Router as Router2 } from "express";
 
-// src/jobs/scheduler.service.ts
+// src/utils/validators.ts
+import Joi from "joi";
+function validateCronExpression(cron3) {
+  const cronRegex = /^((\d+,)*\d+|\*)(\/\d+)?( ((\d+,)*\d+|\*)(\/\d+)?){4}$/;
+  return cronRegex.test(cron3);
+}
+function validateCronJobCreate(data) {
+  const schema = Joi.object({
+    companyId: Joi.string().required(),
+    name: Joi.string().required().min(3).max(100),
+    type: Joi.string().valid("api", "message").required(),
+    isActive: Joi.boolean().default(true),
+    timeout: Joi.number().default(3e4).min(5e3).max(3e5),
+    schedule: Joi.object({
+      cronExpression: Joi.string().required().custom((value2, helpers) => {
+        if (!validateCronExpression(value2)) {
+          return helpers.error("any.invalid");
+        }
+        return value2;
+      }).messages({ "any.invalid": "Expresi\xF3n cron inv\xE1lida" }),
+      timezone: Joi.string().default("America/Lima")
+    }).required(),
+    message: Joi.when("type", {
+      is: "message",
+      then: Joi.object({
+        sender: Joi.string().optional(),
+        chatId: Joi.string().required(),
+        body: Joi.string().required().min(1),
+        mentions: Joi.array().items(Joi.string()).optional()
+      }).required(),
+      otherwise: Joi.object({
+        sender: Joi.string().optional(),
+        chatId: Joi.string().required(),
+        body: Joi.string().allow("").optional(),
+        mentions: Joi.array().items(Joi.string()).optional()
+      }).optional()
+    }),
+    apiConfig: Joi.object({
+      url: Joi.string().required().uri(),
+      method: Joi.string().valid("GET", "POST", "PUT").default("GET"),
+      headers: Joi.object().pattern(Joi.string(), Joi.string()).optional(),
+      body: Joi.any()
+    }).when("type", {
+      is: "api",
+      then: Joi.required(),
+      otherwise: Joi.optional()
+    }),
+    metadata: Joi.object({
+      createdBy: Joi.string().optional(),
+      updatedBy: Joi.string().optional(),
+      tags: Joi.array().items(Joi.string()).optional()
+    }).optional(),
+    retryPolicy: Joi.object({
+      maxRetries: Joi.number().default(3).min(0).max(10),
+      backoffMultiplier: Joi.number().default(2).min(1).max(5),
+      currentRetries: Joi.number().min(0).max(10).optional()
+    }).optional()
+  });
+  const { error, value } = schema.validate(data, {
+    abortEarly: false,
+    stripUnknown: true
+  });
+  if (error) {
+    const errors = error.details.map((detail) => ({
+      field: detail.path.join("."),
+      message: detail.message
+    }));
+    return { success: false, errors };
+  }
+  return { success: true, data: value };
+}
+function validateCronJobUpdate(data) {
+  const schema = Joi.object({
+    name: Joi.string().min(3).max(100),
+    type: Joi.string().valid("api", "message"),
+    isActive: Joi.boolean(),
+    timeout: Joi.number().min(5e3).max(3e5),
+    schedule: Joi.object({
+      cronExpression: Joi.string().custom((value2, helpers) => {
+        if (!validateCronExpression(value2)) {
+          return helpers.error("any.invalid");
+        }
+        return value2;
+      }).messages({ "any.invalid": "Expresi\xF3n cron inv\xE1lida" }),
+      timezone: Joi.string()
+    }).optional(),
+    message: Joi.object({
+      sender: Joi.string().optional(),
+      chatId: Joi.string().required(),
+      body: Joi.string().allow("").optional(),
+      mentions: Joi.array().items(Joi.string()).optional()
+    }).optional(),
+    apiConfig: Joi.object({
+      url: Joi.string().required().uri(),
+      method: Joi.string().valid("GET", "POST", "PUT"),
+      headers: Joi.object().pattern(Joi.string(), Joi.string()).optional(),
+      body: Joi.any()
+    }).optional(),
+    metadata: Joi.object({
+      updatedBy: Joi.string().optional(),
+      tags: Joi.array().items(Joi.string()).optional()
+    }).optional(),
+    retryPolicy: Joi.object({
+      maxRetries: Joi.number().min(0).max(10),
+      backoffMultiplier: Joi.number().min(1).max(5),
+      currentRetries: Joi.number().min(0).max(10).optional()
+    }).optional()
+  }).min(1);
+  const { error, value } = schema.validate(data, {
+    abortEarly: false,
+    stripUnknown: true
+  });
+  if (error) {
+    const errors = error.details.map((detail) => ({
+      field: detail.path.join("."),
+      message: detail.message
+    }));
+    return { success: false, errors };
+  }
+  return { success: true, data: value };
+}
+
+// src/api/controllers/jobs.controller.v2.ts
 init_logger();
-import cron from "node-cron";
-import axios from "axios";
+
+// src/database/sharedConnection.ts
+init_logger();
 init_environment();
-import path7 from "path";
-var JobScheduler = class {
+import mongoose from "mongoose";
+var sharedConnection = null;
+var connecting = null;
+async function getSharedConnection() {
+  if (sharedConnection && sharedConnection.readyState === 1) {
+    return sharedConnection;
+  }
+  if (connecting) {
+    return connecting;
+  }
+  logger_default.info("[SharedDB] Connecting to shared_db...");
+  connecting = mongoose.createConnection(config.mongodb.portalUri, {
+    dbName: config.mongodb.sharedDb,
+    serverSelectionTimeoutMS: 1e4,
+    socketTimeoutMS: 45e3,
+    maxPoolSize: 5,
+    minPoolSize: 1,
+    family: 4,
+    retryWrites: true,
+    heartbeatFrequencyMS: 1e4
+  }).asPromise().then((conn) => {
+    sharedConnection = conn;
+    connecting = null;
+    logger_default.info("[SharedDB] Connected");
+    return conn;
+  }).catch((error) => {
+    connecting = null;
+    logger_default.error("[SharedDB] Connection failed:", error);
+    throw error;
+  });
+  return connecting;
+}
+
+// src/models/cronjob.model.ts
+import { Schema } from "mongoose";
+var CronJobMessageSchema = new Schema(
+  {
+    sender: { type: String },
+    chatId: { type: String, required: true },
+    body: { type: String },
+    mentions: [{ type: String }]
+  },
+  { _id: false }
+);
+var CronJobApiConfigSchema = new Schema(
+  {
+    url: { type: String, required: true },
+    method: { type: String, enum: ["GET", "POST", "PUT"], default: "GET" },
+    headers: { type: Map, of: String },
+    body: Schema.Types.Mixed
+  },
+  { _id: false }
+);
+var CronJobScheduleSchema = new Schema(
+  {
+    cronExpression: { type: String, required: true },
+    timezone: { type: String, default: "America/Lima" },
+    nextRun: Date,
+    lastRun: Date
+  },
+  { _id: false }
+);
+var CronJobRetryPolicySchema = new Schema(
+  {
+    maxRetries: { type: Number, default: 3 },
+    backoffMultiplier: { type: Number, default: 2 },
+    currentRetries: { type: Number, default: 0 }
+  },
+  { _id: false }
+);
+var CronJobHistoryEntrySchema = new Schema(
+  {
+    status: { type: String, enum: ["success", "error"], required: true },
+    timestamp: { type: Date, required: true },
+    duration: Number,
+    error: String,
+    metadata: Schema.Types.Mixed
+  },
+  { _id: false }
+);
+var CronJobMetadataSchema = new Schema(
+  {
+    createdBy: String,
+    updatedBy: String,
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+    tags: [String],
+    legacyId: String,
+    legacyCompany: String
+  },
+  { _id: false }
+);
+var CronJobSchema = new Schema(
+  {
+    companyId: {
+      type: String,
+      required: true,
+      index: true
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 1,
+      maxlength: 100
+    },
+    type: {
+      type: String,
+      enum: ["api", "message"],
+      required: true
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true
+    },
+    timeout: { type: Number, default: 3e4 },
+    message: CronJobMessageSchema,
+    apiConfig: CronJobApiConfigSchema,
+    schedule: {
+      type: CronJobScheduleSchema,
+      required: true
+    },
+    retryPolicy: {
+      type: CronJobRetryPolicySchema,
+      default: () => ({
+        maxRetries: 3,
+        backoffMultiplier: 2,
+        currentRetries: 0
+      })
+    },
+    status: {
+      type: String,
+      enum: ["idle", "running", "success", "error"],
+      default: "idle"
+    },
+    lastExecution: Date,
+    failureCount: {
+      type: Number,
+      default: 0
+    },
+    lastError: String,
+    history: {
+      type: [CronJobHistoryEntrySchema],
+      default: []
+    },
+    metadata: {
+      type: CronJobMetadataSchema,
+      default: () => ({
+        createdAt: /* @__PURE__ */ new Date(),
+        updatedAt: /* @__PURE__ */ new Date(),
+        tags: []
+      })
+    }
+  },
+  {
+    timestamps: true
+  }
+);
+CronJobSchema.index({ companyId: 1, isActive: 1 });
+CronJobSchema.index({ companyId: 1, type: 1 });
+CronJobSchema.index({ "schedule.nextRun": 1 }, { sparse: true });
+CronJobSchema.pre("validate", function() {
+  if (this.type === "message" && !this.message) {
+    this.invalidate("message", 'message is required when type is "message"');
+  }
+  if (this.type === "message" && (!this.message?.body || !this.message.body.trim())) {
+    this.invalidate("message.body", 'message body is required when type is "message"');
+  }
+  if (this.type === "api" && !this.apiConfig) {
+    this.invalidate("apiConfig", 'apiConfig is required when type is "api"');
+  }
+});
+CronJobSchema.pre("save", function() {
+  if (this.history && this.history.length > 50) {
+    this.history = this.history.slice(-50);
+  }
+});
+
+// src/database/models.ts
+init_company_model();
+var cronJobModel = null;
+var companyModel = null;
+async function getCronJobModel() {
+  if (cronJobModel) {
+    return cronJobModel;
+  }
+  const conn = await getSharedConnection();
+  cronJobModel = conn.models.CronJob || conn.model("CronJob", CronJobSchema);
+  return cronJobModel;
+}
+async function getCompanyModel() {
+  if (companyModel) {
+    return companyModel;
+  }
+  const conn = await getSharedConnection();
+  companyModel = conn.models.Company || conn.model("Company", CompanySchema);
+  return companyModel;
+}
+async function getSharedModels() {
+  const [CronJobModel, CompanyModel] = await Promise.all([
+    getCronJobModel(),
+    getCompanyModel()
+  ]);
+  return { CronJobModel, CompanyModel };
+}
+
+// src/api/controllers/jobs.controller.v2.ts
+var JobsControllerV2 = class {
+  constructor(scheduler) {
+    this.createJob = async (req, res) => {
+      try {
+        const validation = validateCronJobCreate(req.body);
+        if (!validation.success) {
+          return res.status(400).json({
+            ok: false,
+            message: "Validation failed",
+            errors: validation.errors
+          });
+        }
+        const job = await this.scheduler.createJob(validation.data);
+        return res.status(201).json({
+          ok: true,
+          data: job
+        });
+      } catch (error) {
+        logger_default.error("[JobsControllerV2] Create job failed:", error);
+        return res.status(500).json({
+          ok: false,
+          message: error.message
+        });
+      }
+    };
+    this.listJobs = async (req, res) => {
+      try {
+        const { companyId, type, isActive } = req.query;
+        const filter = {};
+        if (companyId) filter.companyId = companyId;
+        if (type) filter.type = type;
+        if (isActive !== void 0) filter.isActive = isActive === "true";
+        const { CronJobModel } = await getSharedModels();
+        const jobs = await CronJobModel.find(filter).sort({
+          "metadata.createdAt": -1
+        });
+        return res.status(200).json({
+          ok: true,
+          data: jobs
+        });
+      } catch (error) {
+        logger_default.error("[JobsControllerV2] List jobs failed:", error);
+        return res.status(500).json({
+          ok: false,
+          message: error.message
+        });
+      }
+    };
+    this.getJob = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const job = await this.scheduler.getJob(id);
+        if (!job) {
+          return res.status(404).json({
+            ok: false,
+            message: "Job not found"
+          });
+        }
+        return res.status(200).json({
+          ok: true,
+          data: job
+        });
+      } catch (error) {
+        logger_default.error("[JobsControllerV2] Get job failed:", error);
+        return res.status(500).json({
+          ok: false,
+          message: error.message
+        });
+      }
+    };
+    this.updateJob = async (req, res) => {
+      try {
+        const { id } = req.params;
+        const validation = validateCronJobUpdate(req.body);
+        if (!validation.success) {
+          return res.status(400).json({
+            ok: false,
+            message: "Validation failed",
+            errors: validation.errors
+          });
+        }
+        const job = await this.scheduler.updateJob(id, validation.data);
+        return res.status(200).json({
+          ok: true,
+          data: job
+        });
+      } catch (error) {
+        logger_default.error("[JobsControllerV2] Update job failed:", error);
+        return res.status(500).json({
+          ok: false,
+          message: error.message
+        });
+      }
+    };
+    this.deleteJob = async (req, res) => {
+      try {
+        const { id } = req.params;
+        await this.scheduler.deleteJob(id);
+        return res.status(200).json({
+          ok: true,
+          message: `Job ${id} deleted`
+        });
+      } catch (error) {
+        logger_default.error("[JobsControllerV2] Delete job failed:", error);
+        return res.status(500).json({
+          ok: false,
+          message: error.message
+        });
+      }
+    };
+    this.runJobNow = async (req, res) => {
+      try {
+        const { id } = req.params;
+        await this.scheduler.runJobNow(id);
+        return res.status(200).json({
+          ok: true,
+          message: `Job ${id} executed`
+        });
+      } catch (error) {
+        logger_default.error("[JobsControllerV2] Run job failed:", error);
+        return res.status(500).json({
+          ok: false,
+          message: error.message
+        });
+      }
+    };
+    this.scheduler = scheduler;
+  }
+};
+
+// src/jobs/scheduler.service.v2.ts
+import cron from "node-cron";
+
+// src/jobs/executor.service.ts
+import axios2 from "axios";
+init_whatsapp_direct_service();
+init_logger();
+var JobExecutor = class {
+  constructor() {
+  }
+  resolveRetryPolicy(job) {
+    const maxRetries = Math.min(job.retryPolicy?.maxRetries ?? 1, 1);
+    const backoffMultiplier = job.retryPolicy?.backoffMultiplier ?? 1;
+    const currentRetries = job.retryPolicy?.currentRetries ?? 0;
+    return {
+      maxRetries: Math.max(0, maxRetries),
+      backoffMultiplier: Math.max(1, backoffMultiplier),
+      currentRetries: Math.max(0, currentRetries)
+    };
+  }
+  prependBotPrefix(message, prefix) {
+    const fallbackPrefix = "\u{1F916} ConstRoadBot";
+    const effectivePrefix = prefix && prefix.trim() ? prefix.trim() : fallbackPrefix;
+    const trimmed = (message ?? "").trim();
+    if (!trimmed) {
+      return effectivePrefix;
+    }
+    const normalized = trimmed.replace(/\r\n/g, "\n");
+    if (normalized.toLowerCase().startsWith(effectivePrefix.toLowerCase())) {
+      return normalized;
+    }
+    return `${effectivePrefix}
+
+${normalized}`;
+  }
+  normalizeRecipient(raw) {
+    const trimmed = raw.trim();
+    if (!trimmed) return trimmed;
+    if (trimmed.includes("@")) return trimmed;
+    const normalized = trimmed.replace(/[^\d]/g, "");
+    return `${normalized}@s.whatsapp.net`;
+  }
+  async execute(job) {
+    const startTime = Date.now();
+    const { CronJobModel, CompanyModel } = await getSharedModels();
+    try {
+      logger_default.info(
+        `[JobExecutor] Executing job ${job._id} (${job.name}) for company ${job.companyId}`
+      );
+      await CronJobModel.updateOne(
+        { _id: job._id },
+        { status: "running", lastExecution: /* @__PURE__ */ new Date() }
+      );
+      const company = await CompanyModel.findOne({ companyId: job.companyId });
+      if (!company) {
+        throw new Error(`Company ${job.companyId} not found`);
+      }
+      const sender = company.whatsappConfig?.sender;
+      const cronjobPrefix = company.whatsappConfig?.cronjobPrefix;
+      const hasChatId = Boolean(job.message?.chatId);
+      const hasBody = Boolean(job.message?.body?.trim());
+      if (!sender && (job.type === "message" || hasChatId)) {
+        throw new Error(`No sender configured for company ${job.companyId}`);
+      }
+      if (job.type === "message") {
+        await this.executeMessage(job, sender, cronjobPrefix);
+      } else if (job.type === "api") {
+        const apiMessages = await this.executeApi(job);
+        if (apiMessages && apiMessages.length > 0) {
+          await this.executeBatchMessages(
+            sender,
+            apiMessages,
+            cronjobPrefix,
+            job.message?.chatId
+          );
+        } else if (hasChatId && hasBody) {
+          await this.executeMessage(job, sender, cronjobPrefix);
+        }
+      }
+      const duration = Date.now() - startTime;
+      await this.recordSuccess(job, duration);
+      logger_default.info(
+        `[JobExecutor] Job ${job._id} completed successfully in ${duration}ms`
+      );
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger_default.error(`[JobExecutor] Job ${job._id} failed:`, error);
+      const retryPolicy = this.resolveRetryPolicy(job);
+      if (retryPolicy.currentRetries < retryPolicy.maxRetries) {
+        await this.scheduleRetry(job, error, retryPolicy);
+      } else {
+        await this.recordError(job, error, duration);
+      }
+    }
+  }
+  async executeMessage(job, sender, prefix, overrideBody) {
+    if (!job.message) {
+      throw new Error("Message configuration is missing");
+    }
+    const { chatId, body, mentions } = job.message;
+    const resolvedBody = (overrideBody ?? body ?? "").trim();
+    const messageBody = this.prependBotPrefix(resolvedBody, prefix ?? "");
+    await WhatsAppDirectService.sendMessage(sender, chatId, messageBody, {
+      mentions: mentions || [],
+      queueOnFail: true
+    });
+    logger_default.info(`[JobExecutor] Message sent to ${chatId}`);
+  }
+  async executeBatchMessages(sender, items, prefix, defaultTo) {
+    for (const item of items) {
+      const rawTo = item.to ?? defaultTo;
+      if (!rawTo) {
+        logger_default.warn("[JobExecutor] Skipping message with no recipient");
+        continue;
+      }
+      const recipient = this.normalizeRecipient(rawTo);
+      const messageBody = this.prependBotPrefix(item.message, prefix ?? "");
+      await WhatsAppDirectService.sendMessage(sender, recipient, messageBody, {
+        mentions: item.mentions || [],
+        queueOnFail: true
+      });
+      logger_default.info(`[JobExecutor] Message sent to ${recipient}`);
+    }
+  }
+  shouldUseApiResponseMessage(job, requestHeaders) {
+    const headers = requestHeaders ?? job.apiConfig?.headers ?? {};
+    const rawFlag = headers["x-cronjob-return-message"] || headers["x-cronjob-use-response-message"];
+    if (rawFlag && rawFlag !== "0" && rawFlag !== "false") {
+      return true;
+    }
+    const url = job.apiConfig?.url;
+    if (!url) return false;
+    try {
+      const parsed = new URL(url, "http://localhost");
+      const param = parsed.searchParams.get("returnMessage");
+      return param === "1" || param === "true" || param === "yes";
+    } catch {
+      return false;
+    }
+  }
+  coerceApiMessages(payload, defaultTo) {
+    if (!payload) return void 0;
+    const toItem = (value) => {
+      if (!value) return null;
+      if (typeof value === "string") {
+        return { to: defaultTo, message: value };
+      }
+      if (typeof value === "object") {
+        const message = typeof value.message === "string" ? value.message : void 0;
+        if (!message) return null;
+        const to = typeof value.to === "string" ? value.to : defaultTo;
+        const mentions = Array.isArray(value.mentions) ? value.mentions.filter((m) => typeof m === "string") : void 0;
+        return { to, message, mentions };
+      }
+      return null;
+    };
+    if (Array.isArray(payload)) {
+      const items = payload.map(toItem).filter(Boolean);
+      return items.length > 0 ? items : void 0;
+    }
+    const single = toItem(payload);
+    return single ? [single] : void 0;
+  }
+  mergeApiMessages(primary, secondary) {
+    if (primary && secondary) return [...primary, ...secondary];
+    if (primary && primary.length > 0) return primary;
+    if (secondary && secondary.length > 0) return secondary;
+    return void 0;
+  }
+  extractMessageFromApiResponse(data, companyId, defaultTo) {
+    if (!data) return void 0;
+    const topMessages = this.coerceApiMessages(data.messages, defaultTo);
+    const topMessage = this.coerceApiMessages(data.message, defaultTo);
+    const topLevel = this.mergeApiMessages(topMessages, topMessage);
+    if (topLevel && topLevel.length > 0) return topLevel;
+    const tenantResults = Array.isArray(data.tenantResults) ? data.tenantResults : null;
+    if (!tenantResults || tenantResults.length === 0) return void 0;
+    const match = companyId ? tenantResults.find((t) => t?.companyId === companyId) : tenantResults[0];
+    const resultMessages = this.coerceApiMessages(match?.result?.messages, defaultTo);
+    const resultMessage = this.coerceApiMessages(match?.result?.message, defaultTo);
+    return this.mergeApiMessages(resultMessages, resultMessage);
+  }
+  async executeApi(job) {
+    if (!job.apiConfig) {
+      throw new Error("API configuration is missing");
+    }
+    const { url, method, headers, body } = job.apiConfig;
+    const requestHeaders = {
+      ...headers || {}
+    };
+    if (job.companyId && !requestHeaders["x-company-id"]) {
+      requestHeaders["x-company-id"] = String(job.companyId);
+    }
+    if (job.message?.chatId && !requestHeaders["x-cronjob-chat-id"]) {
+      requestHeaders["x-cronjob-chat-id"] = String(job.message.chatId);
+    }
+    if (!requestHeaders["x-cronjob-return-message"] && !requestHeaders["x-cronjob-use-response-message"] && job.message?.chatId) {
+      requestHeaders["x-cronjob-return-message"] = "1";
+    }
+    const response = await axios2.request({
+      url,
+      method,
+      headers: requestHeaders,
+      data: body,
+      timeout: job.timeout || 3e4
+    });
+    logger_default.info(`[JobExecutor] API call to ${url} returned ${response.status}`);
+    if (!this.shouldUseApiResponseMessage(job, requestHeaders)) {
+      return void 0;
+    }
+    const messages = this.extractMessageFromApiResponse(
+      response.data,
+      job.companyId,
+      job.message?.chatId
+    );
+    if (!messages || messages.length === 0) {
+      logger_default.warn(`[JobExecutor] API response did not include messages to send`);
+    }
+    return messages;
+  }
+  async recordSuccess(job, duration) {
+    const { CronJobModel } = await getSharedModels();
+    await CronJobModel.updateOne(
+      { _id: job._id },
+      {
+        status: "success",
+        failureCount: 0,
+        lastError: null,
+        "retryPolicy.currentRetries": 0,
+        $push: {
+          history: {
+            $each: [
+              {
+                status: "success",
+                timestamp: /* @__PURE__ */ new Date(),
+                duration
+              }
+            ],
+            $slice: -50
+          }
+        }
+      }
+    );
+  }
+  async recordError(job, error, duration) {
+    const { CronJobModel } = await getSharedModels();
+    await CronJobModel.updateOne(
+      { _id: job._id },
+      {
+        status: "error",
+        $inc: { failureCount: 1 },
+        lastError: error.message,
+        $push: {
+          history: {
+            $each: [
+              {
+                status: "error",
+                timestamp: /* @__PURE__ */ new Date(),
+                duration,
+                error: error.message
+              }
+            ],
+            $slice: -50
+          }
+        }
+      }
+    );
+  }
+  async scheduleRetry(job, error, retryPolicy) {
+    const { CronJobModel } = await getSharedModels();
+    const currentRetries = retryPolicy.currentRetries;
+    const maxRetries = retryPolicy.maxRetries;
+    const backoffMultiplier = retryPolicy.backoffMultiplier;
+    const backoffDelay = Math.pow(backoffMultiplier, currentRetries) * 1e3;
+    logger_default.info(
+      `[JobExecutor] Scheduling retry ${currentRetries + 1}/${maxRetries} for job ${job._id} in ${backoffDelay}ms`
+    );
+    const nextRetries = currentRetries + 1;
+    await CronJobModel.updateOne(
+      { _id: job._id },
+      { "retryPolicy.currentRetries": nextRetries }
+    );
+    const nextJob = {
+      ...job,
+      retryPolicy: {
+        ...job.retryPolicy ?? {},
+        maxRetries,
+        backoffMultiplier,
+        currentRetries: nextRetries
+      }
+    };
+    setTimeout(async () => {
+      await this.execute(nextJob);
+    }, backoffDelay);
+  }
+};
+
+// src/utils/cronHelpers.ts
+var import_cron_parser = __toESM(require_parser(), 1);
+function calculateNextRun(cronExpression, timezone = "America/Lima") {
+  const interval = import_cron_parser.default.parseExpression(cronExpression, {
+    currentDate: /* @__PURE__ */ new Date(),
+    tz: timezone
+  });
+  return interval.next().toDate();
+}
+
+// src/jobs/scheduler.service.v2.ts
+init_logger();
+var JobSchedulerV2 = class {
   constructor() {
     this.scheduledTasks = /* @__PURE__ */ new Map();
-    this.jobsFile = config.jobs.storageFile;
-    this.store = new json_store_default({
-      baseDir: path7.dirname(this.jobsFile),
-      autoBackup: true
-    });
+    this.executor = new JobExecutor();
   }
   async initialize() {
     try {
-      logger_default.info("Initializing Job Scheduler...");
-      const jobs = await this.loadJobs();
-      for (const job of jobs) {
+      logger_default.info("[JobScheduler] Initializing v2...");
+      const { CronJobModel } = await getSharedModels();
+      const activeJobs = await CronJobModel.find({ isActive: true });
+      logger_default.info(`[JobScheduler] Found ${activeJobs.length} active jobs`);
+      for (const job of activeJobs) {
+        await this.scheduleJob(job, { silent: true });
+      }
+      logger_default.info(`[JobScheduler] Scheduled ${activeJobs.length} active jobs`);
+      logger_default.info("[JobScheduler] Initialization complete");
+    } catch (error) {
+      logger_default.error("[JobScheduler] Initialization failed:", error);
+      throw error;
+    }
+  }
+  async createJob(data) {
+    try {
+      const { CronJobModel, CompanyModel } = await getSharedModels();
+      const company = await CompanyModel.findOne({ companyId: data.companyId });
+      if (!company) {
+        throw new Error(`Company ${data.companyId} not found`);
+      }
+      if (data.type === "message" && !company.whatsappConfig?.sender) {
+        throw new Error(
+          `Company ${data.companyId} does not have WhatsApp sender configured`
+        );
+      }
+      const limit = company.subscription?.limits?.cronJobs;
+      if (typeof limit === "number") {
+        const currentCount = await CronJobModel.countDocuments({
+          companyId: data.companyId,
+          isActive: true
+        });
+        if (currentCount >= limit) {
+          throw new Error(`Cronjob limit reached for company ${data.companyId}`);
+        }
+      }
+      const schedule = data.schedule || {
+        cronExpression: "",
+        timezone: "America/Lima"
+      };
+      if (schedule.cronExpression) {
+        schedule.nextRun = calculateNextRun(
+          schedule.cronExpression,
+          schedule.timezone || "America/Lima"
+        );
+      }
+      const job = await CronJobModel.create({
+        ...data,
+        schedule,
+        metadata: {
+          ...data.metadata,
+          createdAt: /* @__PURE__ */ new Date(),
+          updatedAt: /* @__PURE__ */ new Date()
+        }
+      });
+      if (company.subscription?.usage?.cronJobs !== void 0) {
+        await CompanyModel.updateOne(
+          { companyId: data.companyId },
+          { $inc: { "subscription.usage.cronJobs": 1 } }
+        );
+      }
+      if (job.isActive) {
+        await this.scheduleJob(job);
+      }
+      logger_default.info(
+        `[JobScheduler] Created job ${job._id} for company ${job.companyId}`
+      );
+      return job;
+    } catch (error) {
+      logger_default.error("[JobScheduler] Failed to create job:", error);
+      throw error;
+    }
+  }
+  async updateJob(jobId, updates) {
+    try {
+      const { CronJobModel } = await getSharedModels();
+      const job = await CronJobModel.findById(jobId);
+      if (!job) {
+        throw new Error(`Job ${jobId} not found`);
+      }
+      if (job.type === "message" && updates.message && (!updates.message.body || !updates.message.body.trim())) {
+        throw new Error('message.body is required when type is "message"');
+      }
+      Object.assign(job, updates, {
+        "metadata.updatedAt": /* @__PURE__ */ new Date(),
+        "metadata.updatedBy": updates.metadata?.updatedBy
+      });
+      if (updates.schedule?.cronExpression) {
+        job.schedule.nextRun = calculateNextRun(
+          updates.schedule.cronExpression,
+          updates.schedule.timezone || job.schedule.timezone || "America/Lima"
+        );
+      }
+      await job.save();
+      if (updates.schedule?.cronExpression || updates.isActive !== void 0) {
+        this.unscheduleJob(jobId);
         if (job.isActive) {
           await this.scheduleJob(job);
         }
       }
-      logger_default.info(`Loaded and scheduled ${jobs.length} cron jobs`);
-    } catch (error) {
-      logger_default.error("Error initializing Job Scheduler:", error);
-    }
-  }
-  async createJob(jobData) {
-    try {
-      if (!validateCronExpression(jobData.cronExpression)) {
-        throw new Error("Invalid cron expression");
-      }
-      const type = jobData.type || (jobData.url ? "api" : "message");
-      const job = {
-        id: `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        ...jobData,
-        type,
-        url: jobData.url || "",
-        metadata: {
-          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-          updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-          failureCount: 0
-        },
-        retryPolicy: jobData.retryPolicy || { maxRetries: 3, backoffMultiplier: 2 },
-        timeout: jobData.timeout || 3e4
-      };
-      await this.saveJob(job);
-      if (job.isActive) {
-        await this.scheduleJob(job);
-      }
-      logger_default.info(`Created job: ${job.id}`);
+      logger_default.info(`[JobScheduler] Updated job ${jobId}`);
       return job;
     } catch (error) {
-      logger_default.error("Error creating job:", error);
+      logger_default.error("[JobScheduler] Failed to update job:", error);
       throw error;
     }
   }
-  async updateJob(id, updates) {
+  async deleteJob(jobId) {
     try {
-      const jobs = await this.loadJobs();
-      const jobIndex = jobs.findIndex((j) => j.id === id);
-      if (jobIndex === -1) {
-        throw new Error(`Job ${id} not found`);
-      }
-      const job = jobs[jobIndex];
-      const nextType = updates.type || job.type || (updates.url || job.url ? "api" : "message");
-      const updated = {
-        ...job,
-        ...updates,
-        id: job.id,
-        // No actualizar ID
-        type: nextType,
-        url: updates.url ?? job.url ?? "",
-        metadata: {
-          ...job.metadata,
-          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-        },
-        retryPolicy: updates.retryPolicy || job.retryPolicy || { maxRetries: 3, backoffMultiplier: 2 },
-        timeout: updates.timeout || job.timeout || 3e4
-      };
-      const scheduled = this.scheduledTasks.get(id);
-      if (scheduled) {
-        scheduled.task.stop();
-        this.scheduledTasks.delete(id);
-      }
-      jobs[jobIndex] = updated;
-      await this.saveAllJobs(jobs);
-      if (updated.isActive) {
-        await this.scheduleJob(updated);
-      }
-      logger_default.info(`Updated job: ${id}`);
-      return updated;
-    } catch (error) {
-      logger_default.error("Error updating job:", error);
-      throw error;
-    }
-  }
-  async deleteJob(id) {
-    try {
-      const scheduled = this.scheduledTasks.get(id);
-      if (scheduled) {
-        scheduled.task.stop();
-        this.scheduledTasks.delete(id);
-      }
-      const jobs = await this.loadJobs();
-      const filtered = jobs.filter((j) => j.id !== id);
-      await this.saveAllJobs(filtered);
-      logger_default.info(`Deleted job: ${id}`);
-    } catch (error) {
-      logger_default.error("Error deleting job:", error);
-      throw error;
-    }
-  }
-  async runJobNow(id) {
-    try {
-      const jobs = await this.loadJobs();
-      const job = jobs.find((j) => j.id === id);
+      const { CronJobModel, CompanyModel } = await getSharedModels();
+      const job = await CronJobModel.findById(jobId);
       if (!job) {
-        throw new Error(`Job ${id} not found`);
+        throw new Error(`Job ${jobId} not found`);
       }
-      logger_default.info(`Running job manually: ${job.name}`);
-      await this.executeJob(job, { throwOnError: true });
+      this.unscheduleJob(jobId);
+      if (job.companyId) {
+        await CompanyModel.updateOne(
+          { companyId: job.companyId },
+          { $inc: { "subscription.usage.cronJobs": -1 } }
+        );
+      }
+      await CronJobModel.deleteOne({ _id: jobId });
+      logger_default.info(`[JobScheduler] Deleted job ${jobId}`);
     } catch (error) {
-      logger_default.error(`Error running job ${id}:`, error);
+      logger_default.error("[JobScheduler] Failed to delete job:", error);
       throw error;
     }
   }
-  async getJob(id) {
-    const jobs = await this.loadJobs();
-    return jobs.find((j) => j.id === id) || null;
+  async runJobNow(jobId) {
+    try {
+      const { CronJobModel } = await getSharedModels();
+      const job = await CronJobModel.findById(jobId);
+      if (!job) {
+        throw new Error(`Job ${jobId} not found`);
+      }
+      logger_default.info(`[JobScheduler] Running job ${jobId} manually`);
+      await this.executor.execute(job);
+    } catch (error) {
+      logger_default.error("[JobScheduler] Failed to run job manually:", error);
+      throw error;
+    }
+  }
+  async getJobsByCompany(companyId) {
+    const { CronJobModel } = await getSharedModels();
+    return CronJobModel.find({ companyId }).sort({ "metadata.createdAt": -1 });
   }
   async getAllJobs() {
-    return await this.loadJobs();
+    const { CronJobModel } = await getSharedModels();
+    return CronJobModel.find({}).sort({ "metadata.createdAt": -1 });
   }
-  async getJobsByCompany(company) {
-    const jobs = await this.loadJobs();
-    return jobs.filter((j) => j.company === company);
+  async getJob(jobId) {
+    const { CronJobModel } = await getSharedModels();
+    return CronJobModel.findById(jobId);
   }
-  async scheduleJob(job) {
+  async scheduleJob(job, options = {}) {
     try {
-      if (!validateCronExpression(job.cronExpression)) {
-        throw new Error(`Invalid cron expression for job ${job.id}`);
-      }
-      const task = cron.schedule(job.cronExpression, async () => {
-        await this.executeJob(job);
-      });
-      this.scheduledTasks.set(job.id, { task, data: job });
-      logger_default.debug(`Scheduled job: ${job.id} - ${job.name}`);
-    } catch (error) {
-      logger_default.error(`Error scheduling job ${job.id}:`, error);
-    }
-  }
-  async executeJob(job, options = {}) {
-    try {
-      const startTime = Date.now();
-      const retryPolicy = job.retryPolicy || { maxRetries: 3, backoffMultiplier: 2 };
-      const timeout = job.timeout || 3e4;
-      logger_default.info(`Executing job: ${job.name} (${job.id})`);
-      if (job.type === "message") {
-        const sender = job.message?.sender;
-        const chatId = job.message?.chatId;
-        const body = job.message?.body;
-        if (!sender || !chatId || !body) {
-          throw new Error("Message job missing sender, chatId, or body");
+      const task = cron.schedule(
+        job.schedule.cronExpression,
+        async () => {
+          await this.executor.execute(job);
+        },
+        {
+          timezone: job.schedule.timezone || "America/Lima",
+          scheduled: true
         }
-        await retry(
-          async () => {
-            const result = await connection_manager_default.sendTextMessage(sender, chatId, body);
-            if (result.queued) {
-              logger_default.info(`Message job queued for ${sender} -> ${chatId}`);
-            }
-          },
-          retryPolicy.maxRetries,
-          1e3,
-          retryPolicy.backoffMultiplier
-        );
-      } else {
-        await retry(
-          async () => {
-            if (!job.url) {
-              throw new Error("API job missing url");
-            }
-            const response = await axios.get(
-              job.url,
-              // {
-              //   jobId: job.id,
-              //   jobName: job.name,
-              //   company: job.company,
-              //   executedAt: new Date().toISOString(),
-              // },
-              {
-                timeout
-              }
-            );
-            return response;
-          },
-          retryPolicy.maxRetries,
-          1e3,
-          retryPolicy.backoffMultiplier
+      );
+      this.scheduledTasks.set(job._id.toString(), {
+        jobId: job._id.toString(),
+        task
+      });
+      if (!options.silent) {
+        logger_default.debug(
+          `[JobScheduler] Scheduled job ${job._id} with expression ${job.schedule.cronExpression}`
         );
       }
-      const duration = Date.now() - startTime;
-      const jobs = await this.loadJobs();
-      const jobIndex = jobs.findIndex((j) => j.id === job.id);
-      if (jobIndex !== -1) {
-        const runTimestamp = (/* @__PURE__ */ new Date()).toISOString();
-        jobs[jobIndex].metadata = jobs[jobIndex].metadata || {
-          createdAt: runTimestamp,
-          updatedAt: runTimestamp,
-          failureCount: 0
-        };
-        jobs[jobIndex].metadata.lastRun = (/* @__PURE__ */ new Date()).toISOString();
-        jobs[jobIndex].metadata.failureCount = 0;
-        jobs[jobIndex].lastExecution = runTimestamp;
-        jobs[jobIndex].status = "success";
-        jobs[jobIndex].history = [
-          ...this.normalizeHistory(jobs[jobIndex].history),
-          { status: "success", timestamp: runTimestamp }
-        ].slice(-10);
-        await this.saveAllJobs(jobs);
-      }
-      logger_default.info(`\u2705 Job completed: ${job.name} (${duration}ms)`);
     } catch (error) {
-      logger_default.error(`\u274C Job failed: ${job.name}`, error);
-      const jobs = await this.loadJobs();
-      const jobIndex = jobs.findIndex((j) => j.id === job.id);
-      if (jobIndex !== -1) {
-        const runTimestamp = (/* @__PURE__ */ new Date()).toISOString();
-        jobs[jobIndex].metadata = jobs[jobIndex].metadata || {
-          createdAt: runTimestamp,
-          updatedAt: runTimestamp,
-          failureCount: 0
-        };
-        jobs[jobIndex].metadata.failureCount++;
-        jobs[jobIndex].metadata.lastError = error.message;
-        jobs[jobIndex].lastExecution = runTimestamp;
-        jobs[jobIndex].status = "error";
-        jobs[jobIndex].history = [
-          ...this.normalizeHistory(jobs[jobIndex].history),
-          {
-            status: "error",
-            timestamp: runTimestamp,
-            error: error.message
-          }
-        ].slice(-10);
-        await this.saveAllJobs(jobs);
-      }
-      if (options.throwOnError) {
-        throw error;
-      }
+      logger_default.error(
+        `[JobScheduler] Failed to schedule job ${job._id}:`,
+        error
+      );
+      throw error;
     }
   }
-  normalizeHistory(history) {
-    if (!history || !Array.isArray(history)) {
-      return [];
+  unscheduleJob(jobId) {
+    const scheduled = this.scheduledTasks.get(jobId);
+    if (scheduled) {
+      scheduled.task.stop();
+      this.scheduledTasks.delete(jobId);
+      logger_default.debug(`[JobScheduler] Unscheduled job ${jobId}`);
     }
-    return history.filter((item) => {
-      return !!item && (item.status === "success" || item.status === "error") && typeof item.timestamp === "string";
-    });
-  }
-  async loadJobs() {
-    try {
-      const filename = path7.basename(this.jobsFile);
-      const key = filename.replace(".json", "");
-      const data = await this.store.get(key);
-      if (Array.isArray(data)) {
-        return data.map((job) => this.normalizeJob(job));
-      }
-      if (data && typeof data === "object" && "jobs" in data) {
-        const wrapped = data;
-        return (wrapped.jobs || []).map((job) => this.normalizeJob(job));
-      }
-      return [];
-    } catch (error) {
-      logger_default.warn("Error loading jobs, returning empty array:", error);
-      return [];
-    }
-  }
-  normalizeJob(job) {
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    return {
-      ...job,
-      metadata: job.metadata || {
-        createdAt: now,
-        updatedAt: now,
-        failureCount: 0
-      },
-      retryPolicy: job.retryPolicy || { maxRetries: 3, backoffMultiplier: 2 },
-      timeout: job.timeout || 3e4,
-      history: this.normalizeHistory(job.history)
-    };
-  }
-  async saveJob(job) {
-    const jobs = await this.loadJobs();
-    const index = jobs.findIndex((j) => j.id === job.id);
-    if (index >= 0) {
-      jobs[index] = job;
-    } else {
-      jobs.push(job);
-    }
-    await this.saveAllJobs(jobs);
-  }
-  async saveAllJobs(jobs) {
-    const filename = path7.basename(this.jobsFile);
-    const key = filename.replace(".json", "");
-    await this.store.set(key, jobs);
   }
   async shutdown() {
+    logger_default.info("[JobScheduler] Shutting down...");
     for (const [, scheduled] of this.scheduledTasks) {
       scheduled.task.stop();
     }
     this.scheduledTasks.clear();
-    logger_default.info("Job Scheduler shut down");
+    logger_default.info("[JobScheduler] Shutdown complete");
+  }
+  async syncFromDatabase() {
+    logger_default.info("[JobScheduler] Syncing from database...");
+    for (const [, scheduled] of this.scheduledTasks) {
+      scheduled.task.stop();
+    }
+    this.scheduledTasks.clear();
+    await this.initialize();
   }
 };
-var scheduler_service_default = new JobScheduler();
+var scheduler_service_v2_default = JobSchedulerV2;
 
-// src/api/controllers/jobs.controller.ts
-async function createJob(req, res, next) {
-  try {
-    const validation = validateCronJob(req.body);
-    if (!validation.valid) {
-      const error = new Error("Validation failed");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      error.details = validation.errors;
-      return next(error);
-    }
-    const job = await scheduler_service_default.createJob(req.body);
-    res.status(HTTP_STATUS.CREATED).json({
-      success: true,
-      data: job
+// src/jobs/scheduler.v2.instance.ts
+var jobSchedulerV2 = new scheduler_service_v2_default();
+var scheduler_v2_instance_default = jobSchedulerV2;
+
+// src/api/middlewares/validateCompany.middleware.ts
+async function validateCompany(req, res, next) {
+  const companyId = req.body && req.body.companyId || req.query && req.query.companyId;
+  if (!companyId || typeof companyId !== "string") {
+    return res.status(400).json({
+      ok: false,
+      message: "companyId is required"
     });
-  } catch (error) {
-    next(error);
   }
-}
-async function updateJob(req, res, next) {
-  try {
-    const { id } = req.params;
-    const validation = validateCronJobUpdate(req.body);
-    if (!validation.valid) {
-      const error = new Error("Validation failed");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      error.details = validation.errors;
-      return next(error);
-    }
-    const job = await scheduler_service_default.updateJob(id, req.body);
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      data: job
+  const { CompanyModel } = await getSharedModels();
+  const company = await CompanyModel.findOne({ companyId });
+  if (!company) {
+    return res.status(404).json({
+      ok: false,
+      message: `Company ${companyId} not found`
     });
-  } catch (error) {
-    next(error);
   }
-}
-async function deleteJob(req, res, next) {
-  try {
-    const { id } = req.params;
-    await scheduler_service_default.deleteJob(id);
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: `Job ${id} deleted`
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function getJob(req, res, next) {
-  try {
-    const { id } = req.params;
-    const job = await scheduler_service_default.getJob(id);
-    if (!job) {
-      const error = new Error("Job not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      data: job
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function getAllJobs(req, res, next) {
-  try {
-    const { company } = req.query;
-    let jobs;
-    if (company && (company === "constroad" || company === "altavia")) {
-      jobs = await scheduler_service_default.getJobsByCompany(company);
-    } else {
-      jobs = await scheduler_service_default.getAllJobs();
-    }
-    res.status(HTTP_STATUS.OK).json(jobs);
-  } catch (error) {
-    next(error);
-  }
-}
-async function runJobNow(req, res, next) {
-  try {
-    const { id } = req.params;
-    await scheduler_service_default.runJobNow(id);
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: `Job ${id} executed`
-    });
-  } catch (error) {
-    next(error);
-  }
+  req.companyId = companyId;
+  return next();
 }
 
-// src/api/routes/jobs.routes.ts
+// src/api/middlewares/validateSender.middleware.ts
+async function validateSender(req, res, next) {
+  const companyId = req.body && req.body.companyId || req.query && req.query.companyId;
+  if (!companyId || typeof companyId !== "string") {
+    return res.status(400).json({
+      ok: false,
+      message: "companyId is required to validate sender"
+    });
+  }
+  const { CompanyModel } = await getSharedModels();
+  const company = await CompanyModel.findOne({ companyId });
+  if (!company) {
+    return res.status(404).json({
+      ok: false,
+      message: `Company ${companyId} not found`
+    });
+  }
+  const jobType = req.body?.type;
+  const hasMessage = Boolean(req.body?.message?.chatId) || Boolean(req.body?.message?.body);
+  const shouldRequireSender = jobType === "message" || hasMessage;
+  if (shouldRequireSender && !company.whatsappConfig?.sender) {
+    return res.status(400).json({
+      ok: false,
+      message: "No hay sender de WhatsApp configurado para esta empresa. Configure uno antes de crear cronjobs."
+    });
+  }
+  return next();
+}
+
+// src/api/routes/jobs.routes.v2.ts
 var router2 = Router2();
-router2.post("/", jobsLimiter, createJob);
-router2.get("/", getAllJobs);
-router2.get("/:id", getJob);
-router2.patch("/:id", updateJob);
-router2.put("/:id", updateJob);
-router2.delete("/:id", deleteJob);
-router2.post("/:id/run", runJobNow);
-var jobs_routes_default = router2;
+var controller = new JobsControllerV2(scheduler_v2_instance_default);
+router2.post("/", jobsLimiter, validateCompany, validateSender, controller.createJob);
+router2.get("/", controller.listJobs);
+router2.get("/:id", controller.getJob);
+router2.patch("/:id", controller.updateJob);
+router2.put("/:id", controller.updateJob);
+router2.delete("/:id", controller.deleteJob);
+router2.post("/:id/run", controller.runJobNow);
+var jobs_routes_v2_default = router2;
 
 // src/api/routes/message.routes.ts
 import { Router as Router3 } from "express";
 import multer from "multer";
 
-// src/api/controllers/message.controller.ts
+// src/api/controllers/message.controller.simple.ts
+init_whatsapp_direct_service();
 init_logger();
 
 // src/middleware/quota.middleware.ts
 init_quota_validator_service();
 init_logger();
-async function requireWhatsAppQuota(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = 401;
-      error.code = "COMPANY_ID_REQUIRED";
-      throw error;
-    }
-    if (!quotaValidatorService.isReady()) {
-      logger_default.warn("QuotaValidator not ready, allowing operation");
-      return next();
-    }
-    const allowed = await quotaValidatorService.checkWhatsAppQuota(companyId);
-    if (!allowed) {
-      const quotaInfo = await quotaValidatorService.getWhatsAppQuotaInfo(companyId);
-      logger_default.warn(`WhatsApp quota exceeded for company ${companyId}`, quotaInfo);
-      res.status(429).json({
-        success: false,
-        error: {
-          message: "WhatsApp message quota exceeded for this month",
-          code: "WHATSAPP_QUOTA_EXCEEDED",
-          statusCode: 429,
-          quota: {
-            current: quotaInfo.current,
-            limit: quotaInfo.limit,
-            remaining: quotaInfo.remaining,
-            period: quotaInfo.period
-          }
-        }
-      });
-      return;
-    }
-    logger_default.debug(`WhatsApp quota check passed for company ${companyId}`);
-    next();
-  } catch (error) {
-    const err = error;
-    const statusCode = err.statusCode || 500;
-    logger_default.error("WhatsApp quota validation error:", error);
-    res.status(statusCode).json({
-      success: false,
-      error: {
-        message: err.message || "Error validating WhatsApp quota",
-        code: err.code || "QUOTA_VALIDATION_ERROR",
-        statusCode
-      }
-    });
-  }
-}
 async function requireStorageQuota(req, res, next) {
   try {
     const companyId = req.companyId;
@@ -7337,107 +15626,50 @@ function formatBytes(bytes) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
-// src/api/controllers/message.controller.ts
-function normalizeRecipient(raw) {
-  const trimmed = raw.trim();
-  if (!trimmed) return trimmed;
-  if (trimmed.includes("@")) return trimmed;
-  const normalized = trimmed.replace(/[^\d]/g, "");
-  return `${normalized}@s.whatsapp.net`;
-}
-function detectMimeType(filename, fallback) {
-  if (fallback) return fallback;
-  if (!filename) return "application/octet-stream";
-  const ext = filename.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "pdf":
-      return "application/pdf";
-    case "doc":
-      return "application/msword";
-    case "docx":
-      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    case "xls":
-      return "application/vnd.ms-excel";
-    case "xlsx":
-      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    case "ppt":
-      return "application/vnd.ms-powerpoint";
-    case "pptx":
-      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-    case "txt":
-      return "text/plain";
-    case "csv":
-      return "text/csv";
-    case "zip":
-      return "application/zip";
-    case "rar":
-      return "application/vnd.rar";
-    case "7z":
-      return "application/x-7z-compressed";
-    default:
-      return "application/octet-stream";
-  }
-}
-async function sendMessage(req, res, next) {
-  try {
-    const { sessionPhone, chatId, message } = req.body;
-    if (!sessionPhone || !chatId || !message) {
-      const error = new Error("sessionPhone, chatId, and message are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const { queued } = await connection_manager_default.sendTextMessage(
-      sessionPhone,
-      chatId,
-      message
-    );
-    logger_default.info(`Message ${queued ? "queued" : "sent"} to ${chatId} via ${sessionPhone}`);
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: queued ? "Message queued for delivery" : "Message sent successfully",
-      queued
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+// src/api/controllers/message.controller.simple.ts
 async function sendTextMessage(req, res, next) {
   try {
     const { sessionPhone } = req.params;
-    const { to, message, mentions } = req.body;
-    if (!sessionPhone || !to || !message) {
-      const error = new Error("sessionPhone, to, and message are required");
+    const { to, message } = req.body;
+    if (!to || !message) {
+      const error = new Error("to and message are required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const recipient = normalizeRecipient(to);
-    if (!recipient) {
-      const error = new Error("to is required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const isConnected = await connection_manager_default.ensureConnected(sessionPhone);
-    const socket = connection_manager_default.getConnection(sessionPhone);
-    if (!socket || !isConnected) {
+    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
       const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
-    const messageContent = { text: message };
-    if (mentions && Array.isArray(mentions) && mentions.length > 0) {
-      const mentionedJids = mentions.map((phone) => normalizeRecipient(phone));
-      messageContent.mentions = mentionedJids;
-      logger_default.info(`Sending message with ${mentionedJids.length} mentions`);
+    logger_default.info(`\u{1F4E4} Sending text message from ${sessionPhone} to ${to}`);
+    try {
+      const result = await WhatsAppDirectService.sendMessage(sessionPhone, to, message);
+      if (req.tenantId) {
+        await incrementWhatsAppUsage(req.tenantId);
+      }
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        message: "Message sent successfully",
+        messageId: result.key.id,
+        timestamp: result.messageTimestamp
+      });
+    } catch (sendError) {
+      const errorMsg = sendError instanceof Error ? sendError.message : String(sendError);
+      logger_default.error(`\u274C Send error: ${errorMsg}`);
+      if (to.includes("@g.us") && (errorMsg.includes("participant") || errorMsg.includes("forbidden") || errorMsg.includes("not-acceptable"))) {
+        const error = new Error(
+          `Cannot send to group. The bot may not be a member/admin of this group. Try refreshing groups with GET /api/sessions/${sessionPhone}/syncGroups`
+        );
+        error.statusCode = HTTP_STATUS.FORBIDDEN;
+        return next(error);
+      }
+      if (errorMsg.includes("session") || errorMsg.includes("connection") || errorMsg.includes("not connected")) {
+        const error = new Error("Session disconnected. Please reconnect.");
+        error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+        return next(error);
+      }
+      throw sendError;
     }
-    await socket.sendMessage(recipient, messageContent);
-    if (req.companyId) {
-      await incrementWhatsAppUsage(req.companyId);
-    }
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: "Message sent successfully",
-      mentionsCount: mentions?.length || 0
-    });
   } catch (error) {
     next(error);
   }
@@ -7445,33 +15677,44 @@ async function sendTextMessage(req, res, next) {
 async function sendImage(req, res, next) {
   try {
     const { sessionPhone } = req.params;
-    const { to, caption } = req.body;
+    const { to, caption, filePath, fileUrl, mimeType, fileName } = req.body;
     const file = req.file;
-    if (!sessionPhone || !to || !file) {
-      const error = new Error("sessionPhone, to, and file are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const isConnected = await connection_manager_default.ensureConnected(sessionPhone);
-    const socket = connection_manager_default.getConnection(sessionPhone);
-    if (!socket || !isConnected) {
-      const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const recipient = normalizeRecipient(to);
-    if (!recipient) {
+    if (!to) {
       const error = new Error("to is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    await socket.sendMessage(recipient, {
-      image: file.buffer,
+    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
+      const error = new Error("Session not connected");
+      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      return next(error);
+    }
+    logger_default.info(`\u{1F4E4} Sending image from ${sessionPhone} to ${to}`);
+    const sendOptions = {
       caption,
-      mimetype: file.mimetype
-    });
-    if (req.companyId) {
-      await incrementWhatsAppUsage(req.companyId);
+      mimeType,
+      fileName,
+      companyId: req.companyId
+      // For filePath/fileUrl resolution
+    };
+    if (file?.buffer) {
+      sendOptions.buffer = file.buffer;
+      sendOptions.fileName = file.originalname;
+      sendOptions.mimeType = mimeType || file.mimetype;
+    } else if (file?.filename) {
+      sendOptions.fileName = file.filename;
+    } else if (filePath) {
+      sendOptions.filePath = filePath;
+    } else if (fileUrl) {
+      sendOptions.fileUrl = fileUrl;
+    } else {
+      const error = new Error("file, filePath, or fileUrl is required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    await WhatsAppDirectService.sendImageFile(sessionPhone, to, sendOptions);
+    if (req.tenantId) {
+      await incrementWhatsAppUsage(req.tenantId);
     }
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -7484,33 +15727,43 @@ async function sendImage(req, res, next) {
 async function sendVideo(req, res, next) {
   try {
     const { sessionPhone } = req.params;
-    const { to, caption } = req.body;
+    const { to, caption, filePath, fileUrl, mimeType, fileName } = req.body;
     const file = req.file;
-    if (!sessionPhone || !to || !file) {
-      const error = new Error("sessionPhone, to, and file are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const isConnected = await connection_manager_default.ensureConnected(sessionPhone);
-    const socket = connection_manager_default.getConnection(sessionPhone);
-    if (!socket || !isConnected) {
-      const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const recipient = normalizeRecipient(to);
-    if (!recipient) {
+    if (!to) {
       const error = new Error("to is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    await socket.sendMessage(recipient, {
-      video: file.buffer,
+    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
+      const error = new Error("Session not connected");
+      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      return next(error);
+    }
+    logger_default.info(`\u{1F4E4} Sending video from ${sessionPhone} to ${to}`);
+    const sendOptions = {
       caption,
-      mimetype: file.mimetype
-    });
-    if (req.companyId) {
-      await incrementWhatsAppUsage(req.companyId);
+      mimeType,
+      fileName,
+      companyId: req.companyId
+    };
+    if (file?.buffer) {
+      sendOptions.buffer = file.buffer;
+      sendOptions.fileName = file.originalname;
+      sendOptions.mimeType = mimeType || file.mimetype;
+    } else if (file?.filename) {
+      sendOptions.fileName = file.filename;
+    } else if (filePath) {
+      sendOptions.filePath = filePath;
+    } else if (fileUrl) {
+      sendOptions.fileUrl = fileUrl;
+    } else {
+      const error = new Error("file, filePath, or fileUrl is required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    await WhatsAppDirectService.sendVideoFile(sessionPhone, to, sendOptions);
+    if (req.tenantId) {
+      await incrementWhatsAppUsage(req.tenantId);
     }
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -7523,34 +15776,43 @@ async function sendVideo(req, res, next) {
 async function sendFile(req, res, next) {
   try {
     const { sessionPhone } = req.params;
-    const { to, caption, mimeType } = req.body;
+    const { to, caption, filePath, fileUrl, mimeType, fileName } = req.body;
     const file = req.file;
-    if (!sessionPhone || !to || !file) {
-      const error = new Error("sessionPhone, to, and file are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const isConnected = await connection_manager_default.ensureConnected(sessionPhone);
-    const socket = connection_manager_default.getConnection(sessionPhone);
-    if (!socket || !isConnected) {
-      const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const recipient = normalizeRecipient(to);
-    if (!recipient) {
+    if (!to) {
       const error = new Error("to is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    await socket.sendMessage(recipient, {
-      document: file.buffer,
-      fileName: file.originalname || "document",
-      mimetype: detectMimeType(file.originalname, mimeType || file.mimetype),
-      caption
-    });
-    if (req.companyId) {
-      await incrementWhatsAppUsage(req.companyId);
+    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
+      const error = new Error("Session not connected");
+      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      return next(error);
+    }
+    logger_default.info(`\u{1F4E4} Sending file from ${sessionPhone} to ${to}`);
+    const sendOptions = {
+      caption,
+      mimeType,
+      fileName,
+      companyId: req.companyId
+    };
+    if (file?.buffer) {
+      sendOptions.buffer = file.buffer;
+      sendOptions.fileName = file.originalname || "document";
+      sendOptions.mimeType = mimeType || file.mimetype;
+    } else if (file?.filename) {
+      sendOptions.fileName = file.filename;
+    } else if (filePath) {
+      sendOptions.filePath = filePath;
+    } else if (fileUrl) {
+      sendOptions.fileUrl = fileUrl;
+    } else {
+      const error = new Error("file, filePath, or fileUrl is required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    await WhatsAppDirectService.sendDocument(sessionPhone, to, sendOptions);
+    if (req.tenantId) {
+      await incrementWhatsAppUsage(req.tenantId);
     }
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -7560,230 +15822,1315 @@ async function sendFile(req, res, next) {
     next(error);
   }
 }
-async function getConversation(req, res, next) {
+
+// src/api/routes/message.routes.ts
+var router3 = Router3();
+var upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
+router3.post(
+  "/:sessionPhone/text",
+  sendTextMessage
+);
+router3.post(
+  "/:sessionPhone/image",
+  // requireTenant,
+  // whatsappRateLimiter,
+  // requireWhatsAppQuota,
+  upload.single("file"),
+  sendImage
+);
+router3.post(
+  "/:sessionPhone/video",
+  // requireTenant,
+  // whatsappRateLimiter,
+  // requireWhatsAppQuota,
+  upload.single("file"),
+  sendVideo
+);
+router3.post(
+  "/:sessionPhone/file",
+  // requireTenant,
+  // whatsappRateLimiter,
+  // requireWhatsAppQuota,
+  upload.single("file"),
+  sendFile
+);
+var message_routes_default = router3;
+
+// src/api/routes/pdf.routes.ts
+import { Router as Router4 } from "express";
+
+// src/pdf/generator.service.ts
+init_logger();
+init_environment();
+import puppeteer from "puppeteer";
+import Handlebars from "handlebars";
+import fs7 from "fs-extra";
+import path10 from "path";
+import { randomUUID as randomUUID2 } from "crypto";
+var PDFGenerator = class {
+  constructor() {
+    this.browser = null;
+    this.templatesDir = config.pdf.templatesDir;
+    this.uploadsDir = config.pdf.uploadsDir;
+  }
+  async initialize() {
+    try {
+      logger_default.info("Initializing PDF Generator...");
+      await fs7.ensureDir(this.templatesDir);
+      await fs7.ensureDir(this.uploadsDir);
+      const headlessEnv = process.env.PUPPETEER_HEADLESS;
+      const headlessMode = headlessEnv === "true" ? true : headlessEnv === "false" ? false : "new";
+      const launchBrowser = async (headless) => puppeteer.launch({
+        headless,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage"
+        ]
+      });
+      if (headlessEnv) {
+        this.browser = await launchBrowser(headlessMode);
+      } else {
+        try {
+          this.browser = await launchBrowser(headlessMode);
+        } catch (error) {
+          logger_default.warn(
+            `Puppeteer launch failed with headless=${String(headlessMode)}. Retrying with headless=true`,
+            error
+          );
+          this.browser = await launchBrowser(true);
+        }
+      }
+      logger_default.info("PDF Generator initialized");
+    } catch (error) {
+      logger_default.error("Error initializing PDF Generator:", error);
+      throw error;
+    }
+  }
+  async generatePDF(request) {
+    try {
+      if (!this.browser) {
+        throw new Error("PDF Generator not initialized");
+      }
+      logger_default.info(`Generating PDF from template: ${request.templateId}`);
+      const template = await this.loadTemplate(request.templateId);
+      const compiled = Handlebars.compile(template);
+      const html = compiled(request.data);
+      const filename = request.filename || `pdf-${randomUUID2()}.pdf`;
+      const filepath = path10.join(this.uploadsDir, filename);
+      const page = await this.browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      await page.pdf({
+        path: filepath,
+        format: "A4",
+        margin: { top: "20px", right: "20px", bottom: "20px", left: "20px" }
+      });
+      await page.close();
+      logger_default.info(`PDF generated: ${filepath}`);
+      return filepath;
+    } catch (error) {
+      logger_default.error("Error generating PDF:", error);
+      throw error;
+    }
+  }
+  async createTemplate(id, name, htmlContent) {
+    try {
+      const filepath = path10.join(this.templatesDir, `${id}.hbs`);
+      await fs7.ensureDir(path10.dirname(filepath));
+      await fs7.writeFile(filepath, htmlContent, "utf-8");
+      logger_default.info(`Created PDF template: ${id}`);
+    } catch (error) {
+      logger_default.error("Error creating PDF template:", error);
+      throw error;
+    }
+  }
+  async loadTemplate(templateId) {
+    try {
+      const filepath = path10.join(this.templatesDir, `${templateId}.hbs`);
+      if (!await fs7.pathExists(filepath)) {
+        throw new Error(`Template not found: ${templateId}`);
+      }
+      return await fs7.readFile(filepath, "utf-8");
+    } catch (error) {
+      logger_default.error("Error loading template:", error);
+      throw error;
+    }
+  }
+  async listTemplates() {
+    try {
+      const files = await fs7.readdir(this.templatesDir);
+      return files.filter((f) => f.endsWith(".hbs")).map((f) => f.replace(".hbs", ""));
+    } catch (error) {
+      logger_default.error("Error listing templates:", error);
+      return [];
+    }
+  }
+  async deleteTemplate(templateId) {
+    try {
+      const filepath = path10.join(this.templatesDir, `${templateId}.hbs`);
+      if (await fs7.pathExists(filepath)) {
+        await fs7.remove(filepath);
+        logger_default.info(`Deleted template: ${templateId}`);
+      }
+    } catch (error) {
+      logger_default.error("Error deleting template:", error);
+      throw error;
+    }
+  }
+  async shutdown() {
+    if (this.browser) {
+      await this.browser.close();
+      logger_default.info("PDF Generator shut down");
+    }
+  }
+};
+var generator_service_default = new PDFGenerator();
+
+// src/api/controllers/pdf.controller.ts
+async function generatePDF(req, res, next) {
   try {
-    const { sessionPhone, chatId } = req.params;
-    if (!sessionPhone || !chatId) {
-      const error = new Error("sessionPhone and chatId are required");
+    const { templateId, data, filename } = req.body;
+    if (!templateId || !data) {
+      const error = new Error("templateId and data are required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const conversation = await conversation_manager_default.get(chatId, sessionPhone);
-    if (!conversation) {
-      const error = new Error("Conversation not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    res.status(HTTP_STATUS.OK).json({
+    const filepath = await generator_service_default.generatePDF({
+      templateId,
+      data,
+      filename
+    });
+    res.status(HTTP_STATUS.CREATED).json({
       success: true,
-      data: conversation
+      data: {
+        filepath,
+        filename: filename || `pdf-${Date.now()}.pdf`
+      }
     });
   } catch (error) {
     next(error);
   }
 }
-async function getAllConversations(req, res, next) {
+async function createTemplate(req, res, next) {
   try {
-    const { sessionPhone } = req.params;
-    if (!sessionPhone) {
-      const error = new Error("sessionPhone is required");
+    const { id, name, htmlContent } = req.body;
+    if (!id || !name || !htmlContent) {
+      const error = new Error("id, name, and htmlContent are required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const conversations = await conversation_manager_default.getAllForSession(sessionPhone);
+    await generator_service_default.createTemplate(id, name, htmlContent);
+    res.status(HTTP_STATUS.CREATED).json({
+      success: true,
+      message: `Template ${id} created`
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function listTemplates(req, res, next) {
+  try {
+    const templates = await generator_service_default.listTemplates();
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
-        total: conversations.length,
-        conversations
+        total: templates.length,
+        templates
       }
     });
   } catch (error) {
     next(error);
   }
 }
-async function closeConversation(req, res, next) {
+async function deleteTemplate(req, res, next) {
   try {
-    const { sessionPhone, chatId } = req.params;
-    if (!sessionPhone || !chatId) {
-      const error = new Error("sessionPhone and chatId are required");
+    const { templateId } = req.params;
+    if (!templateId) {
+      const error = new Error("templateId is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    await conversation_manager_default.closeConversation(chatId, sessionPhone);
+    await generator_service_default.deleteTemplate(templateId);
     res.status(HTTP_STATUS.OK).json({
       success: true,
-      message: "Conversation closed"
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function sendPoll(req, res, next) {
-  try {
-    const { sessionPhone } = req.params;
-    const { to, question, options, selectableCount } = req.body;
-    if (!sessionPhone || !to || !question || !options) {
-      const error = new Error("sessionPhone, to, question, and options are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    if (!Array.isArray(options) || options.length < 2) {
-      const error = new Error("options must be an array with at least 2 items");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    if (options.length > 12) {
-      const error = new Error("options cannot exceed 12 items");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const isConnected = await connection_manager_default.ensureConnected(sessionPhone);
-    const socket = connection_manager_default.getConnection(sessionPhone);
-    if (!socket || !isConnected) {
-      const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const recipient = normalizeRecipient(to);
-    if (!recipient) {
-      const error = new Error("Invalid recipient");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const selectableOptions = selectableCount || 1;
-    const maxSelectable = Math.min(selectableOptions, options.length);
-    const message = await socket.sendMessage(recipient, {
-      poll: {
-        name: question,
-        values: options,
-        selectableCount: maxSelectable
-      }
-    });
-    logger_default.info(`Poll sent to ${recipient}: ${question} (${options.length} options)`);
-    if (req.companyId) {
-      await incrementWhatsAppUsage(req.companyId);
-    }
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: "Poll sent successfully",
-      messageId: message.key.id,
-      pollDetails: {
-        question,
-        optionsCount: options.length,
-        selectableCount: maxSelectable
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function sendTextMenu(req, res, next) {
-  try {
-    const { sessionPhone } = req.params;
-    const { to, title, options, footer } = req.body;
-    if (!sessionPhone || !to || !options) {
-      const error = new Error("sessionPhone, to, and options are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    if (!Array.isArray(options) || options.length < 1) {
-      const error = new Error("options must be an array with at least 1 item");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const isConnected = await connection_manager_default.ensureConnected(sessionPhone);
-    const socket = connection_manager_default.getConnection(sessionPhone);
-    if (!socket || !isConnected) {
-      const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const recipient = normalizeRecipient(to);
-    if (!recipient) {
-      const error = new Error("Invalid recipient");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const menuLines = [];
-    if (title) {
-      menuLines.push(`*${title}*`);
-      menuLines.push("");
-    }
-    options.forEach((option, index) => {
-      menuLines.push(`${index + 1}. ${option}`);
-    });
-    if (footer) {
-      menuLines.push("");
-      menuLines.push(footer);
-    } else {
-      menuLines.push("");
-      menuLines.push("_Reply with the number of your choice_");
-    }
-    const menuText = menuLines.join("\n");
-    await socket.sendMessage(recipient, { text: menuText });
-    logger_default.info(`Text menu sent to ${recipient}: ${options.length} options`);
-    if (req.companyId) {
-      await incrementWhatsAppUsage(req.companyId);
-    }
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: "Text menu sent successfully",
-      menuDetails: {
-        title: title || null,
-        optionsCount: options.length,
-        footer: footer || null
-      }
+      message: `Template ${templateId} deleted`
     });
   } catch (error) {
     next(error);
   }
 }
 
+// src/api/controllers/pdf-vale.controller.ts
+import fs9 from "fs-extra";
+import path12 from "path";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { randomUUID as randomUUID3 } from "crypto";
+init_environment();
+
+// src/pdf/render.service.ts
+init_environment();
+import fs8 from "fs-extra";
+import path11 from "path";
+import crypto2 from "crypto";
+import { createCanvas } from "@napi-rs/canvas";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+function getCacheKey(filePath, stat, page, scale) {
+  const raw = `${filePath}:${stat.size}:${stat.mtimeMs}:${page}:${scale}`;
+  return crypto2.createHash("sha1").update(raw).digest("hex");
+}
+function clampScale(value) {
+  if (Number.isNaN(value)) return 1;
+  return Math.min(3, Math.max(0.5, value));
+}
+async function getPdfInfo(filePath) {
+  const buffer = await fs8.readFile(filePath);
+  const data = new Uint8Array(buffer);
+  const task = pdfjsLib.getDocument({ data, disableWorker: true });
+  const pdf = await task.promise;
+  return {
+    pages: pdf.numPages
+  };
+}
+async function renderPdfPageToPng(filePath, options) {
+  const stat = await fs8.stat(filePath);
+  const scale = clampScale(options.scale);
+  const cacheKey = getCacheKey(filePath, stat, options.page, scale);
+  const cacheDir = path11.resolve(config.drive.cacheDir, cacheKey);
+  const cacheFile = path11.join(cacheDir, `page-${options.page}.png`);
+  if (await fs8.pathExists(cacheFile)) {
+    return { cacheFile, fromCache: true };
+  }
+  await fs8.ensureDir(cacheDir);
+  const buffer = await fs8.readFile(filePath);
+  const data = new Uint8Array(buffer);
+  const task = pdfjsLib.getDocument({ data, disableWorker: true });
+  const pdf = await task.promise;
+  if (options.page < 1 || options.page > pdf.numPages) {
+    throw new Error("Page out of range");
+  }
+  const page = await pdf.getPage(options.page);
+  const viewport = page.getViewport({ scale });
+  const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+  const ctx = canvas.getContext("2d");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const pngBuffer = canvas.toBuffer("image/png");
+  await fs8.writeFile(cacheFile, pngBuffer);
+  return { cacheFile, fromCache: false };
+}
+async function renderPdfPageToPngWithGrid(filePath, options) {
+  const stat = await fs8.stat(filePath);
+  const scale = clampScale(options.scale);
+  const gridSize = options.gridSize && options.gridSize > 0 ? options.gridSize : 50;
+  const cacheKey = getCacheKey(filePath, stat, options.page, scale) + `-g${gridSize}`;
+  const cacheDir = path11.resolve(config.drive.cacheDir, cacheKey);
+  const cacheFile = path11.join(cacheDir, `page-${options.page}-grid.png`);
+  if (await fs8.pathExists(cacheFile)) {
+    return { cacheFile, fromCache: true };
+  }
+  await fs8.ensureDir(cacheDir);
+  const buffer = await fs8.readFile(filePath);
+  const data = new Uint8Array(buffer);
+  const task = pdfjsLib.getDocument({ data, disableWorker: true });
+  const pdf = await task.promise;
+  if (options.page < 1 || options.page > pdf.numPages) {
+    throw new Error("Page out of range");
+  }
+  const page = await pdf.getPage(options.page);
+  const viewport = page.getViewport({ scale });
+  const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+  const ctx = canvas.getContext("2d");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const step = gridSize * scale;
+  ctx.strokeStyle = "rgba(255,0,0,0.35)";
+  ctx.lineWidth = 1;
+  ctx.font = `${Math.max(10, Math.floor(10 * scale))}px Arial`;
+  ctx.fillStyle = "rgba(255,0,0,0.7)";
+  for (let x = 0; x <= canvas.width; x += step) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+    ctx.fillText(String(Math.round(x / scale)), x + 2, 12);
+  }
+  for (let y = 0; y <= canvas.height; y += step) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+    const coord = Math.round((canvas.height - y) / scale);
+    ctx.fillText(String(coord), 2, y - 2);
+  }
+  const pngBuffer = canvas.toBuffer("image/png");
+  await fs8.writeFile(cacheFile, pngBuffer);
+  return { cacheFile, fromCache: false };
+}
+
+// src/api/controllers/pdf-vale.controller.ts
+init_sessions_simple();
+var DEFAULT_TEMPLATE = "plantilla_dispatch_note.pdf";
+var DEFAULT_COORDS = {
+  nroVale: { x: 445, y: 755, size: 11, bold: true },
+  fecha: { x: 450, y: 725, size: 11, bold: true },
+  senores: { x: 122, y: 676, size: 11, bold: true },
+  obra: { x: 122, y: 655, size: 11 },
+  tipoMaterial: { x: 122, y: 632, size: 11 },
+  nroM3: { x: 230, y: 608, size: 11 },
+  placa: { x: 405, y: 610, size: 11 },
+  chofer: { x: 405, y: 585, size: 11 },
+  hora: { x: 405, y: 560, size: 11 },
+  nota: { x: 122, y: 588, size: 11 }
+};
+function adjustFontSizeForValue(key, value, baseSize) {
+  if (key !== "obra") return baseSize;
+  const length = value.trim().length;
+  if (length > 70) return Math.max(8, baseSize - 4);
+  if (length > 55) return Math.max(9, baseSize - 3);
+  if (length > 40) return Math.max(10, baseSize - 2);
+  if (length > 30) return Math.max(11, baseSize - 1);
+  return baseSize;
+}
+function normalizeWhatsappTarget(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes("@")) return trimmed;
+  if (trimmed.includes("-")) {
+    return `${trimmed}@g.us`;
+  }
+  const digits = trimmed.replace(/[^\d]/g, "");
+  if (digits.length < 8) return null;
+  return `${digits}@s.whatsapp.net`;
+}
+function getDefaultWhatsappSession() {
+  const sessions2 = listSessions();
+  return sessions2.find((phone) => isSessionReady(phone)) || null;
+}
+async function sendWhatsappNotification(sessionOverride, target, caption, fileBuffer, filename) {
+  const sessionPhone = sessionOverride || getDefaultWhatsappSession();
+  if (!sessionPhone) {
+    throw new Error("No WhatsApp session connected");
+  }
+  const recipient = normalizeWhatsappTarget(target);
+  if (!recipient) {
+    throw new Error("Invalid WhatsApp target");
+  }
+  if (!isSessionReady(sessionPhone)) {
+    throw new Error("WhatsApp session not connected");
+  }
+  const socket = getSession(sessionPhone);
+  if (!socket) {
+    throw new Error("WhatsApp session not found");
+  }
+  await socket.sendMessage(recipient, {
+    document: fileBuffer,
+    fileName: filename,
+    mimetype: "application/pdf",
+    caption
+  });
+  return { sessionPhone, recipient };
+}
+async function sendTelegramNotification(chatId, caption, fileBuffer, filename) {
+  if (!config.telegram.botToken) {
+    throw new Error("Telegram bot token not configured");
+  }
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  if (caption) form.append("caption", caption);
+  form.append("document", new Blob([fileBuffer], { type: "application/pdf" }), filename);
+  const response = await fetch(
+    `https://api.telegram.org/bot${config.telegram.botToken}/sendDocument`,
+    {
+      method: "POST",
+      body: form
+    }
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Telegram error: ${response.status} ${text}`);
+  }
+}
+function resolveProto(req) {
+  const forwarded = req.headers["x-forwarded-proto"];
+  if (typeof forwarded === "string" && forwarded.length > 0) {
+    return forwarded.split(",")[0].trim();
+  }
+  if (Array.isArray(forwarded) && forwarded[0]) {
+    return forwarded[0];
+  }
+  return req.protocol;
+}
+function buildAbsoluteUrl(req, relativeUrl) {
+  const host = req.get("x-forwarded-host") || req.get("host");
+  if (!host) return relativeUrl;
+  const proto = resolveProto(req);
+  return `${proto}://${host}${relativeUrl}`;
+}
+async function generateVale(req, res, next) {
+  try {
+    const {
+      template = DEFAULT_TEMPLATE,
+      fields,
+      coords,
+      notify
+    } = req.body;
+    if (!fields) {
+      const error = new Error("fields are required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const requiredFields = [
+      "senores",
+      "obra",
+      "tipoMaterial",
+      "nroM3",
+      "placa",
+      "chofer",
+      "hora",
+      "fecha"
+    ];
+    for (const key of requiredFields) {
+      if (!fields[key]) {
+        const error = new Error(`${key} is required`);
+        error.statusCode = HTTP_STATUS.BAD_REQUEST;
+        return next(error);
+      }
+    }
+    const templatePath = path12.join(config.pdf.templatesDir, template);
+    if (!await fs9.pathExists(templatePath)) {
+      const error = new Error("Template not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    const bytes = await fs9.readFile(templatePath);
+    const pdfDoc = await PDFDocument.load(bytes);
+    const page = pdfDoc.getPages()[0];
+    const { width, height } = page.getSize();
+    if (width > height) {
+      const error = new Error("Template must be portrait (vertical)");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const signaturePath = path12.join(
+      path12.dirname(config.pdf.templatesDir),
+      "signatures",
+      "signature-dispatch-note.png"
+    );
+    if (await fs9.pathExists(signaturePath)) {
+      const signatureBytes = await fs9.readFile(signaturePath);
+      const signatureImage = await pdfDoc.embedPng(signatureBytes);
+      page.drawImage(signatureImage, {
+        x: 120,
+        y: 500,
+        width: 140,
+        height: 55
+      });
+    }
+    const values = {
+      nroVale: fields.nroVale || `VALE-${Date.now()}`,
+      fecha: fields.fecha,
+      senores: fields.senores,
+      obra: fields.obra,
+      tipoMaterial: fields.tipoMaterial,
+      nroM3: fields.nroM3,
+      placa: fields.placa,
+      chofer: fields.chofer,
+      hora: fields.hora,
+      nota: fields.nota || ""
+    };
+    const positions = {
+      ...DEFAULT_COORDS,
+      ...coords || {}
+    };
+    Object.keys(values).forEach((key) => {
+      const value = values[key];
+      if (!value) return;
+      const pos = positions[key];
+      const isVale = key === "nroVale";
+      const isbold = pos.bold || false;
+      const size = adjustFontSizeForValue(key, String(value), pos.size || 12);
+      page.drawText(String(value), {
+        x: pos.x,
+        y: pos.y,
+        size,
+        font: isbold ? fontBold : font,
+        color: isVale ? rgb(0.8, 0, 0) : rgb(0, 0, 0)
+      });
+    });
+    await fs9.ensureDir(config.pdf.tempDir);
+    const valeNumber = fields.nroVale || randomUUID3().slice(0, 8);
+    const safeVale = String(valeNumber).replace(/[^a-zA-Z0-9_-]+/g, "-");
+    const filename = `vale-despacho-${safeVale}.pdf`;
+    const outputPath = path12.join(config.pdf.tempDir, filename);
+    const pdfBytes = await pdfDoc.save();
+    await fs9.writeFile(outputPath, pdfBytes);
+    const publicUrl = `${config.pdf.tempPublicBaseUrl.replace(/\/+$/, "")}/${encodeURI(
+      filename
+    )}`;
+    const notifyStatus = {};
+    const notifyTasks = [];
+    if (notify?.whatsapp?.to) {
+      notifyTasks.push(
+        (async () => {
+          try {
+            const result = await sendWhatsappNotification(
+              notify.whatsapp.from,
+              notify.whatsapp.to,
+              notify.whatsapp.caption,
+              Buffer.from(pdfBytes),
+              filename
+            );
+            notifyStatus.whatsapp = { sent: true, ...result };
+          } catch (error) {
+            notifyStatus.whatsapp = { sent: false, error: String(error) };
+          }
+        })()
+      );
+    }
+    if (notify?.telegram?.chatId) {
+      notifyTasks.push(
+        (async () => {
+          try {
+            await sendTelegramNotification(
+              notify.telegram.chatId,
+              notify.telegram.caption,
+              Buffer.from(pdfBytes),
+              filename
+            );
+            notifyStatus.telegram = { sent: true };
+          } catch (error) {
+            notifyStatus.telegram = { sent: false, error: String(error) };
+          }
+        })()
+      );
+    }
+    if (notifyTasks.length > 0) {
+      await Promise.allSettled(notifyTasks);
+    }
+    res.status(HTTP_STATUS.CREATED).json({
+      success: true,
+      data: {
+        filename,
+        url: publicUrl,
+        urlAbsolute: buildAbsoluteUrl(req, publicUrl),
+        notify: notifyStatus
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function previewValeTemplateGrid(req, res, next) {
+  try {
+    const template = String(req.query.template || DEFAULT_TEMPLATE);
+    const page = parseInt(String(req.query.page || "1"), 10);
+    const scale = parseFloat(String(req.query.scale || "1.5"));
+    const gridSize = parseInt(String(req.query.grid || "50"), 10);
+    const templatePath = path12.join(config.pdf.templatesDir, template);
+    if (!await fs9.pathExists(templatePath)) {
+      const error = new Error("Template not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    const { cacheFile } = await renderPdfPageToPngWithGrid(templatePath, {
+      page,
+      scale,
+      gridSize
+    });
+    res.setHeader("Cache-Control", "public, max-age=3600, immutable");
+    res.setHeader("Content-Type", "image/png");
+    res.status(HTTP_STATUS.OK).sendFile(path12.resolve(cacheFile));
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error("Invalid request");
+    if (!err.statusCode) {
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+    }
+    next(err);
+  }
+}
+
+// src/api/routes/pdf.routes.ts
+var router4 = Router4();
+router4.post("/generate", generatePDF);
+router4.post("/generate-vale", generateVale);
+router4.get("/templates/preview-grid", previewValeTemplateGrid);
+router4.post("/templates", createTemplate);
+router4.get("/templates", listTemplates);
+router4.delete("/templates/:templateId", deleteTemplate);
+var pdf_routes_default = router4;
+
+// src/api/routes/drive.routes.ts
+import { Router as Router5 } from "express";
+import multer2 from "multer";
+import fs12 from "fs-extra";
+import path15 from "path";
+
+// src/api/controllers/drive.controller.ts
+import fs10 from "fs-extra";
+import path13 from "path";
+init_storage_path_service();
+function isValidEntryName(name) {
+  if (!name) return false;
+  if (name === "." || name === "..") return false;
+  return !/[\\/]/.test(name);
+}
+function toEntry(relativeBase, name, stat, companyId) {
+  const relPath = relativeBase ? `${relativeBase}/${name}` : name;
+  const type = stat.isDirectory() ? "folder" : "file";
+  const listUrl = type === "folder" ? `/api/drive/list?path=${encodeURIComponent(relPath)}` : void 0;
+  return {
+    name,
+    path: relPath,
+    type,
+    size: stat.isFile() ? stat.size : void 0,
+    updatedAt: stat.mtime.toISOString(),
+    url: stat.isFile() ? `/files/companies/${companyId}/${relPath}` : void 0,
+    listUrl
+  };
+}
+function resolveProto2(req) {
+  const forwarded = req.headers["x-forwarded-proto"];
+  if (typeof forwarded === "string" && forwarded.length > 0) {
+    return forwarded.split(",")[0].trim();
+  }
+  if (Array.isArray(forwarded) && forwarded[0]) {
+    return forwarded[0];
+  }
+  return req.protocol;
+}
+function buildAbsoluteUrl2(req, relativeUrl) {
+  const host = req.get("x-forwarded-host") || req.get("host");
+  if (!host) return relativeUrl;
+  const proto = resolveProto2(req);
+  return `${proto}://${host}${relativeUrl}`;
+}
+async function listEntries(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+    await storagePathService.ensureCompanyStructure(companyId);
+    const relativePath = req.query.path || "";
+    const resolved = storagePathService.resolvePath(companyId, relativePath);
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error = new Error("Access denied: invalid path");
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    const exists = await fs10.pathExists(resolved);
+    if (!exists) {
+      const error = new Error("Path not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    const stat = await fs10.stat(resolved);
+    if (!stat.isDirectory()) {
+      const error = new Error("Path is not a folder");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const entries = (await fs10.readdir(resolved)).filter((name) => !name.startsWith("."));
+    const results = await Promise.all(
+      entries.map(async (name) => {
+        const entryStat = await fs10.stat(path13.join(resolved, name));
+        const entry = toEntry(relativePath, name, entryStat, companyId);
+        const result = { ...entry };
+        if (entry.url) {
+          result.urlAbsolute = buildAbsoluteUrl2(req, entry.url);
+        }
+        if (entry.listUrl) {
+          result.listUrlAbsolute = buildAbsoluteUrl2(req, entry.listUrl);
+        }
+        return result;
+      })
+    );
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        path: relativePath || "",
+        total: results.length,
+        entries: results
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function createFolder(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+    const { path: parentPath, name } = req.body;
+    if (!name || !isValidEntryName(name)) {
+      const error = new Error("Invalid folder name");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const relativePath = parentPath || "";
+    const resolved = storagePathService.resolvePath(companyId, relativePath);
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error = new Error("Access denied: invalid path");
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    const parentExists = await fs10.pathExists(resolved);
+    if (!parentExists) {
+      const error = new Error("Parent path not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    const target = path13.join(resolved, name);
+    if (!storagePathService.validateAccess(target, companyId)) {
+      const error = new Error("Access denied: invalid target path");
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    await fs10.ensureDir(target);
+    const newPath = relativePath ? `${relativePath}/${name}` : name;
+    res.status(HTTP_STATUS.CREATED).json({
+      success: true,
+      data: {
+        name,
+        path: newPath,
+        type: "folder"
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function uploadFile(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+    const { path: parentPath } = req.body;
+    const file = req.file;
+    if (!file) {
+      const error = new Error("file is required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    if (!isValidEntryName(file.originalname)) {
+      const error = new Error("Invalid file name");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const relativePath = parentPath || "";
+    const resolved = storagePathService.resolvePath(companyId, relativePath);
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error = new Error("Access denied: invalid path");
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    await fs10.ensureDir(resolved);
+    const MAX_ORDERS_BYTES = 100 * 1024 * 1024;
+    const MAX_DRIVE_BYTES2 = 2 * 1024 * 1024 * 1024;
+    const isDriveRoot = relativePath.startsWith("drive");
+    const maxAllowedBytes = isDriveRoot ? MAX_DRIVE_BYTES2 : MAX_ORDERS_BYTES;
+    if (file.size > maxAllowedBytes) {
+      await fs10.remove(file.path).catch(() => {
+      });
+      const error = new Error("File too large");
+      error.statusCode = HTTP_STATUS.REQUEST_TOO_LONG;
+      return next(error);
+    }
+    const target = path13.join(resolved, file.originalname);
+    if (!storagePathService.validateAccess(target, companyId)) {
+      const error = new Error("Access denied: invalid target path");
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    await fs10.move(file.path, target, { overwrite: true });
+    await incrementStorageUsage(companyId, file.size);
+    const filePath = relativePath ? `${relativePath}/${file.originalname}` : file.originalname;
+    const publicUrl = `/files/companies/${companyId}/${filePath}`;
+    res.status(HTTP_STATUS.CREATED).json({
+      success: true,
+      data: {
+        name: file.originalname,
+        path: filePath,
+        type: "file",
+        size: file.size,
+        url: publicUrl,
+        urlAbsolute: buildAbsoluteUrl2(req, publicUrl)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function deleteEntry(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+    const targetPath = req.query.path;
+    if (!targetPath) {
+      const error = new Error("path is required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const resolved = storagePathService.resolvePath(companyId, targetPath);
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error = new Error("Access denied: invalid path");
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    const exists = await fs10.pathExists(resolved);
+    if (!exists) {
+      const error = new Error("Path not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    const stats = await fs10.stat(resolved);
+    const isFile = stats.isFile();
+    const fileSize = isFile ? stats.size : 0;
+    await fs10.remove(resolved);
+    if (isFile && fileSize > 0) {
+      await decrementStorageUsage(companyId, fileSize);
+    }
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: "Entry deleted",
+      data: {
+        path: targetPath
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function moveEntry(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+    const { from, to } = req.body;
+    if (!from || !to) {
+      const error = new Error("from and to are required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const fromResolved = storagePathService.resolvePath(companyId, from);
+    const toResolved = storagePathService.resolvePath(companyId, to);
+    if (!storagePathService.validateAccess(fromResolved, companyId)) {
+      const error = new Error("Access denied: invalid source path");
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    if (!storagePathService.validateAccess(toResolved, companyId)) {
+      const error = new Error("Access denied: invalid destination path");
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    const exists = await fs10.pathExists(fromResolved);
+    if (!exists) {
+      const error = new Error("Source not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    await fs10.ensureDir(path13.dirname(toResolved));
+    await fs10.move(fromResolved, toResolved, { overwrite: false });
+    const publicUrl = `/files/companies/${companyId}/${to}`;
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        from,
+        to,
+        url: publicUrl,
+        urlAbsolute: buildAbsoluteUrl2(req, publicUrl)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function getInfo(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+    const targetPath = req.query.path;
+    if (!targetPath) {
+      const error = new Error("path is required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const resolved = storagePathService.resolvePath(companyId, targetPath);
+    if (!storagePathService.validateAccess(resolved, companyId)) {
+      const error = new Error("Access denied: invalid path");
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    const stat = await fs10.stat(resolved);
+    const name = path13.basename(resolved);
+    const parent = path13.dirname(targetPath).replace(/\\/g, "/");
+    const base = parent === "." ? "" : parent;
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: (() => {
+        const entry = toEntry(base, name, stat, companyId);
+        const result = { ...entry };
+        if (entry.url) {
+          result.urlAbsolute = buildAbsoluteUrl2(req, entry.url);
+        }
+        if (entry.listUrl) {
+          result.listUrlAbsolute = buildAbsoluteUrl2(req, entry.listUrl);
+        }
+        return result;
+      })()
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// src/api/controllers/drive-pdf.controller.ts
+import fs11 from "fs-extra";
+import path14 from "path";
+init_storage_path_service();
+function getPdfPathFromRequest(req) {
+  const companyId = req.companyId;
+  if (!companyId) {
+    throw new Error("Company ID is required");
+  }
+  const { path: pathParam } = req.query;
+  if (!pathParam) {
+    throw new Error("path is required");
+  }
+  const resolved = storagePathService.resolvePath(companyId, pathParam);
+  if (!storagePathService.validateAccess(resolved, companyId)) {
+    throw new Error("Access denied: invalid path");
+  }
+  return { resolved, normalized: pathParam };
+}
+function ensurePdfExtension(filePath) {
+  return path14.extname(filePath).toLowerCase() === ".pdf";
+}
+async function resolveExistingPdfPath(resolved, normalized, companyId) {
+  if (await fs11.pathExists(resolved)) {
+    return { resolved, normalized };
+  }
+  const candidates = [normalized.normalize("NFC"), normalized.normalize("NFD")].filter(
+    (candidate, index, arr) => candidate && arr.indexOf(candidate) === index
+  );
+  for (const candidate of candidates) {
+    const altResolved = storagePathService.resolvePath(companyId, candidate);
+    if (await fs11.pathExists(altResolved)) {
+      return { resolved: altResolved, normalized: candidate };
+    }
+  }
+  return { resolved, normalized };
+}
+async function getPdfMetadata(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+    const initial = getPdfPathFromRequest(req);
+    const { resolved, normalized } = await resolveExistingPdfPath(
+      initial.resolved,
+      initial.normalized,
+      companyId
+    );
+    if (!normalized || !ensurePdfExtension(resolved)) {
+      const error = new Error("Only PDF files are allowed");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const exists = await fs11.pathExists(resolved);
+    if (!exists) {
+      const error = new Error("File not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    const info = await getPdfInfo(resolved);
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        path: normalized,
+        pages: info.pages
+      }
+    });
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error("Invalid request");
+    if (!err.statusCode) {
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+    }
+    next(err);
+  }
+}
+async function getPdfPageImage(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+    const initial = getPdfPathFromRequest(req);
+    const { resolved, normalized } = await resolveExistingPdfPath(
+      initial.resolved,
+      initial.normalized,
+      companyId
+    );
+    const page = parseInt(String(req.query.page || "1"), 10);
+    const scale = parseFloat(String(req.query.scale || "1.5"));
+    if (!normalized || !ensurePdfExtension(resolved)) {
+      const error = new Error("Only PDF files are allowed");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const exists = await fs11.pathExists(resolved);
+    if (!exists) {
+      const error = new Error("File not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    const { cacheFile } = await renderPdfPageToPng(resolved, { page, scale });
+    res.setHeader("Cache-Control", "public, max-age=3600, immutable");
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("X-PDF-Path", normalized);
+    res.setHeader("X-PDF-Page", String(page));
+    res.status(HTTP_STATUS.OK).sendFile(path14.resolve(cacheFile));
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error("Invalid request");
+    if (!err.statusCode) {
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+    }
+    next(err);
+  }
+}
+async function getPdfPagePreviewGrid(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+    const initial = getPdfPathFromRequest(req);
+    const { resolved, normalized } = await resolveExistingPdfPath(
+      initial.resolved,
+      initial.normalized,
+      companyId
+    );
+    const page = parseInt(String(req.query.page || "1"), 10);
+    const scale = parseFloat(String(req.query.scale || "1.5"));
+    const gridSize = parseInt(String(req.query.grid || "50"), 10);
+    if (!normalized || !ensurePdfExtension(resolved)) {
+      const error = new Error("Only PDF files are allowed");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    const exists = await fs11.pathExists(resolved);
+    if (!exists) {
+      const error = new Error("File not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    const { cacheFile } = await renderPdfPageToPngWithGrid(resolved, {
+      page,
+      scale,
+      gridSize
+    });
+    res.setHeader("Cache-Control", "public, max-age=3600, immutable");
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("X-PDF-Path", normalized);
+    res.setHeader("X-PDF-Page", String(page));
+    res.status(HTTP_STATUS.OK).sendFile(path14.resolve(cacheFile));
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error("Invalid request");
+    if (!err.statusCode) {
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+    }
+    next(err);
+  }
+}
+
+// src/api/routes/drive.routes.ts
+init_environment();
+
 // src/middleware/tenant.middleware.ts
 var import_jsonwebtoken = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 init_logger();
-function requireTenant(req, res, next) {
+import crypto3 from "crypto";
+var API_KEY_PREFIX = "lk_fe_";
+var normalizeSender = (value) => value.replace(/[^\d]/g, "");
+var extractApiKey = (req) => {
+  const headerKey = req.headers["x-api-key"];
+  if (typeof headerKey === "string" && headerKey.trim()) {
+    return headerKey.trim();
+  }
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === "string" && authHeader.startsWith("ApiKey ")) {
+    return authHeader.replace("ApiKey ", "").trim();
+  }
+  return null;
+};
+var parseApiKey = (apiKey) => {
+  if (!apiKey.startsWith(API_KEY_PREFIX)) {
+    return null;
+  }
+  const rest = apiKey.slice(API_KEY_PREFIX.length);
+  const separatorIndex = rest.indexOf("_");
+  if (separatorIndex <= 0) {
+    return null;
+  }
+  const companyId = rest.slice(0, separatorIndex).trim();
+  const secret = rest.slice(separatorIndex + 1).trim();
+  if (!companyId || !secret) {
+    return null;
+  }
+  return { companyId, secret };
+};
+var hashApiKey = (apiKey) => crypto3.createHash("sha256").update(apiKey).digest("hex");
+var timingSafeEqual = (a, b) => {
+  try {
+    const aBuf = Buffer.from(a);
+    const bBuf = Buffer.from(b);
+    if (aBuf.length !== bBuf.length) return false;
+    return crypto3.timingSafeEqual(aBuf, bBuf);
+  } catch {
+    return false;
+  }
+};
+async function requireTenant(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const parts = authHeader.split(" ");
+      const token = parts[1];
+      if (!token) {
+        const error = new Error("No token provided");
+        error.statusCode = 401;
+        throw error;
+      }
+      let decoded;
+      try {
+        decoded = import_jsonwebtoken.default.verify(token, config.security.jwtSecret);
+      } catch (err) {
+        const error = new Error("Invalid or expired token");
+        error.statusCode = 401;
+        throw error;
+      }
+      if (!decoded.companyId) {
+        const error = new Error("Token does not contain companyId");
+        error.statusCode = 401;
+        throw error;
+      }
+      req.companyId = decoded.companyId;
+      req.auth = { type: "jwt" };
+      logger_default.info(`Tenant validated: ${decoded.companyId}`, {
+        path: req.path,
+        method: req.method,
+        userId: decoded.userId
+      });
+      return next();
+    }
+    const apiKey = extractApiKey(req);
+    if (!apiKey) {
       const error = new Error("No authorization header provided");
       error.statusCode = 401;
       throw error;
     }
-    const parts = authHeader.split(" ");
-    if (parts.length !== 2 || parts[0] !== "Bearer") {
-      const error = new Error("Invalid authorization header format. Expected: Bearer <token>");
+    const parsed = parseApiKey(apiKey);
+    if (!parsed) {
+      const error = new Error("Invalid API key format");
       error.statusCode = 401;
       throw error;
     }
-    const token = parts[1];
-    if (!token) {
-      const error = new Error("No token provided");
+    const CompanyModel = await getCompanyModel();
+    const company = await CompanyModel.findOne({ companyId: parsed.companyId, isActive: true }).lean();
+    if (!company) {
+      const error = new Error("Company not found");
       error.statusCode = 401;
       throw error;
     }
-    let decoded;
-    try {
-      decoded = import_jsonwebtoken.default.verify(token, config.security.jwtSecret);
-    } catch (err) {
-      const error = new Error("Invalid or expired token");
+    const keyData = company["api-key-lila-access"] || {};
+    if (!keyData.keyHash || keyData.isActive !== true) {
+      const error = new Error("API key inactive or not configured");
       error.statusCode = 401;
       throw error;
     }
-    if (!decoded.companyId) {
-      const error = new Error("Token does not contain companyId");
+    const computedHash = hashApiKey(apiKey);
+    if (!timingSafeEqual(computedHash, String(keyData.keyHash))) {
+      const error = new Error("Invalid API key");
       error.statusCode = 401;
       throw error;
     }
-    req.companyId = decoded.companyId;
-    logger_default.info(`Tenant validated: ${decoded.companyId}`, {
+    const origin = req.headers.origin;
+    if (Array.isArray(keyData.allowedOrigins) && keyData.allowedOrigins.length > 0 && typeof origin === "string") {
+      if (!keyData.allowedOrigins.includes(origin)) {
+        const error = new Error("Origin not allowed");
+        error.statusCode = 403;
+        throw error;
+      }
+    }
+    req.companyId = parsed.companyId;
+    req.auth = { type: "apiKey", keyPrefix: keyData.keyPrefix };
+    req.apiKeyAllowedSenders = Array.isArray(keyData.allowedSenders) ? keyData.allowedSenders.map((sender) => normalizeSender(String(sender))) : void 0;
+    const baseUrl = req.baseUrl || "";
+    if (baseUrl.startsWith("/api/drive") && company.features?.modules?.drive === false) {
+      const error = new Error("Drive module not enabled for this company");
+      error.statusCode = 403;
+      throw error;
+    }
+    if (baseUrl.startsWith("/api/message") && !company.whatsappConfig?.sender) {
+      const error = new Error("WhatsApp sender not configured for this company");
+      error.statusCode = 403;
+      throw error;
+    }
+    if (baseUrl.startsWith("/api/message") && req.apiKeyAllowedSenders?.length) {
+      const sessionPhoneRaw = req.params?.sessionPhone;
+      const sessionPhone = sessionPhoneRaw ? normalizeSender(String(sessionPhoneRaw)) : "";
+      if (sessionPhone && !req.apiKeyAllowedSenders.includes(sessionPhone)) {
+        const error = new Error("Sender not allowed for this API key");
+        error.statusCode = 403;
+        throw error;
+      }
+    }
+    await CompanyModel.updateOne(
+      { companyId: parsed.companyId },
+      {
+        $set: {
+          "api-key-lila-access.lastUsedAt": /* @__PURE__ */ new Date(),
+          "api-key-lila-access.lastUsedIp": req.ip
+        }
+      }
+    );
+    logger_default.info(`Tenant validated (apiKey): ${parsed.companyId}`, {
       path: req.path,
-      method: req.method,
-      userId: decoded.userId
+      method: req.method
     });
-    next();
+    return next();
   } catch (err) {
     const error = err;
     const statusCode = error.statusCode || 401;
@@ -7925,1384 +17272,24 @@ var uploadRateLimiter = companyRateLimiter({
   message: "Upload rate limit exceeded. Maximum 20 uploads per minute."
 });
 
-// src/api/routes/message.routes.ts
-var router3 = Router3();
-var upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }
-});
-router3.post("/", messageLimiter, sendMessage);
-router3.post(
-  "/:sessionPhone/text",
-  requireTenant,
-  whatsappRateLimiter,
-  requireWhatsAppQuota,
-  sendTextMessage
-);
-router3.post(
-  "/:sessionPhone/image",
-  requireTenant,
-  whatsappRateLimiter,
-  requireWhatsAppQuota,
-  upload.single("file"),
-  sendImage
-);
-router3.post(
-  "/:sessionPhone/video",
-  requireTenant,
-  whatsappRateLimiter,
-  requireWhatsAppQuota,
-  upload.single("file"),
-  sendVideo
-);
-router3.post(
-  "/:sessionPhone/file",
-  requireTenant,
-  whatsappRateLimiter,
-  requireWhatsAppQuota,
-  upload.single("file"),
-  sendFile
-);
-router3.get("/:sessionPhone/:chatId", getConversation);
-router3.get("/:sessionPhone", getAllConversations);
-router3.delete("/:sessionPhone/:chatId", closeConversation);
-router3.post(
-  "/:sessionPhone/poll",
-  requireTenant,
-  whatsappRateLimiter,
-  requireWhatsAppQuota,
-  sendPoll
-);
-router3.post(
-  "/:sessionPhone/menu",
-  requireTenant,
-  whatsappRateLimiter,
-  requireWhatsAppQuota,
-  sendTextMenu
-);
-var message_routes_default = router3;
-
-// src/api/routes/pdf.routes.ts
-import { Router as Router4 } from "express";
-
-// src/pdf/generator.service.ts
-init_logger();
-init_environment();
-import puppeteer from "puppeteer";
-import Handlebars from "handlebars";
-import fs4 from "fs-extra";
-import path8 from "path";
-import { randomUUID as randomUUID2 } from "crypto";
-var PDFGenerator = class {
-  constructor() {
-    this.browser = null;
-    this.templatesDir = config.pdf.templatesDir;
-    this.uploadsDir = config.pdf.uploadsDir;
-  }
-  async initialize() {
-    try {
-      logger_default.info("Initializing PDF Generator...");
-      await fs4.ensureDir(this.templatesDir);
-      await fs4.ensureDir(this.uploadsDir);
-      this.browser = await puppeteer.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"]
-      });
-      logger_default.info("PDF Generator initialized");
-    } catch (error) {
-      logger_default.error("Error initializing PDF Generator:", error);
-      throw error;
-    }
-  }
-  async generatePDF(request) {
-    try {
-      if (!this.browser) {
-        throw new Error("PDF Generator not initialized");
-      }
-      logger_default.info(`Generating PDF from template: ${request.templateId}`);
-      const template = await this.loadTemplate(request.templateId);
-      const compiled = Handlebars.compile(template);
-      const html = compiled(request.data);
-      const filename = request.filename || `pdf-${randomUUID2()}.pdf`;
-      const filepath = path8.join(this.uploadsDir, filename);
-      const page = await this.browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
-      await page.pdf({
-        path: filepath,
-        format: "A4",
-        margin: { top: "20px", right: "20px", bottom: "20px", left: "20px" }
-      });
-      await page.close();
-      logger_default.info(`PDF generated: ${filepath}`);
-      return filepath;
-    } catch (error) {
-      logger_default.error("Error generating PDF:", error);
-      throw error;
-    }
-  }
-  async createTemplate(id, name, htmlContent) {
-    try {
-      const filepath = path8.join(this.templatesDir, `${id}.hbs`);
-      await fs4.ensureDir(path8.dirname(filepath));
-      await fs4.writeFile(filepath, htmlContent, "utf-8");
-      logger_default.info(`Created PDF template: ${id}`);
-    } catch (error) {
-      logger_default.error("Error creating PDF template:", error);
-      throw error;
-    }
-  }
-  async loadTemplate(templateId) {
-    try {
-      const filepath = path8.join(this.templatesDir, `${templateId}.hbs`);
-      if (!await fs4.pathExists(filepath)) {
-        throw new Error(`Template not found: ${templateId}`);
-      }
-      return await fs4.readFile(filepath, "utf-8");
-    } catch (error) {
-      logger_default.error("Error loading template:", error);
-      throw error;
-    }
-  }
-  async listTemplates() {
-    try {
-      const files = await fs4.readdir(this.templatesDir);
-      return files.filter((f) => f.endsWith(".hbs")).map((f) => f.replace(".hbs", ""));
-    } catch (error) {
-      logger_default.error("Error listing templates:", error);
-      return [];
-    }
-  }
-  async deleteTemplate(templateId) {
-    try {
-      const filepath = path8.join(this.templatesDir, `${templateId}.hbs`);
-      if (await fs4.pathExists(filepath)) {
-        await fs4.remove(filepath);
-        logger_default.info(`Deleted template: ${templateId}`);
-      }
-    } catch (error) {
-      logger_default.error("Error deleting template:", error);
-      throw error;
-    }
-  }
-  async shutdown() {
-    if (this.browser) {
-      await this.browser.close();
-      logger_default.info("PDF Generator shut down");
-    }
-  }
-};
-var generator_service_default = new PDFGenerator();
-
-// src/api/controllers/pdf.controller.ts
-async function generatePDF(req, res, next) {
-  try {
-    const { templateId, data, filename } = req.body;
-    if (!templateId || !data) {
-      const error = new Error("templateId and data are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const filepath = await generator_service_default.generatePDF({
-      templateId,
-      data,
-      filename
-    });
-    res.status(HTTP_STATUS.CREATED).json({
-      success: true,
-      data: {
-        filepath,
-        filename: filename || `pdf-${Date.now()}.pdf`
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function createTemplate(req, res, next) {
-  try {
-    const { id, name, htmlContent } = req.body;
-    if (!id || !name || !htmlContent) {
-      const error = new Error("id, name, and htmlContent are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    await generator_service_default.createTemplate(id, name, htmlContent);
-    res.status(HTTP_STATUS.CREATED).json({
-      success: true,
-      message: `Template ${id} created`
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function listTemplates(req, res, next) {
-  try {
-    const templates = await generator_service_default.listTemplates();
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      data: {
-        total: templates.length,
-        templates
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function deleteTemplate(req, res, next) {
-  try {
-    const { templateId } = req.params;
-    if (!templateId) {
-      const error = new Error("templateId is required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    await generator_service_default.deleteTemplate(templateId);
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: `Template ${templateId} deleted`
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-// src/api/controllers/pdf-vale.controller.ts
-import fs6 from "fs-extra";
-import path10 from "path";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { randomUUID as randomUUID3 } from "crypto";
-init_environment();
-
-// src/pdf/render.service.ts
-init_environment();
-import fs5 from "fs-extra";
-import path9 from "path";
-import crypto from "crypto";
-import { createCanvas } from "@napi-rs/canvas";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-function getCacheKey(filePath, stat, page, scale) {
-  const raw = `${filePath}:${stat.size}:${stat.mtimeMs}:${page}:${scale}`;
-  return crypto.createHash("sha1").update(raw).digest("hex");
-}
-function clampScale(value) {
-  if (Number.isNaN(value)) return 1;
-  return Math.min(3, Math.max(0.5, value));
-}
-async function getPdfInfo(filePath) {
-  const buffer = await fs5.readFile(filePath);
-  const data = new Uint8Array(buffer);
-  const task = pdfjsLib.getDocument({ data, disableWorker: true });
-  const pdf = await task.promise;
-  return {
-    pages: pdf.numPages
-  };
-}
-async function renderPdfPageToPng(filePath, options) {
-  const stat = await fs5.stat(filePath);
-  const scale = clampScale(options.scale);
-  const cacheKey = getCacheKey(filePath, stat, options.page, scale);
-  const cacheDir = path9.resolve(config.drive.cacheDir, cacheKey);
-  const cacheFile = path9.join(cacheDir, `page-${options.page}.png`);
-  if (await fs5.pathExists(cacheFile)) {
-    return { cacheFile, fromCache: true };
-  }
-  await fs5.ensureDir(cacheDir);
-  const buffer = await fs5.readFile(filePath);
-  const data = new Uint8Array(buffer);
-  const task = pdfjsLib.getDocument({ data, disableWorker: true });
-  const pdf = await task.promise;
-  if (options.page < 1 || options.page > pdf.numPages) {
-    throw new Error("Page out of range");
-  }
-  const page = await pdf.getPage(options.page);
-  const viewport = page.getViewport({ scale });
-  const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-  const ctx = canvas.getContext("2d");
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  const pngBuffer = canvas.toBuffer("image/png");
-  await fs5.writeFile(cacheFile, pngBuffer);
-  return { cacheFile, fromCache: false };
-}
-async function renderPdfPageToPngWithGrid(filePath, options) {
-  const stat = await fs5.stat(filePath);
-  const scale = clampScale(options.scale);
-  const gridSize = options.gridSize && options.gridSize > 0 ? options.gridSize : 50;
-  const cacheKey = getCacheKey(filePath, stat, options.page, scale) + `-g${gridSize}`;
-  const cacheDir = path9.resolve(config.drive.cacheDir, cacheKey);
-  const cacheFile = path9.join(cacheDir, `page-${options.page}-grid.png`);
-  if (await fs5.pathExists(cacheFile)) {
-    return { cacheFile, fromCache: true };
-  }
-  await fs5.ensureDir(cacheDir);
-  const buffer = await fs5.readFile(filePath);
-  const data = new Uint8Array(buffer);
-  const task = pdfjsLib.getDocument({ data, disableWorker: true });
-  const pdf = await task.promise;
-  if (options.page < 1 || options.page > pdf.numPages) {
-    throw new Error("Page out of range");
-  }
-  const page = await pdf.getPage(options.page);
-  const viewport = page.getViewport({ scale });
-  const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-  const ctx = canvas.getContext("2d");
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  const step = gridSize * scale;
-  ctx.strokeStyle = "rgba(255,0,0,0.35)";
-  ctx.lineWidth = 1;
-  ctx.font = `${Math.max(10, Math.floor(10 * scale))}px Arial`;
-  ctx.fillStyle = "rgba(255,0,0,0.7)";
-  for (let x = 0; x <= canvas.width; x += step) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
-    ctx.fillText(String(Math.round(x / scale)), x + 2, 12);
-  }
-  for (let y = 0; y <= canvas.height; y += step) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
-    ctx.stroke();
-    const coord = Math.round((canvas.height - y) / scale);
-    ctx.fillText(String(coord), 2, y - 2);
-  }
-  const pngBuffer = canvas.toBuffer("image/png");
-  await fs5.writeFile(cacheFile, pngBuffer);
-  return { cacheFile, fromCache: false };
-}
-
-// src/api/controllers/pdf-vale.controller.ts
-var DEFAULT_TEMPLATE = "plantilla_dispatch_note.pdf";
-var DEFAULT_COORDS = {
-  nroVale: { x: 445, y: 755, size: 11, bold: true },
-  fecha: { x: 450, y: 725, size: 11, bold: true },
-  senores: { x: 122, y: 676, size: 11, bold: true },
-  obra: { x: 122, y: 655, size: 11 },
-  tipoMaterial: { x: 122, y: 632, size: 11 },
-  nroM3: { x: 230, y: 608, size: 11 },
-  placa: { x: 405, y: 610, size: 11 },
-  chofer: { x: 405, y: 585, size: 11 },
-  hora: { x: 405, y: 560, size: 11 },
-  nota: { x: 122, y: 588, size: 11 }
-};
-function adjustFontSizeForValue(key, value, baseSize) {
-  if (key !== "obra") return baseSize;
-  const length = value.trim().length;
-  if (length > 70) return Math.max(8, baseSize - 4);
-  if (length > 55) return Math.max(9, baseSize - 3);
-  if (length > 40) return Math.max(10, baseSize - 2);
-  if (length > 30) return Math.max(11, baseSize - 1);
-  return baseSize;
-}
-function normalizeWhatsappTarget(raw) {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (trimmed.includes("@")) return trimmed;
-  if (trimmed.includes("-")) {
-    return `${trimmed}@g.us`;
-  }
-  const digits = trimmed.replace(/[^\d]/g, "");
-  if (digits.length < 8) return null;
-  return `${digits}@s.whatsapp.net`;
-}
-function getDefaultWhatsappSession() {
-  const sessions = Array.from(connection_manager_default.getAllConnections().keys());
-  return sessions.find((phone) => connection_manager_default.isConnected(phone)) || null;
-}
-async function sendWhatsappNotification(sessionOverride, target, caption, fileBuffer, filename) {
-  const sessionPhone = sessionOverride || getDefaultWhatsappSession();
-  if (!sessionPhone) {
-    throw new Error("No WhatsApp session connected");
-  }
-  const recipient = normalizeWhatsappTarget(target);
-  if (!recipient) {
-    throw new Error("Invalid WhatsApp target");
-  }
-  const isConnected = await connection_manager_default.ensureConnected(sessionPhone);
-  if (!isConnected) {
-    throw new Error("WhatsApp session not connected");
-  }
-  const socket = connection_manager_default.getConnection(sessionPhone);
-  if (!socket) {
-    throw new Error("WhatsApp session not connected");
-  }
-  await socket.sendMessage(recipient, {
-    document: fileBuffer,
-    fileName: filename,
-    mimetype: "application/pdf",
-    caption
-  });
-  return { sessionPhone, recipient };
-}
-async function sendTelegramNotification(chatId, caption, fileBuffer, filename) {
-  if (!config.telegram.botToken) {
-    throw new Error("Telegram bot token not configured");
-  }
-  const form = new FormData();
-  form.append("chat_id", chatId);
-  if (caption) form.append("caption", caption);
-  form.append("document", new Blob([fileBuffer], { type: "application/pdf" }), filename);
-  const response = await fetch(
-    `https://api.telegram.org/bot${config.telegram.botToken}/sendDocument`,
-    {
-      method: "POST",
-      body: form
-    }
-  );
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Telegram error: ${response.status} ${text}`);
-  }
-}
-function buildAbsoluteUrl(req, relativeUrl) {
-  const host = req.get("host");
-  if (!host) return relativeUrl;
-  const proto = req.protocol;
-  return `${proto}://${host}${relativeUrl}`;
-}
-async function generateVale(req, res, next) {
-  try {
-    const {
-      template = DEFAULT_TEMPLATE,
-      fields,
-      coords,
-      notify
-    } = req.body;
-    if (!fields) {
-      const error = new Error("fields are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const requiredFields = [
-      "senores",
-      "obra",
-      "tipoMaterial",
-      "nroM3",
-      "placa",
-      "chofer",
-      "hora",
-      "fecha"
-    ];
-    for (const key of requiredFields) {
-      if (!fields[key]) {
-        const error = new Error(`${key} is required`);
-        error.statusCode = HTTP_STATUS.BAD_REQUEST;
-        return next(error);
-      }
-    }
-    const templatePath = path10.join(config.pdf.templatesDir, template);
-    if (!await fs6.pathExists(templatePath)) {
-      const error = new Error("Template not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    const bytes = await fs6.readFile(templatePath);
-    const pdfDoc = await PDFDocument.load(bytes);
-    const page = pdfDoc.getPages()[0];
-    const { width, height } = page.getSize();
-    if (width > height) {
-      const error = new Error("Template must be portrait (vertical)");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const signaturePath = path10.join(
-      path10.dirname(config.pdf.templatesDir),
-      "signatures",
-      "signature-dispatch-note.png"
-    );
-    if (await fs6.pathExists(signaturePath)) {
-      const signatureBytes = await fs6.readFile(signaturePath);
-      const signatureImage = await pdfDoc.embedPng(signatureBytes);
-      page.drawImage(signatureImage, {
-        x: 120,
-        y: 500,
-        width: 140,
-        height: 55
-      });
-    }
-    const values = {
-      nroVale: fields.nroVale || `VALE-${Date.now()}`,
-      fecha: fields.fecha,
-      senores: fields.senores,
-      obra: fields.obra,
-      tipoMaterial: fields.tipoMaterial,
-      nroM3: fields.nroM3,
-      placa: fields.placa,
-      chofer: fields.chofer,
-      hora: fields.hora,
-      nota: fields.nota || ""
-    };
-    const positions = {
-      ...DEFAULT_COORDS,
-      ...coords || {}
-    };
-    Object.keys(values).forEach((key) => {
-      const value = values[key];
-      if (!value) return;
-      const pos = positions[key];
-      const isVale = key === "nroVale";
-      const isbold = pos.bold || false;
-      const size = adjustFontSizeForValue(key, String(value), pos.size || 12);
-      page.drawText(String(value), {
-        x: pos.x,
-        y: pos.y,
-        size,
-        font: isbold ? fontBold : font,
-        color: isVale ? rgb(0.8, 0, 0) : rgb(0, 0, 0)
-      });
-    });
-    await fs6.ensureDir(config.pdf.tempDir);
-    const valeNumber = fields.nroVale || randomUUID3().slice(0, 8);
-    const safeVale = String(valeNumber).replace(/[^a-zA-Z0-9_-]+/g, "-");
-    const filename = `vale-despacho-${safeVale}.pdf`;
-    const outputPath = path10.join(config.pdf.tempDir, filename);
-    const pdfBytes = await pdfDoc.save();
-    await fs6.writeFile(outputPath, pdfBytes);
-    const publicUrl = `${config.pdf.tempPublicBaseUrl.replace(/\/+$/, "")}/${encodeURI(
-      filename
-    )}`;
-    const notifyStatus = {};
-    const notifyTasks = [];
-    if (notify?.whatsapp?.to) {
-      notifyTasks.push(
-        (async () => {
-          try {
-            const result = await sendWhatsappNotification(
-              notify.whatsapp.from,
-              notify.whatsapp.to,
-              notify.whatsapp.caption,
-              Buffer.from(pdfBytes),
-              filename
-            );
-            notifyStatus.whatsapp = { sent: true, ...result };
-          } catch (error) {
-            notifyStatus.whatsapp = { sent: false, error: String(error) };
-          }
-        })()
-      );
-    }
-    if (notify?.telegram?.chatId) {
-      notifyTasks.push(
-        (async () => {
-          try {
-            await sendTelegramNotification(
-              notify.telegram.chatId,
-              notify.telegram.caption,
-              Buffer.from(pdfBytes),
-              filename
-            );
-            notifyStatus.telegram = { sent: true };
-          } catch (error) {
-            notifyStatus.telegram = { sent: false, error: String(error) };
-          }
-        })()
-      );
-    }
-    if (notifyTasks.length > 0) {
-      await Promise.allSettled(notifyTasks);
-    }
-    res.status(HTTP_STATUS.CREATED).json({
-      success: true,
-      data: {
-        filename,
-        url: publicUrl,
-        urlAbsolute: buildAbsoluteUrl(req, publicUrl),
-        notify: notifyStatus
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function previewValeTemplateGrid(req, res, next) {
-  try {
-    const template = String(req.query.template || DEFAULT_TEMPLATE);
-    const page = parseInt(String(req.query.page || "1"), 10);
-    const scale = parseFloat(String(req.query.scale || "1.5"));
-    const gridSize = parseInt(String(req.query.grid || "50"), 10);
-    const templatePath = path10.join(config.pdf.templatesDir, template);
-    if (!await fs6.pathExists(templatePath)) {
-      const error = new Error("Template not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    const { cacheFile } = await renderPdfPageToPngWithGrid(templatePath, {
-      page,
-      scale,
-      gridSize
-    });
-    res.setHeader("Cache-Control", "public, max-age=3600, immutable");
-    res.setHeader("Content-Type", "image/png");
-    res.status(HTTP_STATUS.OK).sendFile(path10.resolve(cacheFile));
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error("Invalid request");
-    if (!err.statusCode) {
-      err.statusCode = HTTP_STATUS.BAD_REQUEST;
-    }
-    next(err);
-  }
-}
-
-// src/api/routes/pdf.routes.ts
-var router4 = Router4();
-router4.post("/generate", generatePDF);
-router4.post("/generate-vale", generateVale);
-router4.get("/templates/preview-grid", previewValeTemplateGrid);
-router4.post("/templates", createTemplate);
-router4.get("/templates", listTemplates);
-router4.delete("/templates/:templateId", deleteTemplate);
-var pdf_routes_default = router4;
-
 // src/api/routes/drive.routes.ts
-import { Router as Router5 } from "express";
-import multer2 from "multer";
-import fs10 from "fs-extra";
-import path14 from "path";
-
-// src/api/controllers/drive.controller.ts
-import fs8 from "fs-extra";
-import path12 from "path";
-
-// src/services/storage-path.service.ts
-init_environment();
-init_logger();
-import path11 from "path";
-import fs7 from "fs-extra";
-var StoragePathService = class {
-  constructor() {
-    /**
-     * Módulos estándar que se crean automáticamente para cada empresa
-     */
-    this.standardModules = [
-      { name: "orders", description: "Pedidos y obras", autoCreate: true },
-      { name: "dispatches", description: "Despachos y vales", autoCreate: true },
-      { name: "clients", description: "Documentos de clientes", autoCreate: true },
-      { name: "certificates", description: "Certificados de calidad", autoCreate: true },
-      { name: "reports", description: "Reportes y an\xE1lisis", autoCreate: true },
-      { name: "media", description: "Archivos multimedia", autoCreate: true },
-      { name: "temp", description: "Archivos temporales", autoCreate: true }
-    ];
-    this.root = config.storage.root;
-    logger_default.info(`StoragePathService initialized with root: ${this.root}`);
-  }
-  // ==========================================================================
-  // PATH BUILDERS
-  // ==========================================================================
-  /**
-   * Obtiene la ruta raíz de una empresa
-   * @param companyId ID de la empresa
-   * @returns Ruta absoluta a la carpeta de la empresa
-   */
-  getCompanyRoot(companyId) {
-    if (!companyId || companyId.trim() === "") {
-      throw new Error("companyId is required");
-    }
-    return path11.join(this.root, "companies", companyId);
-  }
-  /**
-   * Obtiene la ruta de un módulo específico para una empresa
-   * @param companyId ID de la empresa
-   * @param module Nombre del módulo (orders, dispatches, clients, etc.)
-   * @param subpath Subruta opcional dentro del módulo
-   * @returns Ruta absoluta al módulo o subruta
-   */
-  getModulePath(companyId, module, subpath) {
-    const root = this.getCompanyRoot(companyId);
-    const modulePath = path11.join(root, module);
-    if (subpath) {
-      return path11.join(modulePath, subpath);
-    }
-    return modulePath;
-  }
-  /**
-   * Obtiene la estructura completa de carpetas para una empresa
-   * @param companyId ID de la empresa
-   * @returns Objeto con todas las rutas de módulos
-   */
-  getCompanyStructure(companyId) {
-    const root = this.getCompanyRoot(companyId);
-    return {
-      companyId,
-      root,
-      modules: {
-        orders: path11.join(root, "orders"),
-        dispatches: path11.join(root, "dispatches"),
-        clients: path11.join(root, "clients"),
-        certificates: path11.join(root, "certificates"),
-        reports: path11.join(root, "reports"),
-        media: path11.join(root, "media"),
-        temp: path11.join(root, "temp")
-      }
-    };
-  }
-  /**
-   * Resuelve una ruta relativa a una ruta absoluta dentro de una empresa
-   * @param companyId ID de la empresa
-   * @param relativePath Ruta relativa proporcionada por el usuario
-   * @returns Ruta absoluta resuelta
-   */
-  resolvePath(companyId, relativePath) {
-    const companyRoot = this.getCompanyRoot(companyId);
-    const normalized = path11.normalize(relativePath);
-    const resolved = path11.join(companyRoot, normalized);
-    return resolved;
-  }
-  // ==========================================================================
-  // VALIDATION
-  // ==========================================================================
-  /**
-   * Valida que una ruta esté dentro del espacio permitido para una empresa
-   * Previene path traversal attacks (../, etc.)
-   * @param requestedPath Ruta que se quiere acceder
-   * @param companyId ID de la empresa
-   * @returns true si el acceso es válido, false si no
-   */
-  validateAccess(requestedPath, companyId) {
-    try {
-      const companyRoot = this.getCompanyRoot(companyId);
-      const normalizedRequested = path11.normalize(requestedPath);
-      const normalizedRoot = path11.normalize(companyRoot);
-      const isWithinCompanyRoot = normalizedRequested.startsWith(normalizedRoot);
-      if (!isWithinCompanyRoot) {
-        logger_default.warn("Path validation failed: outside company root", {
-          companyId,
-          requestedPath: normalizedRequested,
-          companyRoot: normalizedRoot
-        });
-        return false;
-      }
-      const relative = path11.relative(normalizedRoot, normalizedRequested);
-      const hasTraversal = relative.startsWith("..") || path11.isAbsolute(relative);
-      if (hasTraversal) {
-        logger_default.warn("Path validation failed: traversal attempt detected", {
-          companyId,
-          requestedPath: normalizedRequested,
-          relative
-        });
-        return false;
-      }
-      return true;
-    } catch (error) {
-      logger_default.error("Path validation error:", error);
-      return false;
-    }
-  }
-  /**
-   * Valida que un módulo sea válido
-   * @param moduleName Nombre del módulo
-   * @returns true si es un módulo estándar
-   */
-  isValidModule(moduleName) {
-    return this.standardModules.some((m) => m.name === moduleName);
-  }
-  // ==========================================================================
-  // DIRECTORY MANAGEMENT
-  // ==========================================================================
-  /**
-   * Crea la estructura de carpetas completa para una empresa
-   * @param companyId ID de la empresa
-   * @returns Promise que se resuelve cuando se crea la estructura
-   */
-  async ensureCompanyStructure(companyId) {
-    const structure = this.getCompanyStructure(companyId);
-    logger_default.info(`Creating company storage structure for: ${companyId}`);
-    try {
-      await fs7.ensureDir(structure.root);
-      const moduleCreations = this.standardModules.filter((m) => m.autoCreate).map(async (module) => {
-        const modulePath = path11.join(structure.root, module.name);
-        await fs7.ensureDir(modulePath);
-        logger_default.debug(`Created module folder: ${module.name}`, { companyId });
-      });
-      await Promise.all(moduleCreations);
-      logger_default.info(`Company storage structure created successfully for: ${companyId}`);
-      return structure;
-    } catch (error) {
-      logger_default.error(`Failed to create company storage structure for: ${companyId}`, error);
-      throw error;
-    }
-  }
-  /**
-   * Verifica si la estructura de una empresa existe
-   * @param companyId ID de la empresa
-   * @returns true si existe la carpeta raíz
-   */
-  async companyStructureExists(companyId) {
-    const root = this.getCompanyRoot(companyId);
-    return fs7.pathExists(root);
-  }
-  /**
-   * Asegura que un directorio exista, creándolo si es necesario
-   * Solo si está dentro del espacio de la empresa
-   * @param dirPath Ruta del directorio
-   * @param companyId ID de la empresa
-   */
-  async ensureDir(dirPath, companyId) {
-    if (!this.validateAccess(dirPath, companyId)) {
-      throw new Error("Invalid path: outside company storage space");
-    }
-    await fs7.ensureDir(dirPath);
-  }
-  // ==========================================================================
-  // UTILITIES
-  // ==========================================================================
-  /**
-   * Obtiene información de uso de almacenamiento para una empresa
-   * @param companyId ID de la empresa
-   * @returns Tamaño total en bytes
-   */
-  async getStorageUsage(companyId) {
-    const root = this.getCompanyRoot(companyId);
-    if (!await fs7.pathExists(root)) {
-      return 0;
-    }
-    try {
-      const calculateSize = async (dir) => {
-        const entries = await fs7.readdir(dir, { withFileTypes: true });
-        let totalSize = 0;
-        for (const entry of entries) {
-          const fullPath = path11.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            totalSize += await calculateSize(fullPath);
-          } else {
-            const stats = await fs7.stat(fullPath);
-            totalSize += stats.size;
-          }
-        }
-        return totalSize;
-      };
-      return await calculateSize(root);
-    } catch (error) {
-      logger_default.error(`Failed to calculate storage usage for: ${companyId}`, error);
-      return 0;
-    }
-  }
-  /**
-   * Convierte bytes a formato legible
-   * @param bytes Tamaño en bytes
-   * @returns String formateado (ej: "1.5 GB")
-   */
-  formatBytes(bytes) {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-  }
-  /**
-   * Limpia archivos temporales de una empresa
-   * @param companyId ID de la empresa
-   */
-  async cleanTempFiles(companyId) {
-    const tempPath = this.getModulePath(companyId, "temp");
-    if (await fs7.pathExists(tempPath)) {
-      await fs7.emptyDir(tempPath);
-      logger_default.info(`Cleaned temp files for company: ${companyId}`);
-    }
-  }
-};
-var storagePathService = new StoragePathService();
-
-// src/api/controllers/drive.controller.ts
-function isValidEntryName(name) {
-  if (!name) return false;
-  if (name === "." || name === "..") return false;
-  return !/[\\/]/.test(name);
-}
-function toEntry(relativeBase, name, stat, companyId) {
-  const relPath = relativeBase ? `${relativeBase}/${name}` : name;
-  const type = stat.isDirectory() ? "folder" : "file";
-  const listUrl = type === "folder" ? `/api/drive/list?path=${encodeURIComponent(relPath)}` : void 0;
-  return {
-    name,
-    path: relPath,
-    type,
-    size: stat.isFile() ? stat.size : void 0,
-    updatedAt: stat.mtime.toISOString(),
-    url: stat.isFile() ? `/files/companies/${companyId}/${relPath}` : void 0,
-    listUrl
-  };
-}
-function buildAbsoluteUrl2(req, relativeUrl) {
-  const host = req.get("host");
-  if (!host) return relativeUrl;
-  const proto = req.protocol;
-  return `${proto}://${host}${relativeUrl}`;
-}
-async function listEntries(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-      return next(error);
-    }
-    await storagePathService.ensureCompanyStructure(companyId);
-    const relativePath = req.query.path || "";
-    const resolved = storagePathService.resolvePath(companyId, relativePath);
-    if (!storagePathService.validateAccess(resolved, companyId)) {
-      const error = new Error("Access denied: invalid path");
-      error.statusCode = HTTP_STATUS.FORBIDDEN;
-      return next(error);
-    }
-    const exists = await fs8.pathExists(resolved);
-    if (!exists) {
-      const error = new Error("Path not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    const stat = await fs8.stat(resolved);
-    if (!stat.isDirectory()) {
-      const error = new Error("Path is not a folder");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const entries = (await fs8.readdir(resolved)).filter((name) => !name.startsWith("."));
-    const results = await Promise.all(
-      entries.map(async (name) => {
-        const entryStat = await fs8.stat(path12.join(resolved, name));
-        const entry = toEntry(relativePath, name, entryStat, companyId);
-        const result = { ...entry };
-        if (entry.url) {
-          result.urlAbsolute = buildAbsoluteUrl2(req, entry.url);
-        }
-        if (entry.listUrl) {
-          result.listUrlAbsolute = buildAbsoluteUrl2(req, entry.listUrl);
-        }
-        return result;
-      })
-    );
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      data: {
-        path: relativePath || "",
-        total: results.length,
-        entries: results
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function createFolder(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-      return next(error);
-    }
-    const { path: parentPath, name } = req.body;
-    if (!name || !isValidEntryName(name)) {
-      const error = new Error("Invalid folder name");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const relativePath = parentPath || "";
-    const resolved = storagePathService.resolvePath(companyId, relativePath);
-    if (!storagePathService.validateAccess(resolved, companyId)) {
-      const error = new Error("Access denied: invalid path");
-      error.statusCode = HTTP_STATUS.FORBIDDEN;
-      return next(error);
-    }
-    const parentExists = await fs8.pathExists(resolved);
-    if (!parentExists) {
-      const error = new Error("Parent path not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    const target = path12.join(resolved, name);
-    if (!storagePathService.validateAccess(target, companyId)) {
-      const error = new Error("Access denied: invalid target path");
-      error.statusCode = HTTP_STATUS.FORBIDDEN;
-      return next(error);
-    }
-    await fs8.ensureDir(target);
-    const newPath = relativePath ? `${relativePath}/${name}` : name;
-    res.status(HTTP_STATUS.CREATED).json({
-      success: true,
-      data: {
-        name,
-        path: newPath,
-        type: "folder"
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function uploadFile(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-      return next(error);
-    }
-    const { path: parentPath } = req.body;
-    const file = req.file;
-    if (!file) {
-      const error = new Error("file is required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    if (!isValidEntryName(file.originalname)) {
-      const error = new Error("Invalid file name");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const relativePath = parentPath || "";
-    const resolved = storagePathService.resolvePath(companyId, relativePath);
-    if (!storagePathService.validateAccess(resolved, companyId)) {
-      const error = new Error("Access denied: invalid path");
-      error.statusCode = HTTP_STATUS.FORBIDDEN;
-      return next(error);
-    }
-    await fs8.ensureDir(resolved);
-    const MAX_ORDERS_BYTES = 100 * 1024 * 1024;
-    const MAX_DRIVE_BYTES2 = 2 * 1024 * 1024 * 1024;
-    const isDriveRoot = relativePath.startsWith("drive");
-    const maxAllowedBytes = isDriveRoot ? MAX_DRIVE_BYTES2 : MAX_ORDERS_BYTES;
-    if (file.size > maxAllowedBytes) {
-      await fs8.remove(file.path).catch(() => {
-      });
-      const error = new Error("File too large");
-      error.statusCode = HTTP_STATUS.REQUEST_TOO_LONG;
-      return next(error);
-    }
-    const target = path12.join(resolved, file.originalname);
-    if (!storagePathService.validateAccess(target, companyId)) {
-      const error = new Error("Access denied: invalid target path");
-      error.statusCode = HTTP_STATUS.FORBIDDEN;
-      return next(error);
-    }
-    await fs8.move(file.path, target, { overwrite: true });
-    await incrementStorageUsage(companyId, file.size);
-    const filePath = relativePath ? `${relativePath}/${file.originalname}` : file.originalname;
-    const publicUrl = `/files/companies/${companyId}/${filePath}`;
-    res.status(HTTP_STATUS.CREATED).json({
-      success: true,
-      data: {
-        name: file.originalname,
-        path: filePath,
-        type: "file",
-        size: file.size,
-        url: publicUrl,
-        urlAbsolute: buildAbsoluteUrl2(req, publicUrl)
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function deleteEntry(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-      return next(error);
-    }
-    const targetPath = req.query.path;
-    if (!targetPath) {
-      const error = new Error("path is required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const resolved = storagePathService.resolvePath(companyId, targetPath);
-    if (!storagePathService.validateAccess(resolved, companyId)) {
-      const error = new Error("Access denied: invalid path");
-      error.statusCode = HTTP_STATUS.FORBIDDEN;
-      return next(error);
-    }
-    const exists = await fs8.pathExists(resolved);
-    if (!exists) {
-      const error = new Error("Path not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    const stats = await fs8.stat(resolved);
-    const isFile = stats.isFile();
-    const fileSize = isFile ? stats.size : 0;
-    await fs8.remove(resolved);
-    if (isFile && fileSize > 0) {
-      await decrementStorageUsage(companyId, fileSize);
-    }
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      message: "Entry deleted",
-      data: {
-        path: targetPath
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function moveEntry(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-      return next(error);
-    }
-    const { from, to } = req.body;
-    if (!from || !to) {
-      const error = new Error("from and to are required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const fromResolved = storagePathService.resolvePath(companyId, from);
-    const toResolved = storagePathService.resolvePath(companyId, to);
-    if (!storagePathService.validateAccess(fromResolved, companyId)) {
-      const error = new Error("Access denied: invalid source path");
-      error.statusCode = HTTP_STATUS.FORBIDDEN;
-      return next(error);
-    }
-    if (!storagePathService.validateAccess(toResolved, companyId)) {
-      const error = new Error("Access denied: invalid destination path");
-      error.statusCode = HTTP_STATUS.FORBIDDEN;
-      return next(error);
-    }
-    const exists = await fs8.pathExists(fromResolved);
-    if (!exists) {
-      const error = new Error("Source not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    await fs8.ensureDir(path12.dirname(toResolved));
-    await fs8.move(fromResolved, toResolved, { overwrite: false });
-    const publicUrl = `/files/companies/${companyId}/${to}`;
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      data: {
-        from,
-        to,
-        url: publicUrl,
-        urlAbsolute: buildAbsoluteUrl2(req, publicUrl)
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-async function getInfo(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-      return next(error);
-    }
-    const targetPath = req.query.path;
-    if (!targetPath) {
-      const error = new Error("path is required");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const resolved = storagePathService.resolvePath(companyId, targetPath);
-    if (!storagePathService.validateAccess(resolved, companyId)) {
-      const error = new Error("Access denied: invalid path");
-      error.statusCode = HTTP_STATUS.FORBIDDEN;
-      return next(error);
-    }
-    const stat = await fs8.stat(resolved);
-    const name = path12.basename(resolved);
-    const parent = path12.dirname(targetPath).replace(/\\/g, "/");
-    const base = parent === "." ? "" : parent;
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      data: (() => {
-        const entry = toEntry(base, name, stat, companyId);
-        const result = { ...entry };
-        if (entry.url) {
-          result.urlAbsolute = buildAbsoluteUrl2(req, entry.url);
-        }
-        if (entry.listUrl) {
-          result.listUrlAbsolute = buildAbsoluteUrl2(req, entry.listUrl);
-        }
-        return result;
-      })()
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-// src/api/controllers/drive-pdf.controller.ts
-import fs9 from "fs-extra";
-import path13 from "path";
-function getPdfPathFromRequest(req) {
-  const companyId = req.companyId;
-  if (!companyId) {
-    throw new Error("Company ID is required");
-  }
-  const { path: pathParam } = req.query;
-  if (!pathParam) {
-    throw new Error("path is required");
-  }
-  const resolved = storagePathService.resolvePath(companyId, pathParam);
-  if (!storagePathService.validateAccess(resolved, companyId)) {
-    throw new Error("Access denied: invalid path");
-  }
-  return { resolved, normalized: pathParam };
-}
-function ensurePdfExtension(filePath) {
-  return path13.extname(filePath).toLowerCase() === ".pdf";
-}
-async function resolveExistingPdfPath(resolved, normalized, companyId) {
-  if (await fs9.pathExists(resolved)) {
-    return { resolved, normalized };
-  }
-  const candidates = [normalized.normalize("NFC"), normalized.normalize("NFD")].filter(
-    (candidate, index, arr) => candidate && arr.indexOf(candidate) === index
-  );
-  for (const candidate of candidates) {
-    const altResolved = storagePathService.resolvePath(companyId, candidate);
-    if (await fs9.pathExists(altResolved)) {
-      return { resolved: altResolved, normalized: candidate };
-    }
-  }
-  return { resolved, normalized };
-}
-async function getPdfMetadata(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-      return next(error);
-    }
-    const initial = getPdfPathFromRequest(req);
-    const { resolved, normalized } = await resolveExistingPdfPath(
-      initial.resolved,
-      initial.normalized,
-      companyId
-    );
-    if (!normalized || !ensurePdfExtension(resolved)) {
-      const error = new Error("Only PDF files are allowed");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const exists = await fs9.pathExists(resolved);
-    if (!exists) {
-      const error = new Error("File not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    const info = await getPdfInfo(resolved);
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      data: {
-        path: normalized,
-        pages: info.pages
-      }
-    });
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error("Invalid request");
-    if (!err.statusCode) {
-      err.statusCode = HTTP_STATUS.BAD_REQUEST;
-    }
-    next(err);
-  }
-}
-async function getPdfPageImage(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-      return next(error);
-    }
-    const initial = getPdfPathFromRequest(req);
-    const { resolved, normalized } = await resolveExistingPdfPath(
-      initial.resolved,
-      initial.normalized,
-      companyId
-    );
-    const page = parseInt(String(req.query.page || "1"), 10);
-    const scale = parseFloat(String(req.query.scale || "1.5"));
-    if (!normalized || !ensurePdfExtension(resolved)) {
-      const error = new Error("Only PDF files are allowed");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const exists = await fs9.pathExists(resolved);
-    if (!exists) {
-      const error = new Error("File not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    const { cacheFile } = await renderPdfPageToPng(resolved, { page, scale });
-    res.setHeader("Cache-Control", "public, max-age=3600, immutable");
-    res.setHeader("Content-Type", "image/png");
-    res.setHeader("X-PDF-Path", normalized);
-    res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path13.resolve(cacheFile));
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error("Invalid request");
-    if (!err.statusCode) {
-      err.statusCode = HTTP_STATUS.BAD_REQUEST;
-    }
-    next(err);
-  }
-}
-async function getPdfPagePreviewGrid(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-      return next(error);
-    }
-    const initial = getPdfPathFromRequest(req);
-    const { resolved, normalized } = await resolveExistingPdfPath(
-      initial.resolved,
-      initial.normalized,
-      companyId
-    );
-    const page = parseInt(String(req.query.page || "1"), 10);
-    const scale = parseFloat(String(req.query.scale || "1.5"));
-    const gridSize = parseInt(String(req.query.grid || "50"), 10);
-    if (!normalized || !ensurePdfExtension(resolved)) {
-      const error = new Error("Only PDF files are allowed");
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    const exists = await fs9.pathExists(resolved);
-    if (!exists) {
-      const error = new Error("File not found");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
-    }
-    const { cacheFile } = await renderPdfPageToPngWithGrid(resolved, {
-      page,
-      scale,
-      gridSize
-    });
-    res.setHeader("Cache-Control", "public, max-age=3600, immutable");
-    res.setHeader("Content-Type", "image/png");
-    res.setHeader("X-PDF-Path", normalized);
-    res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path13.resolve(cacheFile));
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error("Invalid request");
-    if (!err.statusCode) {
-      err.statusCode = HTTP_STATUS.BAD_REQUEST;
-    }
-    next(err);
-  }
-}
-
-// src/api/routes/drive.routes.ts
-init_environment();
 var router5 = Router5();
 var MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024;
-var tempDir = path14.join(config.storage.root, "temp", "uploads");
-fs10.ensureDirSync(tempDir);
+var tempDir = path15.join(config.storage.root, "temp", "uploads");
+try {
+  fs12.ensureDirSync(tempDir);
+} catch (error) {
+  if (config.nodeEnv !== "production") {
+    const fallback = path15.join(process.cwd(), "data", "storage", "temp", "uploads");
+    fs12.ensureDirSync(fallback);
+    console.warn(
+      `[drive] Failed to init temp dir at ${tempDir}. Using fallback: ${fallback}`
+    );
+    tempDir = fallback;
+  } else {
+    throw error;
+  }
+}
 var upload2 = multer2({
   storage: multer2.diskStorage({
     destination: (_req, _file, cb) => cb(null, tempDir),
@@ -9876,28 +17863,52 @@ var openApiSpec = {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["name", "cronExpression", "company", "isActive"],
+                required: ["companyId", "name", "type", "schedule"],
                 properties: {
+                  companyId: { type: "string" },
                   name: { type: "string" },
                   type: { type: "string", enum: ["api", "message"] },
-                  url: { type: "string" },
+                  isActive: { type: "boolean" },
+                  timeout: { type: "number" },
+                  schedule: {
+                    type: "object",
+                    required: ["cronExpression"],
+                    properties: {
+                      cronExpression: { type: "string" },
+                      timezone: { type: "string" }
+                    }
+                  },
                   message: {
                     type: "object",
                     properties: {
-                      sender: { type: "string" },
                       chatId: { type: "string" },
-                      body: { type: "string" }
+                      body: { type: "string" },
+                      mentions: { type: "array", items: { type: "string" } }
                     }
                   },
-                  cronExpression: { type: "string" },
-                  company: { type: "string", enum: ["constroad", "altavia"] },
-                  isActive: { type: "boolean" },
-                  timeout: { type: "number" },
+                  apiConfig: {
+                    type: "object",
+                    properties: {
+                      url: { type: "string" },
+                      method: { type: "string", enum: ["GET", "POST", "PUT"] },
+                      headers: { type: "object" },
+                      body: {}
+                    }
+                  },
+                  metadata: {
+                    type: "object",
+                    properties: {
+                      createdBy: { type: "string" },
+                      updatedBy: { type: "string" },
+                      tags: { type: "array", items: { type: "string" } }
+                    }
+                  },
                   retryPolicy: {
                     type: "object",
                     properties: {
                       maxRetries: { type: "number" },
-                      backoffMultiplier: { type: "number" }
+                      backoffMultiplier: { type: "number" },
+                      currentRetries: { type: "number" }
                     }
                   }
                 }
@@ -9914,11 +17925,25 @@ var openApiSpec = {
         summary: "Listar cron jobs",
         parameters: [
           {
-            name: "company",
+            name: "companyId",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["constroad", "altavia"] },
+            schema: { type: "string" },
             description: "Filtrar jobs por empresa"
+          },
+          {
+            name: "type",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["api", "message"] },
+            description: "Filtrar por tipo"
+          },
+          {
+            name: "isActive",
+            in: "query",
+            required: false,
+            schema: { type: "boolean" },
+            description: "Filtrar por estado"
           }
         ],
         responses: {
@@ -9948,25 +17973,46 @@ var openApiSpec = {
                 type: "object",
                 properties: {
                   name: { type: "string" },
-                  url: { type: "string" },
                   type: { type: "string", enum: ["api", "message"] },
+                  isActive: { type: "boolean" },
+                  timeout: { type: "number" },
+                  schedule: {
+                    type: "object",
+                    properties: {
+                      cronExpression: { type: "string" },
+                      timezone: { type: "string" }
+                    }
+                  },
                   message: {
                     type: "object",
                     properties: {
-                      sender: { type: "string" },
                       chatId: { type: "string" },
-                      body: { type: "string" }
+                      body: { type: "string" },
+                      mentions: { type: "array", items: { type: "string" } }
                     }
                   },
-                  cronExpression: { type: "string" },
-                  company: { type: "string", enum: ["constroad", "altavia"] },
-                  isActive: { type: "boolean" },
-                  timeout: { type: "number" },
+                  apiConfig: {
+                    type: "object",
+                    properties: {
+                      url: { type: "string" },
+                      method: { type: "string", enum: ["GET", "POST", "PUT"] },
+                      headers: { type: "object" },
+                      body: {}
+                    }
+                  },
+                  metadata: {
+                    type: "object",
+                    properties: {
+                      updatedBy: { type: "string" },
+                      tags: { type: "array", items: { type: "string" } }
+                    }
+                  },
                   retryPolicy: {
                     type: "object",
                     properties: {
                       maxRetries: { type: "number" },
-                      backoffMultiplier: { type: "number" }
+                      backoffMultiplier: { type: "number" },
+                      currentRetries: { type: "number" }
                     }
                   }
                 }
@@ -9990,25 +18036,46 @@ var openApiSpec = {
                 type: "object",
                 properties: {
                   name: { type: "string" },
-                  url: { type: "string" },
                   type: { type: "string", enum: ["api", "message"] },
+                  isActive: { type: "boolean" },
+                  timeout: { type: "number" },
+                  schedule: {
+                    type: "object",
+                    properties: {
+                      cronExpression: { type: "string" },
+                      timezone: { type: "string" }
+                    }
+                  },
                   message: {
                     type: "object",
                     properties: {
-                      sender: { type: "string" },
                       chatId: { type: "string" },
-                      body: { type: "string" }
+                      body: { type: "string" },
+                      mentions: { type: "array", items: { type: "string" } }
                     }
                   },
-                  cronExpression: { type: "string" },
-                  company: { type: "string", enum: ["constroad", "altavia"] },
-                  isActive: { type: "boolean" },
-                  timeout: { type: "number" },
+                  apiConfig: {
+                    type: "object",
+                    properties: {
+                      url: { type: "string" },
+                      method: { type: "string", enum: ["GET", "POST", "PUT"] },
+                      headers: { type: "object" },
+                      body: {}
+                    }
+                  },
+                  metadata: {
+                    type: "object",
+                    properties: {
+                      updatedBy: { type: "string" },
+                      tags: { type: "array", items: { type: "string" } }
+                    }
+                  },
                   retryPolicy: {
                     type: "object",
                     properties: {
                       maxRetries: { type: "number" },
-                      backoffMultiplier: { type: "number" }
+                      backoffMultiplier: { type: "number" },
+                      currentRetries: { type: "number" }
                     }
                   }
                 }
@@ -10677,9 +18744,31 @@ var openApiSpec = {
 };
 
 // src/index.ts
+init_sessions_simple();
+
+// src/whatsapp/baileys/restore-sessions.simple.ts
+init_sessions_simple();
+init_environment();
+import fs13 from "fs";
+var restoreAllSessions = async () => {
+  if (!fs13.existsSync(config.whatsapp.sessionDir)) return;
+  const sessionDirs = fs13.readdirSync(config.whatsapp.sessionDir, { withFileTypes: true }).filter((dirent) => dirent.isDirectory()).filter((dirent) => /^\d{9,15}$/.test(dirent.name)).map((dirent) => dirent.name);
+  for (const phone of sessionDirs) {
+    try {
+      console.log(`\u267B\uFE0F Restoring session for ${phone}`);
+      await startSession(phone, () => {
+      });
+    } catch (err) {
+      console.error(`\u274C Error restoring session for ${phone}:`, err);
+    }
+  }
+};
+
+// src/index.ts
 import cron2 from "node-cron";
-import fs11 from "fs-extra";
+import fs14 from "fs-extra";
 var app = express();
+app.set("trust proxy", config.security.trustProxy);
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -10690,7 +18779,41 @@ app.use(
     }
   })
 );
-app.use(cors());
+var corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || "").split(",").map((origin) => origin.trim()).filter(Boolean);
+var resolveStaticCorsOrigin = (origin) => {
+  if (!origin) return null;
+  const normalized = Array.isArray(origin) ? origin[0] : origin;
+  if (!normalized) return null;
+  if (corsOrigins.length === 0) return normalized;
+  if (corsOrigins.includes(normalized)) return normalized;
+  return null;
+};
+var setStaticCorsHeaders = (req, res) => {
+  const origin = resolveStaticCorsOrigin(req.headers.origin);
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Range, Content-Type, Authorization, x-api-key, x-request-id");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+};
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+    allowedHeaders: ["Authorization", "x-api-key", "Content-Type", "x-request-id"]
+  })
+);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(requestLogger);
@@ -10705,7 +18828,7 @@ app.get("/health", (req, res) => {
 });
 app.use("/api/sessions", session_routes_default);
 app.use("/api/session", session_routes_default);
-app.use("/api/jobs", jobs_routes_default);
+app.use("/api/jobs", jobs_routes_v2_default);
 app.use("/api/message", message_routes_default);
 app.use("/api/pdf", pdf_routes_default);
 app.use("/api/drive", drive_routes_default);
@@ -10716,7 +18839,10 @@ app.use(
     index: false,
     dotfiles: "deny",
     maxAge: "1h",
-    immutable: true
+    immutable: true,
+    setHeaders: (res, _path, _stat) => {
+      setStaticCorsHeaders(res.req, res);
+    }
   })
 );
 app.use(
@@ -10725,7 +18851,10 @@ app.use(
     fallthrough: false,
     index: false,
     dotfiles: "deny",
-    maxAge: "1h"
+    maxAge: "1h",
+    setHeaders: (res, _path, _stat) => {
+      setStaticCorsHeaders(res.req, res);
+    }
   })
 );
 app.use(
@@ -10736,11 +18865,11 @@ app.use(
   })
 );
 app.get("/api/status", (req, res) => {
-  const connections = connection_manager_default.getAllConnections();
+  const sessions2 = listSessions();
   res.status(200).json({
     success: true,
     data: {
-      activeSessions: connections.size,
+      activeSessions: sessions2.length,
       nodeEnv: config.nodeEnv,
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     }
@@ -10750,7 +18879,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 async function startServer() {
   try {
-    logger_default.info("\u{1F680} Starting WhatsApp AI Agent Server...");
+    logger_default.info("\u{1F680} Starting WhatsApp Server...");
     logger_default.info("Initializing Quota Validator...");
     const { quotaValidatorService: quotaValidatorService2 } = await Promise.resolve().then(() => (init_quota_validator_service(), quota_validator_service_exports));
     try {
@@ -10759,18 +18888,14 @@ async function startServer() {
     } catch (error) {
       logger_default.warn("Quota Validator initialization failed, quota validation will be disabled:", error);
     }
-    logger_default.info("Initializing PDF Generator...");
     await generator_service_default.initialize();
-    await fs11.ensureDir(config.pdf.tempDir);
+    await fs14.ensureDir(config.pdf.tempDir);
     logger_default.info("Initializing Job Scheduler...");
-    await scheduler_service_default.initialize();
-    logger_default.info("Reconnecting saved WhatsApp sessions...");
-    await connection_manager_default.reconnectSavedSessions();
-    logger_default.info("Starting session recovery watchdog...");
-    connection_manager_default.startSessionRecoveryWatchdog();
+    await scheduler_v2_instance_default.initialize();
+    restoreAllSessions();
     cron2.schedule("0 0 * * 0", async () => {
       try {
-        await fs11.emptyDir(config.pdf.tempDir);
+        await fs14.emptyDir(config.pdf.tempDir);
         logger_default.info("\u2705 Cleared PDF temp directory");
       } catch (error) {
         logger_default.error("Failed to clear PDF temp directory:", error);
@@ -10787,8 +18912,16 @@ async function startServer() {
       server.close(async () => {
         logger_default.info("HTTP server closed");
         try {
-          await connection_manager_default.disconnectAll();
-          await scheduler_service_default.shutdown();
+          const sessions2 = listSessions();
+          for (const sessionId of sessions2) {
+            try {
+              await disconnectSession(sessionId);
+            } catch (err) {
+              logger_default.error(`Error disconnecting ${sessionId}:`, err);
+            }
+          }
+          logger_default.info("All WhatsApp sessions disconnected");
+          await scheduler_v2_instance_default.shutdown();
           await generator_service_default.shutdown();
           const { quotaValidatorService: quotaValidatorService3 } = await Promise.resolve().then(() => (init_quota_validator_service(), quota_validator_service_exports));
           await quotaValidatorService3.disconnect();

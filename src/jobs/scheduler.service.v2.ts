@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { getSharedModels } from '../database/models.js';
 import { ICronJob } from '../models/cronjob.model.js';
-import { ConnectionManager } from '../whatsapp/baileys/connection.manager.js';
 import { JobExecutor } from './executor.service.js';
 import { calculateNextRun } from '../utils/cronHelpers.js';
 import logger from '../utils/logger.js';
@@ -14,11 +13,9 @@ interface ScheduledTask {
 class JobSchedulerV2 {
   private scheduledTasks: Map<string, ScheduledTask> = new Map();
   private executor: JobExecutor;
-  private connectionManager: ConnectionManager;
 
-  constructor(connectionManager: ConnectionManager) {
-    this.connectionManager = connectionManager;
-    this.executor = new JobExecutor(connectionManager);
+  constructor() {
+    this.executor = new JobExecutor();
   }
 
   async initialize(): Promise<void> {

@@ -18,7 +18,9 @@ import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './api/docs/openapi.js';
 import jobScheduler from './jobs/scheduler.v2.instance.js';
 import pdfGenerator from './pdf/generator.service.js';
-import connectionManager from './whatsapp/baileys/connection.manager.js';
+// 🔄 USING SIMPLE SESSIONS (notifications approach)
+import { listSessions, disconnectSession } from './whatsapp/baileys/sessions.simple.js';
+import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.js';
 import cron from 'node-cron';
 import fs from 'fs-extra';
 
@@ -147,11 +149,11 @@ app.use(
 
 // Status endpoint
 app.get('/api/status', (req, res) => {
-  const connections = connectionManager.getAllConnections();
+  const sessions = listSessions();
   res.status(200).json({
     success: true,
     data: {
-      activeSessions: connections.size,
+      activeSessions: sessions.length,
       nodeEnv: config.nodeEnv,
       timestamp: new Date().toISOString(),
     },
@@ -184,12 +186,8 @@ async function startServer() {
     logger.info('Initializing Job Scheduler...');
     await jobScheduler.initialize();
 
-    logger.info('Reconnecting saved WhatsApp sessions...');
-    await connectionManager.reconnectSavedSessions();
-
-    // 🛡️ Iniciar watchdog de recuperación automática de sesiones
-    logger.info('Starting session recovery watchdog...');
-    connectionManager.startSessionRecoveryWatchdog();
+    // 🔄 WhatsApp sessions (notifications approach)
+    restoreAllSessions();
 
     cron.schedule('0 0 * * 0', async () => {
       try {
@@ -217,7 +215,15 @@ async function startServer() {
 
         try {
           // Desconectar todas las sesiones de WhatsApp
-          await connectionManager.disconnectAll();
+          const sessions = listSessions();
+          for (const sessionId of sessions) {
+            try {
+              await disconnectSession(sessionId);
+            } catch (err) {
+              logger.error(`Error disconnecting ${sessionId}:`, err);
+            }
+          }
+          logger.info('All WhatsApp sessions disconnected');
 
           // Cerrar scheduler de jobs
           await jobScheduler.shutdown();
