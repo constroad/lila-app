@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import * as sessionController from '../controllers/session.controller.js';
+// 🔄 USING SIMPLE CONTROLLER (notifications approach)
+import * as sessionController from '../controllers/session.controller.simple.js';
 import { sessionLimiter } from '../middlewares/rateLimiter.js';
 
 const router = Router();
@@ -8,13 +9,15 @@ const router = Router();
 router.get('/list', sessionController.listActiveSessions);
 
 // POST /api/sessions - Crear nueva sesión WhatsApp (QR method)
-router.post('/', sessionLimiter, sessionController.createSession);
+// 🧪 TESTING MODE: Middlewares deshabilitados
+router.post('/', /* sessionLimiter, */ sessionController.createSession);
 
 // GET /api/sessions/:phoneNumber/qr - Obtener QR como imagen PNG
 router.get('/:phoneNumber/qr', sessionController.getQRCodeImage);
 
 // POST /api/sessions/:phoneNumber/request-pairing-code - Solicitar código de emparejamiento
-router.post('/:phoneNumber/request-pairing-code', sessionLimiter, sessionController.createPairingCodeSession);
+// 🧪 TESTING MODE: Middlewares deshabilitados
+router.post('/:phoneNumber/request-pairing-code', /* sessionLimiter, */ sessionController.createPairingSessionHandler);
 
 // GET /api/sessions/:phoneNumber/status - Obtener estado de sesión
 router.get('/:phoneNumber/status', sessionController.getSessionStatus);
@@ -22,7 +25,7 @@ router.get('/:phoneNumber/status', sessionController.getSessionStatus);
 // POST /api/sessions/:phoneNumber/logout - Cerrar sesión activa
 router.post('/:phoneNumber/logout', sessionController.logoutSession);
 
-// POST /api/sessions/:phoneNumber/clear - Eliminar sesión y credenciales
+// POST /api/sessions/:phoneNumber/clear - Reset completo de sesión (logout + delete files + clear queue)
 router.post('/:phoneNumber/clear', sessionController.clearSession);
 
 // GET /api/sessions/:phoneNumber/groups - Listar grupos de WhatsApp
@@ -37,14 +40,10 @@ router.get('/:phoneNumber/contacts', sessionController.getContactsHandler);
 // DELETE /api/sessions/:phoneNumber - Desconectar sesión
 router.delete('/:phoneNumber', sessionController.disconnectSession);
 
-// POST /api/sessions/:phoneNumber/restore - Restaurar desde backup
-router.post('/:phoneNumber/restore', sessionController.restoreSessionFromBackup);
-
-// GET /api/sessions/:phoneNumber/backups - Listar backups disponibles
-router.get('/:phoneNumber/backups', sessionController.listSessionBackups);
-
-// POST /api/sessions/:phoneNumber/reset-reconnect - Resetear estado de reconexión
-router.post('/:phoneNumber/reset-reconnect', sessionController.resetReconnectState);
+// DISABLED: Simple controller doesn't have backup features
+// router.post('/:phoneNumber/restore', sessionController.restoreSessionFromBackup);
+// router.get('/:phoneNumber/backups', sessionController.listSessionBackups);
+// router.post('/:phoneNumber/reset-reconnect', sessionController.resetReconnectState);
 
 // GET /api/sessions - Obtener todas las sesiones
 router.get('/', sessionController.getAllSessions);

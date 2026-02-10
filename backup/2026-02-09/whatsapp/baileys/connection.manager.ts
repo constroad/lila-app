@@ -17,7 +17,108 @@ import pino from 'pino';
 import logger from '../../utils/logger.js';
 import { config } from '../../config/environment.js';
 import outboxQueue from '../queue/outbox-queue.js';
-import { setSignalDecryptErrorHandler } from '../../utils/console-hijack.js';
+import { makeInMemoryStore } from './store.manager.js';
+import type { InMemoryStore } from './store.types.js';
+import { populateStoreIfEmpty } from './populate-store.js';
+
+// 🔇 Silenciar logs ruidosos de Signal Protocol/Baileys
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const signalDecryptErrorPatterns = [
+  'Bad MAC',
+  'Session error: Error: Bad MAC',
+  'Session error:Error: Bad MAC',
+  'Failed to decrypt message with any known session',
+  'MessageCounterError: Key used already or never filled',
+  'MessageCounterError',
+];
+
+type SignalDecryptErrorPayload = {
+  message: string;
+  stack?: string;
+};
+
+let signalDecryptErrorHandler: ((payload: SignalDecryptErrorPayload) => void) | null = null;
+
+const extractConsoleErrorPayload = (args: any[]): SignalDecryptErrorPayload => {
+  let message = '';
+  let stack: string | undefined;
+
+  for (const arg of args) {
+    if (arg instanceof Error) {
+      message = message ? `${message} ${arg.message}` : arg.message;
+      stack = stack || arg.stack;
+      continue;
+    }
+    if (typeof arg === 'string') {
+      message = message ? `${message} ${arg}` : arg;
+      continue;
+    }
+    if (arg && typeof arg === 'object') {
+      const maybeMessage = (arg as { message?: unknown }).message;
+      if (typeof maybeMessage === 'string') {
+        message = message ? `${message} ${maybeMessage}` : maybeMessage;
+      }
+    }
+  }
+
+  return {
+    message: message.trim(),
+    stack,
+  };
+};
+
+const isSignalSessionEntry = (value: any): boolean => {
+  if (!value || typeof value !== 'object') return false;
+  const hasChains = '_chains' in value;
+  const hasRatchet = 'currentRatchet' in value;
+  const hasIndexInfo = 'indexInfo' in value;
+  const hasRegistrationId = 'registrationId' in value;
+  return (
+    (hasChains && hasRatchet) ||
+    (hasChains && hasIndexInfo) ||
+    (hasRatchet && hasIndexInfo) ||
+    (hasChains && hasRegistrationId)
+  );
+};
+
+const sanitizeConsoleArgs = (args: any[]) => {
+  let mutated = false;
+  const sanitized = args.map((arg) => {
+    if (isSignalSessionEntry(arg)) {
+      mutated = true;
+      return '[redacted session]';
+    }
+    return arg;
+  });
+  return { sanitized, mutated };
+};
+
+console.log = (...args: any[]) => {
+  const { sanitized, mutated } = sanitizeConsoleArgs(args);
+  const message = sanitized.join(' ');
+  // Filtrar mensajes de Signal Protocol que ensucian la consola
+  if (
+    message.includes('Closing open session in favor of') ||
+    message.includes('Closing session: SessionEntry') ||
+    message.includes('_chains:') ||
+    message.includes('registrationId:') ||
+    message.includes('currentRatchet:') ||
+    signalDecryptErrorPatterns.some((pattern) => message.includes(pattern))
+  ) {
+    return; // Silenciar estos mensajes
+  }
+  originalConsoleLog.apply(console, mutated ? sanitized : args);
+};
+console.error = (...args: any[]) => {
+  const { sanitized, mutated } = sanitizeConsoleArgs(args);
+  const payload = extractConsoleErrorPayload(mutated ? sanitized : args);
+  if (signalDecryptErrorPatterns.some((pattern) => payload.message.includes(pattern))) {
+    signalDecryptErrorHandler?.(payload);
+    return;
+  }
+  originalConsoleError.apply(console, mutated ? sanitized : args);
+};
 
 type BackupEntry = {
   name: string;
@@ -49,6 +150,9 @@ export class ConnectionManager {
   private disabledSessions: Set<string> = new Set();
   private manualDisconnects: Set<string> = new Set();
   private groupCapabilitiesVerified: Set<string> = new Set();
+  // 🗄️ STORES - makeInMemoryStore para cada sesión (de notifications)
+  private stores: Map<string, InMemoryStore> = new Map();
+  private storePersistTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
 
   // 🔧 NEW: Keepalive management
   private keepaliveTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
@@ -148,6 +252,42 @@ export class ConnectionManager {
           // 🔧 FIX: Explicit WebSocket URL (from notifications project)
           waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
         });
+
+        // 🔧 FIX CRÍTICO: Establecer socket.user inmediatamente desde creds si existe
+        // Esto previene problemas de deviceID al asegurar que socket.user esté disponible
+        // desde el inicio, no solo después de connection.open
+        if (!socket.user && state.creds?.me) {
+          logger.info(`🔧 [createConnection] Initializing socket.user from creds.me for ${sessionPhone}`);
+          socket.user = {
+            id: state.creds.me.id,
+            name: state.creds.me.name,
+            lid: state.creds.me.lid,
+          };
+          logger.info(`✅ [createConnection] socket.user initialized: ${JSON.stringify({id: socket.user.id, name: socket.user.name})}`);
+        }
+
+        // 🗄️ STORE: Crear makeInMemoryStore (basado en notifications)
+        const storeFilePath = path.join(config.whatsapp.sessionDir, sessionPhone, 'baileys_store.json');
+        const store = makeInMemoryStore(storeFilePath);
+        this.stores.set(sessionPhone, store);
+
+        // Cargar estado anterior del store
+        store.readFromFile();
+
+        // Persistir automáticamente cada 10 segundos
+        const persistTimer = setInterval(() => {
+          try {
+            store.writeToFile();
+          } catch (error) {
+            logger.error(`Error persisting store for ${sessionPhone}: ${error}`);
+          }
+        }, 10_000);
+        this.storePersistTimers.set(sessionPhone, persistTimer);
+
+        // Conectar store a eventos de Baileys
+        store.bind(socket.ev);
+
+        logger.info(`🗄️ Store initialized for ${sessionPhone}: ${store.chats.size} chats, ${store.contacts.size} contacts`);
 
         this.contactsBySession.set(sessionPhone, new Map());
 
@@ -369,6 +509,30 @@ export class ConnectionManager {
   }
 
   private setupListeners(socket: any, sessionPhone: string, sessionDir: string, saveCreds: any) {
+    // 🗄️ STORE SYNC: Listener para historial de mensajes (de notifications)
+    const store = this.stores.get(sessionPhone);
+    if (store) {
+      socket.ev.on('messaging-history.set', async ({ chats, contacts, messages }: any) => {
+        logger.info(`📥 messaging-history.set: ${chats.length} chats, ${contacts.length} contacts for ${sessionPhone}`);
+
+        // Sincronizar chats al store
+        chats.forEach((chat: any) => store.chats.set(chat.id, chat));
+
+        // Sincronizar contactos al store
+        contacts.forEach((contact: any) => store.contacts.set(contact.id, contact));
+
+        // Sincronizar mensajes al store
+        messages.forEach((msg: any) => {
+          const jid = msg.key.remoteJid!;
+          const list = store.messages.get(jid) || [];
+          list.push(msg);
+          store.messages.set(jid, list);
+        });
+
+        logger.info(`✅ Store synced: ${store.chats.size} chats, ${store.contacts.size} contacts`);
+      });
+    }
+
     // Conexión establecida
     socket.ev.on('connection.update', async (update: any) => {
       const { connection, lastDisconnect, qr } = update;
@@ -547,6 +711,17 @@ export class ConnectionManager {
         // Solo ejecutar esto para conexiones nuevas, no reconnects
         if (!this.hasVerifiedGroupCapabilities(sessionPhone)) {
           this.scheduleGroupCapabilityTest(sessionPhone, socket);
+        }
+
+        // 🗄️ STORE SYNC: Sincronizar grupos y metadata (de notifications)
+        const store = this.stores.get(sessionPhone);
+        if (store) {
+          try {
+            // Populate store con grupos actuales
+            await populateStoreIfEmpty(sessionPhone, socket, store);
+          } catch (error) {
+            logger.error(`Failed to populate store for ${sessionPhone}: ${error}`);
+          }
         }
 
         // 🔧 FIX: Send presence update after connection opens (from notifications project)
@@ -969,7 +1144,25 @@ export class ConnectionManager {
     this.groupsInFlight.delete(sessionPhone);
     this.clearConnectWatchdog(sessionPhone);
     this.clearGroupCapabilityVerification(sessionPhone);
-    this.stopKeepalive(sessionPhone); // 🔧 NEW: Stop keepalive on cleanup
+
+    // 🗄️ STORE CLEANUP: Limpiar store y su timer
+    const storePersistTimer = this.storePersistTimers.get(sessionPhone);
+    if (storePersistTimer) {
+      clearInterval(storePersistTimer);
+      this.storePersistTimers.delete(sessionPhone);
+    }
+
+    const store = this.stores.get(sessionPhone);
+    if (store) {
+      try {
+        // Última persistencia antes de eliminar
+        store.writeToFile();
+      } catch (error) {
+        logger.error(`Error in final store write for ${sessionPhone}: ${error}`);
+      }
+      this.stores.delete(sessionPhone);
+    }
+
     if (options.clearQr) {
       this.qrCodes.delete(sessionPhone);
       this.qrIssuedAt.delete(sessionPhone);
@@ -2218,6 +2411,68 @@ export class ConnectionManager {
       logger.error(`Failed to assert group sessions for ${groupJid}: ${String(error)}`);
       // No lanzar error - dejar que el intento de envío sea la prueba final
     }
+  }
+
+  // 🗄️ STORE ACCESS METHODS (de notifications)
+
+  /**
+   * Obtener el store de una sesión
+   */
+  getStore(sessionPhone: string): InMemoryStore | undefined {
+    return this.stores.get(sessionPhone);
+  }
+
+  /**
+   * Listar grupos desde el store (en lugar de consultar Baileys)
+   */
+  listGroupsFromStore(sessionPhone: string): Array<{ id: string; name: string; participants: string[] }> {
+    const store = this.stores.get(sessionPhone);
+    if (!store) {
+      logger.warn(`No store found for ${sessionPhone}`);
+      return [];
+    }
+
+    return Array.from(store.chats.values())
+      .filter((chat) => chat.id.endsWith('@g.us'))
+      .map((group) => ({
+        id: group.id,
+        name: group.name || group.id,
+        // @ts-ignore - participants puede no estar en el tipo pero lo usamos
+        participants: (group.participants || []).map((p: any) => p.id || p) as string[],
+      }));
+  }
+
+  /**
+   * Listar contactos desde el store (en lugar de consultar Baileys)
+   */
+  listContactsFromStore(sessionPhone: string): Array<{ id: string; name: string }> {
+    const store = this.stores.get(sessionPhone);
+    if (!store) {
+      logger.warn(`No store found for ${sessionPhone}`);
+      return [];
+    }
+
+    return Array.from(store.contacts.values()).map((contact) => ({
+      id: contact.id,
+      name: contact.name || contact.notify || contact.id.split('@')[0],
+    }));
+  }
+
+  /**
+   * Refrescar grupos manualmente (forzar sync con WhatsApp)
+   */
+  async refreshGroupsInStore(sessionPhone: string): Promise<{ success: boolean; groupCount: number; error?: string }> {
+    const socket = this.connections.get(sessionPhone);
+    if (!socket) {
+      return { success: false, groupCount: 0, error: 'Session not found' };
+    }
+
+    const store = this.stores.get(sessionPhone);
+    if (!store) {
+      return { success: false, groupCount: 0, error: 'Store not found' };
+    }
+
+    return await populateStoreIfEmpty(sessionPhone, socket, store);
   }
 }
 

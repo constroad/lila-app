@@ -19,6 +19,7 @@ import { config } from '../../config/environment.js';
 import { requireTenant } from '../../middleware/tenant.middleware.js';
 import { requireStorageQuota } from '../../middleware/quota.middleware.js';
 import { uploadRateLimiter } from '../../middleware/company-rate-limiter.middleware.js';
+import { createTusServer, tusMiddleware, getTusUploadInfo } from '../../services/tus-upload.service.js';
 
 const router = Router();
 const MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
@@ -49,7 +50,18 @@ const upload = multer({
   limits: { fileSize: MAX_DRIVE_BYTES },
 });
 
+const tusServer = createTusServer();
+const tusCreateRateLimiter = (req, res, next) => {
+  if (req.method === 'POST') {
+    return uploadRateLimiter(req, res, next);
+  }
+  return next();
+};
+
 // Multi-tenant routes (require JWT authentication + quotas)
+router.get('/upload-tus/:id/info', requireTenant, getTusUploadInfo);
+router.all('/upload-tus', requireTenant, tusCreateRateLimiter, tusMiddleware(tusServer));
+router.all('/upload-tus/*', requireTenant, tusCreateRateLimiter, tusMiddleware(tusServer));
 router.get('/list', requireTenant, listEntries);
 router.get('/info', requireTenant, getInfo);
 router.post('/folders', requireTenant, createFolder);

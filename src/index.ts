@@ -21,7 +21,9 @@ import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './api/docs/openapi.js';
 import jobScheduler from './jobs/scheduler.v2.instance.js';
 import pdfGenerator from './pdf/generator.service.js';
-import connectionManager from './whatsapp/baileys/connection.manager.js';
+// 🔄 USING SIMPLE SESSIONS (notifications approach)
+import { listSessions, disconnectSession } from './whatsapp/baileys/sessions.simple.js';
+import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.js';
 import cron from 'node-cron';
 import fs from 'fs-extra';
 
@@ -80,7 +82,26 @@ app.use(
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
-    allowedHeaders: ['Authorization', 'x-api-key', 'Content-Type', 'x-request-id'],
+    allowedHeaders: [
+      'Authorization',
+      'x-api-key',
+      'Content-Type',
+      'x-request-id',
+      'Tus-Resumable',
+      'Upload-Length',
+      'Upload-Offset',
+      'Upload-Metadata',
+      'Upload-Defer-Length',
+      'Upload-Checksum',
+      'Upload-Expires',
+    ],
+    exposedHeaders: [
+      'Location',
+      'Tus-Resumable',
+      'Upload-Offset',
+      'Upload-Length',
+      'Upload-Expires',
+    ],
   })
 );
 
@@ -150,11 +171,11 @@ app.use(
 
 // Status endpoint
 app.get('/api/status', (req, res) => {
-  const connections = connectionManager.getAllConnections();
+  const sessions = listSessions();
   res.status(200).json({
     success: true,
     data: {
-      activeSessions: connections.size,
+      activeSessions: sessions.length,
       nodeEnv: config.nodeEnv,
       timestamp: new Date().toISOString(),
     },
@@ -187,12 +208,8 @@ async function startServer() {
     logger.info('Initializing Job Scheduler...');
     await jobScheduler.initialize();
 
-    logger.info('Reconnecting saved WhatsApp sessions...');
-    await connectionManager.reconnectSavedSessions();
-
-    // 🛡️ Iniciar watchdog de recuperación automática de sesiones
-    logger.info('Starting session recovery watchdog...');
-    connectionManager.startSessionRecoveryWatchdog();
+    // 🔄 WhatsApp sessions (notifications approach)
+    restoreAllSessions();
 
     cron.schedule('0 0 * * 0', async () => {
       try {
@@ -210,6 +227,18 @@ async function startServer() {
       logger.info(`📁 WhatsApp sessions dir: ${config.whatsapp.sessionDir}`);
     });
 
+    // Phase 1: Extend HTTP server timeouts for large uploads (no breaking changes)
+    const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+    server.timeout = UPLOAD_TIMEOUT_MS;
+    server.keepAliveTimeout = UPLOAD_TIMEOUT_MS + 20000; // Must be > server.timeout
+    server.headersTimeout = UPLOAD_TIMEOUT_MS + 30000; // Must be > keepAliveTimeout
+
+    logger.info('⏱️ HTTP server timeouts configured for large uploads', {
+      timeoutSeconds: server.timeout / 1000,
+      keepAliveSeconds: server.keepAliveTimeout / 1000,
+      headersSeconds: server.headersTimeout / 1000,
+    });
+
     // Graceful shutdown
     const gracefulShutdown = async (signal: string) => {
       logger.info(`\n📴 Received ${signal}, shutting down gracefully...`);
@@ -220,7 +249,15 @@ async function startServer() {
 
         try {
           // Desconectar todas las sesiones de WhatsApp
-          await connectionManager.disconnectAll();
+          const sessions = listSessions();
+          for (const sessionId of sessions) {
+            try {
+              await disconnectSession(sessionId);
+            } catch (err) {
+              logger.error(`Error disconnecting ${sessionId}:`, err);
+            }
+          }
+          logger.info('All WhatsApp sessions disconnected');
 
           // Cerrar scheduler de jobs
           await jobScheduler.shutdown();

@@ -67,7 +67,25 @@ npm run build
 npm run start
 ```
 
-## 📚 Estructura del Proyecto
+## 📚 Documentación
+
+📖 **[Ver Documentación Completa →](docs/README.md)**
+
+### Documento Principal
+
+| Documento | Descripción | Tiempo de Lectura |
+|-----------|-------------|-------------------|
+| **[Architecture AS-IS](docs/current/ARCHITECTURE-AS-IS-2026-02-09.md)** | 📚 **Todo en un solo lugar**: Arquitectura completa, sistema de cola, envío de media, testing, y más | 30 min |
+
+### Inicio Rápido para Nuevos Desarrolladores
+
+1. **Lee la arquitectura**: [ARCHITECTURE-AS-IS-2026-02-09.md](docs/current/ARCHITECTURE-AS-IS-2026-02-09.md)
+2. **Ejecuta el test**: `npm run test:send`
+3. **Explora el código**: Ver sección "Key Files" en arquitectura
+
+---
+
+## 📁 Estructura del Proyecto
 
 ```
 src/
@@ -75,14 +93,20 @@ src/
 │   ├── routes/          # Definición de rutas
 │   ├── controllers/     # Lógica de controladores
 │   └── middlewares/     # Middlewares (auth, error, etc)
+├── services/
+│   ├── whatsapp-direct.service.ts    # ⭐ Core WhatsApp service
+│   └── whatsapp-media.utils.ts      # Media handling utilities
 ├── whatsapp/
-│   ├── baileys/         # Gestión de conexiones WhatsApp
-│   ├── ai-agent/        # Lógica del agente conversacional
-│   │   ├── prompts/     # Templates de prompts
-│   │   ├── agent.service.ts
-│   │   ├── conversation.manager.ts
-│   │   └── message.listener.ts
-│   └── queue/           # Cola de mensajes (futuro)
+│   ├── baileys/
+│   │   ├── sessions.simple.ts        # ⭐ Session management
+│   │   └── populate-store-simple.ts
+│   ├── queue/
+│   │   └── outbox-queue.ts           # ⭐ Message queue system
+│   └── ai-agent/        # Lógica del agente conversacional
+│       ├── prompts/     # Templates de prompts
+│       ├── agent.service.ts
+│       ├── conversation.manager.ts
+│       └── message.listener.ts
 ├── jobs/                # Sistema de cron jobs
 ├── pdf/                 # Generador de PDFs
 ├── storage/             # Persistencia de datos
@@ -90,6 +114,15 @@ src/
 ├── config/              # Configuración
 ├── types/               # Tipos TypeScript
 └── index.ts             # Punto de entrada
+
+docs/
+├── README.md            # 📚 Documentation index
+├── current/             # Current documentation
+│   ├── ARCHITECTURE-AS-IS-2026-02-09.md
+│   ├── QUEUE_SYSTEM_IMPROVEMENTS.md
+│   ├── IMAGE_SEND_IMPROVEMENTS.md
+│   └── VIDEO_FILE_IMPROVEMENTS.md
+└── legacy/              # Historical docs (reference only)
 ```
 
 ## 🔌 API Endpoints

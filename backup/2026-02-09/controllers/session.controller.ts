@@ -251,9 +251,24 @@ export async function syncGroups(req: Request, res: Response, next: NextFunction
       return next(error);
     }
 
-    const groups = await connectionManager.getGroups(phoneNumber);
+    // 🔄 NUEVO: Usar refreshGroupsInStore (basado en notifications)
+    logger.info(`Syncing groups for ${phoneNumber} using refreshGroupsInStore`);
+    const result = await connectionManager.refreshGroupsInStore(phoneNumber);
 
-    res.status(HTTP_STATUS.OK).json(groups);
+    if (result.success) {
+      // Listar grupos desde el store después de sync
+      const groups = connectionManager.listGroupsFromStore(phoneNumber);
+
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        groupCount: result.groupCount,
+        groups,
+      });
+    } else {
+      const error: CustomError = new Error(result.error || 'Failed to sync groups');
+      error.statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR;
+      return next(error);
+    }
   } catch (error) {
     next(error);
   }

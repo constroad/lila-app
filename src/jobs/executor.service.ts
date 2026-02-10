@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getSharedModels } from '../database/models.js';
 import { ICronJob } from '../models/cronjob.model.js';
-import { ConnectionManager } from '../whatsapp/baileys/connection.manager.js';
+import { WhatsAppDirectService } from '../services/whatsapp-direct.service.js';
 import logger from '../utils/logger.js';
 
 type ApiMessageItem = {
@@ -11,10 +11,8 @@ type ApiMessageItem = {
 };
 
 export class JobExecutor {
-  private connectionManager: ConnectionManager;
-
-  constructor(connectionManager: ConnectionManager) {
-    this.connectionManager = connectionManager;
+  constructor() {
+    // No dependencies needed - using WhatsAppDirectService statically
   }
 
   private resolveRetryPolicy(job: ICronJob) {
@@ -130,7 +128,7 @@ export class JobExecutor {
     const resolvedBody = (overrideBody ?? body ?? '').trim();
     const messageBody = this.prependBotPrefix(resolvedBody, prefix ?? '');
 
-    await this.connectionManager.sendTextMessage(sender, chatId, messageBody, {
+    await WhatsAppDirectService.sendMessage(sender, chatId, messageBody, {
       mentions: mentions || [],
       queueOnFail: true,
     });
@@ -152,7 +150,7 @@ export class JobExecutor {
       }
       const recipient = this.normalizeRecipient(rawTo);
       const messageBody = this.prependBotPrefix(item.message, prefix ?? '');
-      await this.connectionManager.sendTextMessage(sender, recipient, messageBody, {
+      await WhatsAppDirectService.sendMessage(sender, recipient, messageBody, {
         mentions: item.mentions || [],
         queueOnFail: true,
       });

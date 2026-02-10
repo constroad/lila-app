@@ -7,7 +7,7 @@ import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
 import { config } from '../../config/environment.js';
 import { renderPdfPageToPngWithGrid } from '../../pdf/render.service.js';
-import { listSessions, isSessionReady, getSession } from '../../whatsapp/baileys/sessions.simple.js';
+import connectionManager from '../../whatsapp/baileys/connection.manager.js';
 
 type ValeFields = {
   nroVale?: string;
@@ -86,8 +86,8 @@ function normalizeWhatsappTarget(raw: string) {
 }
 
 function getDefaultWhatsappSession() {
-  const sessions = listSessions();
-  return sessions.find((phone) => isSessionReady(phone)) || null;
+  const sessions = Array.from(connectionManager.getAllConnections().keys());
+  return sessions.find((phone) => connectionManager.isConnected(phone)) || null;
 }
 
 async function sendWhatsappNotification(
@@ -106,13 +106,14 @@ async function sendWhatsappNotification(
     throw new Error('Invalid WhatsApp target');
   }
 
-  if (!isSessionReady(sessionPhone)) {
+  const isConnected = await connectionManager.ensureConnected(sessionPhone);
+  if (!isConnected) {
     throw new Error('WhatsApp session not connected');
   }
 
-  const socket = getSession(sessionPhone);
+  const socket = connectionManager.getConnection(sessionPhone);
   if (!socket) {
-    throw new Error('WhatsApp session not found');
+    throw new Error('WhatsApp session not connected');
   }
 
   await socket.sendMessage(recipient, {
