@@ -154,8 +154,13 @@ export class ConnectionManager {
   private stores: Map<string, InMemoryStore> = new Map();
   private storePersistTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
 
+  // 🔧 NEW: Keepalive management
+  private keepaliveTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
+  private readonly KEEPALIVE_INTERVAL_MS = 30000; // 30 seconds
+
   constructor() {
-    signalDecryptErrorHandler = this.handleSignalDecryptError.bind(this);
+    // Register Signal decrypt error handler with console hijacker
+    setSignalDecryptErrorHandler(this.handleSignalDecryptError.bind(this));
   }
 
   async createConnection(sessionPhone: string): Promise<any> {
@@ -727,6 +732,9 @@ export class ConnectionManager {
           logger.warn(`Failed to set presence for ${sessionPhone}: ${String(error)}`);
         }
 
+        // 🔧 CRITICAL FIX: Start keepalive to prevent disconnections
+        this.startKeepalive(sessionPhone);
+
         this.qrCodes.delete(sessionPhone);
         this.resetReconnectState(sessionPhone);
         await this.flushOutbox(sessionPhone);
@@ -999,9 +1007,14 @@ export class ConnectionManager {
         logger.info(`📨 Preparing to send group message to ${recipient}`);
         await this.assertGroupSessions(socket, recipient);
 
-        // ⏳ Additional delay to ensure sessions are fully persisted
-        logger.info(`⏳ Extra 3s delay to ensure session persistence...`);
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        // ⏳ INCREASED: Additional delay to ensure sessions are fully persisted to disk
+        // This extra wait time is critical to prevent "waiting for this message" errors
+        // Sessions need time to:
+        // 1. Complete all key exchanges
+        // 2. Persist to session-*.json files on disk
+        // 3. Ensure all encryption keys are ready
+        logger.info(`⏳ Extra 5s delay to ensure session persistence...`);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
         logger.info(`✅ Ready to send after persistence delay`);
       }
 
@@ -1282,6 +1295,62 @@ export class ConnectionManager {
     }, delayMs);
 
     this.reconnectTimers.set(sessionPhone, timer);
+  }
+
+  /**
+   * 🔧 CRITICAL FIX: Start keepalive to prevent connection timeout
+   *
+   * WhatsApp Web connections require periodic activity or they close after ~5 minutes.
+   * This sends presence updates every 30 seconds to keep the connection alive.
+   *
+   * Without keepalive:
+   * - Connection closes with code 428 (connectionClosed) every 4-5 minutes
+   * - Causes frequent reconnections and session disruption
+   * - Messages fail with "waiting for this message" error
+   */
+  private startKeepalive(sessionPhone: string): void {
+    // Clear existing keepalive if any
+    this.stopKeepalive(sessionPhone);
+
+    logger.info(`🔄 Starting keepalive for ${sessionPhone} (every ${this.KEEPALIVE_INTERVAL_MS}ms)`);
+
+    const keepaliveTimer = setInterval(async () => {
+      try {
+        const socket = this.connections.get(sessionPhone);
+        if (!socket) {
+          logger.warn(`Keepalive: No socket for ${sessionPhone}, stopping keepalive`);
+          this.stopKeepalive(sessionPhone);
+          return;
+        }
+
+        if (!this.isConnected(sessionPhone)) {
+          logger.warn(`Keepalive: Session ${sessionPhone} not connected, stopping keepalive`);
+          this.stopKeepalive(sessionPhone);
+          return;
+        }
+
+        // Send presence update to keep connection alive
+        await socket.sendPresenceUpdate('available');
+        logger.debug(`💓 Keepalive sent for ${sessionPhone}`);
+      } catch (error) {
+        logger.warn(`Keepalive failed for ${sessionPhone}: ${String(error)}`);
+        // Don't stop keepalive on error - it may recover
+      }
+    }, this.KEEPALIVE_INTERVAL_MS);
+
+    this.keepaliveTimers.set(sessionPhone, keepaliveTimer);
+  }
+
+  /**
+   * Stop keepalive timer for a session
+   */
+  private stopKeepalive(sessionPhone: string): void {
+    const timer = this.keepaliveTimers.get(sessionPhone);
+    if (timer) {
+      clearInterval(timer);
+      this.keepaliveTimers.delete(sessionPhone);
+      logger.debug(`🛑 Keepalive stopped for ${sessionPhone}`);
+    }
   }
 
   private getClearMarkerPath(sessionPhone: string): string {
@@ -2201,6 +2270,17 @@ export class ConnectionManager {
    * Establece sesiones para participantes de un grupo antes de enviar mensajes
    * Esta es la función CRÍTICA que faltaba integrar en el flujo de envío
    */
+  /**
+   * 🔧 CRITICAL FIX: Assert Signal Protocol sessions before sending group messages
+   *
+   * Without proper session assertion:
+   * - Messages show "waiting for this message, this may take a while"
+   * - Recipients cannot decrypt messages
+   * - Group messaging fails silently
+   *
+   * This ensures all participants have valid Signal Protocol sessions established
+   * before sending messages to the group.
+   */
   private async assertGroupSessions(socket: any, groupJid: string): Promise<void> {
     try {
       logger.info(`🔄 Asserting sessions for group ${groupJid}...`);
@@ -2259,13 +2339,39 @@ export class ConnectionManager {
 
       logger.info(`🔄 Asserting sessions for ${filtered.length} filtered participants...`);
 
-      // Assert user-level sessions
-      await socket.assertSessions(filtered, true);
-      logger.info(`✅ User-level sessions asserted`);
+      // Assert user-level sessions with retry
+      const maxRetries = 2;
+      let retryCount = 0;
+      let success = false;
 
-      // Esperar para dar tiempo a que se establezcan las sesiones
-      const waitTime = Math.min(2000 + (filtered.length * 50), 10000);
-      logger.info(`⏳ Waiting ${waitTime}ms for sessions to establish...`);
+      while (retryCount < maxRetries && !success) {
+        try {
+          await socket.assertSessions(filtered, true);
+          success = true;
+          logger.info(`✅ User-level sessions asserted (attempt ${retryCount + 1})`);
+        } catch (error) {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            logger.warn(`Session assertion failed (attempt ${retryCount}), retrying... Error: ${String(error)}`);
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      // 🔧 INCREASED WAIT TIME: Give more time for sessions to persist to disk
+      // Sessions need time to:
+      // 1. Exchange pre-keys with all participants
+      // 2. Establish Signal Protocol sessions
+      // 3. Write session files to disk
+      // Without adequate wait time, messages fail with "waiting for this message"
+      const baseWaitTime = 3000; // Increased from 2000ms
+      const perParticipantTime = 100; // Increased from 50ms
+      const maxWaitTime = 15000; // Increased from 10000ms
+      const waitTime = Math.min(baseWaitTime + (filtered.length * perParticipantTime), maxWaitTime);
+
+      logger.info(`⏳ Waiting ${waitTime}ms for sessions to establish and persist to disk...`);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
 
       // Assert device-level sessions si está disponible
@@ -2291,7 +2397,8 @@ export class ConnectionManager {
           if (deviceJids.length > 0) {
             logger.info(`🔄 Asserting ${deviceJids.length} device-level sessions...`);
             await socket.assertSessions(deviceJids, true);
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            // Longer wait for device sessions
+            await new Promise((resolve) => setTimeout(resolve, 2000));
             logger.info(`✅ Device-level sessions asserted`);
           }
         } catch (error) {
