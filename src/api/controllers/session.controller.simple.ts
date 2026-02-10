@@ -14,7 +14,8 @@ import {
   getQRCode,
   isSessionReady,
   listSessions,
-  disconnectSession,
+  disconnectSession as disconnectSimpleSession,
+  clearSession as clearSimpleSession,
   getSession,
 } from '../../whatsapp/baileys/sessions.simple.js';
 import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js';
@@ -178,11 +179,46 @@ export async function disconnectSessionHandler(req: Request, res: Response, next
       return next(error);
     }
 
-    await disconnectSession(phoneNumber);
+    await disconnectSimpleSession(phoneNumber);
 
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: `Session ${phoneNumber} disconnected`,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Clear session completely (reset)
+ * POST /api/sessions/:phoneNumber/clear
+ *
+ * This performs a complete session reset:
+ * - Logout from WhatsApp
+ * - Delete physical session files (credentials)
+ * - Clear message queue
+ * - Remove backup files
+ * - Clean memory structures
+ *
+ * Use this when the user wants to completely remove a session and prevent auto-recovery.
+ */
+export async function clearSessionHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { phoneNumber } = req.params;
+
+    if (!phoneNumber) {
+      const error: CustomError = new Error('phoneNumber is required');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    logger.info(`Clearing session ${phoneNumber} (full reset)...`);
+    await clearSimpleSession(phoneNumber);
+
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: `Session ${phoneNumber} cleared completely`,
     });
   } catch (error) {
     next(error);
@@ -331,7 +367,7 @@ export async function syncGroupsHandler(req: Request, res: Response, next: NextF
       });
     } else {
       const error: CustomError = new Error(result.error || 'Failed to sync groups');
-      error.statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR;
+      error.statusCode = HTTP_STATUS.INTERNAL_ERROR;
       return next(error);
     }
   } catch (error) {
@@ -376,6 +412,7 @@ export const listActiveSessions = getAllSessionsHandler;
 export const createSession = createSessionHandler;
 export const getSessionStatus = getSessionStatusHandler;
 export const disconnectSession = disconnectSessionHandler;
+export const clearSession = clearSessionHandler;
 export const getAllSessions = getAllSessionsHandler;
 export const getQRCodeImage = getQRCodeImageHandler;
 export const getGroupList = getGroupListHandler;

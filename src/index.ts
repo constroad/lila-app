@@ -79,7 +79,26 @@ app.use(
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
-    allowedHeaders: ['Authorization', 'x-api-key', 'Content-Type', 'x-request-id'],
+    allowedHeaders: [
+      'Authorization',
+      'x-api-key',
+      'Content-Type',
+      'x-request-id',
+      'Tus-Resumable',
+      'Upload-Length',
+      'Upload-Offset',
+      'Upload-Metadata',
+      'Upload-Defer-Length',
+      'Upload-Checksum',
+      'Upload-Expires',
+    ],
+    exposedHeaders: [
+      'Location',
+      'Tus-Resumable',
+      'Upload-Offset',
+      'Upload-Length',
+      'Upload-Expires',
+    ],
   })
 );
 
@@ -203,6 +222,18 @@ async function startServer() {
       logger.info(`✅ Server running on port ${config.port}`);
       logger.info(`📊 Environment: ${config.nodeEnv}`);
       logger.info(`📁 WhatsApp sessions dir: ${config.whatsapp.sessionDir}`);
+    });
+
+    // Phase 1: Extend HTTP server timeouts for large uploads (no breaking changes)
+    const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+    server.timeout = UPLOAD_TIMEOUT_MS;
+    server.keepAliveTimeout = UPLOAD_TIMEOUT_MS + 20000; // Must be > server.timeout
+    server.headersTimeout = UPLOAD_TIMEOUT_MS + 30000; // Must be > keepAliveTimeout
+
+    logger.info('⏱️ HTTP server timeouts configured for large uploads', {
+      timeoutSeconds: server.timeout / 1000,
+      keepAliveSeconds: server.keepAliveTimeout / 1000,
+      headersSeconds: server.headersTimeout / 1000,
     });
 
     // Graceful shutdown

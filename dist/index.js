@@ -1606,6 +1606,7 @@ import {
   useMultiFileAuthState
 } from "@whiskeysockets/baileys";
 import path9 from "path";
+import fs7 from "fs-extra";
 import pino from "pino";
 function getStore(sessionId) {
   const store = stores[sessionId];
@@ -1791,6 +1792,7 @@ var init_sessions_simple = __esm({
     init_logger();
     init_environment();
     init_populate_store_simple();
+    init_outbox_queue();
     init_outbox_queue();
     sessions = {};
     stores = {};
@@ -14293,6 +14295,24 @@ async function disconnectSessionHandler(req, res, next) {
     next(error);
   }
 }
+async function clearSessionHandler(req, res, next) {
+  try {
+    const { phoneNumber } = req.params;
+    if (!phoneNumber) {
+      const error = new Error("phoneNumber is required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    logger_default.info(`Clearing session ${phoneNumber} (full reset)...`);
+    await clearSession(phoneNumber);
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: `Session ${phoneNumber} cleared completely`
+    });
+  } catch (error) {
+    next(error);
+  }
+}
 async function getAllSessionsHandler(req, res, next) {
   try {
     const sessionIds = listSessions();
@@ -14432,6 +14452,7 @@ var listActiveSessions = getAllSessionsHandler;
 var createSession = createSessionHandler;
 var getSessionStatus = getSessionStatusHandler;
 var disconnectSession2 = disconnectSessionHandler;
+var clearSession = clearSessionHandler;
 var getAllSessions = getAllSessionsHandler;
 var getQRCodeImage = getQRCodeImageHandler;
 var getGroupList = getGroupListHandler;
@@ -14445,6 +14466,7 @@ router.get("/:phoneNumber/qr", getQRCodeImage);
 router.post("/:phoneNumber/request-pairing-code", createPairingSessionHandler);
 router.get("/:phoneNumber/status", getSessionStatus);
 router.post("/:phoneNumber/logout", logoutSession);
+router.post("/:phoneNumber/clear", clearSession);
 router.get("/:phoneNumber/groups", getGroupList);
 router.get("/:phoneNumber/syncGroups", syncGroups);
 router.get("/:phoneNumber/contacts", getContactsHandler);
@@ -15867,7 +15889,7 @@ init_logger();
 init_environment();
 import puppeteer from "puppeteer";
 import Handlebars from "handlebars";
-import fs7 from "fs-extra";
+import fs8 from "fs-extra";
 import path10 from "path";
 import { randomUUID as randomUUID2 } from "crypto";
 var PDFGenerator = class {
@@ -15879,8 +15901,8 @@ var PDFGenerator = class {
   async initialize() {
     try {
       logger_default.info("Initializing PDF Generator...");
-      await fs7.ensureDir(this.templatesDir);
-      await fs7.ensureDir(this.uploadsDir);
+      await fs8.ensureDir(this.templatesDir);
+      await fs8.ensureDir(this.uploadsDir);
       const headlessEnv = process.env.PUPPETEER_HEADLESS;
       const headlessMode = headlessEnv === "true" ? true : headlessEnv === "false" ? false : "new";
       const launchBrowser = async (headless) => puppeteer.launch({
@@ -15939,8 +15961,8 @@ var PDFGenerator = class {
   async createTemplate(id, name, htmlContent) {
     try {
       const filepath = path10.join(this.templatesDir, `${id}.hbs`);
-      await fs7.ensureDir(path10.dirname(filepath));
-      await fs7.writeFile(filepath, htmlContent, "utf-8");
+      await fs8.ensureDir(path10.dirname(filepath));
+      await fs8.writeFile(filepath, htmlContent, "utf-8");
       logger_default.info(`Created PDF template: ${id}`);
     } catch (error) {
       logger_default.error("Error creating PDF template:", error);
@@ -15950,10 +15972,10 @@ var PDFGenerator = class {
   async loadTemplate(templateId) {
     try {
       const filepath = path10.join(this.templatesDir, `${templateId}.hbs`);
-      if (!await fs7.pathExists(filepath)) {
+      if (!await fs8.pathExists(filepath)) {
         throw new Error(`Template not found: ${templateId}`);
       }
-      return await fs7.readFile(filepath, "utf-8");
+      return await fs8.readFile(filepath, "utf-8");
     } catch (error) {
       logger_default.error("Error loading template:", error);
       throw error;
@@ -15961,7 +15983,7 @@ var PDFGenerator = class {
   }
   async listTemplates() {
     try {
-      const files = await fs7.readdir(this.templatesDir);
+      const files = await fs8.readdir(this.templatesDir);
       return files.filter((f) => f.endsWith(".hbs")).map((f) => f.replace(".hbs", ""));
     } catch (error) {
       logger_default.error("Error listing templates:", error);
@@ -15971,8 +15993,8 @@ var PDFGenerator = class {
   async deleteTemplate(templateId) {
     try {
       const filepath = path10.join(this.templatesDir, `${templateId}.hbs`);
-      if (await fs7.pathExists(filepath)) {
-        await fs7.remove(filepath);
+      if (await fs8.pathExists(filepath)) {
+        await fs8.remove(filepath);
         logger_default.info(`Deleted template: ${templateId}`);
       }
     } catch (error) {
@@ -16064,7 +16086,7 @@ async function deleteTemplate(req, res, next) {
 }
 
 // src/api/controllers/pdf-vale.controller.ts
-import fs9 from "fs-extra";
+import fs10 from "fs-extra";
 import path12 from "path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { randomUUID as randomUUID3 } from "crypto";
@@ -16072,7 +16094,7 @@ init_environment();
 
 // src/pdf/render.service.ts
 init_environment();
-import fs8 from "fs-extra";
+import fs9 from "fs-extra";
 import path11 from "path";
 import crypto2 from "crypto";
 import { createCanvas } from "@napi-rs/canvas";
@@ -16086,7 +16108,7 @@ function clampScale(value) {
   return Math.min(3, Math.max(0.5, value));
 }
 async function getPdfInfo(filePath) {
-  const buffer = await fs8.readFile(filePath);
+  const buffer = await fs9.readFile(filePath);
   const data = new Uint8Array(buffer);
   const task = pdfjsLib.getDocument({ data, disableWorker: true });
   const pdf = await task.promise;
@@ -16095,16 +16117,16 @@ async function getPdfInfo(filePath) {
   };
 }
 async function renderPdfPageToPng(filePath, options) {
-  const stat = await fs8.stat(filePath);
+  const stat = await fs9.stat(filePath);
   const scale = clampScale(options.scale);
   const cacheKey = getCacheKey(filePath, stat, options.page, scale);
   const cacheDir = path11.resolve(config.drive.cacheDir, cacheKey);
   const cacheFile = path11.join(cacheDir, `page-${options.page}.png`);
-  if (await fs8.pathExists(cacheFile)) {
+  if (await fs9.pathExists(cacheFile)) {
     return { cacheFile, fromCache: true };
   }
-  await fs8.ensureDir(cacheDir);
-  const buffer = await fs8.readFile(filePath);
+  await fs9.ensureDir(cacheDir);
+  const buffer = await fs9.readFile(filePath);
   const data = new Uint8Array(buffer);
   const task = pdfjsLib.getDocument({ data, disableWorker: true });
   const pdf = await task.promise;
@@ -16117,21 +16139,21 @@ async function renderPdfPageToPng(filePath, options) {
   const ctx = canvas.getContext("2d");
   await page.render({ canvasContext: ctx, viewport }).promise;
   const pngBuffer = canvas.toBuffer("image/png");
-  await fs8.writeFile(cacheFile, pngBuffer);
+  await fs9.writeFile(cacheFile, pngBuffer);
   return { cacheFile, fromCache: false };
 }
 async function renderPdfPageToPngWithGrid(filePath, options) {
-  const stat = await fs8.stat(filePath);
+  const stat = await fs9.stat(filePath);
   const scale = clampScale(options.scale);
   const gridSize = options.gridSize && options.gridSize > 0 ? options.gridSize : 50;
   const cacheKey = getCacheKey(filePath, stat, options.page, scale) + `-g${gridSize}`;
   const cacheDir = path11.resolve(config.drive.cacheDir, cacheKey);
   const cacheFile = path11.join(cacheDir, `page-${options.page}-grid.png`);
-  if (await fs8.pathExists(cacheFile)) {
+  if (await fs9.pathExists(cacheFile)) {
     return { cacheFile, fromCache: true };
   }
-  await fs8.ensureDir(cacheDir);
-  const buffer = await fs8.readFile(filePath);
+  await fs9.ensureDir(cacheDir);
+  const buffer = await fs9.readFile(filePath);
   const data = new Uint8Array(buffer);
   const task = pdfjsLib.getDocument({ data, disableWorker: true });
   const pdf = await task.promise;
@@ -16164,7 +16186,7 @@ async function renderPdfPageToPngWithGrid(filePath, options) {
     ctx.fillText(String(coord), 2, y - 2);
   }
   const pngBuffer = canvas.toBuffer("image/png");
-  await fs8.writeFile(cacheFile, pngBuffer);
+  await fs9.writeFile(cacheFile, pngBuffer);
   return { cacheFile, fromCache: false };
 }
 
@@ -16298,12 +16320,12 @@ async function generateVale(req, res, next) {
       }
     }
     const templatePath = path12.join(config.pdf.templatesDir, template);
-    if (!await fs9.pathExists(templatePath)) {
+    if (!await fs10.pathExists(templatePath)) {
       const error = new Error("Template not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const bytes = await fs9.readFile(templatePath);
+    const bytes = await fs10.readFile(templatePath);
     const pdfDoc = await PDFDocument.load(bytes);
     const page = pdfDoc.getPages()[0];
     const { width, height } = page.getSize();
@@ -16319,8 +16341,8 @@ async function generateVale(req, res, next) {
       "signatures",
       "signature-dispatch-note.png"
     );
-    if (await fs9.pathExists(signaturePath)) {
-      const signatureBytes = await fs9.readFile(signaturePath);
+    if (await fs10.pathExists(signaturePath)) {
+      const signatureBytes = await fs10.readFile(signaturePath);
       const signatureImage = await pdfDoc.embedPng(signatureBytes);
       page.drawImage(signatureImage, {
         x: 120,
@@ -16360,13 +16382,13 @@ async function generateVale(req, res, next) {
         color: isVale ? rgb(0.8, 0, 0) : rgb(0, 0, 0)
       });
     });
-    await fs9.ensureDir(config.pdf.tempDir);
+    await fs10.ensureDir(config.pdf.tempDir);
     const valeNumber = fields.nroVale || randomUUID3().slice(0, 8);
     const safeVale = String(valeNumber).replace(/[^a-zA-Z0-9_-]+/g, "-");
     const filename = `vale-despacho-${safeVale}.pdf`;
     const outputPath = path12.join(config.pdf.tempDir, filename);
     const pdfBytes = await pdfDoc.save();
-    await fs9.writeFile(outputPath, pdfBytes);
+    await fs10.writeFile(outputPath, pdfBytes);
     const publicUrl = `${config.pdf.tempPublicBaseUrl.replace(/\/+$/, "")}/${encodeURI(
       filename
     )}`;
@@ -16430,7 +16452,7 @@ async function previewValeTemplateGrid(req, res, next) {
     const scale = parseFloat(String(req.query.scale || "1.5"));
     const gridSize = parseInt(String(req.query.grid || "50"), 10);
     const templatePath = path12.join(config.pdf.templatesDir, template);
-    if (!await fs9.pathExists(templatePath)) {
+    if (!await fs10.pathExists(templatePath)) {
       const error = new Error("Template not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
@@ -16465,11 +16487,11 @@ var pdf_routes_default = router4;
 // src/api/routes/drive.routes.ts
 import { Router as Router5 } from "express";
 import multer2 from "multer";
-import fs12 from "fs-extra";
+import fs13 from "fs-extra";
 import path15 from "path";
 
 // src/api/controllers/drive.controller.ts
-import fs10 from "fs-extra";
+import fs11 from "fs-extra";
 import path13 from "path";
 init_storage_path_service();
 function isValidEntryName(name) {
@@ -16523,22 +16545,22 @@ async function listEntries(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs10.pathExists(resolved);
+    const exists = await fs11.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stat = await fs10.stat(resolved);
+    const stat = await fs11.stat(resolved);
     if (!stat.isDirectory()) {
       const error = new Error("Path is not a folder");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const entries = (await fs10.readdir(resolved)).filter((name) => !name.startsWith("."));
+    const entries = (await fs11.readdir(resolved)).filter((name) => !name.startsWith("."));
     const results = await Promise.all(
       entries.map(async (name) => {
-        const entryStat = await fs10.stat(path13.join(resolved, name));
+        const entryStat = await fs11.stat(path13.join(resolved, name));
         const entry = toEntry(relativePath, name, entryStat, companyId);
         const result = { ...entry };
         if (entry.url) {
@@ -16583,7 +16605,7 @@ async function createFolder(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const parentExists = await fs10.pathExists(resolved);
+    const parentExists = await fs11.pathExists(resolved);
     if (!parentExists) {
       const error = new Error("Parent path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -16595,7 +16617,7 @@ async function createFolder(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs10.ensureDir(target);
+    await fs11.ensureDir(target);
     const newPath = relativePath ? `${relativePath}/${name}` : name;
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
@@ -16636,13 +16658,13 @@ async function uploadFile(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs10.ensureDir(resolved);
+    await fs11.ensureDir(resolved);
     const MAX_ORDERS_BYTES = 100 * 1024 * 1024;
     const MAX_DRIVE_BYTES2 = 2 * 1024 * 1024 * 1024;
     const isDriveRoot = relativePath.startsWith("drive");
     const maxAllowedBytes = isDriveRoot ? MAX_DRIVE_BYTES2 : MAX_ORDERS_BYTES;
     if (file.size > maxAllowedBytes) {
-      await fs10.remove(file.path).catch(() => {
+      await fs11.remove(file.path).catch(() => {
       });
       const error = new Error("File too large");
       error.statusCode = HTTP_STATUS.REQUEST_TOO_LONG;
@@ -16654,7 +16676,7 @@ async function uploadFile(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs10.move(file.path, target, { overwrite: true });
+    await fs11.move(file.path, target, { overwrite: true });
     await incrementStorageUsage(companyId, file.size);
     const filePath = relativePath ? `${relativePath}/${file.originalname}` : file.originalname;
     const publicUrl = `/files/companies/${companyId}/${filePath}`;
@@ -16693,16 +16715,16 @@ async function deleteEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs10.pathExists(resolved);
+    const exists = await fs11.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stats = await fs10.stat(resolved);
+    const stats = await fs11.stat(resolved);
     const isFile = stats.isFile();
     const fileSize = isFile ? stats.size : 0;
-    await fs10.remove(resolved);
+    await fs11.remove(resolved);
     if (isFile && fileSize > 0) {
       await decrementStorageUsage(companyId, fileSize);
     }
@@ -16743,14 +16765,14 @@ async function moveEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs10.pathExists(fromResolved);
+    const exists = await fs11.pathExists(fromResolved);
     if (!exists) {
       const error = new Error("Source not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    await fs10.ensureDir(path13.dirname(toResolved));
-    await fs10.move(fromResolved, toResolved, { overwrite: false });
+    await fs11.ensureDir(path13.dirname(toResolved));
+    await fs11.move(fromResolved, toResolved, { overwrite: false });
     const publicUrl = `/files/companies/${companyId}/${to}`;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -16785,7 +16807,7 @@ async function getInfo(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const stat = await fs10.stat(resolved);
+    const stat = await fs11.stat(resolved);
     const name = path13.basename(resolved);
     const parent = path13.dirname(targetPath).replace(/\\/g, "/");
     const base = parent === "." ? "" : parent;
@@ -16809,7 +16831,7 @@ async function getInfo(req, res, next) {
 }
 
 // src/api/controllers/drive-pdf.controller.ts
-import fs11 from "fs-extra";
+import fs12 from "fs-extra";
 import path14 from "path";
 init_storage_path_service();
 function getPdfPathFromRequest(req) {
@@ -16831,7 +16853,7 @@ function ensurePdfExtension(filePath) {
   return path14.extname(filePath).toLowerCase() === ".pdf";
 }
 async function resolveExistingPdfPath(resolved, normalized, companyId) {
-  if (await fs11.pathExists(resolved)) {
+  if (await fs12.pathExists(resolved)) {
     return { resolved, normalized };
   }
   const candidates = [normalized.normalize("NFC"), normalized.normalize("NFD")].filter(
@@ -16839,7 +16861,7 @@ async function resolveExistingPdfPath(resolved, normalized, companyId) {
   );
   for (const candidate of candidates) {
     const altResolved = storagePathService.resolvePath(companyId, candidate);
-    if (await fs11.pathExists(altResolved)) {
+    if (await fs12.pathExists(altResolved)) {
       return { resolved: altResolved, normalized: candidate };
     }
   }
@@ -16864,7 +16886,7 @@ async function getPdfMetadata(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs11.pathExists(resolved);
+    const exists = await fs12.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -16907,7 +16929,7 @@ async function getPdfPageImage(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs11.pathExists(resolved);
+    const exists = await fs12.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -16949,7 +16971,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs11.pathExists(resolved);
+    const exists = await fs12.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -17277,11 +17299,11 @@ var router5 = Router5();
 var MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024;
 var tempDir = path15.join(config.storage.root, "temp", "uploads");
 try {
-  fs12.ensureDirSync(tempDir);
+  fs13.ensureDirSync(tempDir);
 } catch (error) {
   if (config.nodeEnv !== "production") {
     const fallback = path15.join(process.cwd(), "data", "storage", "temp", "uploads");
-    fs12.ensureDirSync(fallback);
+    fs13.ensureDirSync(fallback);
     console.warn(
       `[drive] Failed to init temp dir at ${tempDir}. Using fallback: ${fallback}`
     );
@@ -18749,10 +18771,10 @@ init_sessions_simple();
 // src/whatsapp/baileys/restore-sessions.simple.ts
 init_sessions_simple();
 init_environment();
-import fs13 from "fs";
+import fs14 from "fs";
 var restoreAllSessions = async () => {
-  if (!fs13.existsSync(config.whatsapp.sessionDir)) return;
-  const sessionDirs = fs13.readdirSync(config.whatsapp.sessionDir, { withFileTypes: true }).filter((dirent) => dirent.isDirectory()).filter((dirent) => /^\d{9,15}$/.test(dirent.name)).map((dirent) => dirent.name);
+  if (!fs14.existsSync(config.whatsapp.sessionDir)) return;
+  const sessionDirs = fs14.readdirSync(config.whatsapp.sessionDir, { withFileTypes: true }).filter((dirent) => dirent.isDirectory()).filter((dirent) => /^\d{9,15}$/.test(dirent.name)).map((dirent) => dirent.name);
   for (const phone of sessionDirs) {
     try {
       console.log(`\u267B\uFE0F Restoring session for ${phone}`);
@@ -18766,7 +18788,7 @@ var restoreAllSessions = async () => {
 
 // src/index.ts
 import cron2 from "node-cron";
-import fs14 from "fs-extra";
+import fs15 from "fs-extra";
 var app = express();
 app.set("trust proxy", config.security.trustProxy);
 app.use(
@@ -18889,13 +18911,13 @@ async function startServer() {
       logger_default.warn("Quota Validator initialization failed, quota validation will be disabled:", error);
     }
     await generator_service_default.initialize();
-    await fs14.ensureDir(config.pdf.tempDir);
+    await fs15.ensureDir(config.pdf.tempDir);
     logger_default.info("Initializing Job Scheduler...");
     await scheduler_v2_instance_default.initialize();
     restoreAllSessions();
     cron2.schedule("0 0 * * 0", async () => {
       try {
-        await fs14.emptyDir(config.pdf.tempDir);
+        await fs15.emptyDir(config.pdf.tempDir);
         logger_default.info("\u2705 Cleared PDF temp directory");
       } catch (error) {
         logger_default.error("Failed to clear PDF temp directory:", error);

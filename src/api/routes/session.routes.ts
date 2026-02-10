@@ -25,8 +25,8 @@ router.get('/:phoneNumber/status', sessionController.getSessionStatus);
 // POST /api/sessions/:phoneNumber/logout - Cerrar sesión activa
 router.post('/:phoneNumber/logout', sessionController.logoutSession);
 
-// DISABLED: Simple controller doesn't have clearSession (use logout/disconnect)
-// router.post('/:phoneNumber/clear', sessionController.clearSession);
+// POST /api/sessions/:phoneNumber/clear - Reset completo de sesión (logout + delete files + clear queue)
+router.post('/:phoneNumber/clear', sessionController.clearSession);
 
 // GET /api/sessions/:phoneNumber/groups - Listar grupos de WhatsApp
 router.get('/:phoneNumber/groups', sessionController.getGroupList);

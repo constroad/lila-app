@@ -15,13 +15,14 @@ import {
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import path from 'path';
+import fs from 'fs-extra';
 import { makeInMemoryStore } from './store.manager.js';
 import { InMemoryStore } from './store.types.js';
-import qrcode from 'qrcode';
 import logger from '../../utils/logger.js';
 import { config } from '../../config/environment.js';
 import { populateStoreIfEmpty } from './populate-store-simple.js';
 import { flushOutboxForSession } from '../queue/outbox-queue.js';
+import outboxQueue from '../queue/outbox-queue.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -284,5 +285,82 @@ export async function disconnectSession(sessionId: string): Promise<void> {
     delete qrCodes[sessionId];
     readyClients.delete(sessionId);
     logger.info(`Session ${sessionId} disconnected and removed`);
+  }
+}
+
+/**
+ * Clear session completely (reset)
+ * This performs a full session reset including:
+ * - Logout from WhatsApp
+ * - Delete physical session files (credentials)
+ * - Clear message queue
+ * - Remove backup files
+ * - Clean memory structures
+ *
+ * Use this when user wants to completely remove a session and prevent auto-recovery.
+ */
+export async function clearSession(sessionId: string): Promise<void> {
+  try {
+    logger.info(`🧹 Clearing session ${sessionId} completely...`);
+
+    // 1. Logout if session is active
+    const sock = sessions[sessionId];
+    if (sock) {
+      try {
+        logger.info(`Logging out session ${sessionId}...`);
+        await sock.logout();
+      } catch (error) {
+        logger.warn(`Failed to logout ${sessionId} (may already be disconnected):`, error);
+      }
+    }
+
+    // 2. Clean up memory structures
+    delete sessions[sessionId];
+    delete stores[sessionId];
+    delete qrCodes[sessionId];
+    readyClients.delete(sessionId);
+    logger.info(`✅ Memory cleaned for ${sessionId}`);
+
+    // 3. Delete physical session files (credentials)
+    const sessionDir = path.join(config.whatsapp.sessionDir, sessionId);
+    try {
+      if (await fs.pathExists(sessionDir)) {
+        await fs.remove(sessionDir);
+        logger.info(`✅ Deleted session directory: ${sessionDir}`);
+      } else {
+        logger.info(`Session directory already deleted: ${sessionDir}`);
+      }
+    } catch (error) {
+      logger.error(`❌ Failed to delete session directory ${sessionDir}:`, error);
+      // Don't throw - continue with cleanup
+    }
+
+    // 4. Delete backup files (if they exist)
+    const backupDir = path.join(config.whatsapp.sessionDir, 'backups', sessionId);
+    try {
+      if (await fs.pathExists(backupDir)) {
+        await fs.remove(backupDir);
+        logger.info(`✅ Deleted backup directory: ${backupDir}`);
+      } else {
+        logger.info(`Backup directory already deleted: ${backupDir}`);
+      }
+    } catch (error) {
+      logger.warn(`Failed to delete backup directory ${backupDir}:`, error);
+      // Don't throw - continue with cleanup
+    }
+
+    // 5. Clear message queue
+    try {
+      await outboxQueue.clear(sessionId);
+      logger.info(`✅ Cleared message queue for ${sessionId}`);
+    } catch (error) {
+      logger.warn(`Failed to clear queue for ${sessionId}:`, error);
+      // Don't throw - continue with cleanup
+    }
+
+    logger.info(`✅ Session ${sessionId} completely cleared and reset`);
+  } catch (error) {
+    logger.error(`❌ Error during clearSession for ${sessionId}:`, error);
+    throw error;
   }
 }
