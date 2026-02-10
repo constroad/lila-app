@@ -325,10 +325,7 @@ export async function getGroupListHandler(req: Request, res: Response, next: Nex
 
     const groups = WhatsAppDirectService.listGroups(phoneNumber);
 
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      groups,
-    });
+    res.status(HTTP_STATUS.OK).json(groups);
   } catch (error) {
     next(error);
   }
@@ -397,10 +394,7 @@ export async function getContactsHandler(req: Request, res: Response, next: Next
 
     const contacts = WhatsAppDirectService.listContacts(phoneNumber);
 
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      contacts,
-    });
+    res.status(HTTP_STATUS.OK).json(contacts);
   } catch (error) {
     next(error);
   }
