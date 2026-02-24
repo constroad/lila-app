@@ -1,4 +1,4 @@
-import puppeteer, { Browser } from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer';
 import Handlebars from 'handlebars';
 import fs from 'fs-extra';
 import path from 'path';
@@ -11,14 +11,26 @@ export class PDFGenerator {
   private browser: Browser | null = null;
   private templatesDir: string;
   private uploadsDir: string;
+  private protocolTimeout: number;
+  private isInitializing = false;
+  private initializePromise?: Promise<void>;
 
   constructor() {
     this.templatesDir = config.pdf.templatesDir;
     this.uploadsDir = config.pdf.uploadsDir;
+    this.protocolTimeout =
+      Number(process.env.PUPPETEER_PROTOCOL_TIMEOUT) ||
+      (config.pdf as any)?.protocolTimeout ||
+      180000;
   }
 
   async initialize(): Promise<void> {
     try {
+      if (this.isInitializing && this.initializePromise) {
+        await this.initializePromise;
+        return;
+      }
+      this.isInitializing = true;
       logger.info('Initializing PDF Generator...');
       
       // Asegurar que los directorios existen
@@ -33,6 +45,7 @@ export class PDFGenerator {
       const launchBrowser = async (headless: boolean | 'new') =>
         puppeteer.launch({
           headless,
+          protocolTimeout: this.protocolTimeout,
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -58,14 +71,64 @@ export class PDFGenerator {
     } catch (error) {
       logger.error('Error initializing PDF Generator:', error);
       throw error;
+    } finally {
+      this.isInitializing = false;
+      this.initializePromise = undefined;
+    }
+  }
+
+  private async ensureBrowser(): Promise<void> {
+    if (this.browser && this.browser.isConnected()) {
+      return;
+    }
+    if (!this.initializePromise) {
+      this.initializePromise = this.initialize();
+    }
+    await this.initializePromise;
+  }
+
+  private isProtocolTimeoutError(error: any): boolean {
+    const message = error?.message || '';
+    return (
+      error?.name === 'ProtocolError' ||
+      message.includes('Target.createTarget timed out') ||
+      message.includes('Protocol error')
+    );
+  }
+
+  private async restartBrowser(): Promise<void> {
+    try {
+      if (this.browser) {
+        await this.browser.close();
+      }
+    } catch (error) {
+      logger.warn('Failed to close browser before restart', { error: String(error) });
+    } finally {
+      this.browser = null;
+    }
+    this.initializePromise = this.initialize();
+    await this.initializePromise;
+  }
+
+  private async createPageWithRetry(): Promise<Page> {
+    await this.ensureBrowser();
+    try {
+      return await this.browser!.newPage();
+    } catch (error) {
+      if (this.isProtocolTimeoutError(error)) {
+        logger.warn('Puppeteer newPage timed out. Restarting browser...', {
+          error: String(error),
+        });
+        await this.restartBrowser();
+        return await this.browser!.newPage();
+      }
+      throw error;
     }
   }
 
   async generatePDF(request: PDFGenerationRequest): Promise<string> {
     try {
-      if (!this.browser) {
-        throw new Error('PDF Generator not initialized');
-      }
+      await this.ensureBrowser();
 
       logger.info(`Generating PDF from template: ${request.templateId}`);
 
@@ -80,12 +143,15 @@ export class PDFGenerator {
       const filename = request.filename || `pdf-${randomUUID()}.pdf`;
       const filepath = path.join(this.uploadsDir, filename);
 
-      const page = await this.browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      const page = await this.createPageWithRetry();
+      page.setDefaultNavigationTimeout(this.protocolTimeout);
+      page.setDefaultTimeout(this.protocolTimeout);
+      await page.setContent(html, { waitUntil: 'networkidle0', timeout: this.protocolTimeout });
       await page.pdf({
         path: filepath,
         format: 'A4',
         margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+        preferCSSPageSize: true,
       });
       await page.close();
 
@@ -93,6 +159,46 @@ export class PDFGenerator {
       return filepath;
     } catch (error) {
       logger.error('Error generating PDF:', error);
+      throw error;
+    }
+  }
+
+  async generateFromHtml(
+    html: string,
+    options: {
+      filename?: string;
+      outputPath?: string;
+      format?: 'A4' | 'Letter' | 'Legal';
+      landscape?: boolean;
+      margin?: { top: string; right: string; bottom: string; left: string };
+    } = {}
+  ): Promise<string> {
+    try {
+      await this.ensureBrowser();
+
+      const filepath = options.outputPath
+        ? options.outputPath
+        : path.join(this.uploadsDir, options.filename || `pdf-${randomUUID()}.pdf`);
+
+      await fs.ensureDir(path.dirname(filepath));
+
+      const page = await this.createPageWithRetry();
+      page.setDefaultNavigationTimeout(this.protocolTimeout);
+      page.setDefaultTimeout(this.protocolTimeout);
+      await page.setContent(html, { waitUntil: 'networkidle0', timeout: this.protocolTimeout });
+      await page.pdf({
+        path: filepath,
+        format: options.format || 'A4',
+        landscape: Boolean(options.landscape),
+        margin: options.margin || { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+        preferCSSPageSize: true,
+      });
+      await page.close();
+
+      logger.info(`PDF generated from HTML: ${filepath}`);
+      return filepath;
+    } catch (error) {
+      logger.error('Error generating PDF from HTML:', error);
       throw error;
     }
   }

@@ -17,6 +17,8 @@ import jobsRoutes from './api/routes/jobs.routes.v2.js';
 import messageRoutes from './api/routes/message.routes.js';
 import pdfRoutes from './api/routes/pdf.routes.js';
 import driveRoutes from './api/routes/drive.routes.js';
+import documentsRoutes from './api/routes/documents.routes.js';
+import serviceManagementReportRoutes from './api/routes/service-management-report.routes.js';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './api/docs/openapi.js';
 import jobScheduler from './jobs/scheduler.v2.instance.js';
@@ -130,6 +132,8 @@ app.use('/api/jobs', jobsRoutes);
 app.use('/api/message', messageRoutes);
 app.use('/api/pdf', pdfRoutes);
 app.use('/api/drive', driveRoutes);
+app.use('/api/documents', documentsRoutes);
+app.use('/api/service-management-report', serviceManagementReportRoutes);
 
 // Public file access (multi-tenant only - Fase 9)
 app.use(

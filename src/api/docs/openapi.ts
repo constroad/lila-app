@@ -18,6 +18,8 @@ export const openApiSpec = {
     { name: 'PDF', description: 'Generacion de PDFs y templates' },
     { name: 'Drive', description: 'Almacenamiento multi-tenant (requiere JWT con companyId)' },
     { name: 'System', description: 'Health y estado del servidor' },
+    { name: 'Documents', description: 'Generacion de documentos (schemas, reportes, sandbox)' },
+    { name: 'ServiceReports', description: 'Gestion de reportes de servicio' },
   ],
   components: {
     securitySchemes: {
@@ -40,6 +42,56 @@ export const openApiSpec = {
               statusCode: { type: 'number' },
             },
           },
+        },
+      },
+      DocumentSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          code: { type: 'string' },
+          name: { type: 'string' },
+          description: { type: 'string' },
+          category: { type: 'string' },
+          version: { type: 'string' },
+          lastUpdated: { type: 'string' },
+          orientation: { type: 'string' },
+          pageSize: { type: 'string' },
+          sections: { type: 'array', items: { type: 'object' } },
+          defaultData: { type: 'object' },
+        },
+      },
+      ServiceReport: {
+        type: 'object',
+        properties: {
+          _id: { type: 'string' },
+          serviceManagementId: { type: 'string' },
+          type: { type: 'string' },
+          status: { type: 'string' },
+          schemaData: { type: 'object' },
+          draftData: { type: 'object' },
+          generatedDocuments: { type: 'object' },
+          attachments: { type: 'array', items: { type: 'object' } },
+          editLock: { type: 'object' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      DocumentsGenerateRequest: {
+        type: 'object',
+        properties: {
+          reportId: { type: 'string' },
+        },
+        required: [ 'reportId' ],
+      },
+      DocumentsGenerateResponse: {
+        type: 'object',
+        properties: {
+          reportId: { type: 'string' },
+          status: { type: 'string' },
+          docxUrl: { type: 'string' },
+          pdfUrl: { type: 'string' },
+          docxUrlAbsolute: { type: 'string' },
+          pdfUrlAbsolute: { type: 'string' },
         },
       },
       DriveEntry: {
@@ -107,6 +159,373 @@ export const openApiSpec = {
               },
             },
           },
+        },
+      },
+    },
+    '/api/documents/schemas': {
+      get: {
+        tags: ['Documents'],
+        summary: 'Listar todos los schemas de documentos',
+        responses: {
+          200: {
+            description: 'Lista de schemas',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/DocumentSchema' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/documents/schemas/{code}': {
+      get: {
+        tags: ['Documents'],
+        summary: 'Obtener schema por codigo',
+        parameters: [
+          {
+            in: 'path',
+            name: 'code',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Schema encontrado',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/DocumentSchema' },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Schema no encontrado' },
+        },
+      },
+    },
+    '/api/documents/sandbox/random-data': {
+      post: {
+        tags: ['Documents'],
+        summary: 'Generar data aleatoria para un schema',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                },
+                required: [ 'code' ],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Data generada',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { type: 'object' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/documents/report-data/{serviceId}/{type}': {
+      get: {
+        tags: ['Documents'],
+        summary: 'Obtener data agregada por servicio y tipo de informe',
+        parameters: [
+          {
+            in: 'path',
+            name: 'serviceId',
+            required: true,
+            schema: { type: 'string' },
+          },
+          {
+            in: 'path',
+            name: 'type',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Data agregada',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { type: 'object' },
+                    meta: { type: 'object' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/documents/generate': {
+      post: {
+        tags: ['Documents'],
+        summary: 'Generar DOCX/PDF desde un reporte',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/DocumentsGenerateRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Documento generado',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/DocumentsGenerateResponse' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/documents/{id}': {
+      get: {
+        tags: ['Documents'],
+        summary: 'Obtener reporte (documento) por ID',
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          200: {
+            description: 'Reporte encontrado',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/ServiceReport' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/documents/{id}/download': {
+      get: {
+        tags: ['Documents'],
+        summary: 'Obtener URL de descarga',
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
+          { in: 'query', name: 'format', required: false, schema: { type: 'string', enum: [ 'docx', 'pdf' ] } },
+        ],
+        responses: {
+          200: {
+            description: 'URL de descarga',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        url: { type: 'string' },
+                        urlAbsolute: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/service-management-report': {
+      get: {
+        tags: ['ServiceReports'],
+        summary: 'Listar reportes de servicio',
+        parameters: [
+          { in: 'query', name: 'serviceManagementId', schema: { type: 'string' } },
+          { in: 'query', name: 'type', schema: { type: 'string' } },
+        ],
+        responses: {
+          200: {
+            description: 'Lista de reportes',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { type: 'array', items: { $ref: '#/components/schemas/ServiceReport' } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ['ServiceReports'],
+        summary: 'Crear reporte de servicio',
+        security: [ { bearerAuth: [] } ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ServiceReport' },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Reporte creado',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/ServiceReport' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/service-management-report/{id}': {
+      get: {
+        tags: ['ServiceReports'],
+        summary: 'Obtener reporte por ID',
+        parameters: [ { in: 'path', name: 'id', required: true, schema: { type: 'string' } } ],
+        responses: {
+          200: {
+            description: 'Reporte encontrado',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/ServiceReport' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      put: {
+        tags: ['ServiceReports'],
+        summary: 'Actualizar reporte',
+        security: [ { bearerAuth: [] } ],
+        parameters: [ { in: 'path', name: 'id', required: true, schema: { type: 'string' } } ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ServiceReport' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Reporte actualizado',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/ServiceReport' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ['ServiceReports'],
+        summary: 'Eliminar reporte',
+        security: [ { bearerAuth: [] } ],
+        parameters: [ { in: 'path', name: 'id', required: true, schema: { type: 'string' } } ],
+        responses: {
+          200: { description: 'Reporte eliminado' },
+        },
+      },
+    },
+    '/api/service-management-report/{id}/lock': {
+      post: {
+        tags: ['ServiceReports'],
+        summary: 'Adquirir lock de edicion',
+        security: [ { bearerAuth: [] } ],
+        parameters: [ { in: 'path', name: 'id', required: true, schema: { type: 'string' } } ],
+        responses: {
+          200: { description: 'Lock adquirido' },
+          409: { description: 'Lock en uso' },
+        },
+      },
+    },
+    '/api/service-management-report/{id}/unlock': {
+      post: {
+        tags: ['ServiceReports'],
+        summary: 'Liberar lock de edicion',
+        security: [ { bearerAuth: [] } ],
+        parameters: [ { in: 'path', name: 'id', required: true, schema: { type: 'string' } } ],
+        responses: {
+          200: { description: 'Lock liberado' },
+        },
+      },
+    },
+    '/api/service-management-report/{id}/heartbeat': {
+      post: {
+        tags: ['ServiceReports'],
+        summary: 'Extender lock de edicion',
+        security: [ { bearerAuth: [] } ],
+        parameters: [ { in: 'path', name: 'id', required: true, schema: { type: 'string' } } ],
+        responses: {
+          200: { description: 'Lock actualizado' },
         },
       },
     },
