@@ -39,6 +39,7 @@ export class ReportHtmlRenderer {
   private data: Record<string, any>;
   private options: HtmlRendererOptions;
   private headerSection: SectionSchema | null;
+  private sectionTitleMap: Map<string, string>;
 
   constructor(schema: DocumentSchema, data: Record<string, any>, options: HtmlRendererOptions = {}) {
     this.schema = schema;
@@ -49,6 +50,7 @@ export class ReportHtmlRenderer {
       ...options,
     };
     this.headerSection = schema.sections.find((section) => section.type === 'header') || null;
+    this.sectionTitleMap = this.buildSectionTitleMap();
   }
 
   async render(): Promise<string> {
@@ -108,6 +110,51 @@ export class ReportHtmlRenderer {
 </html>`;
   }
 
+  private buildSectionTitleMap(): Map<string, string> {
+    const map = new Map<string, string>();
+    if (this.schema.code !== 'IAA') {
+      return map;
+    }
+    const includeLevantamiento = Boolean(this.getValue('levantamiento.incluir'));
+    const sections = this.schema.sections.filter((section) => {
+      if (section.type === 'header') return false;
+      if (section.id === 'levantamientoTopografico' && !includeLevantamiento) {
+        return false;
+      }
+      return true;
+    });
+    let index = 1;
+    for (const section of sections) {
+      if (!section.title) continue;
+      map.set(section.id, `${this.toRoman(index)}. ${section.title}`);
+      index += 1;
+    }
+    return map;
+  }
+
+  private resolveSectionTitle(section: SectionSchema): string {
+    return this.sectionTitleMap.get(section.id) || section.title || '';
+  }
+
+  private toRoman(value: number): string {
+    const roman: Array<[number, string]> = [
+      [10, 'X'],
+      [9, 'IX'],
+      [5, 'V'],
+      [4, 'IV'],
+      [1, 'I'],
+    ];
+    let num = value;
+    let out = '';
+    for (const [n, symbol] of roman) {
+      while (num >= n) {
+        out += symbol;
+        num -= n;
+      }
+    }
+    return out || String(value);
+  }
+
   private async renderSection(section: SectionSchema): Promise<string> {
     switch (section.type) {
       case 'header':
@@ -115,9 +162,15 @@ export class ReportHtmlRenderer {
       case 'projectData':
       case 'simpleFields':
       case 'summary':
+        if (section.id === 'levantamientoTopografico' && this.schema.code === 'IAA') {
+          return this.renderLevantamientoTopografico(section);
+        }
         return this.renderFieldsSection(section);
       case 'dataTable':
       case 'resultsTable':
+        if (section.id === 'cuadroMetrado' && this.schema.code === 'IAA') {
+          return this.renderCuadroMetrado(section);
+        }
         return this.renderDataTable(section);
       case 'checklist':
         return this.renderChecklist(section);
@@ -247,7 +300,8 @@ export class ReportHtmlRenderer {
   }
 
   private renderFieldsSection(section: SectionSchema): string {
-    const title = section.title ? `<h2>${this.escapeHtml(section.title)}</h2>` : '';
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const fields = section.fields || [];
     if (fields.length === 0) {
       return `<div class="section">${title}</div>`;
@@ -264,8 +318,73 @@ export class ReportHtmlRenderer {
     return `<div class="section">${title}<table class="kv-table">${rows}</table></div>`;
   }
 
+  private renderLevantamientoTopografico(section: SectionSchema): string {
+    if (!this.getValue('levantamiento.incluir')) {
+      return '';
+    }
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
+
+    const rows = [
+      {
+        leftLabel: 'TOPOGRAFO RESPONSABLE',
+        leftKey: 'levantamiento.topografo',
+        rightLabel: 'CIP',
+        rightKey: 'levantamiento.cip',
+      },
+      {
+        leftLabel: 'EQUIPO UTILIZADO',
+        leftKey: 'levantamiento.equipo',
+        rightLabel: 'NRO SERIE',
+        rightKey: 'levantamiento.nroSerie',
+      },
+      {
+        leftLabel: 'CERT. CALIBRACION',
+        leftKey: 'levantamiento.certCalibracion',
+        rightLabel: 'FECHA CALIBRACION',
+        rightKey: 'levantamiento.fechaCalibracion',
+        rightType: 'date',
+      },
+      {
+        leftLabel: 'FECHA LEVANTAMIENTO',
+        leftKey: 'levantamiento.fechaLevantamiento',
+        leftType: 'date',
+        rightLabel: 'SISTEMA REFERENCIA',
+        rightKey: 'levantamiento.sistemaReferencia',
+      },
+      {
+        leftLabel: 'PLANO DE REFERENCIA',
+        leftKey: 'levantamiento.planoReferencia',
+        colspan: 3,
+      },
+    ];
+
+    const headerRow = `<tr><th colspan="4" style="text-align:center;">DATOS DEL LEVANTAMIENTO TOPOGRAFICO</th></tr>`;
+    const bodyRows = rows
+      .map((row) => {
+        const leftValue = this.formatValue(this.getValue(row.leftKey), row.leftType);
+        if (row.colspan) {
+          return `<tr>
+            <td style="font-weight:bold;">${this.escapeHtml(row.leftLabel)}</td>
+            <td colspan="3">${this.escapeHtml(leftValue)}</td>
+          </tr>`;
+        }
+        const rightValue = this.formatValue(this.getValue(row.rightKey || ''), row.rightType);
+        return `<tr>
+          <td style="font-weight:bold;">${this.escapeHtml(row.leftLabel)}</td>
+          <td>${this.escapeHtml(leftValue)}</td>
+          <td style="font-weight:bold;">${this.escapeHtml(row.rightLabel || '')}</td>
+          <td>${this.escapeHtml(rightValue)}</td>
+        </tr>`;
+      })
+      .join('');
+
+    return `<div class="section">${title}<table>${headerRow}${bodyRows}</table></div>`;
+  }
+
   private renderDataTable(section: SectionSchema): string {
-    const title = section.title ? `<h2>${this.escapeHtml(section.title)}</h2>` : '';
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const columns = section.columns || [];
     if (columns.length === 0) {
       return `<div class="section">${title}</div>`;
@@ -334,8 +453,149 @@ export class ReportHtmlRenderer {
     return `<div class="section">${title}<table>${headerRow}${subHeaderRow}${rows}</table></div>`;
   }
 
+  private renderCuadroMetrado(section: SectionSchema): string {
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
+
+    const rowsData = this.resolveTableRows(section);
+    const columns = section.columns || [];
+    if (columns.length === 0) {
+      return `<div class="section">${title}</div>`;
+    }
+
+    const hasPartida = rowsData.some((row) => row?.partida || row?.partidaCodigo || row?.partidaId);
+    const displayColumns = hasPartida
+      ? columns.filter((col) => col.key !== 'partida')
+      : columns;
+
+    const hasGroups = displayColumns.some((column) => column.group);
+    const headerCells: Array<
+      | { type: 'group'; label: string; span: number }
+      | { type: 'single'; column: ColumnSchema }
+    > = [];
+
+    let index = 0;
+    while (index < displayColumns.length) {
+      const column = displayColumns[index];
+      if (!column.group) {
+        headerCells.push({ type: 'single', column });
+        index += 1;
+        continue;
+      }
+      const groupLabel = column.group;
+      let span = 1;
+      while (index + span < displayColumns.length && displayColumns[index + span].group === groupLabel) {
+        span += 1;
+      }
+      headerCells.push({ type: 'group', label: groupLabel, span });
+      index += span;
+    }
+
+    const headerRow = `<tr>${headerCells
+      .map((cell) => {
+        if (cell.type === 'group') {
+          return `<th colspan="${cell.span}" style="text-align:center;">${this.escapeHtml(cell.label)}</th>`;
+        }
+        const col = cell.column;
+        const width = col.width ? `width:${col.width}px;` : '';
+        const rowSpan = hasGroups ? 'rowspan="2"' : '';
+        return `<th ${rowSpan} style="${width}text-align:${this.alignCss(col.align)}">${this.escapeHtml(col.label || col.key)}</th>`;
+      })
+      .join('')}</tr>`;
+
+    const subHeaderRow = hasGroups
+      ? `<tr>${displayColumns
+          .filter((col) => col.group)
+          .map((col) => {
+            const width = col.width ? `width:${col.width}px;` : '';
+            return `<th style="${width}text-align:${this.alignCss(col.align)}">${this.escapeHtml(col.label || col.key)}</th>`;
+          })
+          .join('')}</tr>`
+      : '';
+
+    if (!hasPartida) {
+      const rows = rowsData
+        .map((row) => {
+          const cells = displayColumns
+            .map((col) => {
+              const rawValue = this.getValue(col.key, row);
+              const formatted = this.escapeHtml(this.formatValue(rawValue, col.type, col));
+              const width = col.width ? `width:${col.width}px;` : '';
+              return `<td style="${width}text-align:${this.alignCss(col.align)}">${formatted}</td>`;
+            })
+            .join('');
+          return `<tr>${cells}</tr>`;
+        })
+        .join('');
+      return `<div class="section">${title}<table>${headerRow}${subHeaderRow}${rows}</table></div>`;
+    }
+
+    const groups: Array<{ label: string; rows: Array<Record<string, any>> }> = [];
+    const groupMap = new Map<string, { label: string; rows: Array<Record<string, any>> }>();
+
+    rowsData.forEach((row, rowIndex) => {
+      const rawLabel = row?.partida || row?.partidaCodigo || row?.partidaId || row?.descripcion || '';
+      const label = String(rawLabel || `Partida ${rowIndex + 1}`);
+      const key = String(row?.partidaId || row?.partidaCodigo || row?.partida || label);
+      if (!groupMap.has(key)) {
+        const group = { label, rows: [] as Array<Record<string, any>> };
+        groupMap.set(key, group);
+        groups.push(group);
+      }
+      groupMap.get(key)!.rows.push(row);
+    });
+
+    const bodyRows = groups
+      .map((group) => {
+        const groupHeader = `<tr><td colspan="${displayColumns.length}" style="font-weight:bold;">PARTIDA: ${this.escapeHtml(group.label)}</td></tr>`;
+        const groupRows = group.rows
+          .map((row) => {
+            const cells = displayColumns
+              .map((col) => {
+                const rawValue = this.getValue(col.key, row);
+                const formatted = this.escapeHtml(this.formatValue(rawValue, col.type, col));
+                const width = col.width ? `width:${col.width}px;` : '';
+                return `<td style="${width}text-align:${this.alignCss(col.align)}">${formatted}</td>`;
+              })
+              .join('');
+            return `<tr>${cells}</tr>`;
+          })
+          .join('');
+
+        const totals = displayColumns.map((col, index) => {
+          if (col.key === 'area' || col.key === 'volumen') {
+            const sum = group.rows.reduce((acc, row) => acc + Number(row?.[col.key] || 0), 0);
+            const formatted = this.escapeHtml(this.formatValue(sum, col.type, col));
+            return `<td style="font-weight:bold;text-align:${this.alignCss(col.align)}">${formatted}</td>`;
+          }
+          if (index === 0) {
+            return `<td style="font-weight:bold;">SUBTOTAL ${this.escapeHtml(group.label)}</td>`;
+          }
+          return `<td></td>`;
+        }).join('');
+        const totalRow = `<tr>${totals}</tr>`;
+        return `${groupHeader}${groupRows}${totalRow}`;
+      })
+      .join('');
+
+    const summaryParts = groups.map((group) => {
+      const areaTotal = group.rows.reduce((acc, row) => acc + Number(row?.area || 0), 0);
+      const volumenTotal = group.rows.reduce((acc, row) => acc + Number(row?.volumen || 0), 0);
+      const areaText = this.formatValue(areaTotal, 'number');
+      const volumenText = this.formatValue(volumenTotal, 'number');
+      const volumenLabel = volumenTotal ? ` (${volumenText} m3)` : '';
+      return `${this.escapeHtml(group.label)}: ${this.escapeHtml(areaText)} m2${volumenLabel}`;
+    });
+    const summaryRow = summaryParts.length > 0
+      ? `<tr><td colspan="${displayColumns.length}" style="font-weight:bold;">RESUMEN DE METRADOS ADICIONALES: ${summaryParts.join(' | ')}</td></tr>`
+      : '';
+
+    return `<div class="section">${title}<table>${headerRow}${subHeaderRow}${bodyRows}${summaryRow}</table></div>`;
+  }
+
   private renderChecklist(section: SectionSchema): string {
-    const title = section.title ? `<h2>${this.escapeHtml(section.title)}</h2>` : '';
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const items = section.items || [];
     const list = items
       .map((item) => {
@@ -350,7 +610,8 @@ export class ReportHtmlRenderer {
   }
 
   private async renderPhotoPanel(section: SectionSchema): Promise<string> {
-    const title = section.title ? `<h2>${this.escapeHtml(section.title)}</h2>` : '';
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const photos = this.limitPhotos(this.resolvePhotos(section), section.maxImages);
     if (photos.length === 0) {
       return `<div class="section">${title}<div>Sin fotos registradas.</div></div>`;
@@ -361,7 +622,8 @@ export class ReportHtmlRenderer {
   }
 
   private async renderPhotoSection(section: SectionSchema): Promise<string> {
-    const title = section.title ? `<h2>${this.escapeHtml(section.title)}</h2>` : '';
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const groups = this.resolvePhotoGroups(section);
     if (groups.length === 0) {
       return `<div class="section">${title}<div>Sin fotos registradas.</div></div>`;
@@ -383,19 +645,28 @@ export class ReportHtmlRenderer {
   }
 
   private renderRichText(section: SectionSchema): string {
-    const title = section.title ? `<h2>${this.escapeHtml(section.title)}</h2>` : '';
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const value = this.getValue(section.id);
-    if (!value) {
-      return `<div class="section">${title}</div>`;
+    const lines = value
+      ? Array.isArray(value)
+        ? value.map(String)
+        : String(value).split(/\r?\n/)
+      : [];
+    const html = lines.length > 0
+      ? lines.map((line) => `<p>${this.escapeHtml(line)}</p>`).join('')
+      : '<p>&nbsp;</p>';
+
+    if (this.schema.code === 'IAA' && ['antecedentes', 'justificacionTecnica', 'conclusiones'].includes(section.id)) {
+      return `<div class="section">${title}<table><tr><td>${html}</td></tr></table></div>`;
     }
 
-    const lines = Array.isArray(value) ? value.map(String) : String(value).split(/\r?\n/);
-    const html = lines.map((line) => `<p>${this.escapeHtml(line)}</p>`).join('');
     return `<div class="section">${title}${html}</div>`;
   }
 
   private async renderSignatures(section: SectionSchema): Promise<string> {
-    const title = section.title ? `<h2>${this.escapeHtml(section.title)}</h2>` : '';
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const signatures = section.signatures || [];
     if (signatures.length === 0) {
       return `<div class="section">${title}</div>`;
@@ -438,11 +709,9 @@ export class ReportHtmlRenderer {
             return `<img src="${item.src}" style="position:absolute;top:0;left:0;max-height:70px;max-width:${width}px;object-fit:contain;z-index:${zIndex};" />`;
           })
           .join('');
-        const imageHtml = imageLayers
-          ? `<div style="display:flex;justify-content:${justify};margin:6px 0;">
-              <div style="position:relative;width:${width}px;height:80px;">${imageLayers}</div>
-            </div>`
-          : '';
+        const imageHtml = `<div style="display:flex;justify-content:${justify};margin:6px 0;">
+            <div style="position:relative;width:${width}px;height:80px;">${imageLayers}</div>
+          </div>`;
         const lineHtml =
           section.signatureStyle === 'line'
             ? `<div style="border-top:1px solid #333; margin:6px 0 4px 0;"></div>`
@@ -493,16 +762,29 @@ export class ReportHtmlRenderer {
       return direct.rows;
     }
 
+    if (direct && Array.isArray(direct.items)) {
+      return direct.items;
+    }
+
+    if (direct && typeof direct === 'object') {
+      const numericKeys = Object.keys(direct)
+        .filter((key) => /^\d+$/.test(key))
+        .sort((a, b) => Number(a) - Number(b));
+      if (numericKeys.length > 0) {
+        return numericKeys.map((key) => (direct as Record<string, any>)[key]);
+      }
+    }
+
     return [];
   }
 
   private resolvePhotos(section: SectionSchema): PhotoItem[] {
     const direct = this.getValue(section.id);
+    if (direct && Array.isArray(direct.fotos) && direct.fotos.length > 0) {
+      return direct.fotos as PhotoItem[];
+    }
     if (Array.isArray(direct)) {
       return direct as PhotoItem[];
-    }
-    if (direct && Array.isArray(direct.fotos)) {
-      return direct.fotos as PhotoItem[];
     }
 
     const nested = this.getValue(`secciones.${section.id}.fotos`);
@@ -561,12 +843,12 @@ export class ReportHtmlRenderer {
     for (let i = 0; i < photos.length; i += columns) {
       const chunk = photos.slice(i, i + columns);
       const cells = await Promise.all(
-        chunk.map(async (photo) => {
+        chunk.map(async (photo, index) => {
           const src = await this.resolveImageSrc(photo);
           const imgTag = src
             ? `<img src="${src}" style="width:100%;height:${imageHeight}px;object-fit:contain;background:#f8f8f8;" />`
             : `<div style="height:${imageHeight}px;display:flex;align-items:center;justify-content:center;background:#f8f8f8;">Sin imagen</div>`;
-          const caption = this.buildPhotoCaption(photo, section);
+          const caption = this.buildPhotoCaption(photo, section, i + index + 1);
           const captionHtml = caption ? `<div class="caption">${this.escapeHtml(caption)}</div>` : '';
           const cellWidth = `${(100 / columns).toFixed(2)}%`;
           return `<td style="width:${cellWidth};">${imgTag}${captionHtml}</td>`;
@@ -586,8 +868,11 @@ export class ReportHtmlRenderer {
     return `<table class="photo-table" style="table-layout:fixed;">${rows.join('')}</table>`;
   }
 
-  private buildPhotoCaption(photo: PhotoItem, section: SectionSchema): string {
+  private buildPhotoCaption(photo: PhotoItem, section: SectionSchema, index: number): string {
     const parts: string[] = [];
+    if (this.schema.code === 'IAA' && section.id === 'panelFotografico') {
+      parts.push(`Foto ${index}`);
+    }
     if (photo.descripcion) {
       parts.push(photo.descripcion);
     } else if (photo.filename) {
@@ -610,12 +895,21 @@ export class ReportHtmlRenderer {
       return base64;
     }
 
-    if (photo.url) {
-      if (photo.url.startsWith('http')) {
-        return photo.url;
+    const urlCandidate =
+      photo.url ||
+      (photo as any).thumbnailUrl ||
+      (photo as any).fileUrl ||
+      (photo as any).lilaAppUrl ||
+      (photo as any).metadata?.lilaAppUrl ||
+      (photo as any).metadata?.fileUrl ||
+      '';
+
+    if (urlCandidate) {
+      if (urlCandidate.startsWith('http')) {
+        return urlCandidate;
       }
-      if (photo.url.startsWith('/files/companies/')) {
-        return this.buildAbsoluteUrl(photo.url);
+      if (urlCandidate.startsWith('/files/companies/')) {
+        return this.buildAbsoluteUrl(urlCandidate);
       }
     }
 

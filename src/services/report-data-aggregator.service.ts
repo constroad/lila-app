@@ -196,6 +196,79 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
           documentoReferencia: '',
         },
       };
+    case 'IAA': {
+      const allPartidas = Array.isArray(service.partidas) ? service.partidas : [];
+      const partidasAdicionales = allPartidas.filter(
+        (p: any) => p && typeof p === 'object' && p.isAdditional === true
+      );
+
+      const metrado = partidasAdicionales.map((p: any, index: number) => {
+        return {
+          item: String(index + 1).padStart(2, '0'),
+          partida: String(p.description || ''),
+          descripcion: String(p.description || ''),
+          unidad: String(p.unit || ''),
+          metodo: '',
+          referencia: '',
+          area: 0,
+          volumen: 0,
+        };
+      });
+
+      return {
+        ...projectData,
+        proyecto: {
+          ...projectData.proyecto,
+          entidad: '',
+          supervision: '',
+          contrato: '',
+          frente: '',
+        },
+        levantamiento: {
+          incluir: false,
+          topografo: '',
+          cip: '',
+          equipo: '',
+          nroSerie: '',
+          certCalibracion: '',
+          fechaCalibracion: '',
+          fechaLevantamiento: '',
+          sistemaReferencia: '',
+          planoReferencia: '',
+        },
+        antecedentes: '',
+        justificacionTecnica: '',
+        ubicacionTecnica: [
+          {
+            item: '01',
+            tramoZona: '',
+            progInicial: '',
+            progFinal: '',
+            lado: '',
+            descripcion: '',
+          },
+        ],
+        cuadroMetrado: metrado.length > 0 ? metrado : [
+          {
+            item: '01',
+            partida: '',
+            descripcion: '',
+            unidad: '',
+            metodo: '',
+            referencia: '',
+            area: 0,
+            volumen: 0,
+          },
+        ],
+        panelFotografico: { fotos: [] },
+        conclusiones: '',
+        firmas: {
+          elaboradoPor: { nombre: '', cargo: 'Supervisor de Campo', cip: '' },
+          revisadoPor: { nombre: '', cargo: 'Residente de Obra', cip: '' },
+          aprobadoPor: { nombre: '', cargo: 'Residente de Obra', cip: '' }
+        }
+      };
+    }
     default:
       return {
         ...projectData,

@@ -52,6 +52,7 @@ export class DOCXGenerator {
   private schema: DocumentSchema;
   private data: Record<string, any>;
   private options: DOCXGeneratorOptions;
+  private sectionTitleMap: Map<string, string>;
 
   constructor(schema: DocumentSchema, data: Record<string, any>, options: DOCXGeneratorOptions = {}) {
     this.schema = schema;
@@ -61,6 +62,7 @@ export class DOCXGenerator {
       imageMaxHeight: 180,
       ...options,
     };
+    this.sectionTitleMap = this.buildSectionTitleMap();
   }
 
   async generate(): Promise<Buffer> {
@@ -117,6 +119,51 @@ export class DOCXGenerator {
     return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   }
 
+  private buildSectionTitleMap(): Map<string, string> {
+    const map = new Map<string, string>();
+    if (this.schema.code !== 'IAA') {
+      return map;
+    }
+    const includeLevantamiento = Boolean(this.getValue('levantamiento.incluir'));
+    const sections = this.schema.sections.filter((section) => {
+      if (section.type === 'header') return false;
+      if (section.id === 'levantamientoTopografico' && !includeLevantamiento) {
+        return false;
+      }
+      return true;
+    });
+    let index = 1;
+    for (const section of sections) {
+      if (!section.title) continue;
+      map.set(section.id, `${this.toRoman(index)}. ${section.title}`);
+      index += 1;
+    }
+    return map;
+  }
+
+  private resolveSectionTitle(section: SectionSchema): string {
+    return this.sectionTitleMap.get(section.id) || section.title || '';
+  }
+
+  private toRoman(value: number): string {
+    const roman: Array<[number, string]> = [
+      [10, 'X'],
+      [9, 'IX'],
+      [5, 'V'],
+      [4, 'IV'],
+      [1, 'I'],
+    ];
+    let num = value;
+    let out = '';
+    for (const [n, symbol] of roman) {
+      while (num >= n) {
+        out += symbol;
+        num -= n;
+      }
+    }
+    return out || String(value);
+  }
+
   private buildDocxSection(orientation: 'portrait' | 'landscape') {
     return {
       properties: {
@@ -148,10 +195,16 @@ export class DOCXGenerator {
       case 'projectData':
         return this.renderFieldsSection(section);
       case 'simpleFields':
+        if (section.id === 'levantamientoTopografico' && this.schema.code === 'IAA') {
+          return this.renderLevantamientoTopografico(section);
+        }
         return this.renderFieldsSection(section);
       case 'summary':
         return this.renderFieldsSection(section);
       case 'dataTable':
+        if (section.id === 'cuadroMetrado' && this.schema.code === 'IAA') {
+          return this.renderCuadroMetrado(section);
+        }
         return this.renderDataTable(section);
       case 'resultsTable':
         return this.renderDataTable(section);
@@ -321,8 +374,9 @@ export class DOCXGenerator {
 
   private renderFieldsSection(section: SectionSchema): Array<Paragraph | Table> {
     const elements: Array<Paragraph | Table> = [];
-    if (section.title) {
-      elements.push(this.renderSectionTitle(section.title));
+    const title = this.resolveSectionTitle(section);
+    if (title) {
+      elements.push(this.renderSectionTitle(title));
     }
 
     const fields = section.fields || [];
@@ -362,10 +416,131 @@ export class DOCXGenerator {
     return elements;
   }
 
+  private renderLevantamientoTopografico(section: SectionSchema): Array<Paragraph | Table> {
+    const elements: Array<Paragraph | Table> = [];
+    if (!this.getValue('levantamiento.incluir')) {
+      return elements;
+    }
+    const title = this.resolveSectionTitle(section);
+    if (title) {
+      elements.push(this.renderSectionTitle(title));
+    }
+
+    const rows = [
+      {
+        leftLabel: 'TOPOGRAFO RESPONSABLE',
+        leftKey: 'levantamiento.topografo',
+        rightLabel: 'CIP',
+        rightKey: 'levantamiento.cip',
+      },
+      {
+        leftLabel: 'EQUIPO UTILIZADO',
+        leftKey: 'levantamiento.equipo',
+        rightLabel: 'NRO SERIE',
+        rightKey: 'levantamiento.nroSerie',
+      },
+      {
+        leftLabel: 'CERT. CALIBRACION',
+        leftKey: 'levantamiento.certCalibracion',
+        rightLabel: 'FECHA CALIBRACION',
+        rightKey: 'levantamiento.fechaCalibracion',
+        rightType: 'date',
+      },
+      {
+        leftLabel: 'FECHA LEVANTAMIENTO',
+        leftKey: 'levantamiento.fechaLevantamiento',
+        leftType: 'date',
+        rightLabel: 'SISTEMA REFERENCIA',
+        rightKey: 'levantamiento.sistemaReferencia',
+      },
+      {
+        leftLabel: 'PLANO DE REFERENCIA',
+        leftKey: 'levantamiento.planoReferencia',
+        colspan: 3,
+      },
+    ];
+
+    const tableRows: TableRow[] = [];
+    tableRows.push(
+      new TableRow({
+        children: [
+          new TableCell({
+            columnSpan: 4,
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: 'DATOS DEL LEVANTAMIENTO TOPOGRAFICO', bold: true })],
+                alignment: AlignmentType.CENTER,
+              }),
+            ],
+          }),
+        ],
+      })
+    );
+
+    rows.forEach((row) => {
+      const leftValue = this.formatValue(this.getValue(row.leftKey), row.leftType);
+      if (row.colspan) {
+        tableRows.push(
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: row.leftLabel, bold: true })],
+                  }),
+                ],
+              }),
+              new TableCell({
+                columnSpan: row.colspan,
+                children: [new Paragraph({ text: leftValue })],
+              }),
+            ],
+          })
+        );
+        return;
+      }
+
+      const rightValue = this.formatValue(this.getValue(row.rightKey || ''), row.rightType);
+      tableRows.push(
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: row.leftLabel, bold: true })],
+                }),
+              ],
+            }),
+            new TableCell({ children: [new Paragraph({ text: leftValue })] }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: row.rightLabel || '', bold: true })],
+                }),
+              ],
+            }),
+            new TableCell({ children: [new Paragraph({ text: rightValue })] }),
+          ],
+        })
+      );
+    });
+
+    elements.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: tableRows,
+      })
+    );
+
+    elements.push(new Paragraph({ text: '' }));
+    return elements;
+  }
+
   private renderDataTable(section: SectionSchema): Array<Paragraph | Table> {
     const elements: Array<Paragraph | Table> = [];
-    if (section.title) {
-      elements.push(this.renderSectionTitle(section.title));
+    const title = this.resolveSectionTitle(section);
+    if (title) {
+      elements.push(this.renderSectionTitle(title));
     }
 
     const rowsData = this.resolveTableRows(section);
@@ -474,10 +649,258 @@ export class DOCXGenerator {
     return elements;
   }
 
+  private renderCuadroMetrado(section: SectionSchema): Array<Paragraph | Table> {
+    const elements: Array<Paragraph | Table> = [];
+    const title = this.resolveSectionTitle(section);
+    if (title) {
+      elements.push(this.renderSectionTitle(title));
+    }
+
+    const rowsData = this.resolveTableRows(section);
+    const columns = section.columns || [];
+    if (columns.length === 0) {
+      return elements;
+    }
+
+    const hasPartida = rowsData.some((row) => row?.partida || row?.partidaCodigo || row?.partidaId);
+    const displayColumns = hasPartida
+      ? columns.filter((col) => col.key !== 'partida')
+      : columns;
+
+    const hasGroups = displayColumns.some((column) => column.group);
+    const headerCells: Array<
+      | { type: 'group'; label: string; span: number }
+      | { type: 'single'; column: ColumnSchema }
+    > = [];
+
+    let index = 0;
+    while (index < displayColumns.length) {
+      const column = displayColumns[index];
+      if (!column.group) {
+        headerCells.push({ type: 'single', column });
+        index += 1;
+        continue;
+      }
+      const groupLabel = column.group;
+      let span = 1;
+      while (index + span < displayColumns.length && displayColumns[index + span].group === groupLabel) {
+        span += 1;
+      }
+      headerCells.push({ type: 'group', label: groupLabel, span });
+      index += span;
+    }
+
+    const headerRow = new TableRow({
+      children: headerCells.map((cell) => {
+        if (cell.type === 'group') {
+          return new TableCell({
+            columnSpan: cell.span,
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: cell.label, bold: true })],
+                alignment: AlignmentType.CENTER,
+              }),
+            ],
+          });
+        }
+        const width = cell.column.width ? this.pxToTwip(cell.column.width) : undefined;
+        return new TableCell({
+          width: width ? { size: width, type: WidthType.DXA } : undefined,
+          rowSpan: hasGroups ? 2 : 1,
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: cell.column.label || cell.column.key, bold: true })],
+              alignment: this.alignFor(cell.column.align),
+            }),
+          ],
+        });
+      }),
+    });
+
+    const subHeaderRow = hasGroups
+      ? new TableRow({
+          children: displayColumns
+            .filter((column) => column.group)
+            .map((column) => {
+              const width = column.width ? this.pxToTwip(column.width) : undefined;
+              return new TableCell({
+                width: width ? { size: width, type: WidthType.DXA } : undefined,
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: column.label || column.key, bold: true })],
+                    alignment: this.alignFor(column.align),
+                  }),
+                ],
+              });
+            }),
+        })
+      : null;
+
+    if (!hasPartida) {
+      const dataRows = rowsData.map((row) =>
+        new TableRow({
+          children: displayColumns.map((column) => {
+            const rawValue = this.getValue(column.key, row);
+            const formatted = this.formatValue(rawValue, column.type, column);
+            const width = column.width ? this.pxToTwip(column.width) : undefined;
+            return new TableCell({
+              width: width ? { size: width, type: WidthType.DXA } : undefined,
+              children: [
+                new Paragraph({
+                  text: formatted,
+                  alignment: this.alignFor(column.align),
+                }),
+              ],
+            });
+          }),
+        })
+      );
+
+      elements.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [headerRow, ...(subHeaderRow ? [subHeaderRow] : []), ...dataRows],
+        })
+      );
+      elements.push(new Paragraph({ text: '' }));
+      return elements;
+    }
+
+    const groups: Array<{ label: string; rows: Array<Record<string, any>> }> = [];
+    const groupMap = new Map<string, { label: string; rows: Array<Record<string, any>> }>();
+    rowsData.forEach((row, rowIndex) => {
+      const rawLabel = row?.partida || row?.partidaCodigo || row?.partidaId || row?.descripcion || '';
+      const label = String(rawLabel || `Partida ${rowIndex + 1}`);
+      const key = String(row?.partidaId || row?.partidaCodigo || row?.partida || label);
+      if (!groupMap.has(key)) {
+        const group = { label, rows: [] as Array<Record<string, any>> };
+        groupMap.set(key, group);
+        groups.push(group);
+      }
+      groupMap.get(key)!.rows.push(row);
+    });
+
+    const tableRows: TableRow[] = [headerRow, ...(subHeaderRow ? [subHeaderRow] : [])];
+
+    groups.forEach((group) => {
+      tableRows.push(
+        new TableRow({
+          children: [
+            new TableCell({
+              columnSpan: displayColumns.length,
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: `PARTIDA: ${group.label}`, bold: true })],
+                }),
+              ],
+            }),
+          ],
+        })
+      );
+
+      group.rows.forEach((row) => {
+        tableRows.push(
+          new TableRow({
+            children: displayColumns.map((column) => {
+              const rawValue = this.getValue(column.key, row);
+              const formatted = this.formatValue(rawValue, column.type, column);
+              const width = column.width ? this.pxToTwip(column.width) : undefined;
+              return new TableCell({
+                width: width ? { size: width, type: WidthType.DXA } : undefined,
+                children: [
+                  new Paragraph({
+                    text: formatted,
+                    alignment: this.alignFor(column.align),
+                  }),
+                ],
+              });
+            }),
+          })
+        );
+      });
+
+      tableRows.push(
+        new TableRow({
+          children: displayColumns.map((column, columnIndex) => {
+            const width = column.width ? this.pxToTwip(column.width) : undefined;
+            if (column.key === 'area' || column.key === 'volumen') {
+              const sum = group.rows.reduce((acc, row) => acc + Number(row?.[column.key] || 0), 0);
+              const formatted = this.formatValue(sum, column.type, column);
+              return new TableCell({
+                width: width ? { size: width, type: WidthType.DXA } : undefined,
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: formatted, bold: true })],
+                    alignment: this.alignFor(column.align),
+                  }),
+                ],
+              });
+            }
+            if (columnIndex === 0) {
+              return new TableCell({
+                width: width ? { size: width, type: WidthType.DXA } : undefined,
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: `SUBTOTAL ${group.label}`, bold: true })],
+                  }),
+                ],
+              });
+            }
+            return new TableCell({
+              width: width ? { size: width, type: WidthType.DXA } : undefined,
+              children: [new Paragraph({ text: '' })],
+            });
+          }),
+        })
+      );
+    });
+
+    if (groups.length > 0) {
+      const summaryParts = groups.map((group) => {
+        const areaTotal = group.rows.reduce((acc, row) => acc + Number(row?.area || 0), 0);
+        const volumenTotal = group.rows.reduce((acc, row) => acc + Number(row?.volumen || 0), 0);
+        const areaText = this.formatValue(areaTotal, 'number');
+        const volumenText = this.formatValue(volumenTotal, 'number');
+        const volumenLabel = volumenTotal ? ` (${volumenText} m3)` : '';
+        return `${group.label}: ${areaText} m2${volumenLabel}`;
+      });
+      tableRows.push(
+        new TableRow({
+          children: [
+            new TableCell({
+              columnSpan: displayColumns.length,
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `RESUMEN DE METRADOS ADICIONALES: ${summaryParts.join(' | ')}`,
+                      bold: true,
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        })
+      );
+    }
+
+    elements.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: tableRows,
+      })
+    );
+
+    elements.push(new Paragraph({ text: '' }));
+    return elements;
+  }
+
   private renderChecklist(section: SectionSchema): Paragraph[] {
     const elements: Paragraph[] = [];
-    if (section.title) {
-      elements.push(this.renderSectionTitle(section.title));
+    const title = this.resolveSectionTitle(section);
+    if (title) {
+      elements.push(this.renderSectionTitle(title));
     }
 
     const items = section.items || [];
@@ -498,8 +921,9 @@ export class DOCXGenerator {
 
   private async renderPhotoPanel(section: SectionSchema): Promise<Array<Paragraph | Table>> {
     const elements: Array<Paragraph | Table> = [];
-    if (section.title) {
-      elements.push(this.renderSectionTitle(section.title));
+    const title = this.resolveSectionTitle(section);
+    if (title) {
+      elements.push(this.renderSectionTitle(title));
     }
 
     const photos = this.limitPhotos(this.resolvePhotos(section), section.maxImages);
@@ -517,8 +941,9 @@ export class DOCXGenerator {
 
   private async renderPhotoSection(section: SectionSchema): Promise<Array<Paragraph | Table>> {
     const elements: Array<Paragraph | Table> = [];
-    if (section.title) {
-      elements.push(this.renderSectionTitle(section.title));
+    const title = this.resolveSectionTitle(section);
+    if (title) {
+      elements.push(this.renderSectionTitle(title));
     }
 
     const groups = this.resolvePhotoGroups(section);
@@ -554,33 +979,49 @@ export class DOCXGenerator {
 
   private renderRichText(section: SectionSchema): Paragraph[] {
     const elements: Paragraph[] = [];
-    if (section.title) {
-      elements.push(this.renderSectionTitle(section.title));
+    const title = this.resolveSectionTitle(section);
+    if (title) {
+      elements.push(this.renderSectionTitle(title));
     }
 
     const value = this.getValue(section.id);
-    if (!value) {
+    const lines = value
+      ? Array.isArray(value)
+        ? value.map((line) => String(line))
+        : String(value).split(/\r?\n/)
+      : [''];
+
+    const paragraphs = lines.map((line) => new Paragraph({ text: line }));
+
+    if (this.schema.code === 'IAA' && ['antecedentes', 'justificacionTecnica', 'conclusiones'].includes(section.id)) {
+      elements.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: paragraphs.length > 0 ? paragraphs : [new Paragraph({ text: '' })],
+                }),
+              ],
+            }),
+          ],
+        })
+      );
       elements.push(new Paragraph({ text: '' }));
       return elements;
     }
 
-    if (Array.isArray(value)) {
-      value.forEach((line) => elements.push(new Paragraph({ text: String(line) })));
-    } else {
-      const text = String(value);
-      text.split(/\r?\n/).forEach((line) => {
-        elements.push(new Paragraph({ text: line }));
-      });
-    }
-
+    paragraphs.forEach((p) => elements.push(p));
     elements.push(new Paragraph({ text: '' }));
     return elements;
   }
 
   private async renderSignatures(section: SectionSchema): Promise<Array<Paragraph | Table>> {
     const elements: Array<Paragraph | Table> = [];
-    if (section.title) {
-      elements.push(this.renderSectionTitle(section.title));
+    const title = this.resolveSectionTitle(section);
+    if (title) {
+      elements.push(this.renderSectionTitle(title));
     }
 
     const signatures = section.signatures || [];
@@ -734,16 +1175,29 @@ export class DOCXGenerator {
       return direct.rows;
     }
 
+    if (direct && Array.isArray(direct.items)) {
+      return direct.items;
+    }
+
+    if (direct && typeof direct === 'object') {
+      const numericKeys = Object.keys(direct)
+        .filter((key) => /^\d+$/.test(key))
+        .sort((a, b) => Number(a) - Number(b));
+      if (numericKeys.length > 0) {
+        return numericKeys.map((key) => (direct as Record<string, any>)[key]);
+      }
+    }
+
     return [];
   }
 
   private resolvePhotos(section: SectionSchema): PhotoItem[] {
     const direct = this.getValue(section.id);
+    if (direct && Array.isArray(direct.fotos) && direct.fotos.length > 0) {
+      return direct.fotos as PhotoItem[];
+    }
     if (Array.isArray(direct)) {
       return direct as PhotoItem[];
-    }
-    if (direct && Array.isArray(direct.fotos)) {
-      return direct.fotos as PhotoItem[];
     }
 
     const nested = this.getValue(`secciones.${section.id}.fotos`);
@@ -802,14 +1256,14 @@ export class DOCXGenerator {
     for (let i = 0; i < photos.length; i += chunkSize) {
       const rowPhotos = photos.slice(i, i + chunkSize);
       const cells = await Promise.all(
-        rowPhotos.map(async (photo) => {
+        rowPhotos.map(async (photo, index) => {
           const children: Paragraph[] = [];
           const imageRun = await this.buildImageRun(photo, columns);
           if (imageRun) {
             children.push(new Paragraph({ children: [imageRun], alignment: AlignmentType.CENTER }));
           }
 
-          const caption = this.buildPhotoCaption(photo, section);
+          const caption = this.buildPhotoCaption(photo, section, i + index + 1);
           if (caption) {
             children.push(new Paragraph({ text: caption, alignment: AlignmentType.CENTER }));
           }
@@ -837,8 +1291,11 @@ export class DOCXGenerator {
     });
   }
 
-  private buildPhotoCaption(photo: PhotoItem, section: SectionSchema): string {
+  private buildPhotoCaption(photo: PhotoItem, section: SectionSchema, index: number): string {
     const parts: string[] = [];
+    if (this.schema.code === 'IAA' && section.id === 'panelFotografico') {
+      parts.push(`Foto ${index}`);
+    }
     if (photo.descripcion) {
       parts.push(photo.descripcion);
     } else if (photo.filename) {
@@ -892,17 +1349,26 @@ export class DOCXGenerator {
       return Buffer.from(base64, 'base64');
     }
 
-    if (photo.url) {
-      if (photo.url.startsWith('http')) {
-        const response = await axios.get(photo.url, {
+    const urlCandidate =
+      photo.url ||
+      (photo as any).thumbnailUrl ||
+      (photo as any).fileUrl ||
+      (photo as any).lilaAppUrl ||
+      (photo as any).metadata?.lilaAppUrl ||
+      (photo as any).metadata?.fileUrl ||
+      '';
+
+    if (urlCandidate) {
+      if (urlCandidate.startsWith('http')) {
+        const response = await axios.get(urlCandidate, {
           responseType: 'arraybuffer',
           timeout: 10000,
         });
         return Buffer.from(response.data);
       }
 
-      if (photo.url.startsWith('/files/companies/')) {
-        const relativePath = photo.url.replace('/files/companies/', '');
+      if (urlCandidate.startsWith('/files/companies/')) {
+        const relativePath = urlCandidate.replace('/files/companies/', '');
         const fullPath = this.resolveCompanyStoragePath(relativePath);
         if (fullPath && (await fs.pathExists(fullPath))) {
           return fs.readFile(fullPath);

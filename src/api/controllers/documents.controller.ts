@@ -370,11 +370,14 @@ async function resolveDocumentContext(req: Request): Promise<DocumentContext> {
   }
 
   let aggregated: any = null;
+  const payloadSchemaData =
+    reportPayload?.schemaData || reportPayload?.draftData?.schemaData;
   let baseData: Record<string, any> =
-    report.schemaData ||
+    (payloadSchemaData && Object.keys(payloadSchemaData).length > 0
+      ? payloadSchemaData
+      : null) ||
     report.draftData?.schemaData ||
-    reportPayload?.schemaData ||
-    reportPayload?.draftData?.schemaData ||
+    report.schemaData ||
     {};
 
   if (!baseData || Object.keys(baseData).length === 0) {

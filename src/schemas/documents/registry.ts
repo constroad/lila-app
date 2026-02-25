@@ -11,6 +11,7 @@ import { actaConformidadSchema } from './acta-conformidad.schema';
 import { protocoloTopoCompletoSchema } from './protocolo-topo-completo.schema';
 import { dossierObraSchema } from './dossier-obra.schema';
 import { valorizacionSchema } from './valorizacion.schema';
+import { informeAreaAdicionalSchema } from './informe-area-adicional.schema';
 import { DocumentSchema, DocumentCategory } from './types';
 
 export const schemaRegistry: Record<string, DocumentSchema> = {
@@ -26,7 +27,8 @@ export const schemaRegistry: Record<string, DocumentSchema> = {
   'levantamiento-obs': levantamientoObsSchema,
   'acta-conformidad': actaConformidadSchema,
   'protocolo-topo-completo': protocoloTopoCompletoSchema,
-  'dossier-obra': dossierObraSchema
+  'dossier-obra': dossierObraSchema,
+  'informe-area-adicional': informeAreaAdicionalSchema
 };
 
 const schemaList = Object.values(schemaRegistry);
