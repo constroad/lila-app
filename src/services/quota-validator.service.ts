@@ -137,7 +137,7 @@ export class QuotaValidatorService {
     try {
       // Solo log en primera conexión
       if (!this.portalMongoConn || !this.IS_PROD) {
-        logger.info('📡 Connecting to Portal MongoDB (shared_db)...');
+        logger.info('📡 Connecting to Portal MongoDB (constroad_db)...');
       }
 
       const connection = mongoose.createConnection(config.mongodb.portalUri, {

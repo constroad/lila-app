@@ -14,7 +14,7 @@ export async function getSharedConnection(): Promise<Connection> {
     return connecting;
   }
 
-  logger.info('[SharedDB] Connecting to shared_db...');
+  logger.info('[SharedDB] Connecting to constroad_db...');
 
   connecting = mongoose
     .createConnection(config.mongodb.portalUri, {

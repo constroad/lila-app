@@ -50,7 +50,7 @@ export const config = {
   // MongoDB (Portal connection for quotas - MongoDB only)
   mongodb: {
     portalUri: process.env.PORTAL_MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017',
-    sharedDb: process.env.PORTAL_SHARED_DB || 'shared_db',
+    sharedDb: process.env.PORTAL_SHARED_DB || 'constroad_db',
   },
 
   // Cron Jobs
