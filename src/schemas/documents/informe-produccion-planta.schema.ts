@@ -73,7 +73,7 @@ export const informeProduccionPlantaSchema: DocumentSchema = {
         { key: 'placa', label: 'PLACA', type: 'text', width: 70, align: 'center', editable: true },
         { key: 'chofer', label: 'CHOFER', type: 'text', width: 140, align: 'left', editable: true },
         { key: 'licencia', label: 'LICENCIA', type: 'text', width: 90, align: 'center', editable: true },
-        { key: 'guiaRemision', label: 'GUIA REMISION', type: 'text', width: 100, align: 'center', editable: true },
+        { key: 'guiaRemision', label: 'NRO DOCUMENTO', type: 'text', width: 100, align: 'center', editable: true },
         { key: 'nroCubos', label: 'N° CUBOS', type: 'number', width: 60, align: 'right', editable: true, decimals: 0 },
         { key: 'tempSalida', label: 'T° SAL. (°C)', type: 'number', width: 70, align: 'right', editable: true, decimals: 1 },
         {

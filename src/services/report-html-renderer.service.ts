@@ -477,7 +477,29 @@ export class ReportHtmlRenderer {
           .join('')}</tr>`
       : '';
 
-    const rowsData = this.resolveTableRows(section);
+    let rowsData = this.resolveTableRows(section);
+    if (this.schema.code === 'IPP' && section.id === 'registroDespachos') {
+      const toMinutes = (value?: string) => {
+        if (!value) return null;
+        const parts = value.split(':').map((part) => Number(part));
+        if (parts.length < 2 || parts.some((part) => Number.isNaN(part))) return null;
+        return parts[0] * 60 + parts[1];
+      };
+      rowsData = [ ...rowsData ].sort((a: any, b: any) => {
+        const aOrder = Number(a?.ordenDespacho);
+        const bOrder = Number(b?.ordenDespacho);
+        const aHasOrder = Number.isFinite(aOrder) && aOrder > 0;
+        const bHasOrder = Number.isFinite(bOrder) && bOrder > 0;
+        if (aHasOrder || bHasOrder) {
+          if (!aHasOrder) return 1;
+          if (!bHasOrder) return -1;
+          return aOrder - bOrder;
+        }
+        const aMinutes = toMinutes(a?.horaSalida) ?? Number.MAX_SAFE_INTEGER;
+        const bMinutes = toMinutes(b?.horaSalida) ?? Number.MAX_SAFE_INTEGER;
+        return aMinutes - bMinutes;
+      });
+    }
     const rows = rowsData
       .map((row) => {
         const cells = columns
