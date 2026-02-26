@@ -9,8 +9,8 @@ export const controlPistaSchema: DocumentSchema = {
   name: 'Control de Pista',
   description: 'Formato de control de pista para verificaciones en campo.',
   category: 'Operations',
-  version: '1.1.0',
-  lastUpdated: '2026-02-23',
+  version: '1.2.1',
+  lastUpdated: '2026-02-26',
   orientation: 'landscape',
   pageSize: 'A4',
   margins: { top: 15, right: 15, bottom: 15, left: 15 },
@@ -48,12 +48,27 @@ export const controlPistaSchema: DocumentSchema = {
       title: 'Informacion de Control',
       gridColumns: 4,
       fields: [
-        { key: 'control.fecha', label: 'FECHA', type: 'date', span: 3, required: true },
-        { key: 'control.tramo', label: 'TRAMO', type: 'text', span: 5, required: true },
-        { key: 'control.frente', label: 'FRENTE', type: 'text', span: 4 },
-        { key: 'control.turno', label: 'TURNO', type: 'text', span: 3 },
-        { key: 'control.clima', label: 'CLIMA', type: 'text', span: 3 },
-        { key: 'control.supervisor', label: 'SUPERVISOR', type: 'text', span: 6 }
+        { key: 'control.fecha', label: 'FECHA', type: 'date', span: 2, required: true },
+        { key: 'control.tramo', label: 'TRAMO', type: 'text', span: 2, required: true },
+        { key: 'control.frente', label: 'FRENTE', type: 'text', span: 2 },
+        { key: 'control.turno', label: 'TURNO', type: 'text', span: 2 },
+        { key: 'control.clima', label: 'CLIMA', type: 'text', span: 2 },
+        { key: 'control.supervisor', label: 'SUPERVISOR', type: 'text', span: 2 }
+      ]
+    },
+    {
+      id: 'resumenControl',
+      type: 'simpleFields',
+      title: 'Resumen de Control',
+      gridColumns: 4,
+      fields: [
+        { key: 'resumenControl.totalCarros', label: 'TOTAL CARROS', type: 'number', span: 2 },
+        { key: 'resumenControl.totalM3', label: 'TOTAL m³', type: 'number', span: 2 },
+        { key: 'resumenControl.tempSalidaProm', label: 'TEMP SALIDA PROM', type: 'number', span: 2 },
+        { key: 'resumenControl.tempLlegadaProm', label: 'TEMP LLEGADA PROM', type: 'number', span: 2 },
+        { key: 'resumenControl.tempRodilloLisoProm', label: 'TEMP RODILLO LISO PROM', type: 'number', span: 2 },
+        { key: 'resumenControl.tempRodilloNeumaticoProm', label: 'TEMP RODILLO NEUM PROM', type: 'number', span: 2 },
+        { key: 'resumenControl.unidadesSinTemperatura', label: 'UNIDADES SIN TEMP', type: 'number', span: 2 }
       ]
     },
     {
@@ -64,19 +79,19 @@ export const controlPistaSchema: DocumentSchema = {
       minRows: 1,
       maxRows: 200,
       columns: [
-        { key: 'item', label: 'ITEM', type: 'number', width: 60, align: 'center', editable: true },
-        { key: 'placa', label: 'PLACA', type: 'text', width: 90, align: 'center', editable: true },
-        { key: 'numeroGuia', label: 'N° GUIA', type: 'text', width: 110, align: 'center', editable: true },
-        { key: 'horaSalida', label: 'H SALIDA', type: 'time', width: 80, align: 'center', editable: true },
-        { key: 'horaLlegada', label: 'H LLEGADA', type: 'time', width: 80, align: 'center', editable: true },
-        { key: 'volumenM3', label: 'VOL m3', type: 'number', width: 80, align: 'right', editable: true },
-        { key: 'tempSalida', label: 'TEMP SALIDA', type: 'number', width: 90, align: 'right', editable: true },
-        { key: 'horaInicioColocacion', label: 'H INICIO COLOC', type: 'time', width: 90, align: 'center', editable: true },
-        { key: 'horaFinalColocacion', label: 'H FINAL COLOC', type: 'time', width: 90, align: 'center', editable: true },
-        { key: 'tempLlegada', label: 'LLEGADA', type: 'number', width: 90, align: 'right', editable: true, group: 'TEMPERATURA' },
-        { key: 'tempRodilloLiso', label: 'RODILLO LISO', type: 'number', width: 90, align: 'right', editable: true, group: 'TEMPERATURA' },
-        { key: 'tempRodilloNeumatico', label: 'RODILLO NEUM', type: 'number', width: 95, align: 'right', editable: true, group: 'TEMPERATURA' },
-        { key: 'observaciones', label: 'OBSERVACIONES', type: 'text', width: 180, align: 'left', editable: true }
+        { key: 'ordenColocacion', label: 'ORDEN', type: 'text', width: 50, align: 'center', editable: true },
+        { key: 'placa', label: 'PLACA', type: 'text', width: 70, align: 'center', editable: true },
+        { key: 'numeroGuia', label: 'N° GUIA', type: 'text', width: 90, align: 'center', editable: true },
+        { key: 'horaSalida', label: 'H SALIDA', type: 'time', width: 55, align: 'center', editable: true },
+        { key: 'horaLlegada', label: 'H LLEGADA', type: 'time', width: 55, align: 'center', editable: true },
+        { key: 'volumenM3', label: 'VOL m3', type: 'number', width: 60, align: 'right', editable: true },
+        { key: 'tempSalida', label: 'TEMP SALIDA', type: 'number', width: 60, align: 'right', editable: true },
+        { key: 'horaInicioColocacion', label: 'H INICIO COLOC', type: 'time', width: 60, align: 'center', editable: true },
+        { key: 'horaFinalColocacion', label: 'H FINAL COLOC', type: 'time', width: 60, align: 'center', editable: true },
+        { key: 'tempLlegada', label: 'LLEGADA', type: 'number', width: 60, align: 'right', editable: true, group: 'TEMPERATURA' },
+        { key: 'tempRodilloLiso', label: 'RODILLO LISO', type: 'number', width: 60, align: 'right', editable: true, group: 'TEMPERATURA' },
+        { key: 'tempRodilloNeumatico', label: 'RODILLO NEUM', type: 'number', width: 60, align: 'right', editable: true, group: 'TEMPERATURA' },
+        { key: 'observaciones', label: 'OBSERVACIONES', type: 'text', width: 140, align: 'left', editable: true }
       ]
     },
     {
@@ -143,9 +158,18 @@ export const controlPistaSchema: DocumentSchema = {
       clima: '',
       supervisor: ''
     },
+    resumenControl: {
+      totalCarros: 0,
+      totalM3: 0,
+      tempSalidaProm: 0,
+      tempLlegadaProm: 0,
+      tempRodilloLisoProm: 0,
+      tempRodilloNeumaticoProm: 0,
+      unidadesSinTemperatura: 0
+    },
     controlPista: [
       {
-        item: 1,
+        ordenColocacion: '',
         placa: '',
         numeroGuia: '',
         horaSalida: '',

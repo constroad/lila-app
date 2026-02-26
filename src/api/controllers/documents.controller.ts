@@ -12,7 +12,6 @@ import { generateRandomDataForSchema } from '../../services/random-data-generato
 import { aggregateReportData, structureDataForReportType } from '../../services/report-data-aggregator.service.js';
 import { getServiceReportModel } from '../../models/service-report.model.js';
 import { storagePathService } from '../../services/storage-path.service.js';
-import { DOCXGenerator } from '../../services/docx-generator.service.js';
 import { ReportHtmlRenderer } from '../../services/report-html-renderer.service.js';
 import pdfGenerator from '../../pdf/generator.service.js';
 import { buildEffectiveSchema } from '../../services/schema-customization.service.js';
@@ -20,6 +19,7 @@ import { PDFMergerService } from '../../services/pdf-merger.service.js';
 import { FolioGeneratorService } from '../../services/folio-generator.service.js';
 import { config } from '../../config/environment.js';
 import { getCompanyModel } from '../../database/models.js';
+import { convertPdfToDocx } from '../../services/pdf-to-docx.service.js';
 
 function resolveProto(req: Request): string {
   const forwarded = req.headers['x-forwarded-proto'];
@@ -530,9 +530,10 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
   const startedAt = Date.now();
   try {
     const { format } = req.body || {};
-    const requestedFormat = typeof format === 'string' ? format : 'both';
-    const generateDocx = requestedFormat === 'both' || requestedFormat === 'docx';
-    const generatePdf = requestedFormat === 'both' || requestedFormat === 'pdf';
+    const requestedFormat = typeof format === 'string' ? format : 'pdf';
+    const normalizedFormat = requestedFormat === 'word' ? 'docx' : requestedFormat;
+    const generateDocx = normalizedFormat === 'both' || normalizedFormat === 'docx';
+    const generatePdf = normalizedFormat === 'both' || normalizedFormat === 'pdf' || normalizedFormat === 'docx';
 
     if (!generateDocx && !generatePdf) {
       const err: CustomError = new Error('Invalid format');
@@ -573,24 +574,6 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
     let mainPages: number | undefined;
     let annexPages: number | undefined;
     let totalPages: number | undefined;
-
-    if (generateDocx) {
-      const docxFilename = `${baseFilename}.docx`;
-      const docxPath = path.join(reportsDir, docxFilename);
-      const docxStarted = Date.now();
-      const generator = new DOCXGenerator(effectiveSchema, data, { companyId });
-      const docxBuffer = await generator.generate();
-      await fs.writeFile(docxPath, docxBuffer);
-      docxDuration = Date.now() - docxStarted;
-
-      const relativePath = path.posix.join(
-        'service',
-        'reports',
-        report.serviceManagementId || 'generic',
-        docxFilename
-      );
-      docxUrl = `/files/companies/${companyId}/${relativePath}`;
-    }
 
     if (generatePdf) {
       const pdfFilename = `${baseFilename}.pdf`;
@@ -649,6 +632,20 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
         report.serviceManagementId || 'generic',
         pdfFilename
       )}`;
+
+      if (generateDocx) {
+        const docxFilename = `${baseFilename}.docx`;
+        const docxPath = path.join(reportsDir, docxFilename);
+        const docxStarted = Date.now();
+        await convertPdfToDocx(pdfPath, docxPath);
+        docxDuration = Date.now() - docxStarted;
+        docxUrl = `/files/companies/${companyId}/${path.posix.join(
+          'service',
+          'reports',
+          report.serviceManagementId || 'generic',
+          docxFilename
+        )}`;
+      }
     }
 
     if (!isTransient && report && typeof report.save === 'function') {
@@ -820,7 +817,9 @@ export async function getDocument(req: Request, res: Response, next: NextFunctio
 export async function downloadDocument(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { format = 'docx' } = req.query;
+    const { format = 'pdf' } = req.query;
+    const normalizedFormat =
+      typeof format === 'string' && format.toLowerCase() === 'word' ? 'docx' : format;
 
     const ServiceReport = await getServiceReportModel();
     const report = await ServiceReport.findById(id).lean();
@@ -832,7 +831,10 @@ export async function downloadDocument(req: Request, res: Response, next: NextFu
       return next(err);
     }
 
-    const url = format === 'pdf' ? report.generatedDocuments.pdfUrl : report.generatedDocuments.docxUrl;
+    const url =
+      normalizedFormat === 'pdf'
+        ? report.generatedDocuments.pdfUrl
+        : report.generatedDocuments.docxUrl;
     if (!url) {
       logger.warn('documents.download.file_missing', { reportId: id, format });
       const err: CustomError = new Error('Document file not available');

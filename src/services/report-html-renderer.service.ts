@@ -89,7 +89,9 @@ export class ReportHtmlRenderer {
     table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
     th, td { border: 1px solid #333; padding: 4px 6px; vertical-align: top; }
     th { background: #f1f1f1; }
-    .kv-table td:first-child { width: 35%; font-weight: bold; }
+    .kv-table.kv-2 td:first-child { width: 35%; font-weight: bold; }
+    .kv-table.kv-4 td:nth-child(odd) { width: 20%; font-weight: bold; }
+    .kv-table.kv-4 td:nth-child(even) { width: 30%; }
     .photo-table td { text-align: center; }
     .photo-table img { max-width: 100%; height: auto; }
     .caption { font-size: 10px; margin-top: 4px; }
@@ -307,6 +309,33 @@ export class ReportHtmlRenderer {
       return `<div class="section">${title}</div>`;
     }
 
+    const useFourColumns =
+      this.schema.code === 'CTL-PIS' &&
+      (section.gridColumns === 4 ||
+        section.id === 'controlInfo' ||
+        section.id === 'resumenControl' ||
+        /informacion de control/i.test(resolvedTitle || '') ||
+        /resumen de control/i.test(resolvedTitle || ''));
+
+    if (useFourColumns) {
+      const rowPairs: string[] = [];
+      for (let i = 0; i < fields.length; i += 2) {
+        const left = fields[i];
+        const right = fields[i + 1];
+        const leftValue = left ? this.escapeHtml(this.formatValue(this.getValue(left.key), left.type, left)) : '';
+        const rightValue = right ? this.escapeHtml(this.formatValue(this.getValue(right.key), right.type, right)) : '';
+        rowPairs.push(
+          `<tr>
+            <td>${this.escapeHtml(left?.label || '')}</td>
+            <td>${leftValue}</td>
+            <td>${this.escapeHtml(right?.label || '')}</td>
+            <td>${rightValue}</td>
+          </tr>`
+        );
+      }
+      return `<div class="section">${title}<table class="kv-table kv-4">${rowPairs.join('')}</table></div>`;
+    }
+
     const rows = fields
       .map((field) => {
         const value = this.getValue(field.key);
@@ -315,7 +344,7 @@ export class ReportHtmlRenderer {
       })
       .join('');
 
-    return `<div class="section">${title}<table class="kv-table">${rows}</table></div>`;
+    return `<div class="section">${title}<table class="kv-table kv-2">${rows}</table></div>`;
   }
 
   private renderLevantamientoTopografico(section: SectionSchema): string {
@@ -391,6 +420,15 @@ export class ReportHtmlRenderer {
     }
 
     const hasGroups = columns.some((col) => col.group);
+    const groupWidths = new Map<string, number>();
+    if (hasGroups) {
+      columns.forEach((col) => {
+        if (!col.group) return;
+        const width = col.width ?? 0;
+        if (!width) return;
+        groupWidths.set(col.group, (groupWidths.get(col.group) || 0) + width);
+      });
+    }
     const headerCells: Array<
       | { type: 'group'; label: string; span: number }
       | { type: 'single'; column: ColumnSchema }
@@ -416,12 +454,14 @@ export class ReportHtmlRenderer {
     const headerRow = `<tr>${headerCells
       .map((cell) => {
         if (cell.type === 'group') {
-          return `<th colspan="${cell.span}" style="text-align:center;">${this.escapeHtml(cell.label)}</th>`;
+          const width = groupWidths.get(cell.label);
+          const widthStyle = width ? `width:${width}px;` : '';
+          return `<th colspan="${cell.span}" style="${widthStyle}text-align:center; white-space:normal; line-height:1.2;">${this.escapeHtml(cell.label)}</th>`;
         }
         const col = cell.column;
         const width = col.width ? `width:${col.width}px;` : '';
         const rowSpan = hasGroups ? 'rowspan="2"' : '';
-        return `<th ${rowSpan} style="${width}text-align:${this.alignCss(col.align)}">${this.escapeHtml(col.label || col.key)}</th>`;
+        return `<th ${rowSpan} style="${width}text-align:${this.alignCss(col.align)}; white-space:normal; line-height:1.2;">${this.escapeHtml(col.label || col.key)}</th>`;
       })
       .join('')}</tr>`;
 
@@ -430,7 +470,7 @@ export class ReportHtmlRenderer {
           .filter((col) => col.group)
           .map((col) => {
             const width = col.width ? `width:${col.width}px;` : '';
-            return `<th style="${width}text-align:${this.alignCss(col.align)}">${this.escapeHtml(col.label || col.key)}</th>`;
+            return `<th style="${width}text-align:${this.alignCss(col.align)}; white-space:normal; line-height:1.2;">${this.escapeHtml(col.label || col.key)}</th>`;
           })
           .join('')}</tr>`
       : '';
@@ -450,7 +490,10 @@ export class ReportHtmlRenderer {
       })
       .join('');
 
-    return `<div class="section">${title}<table>${headerRow}${subHeaderRow}${rows}</table></div>`;
+    const useFixedLayout =
+      this.schema.code === 'CTL-PIS' && section.id === 'controlPista';
+    const tableStyle = useFixedLayout ? ' style="table-layout:fixed;"' : '';
+    return `<div class="section">${title}<table${tableStyle}>${headerRow}${subHeaderRow}${rows}</table></div>`;
   }
 
   private renderCuadroMetrado(section: SectionSchema): string {

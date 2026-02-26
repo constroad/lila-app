@@ -80,6 +80,7 @@ export const openApiSpec = {
         type: 'object',
         properties: {
           reportId: { type: 'string' },
+          format: { type: 'string', enum: ['pdf', 'docx', 'word', 'both'] },
         },
         required: [ 'reportId' ],
       },
@@ -294,7 +295,7 @@ export const openApiSpec = {
     '/api/documents/generate': {
       post: {
         tags: ['Documents'],
-        summary: 'Generar DOCX/PDF desde un reporte',
+        summary: 'Generar PDF (y convertir a Word si se solicita)',
         requestBody: {
           required: true,
           content: {
@@ -352,7 +353,7 @@ export const openApiSpec = {
         summary: 'Obtener URL de descarga',
         parameters: [
           { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
-          { in: 'query', name: 'format', required: false, schema: { type: 'string', enum: [ 'docx', 'pdf' ] } },
+          { in: 'query', name: 'format', required: false, schema: { type: 'string', enum: [ 'pdf', 'docx', 'word' ] } },
         ],
         responses: {
           200: {
