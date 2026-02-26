@@ -108,6 +108,8 @@ export async function sendImage(req: Request, res: Response, next: NextFunction)
     const { sessionPhone } = req.params;
     const { to, caption, filePath, fileUrl, mimeType, fileName } = req.body;
     const file = req.file;
+    const resolvedCompanyId =
+      (req as any).companyId || req.body?.companyId || req.query?.companyId;
 
     if (!to) {
       const error: CustomError = new Error('to is required');
@@ -128,7 +130,7 @@ export async function sendImage(req: Request, res: Response, next: NextFunction)
       caption,
       mimeType,
       fileName,
-      companyId: req.companyId, // For filePath/fileUrl resolution
+      companyId: resolvedCompanyId, // For filePath/fileUrl resolution
     };
 
     // Priority: buffer > fileName (temp) > filePath/fileUrl (storage)
@@ -183,6 +185,8 @@ export async function sendVideo(req: Request, res: Response, next: NextFunction)
     const { sessionPhone } = req.params;
     const { to, caption, filePath, fileUrl, mimeType, fileName } = req.body;
     const file = req.file;
+    const resolvedCompanyId =
+      (req as any).companyId || req.body?.companyId || req.query?.companyId;
 
     if (!to) {
       const error: CustomError = new Error('to is required');
@@ -203,7 +207,7 @@ export async function sendVideo(req: Request, res: Response, next: NextFunction)
       caption,
       mimeType,
       fileName,
-      companyId: req.companyId,
+      companyId: resolvedCompanyId,
     };
 
     // Priority: buffer > fileName (temp) > filePath/fileUrl (storage)
@@ -258,6 +262,8 @@ export async function sendFile(req: Request, res: Response, next: NextFunction) 
     const { sessionPhone } = req.params;
     const { to, caption, filePath, fileUrl, mimeType, fileName } = req.body;
     const file = req.file;
+    const resolvedCompanyId =
+      (req as any).companyId || req.body?.companyId || req.query?.companyId;
 
     if (!to) {
       const error: CustomError = new Error('to is required');
@@ -278,7 +284,7 @@ export async function sendFile(req: Request, res: Response, next: NextFunction) 
       caption,
       mimeType,
       fileName,
-      companyId: req.companyId,
+      companyId: resolvedCompanyId,
     };
 
     // Priority: buffer > fileName (temp) > filePath/fileUrl (storage)

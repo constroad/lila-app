@@ -12,6 +12,7 @@ import { protocoloTopoCompletoSchema } from './protocolo-topo-completo.schema';
 import { dossierObraSchema } from './dossier-obra.schema';
 import { valorizacionSchema } from './valorizacion.schema';
 import { informeAreaAdicionalSchema } from './informe-area-adicional.schema';
+import { informeProduccionPlantaSchema } from './informe-produccion-planta.schema';
 import { DocumentSchema, DocumentCategory } from './types';
 
 export const schemaRegistry: Record<string, DocumentSchema> = {
@@ -28,7 +29,8 @@ export const schemaRegistry: Record<string, DocumentSchema> = {
   'acta-conformidad': actaConformidadSchema,
   'protocolo-topo-completo': protocoloTopoCompletoSchema,
   'dossier-obra': dossierObraSchema,
-  'informe-area-adicional': informeAreaAdicionalSchema
+  'informe-area-adicional': informeAreaAdicionalSchema,
+  'informe-produccion-planta': informeProduccionPlantaSchema
 };
 
 const schemaList = Object.values(schemaRegistry);

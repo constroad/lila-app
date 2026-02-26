@@ -196,6 +196,45 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
           documentoReferencia: '',
         },
       };
+    case 'IPP': {
+      return {
+        datosProyecto: {
+          obra: service.projectName || service.description || '',
+          contratista: service.contratista || service.contractor || '',
+          subcontratista: service.subcontratista || service.subcontractor || '',
+          frenteDestino: service.frente || service.front || '',
+          progresiva: service.progresiva || '',
+        },
+        datosPlanta: {
+          planta: '',
+          ubicacion: '',
+          tipoModelo: '',
+          capacidad: '',
+          operadorEmpresa: '',
+          operadorRuc: '',
+          operadorJefe: '',
+        },
+        registroDespachos: [],
+        resumenProduccion: {
+          totalDespachos: 0,
+          vehiculosUtilizados: 0,
+          totalCubos: 0,
+          tempSalidaPromedio: 0,
+          horarioProduccion: '',
+          despachosConformes: 0,
+          despachosObservados: 0,
+          despachosRechazados: 0,
+        },
+        panelFotograficoPlanta: { fotos: [] },
+        panelFotograficoLaboratorio: { fotos: [] },
+        observaciones: '',
+        firmas: {
+          jefePlanta: { nombre: '', cargo: 'Jefe de Produccion de Planta', empresa: '', cip: '' },
+          laboratorista: { nombre: '', cargo: 'Jefe de Laboratorio de Planta', empresa: '', cip: '' },
+          controlCalidad: { nombre: '', cargo: 'Ing. Control de Calidad', empresa: '', cip: '' },
+        },
+      };
+    }
     case 'IAA': {
       const allPartidas = Array.isArray(service.partidas) ? service.partidas : [];
       const partidasAdicionales = allPartidas.filter(

@@ -18,6 +18,8 @@ interface PhotoItem {
   filename?: string;
   descripcion?: string;
   fecha?: string;
+  hora?: string;
+  codigoMuestra?: string;
   progresiva?: string;
   base64?: string;
   url?: string;
@@ -493,7 +495,43 @@ export class ReportHtmlRenderer {
     const useFixedLayout =
       this.schema.code === 'CTL-PIS' && section.id === 'controlPista';
     const tableStyle = useFixedLayout ? ' style="table-layout:fixed;"' : '';
-    return `<div class="section">${title}<table${tableStyle}>${headerRow}${subHeaderRow}${rows}</table></div>`;
+    const totalsRow = this.renderTableTotalsRow(section, columns, rowsData);
+    return `<div class="section">${title}<table${tableStyle}>${headerRow}${subHeaderRow}${rows}${totalsRow}</table></div>`;
+  }
+
+  private renderTableTotalsRow(
+    section: SectionSchema,
+    columns: ColumnSchema[],
+    rowsData: Array<Record<string, any>>
+  ): string {
+    if (this.schema.code !== 'IPP' || section.id !== 'registroDespachos') {
+      return '';
+    }
+
+    const totalCubos = rowsData.reduce((acc, row) => acc + Number(row?.nroCubos || 0), 0);
+    const tempValues = rowsData
+      .map((row) => Number(row?.tempSalida || 0))
+      .filter((value) => value > 0);
+    const tempPromedio = tempValues.length > 0
+      ? tempValues.reduce((acc, value) => acc + value, 0) / tempValues.length
+      : 0;
+
+    const cells = columns.map((col, index) => {
+      if (col.key === 'nroCubos') {
+        const formatted = this.escapeHtml(this.formatValue(totalCubos, col.type, col));
+        return `<td style="font-weight:bold;text-align:${this.alignCss(col.align)}">${formatted}</td>`;
+      }
+      if (col.key === 'tempSalida') {
+        const formatted = this.escapeHtml(this.formatValue(tempPromedio, col.type, col));
+        return `<td style="font-weight:bold;text-align:${this.alignCss(col.align)}">${formatted}</td>`;
+      }
+      if (index === 0) {
+        return `<td style="font-weight:bold;">TOTALES</td>`;
+      }
+      return '<td></td>';
+    });
+
+    return `<tr>${cells.join('')}</tr>`;
   }
 
   private renderCuadroMetrado(section: SectionSchema): string {
@@ -892,7 +930,9 @@ export class ReportHtmlRenderer {
             ? `<img src="${src}" style="width:100%;height:${imageHeight}px;object-fit:contain;background:#f8f8f8;" />`
             : `<div style="height:${imageHeight}px;display:flex;align-items:center;justify-content:center;background:#f8f8f8;">Sin imagen</div>`;
           const caption = this.buildPhotoCaption(photo, section, i + index + 1);
-          const captionHtml = caption ? `<div class="caption">${this.escapeHtml(caption)}</div>` : '';
+          const captionHtml = caption
+            ? `<div class="caption">${this.renderCaptionLines(caption)}</div>`
+            : '';
           const cellWidth = `${(100 / columns).toFixed(2)}%`;
           return `<td style="width:${cellWidth};">${imgTag}${captionHtml}</td>`;
         })
@@ -912,6 +952,28 @@ export class ReportHtmlRenderer {
   }
 
   private buildPhotoCaption(photo: PhotoItem, section: SectionSchema, index: number): string {
+    if (this.schema.code === 'IPP') {
+      const prefix = section.id === 'panelFotograficoLaboratorio'
+        ? `FOTO L-${String(index).padStart(2, '0')}`
+        : `FOTO P-${String(index).padStart(2, '0')}`;
+      const categoryLabel = this.resolvePhotoCategoryLabel(photo, section);
+      const lines: string[] = [];
+      lines.push(categoryLabel ? `${prefix} [${categoryLabel}]` : prefix);
+      if (photo.descripcion) {
+        lines.push(photo.descripcion);
+      } else if (photo.filename) {
+        lines.push(photo.filename);
+      }
+      const hora = photo.hora || (section.showHora ? photo.fecha : undefined);
+      const metaParts: string[] = [];
+      if (hora) metaParts.push(`Hora: ${hora}`);
+      if (photo.codigoMuestra) metaParts.push(`Muestra: ${photo.codigoMuestra}`);
+      if (metaParts.length > 0) {
+        lines.push(metaParts.join(' | '));
+      }
+      return lines.join('\n');
+    }
+
     const parts: string[] = [];
     if (this.schema.code === 'IAA' && section.id === 'panelFotografico') {
       parts.push(`Foto ${index}`);
@@ -928,8 +990,28 @@ export class ReportHtmlRenderer {
     if (section.showFecha && photo.fecha) {
       parts.push(`Fecha: ${photo.fecha}`);
     }
+    if (section.showHora && photo.hora) {
+      parts.push(`Hora: ${photo.hora}`);
+    }
+    if (photo.codigoMuestra) {
+      parts.push(`Muestra: ${photo.codigoMuestra}`);
+    }
 
     return parts.join(' | ');
+  }
+
+  private resolvePhotoCategoryLabel(photo: PhotoItem, section: SectionSchema): string | null {
+    const value = photo.category || photo.tipo || photo.purpose;
+    if (!value) return null;
+    const categories = section.categories || [];
+    const found = categories.find((category) => category.key === value);
+    return found?.label || value;
+  }
+
+  private renderCaptionLines(caption: string): string {
+    if (!caption) return '';
+    const lines = caption.split('\n');
+    return lines.map((line) => this.escapeHtml(line)).join('<br/>');
   }
 
   private async resolveImageSrc(photo: PhotoItem): Promise<string | null> {

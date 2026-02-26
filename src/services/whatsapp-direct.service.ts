@@ -29,6 +29,28 @@ import path from 'path';
 import fs from 'fs/promises';
 import { config } from '../config/environment.js';
 
+const extractCompanyIdFromUrl = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  try {
+    const url = value.includes('://') ? new URL(value) : null;
+    const pathValue = url ? url.pathname : value;
+    const match = pathValue.match(/\/files\/companies\/([^/]+)\//);
+    if (match?.[1]) return match[1];
+    const alt = pathValue.match(/companies\/([^/]+)\//);
+    return alt?.[1];
+  } catch {
+    const match = value.match(/\/files\/companies\/([^/]+)\//);
+    if (match?.[1]) return match[1];
+    const alt = value.match(/companies\/([^/]+)\//);
+    return alt?.[1];
+  }
+  return undefined;
+};
+
+const resolveCompanyIdFromOptions = (options: { companyId?: string; fileUrl?: string }) => {
+  return options.companyId || extractCompanyIdFromUrl(options.fileUrl);
+};
+
 /**
  * Normalize phone number to WhatsApp JID format
  */
@@ -183,12 +205,13 @@ export const WhatsAppDirectService = {
     }
     // CASE 3: Company storage path (persistent, no cleanup)
     else if (options.filePath || options.fileUrl) {
-      if (!options.companyId) {
+      const resolvedCompanyId = resolveCompanyIdFromOptions(options);
+      if (!resolvedCompanyId) {
         throw new Error('companyId is required when using filePath or fileUrl');
       }
 
       const resolved = await resolveFileBuffer({
-        companyId: options.companyId,
+        companyId: resolvedCompanyId,
         filePath: options.filePath,
         fileUrl: options.fileUrl,
         mimeType: options.mimeType,
@@ -203,7 +226,7 @@ export const WhatsAppDirectService = {
       resolvedMimeType = resolved.mimeType;
     }
     // CASE 4: External URL (download first)
-    else if (options.fileUrl && !options.companyId) {
+    else if (options.fileUrl && !resolveCompanyIdFromOptions(options)) {
       const downloaded = await downloadFileFromUrl(options.fileUrl, options.mimeType);
       videoBuffer = await fs.readFile(downloaded.filePath);
       resolvedMimeType = downloaded.mimeType;
@@ -316,12 +339,13 @@ export const WhatsAppDirectService = {
     }
     // CASE 3: Company storage path (persistent, no cleanup)
     else if (options.filePath || options.fileUrl) {
-      if (!options.companyId) {
+      const resolvedCompanyId = resolveCompanyIdFromOptions(options);
+      if (!resolvedCompanyId) {
         throw new Error('companyId is required when using filePath or fileUrl');
       }
 
       const resolved = await resolveFileBuffer({
-        companyId: options.companyId,
+        companyId: resolvedCompanyId,
         filePath: options.filePath,
         fileUrl: options.fileUrl,
         mimeType: options.mimeType,
@@ -336,7 +360,7 @@ export const WhatsAppDirectService = {
       resolvedMimeType = resolved.mimeType;
     }
     // CASE 4: External URL (download first)
-    else if (options.fileUrl && !options.companyId) {
+    else if (options.fileUrl && !resolveCompanyIdFromOptions(options)) {
       const downloaded = await downloadFileFromUrl(options.fileUrl, options.mimeType);
       imageBuffer = await fs.readFile(downloaded.filePath);
       resolvedMimeType = downloaded.mimeType;
@@ -451,12 +475,13 @@ export const WhatsAppDirectService = {
     }
     // CASE 3: Company storage path (persistent, no cleanup)
     else if (options.filePath || options.fileUrl) {
-      if (!options.companyId) {
+      const resolvedCompanyId = resolveCompanyIdFromOptions(options);
+      if (!resolvedCompanyId) {
         throw new Error('companyId is required when using filePath or fileUrl');
       }
 
       const resolved = await resolveFileBuffer({
-        companyId: options.companyId,
+        companyId: resolvedCompanyId,
         filePath: options.filePath,
         fileUrl: options.fileUrl,
         mimeType: options.mimeType,
@@ -472,7 +497,7 @@ export const WhatsAppDirectService = {
       resolvedFileName = resolved.fileName;
     }
     // CASE 4: External URL (download first)
-    else if (options.fileUrl && !options.companyId) {
+    else if (options.fileUrl && !resolveCompanyIdFromOptions(options)) {
       const downloaded = await downloadFileFromUrl(options.fileUrl, options.mimeType);
       documentBuffer = await fs.readFile(downloaded.filePath);
       resolvedMimeType = downloaded.mimeType;

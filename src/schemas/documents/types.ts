@@ -180,9 +180,10 @@ export interface SectionSchema {
 
   // PhotoPanel / PhotoSection specific
   maxImages?: number;
-  layout?: '2x2' | '2x3' | '3x3' | '4x3';
+  layout?: '2x2' | '2x3' | '3x2' | '3x3' | '4x3';
   showProgresiva?: boolean;
   showFecha?: boolean;
+  showHora?: boolean;
   categories?: {
     key: string;
     label: string;
