@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import fs from 'fs-extra';
 import path from 'path';
+import sharp from 'sharp';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
 import { storagePathService } from '../../services/storage-path.service.js';
@@ -237,6 +238,30 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
 
     const filePath = relativePath ? `${relativePath}/${file.originalname}` : file.originalname;
     const publicUrl = `/files/companies/${companyId}/${filePath}`;
+    let thumbnailUrl: string | undefined;
+
+    const isImage = typeof file.mimetype === 'string' && file.mimetype.startsWith('image/') && !file.mimetype.includes('svg');
+    if (isImage) {
+      try {
+        const parsed = path.parse(file.originalname);
+        const thumbName = `.thumb_${parsed.name}.jpg`;
+        const thumbTarget = path.join(resolved, thumbName);
+        const buffer = await fs.readFile(target);
+        const thumbBuffer = await sharp(buffer)
+          .resize(1200, 1200, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .jpeg({ quality: 70, progressive: true, mozjpeg: true })
+          .toBuffer();
+        await fs.writeFile(thumbTarget, thumbBuffer);
+        await incrementStorageUsage(companyId, thumbBuffer.length);
+        const thumbPath = relativePath ? `${relativePath}/${thumbName}` : thumbName;
+        thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
+      } catch (error) {
+        logger.warn('Failed to generate thumbnail', { error: String(error), file: file.originalname });
+      }
+    }
 
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
@@ -247,6 +272,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
         size: file.size,
         url: publicUrl,
         urlAbsolute: buildAbsoluteUrl(req, publicUrl),
+        ...(thumbnailUrl ? { thumbnailUrl, thumbnailUrlAbsolute: buildAbsoluteUrl(req, thumbnailUrl) } : {}),
       },
     });
   } catch (error) {

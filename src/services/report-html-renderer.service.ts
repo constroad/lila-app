@@ -1108,8 +1108,8 @@ export class ReportHtmlRenderer {
     }
 
     const urlCandidate =
-      photo.url ||
       (photo as any).thumbnailUrl ||
+      photo.url ||
       (photo as any).fileUrl ||
       (photo as any).lilaAppUrl ||
       (photo as any).metadata?.lilaAppUrl ||

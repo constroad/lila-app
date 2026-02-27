@@ -33,6 +33,7 @@ function resolveProto(req: Request): string {
 }
 
 function buildAbsoluteUrl(req: Request, relativeUrl: string) {
+  if (!relativeUrl) return relativeUrl;
   const host = req.get('x-forwarded-host') || req.get('host');
   if (!host) return relativeUrl;
   const proto = resolveProto(req);
