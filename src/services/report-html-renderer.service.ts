@@ -236,7 +236,10 @@ export class ReportHtmlRenderer {
         ...(config.centerLines || []),
         ...((config.centerLinesKeys || []).map((key) => this.getValue(key)).filter(Boolean)),
       ]
-        .map((line) => `<div style="text-align:center;">${this.escapeHtml(String(line))}</div>`)
+        .map(
+          (line) =>
+            `<div style="text-align:center;font-size:13px;font-weight:700;">${this.escapeHtml(String(line))}</div>`
+        )
         .join('');
 
       const rightHtml = rightFields
@@ -312,12 +315,15 @@ export class ReportHtmlRenderer {
     }
 
     const useFourColumns =
-      this.schema.code === 'CTL-PIS' &&
-      (section.gridColumns === 4 ||
-        section.id === 'controlInfo' ||
-        section.id === 'resumenControl' ||
-        /informacion de control/i.test(resolvedTitle || '') ||
-        /resumen de control/i.test(resolvedTitle || ''));
+      (this.schema.code === 'CTL-PIS' &&
+        (section.gridColumns === 4 ||
+          section.id === 'controlInfo' ||
+          section.id === 'resumenControl' ||
+          /informacion de control/i.test(resolvedTitle || '') ||
+          /resumen de control/i.test(resolvedTitle || ''))) ||
+      (this.schema.code === 'IPP' &&
+        section.id === 'datosPlanta' &&
+        section.gridColumns === 4);
 
     if (useFourColumns) {
       const rowPairs: string[] = [];
@@ -938,13 +944,72 @@ export class ReportHtmlRenderer {
     return photos.slice(0, max);
   }
 
+  private isImagePhoto(photo: PhotoItem): boolean {
+    const mime = (photo as any).mimeType || (photo as any).mime || (photo as any).metadata?.mimeType || '';
+    const candidates = [
+      (photo as any).filename,
+      (photo as any).name,
+      photo.url,
+      (photo as any).thumbnailUrl,
+      (photo as any).fileUrl,
+      (photo as any).lilaAppUrl,
+      (photo as any).metadata?.fileUrl,
+      (photo as any).metadata?.lilaAppUrl,
+    ].filter(Boolean) as string[];
+    const normalizedCandidates = candidates.map((value) =>
+      typeof value === 'string' ? value.split('?')[0].split('#')[0].toLowerCase() : ''
+    );
+    const hasVideoExtension = normalizedCandidates.some((value) =>
+      value.endsWith('.mp4') ||
+      value.endsWith('.webm') ||
+      value.endsWith('.mov') ||
+      value.endsWith('.mkv') ||
+      value.endsWith('.avi') ||
+      value.endsWith('.m4v') ||
+      value.endsWith('.mpeg') ||
+      value.endsWith('.mpg') ||
+      value.endsWith('.3gp')
+    );
+    const hasImageExtension = normalizedCandidates.some((value) =>
+      value.endsWith('.jpg') ||
+      value.endsWith('.jpeg') ||
+      value.endsWith('.png') ||
+      value.endsWith('.webp') ||
+      value.endsWith('.gif') ||
+      value.endsWith('.bmp') ||
+      value.endsWith('.heic') ||
+      value.endsWith('.heif')
+    );
+
+    if (typeof mime === 'string' && mime) {
+      const normalizedMime = mime.toLowerCase();
+      if (normalizedMime.includes('video') || normalizedMime.includes('pdf') || normalizedMime.includes('application')) {
+        return false;
+      }
+      if (normalizedMime.includes('image')) {
+        return !hasVideoExtension;
+      }
+    }
+
+    if ((photo as any).base64) {
+      return !hasVideoExtension;
+    }
+
+    if (hasVideoExtension) {
+      return false;
+    }
+
+    return hasImageExtension;
+  }
+
   private async renderPhotoTable(photos: PhotoItem[], section: SectionSchema): Promise<string> {
+    const imagePhotos = photos.filter((photo) => this.isImagePhoto(photo));
     const [columns] = this.parseLayout(section.layout);
     const imageHeight = this.resolvePhotoHeight(columns);
     const rows: string[] = [];
 
-    for (let i = 0; i < photos.length; i += columns) {
-      const chunk = photos.slice(i, i + columns);
+    for (let i = 0; i < imagePhotos.length; i += columns) {
+      const chunk = imagePhotos.slice(i, i + columns);
       const cells = await Promise.all(
         chunk.map(async (photo, index) => {
           const src = await this.resolveImageSrc(photo);
