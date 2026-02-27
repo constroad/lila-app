@@ -244,7 +244,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     if (isImage) {
       try {
         const parsed = path.parse(file.originalname);
-        const thumbName = `.thumb_${parsed.name}.jpg`;
+        const thumbName = `thumb_${parsed.name}.jpg`;
         const thumbTarget = path.join(resolved, thumbName);
         const buffer = await fs.readFile(target);
         const thumbBuffer = await sharp(buffer)

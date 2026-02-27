@@ -428,10 +428,28 @@ export class ReportHtmlRenderer {
       return `<div class="section">${title}</div>`;
     }
 
-    const hasGroups = columns.some((col) => col.group);
+    const hiddenColumns = (() => {
+      if (this.schema.code !== 'CTL-PIS' || section.id !== 'controlPista') return new Set<string>();
+      const config = this.getValue('controlPistaColumns') || {};
+      const hidden = new Set<string>();
+      if (config.hideHoraFinalColocacion) hidden.add('horaFinalColocacion');
+      if (config.hideTempRodilloLiso) hidden.add('tempRodilloLiso');
+      if (config.hideTempRodilloNeumatico) hidden.add('tempRodilloNeumatico');
+      return hidden;
+    })();
+
+    const displayColumns = hiddenColumns.size > 0
+      ? columns.filter((col) => !hiddenColumns.has(col.key))
+      : columns;
+
+    if (displayColumns.length === 0) {
+      return `<div class="section">${title}</div>`;
+    }
+
+    const hasGroups = displayColumns.some((col) => col.group);
     const groupWidths = new Map<string, number>();
     if (hasGroups) {
-      columns.forEach((col) => {
+      displayColumns.forEach((col) => {
         if (!col.group) return;
         const width = col.width ?? 0;
         if (!width) return;
@@ -444,8 +462,8 @@ export class ReportHtmlRenderer {
     > = [];
 
     let index = 0;
-    while (index < columns.length) {
-      const column = columns[index];
+    while (index < displayColumns.length) {
+      const column = displayColumns[index];
       if (!column.group) {
         headerCells.push({ type: 'single', column });
         index += 1;
@@ -453,7 +471,7 @@ export class ReportHtmlRenderer {
       }
       const groupLabel = column.group;
       let span = 1;
-      while (index + span < columns.length && columns[index + span].group === groupLabel) {
+      while (index + span < displayColumns.length && displayColumns[index + span].group === groupLabel) {
         span += 1;
       }
       headerCells.push({ type: 'group', label: groupLabel, span });
@@ -475,7 +493,7 @@ export class ReportHtmlRenderer {
       .join('')}</tr>`;
 
     const subHeaderRow = hasGroups
-      ? `<tr>${columns
+      ? `<tr>${displayColumns
           .filter((col) => col.group)
           .map((col) => {
             const width = col.width ? `width:${col.width}px;` : '';
@@ -509,7 +527,7 @@ export class ReportHtmlRenderer {
     }
     const rows = rowsData
       .map((row) => {
-        const cells = columns
+        const cells = displayColumns
           .map((col) => {
             const rawValue = this.getValue(col.key, row);
             const formatted = this.escapeHtml(this.formatValue(rawValue, col.type, col));
@@ -524,7 +542,7 @@ export class ReportHtmlRenderer {
     const useFixedLayout =
       this.schema.code === 'CTL-PIS' && section.id === 'controlPista';
     const tableStyle = useFixedLayout ? ' style="table-layout:fixed;"' : '';
-    const totalsRow = this.renderTableTotalsRow(section, columns, rowsData);
+    const totalsRow = this.renderTableTotalsRow(section, displayColumns, rowsData);
     return `<div class="section">${title}<table${tableStyle}>${headerRow}${subHeaderRow}${rows}${totalsRow}</table></div>`;
   }
 

@@ -72,6 +72,16 @@ export const controlPistaSchema: DocumentSchema = {
       ]
     },
     {
+      id: 'controlPistaColumns',
+      type: 'checklist',
+      title: 'Columnas en PDF',
+      items: [
+        { key: 'hideHoraFinalColocacion', label: 'Ocultar H. Final Colocación' },
+        { key: 'hideTempRodilloLiso', label: 'Ocultar Temp. Rodillo Liso' },
+        { key: 'hideTempRodilloNeumatico', label: 'Ocultar Temp. Rodillo Neumático' }
+      ]
+    },
+    {
       id: 'controlPista',
       type: 'dataTable',
       title: 'Registro de Control de Pista',
@@ -166,6 +176,11 @@ export const controlPistaSchema: DocumentSchema = {
       tempRodilloLisoProm: 0,
       tempRodilloNeumaticoProm: 0,
       unidadesSinTemperatura: 0
+    },
+    controlPistaColumns: {
+      hideHoraFinalColocacion: false,
+      hideTempRodilloLiso: false,
+      hideTempRodilloNeumatico: false
     },
     controlPista: [
       {
