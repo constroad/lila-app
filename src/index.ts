@@ -28,6 +28,7 @@ import { listSessions, disconnectSession } from './whatsapp/baileys/sessions.sim
 import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.js';
 import cron from 'node-cron';
 import fs from 'fs-extra';
+import path from 'path';
 
 const app = express();
 
@@ -215,14 +216,30 @@ async function startServer() {
     // 🔄 WhatsApp sessions (notifications approach)
     restoreAllSessions();
 
-    cron.schedule('0 0 * * 0', async () => {
+    const pdfTempMaxAgeHours = Number(process.env.PDF_TEMP_MAX_AGE_HOURS || 24);
+    const pdfTempCleanupCron = process.env.PDF_TEMP_CLEANUP_CRON || '0 * * * *';
+
+    const cleanupPdfTemp = async () => {
       try {
-        await fs.emptyDir(config.pdf.tempDir);
-        logger.info('✅ Cleared PDF temp directory');
+        const entries = await fs.readdir(config.pdf.tempDir);
+        const now = Date.now();
+        const maxAgeMs = pdfTempMaxAgeHours * 60 * 60 * 1000;
+        const removals = entries.map(async (entry) => {
+          const fullPath = path.join(config.pdf.tempDir, entry);
+          const stat = await fs.stat(fullPath);
+          if (!stat.isFile()) return;
+          if (now - stat.mtimeMs > maxAgeMs) {
+            await fs.remove(fullPath);
+          }
+        });
+        await Promise.all(removals);
+        logger.info('✅ Cleaned PDF temp directory', { maxAgeHours: pdfTempMaxAgeHours });
       } catch (error) {
-        logger.error('Failed to clear PDF temp directory:', error);
+        logger.error('Failed to clean PDF temp directory:', error);
       }
-    });
+    };
+
+    cron.schedule(pdfTempCleanupCron, cleanupPdfTemp);
 
     // Iniciar servidor HTTP
     const server = app.listen(config.port, () => {

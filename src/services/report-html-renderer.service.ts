@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import sharp from 'sharp';
+import axios from 'axios';
 import { DocumentSchema, SectionSchema, FieldSchema, ColumnSchema } from '../schemas/documents/types.js';
 import { storagePathService } from './storage-path.service.js';
 import { ImageCompressionService } from './image-compression.service.js';
@@ -1103,8 +1104,7 @@ export class ReportHtmlRenderer {
 
   private async resolveImageSrc(photo: PhotoItem): Promise<string | null> {
     if (photo.base64) {
-      const base64 = photo.base64.includes(',') ? photo.base64 : `data:image/jpeg;base64,${photo.base64}`;
-      return base64;
+      return this.resolveBase64Image(photo.base64);
     }
 
     const urlCandidate =
@@ -1117,6 +1117,10 @@ export class ReportHtmlRenderer {
       '';
 
     if (urlCandidate) {
+      const buffer = await this.resolveImageBufferFromUrl(urlCandidate);
+      if (buffer) {
+        return this.bufferToDataUrl(buffer);
+      }
       if (urlCandidate.startsWith('http')) {
         return urlCandidate;
       }
@@ -1159,6 +1163,71 @@ export class ReportHtmlRenderer {
       logger.warn('Failed to read photo file for PDF', { error: String(error), filePath });
     }
     return null;
+  }
+
+  private async resolveBase64Image(base64: string): Promise<string | null> {
+    try {
+      const raw = base64.includes(',') ? base64.split(',')[1] : base64;
+      const buffer = Buffer.from(raw, 'base64');
+      const compressed = await ImageCompressionService.processImage(buffer, 'inline-image');
+      return this.bufferToDataUrl(compressed);
+    } catch (error) {
+      logger.warn('Failed to process inline base64 image', { error: String(error) });
+      const fallback = base64.includes(',') ? base64 : `data:image/jpeg;base64,${base64}`;
+      return fallback;
+    }
+  }
+
+  private resolveStoragePathFromUrl(urlCandidate: string): string | null {
+    if (!this.options.companyId) return null;
+    try {
+      const rawPath = urlCandidate.startsWith('http')
+        ? new URL(urlCandidate).pathname
+        : urlCandidate;
+      const marker = '/files/companies/';
+      const idx = rawPath.indexOf(marker);
+      if (idx === -1) return null;
+      const remainder = rawPath.slice(idx + marker.length);
+      const parts = remainder.split('/').filter(Boolean);
+      if (parts.length < 2) return null;
+      const companyId = parts[0];
+      const relative = parts.slice(1).join('/');
+      return storagePathService.resolvePath(companyId, relative);
+    } catch (error) {
+      logger.warn('Failed to resolve storage path from url', { error: String(error), urlCandidate });
+      return null;
+    }
+  }
+
+  private async resolveImageBufferFromUrl(urlCandidate: string): Promise<Buffer | null> {
+    try {
+      const storagePath = this.resolveStoragePathFromUrl(urlCandidate);
+      if (storagePath && (await fs.pathExists(storagePath))) {
+        const raw = await fs.readFile(storagePath);
+        return ImageCompressionService.processImage(raw, path.basename(storagePath));
+      }
+    } catch (error) {
+      logger.warn('Failed to read image from storage path', { error: String(error), urlCandidate });
+    }
+
+    if (!urlCandidate.startsWith('http')) {
+      return null;
+    }
+
+    try {
+      const response = await axios.get(urlCandidate, {
+        responseType: 'arraybuffer',
+        timeout: 10000,
+      });
+      const buffer = Buffer.from(response.data);
+      return ImageCompressionService.processImage(buffer, path.basename(urlCandidate));
+    } catch (error) {
+      logger.warn('Failed to download image for PDF compression', {
+        error: String(error),
+        urlCandidate,
+      });
+      return null;
+    }
   }
 
   private resolveCompanyStoragePath(relativePath: string): string | null {
