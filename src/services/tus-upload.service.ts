@@ -2,6 +2,7 @@ import { Server } from '@tus/server';
 import { FileStore } from '@tus/file-store';
 import fs from 'fs-extra';
 import path from 'path';
+import sharp from 'sharp';
 import type { Request, Response, NextFunction } from 'express';
 import { config } from '../config/environment.js';
 import { HTTP_STATUS } from '../config/constants.js';
@@ -28,6 +29,8 @@ interface TusUploadInfo {
   size: number;
   url: string;
   urlAbsolute: string;
+  thumbnailUrl?: string;
+  thumbnailUrlAbsolute?: string;
   createdAt: string;
 }
 
@@ -152,6 +155,33 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
 
   const filePath = relativePath ? `${relativePath}/${filename}` : filename;
   const publicUrl = `/files/companies/${companyId}/${filePath}`;
+  let thumbnailUrl: string | undefined;
+
+  const isImage =
+    typeof metadata.filetype === 'string' &&
+    metadata.filetype.startsWith('image/') &&
+    !metadata.filetype.includes('svg');
+  if (isImage) {
+    try {
+      const parsed = path.parse(filename);
+      const thumbName = `thumb_${parsed.name}.jpg`;
+      const thumbTarget = path.join(resolved, thumbName);
+      const buffer = await fs.readFile(target);
+      const thumbBuffer = await sharp(buffer)
+        .resize(1200, 1200, {
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 70, progressive: true, mozjpeg: true })
+        .toBuffer();
+      await fs.writeFile(thumbTarget, thumbBuffer);
+      await incrementStorageUsage(companyId, thumbBuffer.length);
+      const thumbPath = relativePath ? `${relativePath}/${thumbName}` : thumbName;
+      thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
+    } catch (error) {
+      logger.warn('[tus] Failed to generate thumbnail', { error: String(error), file: filename });
+    }
+  }
 
   const info: TusUploadInfo = {
     id: getUploadId(upload),
@@ -161,6 +191,12 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
     size: uploadSize,
     url: publicUrl,
     urlAbsolute: buildAbsoluteUrl(req, publicUrl),
+    ...(thumbnailUrl
+      ? {
+          thumbnailUrl,
+          thumbnailUrlAbsolute: buildAbsoluteUrl(req, thumbnailUrl),
+        }
+      : {}),
     createdAt: new Date().toISOString(),
   };
 

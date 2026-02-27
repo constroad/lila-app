@@ -1139,11 +1139,18 @@ export class ReportHtmlRenderer {
       if (buffer) {
         return this.bufferToDataUrl(buffer);
       }
+
+      const isInternalFile = urlCandidate.includes('/files/companies/');
+      if (isInternalFile) {
+        if (urlCandidate.startsWith('/files/companies/')) {
+          return this.buildAbsoluteUrl(urlCandidate);
+        }
+        // Evitar cargar URL remota interna si no se pudo resolver el archivo localmente.
+        return null;
+      }
+
       if (urlCandidate.startsWith('http')) {
         return urlCandidate;
-      }
-      if (urlCandidate.startsWith('/files/companies/')) {
-        return this.buildAbsoluteUrl(urlCandidate);
       }
     }
 
@@ -1220,9 +1227,13 @@ export class ReportHtmlRenderer {
   private async resolveImageBufferFromUrl(urlCandidate: string): Promise<Buffer | null> {
     try {
       const storagePath = this.resolveStoragePathFromUrl(urlCandidate);
-      if (storagePath && (await fs.pathExists(storagePath))) {
-        const raw = await fs.readFile(storagePath);
-        return ImageCompressionService.processImage(raw, path.basename(storagePath));
+      if (storagePath) {
+        if (await fs.pathExists(storagePath)) {
+          const raw = await fs.readFile(storagePath);
+          return ImageCompressionService.processImage(raw, path.basename(storagePath));
+        }
+        // Si es un recurso interno y no existe localmente, evitar fallback HTTP.
+        return null;
       }
     } catch (error) {
       logger.warn('Failed to read image from storage path', { error: String(error), urlCandidate });
