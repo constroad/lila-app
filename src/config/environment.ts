@@ -22,6 +22,12 @@ const resolvedTrustProxy = trustProxyEnv === undefined
       ? false
       : (Number.isNaN(Number(trustProxyEnv)) ? true : Number(trustProxyEnv));
 
+const storageRootEnv = process.env.FILE_STORAGE_ROOT;
+const storageRoot = storageRootEnv || '/mnt/constroad-storage';
+const defaultPdfTempDir = storageRootEnv
+  ? path.join(storageRoot, 'temp', 'pdf-preview')
+  : './data/pdf-temp';
+
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -63,7 +69,7 @@ export const config = {
   pdf: {
     templatesDir: process.env.PDF_TEMPLATES_DIR || './templates/pdf',
     uploadsDir: process.env.PDF_UPLOADS_DIR || './uploads',
-    tempDir: process.env.PDF_TEMP_DIR || './data/pdf-temp',
+    tempDir: process.env.PDF_TEMP_DIR || defaultPdfTempDir,
     tempPublicBaseUrl: process.env.PDF_TEMP_PUBLIC_BASE_URL || '/pdf-temp',
   },
 
@@ -74,7 +80,7 @@ export const config = {
 
   // Storage root for multi-tenant files
   storage: {
-    root: process.env.FILE_STORAGE_ROOT || '/mnt/constroad-storage',
+    root: storageRoot,
   },
   
   // Logging

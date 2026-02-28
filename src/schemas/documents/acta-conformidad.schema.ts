@@ -49,6 +49,17 @@ export const actaConformidadSchema: DocumentSchema = {
       gridColumns: 4,
       fields: [
         { key: 'acta.fecha', label: 'FECHA', type: 'date', span: 3, required: true },
+        {
+          key: 'acta.tipo',
+          label: 'TIPO DE ACTA',
+          type: 'select',
+          span: 3,
+          required: true,
+          options: [
+            { value: 'VENTA', label: 'Venta de asfalto' },
+            { value: 'SERVICIO', label: 'Servicio' },
+          ],
+        },
         { key: 'acta.lugar', label: 'LUGAR', type: 'text', span: 5 },
         { key: 'acta.contrato', label: 'CONTRATO / OS', type: 'text', span: 4 },
         { key: 'acta.representante', label: 'REPRESENTANTE', type: 'text', span: 6 },
@@ -106,6 +117,7 @@ export const actaConformidadSchema: DocumentSchema = {
     },
     acta: {
       fecha: '',
+      tipo: 'SERVICIO',
       lugar: '',
       contrato: '',
       representante: '',

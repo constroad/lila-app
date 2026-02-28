@@ -35,6 +35,13 @@ const app = express();
 // Trust proxy to honor X-Forwarded-For when behind reverse proxies
 app.set('trust proxy', config.security.trustProxy);
 
+const corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const frameAncestors = ["'self'", ...corsOrigins];
+
 // Middleware de seguridad
 app.use(
   helmet({
@@ -42,15 +49,11 @@ app.use(
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         'img-src': ["'self'", 'data:', 'blob:'],
+        'frame-ancestors': frameAncestors,
       },
     },
   })
 );
-
-const corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || '')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
 
 const resolveStaticCorsOrigin = (origin?: string | string[] | null): string | null => {
   if (!origin) return null;
@@ -209,6 +212,10 @@ async function startServer() {
     // Inicializar servicios
     await pdfGenerator.initialize();
     await fs.ensureDir(config.pdf.tempDir);
+    logger.info('🧾 PDF temp directory configured', {
+      tempDir: config.pdf.tempDir,
+      publicBaseUrl: config.pdf.tempPublicBaseUrl,
+    });
 
     logger.info('Initializing Job Scheduler...');
     await jobScheduler.initialize();

@@ -575,6 +575,8 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
     let mainPages: number | undefined;
     let annexPages: number | undefined;
     let totalPages: number | undefined;
+    let pdfSizeBytes: number | undefined;
+    let docxSizeBytes: number | undefined;
 
     if (generatePdf) {
       const pdfFilename = `${baseFilename}.pdf`;
@@ -633,6 +635,12 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
         report.serviceManagementId || 'generic',
         pdfFilename
       )}`;
+      try {
+        const stats = await fs.stat(pdfPath);
+        pdfSizeBytes = stats.size;
+      } catch (error) {
+        logger.warn('Failed to read generated PDF size', { error: String(error), pdfPath });
+      }
 
       if (generateDocx) {
         const docxFilename = `${baseFilename}.docx`;
@@ -646,6 +654,12 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
           report.serviceManagementId || 'generic',
           docxFilename
         )}`;
+        try {
+          const stats = await fs.stat(docxPath);
+          docxSizeBytes = stats.size;
+        } catch (error) {
+          logger.warn('Failed to read generated DOCX size', { error: String(error), docxPath });
+        }
       }
     }
 
@@ -687,6 +701,8 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
         status: 'generated',
         ...(docxUrl ? { docxUrl, docxUrlAbsolute: buildAbsoluteUrl(req, docxUrl) } : {}),
         ...(pdfUrl ? { pdfUrl, pdfUrlAbsolute: buildAbsoluteUrl(req, pdfUrl) } : {}),
+        ...(typeof pdfSizeBytes === 'number' ? { pdfSizeBytes } : {}),
+        ...(typeof docxSizeBytes === 'number' ? { docxSizeBytes } : {}),
         ...(typeof totalPages === 'number' ? { totalPages } : {}),
         ...(typeof mainPages === 'number' ? { mainPages } : {}),
         ...(typeof annexPages === 'number' ? { annexPages } : {}),
