@@ -120,7 +120,7 @@ export const controlPistaSchema: DocumentSchema = {
       id: 'registroFotografico',
       type: 'photoPanel',
       title: 'Registro Fotografico',
-      maxImages: 20,
+      maxImages: 100,
       layout: '2x3',
       showFecha: true,
       showProgresiva: true

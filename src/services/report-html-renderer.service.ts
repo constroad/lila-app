@@ -30,6 +30,7 @@ interface PhotoItem {
   category?: string;
   tipo?: string;
   purpose?: string;
+  includeInPdf?: boolean;
 }
 
 interface PhotoGroup {
@@ -161,6 +162,9 @@ export class ReportHtmlRenderer {
   }
 
   private async renderSection(section: SectionSchema): Promise<string> {
+    if (this.schema.code === 'CTL-PIS' && section.id === 'controlPistaColumns') {
+      return '';
+    }
     switch (section.type) {
       case 'header':
         return this.renderHeader(section);
@@ -909,21 +913,21 @@ export class ReportHtmlRenderer {
   private resolvePhotos(section: SectionSchema): PhotoItem[] {
     const direct = this.getValue(section.id);
     if (direct && Array.isArray(direct.fotos) && direct.fotos.length > 0) {
-      return direct.fotos as PhotoItem[];
+      return (direct.fotos as PhotoItem[]).filter((photo) => photo?.includeInPdf !== false);
     }
     if (Array.isArray(direct)) {
-      return direct as PhotoItem[];
+      return (direct as PhotoItem[]).filter((photo) => photo?.includeInPdf !== false);
     }
 
     const nested = this.getValue(`secciones.${section.id}.fotos`);
     if (Array.isArray(nested)) {
-      return nested as PhotoItem[];
+      return (nested as PhotoItem[]).filter((photo) => photo?.includeInPdf !== false);
     }
 
     if (section.type === 'photoPanel') {
       const alt = this.getValue('registroFotografico.fotos');
       if (Array.isArray(alt)) {
-        return alt as PhotoItem[];
+        return (alt as PhotoItem[]).filter((photo) => photo?.includeInPdf !== false);
       }
     }
 
