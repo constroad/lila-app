@@ -295,11 +295,17 @@ async function applyHeaderDefaults(
   }
 
   if (needsFecha) {
-    const reportDate =
-      (typeof report?.date === 'string' && report.date.trim() ? report.date : '') ||
-      (typeof data?.control?.fecha === 'string' ? data.control.fecha : '');
-    if (reportDate) {
-      header.fecha = reportDate;
+    const candidateDates = [
+      typeof report?.date === 'string' && report.date.trim() ? report.date : '',
+      typeof data?.control?.fecha === 'string' ? data.control.fecha : '',
+      typeof data?.acta?.fecha === 'string' ? data.acta.fecha : '',
+      typeof data?.proyecto?.fecha === 'string' ? data.proyecto.fecha : '',
+      typeof (data as any)?.areaAdicional?.fecha === 'string' ? (data as any).areaAdicional.fecha : '',
+      typeof (data as any)?.tasa?.fecha === 'string' ? (data as any).tasa.fecha : '',
+      typeof (data as any)?.fecha === 'string' ? (data as any).fecha : '',
+    ].filter(Boolean);
+    if (candidateDates.length > 0) {
+      header.fecha = candidateDates[0];
     }
   }
 }

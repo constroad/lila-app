@@ -60,6 +60,9 @@ export class ReportHtmlRenderer {
   async render(): Promise<string> {
     const sections: string[] = [];
     for (const section of this.schema.sections) {
+      if (!this.shouldRenderSection(section)) {
+        continue;
+      }
       if (section.type === 'header') {
         const output = await this.renderSection(section);
         if (output) {
@@ -225,6 +228,48 @@ export class ReportHtmlRenderer {
     return `<div class="${classes.join(' ')}">${html}</div>`;
   }
 
+  private evaluateShowIf(condition: SectionSchema['showIf']): boolean {
+    if (!condition) return true;
+    const actual = this.getValue(condition.field);
+    const expected = condition.value;
+    switch (condition.operator) {
+      case 'eq':
+        return actual === expected;
+      case 'ne':
+        return actual !== expected;
+      case 'gt':
+        return Number(actual) > Number(expected);
+      case 'gte':
+        return Number(actual) >= Number(expected);
+      case 'lt':
+        return Number(actual) < Number(expected);
+      case 'lte':
+        return Number(actual) <= Number(expected);
+      case 'contains':
+        if (Array.isArray(actual)) return actual.includes(expected);
+        if (typeof actual === 'string') return actual.includes(String(expected));
+        return false;
+      case 'in':
+        if (Array.isArray(expected)) return expected.includes(actual);
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  private shouldRenderSection(section: SectionSchema): boolean {
+    if (section.visible === false) return false;
+    if (section.showIf && !this.evaluateShowIf(section.showIf)) return false;
+    return true;
+  }
+
+  private computeActaTitulo(): string | null {
+    const tipo = String(this.getValue('acta.tipo') || '').toUpperCase();
+    if (tipo === 'VENTA') return 'ACTA DE CONFORMIDAD POR BIENES';
+    if (tipo === 'SERVICIO') return 'ACTA DE CONFORMIDAD POR SERVICIO';
+    return 'ACTA DE CONFORMIDAD';
+  }
+
   private async renderHeader(section: SectionSchema): Promise<string> {
     if (section.headerConfig) {
       const config = section.headerConfig;
@@ -240,7 +285,15 @@ export class ReportHtmlRenderer {
       const centerLines = [
         ...(config.centerLines || []),
         ...((config.centerLinesKeys || []).map((key) => this.getValue(key)).filter(Boolean)),
-      ]
+      ];
+      if (this.schema.code === 'ACT-CNF') {
+        const computed = this.computeActaTitulo();
+        const hasActaTitle = centerLines.some((line) => String(line).toUpperCase().includes('ACTA DE CONFORMIDAD'));
+        if (computed && !hasActaTitle) {
+          centerLines.push(computed);
+        }
+      }
+      const centerLinesHtml = centerLines
         .map(
           (line) =>
             `<div style="text-align:center;font-size:13px;font-weight:700;">${this.escapeHtml(String(line))}</div>`
@@ -288,14 +341,14 @@ export class ReportHtmlRenderer {
                 logoSrc
                   ? `<img src="${logoSrc}" style="max-height:60px;max-width:120px;object-fit:contain;" />`
                   : leftText
-                  ? `<div style="font-weight:700;">${this.escapeHtml(String(leftText))}</div>`
+                  ? `<div style="font-weight:700;font-size:14px;">${this.escapeHtml(String(leftText))}</div>`
                   : ''
               }
             </td>
             <td style="width:56%; text-align:center; border:1px solid #333; padding:6px;">
               ${centerTitle ? `<div style="font-weight:700;">${this.escapeHtml(String(centerTitle))}</div>` : ''}
               ${centerSubtitle ? `<div>${this.escapeHtml(String(centerSubtitle))}</div>` : ''}
-              ${centerLines}
+              ${centerLinesHtml}
             </td>
             <td style="width:22%; border:1px solid #333; padding:6px; font-size:10px;">
               ${rightHtml}
@@ -816,13 +869,30 @@ export class ReportHtmlRenderer {
       return `<div class="section">${title}</div>`;
     }
 
+    const actaTipo = this.schema.code === 'ACT-CNF'
+      ? String(this.getValue('acta.tipo') || '').toUpperCase()
+      : '';
+    const cipLabel = this.schema.code === 'ACT-CNF' ? 'DNI' : 'CIP';
+
     const signaturePath = section.id || 'firmas';
     const cells = await Promise.all(
       signatures.map(async (signature) => {
         const info = this.getValue(`${signaturePath}.${signature.key}`) || {};
         const name = info.nombre || '';
         const role = info.cargo || signature.sublabel || '';
-        const cip = signature.showCIP && info.cip ? `CIP: ${info.cip}` : '';
+        const cip = signature.showCIP && info.cip ? `${cipLabel}: ${info.cip}` : '';
+        const signatureLabel = (() => {
+          if (this.schema.code !== 'ACT-CNF') return signature.label || '';
+          if (actaTipo === 'VENTA') {
+            if (signature.key === 'representanteCliente') return 'RECIBI CONFORME';
+            if (signature.key === 'representanteContratista') return 'ENTREGUE CONFORME';
+          }
+          if (actaTipo === 'SERVICIO') {
+            if (signature.key === 'representanteCliente') return 'CLIENTE';
+            if (signature.key === 'representanteContratista') return 'SUBCONTRATISTA';
+          }
+          return signature.label || '';
+        })();
         const align = info.signatureAlign || 'center';
         const width = Number(info.signatureWidth) || 160;
         const order = info.signatureOrder || 'firma-first';
@@ -861,7 +931,7 @@ export class ReportHtmlRenderer {
             ? `<div style="border-top:1px solid #333; margin:6px 0 4px 0;"></div>`
             : '';
         return `<td>
-          <div><strong>${this.escapeHtml(signature.label || '')}</strong></div>
+          <div><strong>${this.escapeHtml(signatureLabel)}</strong></div>
           ${imageHtml}
           ${lineHtml}
           <div style="margin-top: 8px;">${this.escapeHtml(name)}</div>
