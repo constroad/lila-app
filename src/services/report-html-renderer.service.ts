@@ -314,7 +314,17 @@ export class ReportHtmlRenderer {
   private renderFieldsSection(section: SectionSchema): string {
     const resolvedTitle = this.resolveSectionTitle(section);
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
-    const fields = section.fields || [];
+    const fields = (() => {
+      const baseFields = section.fields || [];
+      if (this.schema.code !== 'CTL-PIS' || section.id !== 'resumenControl') return baseFields;
+      const config = this.getValue('controlPistaColumns') || {};
+      const hiddenKeys = new Set<string>();
+      if (config.hideTempRodilloLiso) hiddenKeys.add('resumenControl.tempRodilloLisoProm');
+      if (config.hideTempRodilloNeumatico) hiddenKeys.add('resumenControl.tempRodilloNeumaticoProm');
+      return hiddenKeys.size > 0
+        ? baseFields.filter((field) => !hiddenKeys.has(field.key))
+        : baseFields;
+    })();
     if (fields.length === 0) {
       return `<div class="section">${title}</div>`;
     }
@@ -789,11 +799,13 @@ export class ReportHtmlRenderer {
       ? lines.map((line) => `<p>${this.escapeHtml(line)}</p>`).join('')
       : '<p>&nbsp;</p>';
 
+    const shouldPageBreak = this.schema.code === 'CTL-PIS' && section.id === 'observaciones';
+
     if (this.schema.code === 'IAA' && ['antecedentes', 'justificacionTecnica', 'conclusiones'].includes(section.id)) {
-      return `<div class="section">${title}<table><tr><td>${html}</td></tr></table></div>`;
+      return `<div class="section"${shouldPageBreak ? ' style="page-break-before:always;"' : ''}>${title}<table><tr><td>${html}</td></tr></table></div>`;
     }
 
-    return `<div class="section">${title}${html}</div>`;
+    return `<div class="section"${shouldPageBreak ? ' style="page-break-before:always;"' : ''}>${title}${html}</div>`;
   }
 
   private async renderSignatures(section: SectionSchema): Promise<string> {
