@@ -371,14 +371,13 @@ async function resolveDocumentContext(req: Request): Promise<DocumentContext> {
   }
 
   let aggregated: any = null;
-  const payloadSchemaData =
-    reportPayload?.schemaData || reportPayload?.draftData?.schemaData;
+  const payloadSchemaData = reportPayload?.schemaData;
   let baseData: Record<string, any> =
     (payloadSchemaData && Object.keys(payloadSchemaData).length > 0
       ? payloadSchemaData
       : null) ||
-    report.draftData?.schemaData ||
     report.schemaData ||
+    report.draftData?.schemaData ||
     {};
 
   if (!baseData || Object.keys(baseData).length === 0) {
@@ -390,28 +389,24 @@ async function resolveDocumentContext(req: Request): Promise<DocumentContext> {
   }
 
   const schemaOverrides =
+    reportPayload?.schemaOverrides ||
     report.schemaOverrides ||
     report.draftData?.schemaOverrides ||
-    reportPayload?.schemaOverrides ||
-    reportPayload?.draftData?.schemaOverrides ||
     {};
   const customSections =
+    reportPayload?.customSections ||
     report.customSections ||
     report.draftData?.customSections ||
-    reportPayload?.customSections ||
-    reportPayload?.draftData?.customSections ||
     [];
   const annexes =
+    reportPayload?.annexes ||
     report.annexes ||
     report.draftData?.annexes ||
-    reportPayload?.annexes ||
-    reportPayload?.draftData?.annexes ||
     [];
   const folioConfig =
-    report.folioConfig ||
-    report.draftData?.folioConfig ||
     reportPayload?.folioConfig ||
-    reportPayload?.draftData?.folioConfig || {
+    report.folioConfig ||
+    report.draftData?.folioConfig || {
       enabled: true,
       format: 'Folio {current}/{total}',
       position: 'footer-right',
