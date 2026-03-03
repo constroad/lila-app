@@ -925,7 +925,11 @@ export class ReportHtmlRenderer {
               item.key === 'firma' && firmaOffsetX
                 ? `transform: translateX(${firmaOffsetX}px);`
                 : '';
-            return `<img src="${item.src}" style="position:absolute;top:0;left:0;max-height:70px;max-width:${width}px;object-fit:contain;z-index:${zIndex};${translate}" />`;
+            const blend =
+              item.key === 'firma'
+                ? 'mix-blend-mode:multiply;'
+                : '';
+            return `<img src="${item.src}" style="position:absolute;top:0;left:0;max-height:70px;max-width:${width}px;object-fit:contain;z-index:${zIndex};${translate}${blend}" />`;
           })
           .join('');
         const imageHtml = `<div style="display:flex;justify-content:${justify};margin:6px 0;">
@@ -1236,7 +1240,10 @@ export class ReportHtmlRenderer {
         if (urlCandidate.startsWith('/files/companies/')) {
           return this.buildAbsoluteUrl(urlCandidate);
         }
-        // Evitar cargar URL remota interna si no se pudo resolver el archivo localmente.
+        // Fallback: permitir URL absoluta interna si no se pudo resolver localmente.
+        if (urlCandidate.startsWith('http')) {
+          return urlCandidate;
+        }
         return null;
       }
 
@@ -1323,8 +1330,7 @@ export class ReportHtmlRenderer {
           const raw = await fs.readFile(storagePath);
           return ImageCompressionService.processImage(raw, path.basename(storagePath));
         }
-        // Si es un recurso interno y no existe localmente, evitar fallback HTTP.
-        return null;
+        // Permitir fallback HTTP cuando el archivo no existe localmente.
       }
     } catch (error) {
       logger.warn('Failed to read image from storage path', { error: String(error), urlCandidate });
