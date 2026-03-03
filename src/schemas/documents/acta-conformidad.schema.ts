@@ -31,7 +31,17 @@ export const actaConformidadSchema: DocumentSchema = {
         ],
       },
     },
-    // Se eliminan "Datos del Proyecto" y "Datos del Acta" por requerimiento.
+    // Se eliminan "Datos del Proyecto" y la mayoría de "Datos del Acta" por requerimiento.
+    // Se conserva solo la fecha del acta para poblar el header.
+    {
+      id: 'datosActa',
+      type: 'simpleFields',
+      title: 'Datos del Acta',
+      gridColumns: 4,
+      fields: [
+        { key: 'acta.fecha', label: 'FECHA DEL ACTA', type: 'date', span: 4 },
+      ],
+    },
     {
       id: 'datosProveedor',
       type: 'simpleFields',
@@ -67,7 +77,6 @@ export const actaConformidadSchema: DocumentSchema = {
         { key: 'bien.obra', label: 'OBRA', type: 'text', span: 12 },
         { key: 'bien.ordenCompra', label: 'N° O/C', type: 'text', span: 4 },
         { key: 'bien.fechaCompra', label: 'FECHA DE COMPRA', type: 'date', span: 4 },
-        { key: 'bien.descripcion', label: 'DESCRIPCION', type: 'text', span: 12 },
       ],
     },
     {
@@ -231,7 +240,6 @@ export const actaConformidadSchema: DocumentSchema = {
       obra: '',
       ordenCompra: '',
       fechaCompra: '',
-      descripcion: '',
     },
     itemsVenta: [],
     contratista: {
