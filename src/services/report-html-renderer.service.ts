@@ -895,6 +895,7 @@ export class ReportHtmlRenderer {
         })();
         const align = info.signatureAlign || 'center';
         const width = Number(info.signatureWidth) || 160;
+        const firmaOffsetX = Number(info.firmaOffsetX) || 0;
         const order = info.signatureOrder || 'firma-first';
         const firmaSrc = await this.resolveSignatureImageSrc(info, 'firma');
         const selloSrc = await this.resolveSignatureImageSrc(info, 'sello');
@@ -920,7 +921,11 @@ export class ReportHtmlRenderer {
                 : item.key === 'sello'
                 ? 2
                 : 1;
-            return `<img src="${item.src}" style="position:absolute;top:0;left:0;max-height:70px;max-width:${width}px;object-fit:contain;z-index:${zIndex};" />`;
+            const translate =
+              item.key === 'firma' && firmaOffsetX
+                ? `transform: translateX(${firmaOffsetX}px);`
+                : '';
+            return `<img src="${item.src}" style="position:absolute;top:0;left:0;max-height:70px;max-width:${width}px;object-fit:contain;z-index:${zIndex};${translate}" />`;
           })
           .join('');
         const imageHtml = `<div style="display:flex;justify-content:${justify};margin:6px 0;">
