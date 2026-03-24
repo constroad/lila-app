@@ -27,6 +27,9 @@ const storageRoot = storageRootEnv || '/mnt/constroad-storage';
 const defaultPdfTempDir = storageRootEnv
   ? path.join(storageRoot, 'temp', 'pdf-preview')
   : './data/pdf-temp';
+const defaultDriveCacheDir = storageRootEnv
+  ? path.join(storageRoot, 'temp', 'drive-cache')
+  : './data/drive-cache';
 
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
@@ -76,6 +79,7 @@ export const config = {
   // Multi-tenant storage (Fase 9)
   drive: {
     maxFileSizeMb: parseInt(process.env.DRIVE_MAX_FILE_SIZE_MB || '25', 10),
+    cacheDir: process.env.DRIVE_CACHE_DIR || defaultDriveCacheDir,
   },
 
   // Storage root for multi-tenant files

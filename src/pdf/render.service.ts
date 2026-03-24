@@ -21,6 +21,10 @@ function clampScale(value: number) {
   return Math.min(3, Math.max(0.5, value));
 }
 
+function resolveDriveCacheDir() {
+  return config.drive?.cacheDir || './data/drive-cache';
+}
+
 export async function getPdfInfo(filePath: string) {
   const buffer = await fs.readFile(filePath);
   const data = new Uint8Array(buffer);
@@ -35,7 +39,7 @@ export async function renderPdfPageToPng(filePath: string, options: RenderOption
   const stat = await fs.stat(filePath);
   const scale = clampScale(options.scale);
   const cacheKey = getCacheKey(filePath, stat, options.page, scale);
-  const cacheDir = path.resolve(config.drive.cacheDir, cacheKey);
+  const cacheDir = path.resolve(resolveDriveCacheDir(), cacheKey);
   const cacheFile = path.join(cacheDir, `page-${options.page}.png`);
 
   if (await fs.pathExists(cacheFile)) {
@@ -69,7 +73,7 @@ export async function renderPdfPageToPngWithGrid(filePath: string, options: Rend
   const scale = clampScale(options.scale);
   const gridSize = options.gridSize && options.gridSize > 0 ? options.gridSize : 50;
   const cacheKey = getCacheKey(filePath, stat, options.page, scale) + `-g${gridSize}`;
-  const cacheDir = path.resolve(config.drive.cacheDir, cacheKey);
+  const cacheDir = path.resolve(resolveDriveCacheDir(), cacheKey);
   const cacheFile = path.join(cacheDir, `page-${options.page}-grid.png`);
 
   if (await fs.pathExists(cacheFile)) {

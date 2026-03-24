@@ -2,14 +2,21 @@ import { Server } from '@tus/server';
 import { FileStore } from '@tus/file-store';
 import fs from 'fs-extra';
 import path from 'path';
-import sharp from 'sharp';
 import type { Request, Response, NextFunction } from 'express';
 import { config } from '../config/environment.js';
 import { HTTP_STATUS } from '../config/constants.js';
 import logger from '../utils/logger.js';
 import { storagePathService } from './storage-path.service.js';
-import { incrementStorageUsage } from '../middleware/quota.middleware.js';
+import { decrementStorageUsage, incrementStorageUsage } from '../middleware/quota.middleware.js';
 import { quotaValidatorService } from './quota-validator.service.js';
+import {
+  buildThumbnailRelativePath,
+  generateThumbnailForFile,
+} from './thumbnail.service.js';
+import {
+  isVideoFile,
+  optimizeVideoForProgressiveStreaming,
+} from './video-stream.service.js';
 
 interface TusUploadMetadata {
   filename?: string;
@@ -29,8 +36,13 @@ interface TusUploadInfo {
   size: number;
   url: string;
   urlAbsolute: string;
+  streamUrl?: string;
+  streamUrlAbsolute?: string;
+  streamType?: string;
+  streamStatus?: 'ready' | 'pending' | 'unsupported' | 'error';
   thumbnailUrl?: string;
   thumbnailUrlAbsolute?: string;
+  thumbnailStatus?: 'ready' | 'pending' | 'unsupported' | 'error';
   createdAt: string;
 }
 
@@ -155,32 +167,46 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
 
   const filePath = relativePath ? `${relativePath}/${filename}` : filename;
   const publicUrl = `/files/companies/${companyId}/${filePath}`;
+  const videoLike = isVideoFile(metadata.filetype, filename);
+  const streamUrl = videoLike ? publicUrl : undefined;
+  const streamType = videoLike ? 'progressive-range' : undefined;
+  const streamStatus: 'ready' | 'pending' | 'unsupported' | 'error' = videoLike ? 'ready' : 'unsupported';
   let thumbnailUrl: string | undefined;
+  let thumbnailStatus: 'ready' | 'pending' | 'unsupported' | 'error' = 'pending';
 
-  const isImage =
-    typeof metadata.filetype === 'string' &&
-    metadata.filetype.startsWith('image/') &&
-    !metadata.filetype.includes('svg');
-  if (isImage) {
-    try {
-      const parsed = path.parse(filename);
-      const thumbName = `thumb_${parsed.name}.jpg`;
-      const thumbTarget = path.join(resolved, thumbName);
-      const buffer = await fs.readFile(target);
-      const thumbBuffer = await sharp(buffer)
-        .resize(1200, 1200, {
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .jpeg({ quality: 70, progressive: true, mozjpeg: true })
-        .toBuffer();
-      await fs.writeFile(thumbTarget, thumbBuffer);
-      await incrementStorageUsage(companyId, thumbBuffer.length);
-      const thumbPath = relativePath ? `${relativePath}/${thumbName}` : thumbName;
-      thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
-    } catch (error) {
-      logger.warn('[tus] Failed to generate thumbnail', { error: String(error), file: filename });
+  if (videoLike) {
+    const optimization = await optimizeVideoForProgressiveStreaming({
+      filePath: target,
+      fileName: filename,
+      mimeType: metadata.filetype,
+    });
+    if (optimization.optimized && optimization.sizeDeltaBytes !== 0) {
+      if (optimization.sizeDeltaBytes > 0) {
+        await incrementStorageUsage(companyId, optimization.sizeDeltaBytes);
+      } else {
+        await decrementStorageUsage(companyId, Math.abs(optimization.sizeDeltaBytes));
+      }
     }
+  }
+
+  const thumbnailResult = await generateThumbnailForFile({
+    filePath: target,
+    fileName: filename,
+    mimeType: metadata.filetype,
+    outputDir: resolved,
+  });
+
+  if (thumbnailResult.status === 'ready' && thumbnailResult.thumbnailName) {
+    const thumbPath = buildThumbnailRelativePath(relativePath, thumbnailResult.thumbnailName);
+    thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
+    if (thumbnailResult.sizeBytes && thumbnailResult.sizeBytes > 0) {
+      await incrementStorageUsage(companyId, thumbnailResult.sizeBytes);
+    }
+    thumbnailStatus = 'ready';
+  } else if (thumbnailResult.status === 'unsupported') {
+    thumbnailStatus = 'unsupported';
+  } else if (thumbnailResult.status === 'error') {
+    thumbnailStatus = 'error';
   }
 
   const info: TusUploadInfo = {
@@ -191,6 +217,15 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
     size: uploadSize,
     url: publicUrl,
     urlAbsolute: buildAbsoluteUrl(req, publicUrl),
+    streamStatus,
+    ...(streamType ? { streamType } : {}),
+    ...(streamUrl
+      ? {
+          streamUrl,
+          streamUrlAbsolute: buildAbsoluteUrl(req, streamUrl),
+        }
+      : {}),
+    thumbnailStatus,
     ...(thumbnailUrl
       ? {
           thumbnailUrl,

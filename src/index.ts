@@ -76,6 +76,17 @@ const setStaticCorsHeaders = (req: express.Request, res: express.Response) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 };
 
+const isSafeThumbRequestPath = (requestPath: string): boolean => {
+  if (!requestPath) return false;
+  try {
+    const decoded = decodeURIComponent(requestPath);
+    const normalized = path.posix.normalize(decoded.startsWith('/') ? decoded : `/${decoded}`);
+    return normalized.includes('/.thumbs/');
+  } catch {
+    return false;
+  }
+};
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -139,20 +150,40 @@ app.use('/api/drive', driveRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/service-management-report', serviceManagementReportRoutes);
 
+const companiesRoot = `${config.storage.root}/companies`;
+const companiesStaticHeaders = (res: express.Response) => {
+  setStaticCorsHeaders(res.req as express.Request, res);
+};
+const companiesThumbsStatic = express.static(companiesRoot, {
+  fallthrough: false,
+  index: false,
+  // Required for generated thumbnail paths under "/.thumbs/"
+  dotfiles: 'allow',
+  maxAge: '1h',
+  immutable: true,
+  setHeaders: (res, _path, _stat) => {
+    companiesStaticHeaders(res);
+  },
+});
+const companiesFilesStatic = express.static(companiesRoot, {
+  fallthrough: false,
+  index: false,
+  dotfiles: 'deny',
+  maxAge: '1h',
+  immutable: true,
+  setHeaders: (res, _path, _stat) => {
+    companiesStaticHeaders(res);
+  },
+});
+
 // Public file access (multi-tenant only - Fase 9)
-app.use(
-  '/files/companies',
-  express.static(config.storage.root + '/companies', {
-    fallthrough: false,
-    index: false,
-    dotfiles: 'deny',
-    maxAge: '1h',
-    immutable: true,
-    setHeaders: (res, _path, _stat) => {
-      setStaticCorsHeaders(res.req as express.Request, res);
-    },
-  })
-);
+app.use('/files/companies', (req, res, next) => {
+  if (isSafeThumbRequestPath(req.path)) {
+    companiesThumbsStatic(req, res, next);
+    return;
+  }
+  companiesFilesStatic(req, res, next);
+});
 
 // Public PDF temp access
 app.use(

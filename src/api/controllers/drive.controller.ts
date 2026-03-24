@@ -1,11 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import fs from 'fs-extra';
 import path from 'path';
-import sharp from 'sharp';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
 import { storagePathService } from '../../services/storage-path.service.js';
 import { incrementStorageUsage, decrementStorageUsage } from '../../middleware/quota.middleware.js';
+import logger from '../../utils/logger.js';
+import {
+  buildThumbnailRelativePath,
+  generateThumbnailForFile,
+} from '../../services/thumbnail.service.js';
+import {
+  isVideoFile,
+  optimizeVideoForProgressiveStreaming,
+} from '../../services/video-stream.service.js';
 
 // Helper: Validar nombre de archivo/folder
 function isValidEntryName(name: string) {
@@ -236,31 +244,50 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     // Incrementar contador de almacenamiento (Fase 10)
     await incrementStorageUsage(companyId, file.size);
 
+    const videoLike = isVideoFile(file.mimetype, file.originalname);
+    let streamStatus: 'ready' | 'unsupported' | 'error' = videoLike ? 'ready' : 'unsupported';
+    const streamType = videoLike ? 'progressive-range' : undefined;
+
+    if (videoLike) {
+      const optimization = await optimizeVideoForProgressiveStreaming({
+        filePath: target,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+      });
+
+      if (optimization.optimized && optimization.sizeDeltaBytes !== 0) {
+        if (optimization.sizeDeltaBytes > 0) {
+          await incrementStorageUsage(companyId, optimization.sizeDeltaBytes);
+        } else {
+          await decrementStorageUsage(companyId, Math.abs(optimization.sizeDeltaBytes));
+        }
+      }
+    }
+
     const filePath = relativePath ? `${relativePath}/${file.originalname}` : file.originalname;
     const publicUrl = `/files/companies/${companyId}/${filePath}`;
+    const streamUrl = videoLike ? publicUrl : undefined;
     let thumbnailUrl: string | undefined;
+    let thumbnailStatus: 'ready' | 'pending' | 'unsupported' | 'error' = 'pending';
 
-    const isImage = typeof file.mimetype === 'string' && file.mimetype.startsWith('image/') && !file.mimetype.includes('svg');
-    if (isImage) {
-      try {
-        const parsed = path.parse(file.originalname);
-        const thumbName = `thumb_${parsed.name}.jpg`;
-        const thumbTarget = path.join(resolved, thumbName);
-        const buffer = await fs.readFile(target);
-        const thumbBuffer = await sharp(buffer)
-          .resize(1200, 1200, {
-            fit: 'inside',
-            withoutEnlargement: true,
-          })
-          .jpeg({ quality: 70, progressive: true, mozjpeg: true })
-          .toBuffer();
-        await fs.writeFile(thumbTarget, thumbBuffer);
-        await incrementStorageUsage(companyId, thumbBuffer.length);
-        const thumbPath = relativePath ? `${relativePath}/${thumbName}` : thumbName;
-        thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
-      } catch (error) {
-        logger.warn('Failed to generate thumbnail', { error: String(error), file: file.originalname });
+    const thumbnailResult = await generateThumbnailForFile({
+      filePath: target,
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      outputDir: resolved,
+    });
+
+    if (thumbnailResult.status === 'ready' && thumbnailResult.thumbnailName) {
+      const thumbPath = buildThumbnailRelativePath(relativePath, thumbnailResult.thumbnailName);
+      thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
+      if (thumbnailResult.sizeBytes && thumbnailResult.sizeBytes > 0) {
+        await incrementStorageUsage(companyId, thumbnailResult.sizeBytes);
       }
+      thumbnailStatus = 'ready';
+    } else if (thumbnailResult.status === 'unsupported') {
+      thumbnailStatus = 'unsupported';
+    } else if (thumbnailResult.status === 'error') {
+      thumbnailStatus = 'error';
     }
 
     res.status(HTTP_STATUS.CREATED).json({
@@ -272,6 +299,15 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
         size: file.size,
         url: publicUrl,
         urlAbsolute: buildAbsoluteUrl(req, publicUrl),
+        streamStatus,
+        ...(streamType ? { streamType } : {}),
+        ...(streamUrl
+          ? {
+              streamUrl,
+              streamUrlAbsolute: buildAbsoluteUrl(req, streamUrl),
+            }
+          : {}),
+        thumbnailStatus,
         ...(thumbnailUrl ? { thumbnailUrl, thumbnailUrlAbsolute: buildAbsoluteUrl(req, thumbnailUrl) } : {}),
       },
     });
@@ -289,7 +325,11 @@ export async function deleteEntry(req: Request, res: Response, next: NextFunctio
       return next(error);
     }
 
-    const targetPath = req.query.path as string;
+    const bodyPath =
+      req.body && typeof req.body === 'object' && typeof (req.body as any).path === 'string'
+        ? String((req.body as any).path)
+        : '';
+    const targetPath = (req.query.path as string) || bodyPath;
 
     if (!targetPath) {
       const error: CustomError = new Error('path is required');
