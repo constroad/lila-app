@@ -26,10 +26,16 @@ export interface ICompanyLimits {
 export interface ICompany extends Document {
   companyId: string; // ID único de la empresa
   name: string;
+  slug?: string;
   ruc?: string;
   email?: string;
   phone?: string;
   address?: string;
+  branding?: {
+    logoLight?: string;
+    logoDark?: string;
+    favicon?: string;
+  };
   whatsappConfig?: {
     sender?: string;
     adminGroupId?: string;
@@ -125,6 +131,10 @@ const CompanySchema = new Schema<ICompany>(
       type: String,
       required: true,
     },
+    slug: {
+      type: String,
+      index: true,
+    },
     ruc: {
       type: String,
       sparse: true,
@@ -138,6 +148,11 @@ const CompanySchema = new Schema<ICompany>(
     },
     address: {
       type: String,
+    },
+    branding: {
+      logoLight: { type: String },
+      logoDark: { type: String },
+      favicon: { type: String },
     },
     whatsappConfig: {
       sender: { type: String },
@@ -199,6 +214,7 @@ const CompanySchema = new Schema<ICompany>(
 // ============================================================================
 
 CompanySchema.index({ isActive: 1 });
+CompanySchema.index({ slug: 1 }, { unique: true, sparse: true });
 
 // ============================================================================
 // EXPORT
