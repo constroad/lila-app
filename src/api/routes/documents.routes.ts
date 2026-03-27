@@ -11,6 +11,8 @@ router.post('/generate', optionalTenant, documentsController.generateDocument);
 router.post('/preview', optionalTenant, documentsController.previewDocument);
 router.post('/quotes/asphalt/preview', optionalTenant, quoteDocumentsController.previewAsphaltQuoteDocument);
 router.post('/quotes/asphalt/generate', optionalTenant, quoteDocumentsController.generateAsphaltQuoteDocument);
+router.post('/quotes/service/preview', optionalTenant, quoteDocumentsController.previewServiceQuoteDocument);
+router.post('/quotes/service/generate', optionalTenant, quoteDocumentsController.generateServiceQuoteDocument);
 router.get('/report-data/:serviceId/:type', optionalTenant, documentsController.getReportData);
 router.post('/sandbox/random-data', optionalTenant, documentsController.generateRandomData);
 router.get('/:id', documentsController.getDocument);

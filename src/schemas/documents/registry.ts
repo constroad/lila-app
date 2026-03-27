@@ -14,6 +14,7 @@ import { valorizacionSchema } from './valorizacion.schema';
 import { informeAreaAdicionalSchema } from './informe-area-adicional.schema';
 import { informeProduccionPlantaSchema } from './informe-produccion-planta.schema';
 import { cotizacionAsfaltoSchema } from './cotizacion-asfalto.schema';
+import { cotizacionServicioSchema } from './cotizacion-servicio.schema';
 import { DocumentSchema, DocumentCategory } from './types';
 
 export const schemaRegistry: Record<string, DocumentSchema> = {
@@ -32,7 +33,8 @@ export const schemaRegistry: Record<string, DocumentSchema> = {
   'dossier-obra': dossierObraSchema,
   'informe-area-adicional': informeAreaAdicionalSchema,
   'informe-produccion-planta': informeProduccionPlantaSchema,
-  'cotizacion-asfalto': cotizacionAsfaltoSchema
+  'cotizacion-asfalto': cotizacionAsfaltoSchema,
+  'cotizacion-servicio': cotizacionServicioSchema
 };
 
 const schemaList = Object.values(schemaRegistry);
