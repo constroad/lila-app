@@ -15,6 +15,7 @@ import { informeAreaAdicionalSchema } from './informe-area-adicional.schema';
 import { informeProduccionPlantaSchema } from './informe-produccion-planta.schema';
 import { cotizacionAsfaltoSchema } from './cotizacion-asfalto.schema';
 import { cotizacionServicioSchema } from './cotizacion-servicio.schema';
+import { ordenCompraSchema } from './orden-compra.schema';
 import { DocumentSchema, DocumentCategory } from './types';
 
 export const schemaRegistry: Record<string, DocumentSchema> = {
@@ -34,7 +35,8 @@ export const schemaRegistry: Record<string, DocumentSchema> = {
   'informe-area-adicional': informeAreaAdicionalSchema,
   'informe-produccion-planta': informeProduccionPlantaSchema,
   'cotizacion-asfalto': cotizacionAsfaltoSchema,
-  'cotizacion-servicio': cotizacionServicioSchema
+  'cotizacion-servicio': cotizacionServicioSchema,
+  'orden-compra': ordenCompraSchema
 };
 
 const schemaList = Object.values(schemaRegistry);

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as documentsController from '../controllers/documents.controller.js';
 import * as quoteDocumentsController from '../controllers/quote-documents.controller.js';
+import * as purchaseOrderDocumentsController from '../controllers/purchase-order-documents.controller.js';
 import { optionalTenant } from '../../middleware/tenant.middleware.js';
 
 const router = Router();
@@ -13,6 +14,8 @@ router.post('/quotes/asphalt/preview', optionalTenant, quoteDocumentsController.
 router.post('/quotes/asphalt/generate', optionalTenant, quoteDocumentsController.generateAsphaltQuoteDocument);
 router.post('/quotes/service/preview', optionalTenant, quoteDocumentsController.previewServiceQuoteDocument);
 router.post('/quotes/service/generate', optionalTenant, quoteDocumentsController.generateServiceQuoteDocument);
+router.post('/purchase-orders/preview', optionalTenant, purchaseOrderDocumentsController.previewPurchaseOrderDocument);
+router.post('/purchase-orders/generate', optionalTenant, purchaseOrderDocumentsController.generatePurchaseOrderDocument);
 router.get('/report-data/:serviceId/:type', optionalTenant, documentsController.getReportData);
 router.post('/sandbox/random-data', optionalTenant, documentsController.generateRandomData);
 router.get('/:id', documentsController.getDocument);
