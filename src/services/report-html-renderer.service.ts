@@ -24,6 +24,8 @@ interface PhotoItem {
   progresiva?: string;
   base64?: string;
   url?: string;
+  renderedUrl?: string;
+  renderedThumbnailUrl?: string;
   filePath?: string;
   path?: string;
   buffer?: Buffer;
@@ -1221,6 +1223,8 @@ export class ReportHtmlRenderer {
     }
 
     const urlCandidate =
+      (photo as any).renderedThumbnailUrl ||
+      (photo as any).renderedUrl ||
       (photo as any).thumbnailUrl ||
       photo.url ||
       (photo as any).fileUrl ||

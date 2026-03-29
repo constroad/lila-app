@@ -129,6 +129,7 @@ export interface SectionSchema {
   type: SectionType;
   title?: string;
   subtitle?: string;
+  placeholder?: string;
   collapsible?: boolean;
   defaultCollapsed?: boolean;
   visible?: boolean;

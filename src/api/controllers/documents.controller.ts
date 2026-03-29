@@ -263,20 +263,32 @@ async function applyHeaderDefaults(
   const needsCodigo = !String(header.codigo || '').trim();
   const needsVersion = !String(header.version || '').trim();
   const needsFecha = !String(header.fecha || '').trim();
+  const needsLogo = !String(header.logoUrl || '').trim();
 
   let companyName = '';
-  if (needsCompanyName || needsCodigo) {
+  let companyLogoUrl = '';
+  if (needsCompanyName || needsCodigo || needsLogo) {
     try {
       const CompanyModel = await getCompanyModel();
       const company = await CompanyModel.findOne({ companyId }).lean();
       companyName = company?.name || '';
+      companyLogoUrl =
+        company?.branding?.logoLight ||
+        company?.branding?.logoDark ||
+        company?.branding?.favicon ||
+        '';
     } catch {
       companyName = '';
+      companyLogoUrl = '';
     }
   }
 
   if (needsCompanyName && companyName) {
     header.companyName = companyName;
+  }
+
+  if (!String(header.logoUrl || '').trim() && companyLogoUrl) {
+    header.logoUrl = companyLogoUrl;
   }
 
   if (needsCodigo) {
