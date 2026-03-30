@@ -190,7 +190,7 @@ function renderDispatchNoteHtml(data: Record<string, any>, baseUrl: string) {
         }
         .header {
           display: grid;
-          grid-template-columns: 30mm 1fr 52mm;
+          grid-template-columns: 39mm 1fr 52mm;
           gap: 7mm;
           align-items: start;
         }
@@ -201,11 +201,11 @@ function renderDispatchNoteHtml(data: Record<string, any>, baseUrl: string) {
           text-align: center;
           justify-content: flex-start;
           min-height: 28mm;
-          padding-top: 7mm;
+          padding-top: 8mm;
         }
         .brand-logo {
-          width: 22mm;
-          max-height: 18mm;
+          width: 33mm;
+          max-height: 27mm;
           object-fit: contain;
         }
         .brand-fallback {
