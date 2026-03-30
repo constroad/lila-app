@@ -12,6 +12,7 @@ import logger from '../../utils/logger.js';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
 import { incrementWhatsAppUsage } from '../../middleware/quota.middleware.js';
+import { replaceLegacyBotLabelForCompanyId } from '../../utils/company-bot.js';
 
 /**
  * Send text message
@@ -40,7 +41,8 @@ export async function sendTextMessage(req: Request, res: Response, next: NextFun
 
     // ✅ DIRECT SEND (like notifications - no assertSessions, no complex logic)
     try {
-      const result = await WhatsAppDirectService.sendMessage(sessionPhone, to, message);
+      const normalizedMessage = await replaceLegacyBotLabelForCompanyId(req.companyId, message);
+      const result = await WhatsAppDirectService.sendMessage(sessionPhone, to, normalizedMessage);
 
       // Increment quota if tenant exists
       if (req.tenantId) {

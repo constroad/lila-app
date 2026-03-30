@@ -6,6 +6,7 @@ import { WhatsAppMessage, Conversation } from '../../types/index.js';
 import { config } from '../../config/environment.js';
 import { sendClientReportAction } from '../../services/portal-actions.service.js';
 import { quotaValidatorService } from '../../services/quota-validator.service.js';
+import { getCompanyBotLabel } from '../../utils/company-bot.js';
 
 export class MessageListener {
   private activeConversations: Map<string, Conversation> = new Map();
@@ -236,11 +237,13 @@ export class MessageListener {
   ): Promise<boolean> {
     const parsed = this.parseActionCommand(messageText, quotedText);
     if (!parsed) return false;
+    const company = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone).catch(() => null);
+    const botLabel = getCompanyBotLabel(company?.slug || company?.name || sessionPhone);
 
     const isGroup = chatId.endsWith('@g.us');
     if (!isGroup) {
       await whatsAppClient.sendMessage(chatId, {
-        text: '🤖 ConstRoadBot\n\nEsta acción solo puede ejecutarse desde el grupo administrador.',
+        text: `${botLabel}\n\nEsta acción solo puede ejecutarse desde el grupo administrador.`,
       });
       return true;
     }
@@ -257,7 +260,7 @@ export class MessageListener {
       const clientLine = result?.clientName ? `Cliente: ${result.clientName}\n` : '';
       const orderLine = result?.orderLabel ? `Pedido: ${result.orderLabel}\n` : '';
       await whatsAppClient.sendMessage(chatId, {
-        text: `🤖 ConstRoadBot\n\nAcción: ${actionLabel}\n${codeLine}${clientLine}${orderLine}Estado: ${result?.status ?? 'ok'}\n${result?.linkUrl ? `Link: ${result.linkUrl}` : ''}`,
+        text: `${botLabel}\n\nAcción: ${actionLabel}\n${codeLine}${clientLine}${orderLine}Estado: ${result?.status ?? 'ok'}\n${result?.linkUrl ? `Link: ${result.linkUrl}` : ''}`,
       });
       logger.info(`Client report action handled for ${chatId}`);
       return true;
@@ -279,7 +282,7 @@ export class MessageListener {
         message = 'Esta solicitud ya expiró. Solicita un nuevo enlace.';
       }
       await whatsAppClient.sendMessage(chatId, {
-        text: `🤖 ConstRoadBot\n\n${message}`.trim(),
+        text: `${botLabel}\n\n${message}`.trim(),
       });
       return true;
     }

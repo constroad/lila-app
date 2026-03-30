@@ -3,6 +3,7 @@ import { getSharedModels } from '../database/models.js';
 import { ICronJob } from '../models/cronjob.model.js';
 import { WhatsAppDirectService } from '../services/whatsapp-direct.service.js';
 import logger from '../utils/logger.js';
+import { getCompanyBotLabel, replaceLegacyBotLabel } from '../utils/company-bot.js';
 
 type ApiMessageItem = {
   to?: string;
@@ -28,7 +29,7 @@ export class JobExecutor {
   }
 
   private prependBotPrefix(message: string, prefix: string): string {
-    const fallbackPrefix = '🤖 ConstRoadBot';
+    const fallbackPrefix = getCompanyBotLabel();
     const effectivePrefix = prefix && prefix.trim() ? prefix.trim() : fallbackPrefix;
     const trimmed = (message ?? '').trim();
 
@@ -73,6 +74,10 @@ export class JobExecutor {
 
       const sender = company.whatsappConfig?.sender;
       const cronjobPrefix = company.whatsappConfig?.cronjobPrefix;
+      const botPrefix = replaceLegacyBotLabel(
+        cronjobPrefix || getCompanyBotLabel(company.slug || company.name || company.companyId),
+        company.slug || company.name || company.companyId
+      );
       const hasChatId = Boolean(job.message?.chatId);
       const hasBody = Boolean(job.message?.body?.trim());
       if (!sender && (job.type === 'message' || hasChatId)) {
@@ -80,18 +85,18 @@ export class JobExecutor {
       }
 
       if (job.type === 'message') {
-        await this.executeMessage(job, sender!, cronjobPrefix);
+        await this.executeMessage(job, sender!, botPrefix);
       } else if (job.type === 'api') {
         const apiMessages = await this.executeApi(job);
         if (apiMessages && apiMessages.length > 0) {
           await this.executeBatchMessages(
             sender!,
             apiMessages,
-            cronjobPrefix,
+            botPrefix,
             job.message?.chatId
           );
         } else if (hasChatId && hasBody) {
-          await this.executeMessage(job, sender!, cronjobPrefix);
+          await this.executeMessage(job, sender!, botPrefix);
         }
       }
 
