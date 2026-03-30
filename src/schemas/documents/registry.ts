@@ -16,6 +16,7 @@ import { informeProduccionPlantaSchema } from './informe-produccion-planta.schem
 import { cotizacionAsfaltoSchema } from './cotizacion-asfalto.schema';
 import { cotizacionServicioSchema } from './cotizacion-servicio.schema';
 import { ordenCompraSchema } from './orden-compra.schema';
+import { dispatchNoteSchema } from './dispatch-note.schema';
 import { DocumentSchema, DocumentCategory } from './types';
 
 export const schemaRegistry: Record<string, DocumentSchema> = {
@@ -36,7 +37,8 @@ export const schemaRegistry: Record<string, DocumentSchema> = {
   'informe-produccion-planta': informeProduccionPlantaSchema,
   'cotizacion-asfalto': cotizacionAsfaltoSchema,
   'cotizacion-servicio': cotizacionServicioSchema,
-  'orden-compra': ordenCompraSchema
+  'orden-compra': ordenCompraSchema,
+  'dispatch-note': dispatchNoteSchema
 };
 
 const schemaList = Object.values(schemaRegistry);
