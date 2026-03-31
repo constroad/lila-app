@@ -77,6 +77,30 @@ const setStaticCorsHeaders = (req: express.Request, res: express.Response) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 };
 
+const shouldDisableStaticCaching = (requestPath: string): boolean => {
+  if (!requestPath) return false;
+  try {
+    const decoded = decodeURIComponent(requestPath);
+    const normalized = path.posix
+      .normalize(decoded.startsWith('/') ? decoded : `/${decoded}`)
+      .toLowerCase();
+    return normalized.includes('/vale/');
+  } catch {
+    return false;
+  }
+};
+
+const applyCompaniesStaticHeaders = (req: express.Request, res: express.Response) => {
+  setStaticCorsHeaders(req, res);
+  if (!shouldDisableStaticCaching(req.path)) {
+    return;
+  }
+
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+};
+
 const isSafeThumbRequestPath = (requestPath: string): boolean => {
   if (!requestPath) return false;
   try {
@@ -154,7 +178,7 @@ app.use('/api/service-management-report', serviceManagementReportRoutes);
 
 const companiesRoot = `${config.storage.root}/companies`;
 const companiesStaticHeaders = (res: express.Response) => {
-  setStaticCorsHeaders(res.req as express.Request, res);
+  applyCompaniesStaticHeaders(res.req as express.Request, res);
 };
 const companiesThumbsStatic = express.static(companiesRoot, {
   fallthrough: false,

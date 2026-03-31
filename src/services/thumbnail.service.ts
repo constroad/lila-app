@@ -63,6 +63,19 @@ function sanitizeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'file';
 }
 
+async function removePreviousThumbnails(outputDir: string, safeBase: string) {
+  const thumbDir = path.join(outputDir, thumbDirName);
+  await fs.ensureDir(thumbDir);
+  const entries = await fs.readdir(thumbDir).catch(() => []);
+  const prefix = `thumb_${safeBase}_`;
+
+  await Promise.all(
+    entries
+      .filter((entry) => entry.startsWith(prefix))
+      .map((entry) => fs.remove(path.join(thumbDir, entry)).catch(() => {}))
+  );
+}
+
 async function createThumbTargetPath(options: GenerateThumbnailOptions): Promise<{ thumbName: string; thumbPath: string }> {
   const stat = await fs.stat(options.filePath);
   const parsed = path.parse(options.fileName);
@@ -76,6 +89,7 @@ async function createThumbTargetPath(options: GenerateThumbnailOptions): Promise
   const thumbName = `thumb_${safeBase}_${hash}.jpg`;
   const thumbDir = path.join(options.outputDir, thumbDirName);
   await fs.ensureDir(thumbDir);
+  await removePreviousThumbnails(options.outputDir, safeBase);
   const thumbPath = path.join(thumbDir, thumbName);
 
   return { thumbName, thumbPath };
