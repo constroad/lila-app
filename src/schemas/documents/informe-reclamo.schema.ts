@@ -84,7 +84,7 @@ export const informeReclamoSchema: DocumentSchema = {
     {
       id: 'registroFotografico',
       type: 'photoSection',
-      title: 'Evidencias Fotografias',
+      title: 'Panel Fotografico',
       maxImages: 20,
       layout: '2x2',
       showFecha: true,

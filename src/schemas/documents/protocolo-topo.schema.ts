@@ -74,7 +74,7 @@ export const protocoloTopoSchema: DocumentSchema = {
     {
       id: 'registroFotografico',
       type: 'photoPanel',
-      title: 'Registro Fotografico',
+      title: 'Panel Fotografico',
       maxImages: 20,
       layout: '2x2',
       showFecha: true

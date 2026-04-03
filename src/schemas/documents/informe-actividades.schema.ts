@@ -85,7 +85,7 @@ export const informeActividadesSchema: DocumentSchema = {
     {
       id: 'registroFotografico',
       type: 'photoSection',
-      title: 'Registro Fotografico',
+      title: 'Panel Fotografico',
       maxImages: 20,
       layout: '2x3',
       showFecha: true,
