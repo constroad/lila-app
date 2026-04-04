@@ -1,9 +1,11 @@
 import axios from 'axios';
+import config from '../config/environment.js';
 import { getSharedModels } from '../database/models.js';
 import { ICronJob } from '../models/cronjob.model.js';
 import { WhatsAppDirectService } from '../services/whatsapp-direct.service.js';
 import logger from '../utils/logger.js';
 import { getCompanyBotLabel, replaceLegacyBotLabel } from '../utils/company-bot.js';
+import { materializeRetryJob, normalizeExecutorApiUrl } from './executor.utils.js';
 
 type ApiMessageItem = {
   to?: string;
@@ -53,11 +55,22 @@ export class JobExecutor {
     return `${normalized}@s.whatsapp.net`;
   }
 
+  private assertValidJob(job: ICronJob): void {
+    const hasId = typeof job === 'object' && job !== null && '_id' in job && Boolean(job._id);
+    const hasName = typeof job?.name === 'string' && job.name.trim().length > 0;
+    const hasCompanyId = typeof job?.companyId === 'string' && job.companyId.trim().length > 0;
+
+    if (!hasId || !hasName || !hasCompanyId) {
+      throw new Error('Invalid cron job payload for execution');
+    }
+  }
+
   async execute(job: ICronJob): Promise<void> {
     const startTime = Date.now();
     const { CronJobModel, CompanyModel } = await getSharedModels();
 
     try {
+      this.assertValidJob(job);
       logger.info(
         `[JobExecutor] Executing job ${job._id} (${job.name}) for company ${job.companyId}`
       );
@@ -255,6 +268,7 @@ export class JobExecutor {
     }
 
     const { url, method, headers, body } = job.apiConfig;
+    const resolvedUrl = normalizeExecutorApiUrl(url, config.portal?.baseUrl);
     const requestHeaders: Record<string, string> = {
       ...(headers || {}),
     };
@@ -273,14 +287,17 @@ export class JobExecutor {
     }
 
     const response = await axios.request({
-      url,
+      url: resolvedUrl,
       method,
       headers: requestHeaders,
       data: body,
       timeout: job.timeout || 30000,
     });
 
-    logger.info(`[JobExecutor] API call to ${url} returned ${response.status}`);
+    if (resolvedUrl !== url) {
+      logger.info(`[JobExecutor] Normalized API URL from ${url} to ${resolvedUrl}`);
+    }
+    logger.info(`[JobExecutor] API call to ${resolvedUrl} returned ${response.status}`);
     if (!this.shouldUseApiResponseMessage(job, requestHeaders)) {
       return undefined;
     }
@@ -377,7 +394,7 @@ export class JobExecutor {
     );
 
     const nextJob: ICronJob = {
-      ...job,
+      ...materializeRetryJob(job),
       retryPolicy: {
         ...(job.retryPolicy ?? {}),
         maxRetries,
