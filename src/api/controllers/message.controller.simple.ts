@@ -42,7 +42,10 @@ export async function sendTextMessage(req: Request, res: Response, next: NextFun
     // ✅ DIRECT SEND (like notifications - no assertSessions, no complex logic)
     try {
       const normalizedMessage = await replaceLegacyBotLabelForCompanyId(req.companyId, message);
-      const result = await WhatsAppDirectService.sendMessage(sessionPhone, to, normalizedMessage);
+      const result = await WhatsAppDirectService.sendMessage(sessionPhone, to, normalizedMessage, {
+        companyId: req.companyId,
+        tenantId: req.tenantId,
+      });
 
       // Increment quota if tenant exists
       if (req.tenantId) {
@@ -133,6 +136,7 @@ export async function sendImage(req: Request, res: Response, next: NextFunction)
       mimeType,
       fileName,
       companyId: resolvedCompanyId, // For filePath/fileUrl resolution
+      tenantId: req.tenantId,
     };
 
     // Priority: buffer > fileName (temp) > filePath/fileUrl (storage)
@@ -210,6 +214,7 @@ export async function sendVideo(req: Request, res: Response, next: NextFunction)
       mimeType,
       fileName,
       companyId: resolvedCompanyId,
+      tenantId: req.tenantId,
     };
 
     // Priority: buffer > fileName (temp) > filePath/fileUrl (storage)
@@ -287,6 +292,7 @@ export async function sendFile(req: Request, res: Response, next: NextFunction) 
       mimeType,
       fileName,
       companyId: resolvedCompanyId,
+      tenantId: req.tenantId,
     };
 
     // Priority: buffer > fileName (temp) > filePath/fileUrl (storage)

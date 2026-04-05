@@ -106,7 +106,8 @@ export class JobExecutor {
             sender!,
             apiMessages,
             botPrefix,
-            job.message?.chatId
+            job.message?.chatId,
+            job.companyId
           );
         } else if (hasChatId && hasBody) {
           await this.executeMessage(job, sender!, botPrefix);
@@ -147,6 +148,7 @@ export class JobExecutor {
     const messageBody = this.prependBotPrefix(resolvedBody, prefix ?? '');
 
     await WhatsAppDirectService.sendMessage(sender, chatId, messageBody, {
+      companyId: job.companyId,
       mentions: mentions || [],
       queueOnFail: true,
     });
@@ -158,7 +160,8 @@ export class JobExecutor {
     sender: string,
     items: ApiMessageItem[],
     prefix?: string,
-    defaultTo?: string
+    defaultTo?: string,
+    companyId?: string
   ): Promise<void> {
     for (const item of items) {
       const rawTo = item.to ?? defaultTo;
@@ -169,6 +172,7 @@ export class JobExecutor {
       const recipient = this.normalizeRecipient(rawTo);
       const messageBody = this.prependBotPrefix(item.message, prefix ?? '');
       await WhatsAppDirectService.sendMessage(sender, recipient, messageBody, {
+        companyId,
         mentions: item.mentions || [],
         queueOnFail: true,
       });

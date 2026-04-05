@@ -28,6 +28,7 @@ import logger from '../utils/logger.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { config } from '../config/environment.js';
+import { resolveWhatsAppRecipient } from '../utils/whatsapp-recipient-routing.js';
 
 const extractCompanyIdFromUrl = (value?: string): string | undefined => {
   if (!value) return undefined;
@@ -96,14 +97,18 @@ export const WhatsAppDirectService = {
     id: string,
     to: string,
     message: string,
-    options: { queueOnFail?: boolean; mentions?: string[] } = {}
+    options: { queueOnFail?: boolean; mentions?: string[]; companyId?: string; tenantId?: string } = {}
   ) {
     const queueOnFail = options.queueOnFail !== false;
+    const routedTo = resolveWhatsAppRecipient(to, {
+      companyId: options.companyId,
+      tenantId: options.tenantId,
+    });
 
     const sock = getSession(id);
     if (!sock) {
       if (queueOnFail) {
-        await outboxQueue.enqueue(id, to, message, options.mentions);
+        await outboxQueue.enqueue(id, routedTo, message, options.mentions);
         logger.info(`📥 Queued text message for ${id} (session not found)`);
         return { queued: true };
       }
@@ -112,7 +117,7 @@ export const WhatsAppDirectService = {
 
     if (!isSessionReady(id)) {
       if (queueOnFail) {
-        await outboxQueue.enqueue(id, to, message, options.mentions);
+        await outboxQueue.enqueue(id, routedTo, message, options.mentions);
         logger.info(`📥 Queued text message for ${id} (session not ready)`);
         return { queued: true };
       }
@@ -120,13 +125,13 @@ export const WhatsAppDirectService = {
     }
 
     try {
-      const validTo = getValidPhoneNumber(to);
+      const validTo = getValidPhoneNumber(routedTo);
       const sendOptions = getSendOptions(validTo);
       return await sock.sendMessage(validTo, { text: message }, sendOptions);
     } catch (error) {
       logger.warn(`Failed to send message via ${id}: ${String(error)}`);
       if (queueOnFail) {
-        await outboxQueue.enqueue(id, to, message, options.mentions);
+        await outboxQueue.enqueue(id, routedTo, message, options.mentions);
         logger.info(`📥 Queued text message for ${id} (send failed)`);
         return { queued: true };
       }
@@ -156,15 +161,20 @@ export const WhatsAppDirectService = {
       caption?: string;
       mimeType?: string;
       companyId?: string;
+      tenantId?: string;
       queueOnFail?: boolean;
     }
   ) {
     const queueOnFail = options.queueOnFail !== false;
+    const routedTo = resolveWhatsAppRecipient(to, {
+      companyId: options.companyId,
+      tenantId: options.tenantId,
+    });
 
     const sock = getSession(id);
     if (!sock) {
       if (queueOnFail) {
-        await outboxQueue.enqueueMedia(id, to, 'video', options);
+        await outboxQueue.enqueueMedia(id, routedTo, 'video', options);
         logger.info(`📥 Queued video message for ${id} (session not found)`);
         return { queued: true };
       }
@@ -173,14 +183,14 @@ export const WhatsAppDirectService = {
 
     if (!isSessionReady(id)) {
       if (queueOnFail) {
-        await outboxQueue.enqueueMedia(id, to, 'video', options);
+        await outboxQueue.enqueueMedia(id, routedTo, 'video', options);
         logger.info(`📥 Queued video message for ${id} (session not ready)`);
         return { queued: true };
       }
       throw new Error('Session not ready');
     }
 
-    const validTo = getValidPhoneNumber(to);
+    const validTo = getValidPhoneNumber(routedTo);
     const sendOptions = getSendOptions(validTo);
 
     let videoBuffer: Buffer;
@@ -259,7 +269,7 @@ export const WhatsAppDirectService = {
     } catch (error) {
       logger.warn(`Failed to send video via ${id}: ${String(error)}`);
       if (queueOnFail) {
-        await outboxQueue.enqueueMedia(id, to, 'video', options);
+        await outboxQueue.enqueueMedia(id, routedTo, 'video', options);
         logger.info(`📥 Queued video message for ${id} (send failed)`);
         return { queued: true };
       }
@@ -292,15 +302,20 @@ export const WhatsAppDirectService = {
       caption?: string;
       mimeType?: string;
       companyId?: string;
+      tenantId?: string;
       queueOnFail?: boolean;
     }
   ) {
     const queueOnFail = options.queueOnFail !== false;
+    const routedTo = resolveWhatsAppRecipient(to, {
+      companyId: options.companyId,
+      tenantId: options.tenantId,
+    });
 
     const sock = getSession(id);
     if (!sock) {
       if (queueOnFail) {
-        await outboxQueue.enqueueMedia(id, to, 'image', options);
+        await outboxQueue.enqueueMedia(id, routedTo, 'image', options);
         logger.info(`📥 Queued image message for ${id} (session not found)`);
         return { queued: true };
       }
@@ -309,14 +324,14 @@ export const WhatsAppDirectService = {
 
     if (!isSessionReady(id)) {
       if (queueOnFail) {
-        await outboxQueue.enqueueMedia(id, to, 'image', options);
+        await outboxQueue.enqueueMedia(id, routedTo, 'image', options);
         logger.info(`📥 Queued image message for ${id} (session not ready)`);
         return { queued: true };
       }
       throw new Error('Session not ready');
     }
 
-    const validTo = getValidPhoneNumber(to);
+    const validTo = getValidPhoneNumber(routedTo);
     const sendOptions = getSendOptions(validTo);
 
     let imageBuffer: Buffer;
@@ -392,7 +407,7 @@ export const WhatsAppDirectService = {
     } catch (error) {
       logger.warn(`Failed to send image via ${id}: ${String(error)}`);
       if (queueOnFail) {
-        await outboxQueue.enqueueMedia(id, to, 'image', options);
+        await outboxQueue.enqueueMedia(id, routedTo, 'image', options);
         logger.info(`📥 Queued image message for ${id} (send failed)`);
         return { queued: true };
       }
@@ -423,15 +438,20 @@ export const WhatsAppDirectService = {
       caption?: string;
       mimeType?: string;
       companyId?: string;
+      tenantId?: string;
       queueOnFail?: boolean;
     }
   ) {
     const queueOnFail = options.queueOnFail !== false;
+    const routedTo = resolveWhatsAppRecipient(to, {
+      companyId: options.companyId,
+      tenantId: options.tenantId,
+    });
 
     const sock = getSession(id);
     if (!sock) {
       if (queueOnFail) {
-        await outboxQueue.enqueueMedia(id, to, 'document', options);
+        await outboxQueue.enqueueMedia(id, routedTo, 'document', options);
         logger.info(`📥 Queued document message for ${id} (session not found)`);
         return { queued: true };
       }
@@ -440,14 +460,14 @@ export const WhatsAppDirectService = {
 
     if (!isSessionReady(id)) {
       if (queueOnFail) {
-        await outboxQueue.enqueueMedia(id, to, 'document', options);
+        await outboxQueue.enqueueMedia(id, routedTo, 'document', options);
         logger.info(`📥 Queued document message for ${id} (session not ready)`);
         return { queued: true };
       }
       throw new Error('Session not ready');
     }
 
-    const validTo = getValidPhoneNumber(to);
+    const validTo = getValidPhoneNumber(routedTo);
     const sendOptions = getSendOptions(validTo);
 
     let documentBuffer: Buffer;
@@ -531,7 +551,7 @@ export const WhatsAppDirectService = {
     } catch (error) {
       logger.warn(`Failed to send document via ${id}: ${String(error)}`);
       if (queueOnFail) {
-        await outboxQueue.enqueueMedia(id, to, 'document', options);
+        await outboxQueue.enqueueMedia(id, routedTo, 'document', options);
         logger.info(`📥 Queued document message for ${id} (send failed)`);
         return { queued: true };
       }

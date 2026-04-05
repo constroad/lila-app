@@ -115,7 +115,7 @@ describe('generateDispatchValeWorkflow', () => {
       '51999999999',
       '999888777',
       expect.stringContaining('https://maps.app.goo.gl/demo'),
-      { queueOnFail: false }
+      { companyId: 'constroad', queueOnFail: false }
     );
     expect(result.whatsapp.fileSent).toBe(true);
     expect(result.whatsapp.locationSent).toBe(true);

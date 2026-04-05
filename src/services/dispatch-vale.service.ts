@@ -286,7 +286,7 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
           sender,
           normalizedPhone,
           `${companyName}:\n\n${normalizedDriverName || 'Chofer'} te enviamos la Ubicación de la obra:\n- 📍 aqui: ${normalizedLocation}`,
-          { queueOnFail: false }
+          { companyId, queueOnFail: false }
         );
         whatsapp.locationSent = true;
       } catch (error) {

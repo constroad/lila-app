@@ -91,6 +91,7 @@ declare global {
   namespace Express {
     interface Request {
       companyId?: string;
+      tenantId?: string;
       auth?: {
         type: 'jwt' | 'apiKey';
         keyPrefix?: string;
