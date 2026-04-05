@@ -18,6 +18,7 @@ import messageRoutes from './api/routes/message.routes.js';
 import pdfRoutes from './api/routes/pdf.routes.js';
 import driveRoutes from './api/routes/drive.routes.js';
 import documentsRoutes from './api/routes/documents.routes.js';
+import dispatchRoutes from './api/routes/dispatch.routes.js';
 import publicRoutes from './api/routes/public.routes.js';
 import serviceManagementReportRoutes from './api/routes/service-management-report.routes.js';
 import swaggerUi from 'swagger-ui-express';
@@ -173,6 +174,7 @@ app.use('/api/message', messageRoutes);
 app.use('/api/pdf', pdfRoutes);
 app.use('/api/drive', driveRoutes);
 app.use('/api/documents', documentsRoutes);
+app.use('/api/dispatch', dispatchRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/service-management-report', serviceManagementReportRoutes);
 
