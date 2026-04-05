@@ -29,28 +29,10 @@ import path from 'path';
 import fs from 'fs/promises';
 import { config } from '../config/environment.js';
 import { resolveWhatsAppRecipient } from '../utils/whatsapp-recipient-routing.js';
-
-const extractCompanyIdFromUrl = (value?: string): string | undefined => {
-  if (!value) return undefined;
-  try {
-    const url = value.includes('://') ? new URL(value) : null;
-    const pathValue = url ? url.pathname : value;
-    const match = pathValue.match(/\/files\/companies\/([^/]+)\//);
-    if (match?.[1]) return match[1];
-    const alt = pathValue.match(/companies\/([^/]+)\//);
-    return alt?.[1];
-  } catch {
-    const match = value.match(/\/files\/companies\/([^/]+)\//);
-    if (match?.[1]) return match[1];
-    const alt = value.match(/companies\/([^/]+)\//);
-    return alt?.[1];
-  }
-  return undefined;
-};
-
-const resolveCompanyIdFromOptions = (options: { companyId?: string; fileUrl?: string }) => {
-  return options.companyId || extractCompanyIdFromUrl(options.fileUrl);
-};
+import {
+  resolveCompanyIdFromMediaOptions,
+  resolveWhatsAppMediaSourceKind,
+} from './whatsapp-media-source.util.js';
 
 /**
  * Normalize phone number to WhatsApp JID format
@@ -198,24 +180,14 @@ export const WhatsAppDirectService = {
     let shouldCleanup = false;
     let cleanupPath: string | undefined;
 
-    // CASE 1: Direct buffer (from upload)
-    if (options.buffer) {
+    const sourceKind = resolveWhatsAppMediaSourceKind(options);
+
+    if (sourceKind === 'buffer') {
       videoBuffer = options.buffer;
       // FIX: Prioritize extension over browser-detected mimetype
       resolvedMimeType = detectMimeType(options.fileName, options.mimeType || 'video/mp4');
-    }
-    // CASE 2: Temp file name (from upload, needs cleanup)
-    else if (options.fileName) {
-      const tempPath = path.join(config.uploads.directory, options.fileName);
-      videoBuffer = await fs.readFile(tempPath);
-      // FIX: Prioritize extension (e.g., .mp4 → video/mp4, not application/mp4)
-      resolvedMimeType = detectMimeType(options.fileName, options.mimeType);
-      shouldCleanup = true;
-      cleanupPath = tempPath;
-    }
-    // CASE 3: Company storage path (persistent, no cleanup)
-    else if (options.filePath || options.fileUrl) {
-      const resolvedCompanyId = resolveCompanyIdFromOptions(options);
+    } else if (sourceKind === 'storage') {
+      const resolvedCompanyId = resolveCompanyIdFromMediaOptions(options);
       if (!resolvedCompanyId) {
         throw new Error('companyId is required when using filePath or fileUrl');
       }
@@ -234,16 +206,20 @@ export const WhatsAppDirectService = {
 
       videoBuffer = resolved.buffer;
       resolvedMimeType = resolved.mimeType;
-    }
-    // CASE 4: External URL (download first)
-    else if (options.fileUrl && !resolveCompanyIdFromOptions(options)) {
+    } else if (sourceKind === 'temp') {
+      const tempPath = path.join(config.uploads.directory, options.fileName);
+      videoBuffer = await fs.readFile(tempPath);
+      // FIX: Prioritize extension (e.g., .mp4 → video/mp4, not application/mp4)
+      resolvedMimeType = detectMimeType(options.fileName, options.mimeType);
+      shouldCleanup = true;
+      cleanupPath = tempPath;
+    } else if (sourceKind === 'external') {
       const downloaded = await downloadFileFromUrl(options.fileUrl, options.mimeType);
       videoBuffer = await fs.readFile(downloaded.filePath);
       resolvedMimeType = downloaded.mimeType;
       shouldCleanup = true;
       cleanupPath = downloaded.filePath;
-    }
-    else {
+    } else {
       throw new Error('One of buffer, fileName, filePath, or fileUrl is required');
     }
 
@@ -339,22 +315,13 @@ export const WhatsAppDirectService = {
     let shouldCleanup = false;
     let cleanupPath: string | undefined;
 
-    // CASE 1: Direct buffer (from upload)
-    if (options.buffer) {
+    const sourceKind = resolveWhatsAppMediaSourceKind(options);
+
+    if (sourceKind === 'buffer') {
       imageBuffer = options.buffer;
       resolvedMimeType = detectMimeType(options.fileName, options.mimeType || 'image/jpeg');
-    }
-    // CASE 2: Temp file name (from upload, needs cleanup)
-    else if (options.fileName) {
-      const tempPath = path.join(config.uploads.directory, options.fileName);
-      imageBuffer = await fs.readFile(tempPath);
-      resolvedMimeType = detectMimeType(options.fileName, options.mimeType);
-      shouldCleanup = true;
-      cleanupPath = tempPath;
-    }
-    // CASE 3: Company storage path (persistent, no cleanup)
-    else if (options.filePath || options.fileUrl) {
-      const resolvedCompanyId = resolveCompanyIdFromOptions(options);
+    } else if (sourceKind === 'storage') {
+      const resolvedCompanyId = resolveCompanyIdFromMediaOptions(options);
       if (!resolvedCompanyId) {
         throw new Error('companyId is required when using filePath or fileUrl');
       }
@@ -373,16 +340,19 @@ export const WhatsAppDirectService = {
 
       imageBuffer = resolved.buffer;
       resolvedMimeType = resolved.mimeType;
-    }
-    // CASE 4: External URL (download first)
-    else if (options.fileUrl && !resolveCompanyIdFromOptions(options)) {
+    } else if (sourceKind === 'temp') {
+      const tempPath = path.join(config.uploads.directory, options.fileName);
+      imageBuffer = await fs.readFile(tempPath);
+      resolvedMimeType = detectMimeType(options.fileName, options.mimeType);
+      shouldCleanup = true;
+      cleanupPath = tempPath;
+    } else if (sourceKind === 'external') {
       const downloaded = await downloadFileFromUrl(options.fileUrl, options.mimeType);
       imageBuffer = await fs.readFile(downloaded.filePath);
       resolvedMimeType = downloaded.mimeType;
       shouldCleanup = true;
       cleanupPath = downloaded.filePath;
-    }
-    else {
+    } else {
       throw new Error('One of buffer, fileName, filePath, or fileUrl is required');
     }
 
@@ -476,26 +446,15 @@ export const WhatsAppDirectService = {
     let shouldCleanup = false;
     let cleanupPath: string | undefined;
 
-    // CASE 1: Direct buffer (from upload)
-    if (options.buffer) {
+    const sourceKind = resolveWhatsAppMediaSourceKind(options);
+
+    if (sourceKind === 'buffer') {
       documentBuffer = options.buffer;
       // FIX: Prioritize extension (e.g., .pdf → application/pdf, not octet-stream)
       resolvedMimeType = detectMimeType(options.fileName, options.mimeType || 'application/octet-stream');
       resolvedFileName = options.fileName || 'document';
-    }
-    // CASE 2: Temp file name (from upload, needs cleanup)
-    else if (options.fileName) {
-      const tempPath = path.join(config.uploads.directory, options.fileName);
-      documentBuffer = await fs.readFile(tempPath);
-      // FIX: Prioritize extension for correct PDF/DOC detection
-      resolvedMimeType = detectMimeType(options.fileName, options.mimeType);
-      resolvedFileName = options.fileName;
-      shouldCleanup = true;
-      cleanupPath = tempPath;
-    }
-    // CASE 3: Company storage path (persistent, no cleanup)
-    else if (options.filePath || options.fileUrl) {
-      const resolvedCompanyId = resolveCompanyIdFromOptions(options);
+    } else if (sourceKind === 'storage') {
+      const resolvedCompanyId = resolveCompanyIdFromMediaOptions(options);
       if (!resolvedCompanyId) {
         throw new Error('companyId is required when using filePath or fileUrl');
       }
@@ -515,17 +474,22 @@ export const WhatsAppDirectService = {
       documentBuffer = resolved.buffer;
       resolvedMimeType = resolved.mimeType;
       resolvedFileName = resolved.fileName;
-    }
-    // CASE 4: External URL (download first)
-    else if (options.fileUrl && !resolveCompanyIdFromOptions(options)) {
+    } else if (sourceKind === 'temp') {
+      const tempPath = path.join(config.uploads.directory, options.fileName);
+      documentBuffer = await fs.readFile(tempPath);
+      // FIX: Prioritize extension for correct PDF/DOC detection
+      resolvedMimeType = detectMimeType(options.fileName, options.mimeType);
+      resolvedFileName = options.fileName;
+      shouldCleanup = true;
+      cleanupPath = tempPath;
+    } else if (sourceKind === 'external') {
       const downloaded = await downloadFileFromUrl(options.fileUrl, options.mimeType);
       documentBuffer = await fs.readFile(downloaded.filePath);
       resolvedMimeType = downloaded.mimeType;
       resolvedFileName = downloaded.fileName;
       shouldCleanup = true;
       cleanupPath = downloaded.filePath;
-    }
-    else {
+    } else {
       throw new Error('One of buffer, fileName, filePath, or fileUrl is required');
     }
 

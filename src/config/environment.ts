@@ -80,6 +80,10 @@ export const config = {
     tempPublicBaseUrl: process.env.PDF_TEMP_PUBLIC_BASE_URL || '/pdf-temp',
   },
 
+  uploads: {
+    directory: process.env.PDF_UPLOADS_DIR || './uploads',
+  },
+
   // Multi-tenant storage (Fase 9)
   drive: {
     maxFileSizeMb: parseInt(process.env.DRIVE_MAX_FILE_SIZE_MB || '25', 10),
