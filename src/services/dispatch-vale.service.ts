@@ -58,34 +58,58 @@ async function registerValeMedia(params: {
   preferredFileName?: string;
 }) {
   const { companyId, dispatchId, orderId, note, document, preferredFileName } = params;
-  const endpoint = `${config.portal.baseUrl}/api/internal/dispatches/vale-media`;
-
-  const response = await axios.post(
-    endpoint,
-    {
-      resourceId: orderId,
-      type: 'VALE',
-      name: preferredFileName || document.fileName,
-      mimeType: 'application/pdf',
-      fileSize: document.sizeBytes,
-      url: document.pdfUrlAbsolute,
-      lilaAppPath: document.relativeDir,
-      lilaAppFilePath: document.filePath,
-      metadata: {
-        dispatchId,
-        note: note || '',
-      },
+  const payload = {
+    resourceId: orderId,
+    type: 'VALE',
+    name: preferredFileName || document.fileName,
+    mimeType: 'application/pdf',
+    fileSize: document.sizeBytes,
+    url: document.pdfUrlAbsolute,
+    lilaAppPath: document.relativeDir,
+    lilaAppFilePath: document.filePath,
+    metadata: {
+      dispatchId,
+      note: note || '',
     },
-    {
-      headers: {
-        Authorization: `Bearer ${buildPortalCallbackToken(companyId)}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 30000,
-    }
-  );
+  };
+  const headers = {
+    Authorization: `Bearer ${buildPortalCallbackToken(companyId)}`,
+    'Content-Type': 'application/json',
+    'x-company-id': companyId,
+  };
 
-  return response.data;
+  try {
+    const response = await axios.post(
+      `${config.portal.baseUrl}/api/internal/dispatches/vale-media`,
+      payload,
+      {
+        headers,
+        timeout: 30000,
+      }
+    );
+    return response.data;
+  } catch (error: any) {
+    if (error?.response?.status !== 404) {
+      throw error;
+    }
+
+    logger.warn('dispatch_vale.register_media.internal_route_missing_fallback', {
+      companyId,
+      dispatchId,
+      orderId,
+      endpoint: `${config.portal.baseUrl}/api/internal/dispatches/vale-media`,
+    });
+
+    const fallbackResponse = await axios.post(
+      `${config.portal.baseUrl}/api/drive/register`,
+      payload,
+      {
+        headers,
+        timeout: 30000,
+      }
+    );
+    return fallbackResponse.data;
+  }
 }
 
 export function validateDispatchValeWorkflowInput(

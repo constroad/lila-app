@@ -47,4 +47,13 @@ describe('JobExecutor helpers', () => {
       )
     ).toBe('http://internal-service.local/api/jobs/weather');
   });
+
+  it('upgrades public http hosts to https even when portal base url is local', () => {
+    expect(
+      normalizeExecutorApiUrl(
+        'http://constroad.com/api/cron/weather-asphalt-forecast',
+        'http://localhost:3000'
+      )
+    ).toBe('https://constroad.com/api/cron/weather-asphalt-forecast');
+  });
 });

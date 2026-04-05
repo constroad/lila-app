@@ -166,6 +166,60 @@ describe('generateDispatchValeWorkflow', () => {
     expect(result.media).toEqual({ _id: 'media-1' });
   });
 
+  it('falls back to the stable portal drive register route when the dedicated internal route returns 404', async () => {
+    const findOne = jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        name: 'ConstRoad',
+        whatsappConfig: { sender: '51999999999' },
+      }),
+    });
+    getCompanyModel.mockResolvedValue({ findOne });
+    generateDispatchNoteDocumentFile.mockResolvedValue({
+      pdfUrl: '/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      pdfUrlAbsolute: 'https://lila.constroad.com/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      totalPages: 1,
+      sizeBytes: 4096,
+      relativeDir: 'vales/nro-2026',
+      fileName: 'vale unidad 1.pdf',
+      filePath: 'dispatches/vales/nro-2026/file.pdf',
+    });
+    axios.post
+      .mockRejectedValueOnce({ response: { status: 404 } })
+      .mockResolvedValueOnce({
+        data: {
+          media: { _id: 'media-fallback' },
+          storage: { used: 1, limit: 10, percentage: 10, fileCount: 1 },
+        },
+      });
+
+    const result = await generateDispatchValeWorkflow({
+      companyId: 'constroad',
+      baseUrl: 'https://lila.constroad.com',
+      dispatchId: 'dispatch-1',
+      orderId: 'order-1',
+      sendDriverPdf: false,
+      documentPayload: {
+        schemaCode: 'DISPATCH-NOTE',
+        orderNumber: '2026-001',
+        schemaData: {},
+      },
+    });
+
+    expect(axios.post).toHaveBeenNthCalledWith(
+      1,
+      'https://portal.constroad.com/api/internal/dispatches/vale-media',
+      expect.any(Object),
+      expect.any(Object)
+    );
+    expect(axios.post).toHaveBeenNthCalledWith(
+      2,
+      'https://portal.constroad.com/api/drive/register',
+      expect.any(Object),
+      expect.any(Object)
+    );
+    expect(result.media).toEqual({ _id: 'media-fallback' });
+  });
+
   it('validates the minimum payload before enqueueing background work', () => {
     expect(() =>
       validateDispatchValeWorkflowInput({
