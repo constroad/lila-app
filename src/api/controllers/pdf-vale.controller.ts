@@ -8,6 +8,7 @@ import { CustomError } from '../middlewares/errorHandler.js';
 import { config } from '../../config/environment.js';
 import { renderPdfPageToPngWithGrid } from '../../pdf/render.service.js';
 import { listSessions, isSessionReady, getSession } from '../../whatsapp/baileys/sessions.simple.js';
+import { normalizeWhatsAppRecipient } from '../../utils/whatsapp-phone.js';
 
 type ValeFields = {
   nroVale?: string;
@@ -73,18 +74,6 @@ function adjustFontSizeForValue(
   return baseSize;
 }
 
-function normalizeWhatsappTarget(raw: string) {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (trimmed.includes('@')) return trimmed;
-  if (trimmed.includes('-')) {
-    return `${trimmed}@g.us`;
-  }
-  const digits = trimmed.replace(/[^\d]/g, '');
-  if (digits.length < 8) return null;
-  return `${digits}@s.whatsapp.net`;
-}
-
 function getDefaultWhatsappSession() {
   const sessions = listSessions();
   return sessions.find((phone) => isSessionReady(phone)) || null;
@@ -101,7 +90,10 @@ async function sendWhatsappNotification(
   if (!sessionPhone) {
     throw new Error('No WhatsApp session connected');
   }
-  const recipient = normalizeWhatsappTarget(target);
+  const recipient = normalizeWhatsAppRecipient(target, {
+    allowGroupShortcut: true,
+    minPhoneDigits: 8,
+  });
   if (!recipient) {
     throw new Error('Invalid WhatsApp target');
   }

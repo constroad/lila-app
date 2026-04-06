@@ -9,6 +9,7 @@ import {
 } from './dispatch-note-document.service.js';
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 import { sendTelegramAlert } from './telegram-alert.service.js';
+import { normalizeWhatsAppPhoneNumber } from '../utils/whatsapp-phone.js';
 
 export interface DispatchValeWorkflowInput {
   companyId: string;
@@ -35,6 +36,20 @@ type DispatchValeWorkflowInputLike = Partial<DispatchValeWorkflowInput> & {
 
 function cleanUrl(url: string): string {
   return String(url || '').replace(/^"+|"+$/g, '').trim();
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function buildPortalCallbackToken(companyId: string): string {
@@ -222,7 +237,7 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
   const company = await CompanyModel.findOne({ companyId, isActive: true }).lean();
   const companyName = String(company?.name || 'ConstRoad').trim() || 'ConstRoad';
   const sender = String(company?.whatsappConfig?.sender || '').trim();
-  const normalizedPhone = String(driverPhoneNumber || '').trim();
+  const normalizedPhone = normalizeWhatsAppPhoneNumber(driverPhoneNumber);
   const normalizedDriverName = String(driverName || '').trim();
   const normalizedLocation = cleanUrl(String(orderLocation || ''));
   const normalizedNote = String(note || '').trim();
@@ -233,13 +248,23 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     payload: documentPayload,
   });
 
-  const mediaRegistration = await registerValeMedia({
+  let mediaRegistrationError = '';
+  const mediaRegistrationPromise = registerValeMedia({
     companyId,
     dispatchId,
     orderId,
     note: normalizedNote,
     document,
     preferredFileName: fileName,
+  }).catch((error) => {
+    mediaRegistrationError = error instanceof Error ? error.message : String(error);
+    logger.error('dispatch_vale.register_media_failed', {
+      companyId,
+      dispatchId,
+      orderId,
+      error: mediaRegistrationError,
+    });
+    return null;
   });
 
   const whatsapp = {
@@ -262,15 +287,30 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     const caption = `${companyName}:\n\nHola ${normalizedDriverName || 'chofer'} *${companyName}* te envia tu vale de despacho\n- Cubos: ${Number(quantity || 0)}m3`;
 
     try {
-      await WhatsAppDirectService.sendDocument(sender, normalizedPhone, {
+      logger.info('dispatch_vale.whatsapp_file_sending', {
         companyId,
-        filePath: document.filePath,
-        fileName: fileName || document.fileName,
-        mimeType: 'application/pdf',
-        caption,
-        queueOnFail: false,
+        dispatchId,
+        sender,
+        driverPhoneNumber: normalizedPhone,
       });
+      await withTimeout(
+        WhatsAppDirectService.sendDocument(sender, normalizedPhone, {
+          companyId,
+          filePath: document.filePath,
+          fileName: fileName || document.fileName,
+          mimeType: 'application/pdf',
+          caption,
+          queueOnFail: true,
+        }),
+        25000,
+        'dispatch vale WhatsApp document send'
+      );
       whatsapp.fileSent = true;
+      logger.info('dispatch_vale.whatsapp_file_sent', {
+        companyId,
+        dispatchId,
+        driverPhoneNumber: normalizedPhone,
+      });
     } catch (error) {
       whatsapp.fileError = error instanceof Error ? error.message : String(error);
       logger.error('dispatch_vale.whatsapp_file_failed', {
@@ -282,11 +322,15 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
 
     if (normalizedLocation) {
       try {
-        await WhatsAppDirectService.sendMessage(
-          sender,
-          normalizedPhone,
-          `${companyName}:\n\n${normalizedDriverName || 'Chofer'} te enviamos la Ubicación de la obra:\n- 📍 aqui: ${normalizedLocation}`,
-          { companyId, queueOnFail: false }
+        await withTimeout(
+          WhatsAppDirectService.sendMessage(
+            sender,
+            normalizedPhone,
+            `${companyName}:\n\n${normalizedDriverName || 'Chofer'} te enviamos la Ubicación de la obra:\n- 📍 aqui: ${normalizedLocation}`,
+            { companyId, queueOnFail: true }
+          ),
+          25000,
+          'dispatch vale WhatsApp location send'
         );
         whatsapp.locationSent = true;
       } catch (error) {
@@ -300,10 +344,33 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     }
   }
 
+  if (whatsapp.skippedReason) {
+    logger.warn('dispatch_vale.whatsapp_skipped', {
+      companyId,
+      dispatchId,
+      reason: whatsapp.skippedReason,
+      requested: whatsapp.requested,
+      hasDriverPhoneNumber: Boolean(normalizedPhone),
+      hasSender: Boolean(sender),
+    });
+  }
+
+  const mediaRegistration = await mediaRegistrationPromise;
+
+  logger.info('dispatch_vale.generate.completed', {
+    companyId,
+    dispatchId,
+    orderId,
+    mediaRegistered: Boolean(mediaRegistration),
+    mediaRegistrationError,
+    whatsapp,
+  });
+
   return {
     document,
     media: mediaRegistration?.media ?? null,
     storage: mediaRegistration?.storage ?? null,
+    mediaRegistrationError,
     whatsapp,
   };
 }

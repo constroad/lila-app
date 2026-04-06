@@ -41,6 +41,7 @@ const {
 } = require('./dispatch-vale.service.js');
 const { sendTelegramAlert } = require('./telegram-alert.service.js');
 const { WhatsAppDirectService } = require('./whatsapp-direct.service.js');
+const { normalizeWhatsAppPhoneNumber } = require('../utils/whatsapp-phone.js');
 
 describe('generateDispatchValeWorkflow', () => {
   beforeEach(() => {
@@ -104,18 +105,19 @@ describe('generateDispatchValeWorkflow', () => {
     expect(axios.post).toHaveBeenCalledTimes(1);
     expect(WhatsAppDirectService.sendDocument).toHaveBeenCalledWith(
       '51999999999',
-      '999888777',
+      '51999888777',
       expect.objectContaining({
         companyId: 'constroad',
         filePath: 'dispatches/vales/nro-2026/file.pdf',
         fileName: 'vale unidad 1.pdf',
+        queueOnFail: true,
       })
     );
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledWith(
       '51999999999',
-      '999888777',
+      '51999888777',
       expect.stringContaining('https://maps.app.goo.gl/demo'),
-      { companyId: 'constroad', queueOnFail: false }
+      { companyId: 'constroad', queueOnFail: true }
     );
     expect(result.whatsapp.fileSent).toBe(true);
     expect(result.whatsapp.locationSent).toBe(true);
@@ -164,6 +166,92 @@ describe('generateDispatchValeWorkflow', () => {
     expect(WhatsAppDirectService.sendMessage).not.toHaveBeenCalled();
     expect(result.whatsapp.skippedReason).toBe('sendDriverPdf disabled');
     expect(result.media).toEqual({ _id: 'media-1' });
+  });
+
+  it('normalizes Peruvian local mobile numbers before sending whatsapp', async () => {
+    const findOne = jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        name: 'ConstRoad',
+        whatsappConfig: { sender: '51999999999' },
+      }),
+    });
+    getCompanyModel.mockResolvedValue({ findOne });
+    generateDispatchNoteDocumentFile.mockResolvedValue({
+      pdfUrl: '/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      pdfUrlAbsolute: 'https://lila.constroad.com/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      totalPages: 1,
+      sizeBytes: 4096,
+      relativeDir: 'vales/nro-2026',
+      fileName: 'vale unidad 1.pdf',
+      filePath: 'dispatches/vales/nro-2026/file.pdf',
+    });
+    axios.post.mockResolvedValue({
+      data: {
+        media: { _id: 'media-1' },
+        storage: { used: 1, limit: 10, percentage: 10, fileCount: 1 },
+      },
+    });
+    WhatsAppDirectService.sendDocument.mockResolvedValue({ ok: true });
+
+    await generateDispatchValeWorkflow({
+      companyId: 'constroad',
+      baseUrl: 'https://lila.constroad.com',
+      dispatchId: 'dispatch-1',
+      orderId: 'order-1',
+      driverPhoneNumber: '981243514',
+      sendDriverPdf: true,
+      documentPayload: {
+        schemaCode: 'DISPATCH-NOTE',
+        orderNumber: '2026-001',
+        schemaData: {},
+      },
+    });
+
+    expect(WhatsAppDirectService.sendDocument).toHaveBeenCalledWith(
+      '51999999999',
+      '51981243514',
+      expect.any(Object)
+    );
+  });
+
+  it('does not block whatsapp delivery when portal media registration fails', async () => {
+    const findOne = jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        name: 'ConstRoad',
+        whatsappConfig: { sender: '51999999999' },
+      }),
+    });
+    getCompanyModel.mockResolvedValue({ findOne });
+    generateDispatchNoteDocumentFile.mockResolvedValue({
+      pdfUrl: '/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      pdfUrlAbsolute: 'https://lila.constroad.com/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      totalPages: 1,
+      sizeBytes: 4096,
+      relativeDir: 'vales/nro-2026',
+      fileName: 'vale unidad 1.pdf',
+      filePath: 'dispatches/vales/nro-2026/file.pdf',
+    });
+    axios.post.mockRejectedValue(new Error('portal unavailable'));
+    WhatsAppDirectService.sendDocument.mockResolvedValue({ ok: true });
+
+    const result = await generateDispatchValeWorkflow({
+      companyId: 'constroad',
+      baseUrl: 'https://lila.constroad.com',
+      dispatchId: 'dispatch-1',
+      orderId: 'order-1',
+      driverPhoneNumber: '999888777',
+      sendDriverPdf: true,
+      documentPayload: {
+        schemaCode: 'DISPATCH-NOTE',
+        orderNumber: '2026-001',
+        schemaData: {},
+      },
+    });
+
+    expect(WhatsAppDirectService.sendDocument).toHaveBeenCalled();
+    expect(result.whatsapp.fileSent).toBe(true);
+    expect(result.media).toBeNull();
+    expect(result.mediaRegistrationError).toBe('portal unavailable');
   });
 
   it('falls back to the stable portal drive register route when the dedicated internal route returns 404', async () => {
@@ -234,6 +322,14 @@ describe('generateDispatchValeWorkflow', () => {
         },
       })
     ).toThrow('dispatchId is required');
+  });
+
+  it('normalizes local dispatch phone numbers', () => {
+    expect(normalizeWhatsAppPhoneNumber('981243514')).toBe('51981243514');
+    expect(normalizeWhatsAppPhoneNumber('+51 981 243 514')).toBe('51981243514');
+    expect(normalizeWhatsAppPhoneNumber('51981243514@s.whatsapp.net')).toBe(
+      '51981243514@s.whatsapp.net'
+    );
   });
 
   it('reports telegram alerts when the background workflow fails', async () => {

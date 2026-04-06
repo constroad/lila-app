@@ -33,28 +33,7 @@ import {
   resolveCompanyIdFromMediaOptions,
   resolveWhatsAppMediaSourceKind,
 } from './whatsapp-media-source.util.js';
-
-/**
- * Normalize phone number to WhatsApp JID format
- */
-function getValidPhoneNumber(to: string): string {
-  let cleanedTo = to.replace(/\s/g, '').replace(/\+/g, '');
-
-  let jid: string | undefined;
-  if (cleanedTo.endsWith('@g.us')) {
-    jid = cleanedTo;
-  } else if (!cleanedTo.endsWith('@s.whatsapp.net')) {
-    jid = `${cleanedTo}@s.whatsapp.net`;
-  } else {
-    jid = cleanedTo;
-  }
-
-  if (cleanedTo === '' || jid === undefined) {
-    throw new Error('Invalid phone number');
-  }
-
-  return jid;
-}
+import { assertWhatsAppRecipient } from '../utils/whatsapp-phone.js';
 
 export const WhatsAppDirectService = {
   /**
@@ -107,7 +86,7 @@ export const WhatsAppDirectService = {
     }
 
     try {
-      const validTo = getValidPhoneNumber(routedTo);
+      const validTo = assertWhatsAppRecipient(routedTo);
       const sendOptions = getSendOptions(validTo);
       return await sock.sendMessage(validTo, { text: message }, sendOptions);
     } catch (error) {
@@ -172,7 +151,7 @@ export const WhatsAppDirectService = {
       throw new Error('Session not ready');
     }
 
-    const validTo = getValidPhoneNumber(routedTo);
+    const validTo = assertWhatsAppRecipient(routedTo);
     const sendOptions = getSendOptions(validTo);
 
     let videoBuffer: Buffer;
@@ -307,7 +286,7 @@ export const WhatsAppDirectService = {
       throw new Error('Session not ready');
     }
 
-    const validTo = getValidPhoneNumber(routedTo);
+    const validTo = assertWhatsAppRecipient(routedTo);
     const sendOptions = getSendOptions(validTo);
 
     let imageBuffer: Buffer;
@@ -437,7 +416,7 @@ export const WhatsAppDirectService = {
       throw new Error('Session not ready');
     }
 
-    const validTo = getValidPhoneNumber(routedTo);
+    const validTo = assertWhatsAppRecipient(routedTo);
     const sendOptions = getSendOptions(validTo);
 
     let documentBuffer: Buffer;

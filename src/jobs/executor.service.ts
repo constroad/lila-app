@@ -5,6 +5,7 @@ import { ICronJob } from '../models/cronjob.model.js';
 import { WhatsAppDirectService } from '../services/whatsapp-direct.service.js';
 import logger from '../utils/logger.js';
 import { getCompanyBotLabel, replaceLegacyBotLabel } from '../utils/company-bot.js';
+import { normalizeWhatsAppRecipient } from '../utils/whatsapp-phone.js';
 import { materializeRetryJob, normalizeExecutorApiUrl } from './executor.utils.js';
 
 type ApiMessageItem = {
@@ -50,9 +51,7 @@ export class JobExecutor {
   private normalizeRecipient(raw: string): string {
     const trimmed = raw.trim();
     if (!trimmed) return trimmed;
-    if (trimmed.includes('@')) return trimmed;
-    const normalized = trimmed.replace(/[^\d]/g, '');
-    return `${normalized}@s.whatsapp.net`;
+    return normalizeWhatsAppRecipient(trimmed) ?? trimmed;
   }
 
   private assertValidJob(job: ICronJob): void {
