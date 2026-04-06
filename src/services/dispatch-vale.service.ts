@@ -10,12 +10,13 @@ import {
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 import { sendTelegramAlert } from './telegram-alert.service.js';
 import { normalizeWhatsAppPhoneNumber } from '../utils/whatsapp-phone.js';
+import { buildDispatchValePayloadFromPortal } from './dispatch-vale-payload.service.js';
 
 export interface DispatchValeWorkflowInput {
   companyId: string;
   baseUrl: string;
   dispatchId: string;
-  orderId: string;
+  orderId?: string;
   note?: string;
   quantity?: number;
   driverName?: string;
@@ -23,7 +24,7 @@ export interface DispatchValeWorkflowInput {
   sendDriverPdf?: boolean;
   orderLocation?: string;
   fileName?: string;
-  documentPayload: DispatchNoteDocumentPayload;
+  documentPayload?: DispatchNoteDocumentPayload;
 }
 
 type DispatchValeWorkflowInputLike = Partial<DispatchValeWorkflowInput> & {
@@ -138,9 +139,8 @@ export function validateDispatchValeWorkflowInput(
   if (!companyId) throw new Error('companyId is required');
   if (!baseUrl) throw new Error('baseUrl is required');
   if (!dispatchId) throw new Error('dispatchId is required');
-  if (!orderId) throw new Error('orderId is required');
-  if (!input.documentPayload || typeof input.documentPayload !== 'object') {
-    throw new Error('documentPayload is required');
+  if (input.documentPayload && typeof input.documentPayload !== 'object') {
+    throw new Error('documentPayload must be an object');
   }
 
   return {
@@ -167,7 +167,7 @@ function buildDispatchValeErrorAlert(input: DispatchValeWorkflowInput, error: un
     '---------------------',
     `companyId: ${input.companyId}`,
     `dispatchId: ${input.dispatchId}`,
-    `orderId: ${input.orderId}`,
+    `orderId: ${input.orderId || 'N/A'}`,
     `driverPhoneNumber: ${input.driverPhoneNumber || 'N/A'}`,
     `message: ${message}`,
   ].join('\n');
@@ -213,6 +213,15 @@ export function enqueueDispatchValeWorkflow(
 }
 
 export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowInput) {
+  const resolvedInput = input.documentPayload && input.orderId
+    ? input
+    : {
+        ...input,
+        ...(await buildDispatchValePayloadFromPortal({
+          companyId: input.companyId,
+          dispatchId: input.dispatchId,
+        })),
+      };
   const {
     companyId,
     baseUrl,
@@ -225,8 +234,8 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     orderLocation,
     fileName,
     documentPayload,
-  } = input;
-  const sendDriverPdf = input.sendDriverPdf !== false;
+  } = resolvedInput;
+  const sendDriverPdf = resolvedInput.sendDriverPdf !== false;
 
   if (!companyId) throw new Error('companyId is required');
   if (!dispatchId) throw new Error('dispatchId is required');

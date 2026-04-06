@@ -1,0 +1,273 @@
+import { Schema, Types } from 'mongoose';
+import { getSharedConnection } from '../database/sharedConnection.js';
+import { getCompanyModel } from '../database/models.js';
+import type { DispatchNoteDocumentPayload } from './dispatch-note-document.service.js';
+
+type PortalDispatch = {
+  _id?: Types.ObjectId | string;
+  companyId?: string;
+  orderId?: string;
+  date?: Date | string;
+  hour?: string;
+  clientId?: string;
+  transportId?: string;
+  description?: string;
+  obra?: string;
+  driverName?: string;
+  driverPhoneNumber?: string;
+  phoneNumber?: string;
+  quantity?: number;
+  note?: string;
+  nroVale?: string;
+  placeholders?: {
+    sendDriverPdf?: boolean;
+  };
+};
+
+type PortalOrder = {
+  _id?: Types.ObjectId | string;
+  obra?: string;
+  location?: string;
+};
+
+type PortalClient = {
+  name?: string;
+};
+
+type PortalTransport = {
+  plate?: string;
+  company?: string;
+  driverName?: string;
+};
+
+type PortalCompany = {
+  companyId?: string;
+  name?: string;
+  slug?: string;
+  branding?: {
+    logoLight?: string;
+    logoDark?: string;
+  };
+};
+
+export type ResolvedDispatchValePayload = {
+  companyId: string;
+  dispatchId: string;
+  orderId: string;
+  note: string;
+  quantity: number;
+  driverName: string;
+  driverPhoneNumber: string;
+  sendDriverPdf: boolean;
+  orderLocation: string;
+  fileName: string;
+  documentPayload: DispatchNoteDocumentPayload;
+};
+
+const looseSchema = new Schema({}, { strict: false });
+
+async function getPortalModel<T>(name: string, collection: string) {
+  const conn = await getSharedConnection();
+  return (
+    conn.models[name] ||
+    conn.model<T>(name, looseSchema, collection)
+  );
+}
+
+function objectId(value?: string) {
+  const normalized = String(value || '').trim();
+  return Types.ObjectId.isValid(normalized) ? new Types.ObjectId(normalized) : null;
+}
+
+function cleanUrl(value?: string): string {
+  return String(value || '').replace(/^"+|"+$/g, '').trim();
+}
+
+function normalizeDispatchUnitLabel(note?: string | null): string {
+  const raw = typeof note === 'string' ? note.trim() : '';
+  if (!raw) return 'Unidad';
+
+  const compact = raw.replace(/\s+/g, ' ');
+  if (/^unidad\b/i.test(compact)) {
+    const suffix = compact.replace(/^unidad\b/i, '').trim();
+    return suffix ? `Unidad ${suffix}` : 'Unidad';
+  }
+
+  return compact;
+}
+
+function buildDispatchValeFileName(note?: string | null): string {
+  const unitLabel = normalizeDispatchUnitLabel(note).toLowerCase();
+  return unitLabel === 'unidad' ? 'vale unidad.pdf' : `vale ${unitLabel}.pdf`;
+}
+
+function formatDateParts(value?: Date | string) {
+  const date = value ? new Date(value) : new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(Number.isNaN(date.getTime()) ? new Date() : date);
+  const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || '';
+  return {
+    slashDate: `${getPart('day')}/${getPart('month')}/${getPart('year').slice(-2)}`,
+    peruvianTime: new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Lima',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).format(Number.isNaN(date.getTime()) ? new Date() : date),
+  };
+}
+
+function buildDispatchNoteDocumentPayload(data: {
+  nro?: string;
+  date?: string;
+  clientName?: string;
+  proyect?: string;
+  material?: string;
+  amount?: number;
+  plate?: string;
+  transportist?: string;
+  hour?: string;
+  note?: string;
+  companyName?: string;
+}) {
+  const companyName = data.companyName?.trim() || 'ConstRoad';
+
+  return {
+    schemaCode: 'DISPATCH-NOTE',
+    orderNumber: String(data.nro || '').trim(),
+    schemaData: {
+      header: {
+        companyName,
+        companySubtitle: 'Planta de Asfalto',
+        serviceLines: [
+          'Venta de asfalto · Certificado de calidad de PEN',
+          'Ensayo Marshall (ASTM D 6926 - 6927)',
+          'Ensayo Rice (AASHTO T 209 / ASTM D 2041)',
+          'Certificado de calidad del MC-30',
+          'Lavado de mezcla asfaltica en caliente (MAC)',
+        ],
+      },
+      dispatch: {
+        valeNumber: String(data.nro || '').trim(),
+        dispatchDate: String(data.date || '').trim(),
+        customerName: String(data.clientName || '').trim(),
+        projectName: String(data.proyect || '').trim(),
+        materialName: String(data.material || '').trim(),
+        quantity: Number(data.amount || 0),
+        quantityLabel: Number(data.amount || 0).toString(),
+        plate: String(data.plate || '').trim(),
+        driverName: String(data.transportist || '').trim(),
+        dispatchHour: String(data.hour || '').trim(),
+        notes: String(data.note || '').trim(),
+      },
+      footer: {
+        generatedBy: `Generated by ${companyName}`,
+      },
+    },
+  };
+}
+
+export async function buildDispatchValePayloadFromPortal(params: {
+  companyId: string;
+  dispatchId: string;
+}): Promise<ResolvedDispatchValePayload> {
+  const companyId = String(params.companyId || '').trim();
+  const dispatchId = String(params.dispatchId || '').trim();
+  const dispatchObjectId = objectId(dispatchId);
+
+  if (!companyId) throw new Error('companyId is required');
+  if (!dispatchObjectId) throw new Error('dispatchId is invalid');
+
+  const DispatchModel = await getPortalModel<PortalDispatch>('DispatchValeDispatch', 'dispatches');
+  const dispatch = await DispatchModel.findOne({ _id: dispatchObjectId, companyId }).lean();
+
+  if (!dispatch) {
+    throw new Error('Dispatch not found');
+  }
+
+  const orderId = String(dispatch.orderId || '').trim();
+  if (!orderId) {
+    throw new Error('Dispatch orderId is required');
+  }
+
+  const [OrderModel, ClientModel, TransportModel, CompanyModel] = await Promise.all([
+    getPortalModel<PortalOrder>('DispatchValeOrder', 'orders'),
+    getPortalModel<PortalClient>('DispatchValeClient', 'clients'),
+    getPortalModel<PortalTransport>('DispatchValeTransport', 'transports'),
+    getCompanyModel(),
+  ]);
+
+  const orderObjectId = objectId(orderId);
+  const clientObjectId = objectId(String(dispatch.clientId || ''));
+  const transportObjectId = objectId(String(dispatch.transportId || ''));
+
+  const [order, client, transport, company] = await Promise.all([
+    orderObjectId
+      ? OrderModel.findOne({ _id: orderObjectId, companyId }).lean()
+      : Promise.resolve(null),
+    clientObjectId
+      ? ClientModel.findOne({ _id: clientObjectId, companyId }).lean()
+      : Promise.resolve(null),
+    transportObjectId
+      ? TransportModel.findOne({ _id: transportObjectId, companyId }).lean()
+      : Promise.resolve(null),
+    CompanyModel.findOne({ companyId }).lean() as Promise<PortalCompany | null>,
+  ]);
+
+  if (!order) {
+    throw new Error('Dispatch order not found');
+  }
+
+  const { peruvianTime, slashDate } = formatDateParts(dispatch.date);
+  const hourToSave = dispatch.hour?.trim() || peruvianTime;
+  const companyName = company?.name || 'ConstRoad';
+  const note = dispatch.note || '';
+  const quantity = dispatch.quantity || 0;
+  const driverName =
+    dispatch.driverName?.trim() ||
+    transport?.driverName?.trim() ||
+    '';
+  const driverPhoneNumber =
+    dispatch.driverPhoneNumber?.trim() ||
+    dispatch.phoneNumber?.trim() ||
+    '';
+
+  return {
+    companyId,
+    dispatchId,
+    orderId,
+    note,
+    quantity,
+    driverName,
+    driverPhoneNumber,
+    sendDriverPdf: dispatch.placeholders?.sendDriverPdf !== false,
+    orderLocation: cleanUrl(order.location),
+    fileName: buildDispatchValeFileName(note),
+    documentPayload: buildDispatchNoteDocumentPayload({
+      nro: dispatch.nroVale || '',
+      date: slashDate,
+      clientName: client?.name || '',
+      proyect: order.obra || dispatch.obra || '',
+      material: dispatch.description || '',
+      amount: quantity,
+      plate: transport?.plate || '',
+      transportist:
+        dispatch.driverName?.trim() ||
+        transport?.driverName?.trim() ||
+        transport?.company?.trim() ||
+        '',
+      hour: hourToSave,
+      note,
+      companyName,
+    }),
+  };
+}

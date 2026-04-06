@@ -30,6 +30,9 @@ jest.mock('./whatsapp-direct.service.js', () => ({
 jest.mock('./telegram-alert.service.js', () => ({
   sendTelegramAlert: jest.fn().mockResolvedValue(true),
 }));
+jest.mock('./dispatch-vale-payload.service.js', () => ({
+  buildDispatchValePayloadFromPortal: jest.fn(),
+}));
 
 const axios = require('axios');
 const { getCompanyModel } = require('../database/models.js');
@@ -42,6 +45,7 @@ const {
 const { sendTelegramAlert } = require('./telegram-alert.service.js');
 const { WhatsAppDirectService } = require('./whatsapp-direct.service.js');
 const { normalizeWhatsAppPhoneNumber } = require('../utils/whatsapp-phone.js');
+const { buildDispatchValePayloadFromPortal } = require('./dispatch-vale-payload.service.js');
 
 describe('generateDispatchValeWorkflow', () => {
   beforeEach(() => {
@@ -254,6 +258,72 @@ describe('generateDispatchValeWorkflow', () => {
     expect(result.mediaRegistrationError).toBe('portal unavailable');
   });
 
+  it('resolves the full vale payload in background when Portal only sends dispatchId', async () => {
+    const findOne = jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        name: 'ConstRoad',
+        whatsappConfig: { sender: '51999999999' },
+      }),
+    });
+    getCompanyModel.mockResolvedValue({ findOne });
+    buildDispatchValePayloadFromPortal.mockResolvedValue({
+      companyId: 'constroad',
+      dispatchId: 'dispatch-1',
+      orderId: 'order-1',
+      note: 'Unidad 9',
+      quantity: 18,
+      driverName: 'Juan Perez',
+      driverPhoneNumber: '981243514',
+      sendDriverPdf: true,
+      orderLocation: 'https://maps.app.goo.gl/demo',
+      fileName: 'vale unidad 9.pdf',
+      documentPayload: {
+        schemaCode: 'DISPATCH-NOTE',
+        orderNumber: '2026-009',
+        schemaData: {},
+      },
+    });
+    generateDispatchNoteDocumentFile.mockResolvedValue({
+      pdfUrl: '/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      pdfUrlAbsolute: 'https://lila.constroad.com/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      totalPages: 1,
+      sizeBytes: 4096,
+      relativeDir: 'vales/nro-2026',
+      fileName: 'vale unidad 9.pdf',
+      filePath: 'dispatches/vales/nro-2026/file.pdf',
+    });
+    axios.post.mockResolvedValue({
+      data: {
+        media: { _id: 'media-1' },
+        storage: { used: 1, limit: 10, percentage: 10, fileCount: 1 },
+      },
+    });
+    WhatsAppDirectService.sendDocument.mockResolvedValue({ ok: true });
+    WhatsAppDirectService.sendMessage.mockResolvedValue({ ok: true });
+
+    const result = await generateDispatchValeWorkflow({
+      companyId: 'constroad',
+      baseUrl: 'https://lila.constroad.com',
+      dispatchId: 'dispatch-1',
+    });
+
+    expect(buildDispatchValePayloadFromPortal).toHaveBeenCalledWith({
+      companyId: 'constroad',
+      dispatchId: 'dispatch-1',
+    });
+    expect(generateDispatchNoteDocumentFile).toHaveBeenCalledWith({
+      companyId: 'constroad',
+      baseUrl: 'https://lila.constroad.com',
+      payload: expect.objectContaining({ orderNumber: '2026-009' }),
+    });
+    expect(WhatsAppDirectService.sendDocument).toHaveBeenCalledWith(
+      '51999999999',
+      '51981243514',
+      expect.objectContaining({ fileName: 'vale unidad 9.pdf' })
+    );
+    expect(result.media).toEqual({ _id: 'media-1' });
+  });
+
   it('falls back to the stable portal drive register route when the dedicated internal route returns 404', async () => {
     const findOne = jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue({
@@ -314,12 +384,6 @@ describe('generateDispatchValeWorkflow', () => {
         companyId: 'constroad',
         baseUrl: 'https://lila.constroad.com',
         dispatchId: '',
-        orderId: 'order-1',
-        documentPayload: {
-          schemaCode: 'DISPATCH-NOTE',
-          orderNumber: '2026-001',
-          schemaData: {},
-        },
       })
     ).toThrow('dispatchId is required');
   });
