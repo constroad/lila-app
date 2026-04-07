@@ -21,6 +21,7 @@ import documentsRoutes from './api/routes/documents.routes.js';
 import dispatchRoutes from './api/routes/dispatch.routes.js';
 import publicRoutes from './api/routes/public.routes.js';
 import serviceManagementReportRoutes from './api/routes/service-management-report.routes.js';
+import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './api/docs/openapi.js';
 import jobScheduler from './jobs/scheduler.v2.instance.js';
@@ -182,17 +183,6 @@ const companiesRoot = `${config.storage.root}/companies`;
 const companiesStaticHeaders = (res: express.Response) => {
   applyCompaniesStaticHeaders(res.req as express.Request, res);
 };
-const companiesThumbsStatic = express.static(companiesRoot, {
-  fallthrough: false,
-  index: false,
-  // Required for generated thumbnail paths under "/.thumbs/"
-  dotfiles: 'allow',
-  maxAge: '1h',
-  immutable: true,
-  setHeaders: (res, _path, _stat) => {
-    companiesStaticHeaders(res);
-  },
-});
 const companiesFilesStatic = express.static(companiesRoot, {
   fallthrough: false,
   index: false,
@@ -207,7 +197,27 @@ const companiesFilesStatic = express.static(companiesRoot, {
 // Public file access (multi-tenant only - Fase 9)
 app.use('/files/companies', (req, res, next) => {
   if (isSafeThumbRequestPath(req.path)) {
-    companiesThumbsStatic(req, res, next);
+    void resolveThumbnailRequestTarget(companiesRoot, req.path)
+      .then((target) => {
+        if (!target) {
+          res.status(404).end();
+          return;
+        }
+
+        companiesStaticHeaders(res);
+        res.sendFile(
+          target.absolutePath,
+          {
+            maxAge: '1h',
+            immutable: true,
+            dotfiles: target.source === 'thumbnail' ? 'allow' : 'deny',
+          },
+          (error) => {
+            if (error) next(error);
+          }
+        );
+      })
+      .catch(next);
     return;
   }
   companiesFilesStatic(req, res, next);

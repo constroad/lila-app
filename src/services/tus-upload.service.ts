@@ -17,6 +17,7 @@ import {
   isVideoFile,
   optimizeVideoForProgressiveStreaming,
 } from './video-stream.service.js';
+import { buildUniqueStorageFileName } from './storage-file-name.service.js';
 
 interface TusUploadMetadata {
   filename?: string;
@@ -33,6 +34,7 @@ interface TusUploadInfo {
   companyId: string;
   name: string;
   path: string;
+  storageFileName?: string;
   size: number;
   url: string;
   urlAbsolute: string;
@@ -135,6 +137,7 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
 
   const relativePath = (metadata.path || '').trim();
   const filename = metadata.filename || getUploadId(upload);
+  const storageFileName = buildUniqueStorageFileName(filename, getUploadId(upload));
 
   if (!isValidEntryName(filename)) {
     throw new Error('Invalid file name');
@@ -155,19 +158,19 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
 
   await fs.ensureDir(resolved);
 
-  const target = path.join(resolved, filename);
+  const target = path.join(resolved, storageFileName);
   if (!storagePathService.validateAccess(target, companyId)) {
     throw new Error('Access denied: invalid target path');
   }
 
   const tempPath = path.join(TUS_STORAGE_DIR, getUploadId(upload));
-  await fs.move(tempPath, target, { overwrite: true });
+  await fs.move(tempPath, target, { overwrite: false });
 
   await incrementStorageUsage(companyId, uploadSize);
 
-  const filePath = relativePath ? `${relativePath}/${filename}` : filename;
+  const filePath = relativePath ? `${relativePath}/${storageFileName}` : storageFileName;
   const publicUrl = `/files/companies/${companyId}/${filePath}`;
-  const videoLike = isVideoFile(metadata.filetype, filename);
+  const videoLike = isVideoFile(metadata.filetype, storageFileName);
   const streamUrl = videoLike ? publicUrl : undefined;
   const streamType = videoLike ? 'progressive-range' : undefined;
   const streamStatus: 'ready' | 'pending' | 'unsupported' | 'error' = videoLike ? 'ready' : 'unsupported';
@@ -177,7 +180,7 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
   if (videoLike) {
     const optimization = await optimizeVideoForProgressiveStreaming({
       filePath: target,
-      fileName: filename,
+      fileName: storageFileName,
       mimeType: metadata.filetype,
     });
     if (optimization.optimized && optimization.sizeDeltaBytes !== 0) {
@@ -191,7 +194,7 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
 
   const thumbnailResult = await generateThumbnailForFile({
     filePath: target,
-    fileName: filename,
+    fileName: storageFileName,
     mimeType: metadata.filetype,
     outputDir: resolved,
   });
@@ -214,6 +217,7 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
     companyId,
     name: filename,
     path: filePath,
+    storageFileName,
     size: uploadSize,
     url: publicUrl,
     urlAbsolute: buildAbsoluteUrl(req, publicUrl),

@@ -14,6 +14,7 @@ import {
   isVideoFile,
   optimizeVideoForProgressiveStreaming,
 } from '../../services/video-stream.service.js';
+import { buildUniqueStorageFileName } from '../../services/storage-file-name.service.js';
 
 // Helper: Validar nombre de archivo/folder
 function isValidEntryName(name: string) {
@@ -230,7 +231,8 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
       return next(error);
     }
 
-    const target = path.join(resolved, file.originalname);
+    const storageFileName = buildUniqueStorageFileName(file.originalname, file.path);
+    const target = path.join(resolved, storageFileName);
 
     // Validar acceso al archivo de destino
     if (!storagePathService.validateAccess(target, companyId)) {
@@ -239,19 +241,19 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
       return next(error);
     }
 
-    await fs.move(file.path, target, { overwrite: true });
+    await fs.move(file.path, target, { overwrite: false });
 
     // Incrementar contador de almacenamiento (Fase 10)
     await incrementStorageUsage(companyId, file.size);
 
-    const videoLike = isVideoFile(file.mimetype, file.originalname);
+    const videoLike = isVideoFile(file.mimetype, storageFileName);
     let streamStatus: 'ready' | 'unsupported' | 'error' = videoLike ? 'ready' : 'unsupported';
     const streamType = videoLike ? 'progressive-range' : undefined;
 
     if (videoLike) {
       const optimization = await optimizeVideoForProgressiveStreaming({
         filePath: target,
-        fileName: file.originalname,
+        fileName: storageFileName,
         mimeType: file.mimetype,
       });
 
@@ -264,7 +266,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
       }
     }
 
-    const filePath = relativePath ? `${relativePath}/${file.originalname}` : file.originalname;
+    const filePath = relativePath ? `${relativePath}/${storageFileName}` : storageFileName;
     const publicUrl = `/files/companies/${companyId}/${filePath}`;
     const streamUrl = videoLike ? publicUrl : undefined;
     let thumbnailUrl: string | undefined;
@@ -272,7 +274,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
 
     const thumbnailResult = await generateThumbnailForFile({
       filePath: target,
-      fileName: file.originalname,
+      fileName: storageFileName,
       mimeType: file.mimetype,
       outputDir: resolved,
     });
@@ -295,6 +297,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
       data: {
         name: file.originalname,
         path: filePath,
+        storageFileName,
         type: 'file',
         size: file.size,
         url: publicUrl,
