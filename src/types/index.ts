@@ -95,6 +95,7 @@ declare global {
       auth?: {
         type: 'jwt' | 'apiKey';
         keyPrefix?: string;
+        role?: string;
       };
       apiKeyAllowedSenders?: string[];
     }

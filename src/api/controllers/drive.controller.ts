@@ -439,6 +439,108 @@ export async function moveEntry(req: Request, res: Response, next: NextFunction)
   }
 }
 
+const cleanMigrationPath = (companyId: string, rawPath: string) => {
+  let normalizedPath = String(rawPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  const filesMarker = `files/companies/${companyId}/`;
+  const companyMarker = `companies/${companyId}/`;
+
+  if (normalizedPath.startsWith(filesMarker)) {
+    normalizedPath = normalizedPath.slice(filesMarker.length);
+  }
+  if (normalizedPath.startsWith(companyMarker)) {
+    normalizedPath = normalizedPath.slice(companyMarker.length);
+  }
+
+  return normalizedPath;
+};
+
+export async function copyCompanyEntry(req: Request, res: Response, next: NextFunction) {
+  try {
+    const targetCompanyId = req.companyId;
+    if (!targetCompanyId) {
+      const error: CustomError = new Error('Company ID is required');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      return next(error);
+    }
+
+    if (req.auth?.role !== 'super-admin') {
+      const error: CustomError = new Error('Super admin role is required');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+
+    const sourceCompanyId = String(req.body?.sourceCompanyId || '').trim();
+    const sourcePath = cleanMigrationPath(sourceCompanyId, String(req.body?.sourcePath || ''));
+    const targetPath = cleanMigrationPath(targetCompanyId, String(req.body?.targetPath || ''));
+
+    if (!sourceCompanyId || !sourcePath || !targetPath) {
+      const error: CustomError = new Error('sourceCompanyId, sourcePath and targetPath are required');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    const sourceResolved = storagePathService.resolvePath(sourceCompanyId, sourcePath);
+    const targetResolved = storagePathService.resolvePath(targetCompanyId, targetPath);
+
+    if (!storagePathService.validateAccess(sourceResolved, sourceCompanyId)) {
+      const error: CustomError = new Error('Access denied: invalid source path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+    if (!storagePathService.validateAccess(targetResolved, targetCompanyId)) {
+      const error: CustomError = new Error('Access denied: invalid target path');
+      error.statusCode = HTTP_STATUS.FORBIDDEN;
+      return next(error);
+    }
+
+    const sourceExists = await fs.pathExists(sourceResolved);
+    if (!sourceExists) {
+      const error: CustomError = new Error('Source not found');
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+
+    const sourceStats = await fs.stat(sourceResolved);
+    if (!sourceStats.isFile()) {
+      const error: CustomError = new Error('Source must be a file');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    await storagePathService.ensureCompanyStructure(targetCompanyId);
+    await fs.ensureDir(path.dirname(targetResolved));
+
+    const targetExists = await fs.pathExists(targetResolved);
+    if (targetExists) {
+      const targetStats = await fs.stat(targetResolved);
+      if (targetStats.size !== sourceStats.size) {
+        const error: CustomError = new Error('Target already exists with different size');
+        error.statusCode = HTTP_STATUS.CONFLICT;
+        return next(error);
+      }
+    } else {
+      await fs.copy(sourceResolved, targetResolved, { overwrite: false });
+      await incrementStorageUsage(targetCompanyId, sourceStats.size);
+    }
+
+    const publicUrl = `/files/companies/${targetCompanyId}/${targetPath}`;
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        sourceCompanyId,
+        targetCompanyId,
+        sourcePath,
+        targetPath,
+        size: sourceStats.size,
+        url: publicUrl,
+        urlAbsolute: buildAbsoluteUrl(req, publicUrl),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getInfo(req: Request, res: Response, next: NextFunction) {
   try {
     const companyId = req.companyId;

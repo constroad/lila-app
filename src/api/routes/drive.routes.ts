@@ -4,6 +4,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import {
   createFolder,
+  copyCompanyEntry,
   deleteEntry,
   getInfo,
   listEntries,
@@ -68,6 +69,7 @@ router.post('/folders', requireTenant, createFolder);
 router.post('/files', requireTenant, uploadRateLimiter, upload.single('file'), requireStorageQuota, uploadFile);
 router.delete('/entry', requireTenant, deleteEntry);
 router.patch('/move', requireTenant, moveEntry);
+router.post('/admin/copy-company-entry', requireTenant, copyCompanyEntry);
 router.get('/pdf/info', requireTenant, getPdfMetadata);
 router.get('/pdf/page', requireTenant, getPdfPageImage);
 router.get('/pdf/preview-grid', requireTenant, getPdfPagePreviewGrid);

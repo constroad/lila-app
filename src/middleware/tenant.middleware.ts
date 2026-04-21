@@ -129,7 +129,7 @@ export async function requireTenant(
       }
 
       req.companyId = decoded.companyId;
-      req.auth = { type: 'jwt' };
+      req.auth = { type: 'jwt', role: decoded.role };
 
       logger.info(`Tenant validated: ${decoded.companyId}`, {
         path: req.path,
