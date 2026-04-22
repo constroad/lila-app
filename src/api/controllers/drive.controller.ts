@@ -511,6 +511,7 @@ export async function copyCompanyEntry(req: Request, res: Response, next: NextFu
     await fs.ensureDir(path.dirname(targetResolved));
 
     const targetExists = await fs.pathExists(targetResolved);
+    let createdTarget = false;
     if (targetExists) {
       const targetStats = await fs.stat(targetResolved);
       if (targetStats.size !== sourceStats.size) {
@@ -521,6 +522,7 @@ export async function copyCompanyEntry(req: Request, res: Response, next: NextFu
     } else {
       await fs.copy(sourceResolved, targetResolved, { overwrite: false });
       await incrementStorageUsage(targetCompanyId, sourceStats.size);
+      createdTarget = true;
     }
 
     const publicUrl = `/files/companies/${targetCompanyId}/${targetPath}`;
@@ -532,6 +534,7 @@ export async function copyCompanyEntry(req: Request, res: Response, next: NextFu
         sourcePath,
         targetPath,
         size: sourceStats.size,
+        created: createdTarget,
         url: publicUrl,
         urlAbsolute: buildAbsoluteUrl(req, publicUrl),
       },
