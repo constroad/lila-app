@@ -2,6 +2,10 @@ jest.mock('../config/environment.js', () => ({
   config: {
     portal: { baseUrl: 'https://portal.constroad.com' },
     security: { jwtSecret: 'secret' },
+    telegram: {
+      botToken: 'telegram-token',
+      errorsChatId: '-100errors',
+    },
   },
 }));
 
@@ -42,6 +46,7 @@ const {
   generateDispatchValeWorkflow,
   validateDispatchValeWorkflowInput,
 } = require('./dispatch-vale.service.js');
+const { runPublicReceptionWorkflow } = require('../api/controllers/public.controller.js');
 const { sendTelegramAlert } = require('./telegram-alert.service.js');
 const { WhatsAppDirectService } = require('./whatsapp-direct.service.js');
 const { normalizeWhatsAppPhoneNumber } = require('../utils/whatsapp-phone.js');
@@ -428,6 +433,143 @@ describe('generateDispatchValeWorkflow', () => {
         dedupeKey: expect.stringContaining('dispatch-vale:constroad:dispatch-1'),
         message: expect.stringContaining('background failed'),
       })
+    );
+  });
+});
+
+describe('runPublicReceptionWorkflow', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  let originalFetch;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    originalFetch = global.fetch;
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          result: {
+            message_id: 1178,
+            document: {
+              file_id: 'file-1',
+              file_name: 'evidence.jpg',
+              mime_type: 'image/jpeg',
+              file_size: 1024,
+              thumb: { file_id: 'thumb-1' },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          result: { file_path: 'documents/file_1.jpg' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          result: { file_path: 'thumbnails/thumb_1.jpg' },
+        }),
+      })
+      .mockResolvedValueOnce({ ok: true });
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('creates the measure, registers media and triggers whatsapp via portal', async () => {
+    axios.get
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: { data: [{ _id: 'media-1' }] } });
+    axios.post
+      .mockResolvedValueOnce({
+        data: {
+          _id: 'measure-1',
+          name: 'PEN #3',
+          measure: 17,
+          status: 'Pending',
+          typeId: 'tanque-pen-3',
+        },
+      })
+      .mockResolvedValueOnce({ data: { _id: 'media-1' } })
+      .mockResolvedValueOnce({ data: { status: 'ok' } });
+    axios.put.mockResolvedValueOnce({
+      data: {
+        _id: 'measure-1',
+        name: 'PEN #3',
+        measure: 17,
+        status: 'Completed',
+        typeId: 'tanque-pen-3',
+      },
+    });
+
+    const tempFilePath = path.join(os.tmpdir(), `reception-${Date.now()}.jpg`);
+    fs.writeFileSync(tempFilePath, Buffer.from('image'));
+
+    await runPublicReceptionWorkflow({
+      kind: 'measure',
+      companyId: 'constroad',
+      telegramChatId: '-100medias',
+      typeId: 'tanque-pen-3',
+      measureName: 'PEN #3',
+      measureValue: 17,
+      unitLabel: 'centímetros',
+      whatsappPhone: '120363402457346500@g.us',
+      whatsappMessage: 'mensaje de prueba',
+      files: [
+        {
+          path: tempFilePath,
+          originalName: 'evidence.jpg',
+          mimeType: 'image/jpeg',
+          size: 1024,
+        },
+      ],
+    });
+
+    expect(axios.post).toHaveBeenNthCalledWith(
+      1,
+      'https://portal.constroad.com/api/measure',
+      expect.objectContaining({
+        name: 'PEN #3',
+        measure: 17,
+        status: 'Pending',
+        typeId: 'tanque-pen-3',
+      }),
+      expect.any(Object)
+    );
+    expect(axios.post).toHaveBeenNthCalledWith(
+      2,
+      'https://portal.constroad.com/api/media',
+      expect.objectContaining({
+        resourceId: 'measure-1',
+        type: 'INPUT_PICTURES',
+        name: 'evidence.jpg',
+      }),
+      expect.any(Object)
+    );
+    expect(axios.put).toHaveBeenCalledWith(
+      'https://portal.constroad.com/api/measure/measure-1',
+      expect.objectContaining({
+        status: 'Completed',
+      }),
+      expect.any(Object)
+    );
+    expect(axios.post).toHaveBeenNthCalledWith(
+      3,
+      'https://portal.constroad.com/api/notifications/whatsapp',
+      expect.objectContaining({
+        type: 'SendText',
+        phone: '120363402457346500@g.us',
+        message: 'mensaje de prueba',
+      }),
+      expect.any(Object)
     );
   });
 });
