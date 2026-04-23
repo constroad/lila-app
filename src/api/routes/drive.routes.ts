@@ -4,8 +4,10 @@ import fs from 'fs-extra';
 import path from 'path';
 import {
   createFolder,
+  copyCompanyEntries,
   copyCompanyEntry,
   deleteEntry,
+  getCopyCompanyEntriesJob,
   getInfo,
   listEntries,
   moveEntry,
@@ -70,6 +72,8 @@ router.post('/files', requireTenant, uploadRateLimiter, upload.single('file'), r
 router.delete('/entry', requireTenant, deleteEntry);
 router.patch('/move', requireTenant, moveEntry);
 router.post('/admin/copy-company-entry', requireTenant, copyCompanyEntry);
+router.post('/admin/copy-company-entries', requireTenant, copyCompanyEntries);
+router.get('/admin/copy-company-entries/:jobId', requireTenant, getCopyCompanyEntriesJob);
 router.get('/pdf/info', requireTenant, getPdfMetadata);
 router.get('/pdf/page', requireTenant, getPdfPageImage);
 router.get('/pdf/preview-grid', requireTenant, getPdfPagePreviewGrid);
