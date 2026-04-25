@@ -131,6 +131,48 @@ function getPeruDayKey(value?: string | Date): string {
   return formatPeruDate(value);
 }
 
+function getObjectIdTimestamp(value: unknown): number {
+  const raw = String(value || '').trim();
+  if (!/^[a-f\d]{24}$/i.test(raw)) {
+    return 0;
+  }
+
+  const hexTimestamp = raw.slice(0, 8);
+  const parsedTimestamp = Number.parseInt(hexTimestamp, 16);
+  if (!Number.isFinite(parsedTimestamp)) {
+    return 0;
+  }
+
+  return parsedTimestamp * 1000;
+}
+
+function sortDispatchesForOperationalSequence(dispatches: any[]): any[] {
+  return [...dispatches].sort((left, right) => {
+    const leftCreatedAt = new Date(left?.createdAt || getObjectIdTimestamp(left?._id)).getTime();
+    const rightCreatedAt = new Date(right?.createdAt || getObjectIdTimestamp(right?._id)).getTime();
+
+    if (leftCreatedAt !== rightCreatedAt) {
+      return leftCreatedAt - rightCreatedAt;
+    }
+
+    return String(left?._id || '').localeCompare(String(right?._id || ''));
+  });
+}
+
+function getSameOperationalDayDispatches(params: {
+  dispatch: any;
+  dispatches: any[];
+}): any[] {
+  const targetDayKey = getPeruDayKey(params.dispatch?.date);
+  const sameDayDispatches = targetDayKey
+    ? params.dispatches.filter(
+        (dispatchItem) => getPeruDayKey(dispatchItem?.date) === targetDayKey
+      )
+    : params.dispatches;
+
+  return sortDispatchesForOperationalSequence(sameDayDispatches);
+}
+
 function parseOrdenDespacho(note?: string): number | undefined {
   if (!note) return undefined;
   const match = note.match(/unidad\s*(\d+)/i);
@@ -202,23 +244,17 @@ function resolvePlantProgressUnitLabel(params: {
   dispatch: any;
   dispatches: any[];
 }): string {
-  if (typeof params.dispatch?.note === 'string' && params.dispatch.note.trim()) {
-    return params.dispatch.note.trim();
+  const numberingScope = getSameOperationalDayDispatches(params);
+  const currentDispatchId = String(params.dispatch?._id || '');
+  const currentIndex = numberingScope.findIndex(
+    (dispatchItem) => String(dispatchItem?._id || '') === currentDispatchId
+  );
+
+  if (currentIndex >= 0) {
+    return `Unidad ${currentIndex + 1}`;
   }
 
-  const targetDayKey = getPeruDayKey(params.dispatch?.date);
-  const numberingScope = targetDayKey
-    ? params.dispatches.filter(
-        (dispatchItem) => getPeruDayKey(dispatchItem.date) === targetDayKey
-      )
-    : params.dispatches;
-  const dispatchedCount = numberingScope.filter(
-    (dispatchItem) =>
-      String(dispatchItem?._id || '') !== String(params.dispatch?._id || '') &&
-      dispatchItem?.state === 'despachado'
-  ).length;
-
-  return `Unidad ${dispatchedCount + 1}`;
+  return 'Unidad';
 }
 
 function buildDispatchClientAlertMessage(
@@ -708,7 +744,11 @@ export async function buildDispatchCompletionContext(
         state: { $ne: 'eliminado' },
       }).lean()
     : [];
-  const remainingOrderDispatches = orderDispatches.filter(
+  const sameOperationalDayDispatches = getSameOperationalDayDispatches({
+    dispatch,
+    dispatches: orderDispatches,
+  });
+  const remainingOrderDispatches = sameOperationalDayDispatches.filter(
     (dispatchItem) =>
       dispatchItem.state === 'pendiente' || dispatchItem.state === 'progreso'
   ).length;

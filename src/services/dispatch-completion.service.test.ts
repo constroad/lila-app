@@ -152,16 +152,32 @@ describe('dispatch-completion.service', () => {
     );
   });
 
-  it('resolves plant progress label with same-day dispatched count', () => {
+  it('resolves plant progress label with same-day operational sequence', () => {
     const label = resolvePlantProgressUnitLabel({
       dispatch: {
         _id: 'dispatch-3',
         date: '2026-04-24T14:00:00.000Z',
+        note: 'Unidad 15',
       },
       dispatches: [
-        { _id: 'dispatch-1', date: '2026-04-24T08:00:00.000Z', state: 'despachado' },
-        { _id: 'dispatch-2', date: '2026-04-24T10:00:00.000Z', state: 'despachado' },
-        { _id: 'dispatch-3', date: '2026-04-24T14:00:00.000Z', state: 'despachado' },
+        {
+          _id: '507f191e810c19729de860ea',
+          createdAt: '2026-04-24T08:00:00.000Z',
+          date: '2026-04-24T08:00:00.000Z',
+          state: 'despachado',
+        },
+        {
+          _id: '507f191e810c19729de860eb',
+          createdAt: '2026-04-24T10:00:00.000Z',
+          date: '2026-04-24T10:00:00.000Z',
+          state: 'despachado',
+        },
+        {
+          _id: 'dispatch-3',
+          createdAt: '2026-04-24T14:00:00.000Z',
+          date: '2026-04-24T14:00:00.000Z',
+          state: 'despachado',
+        },
       ],
     });
 
