@@ -353,4 +353,98 @@ describe('domain-event-dispatcher.service', () => {
       }
     );
   });
+
+  it('continues with later handlers when an earlier one fails', async () => {
+    validateDispatchCompletionWorkflowInput.mockReturnValue({
+      companyId: 'constroad',
+      dispatchFinished: true,
+      dispatchId: 'dispatch-1',
+      sender: '51949376824',
+      state: 'despachado',
+      truckDispatched: true,
+    });
+    buildDispatchCompletionContext.mockResolvedValue({
+      companyBotLabel: 'Globofast',
+      dispatch: { _id: 'dispatch-1' },
+      sender: '51949376824',
+    });
+    runDispatchConfigUpdate.mockResolvedValue(undefined);
+    runDispatchIppSync.mockRejectedValue(new Error('ipp sync failed'));
+    runDispatchIppDocumentReady.mockResolvedValue(undefined);
+    runDispatchCompletionNotifications.mockResolvedValue(undefined);
+
+    const domainEventModel = {
+      findOneAndUpdate: jest
+        .fn()
+        .mockReturnValueOnce({
+          lean: jest.fn().mockResolvedValue({
+            _id: 'event-3',
+            attempts: 1,
+            companyId: 'constroad',
+            eventType: 'dispatch.completed',
+            payload: {
+              dispatchFinished: true,
+              dispatchId: 'dispatch-1',
+              sender: '51949376824',
+              state: 'despachado',
+              truckDispatched: true,
+            },
+          }),
+        })
+        .mockReturnValueOnce({
+          lean: jest.fn().mockResolvedValue(null),
+        }),
+      updateOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+    };
+    const handlerRunModel = {
+      findOneAndUpdate: jest
+        .fn()
+        .mockReturnValueOnce({
+          lean: jest.fn().mockResolvedValue({
+            _id: 'run-1',
+            attempts: 1,
+            companyId: 'constroad',
+            eventId: 'event-3',
+            status: 'running',
+          }),
+        })
+        .mockReturnValueOnce({
+          lean: jest.fn().mockResolvedValue({
+            _id: 'run-2',
+            attempts: 1,
+            companyId: 'constroad',
+            eventId: 'event-3',
+            status: 'running',
+          }),
+        })
+        .mockReturnValueOnce({
+          lean: jest.fn().mockResolvedValue({
+            _id: 'run-3',
+            attempts: 1,
+            companyId: 'constroad',
+            eventId: 'event-3',
+            status: 'running',
+          }),
+        })
+        .mockReturnValueOnce({
+          lean: jest.fn().mockResolvedValue({
+            _id: 'run-4',
+            attempts: 1,
+            companyId: 'constroad',
+            eventId: 'event-3',
+            status: 'running',
+          }),
+        }),
+      updateOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+    };
+
+    getDomainEventModel.mockResolvedValue(domainEventModel);
+    getDomainEventRunModel.mockResolvedValue(handlerRunModel);
+
+    const result = await processPendingDomainEvents(1);
+
+    expect(runDispatchCompletionNotifications).toHaveBeenCalledTimes(1);
+    expect(runDispatchIppDocumentReady).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([{ eventId: 'event-3', status: 'failed' }]);
+  });
 });

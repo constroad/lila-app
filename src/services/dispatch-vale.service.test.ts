@@ -2,7 +2,6 @@ export {};
 
 jest.mock('../config/environment.js', () => ({
   config: {
-    nodeEnv: 'production',
     portal: { baseUrl: 'https://portal.constroad.com' },
     security: { jwtSecret: 'secret' },
     telegram: {
@@ -139,14 +138,13 @@ describe('generateDispatchValeWorkflow', () => {
         filePath: 'dispatches/vales/nro-2026/file.pdf',
         fileName: 'vale unidad 1.pdf',
         queueOnFail: true,
-        skipRecipientRouting: true,
       })
     );
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledWith(
       '51902049935',
       '51999888777',
       expect.stringContaining('https://maps.app.goo.gl/demo'),
-      { companyId: 'constroad', queueOnFail: true, skipRecipientRouting: true }
+      { companyId: 'constroad', queueOnFail: true }
     );
     expect(result.whatsapp.fileSent).toBe(true);
     expect(result.whatsapp.locationSent).toBe(true);

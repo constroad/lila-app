@@ -58,21 +58,13 @@ export const WhatsAppDirectService = {
     id: string,
     to: string,
     message: string,
-    options: {
-      queueOnFail?: boolean;
-      mentions?: string[];
-      companyId?: string;
-      tenantId?: string;
-      skipRecipientRouting?: boolean;
-    } = {}
+    options: { queueOnFail?: boolean; mentions?: string[]; companyId?: string; tenantId?: string } = {}
   ) {
     const queueOnFail = options.queueOnFail !== false;
-    const routedTo = options.skipRecipientRouting
-      ? String(to || '').trim()
-      : resolveWhatsAppRecipient(to, {
-          companyId: options.companyId,
-          tenantId: options.tenantId,
-        });
+    const routedTo = resolveWhatsAppRecipient(to, {
+      companyId: options.companyId,
+      tenantId: options.tenantId,
+    });
 
     const sock = getSession(id);
     if (!sock) {
@@ -397,16 +389,13 @@ export const WhatsAppDirectService = {
       companyId?: string;
       tenantId?: string;
       queueOnFail?: boolean;
-      skipRecipientRouting?: boolean;
     }
   ) {
     const queueOnFail = options.queueOnFail !== false;
-    const routedTo = options.skipRecipientRouting
-      ? String(to || '').trim()
-      : resolveWhatsAppRecipient(to, {
-          companyId: options.companyId,
-          tenantId: options.tenantId,
-        });
+    const routedTo = resolveWhatsAppRecipient(to, {
+      companyId: options.companyId,
+      tenantId: options.tenantId,
+    });
 
     const sock = getSession(id);
     if (!sock) {

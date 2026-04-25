@@ -1,4 +1,5 @@
 const { spawn } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 
 const RESTART_BASE_DELAY_MS = 3000;
@@ -7,10 +8,22 @@ const KILL_GRACE_MS = 5000;
 
 const tsxBin = path.resolve(__dirname, 'node_modules/.bin/tsx');
 const entry = path.resolve(__dirname, 'src/index.ts');
+const envFilePath = path.resolve(__dirname, '.env');
 
 let child = null;
 let restartCount = 0;
 let isShuttingDown = false;
+
+const readNodeEnvFromEnvFile = () => {
+  try {
+    const raw = fs.readFileSync(envFilePath, 'utf8');
+    const match = raw.match(/^NODE_ENV=(.*)$/m);
+    const value = match?.[1]?.trim();
+    return value ? value.replace(/^['"]|['"]$/g, '') : null;
+  } catch {
+    return null;
+  }
+};
 
 const getDelay = () => {
   const factor = Math.min(restartCount, 4);
@@ -26,7 +39,7 @@ const start = () => {
     stdio: 'inherit',
     env: {
       ...process.env,
-      NODE_ENV: process.env.NODE_ENV || 'development'
+      NODE_ENV: readNodeEnvFromEnvFile() || process.env.NODE_ENV || 'development',
     }
   });
 

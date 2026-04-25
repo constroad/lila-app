@@ -9,7 +9,7 @@ const devEnvPath = path.join(moduleDir, '../../.env.development');
 
 dotenv.config({ path: envPath });
 
-if (process.env.NODE_ENV === 'development' || fs.existsSync(devEnvPath)) {
+if (process.env.NODE_ENV === 'development' && fs.existsSync(devEnvPath)) {
   dotenv.config({ path: devEnvPath, override: true });
 }
 

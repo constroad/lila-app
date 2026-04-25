@@ -239,6 +239,8 @@ async function runEventHandlers(event: DomainEventModel & { _id: unknown }) {
     throw new Error(`No handlers registered for ${event.eventType}`);
   }
 
+  let firstError: unknown = null;
+
   for (const handler of handlers) {
     const handlerRun = await acquireHandlerRun({
       companyId: event.companyId,
@@ -265,8 +267,14 @@ async function runEventHandlers(event: DomainEventModel & { _id: unknown }) {
         handlerKey: handler.key,
         error,
       });
-      throw error;
+      if (!firstError) {
+        firstError = error;
+      }
     }
+  }
+
+  if (firstError) {
+    throw firstError;
   }
 }
 
