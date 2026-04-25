@@ -811,6 +811,9 @@ export class ReportHtmlRenderer {
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const photos = this.limitPhotos(this.resolvePhotos(section), section.maxImages);
     if (photos.length === 0) {
+      if (this.schema.code === 'IPP' && section.id === 'panelFotograficoLaboratorio') {
+        return '';
+      }
       return `<div class="section">${title}<div>Sin fotos registradas.</div></div>`;
     }
 
@@ -866,17 +869,33 @@ export class ReportHtmlRenderer {
   private async renderSignatures(section: SectionSchema): Promise<string> {
     const resolvedTitle = this.resolveSectionTitle(section);
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
-    const signatures = section.signatures || [];
+    const signaturePath = section.id || 'firmas';
+    const signatures = (section.signatures || []).filter((signature) => {
+      if (this.schema.code !== 'IPP') {
+        return true;
+      }
+
+      const info = this.getValue(`${signaturePath}.${signature.key}`) || {};
+      return Boolean(
+        String(info.nombre || '').trim() ||
+          String(info.cip || '').trim() ||
+          String(info.empresa || '').trim() ||
+          String(info.firmaUrl || info.signatureUrl || '').trim() ||
+          String(info.firmaBase64 || info.signatureBase64 || '').trim() ||
+          String(info.firmaPath || info.signaturePath || '').trim() ||
+          String(info.selloUrl || '').trim() ||
+          String(info.selloBase64 || '').trim() ||
+          String(info.selloPath || '').trim()
+      );
+    });
     if (signatures.length === 0) {
-      return `<div class="section">${title}</div>`;
+      return this.schema.code === 'IPP' ? '' : `<div class="section">${title}</div>`;
     }
 
     const actaTipo = this.schema.code === 'ACT-CNF'
       ? String(this.getValue('acta.tipo') || '').toUpperCase()
       : '';
     const cipLabel = this.schema.code === 'ACT-CNF' ? 'DNI' : 'CIP';
-
-    const signaturePath = section.id || 'firmas';
     const cells = await Promise.all(
       signatures.map(async (signature) => {
         const info = this.getValue(`${signaturePath}.${signature.key}`) || {};

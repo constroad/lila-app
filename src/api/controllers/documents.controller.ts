@@ -307,14 +307,23 @@ async function applyHeaderDefaults(
   }
 
   if (needsFecha) {
+    const toCandidateDate = (value: unknown) => {
+      if (typeof value === 'string' && value.trim()) return value;
+      if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value.toISOString().slice(0, 10);
+      }
+      return '';
+    };
     const candidateDates = [
-      typeof report?.date === 'string' && report.date.trim() ? report.date : '',
-      typeof data?.control?.fecha === 'string' ? data.control.fecha : '',
-      typeof data?.acta?.fecha === 'string' ? data.acta.fecha : '',
-      typeof data?.proyecto?.fecha === 'string' ? data.proyecto.fecha : '',
-      typeof (data as any)?.areaAdicional?.fecha === 'string' ? (data as any).areaAdicional.fecha : '',
-      typeof (data as any)?.tasa?.fecha === 'string' ? (data as any).tasa.fecha : '',
-      typeof (data as any)?.fecha === 'string' ? (data as any).fecha : '',
+      toCandidateDate(report?.executionDate),
+      toCandidateDate(report?.date),
+      toCandidateDate(data?.header?.fecha),
+      toCandidateDate(data?.control?.fecha),
+      toCandidateDate(data?.acta?.fecha),
+      toCandidateDate(data?.proyecto?.fecha),
+      toCandidateDate((data as any)?.areaAdicional?.fecha),
+      toCandidateDate((data as any)?.tasa?.fecha),
+      toCandidateDate((data as any)?.fecha),
     ].filter(Boolean);
     if (candidateDates.length > 0) {
       header.fecha = candidateDates[0];

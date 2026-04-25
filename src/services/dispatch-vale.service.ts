@@ -11,11 +11,16 @@ import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 import { sendTelegramAlert } from './telegram-alert.service.js';
 import { normalizeWhatsAppPhoneNumber } from '../utils/whatsapp-phone.js';
 import { buildDispatchValePayloadFromPortal } from './dispatch-vale-payload.service.js';
+import { getDomainEventRunModel } from '../models/domain-event-run.model.js';
+
+const DISPATCH_VALE_LOCK_MS = 2 * 60 * 1000;
+const DISPATCH_VALE_RUN_KEY = 'workflow:dispatch-vale';
 
 export interface DispatchValeWorkflowInput {
   companyId: string;
   baseUrl: string;
   dispatchId: string;
+  sender?: string;
   orderId?: string;
   note?: string;
   quantity?: number;
@@ -37,6 +42,21 @@ type DispatchValeWorkflowInputLike = Partial<DispatchValeWorkflowInput> & {
 
 function cleanUrl(url: string): string {
   return String(url || '').replace(/^"+|"+$/g, '').trim();
+}
+
+function normalizeSender(sender?: string): string {
+  return String(sender || '').replace(/\D/g, '').trim();
+}
+
+function isQueuedWhatsAppResult(
+  value: unknown
+): value is { queued: true } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'queued' in value &&
+    (value as { queued?: unknown }).queued === true
+  );
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -135,6 +155,7 @@ export function validateDispatchValeWorkflowInput(
   const baseUrl = String(input.baseUrl || '').trim();
   const dispatchId = String(input.dispatchId || '').trim();
   const orderId = String(input.orderId || '').trim();
+  const sender = normalizeSender(input.sender);
 
   if (!companyId) throw new Error('companyId is required');
   if (!baseUrl) throw new Error('baseUrl is required');
@@ -147,6 +168,7 @@ export function validateDispatchValeWorkflowInput(
     companyId,
     baseUrl,
     dispatchId,
+    sender,
     orderId,
     note: typeof input.note === 'string' ? input.note : '',
     quantity: Number(input.quantity || 0),
@@ -173,14 +195,144 @@ function buildDispatchValeErrorAlert(input: DispatchValeWorkflowInput, error: un
   ].join('\n');
 }
 
+async function queueDispatchValeRun(input: DispatchValeWorkflowInput) {
+  const EventRunModel = await getDomainEventRunModel();
+
+  await EventRunModel.updateOne(
+    {
+      companyId: input.companyId,
+      eventId: input.dispatchId,
+      runKey: DISPATCH_VALE_RUN_KEY,
+    },
+    {
+      $setOnInsert: {
+        attempts: 0,
+        documentGenerated: false,
+        eventType: 'dispatch.vale.requested',
+        mediaRegistered: false,
+        runKey: DISPATCH_VALE_RUN_KEY,
+        runType: 'workflow',
+        whatsappFileSent: false,
+        whatsappLocationSent: false,
+      },
+      $set: {
+        documentGenerated: false,
+        lastError: '',
+        lockExpiresAt: null,
+        mediaRegistered: false,
+        status: 'queued',
+        whatsappFileSent: false,
+        whatsappLocationSent: false,
+      },
+    },
+    { upsert: true }
+  );
+}
+
+async function acquireDispatchValeRun(companyId: string, dispatchId: string) {
+  const EventRunModel = await getDomainEventRunModel();
+  const now = new Date();
+
+  try {
+    return await EventRunModel.findOneAndUpdate(
+      {
+        companyId,
+        eventId: dispatchId,
+        runKey: DISPATCH_VALE_RUN_KEY,
+        $or: [
+          { status: { $ne: 'running' } },
+          { lockExpiresAt: { $exists: false } },
+          { lockExpiresAt: null },
+          { lockExpiresAt: { $lt: now } },
+        ],
+      },
+      {
+        $setOnInsert: {
+          documentGenerated: false,
+          eventType: 'dispatch.vale.requested',
+          mediaRegistered: false,
+          runKey: DISPATCH_VALE_RUN_KEY,
+          runType: 'workflow',
+          whatsappFileSent: false,
+          whatsappLocationSent: false,
+        },
+        $set: {
+          lastError: '',
+          lockExpiresAt: new Date(now.getTime() + DISPATCH_VALE_LOCK_MS),
+          status: 'running',
+        },
+        $inc: { attempts: 1 },
+      },
+      {
+        new: true,
+        upsert: true,
+      }
+    ).lean();
+  } catch (error: any) {
+    if (error?.code === 11000) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function markDispatchValeRunFlags(params: {
+  companyId: string;
+  dispatchId: string;
+  patch: Record<string, unknown>;
+}) {
+  const EventRunModel = await getDomainEventRunModel();
+
+  await EventRunModel.updateOne(
+    {
+      companyId: params.companyId,
+      eventId: params.dispatchId,
+      runKey: DISPATCH_VALE_RUN_KEY,
+    },
+    {
+      $set: params.patch,
+    }
+  );
+}
+
+async function releaseDispatchValeRun(params: {
+  companyId: string;
+  dispatchId: string;
+  error?: unknown;
+}) {
+  const EventRunModel = await getDomainEventRunModel();
+
+  await EventRunModel.updateOne(
+    {
+      companyId: params.companyId,
+      eventId: params.dispatchId,
+      runKey: DISPATCH_VALE_RUN_KEY,
+    },
+    {
+      $set: {
+        lastError:
+          params.error instanceof Error
+            ? params.error.message
+            : params.error
+              ? String(params.error)
+              : '',
+        lockExpiresAt: null,
+        status: params.error ? 'failed' : 'completed',
+      },
+    }
+  );
+}
+
 export function enqueueDispatchValeWorkflow(
   input: DispatchValeWorkflowInput,
   deps?: {
+    persistRun?: (payload: DispatchValeWorkflowInput) => Promise<void>;
     runWorkflow?: (payload: DispatchValeWorkflowInput) => Promise<unknown>;
     notifyError?: (params: { dedupeKey?: string; message: string }) => Promise<boolean>;
     schedule?: (runner: () => void) => void;
   }
 ) {
+  const persistRun = deps?.persistRun || queueDispatchValeRun;
   const runWorkflow = deps?.runWorkflow || generateDispatchValeWorkflow;
   const notifyError = deps?.notifyError || sendTelegramAlert;
   const schedule =
@@ -190,19 +342,21 @@ export function enqueueDispatchValeWorkflow(
     });
 
   schedule(() => {
-    void runWorkflow(input).catch(async (error) => {
-      logger.error('dispatch_vale.background.failed', {
-        companyId: input.companyId,
-        dispatchId: input.dispatchId,
-        orderId: input.orderId,
-        error,
-      });
+    void persistRun(input)
+      .then(() => runWorkflow(input))
+      .catch(async (error) => {
+        logger.error('dispatch_vale.background.failed', {
+          companyId: input.companyId,
+          dispatchId: input.dispatchId,
+          orderId: input.orderId,
+          error,
+        });
 
-      await notifyError({
-        dedupeKey: `dispatch-vale:${input.companyId}:${input.dispatchId}:${error instanceof Error ? error.message : String(error)}`,
-        message: buildDispatchValeErrorAlert(input, error),
+        await notifyError({
+          dedupeKey: `dispatch-vale:${input.companyId}:${input.dispatchId}:${error instanceof Error ? error.message : String(error)}`,
+          message: buildDispatchValeErrorAlert(input, error),
+        });
       });
-    });
   });
 
   return {
@@ -213,173 +367,238 @@ export function enqueueDispatchValeWorkflow(
 }
 
 export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowInput) {
-  const resolvedInput = input.documentPayload && input.orderId
-    ? input
-    : {
-        ...input,
-        ...(await buildDispatchValePayloadFromPortal({
-          companyId: input.companyId,
-          dispatchId: input.dispatchId,
-        })),
-      };
-  const {
-    companyId,
-    baseUrl,
-    dispatchId,
-    orderId,
-    note,
-    quantity,
-    driverName,
-    driverPhoneNumber,
-    orderLocation,
-    fileName,
-    documentPayload,
-  } = resolvedInput;
-  const sendDriverPdf = resolvedInput.sendDriverPdf !== false;
+  const run = await acquireDispatchValeRun(input.companyId, input.dispatchId);
+  if (!run) {
+    return null;
+  }
 
-  if (!companyId) throw new Error('companyId is required');
-  if (!dispatchId) throw new Error('dispatchId is required');
-  if (!orderId) throw new Error('orderId is required');
-  if (!documentPayload) throw new Error('documentPayload is required');
+  try {
+    const resolvedInput = input.documentPayload && input.orderId
+      ? input
+      : {
+          ...input,
+          ...(await buildDispatchValePayloadFromPortal({
+            companyId: input.companyId,
+            dispatchId: input.dispatchId,
+          })),
+        };
+    const {
+      companyId,
+      baseUrl,
+      dispatchId,
+      orderId,
+      note,
+      quantity,
+      driverName,
+      driverPhoneNumber,
+      orderLocation,
+      fileName,
+      documentPayload,
+    } = resolvedInput;
+    const sendDriverPdf = resolvedInput.sendDriverPdf !== false;
 
-  const CompanyModel = await getCompanyModel();
-  const company = await CompanyModel.findOne({ companyId, isActive: true }).lean();
-  const companyName = String(company?.name || 'ConstRoad').trim() || 'ConstRoad';
-  const sender = String(company?.whatsappConfig?.sender || '').trim();
-  const normalizedPhone = normalizeWhatsAppPhoneNumber(driverPhoneNumber);
-  const normalizedDriverName = String(driverName || '').trim();
-  const normalizedLocation = cleanUrl(String(orderLocation || ''));
-  const normalizedNote = String(note || '').trim();
+    if (!companyId) throw new Error('companyId is required');
+    if (!dispatchId) throw new Error('dispatchId is required');
+    if (!orderId) throw new Error('orderId is required');
+    if (!documentPayload) throw new Error('documentPayload is required');
 
-  const document = await generateDispatchNoteDocumentFile({
-    companyId,
-    baseUrl,
-    payload: documentPayload,
-  });
+    const CompanyModel = await getCompanyModel();
+    const company = await CompanyModel.findOne({ companyId, isActive: true }).lean();
+    const companyName = String(company?.name || 'ConstRoad').trim() || 'ConstRoad';
+    const sender =
+      normalizeSender(resolvedInput.sender) ||
+      normalizeSender(String(company?.whatsappConfig?.sender || ''));
+    const normalizedPhone = normalizeWhatsAppPhoneNumber(driverPhoneNumber);
+    const normalizedDriverName = String(driverName || '').trim();
+    const normalizedLocation = cleanUrl(String(orderLocation || ''));
+    const normalizedNote = String(note || '').trim();
 
-  let mediaRegistrationError = '';
-  const mediaRegistrationPromise = registerValeMedia({
-    companyId,
-    dispatchId,
-    orderId,
-    note: normalizedNote,
-    document,
-    preferredFileName: fileName,
-  }).catch((error) => {
-    mediaRegistrationError = error instanceof Error ? error.message : String(error);
-    logger.error('dispatch_vale.register_media_failed', {
+    const document = await generateDispatchNoteDocumentFile({
+      companyId,
+      baseUrl,
+      payload: documentPayload,
+    });
+    await markDispatchValeRunFlags({
+      companyId,
+      dispatchId,
+      patch: { documentGenerated: true },
+    });
+
+    let mediaRegistrationError = '';
+    const mediaRegistrationPromise = registerValeMedia({
       companyId,
       dispatchId,
       orderId,
-      error: mediaRegistrationError,
+      note: normalizedNote,
+      document,
+      preferredFileName: fileName,
+    }).catch((error) => {
+      mediaRegistrationError = error instanceof Error ? error.message : String(error);
+      logger.error('dispatch_vale.register_media_failed', {
+        companyId,
+        dispatchId,
+        orderId,
+        error: mediaRegistrationError,
+      });
+      return null;
     });
-    return null;
-  });
 
-  const whatsapp = {
-    requested: sendDriverPdf,
-    sender,
-    fileSent: false,
-    locationSent: false,
-    skippedReason: '',
-    fileError: '',
-    locationError: '',
-  };
+    const whatsapp = {
+      requested: sendDriverPdf,
+      sender,
+      fileSent: false,
+      locationSent: false,
+      skippedReason: '',
+      fileError: '',
+      locationError: '',
+    };
 
-  if (!sendDriverPdf) {
-    whatsapp.skippedReason = 'sendDriverPdf disabled';
-  } else if (!normalizedPhone) {
-    whatsapp.skippedReason = 'driverPhoneNumber missing';
-  } else if (!sender) {
-    whatsapp.skippedReason = 'company sender not configured';
-  } else {
-    const caption = `${companyName}:\n\nHola ${normalizedDriverName || 'chofer'} *${companyName}* te envia tu vale de despacho\n- Cubos: ${Number(quantity || 0)}m3`;
+    if (!sendDriverPdf) {
+      whatsapp.skippedReason = 'sendDriverPdf disabled';
+    } else if (!normalizedPhone) {
+      whatsapp.skippedReason = 'driverPhoneNumber missing';
+    } else if (!sender) {
+      whatsapp.skippedReason = 'company sender not configured';
+    } else {
+      const caption = `${companyName}:\n\nHola ${normalizedDriverName || 'chofer'} *${companyName}* te envia tu vale de despacho\n- Cubos: ${Number(quantity || 0)}m3`;
 
-    try {
-      logger.info('dispatch_vale.whatsapp_file_sending', {
-        companyId,
-        dispatchId,
-        sender,
-        driverPhoneNumber: normalizedPhone,
-      });
-      await withTimeout(
-        WhatsAppDirectService.sendDocument(sender, normalizedPhone, {
-          companyId,
-          filePath: document.filePath,
-          fileName: fileName || document.fileName,
-          mimeType: 'application/pdf',
-          caption,
-          queueOnFail: true,
-        }),
-        25000,
-        'dispatch vale WhatsApp document send'
-      );
-      whatsapp.fileSent = true;
-      logger.info('dispatch_vale.whatsapp_file_sent', {
-        companyId,
-        dispatchId,
-        driverPhoneNumber: normalizedPhone,
-      });
-    } catch (error) {
-      whatsapp.fileError = error instanceof Error ? error.message : String(error);
-      logger.error('dispatch_vale.whatsapp_file_failed', {
-        companyId,
-        dispatchId,
-        error: whatsapp.fileError,
-      });
-    }
-
-    if (normalizedLocation) {
       try {
-        await withTimeout(
-          WhatsAppDirectService.sendMessage(
-            sender,
-            normalizedPhone,
-            `${companyName}:\n\n${normalizedDriverName || 'Chofer'} te enviamos la Ubicación de la obra:\n- 📍 aqui: ${normalizedLocation}`,
-            { companyId, queueOnFail: true }
-          ),
-          25000,
-          'dispatch vale WhatsApp location send'
-        );
-        whatsapp.locationSent = true;
-      } catch (error) {
-        whatsapp.locationError = error instanceof Error ? error.message : String(error);
-        logger.error('dispatch_vale.whatsapp_location_failed', {
+        logger.info('dispatch_vale.whatsapp_file_sending', {
           companyId,
           dispatchId,
-          error: whatsapp.locationError,
+          sender,
+          driverPhoneNumber: normalizedPhone,
+        });
+        const documentSendResult = await withTimeout(
+          WhatsAppDirectService.sendDocument(sender, normalizedPhone, {
+            companyId,
+            filePath: document.filePath,
+            fileName: fileName || document.fileName,
+            mimeType: 'application/pdf',
+            caption,
+            queueOnFail: true,
+          }),
+          25000,
+          'dispatch vale WhatsApp document send'
+        );
+        if (isQueuedWhatsAppResult(documentSendResult)) {
+          whatsapp.fileError = 'queued';
+          logger.warn('dispatch_vale.whatsapp_file_queued', {
+            companyId,
+            dispatchId,
+            driverPhoneNumber: normalizedPhone,
+            sender,
+          });
+        } else {
+          whatsapp.fileSent = true;
+          await markDispatchValeRunFlags({
+            companyId,
+            dispatchId,
+            patch: { whatsappFileSent: true },
+          });
+          logger.info('dispatch_vale.whatsapp_file_sent', {
+            companyId,
+            dispatchId,
+            driverPhoneNumber: normalizedPhone,
+          });
+        }
+      } catch (error) {
+        whatsapp.fileError = error instanceof Error ? error.message : String(error);
+        logger.error('dispatch_vale.whatsapp_file_failed', {
+          companyId,
+          dispatchId,
+          error: whatsapp.fileError,
         });
       }
-    }
-  }
 
-  if (whatsapp.skippedReason) {
-    logger.warn('dispatch_vale.whatsapp_skipped', {
+      if (normalizedLocation) {
+        try {
+          const locationSendResult = await withTimeout(
+            WhatsAppDirectService.sendMessage(
+              sender,
+              normalizedPhone,
+              `${companyName}:\n\n${normalizedDriverName || 'Chofer'} te enviamos la Ubicación de la obra:\n- 📍 aqui: ${normalizedLocation}`,
+              { companyId, queueOnFail: true }
+            ),
+            25000,
+            'dispatch vale WhatsApp location send'
+          );
+          if (isQueuedWhatsAppResult(locationSendResult)) {
+            whatsapp.locationError = 'queued';
+            logger.warn('dispatch_vale.whatsapp_location_queued', {
+              companyId,
+              dispatchId,
+              driverPhoneNumber: normalizedPhone,
+              sender,
+            });
+          } else {
+            whatsapp.locationSent = true;
+            await markDispatchValeRunFlags({
+              companyId,
+              dispatchId,
+              patch: { whatsappLocationSent: true },
+            });
+          }
+        } catch (error) {
+          whatsapp.locationError = error instanceof Error ? error.message : String(error);
+          logger.error('dispatch_vale.whatsapp_location_failed', {
+            companyId,
+            dispatchId,
+            error: whatsapp.locationError,
+          });
+        }
+      }
+    }
+
+    if (whatsapp.skippedReason) {
+      logger.warn('dispatch_vale.whatsapp_skipped', {
+        companyId,
+        dispatchId,
+        reason: whatsapp.skippedReason,
+        requested: whatsapp.requested,
+        hasDriverPhoneNumber: Boolean(normalizedPhone),
+        hasSender: Boolean(sender),
+      });
+    }
+
+    const mediaRegistration = await mediaRegistrationPromise;
+    if (mediaRegistration?.media?._id) {
+      await markDispatchValeRunFlags({
+        companyId,
+        dispatchId,
+        patch: { mediaRegistered: true },
+      });
+    }
+
+    logger.info('dispatch_vale.generate.completed', {
       companyId,
       dispatchId,
-      reason: whatsapp.skippedReason,
-      requested: whatsapp.requested,
-      hasDriverPhoneNumber: Boolean(normalizedPhone),
-      hasSender: Boolean(sender),
+      orderId,
+      mediaRegistered: Boolean(mediaRegistration),
+      mediaRegistrationError,
+      whatsapp,
     });
+
+    const result = {
+      document,
+      media: mediaRegistration?.media ?? null,
+      storage: mediaRegistration?.storage ?? null,
+      mediaRegistrationError,
+      whatsapp,
+    };
+
+    await releaseDispatchValeRun({
+      companyId,
+      dispatchId,
+    });
+
+    return result;
+  } catch (error) {
+    await releaseDispatchValeRun({
+      companyId,
+      dispatchId,
+      error,
+    });
+    throw error;
   }
-
-  const mediaRegistration = await mediaRegistrationPromise;
-
-  logger.info('dispatch_vale.generate.completed', {
-    companyId,
-    dispatchId,
-    orderId,
-    mediaRegistered: Boolean(mediaRegistration),
-    mediaRegistrationError,
-    whatsapp,
-  });
-
-  return {
-    document,
-    media: mediaRegistration?.media ?? null,
-    storage: mediaRegistration?.storage ?? null,
-    mediaRegistrationError,
-    whatsapp,
-  };
 }

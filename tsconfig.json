@@ -9,6 +9,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": false,
+    "types": ["node", "jest"],
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,

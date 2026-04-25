@@ -44,10 +44,6 @@ export const config = {
     aiEnabled: process.env.WHATSAPP_AI_ENABLED === 'true',
     aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || '51949376824',
     baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || 'fatal',
-    errorsTrackingGroupId:
-      process.env.WHATSAPP_ERRORS_TRACKING_GROUP_ID ||
-      process.env.NEXT_PUBLIC_GROUP_ERRORS_TRACKING ||
-      '120363376500470254@g.us',
   },
   
   // Claude API

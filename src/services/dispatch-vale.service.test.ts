@@ -1,3 +1,5 @@
+export {};
+
 jest.mock('../config/environment.js', () => ({
   config: {
     portal: { baseUrl: 'https://portal.constroad.com' },
@@ -37,9 +39,13 @@ jest.mock('./telegram-alert.service.js', () => ({
 jest.mock('./dispatch-vale-payload.service.js', () => ({
   buildDispatchValePayloadFromPortal: jest.fn(),
 }));
+jest.mock('../models/domain-event-run.model.js', () => ({
+  getDomainEventRunModel: jest.fn(),
+}));
 
 const axios = require('axios');
 const { getCompanyModel } = require('../database/models.js');
+const { getDomainEventRunModel } = require('../models/domain-event-run.model.js');
 const { generateDispatchNoteDocumentFile } = require('./dispatch-note-document.service.js');
 const {
   enqueueDispatchValeWorkflow,
@@ -55,13 +61,24 @@ const { buildDispatchValePayloadFromPortal } = require('./dispatch-vale-payload.
 describe('generateDispatchValeWorkflow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    getDomainEventRunModel.mockResolvedValue({
+      findOneAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          attempts: 1,
+          companyId: 'constroad',
+          dispatchId: 'dispatch-1',
+          status: 'running',
+        }),
+      }),
+      updateOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+    });
   });
 
   it('registers media and sends document plus location when whatsapp is enabled', async () => {
     const findOne = jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue({
         name: 'ConstRoad',
-        whatsappConfig: { sender: '51999999999' },
+        whatsappConfig: { sender: '51911111111' },
       }),
     });
     getCompanyModel.mockResolvedValue({ findOne });
@@ -90,6 +107,7 @@ describe('generateDispatchValeWorkflow', () => {
       orderId: 'order-1',
       note: 'Unidad 1',
       quantity: 15,
+      sender: '51902049935',
       driverName: 'Juan Perez',
       driverPhoneNumber: '999888777',
       sendDriverPdf: true,
@@ -113,7 +131,7 @@ describe('generateDispatchValeWorkflow', () => {
     });
     expect(axios.post).toHaveBeenCalledTimes(1);
     expect(WhatsAppDirectService.sendDocument).toHaveBeenCalledWith(
-      '51999999999',
+      '51902049935',
       '51999888777',
       expect.objectContaining({
         companyId: 'constroad',
@@ -123,7 +141,7 @@ describe('generateDispatchValeWorkflow', () => {
       })
     );
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledWith(
-      '51999999999',
+      '51902049935',
       '51999888777',
       expect.stringContaining('https://maps.app.goo.gl/demo'),
       { companyId: 'constroad', queueOnFail: true }
@@ -175,6 +193,79 @@ describe('generateDispatchValeWorkflow', () => {
     expect(WhatsAppDirectService.sendMessage).not.toHaveBeenCalled();
     expect(result.whatsapp.skippedReason).toBe('sendDriverPdf disabled');
     expect(result.media).toEqual({ _id: 'media-1' });
+  });
+
+  it('does not mark whatsapp as sent when the message is only queued', async () => {
+    const findOne = jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        name: 'ConstRoad',
+        whatsappConfig: { sender: '51902049935' },
+      }),
+    });
+    getCompanyModel.mockResolvedValue({ findOne });
+    generateDispatchNoteDocumentFile.mockResolvedValue({
+      pdfUrl: '/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      pdfUrlAbsolute:
+        'https://lila.constroad.com/files/companies/constroad/dispatches/vales/nro-2026/file.pdf',
+      totalPages: 1,
+      sizeBytes: 4096,
+      relativeDir: 'vales/nro-2026',
+      fileName: 'vale unidad 1.pdf',
+      filePath: 'dispatches/vales/nro-2026/file.pdf',
+    });
+    axios.post.mockResolvedValue({
+      data: {
+        media: { _id: 'media-1' },
+        storage: { used: 1, limit: 10, percentage: 10, fileCount: 1 },
+      },
+    });
+    WhatsAppDirectService.sendDocument.mockResolvedValue({ queued: true });
+    WhatsAppDirectService.sendMessage.mockResolvedValue({ queued: true });
+
+    const result = await generateDispatchValeWorkflow({
+      companyId: 'constroad',
+      baseUrl: 'https://lila.constroad.com',
+      dispatchId: 'dispatch-1',
+      orderId: 'order-1',
+      driverPhoneNumber: '999888777',
+      orderLocation: 'https://maps.app.goo.gl/demo',
+      sendDriverPdf: true,
+      documentPayload: {
+        schemaCode: 'DISPATCH-NOTE',
+        orderNumber: '2026-001',
+        schemaData: {},
+      },
+    });
+
+    expect(result.whatsapp.fileSent).toBe(false);
+    expect(result.whatsapp.locationSent).toBe(false);
+    expect(result.whatsapp.fileError).toBe('queued');
+    expect(result.whatsapp.locationError).toBe('queued');
+  });
+
+  it('normalizes sender provided by portal during validation', () => {
+    expect(
+      validateDispatchValeWorkflowInput({
+        companyId: 'constroad',
+        baseUrl: 'https://lila.constroad.com',
+        dispatchId: 'dispatch-1',
+        sender: '+51 902 049 935',
+      })
+    ).toEqual({
+      baseUrl: 'https://lila.constroad.com',
+      companyId: 'constroad',
+      dispatchId: 'dispatch-1',
+      documentPayload: undefined,
+      driverName: '',
+      driverPhoneNumber: '',
+      fileName: '',
+      note: '',
+      orderId: '',
+      orderLocation: '',
+      quantity: 0,
+      sendDriverPdf: true,
+      sender: '51902049935',
+    });
   });
 
   it('normalizes Peruvian local mobile numbers before sending whatsapp', async () => {
@@ -418,6 +509,7 @@ describe('generateDispatchValeWorkflow', () => {
         },
       }),
       {
+        persistRun: jest.fn().mockResolvedValue(undefined),
         runWorkflow: runner,
         notifyError: sendTelegramAlert,
         schedule: (fn) => scheduled.push(fn),

@@ -1,12 +1,9 @@
+import { GROUP_ERRORS_TRACKING } from '../constants/whatsapp.constants.js';
+
 type WhatsAppScope = {
   companyId?: string | null;
   tenantId?: string | null;
 };
-
-const DEFAULT_ERRORS_TRACKING_GROUP_ID =
-  process.env.WHATSAPP_ERRORS_TRACKING_GROUP_ID ||
-  process.env.NEXT_PUBLIC_GROUP_ERRORS_TRACKING ||
-  '120363376500470254@g.us';
 
 const normalizeScopeId = (value?: string | null): string => String(value || '').trim().toLowerCase();
 
@@ -23,8 +20,8 @@ export const resolveWhatsAppRecipient = (
     return normalizedRecipient;
   }
 
-  if (isTestWhatsAppScope(scope)) {
-    return scope.errorsTrackingGroupId || DEFAULT_ERRORS_TRACKING_GROUP_ID;
+  if (process.env.NODE_ENV === 'development' || isTestWhatsAppScope(scope)) {
+    return scope.errorsTrackingGroupId || GROUP_ERRORS_TRACKING;
   }
 
   return normalizedRecipient;

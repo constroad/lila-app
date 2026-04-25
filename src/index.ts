@@ -19,6 +19,7 @@ import pdfRoutes from './api/routes/pdf.routes.js';
 import driveRoutes from './api/routes/drive.routes.js';
 import documentsRoutes from './api/routes/documents.routes.js';
 import dispatchRoutes from './api/routes/dispatch.routes.js';
+import domainEventsRoutes from './api/routes/domain-events.routes.js';
 import publicRoutes from './api/routes/public.routes.js';
 import serviceManagementReportRoutes from './api/routes/service-management-report.routes.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
@@ -32,6 +33,10 @@ import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.j
 import cron from 'node-cron';
 import fs from 'fs-extra';
 import path from 'path';
+import {
+  startDomainEventWorker,
+  stopDomainEventWorker,
+} from './services/domain-events.service.js';
 
 const app = express();
 
@@ -176,6 +181,7 @@ app.use('/api/pdf', pdfRoutes);
 app.use('/api/drive', driveRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/dispatch', dispatchRoutes);
+app.use('/api/domain-events', domainEventsRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/service-management-report', serviceManagementReportRoutes);
 
@@ -288,6 +294,7 @@ async function startServer() {
 
     logger.info('Initializing Job Scheduler...');
     await jobScheduler.initialize();
+    startDomainEventWorker();
 
     // 🔄 WhatsApp sessions (notifications approach)
     restoreAllSessions();
@@ -358,6 +365,7 @@ async function startServer() {
 
           // Cerrar scheduler de jobs
           await jobScheduler.shutdown();
+          stopDomainEventWorker();
 
           // Cerrar PDF Generator
           await pdfGenerator.shutdown();
