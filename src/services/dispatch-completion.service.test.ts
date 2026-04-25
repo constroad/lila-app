@@ -278,169 +278,11 @@ describe('dispatch-completion.service', () => {
     );
   });
 
-  it('creates ipp in draft on the first dispatched row and completes it on the last one', async () => {
-    const reportCreate = jest.fn().mockResolvedValue({ _id: 'report-1' });
-    const reportUpdate = jest.fn().mockResolvedValue({ acknowledged: true });
-    const dispatchesByRun = [
-      [
-        {
-          _id: 'dispatch-1',
-          companyId: 'constroad',
-          date: '2026-04-24T10:00:00.000Z',
-          driverName: 'Luis',
-          driverLicense: 'LIC-1',
-          note: 'Unidad 1',
-          orderId: 'order-1',
-          placeholders: { tempSalida: 150 },
-          quantity: 7,
-          state: 'despachado',
-          transportId: 'transport-1',
-        },
-        {
-          _id: 'dispatch-2',
-          companyId: 'constroad',
-          date: '2026-04-24T11:00:00.000Z',
-          driverName: 'Mario',
-          driverLicense: 'LIC-2',
-          note: 'Unidad 2',
-          orderId: 'order-1',
-          placeholders: { tempSalida: 155 },
-          quantity: 7,
-          state: 'pendiente',
-          transportId: 'transport-2',
-        },
-      ],
-      [
-        {
-          _id: 'dispatch-1',
-          companyId: 'constroad',
-          date: '2026-04-24T10:00:00.000Z',
-          driverName: 'Luis',
-          driverLicense: 'LIC-1',
-          note: 'Unidad 1',
-          orderId: 'order-1',
-          placeholders: { tempSalida: 150 },
-          quantity: 7,
-          state: 'despachado',
-          transportId: 'transport-1',
-        },
-        {
-          _id: 'dispatch-2',
-          companyId: 'constroad',
-          date: '2026-04-24T11:00:00.000Z',
-          driverName: 'Mario',
-          driverLicense: 'LIC-2',
-          note: 'Unidad 2',
-          orderId: 'order-1',
-          placeholders: { tempSalida: 155 },
-          quantity: 7,
-          state: 'despachado',
-          transportId: 'transport-2',
-        },
-      ],
-    ];
-    const existingReportsByRun = [
-      [],
-      [
-        {
-          _id: 'report-1',
-          orderIds: ['order-1'],
-          schemaData: { registroDespachos: [] },
-        },
-      ],
-    ];
-    const MediaModel = {
-      find: jest.fn().mockImplementation((filter: { type?: string }) => ({
-        lean: jest.fn().mockResolvedValue(
-          filter.type === 'DISPATCH_PICTURES'
-            ? [
-                {
-                  _id: 'media-dispatch-1',
-                  type: 'DISPATCH_PICTURES',
-                  name: 'DISPATCH_PICTURES_1.jpg',
-                  mimeTye: 'image/jpeg',
-                  url: 'https://cdn.constroad.com/dispatch-1.jpg',
-                  thumbnailUrl: 'https://cdn.constroad.com/thumb-dispatch-1.jpg',
-                  date: '2026-04-24T10:05:00.000Z',
-                  metadata: {
-                    dispatchId: 'dispatch-1',
-                  },
-                },
-              ]
-            : [
-                {
-                  _id: 'media-lab-1',
-                  type: 'LABORATORY',
-                  name: 'LAB-1.jpg',
-                  mimeTye: 'image/jpeg',
-                  url: 'https://cdn.constroad.com/lab-1.jpg',
-                  thumbnailUrl: 'https://cdn.constroad.com/thumb-lab-1.jpg',
-                  date: '2026-04-24T10:10:00.000Z',
-                  metadata: {
-                    descripcion: 'Muestra laboratorio',
-                  },
-                },
-              ]
-        ),
-      })),
-    };
-    const connectionModel = jest.fn((modelName: string) => {
-      if (modelName === 'Dispatch') return DispatchModel;
-      if (modelName === 'Media') return MediaModel;
-      if (modelName === 'Transport') return TransportModel;
-      if (modelName === 'ServiceManagement') return ServiceManagementModel;
-      if (modelName === 'ServiceManagementReport') return ReportModel;
-      if (modelName === 'Company') return CompanyModel;
-      throw new Error(`Unexpected model ${modelName}`);
-    });
-    const DispatchModel = {
-      find: jest.fn().mockReturnValue({
-        lean: jest
-          .fn()
-          .mockImplementation(() => Promise.resolve(dispatchesByRun.shift() || [])),
-      }),
-    };
-    const TransportModel = {
-      find: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue([
-          { _id: 'transport-1', plate: 'ABC-123' },
-          { _id: 'transport-2', plate: 'DEF-456' },
-        ]),
-      }),
-    };
-    const ServiceManagementModel = {
-      find: jest.fn().mockReturnValue({
-        sort: jest.fn().mockReturnValue({
-          lean: jest.fn().mockResolvedValue([{ _id: 'service-1', orderIds: ['order-1'] }]),
-        }),
-      }),
-    };
-    const ReportModel = {
-      create: reportCreate,
-      find: jest.fn().mockReturnValue({
-        sort: jest.fn().mockReturnValue({
-          lean: jest
-            .fn()
-            .mockImplementation(() => Promise.resolve(existingReportsByRun.shift() || [])),
-        }),
-      }),
-      updateOne: reportUpdate,
-    };
-    const CompanyModel = {
-      findOne: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue({
-          plantSettings: {
-            productionReport: {
-              planta: 'Planta Norte',
-            },
-          },
-        }),
-      }),
-    };
-
-    getSharedConnection.mockResolvedValue({
-      model: connectionModel,
-      models: {},
+  it('delegates ipp sync to portal so portal remains the only writer', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({ success: true }),
     });
 
     await runDispatchIppSync({
@@ -467,90 +309,15 @@ describe('dispatch-completion.service', () => {
       trackRun: false,
     });
 
-    expect(reportCreate).toHaveBeenCalledWith(
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://portal.constroad.com/api/dispatch/dispatch-1',
       expect.objectContaining({
-        status: 'draft',
-        type: 'IPP',
-        schemaData: expect.objectContaining({
-          header: expect.objectContaining({
-            fecha: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-          }),
-          panelFotograficoPlanta: {
-            fotos: [
-              expect.objectContaining({
-                descripcion: 'Unidad 1',
-                mediaId: 'media-dispatch-1',
-              }),
-            ],
-          },
-          panelFotograficoLaboratorio: {
-            fotos: [
-              expect.objectContaining({
-                descripcion: 'Muestra laboratorio',
-                mediaId: 'media-lab-1',
-              }),
-            ],
-          },
-        }),
-      })
-    );
-    expect(connectionModel).toHaveBeenCalledWith(
-      'ServiceManagement',
-      expect.anything(),
-      'servicemanagements'
-    );
-
-    await runDispatchIppSync({
-      context: {
-        client: null,
-        company: null,
-        companyBotLabel: '🤖 TestBot',
-        dispatch: { _id: 'dispatch-1' },
-        operationalPendingCount: 0,
-        order: { _id: 'order-1' },
-        orderDispatches: [],
-        remainingOrderDispatches: 0,
-        sender: '51902049935',
-      },
-      input: {
-        companyId: 'constroad',
-        dispatchFinished: true,
-        dispatchId: 'dispatch-1',
-        sender: '51902049935',
-        state: 'despachado',
-        truckDispatched: true,
-      },
-      run: {},
-      trackRun: false,
-    });
-
-    expect(reportUpdate).toHaveBeenCalledWith(
-      { _id: 'report-1', companyId: 'constroad' },
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          status: 'completed',
-          executionDate: expect.any(Date),
-          schemaData: expect.objectContaining({
-            header: expect.objectContaining({
-              fecha: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-            }),
-            panelFotograficoPlanta: {
-              fotos: [
-                expect.objectContaining({
-                  descripcion: 'Unidad 1',
-                  mediaId: 'media-dispatch-1',
-                }),
-              ],
-            },
-            panelFotograficoLaboratorio: {
-              fotos: [
-                expect.objectContaining({
-                  descripcion: 'Muestra laboratorio',
-                  mediaId: 'media-lab-1',
-                }),
-              ],
-            },
-          }),
+        method: 'POST',
+        body: JSON.stringify({ orderId: 'order-1' }),
+        headers: expect.objectContaining({
+          Authorization: expect.stringContaining('Bearer '),
+          'Content-Type': 'application/json',
+          'x-company-id': 'constroad',
         }),
       })
     );
