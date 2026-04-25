@@ -64,28 +64,25 @@ const logger = winston.createLogger({
   ],
 });
 
-// Agregar consola en desarrollo
-if (config.nodeEnv === 'development') {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.printf(({ timestamp, level, message, ...meta }) => {
-          const metaKeys = Object.keys(meta).filter((key) => meta[key] !== undefined);
-          const cleanLevel = String(level).replace(/\u001b\[[0-9;]*m/g, '').toLowerCase();
-          const hasOnlyService = metaKeys.length === 1 && metaKeys[0] === 'service';
-          const shouldPrettyPrint = cleanLevel === 'warn' || cleanLevel === 'error';
-          const metaStr =
-            metaKeys.length && !(cleanLevel === 'info' && hasOnlyService)
-              ? shouldPrettyPrint
-                ? `\n${safeStringify(meta, 2)}`
-                : ` ${safeStringify(meta)}`
-              : '';
-          return `${timestamp} [${level}]: ${message}${metaStr}`;
-        })
-      ),
-    })
-  );
-}
+logger.add(
+  new winston.transports.Console({
+    format: winston.format.combine(
+      ...(config.nodeEnv === 'development' ? [winston.format.colorize()] : []),
+      winston.format.printf(({ timestamp, level, message, ...meta }) => {
+        const metaKeys = Object.keys(meta).filter((key) => meta[key] !== undefined);
+        const cleanLevel = String(level).replace(/\u001b\[[0-9;]*m/g, '').toLowerCase();
+        const hasOnlyService = metaKeys.length === 1 && metaKeys[0] === 'service';
+        const shouldPrettyPrint = cleanLevel === 'warn' || cleanLevel === 'error';
+        const metaStr =
+          metaKeys.length && !(cleanLevel === 'info' && hasOnlyService)
+            ? shouldPrettyPrint
+              ? `\n${safeStringify(meta, 2)}`
+              : ` ${safeStringify(meta)}`
+            : '';
+        return `${timestamp} [${level}]: ${message}${metaStr}`;
+      })
+    ),
+  })
+);
 
 export default logger;
