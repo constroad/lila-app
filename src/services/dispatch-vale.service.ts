@@ -412,6 +412,7 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     const normalizedDriverName = String(driverName || '').trim();
     const normalizedLocation = cleanUrl(String(orderLocation || ''));
     const normalizedNote = String(note || '').trim();
+    const skipRecipientRouting = config.nodeEnv === 'production';
 
     const document = await generateDispatchNoteDocumentFile({
       companyId,
@@ -468,6 +469,7 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
           dispatchId,
           sender,
           driverPhoneNumber: normalizedPhone,
+          skipRecipientRouting,
         });
         const documentSendResult = await withTimeout(
           WhatsAppDirectService.sendDocument(sender, normalizedPhone, {
@@ -477,6 +479,7 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
             mimeType: 'application/pdf',
             caption,
             queueOnFail: true,
+            skipRecipientRouting,
           }),
           25000,
           'dispatch vale WhatsApp document send'
@@ -518,7 +521,7 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
               sender,
               normalizedPhone,
               `${companyName}:\n\n${normalizedDriverName || 'Chofer'} te enviamos la Ubicación de la obra:\n- 📍 aqui: ${normalizedLocation}`,
-              { companyId, queueOnFail: true }
+              { companyId, queueOnFail: true, skipRecipientRouting }
             ),
             25000,
             'dispatch vale WhatsApp location send'
