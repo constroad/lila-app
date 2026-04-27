@@ -8,6 +8,7 @@ data/cronjobs.json
 data/cronjobs.json.backup
 data/whatsapp_backup_*
 uploads/
+coverage/
 dist/
 logs/
 .env

@@ -39,13 +39,13 @@ jest.mock('./telegram-alert.service.js', () => ({
 jest.mock('./dispatch-vale-payload.service.js', () => ({
   buildDispatchValePayloadFromPortal: jest.fn(),
 }));
-jest.mock('../models/domain-event-run.model.js', () => ({
-  getDomainEventRunModel: jest.fn(),
+jest.mock('../models/dispatch-vale-run.model.js', () => ({
+  getDispatchValeRunModel: jest.fn(),
 }));
 
 const axios = require('axios');
 const { getCompanyModel } = require('../database/models.js');
-const { getDomainEventRunModel } = require('../models/domain-event-run.model.js');
+const { getDispatchValeRunModel } = require('../models/dispatch-vale-run.model.js');
 const { generateDispatchNoteDocumentFile } = require('./dispatch-note-document.service.js');
 const {
   enqueueDispatchValeWorkflow,
@@ -61,7 +61,7 @@ const { buildDispatchValePayloadFromPortal } = require('./dispatch-vale-payload.
 describe('generateDispatchValeWorkflow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    getDomainEventRunModel.mockResolvedValue({
+    getDispatchValeRunModel.mockResolvedValue({
       findOneAndUpdate: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue({
           attempts: 1,
@@ -525,6 +525,68 @@ describe('generateDispatchValeWorkflow', () => {
         dedupeKey: expect.stringContaining('dispatch-vale:constroad:dispatch-1'),
         message: expect.stringContaining('background failed'),
       })
+    );
+  });
+
+  it('resets vale run flags without conflicting update paths', async () => {
+    const updateOne = jest.fn().mockResolvedValue({ acknowledged: true });
+    getDispatchValeRunModel.mockResolvedValue({
+      findOneAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          attempts: 1,
+          companyId: 'constroad',
+          dispatchId: 'dispatch-1',
+          status: 'running',
+        }),
+      }),
+      updateOne,
+    });
+
+    const scheduled: Array<() => void> = [];
+
+    enqueueDispatchValeWorkflow(
+      validateDispatchValeWorkflowInput({
+        companyId: 'constroad',
+        baseUrl: 'https://lila.constroad.com',
+        dispatchId: 'dispatch-1',
+        orderId: 'order-1',
+        documentPayload: {
+          schemaCode: 'DISPATCH-NOTE',
+          orderNumber: '2026-001',
+          schemaData: {},
+        },
+      }),
+      {
+        runWorkflow: jest.fn().mockResolvedValue(null),
+        notifyError: sendTelegramAlert,
+        schedule: (fn) => scheduled.push(fn),
+      }
+    );
+
+    expect(scheduled).toHaveLength(1);
+    scheduled[0]();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(updateOne).toHaveBeenCalledWith(
+      {
+        companyId: 'constroad',
+        dispatchId: 'dispatch-1',
+      },
+      {
+        $setOnInsert: {
+          attempts: 0,
+        },
+        $set: {
+          documentGenerated: false,
+          lastError: '',
+          lockExpiresAt: null,
+          mediaRegistered: false,
+          status: 'queued',
+          whatsappFileSent: false,
+          whatsappLocationSent: false,
+        },
+      },
+      { upsert: true }
     );
   });
 });

@@ -19,7 +19,6 @@ import pdfRoutes from './api/routes/pdf.routes.js';
 import driveRoutes from './api/routes/drive.routes.js';
 import documentsRoutes from './api/routes/documents.routes.js';
 import dispatchRoutes from './api/routes/dispatch.routes.js';
-import domainEventsRoutes from './api/routes/domain-events.routes.js';
 import publicRoutes from './api/routes/public.routes.js';
 import serviceManagementReportRoutes from './api/routes/service-management-report.routes.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
@@ -33,10 +32,6 @@ import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.j
 import cron from 'node-cron';
 import fs from 'fs-extra';
 import path from 'path';
-import {
-  startDomainEventWorker,
-  stopDomainEventWorker,
-} from './services/domain-events.service.js';
 
 const app = express();
 
@@ -49,6 +44,30 @@ const corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || '')
   .filter(Boolean);
 
 const frameAncestors = ["'self'", ...corsOrigins];
+
+const isTrustedPortalOrigin = (origin: string): boolean => {
+  try {
+    const parsed = new URL(origin);
+    return (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname.endsWith('constroad.com')
+    );
+  } catch {
+    return false;
+  }
+};
+
+const isAllowedCorsOrigin = (origin: string): boolean => {
+  if (corsOrigins.includes(origin)) {
+    return true;
+  }
+
+  if (corsOrigins.length === 0) {
+    return isTrustedPortalOrigin(origin);
+  }
+
+  return isTrustedPortalOrigin(origin);
+};
 
 // Middleware de seguridad
 app.use(
@@ -67,8 +86,7 @@ const resolveStaticCorsOrigin = (origin?: string | string[] | null): string | nu
   if (!origin) return null;
   const normalized = Array.isArray(origin) ? origin[0] : origin;
   if (!normalized) return null;
-  if (corsOrigins.length === 0) return normalized;
-  if (corsOrigins.includes(normalized)) return normalized;
+  if (isAllowedCorsOrigin(normalized)) return normalized;
   return null;
 };
 
@@ -125,7 +143,7 @@ app.use(
       if (!origin) {
         return callback(null, true);
       }
-      if (corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+      if (isAllowedCorsOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error('Not allowed by CORS'));
@@ -181,7 +199,6 @@ app.use('/api/pdf', pdfRoutes);
 app.use('/api/drive', driveRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/dispatch', dispatchRoutes);
-app.use('/api/domain-events', domainEventsRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/service-management-report', serviceManagementReportRoutes);
 
@@ -294,7 +311,6 @@ async function startServer() {
 
     logger.info('Initializing Job Scheduler...');
     await jobScheduler.initialize();
-    startDomainEventWorker();
 
     // 🔄 WhatsApp sessions (notifications approach)
     restoreAllSessions();
@@ -365,7 +381,6 @@ async function startServer() {
 
           // Cerrar scheduler de jobs
           await jobScheduler.shutdown();
-          stopDomainEventWorker();
 
           // Cerrar PDF Generator
           await pdfGenerator.shutdown();

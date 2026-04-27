@@ -11,10 +11,9 @@ import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 import { sendTelegramAlert } from './telegram-alert.service.js';
 import { normalizeWhatsAppPhoneNumber } from '../utils/whatsapp-phone.js';
 import { buildDispatchValePayloadFromPortal } from './dispatch-vale-payload.service.js';
-import { getDomainEventRunModel } from '../models/domain-event-run.model.js';
+import { getDispatchValeRunModel } from '../models/dispatch-vale-run.model.js';
 
 const DISPATCH_VALE_LOCK_MS = 2 * 60 * 1000;
-const DISPATCH_VALE_RUN_KEY = 'workflow:dispatch-vale';
 
 export interface DispatchValeWorkflowInput {
   companyId: string;
@@ -195,50 +194,45 @@ function buildDispatchValeErrorAlert(input: DispatchValeWorkflowInput, error: un
   ].join('\n');
 }
 
-async function queueDispatchValeRun(input: DispatchValeWorkflowInput) {
-  const EventRunModel = await getDomainEventRunModel();
+function buildDispatchValeRunResetPatch() {
+  return {
+    documentGenerated: false,
+    lastError: '',
+    lockExpiresAt: null,
+    mediaRegistered: false,
+    status: 'queued',
+    whatsappFileSent: false,
+    whatsappLocationSent: false,
+  };
+}
 
-  await EventRunModel.updateOne(
+async function queueDispatchValeRun(input: DispatchValeWorkflowInput) {
+  const DispatchValeRunModel = await getDispatchValeRunModel();
+
+  await DispatchValeRunModel.updateOne(
     {
       companyId: input.companyId,
-      eventId: input.dispatchId,
-      runKey: DISPATCH_VALE_RUN_KEY,
+      dispatchId: input.dispatchId,
     },
     {
       $setOnInsert: {
         attempts: 0,
-        documentGenerated: false,
-        eventType: 'dispatch.vale.requested',
-        mediaRegistered: false,
-        runKey: DISPATCH_VALE_RUN_KEY,
-        runType: 'workflow',
-        whatsappFileSent: false,
-        whatsappLocationSent: false,
       },
-      $set: {
-        documentGenerated: false,
-        lastError: '',
-        lockExpiresAt: null,
-        mediaRegistered: false,
-        status: 'queued',
-        whatsappFileSent: false,
-        whatsappLocationSent: false,
-      },
+      $set: buildDispatchValeRunResetPatch(),
     },
     { upsert: true }
   );
 }
 
 async function acquireDispatchValeRun(companyId: string, dispatchId: string) {
-  const EventRunModel = await getDomainEventRunModel();
+  const DispatchValeRunModel = await getDispatchValeRunModel();
   const now = new Date();
 
   try {
-    return await EventRunModel.findOneAndUpdate(
+    return await DispatchValeRunModel.findOneAndUpdate(
       {
         companyId,
-        eventId: dispatchId,
-        runKey: DISPATCH_VALE_RUN_KEY,
+        dispatchId,
         $or: [
           { status: { $ne: 'running' } },
           { lockExpiresAt: { $exists: false } },
@@ -249,10 +243,7 @@ async function acquireDispatchValeRun(companyId: string, dispatchId: string) {
       {
         $setOnInsert: {
           documentGenerated: false,
-          eventType: 'dispatch.vale.requested',
           mediaRegistered: false,
-          runKey: DISPATCH_VALE_RUN_KEY,
-          runType: 'workflow',
           whatsappFileSent: false,
           whatsappLocationSent: false,
         },
@@ -281,13 +272,12 @@ async function markDispatchValeRunFlags(params: {
   dispatchId: string;
   patch: Record<string, unknown>;
 }) {
-  const EventRunModel = await getDomainEventRunModel();
+  const DispatchValeRunModel = await getDispatchValeRunModel();
 
-  await EventRunModel.updateOne(
+  await DispatchValeRunModel.updateOne(
     {
       companyId: params.companyId,
-      eventId: params.dispatchId,
-      runKey: DISPATCH_VALE_RUN_KEY,
+      dispatchId: params.dispatchId,
     },
     {
       $set: params.patch,
@@ -300,13 +290,12 @@ async function releaseDispatchValeRun(params: {
   dispatchId: string;
   error?: unknown;
 }) {
-  const EventRunModel = await getDomainEventRunModel();
+  const DispatchValeRunModel = await getDispatchValeRunModel();
 
-  await EventRunModel.updateOne(
+  await DispatchValeRunModel.updateOne(
     {
       companyId: params.companyId,
-      eventId: params.dispatchId,
-      runKey: DISPATCH_VALE_RUN_KEY,
+      dispatchId: params.dispatchId,
     },
     {
       $set: {
@@ -460,7 +449,7 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     } else if (!sender) {
       whatsapp.skippedReason = 'company sender not configured';
     } else {
-      const caption = `${companyName}:\n\nHola ${normalizedDriverName || 'chofer'} *${companyName}* te envia tu vale de despacho\n- Cubos: ${Number(quantity || 0)}m3`;
+      const caption = `${companyName}:\n\nHola ${normalizedDriverName || 'chofer'} *${companyName}* te envia tu guia de remision`;
 
       try {
         logger.info('dispatch_vale.whatsapp_file_sending', {

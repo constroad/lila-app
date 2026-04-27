@@ -1,10 +1,12 @@
-import type { Model } from 'mongoose';
+import { Schema, type Model } from 'mongoose';
 import { getSharedConnection } from './sharedConnection.js';
 import { CronJobSchema, ICronJob } from '../models/cronjob.model.js';
 import { CompanySchema, ICompany } from '../models/company.model.js';
 
 let cronJobModel: Model<ICronJob> | null = null;
 let companyModel: Model<ICompany> | null = null;
+let configModel: Model<Record<string, unknown>> | null = null;
+const looseSchema = new Schema({}, { strict: false });
 
 export async function getCronJobModel(): Promise<Model<ICronJob>> {
   if (cronJobModel) {
@@ -30,14 +32,28 @@ export async function getCompanyModel(): Promise<Model<ICompany>> {
   return companyModel;
 }
 
+export async function getConfigModel(): Promise<Model<Record<string, unknown>>> {
+  if (configModel) {
+    return configModel;
+  }
+
+  const conn = await getSharedConnection();
+  configModel =
+    (conn.models.Config as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Config', looseSchema, 'configs');
+  return configModel;
+}
+
 export async function getSharedModels(): Promise<{
   CronJobModel: Model<ICronJob>;
   CompanyModel: Model<ICompany>;
+  ConfigModel: Model<Record<string, unknown>>;
 }> {
-  const [CronJobModel, CompanyModel] = await Promise.all([
+  const [CronJobModel, CompanyModel, ConfigModel] = await Promise.all([
     getCronJobModel(),
     getCompanyModel(),
+    getConfigModel(),
   ]);
 
-  return { CronJobModel, CompanyModel };
+  return { CronJobModel, CompanyModel, ConfigModel };
 }
