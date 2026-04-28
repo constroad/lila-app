@@ -30,6 +30,7 @@ type PublicReceptionInput = {
   inputMode: 'standard' | 'combustible';
   companyId: string;
   telegramChatId: string;
+  deviceName?: string;
   materialId: string;
   materialName: string;
   materialDescription: string;
@@ -215,6 +216,7 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
       inputMode,
       companyId,
       telegramChatId: requireString(req.body?.telegramChatId, 'telegramChatId'),
+      deviceName: trimValue(req.body?.deviceName) || undefined,
       materialId: requireString(req.body?.materialId, 'materialId'),
       materialName: requireString(req.body?.materialName, 'materialName'),
       materialDescription: trimValue(req.body?.materialDescription),
@@ -673,6 +675,9 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       purchaseOrderId: input.purchaseOrderId,
       purchaseOrderNumber: input.purchaseOrderNumber,
       arriveDate: new Date().toLocaleString(),
+      source: 'public-reception',
+      inputMode: input.inputMode,
+      deviceName: input.deviceName,
     });
 
     const uploadSummary = await processEvidenceUploads({
@@ -721,6 +726,9 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       purchaseOrderId: input.purchaseOrderId,
       purchaseOrderNumber: input.purchaseOrderNumber,
       arriveDate: new Date().toLocaleString(),
+      source: 'public-reception',
+      inputMode: input.inputMode,
+      deviceName: input.deviceName,
     }));
 
   const uploadSummary = await processEvidenceUploads({
@@ -751,6 +759,9 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
     purchaseOrderId: input.purchaseOrderId,
     purchaseOrderNumber: input.purchaseOrderNumber,
     status: 'Completed',
+    source: 'public-reception',
+    inputMode: input.inputMode,
+    deviceName: input.deviceName,
   });
 
   await sendTelegramTextMessage(
