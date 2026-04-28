@@ -186,6 +186,7 @@ export const actaConformidadSchema: DocumentSchema = {
       id: 'registroFotografico',
       type: 'photoPanel',
       title: 'Panel Fotografico',
+      pageBreakBefore: true,
       maxImages: 20,
       layout: '2x2',
       showFecha: true
@@ -194,6 +195,7 @@ export const actaConformidadSchema: DocumentSchema = {
       id: 'firmas',
       type: 'signatures',
       title: 'Firmas',
+      pageBreakBefore: true,
       signatures: [
         { key: 'representanteContratista', label: 'CONTRATISTA', sublabel: 'Representante', required: true, showCIP: true },
         { key: 'representanteCliente', label: 'CLIENTE', sublabel: 'Representante', required: true, showCIP: true }

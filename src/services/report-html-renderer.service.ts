@@ -811,6 +811,9 @@ export class ReportHtmlRenderer {
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const photos = this.limitPhotos(this.resolvePhotos(section), section.maxImages);
     if (photos.length === 0) {
+      if (this.schema.code === 'ACT-CNF') {
+        return '';
+      }
       if (this.schema.code === 'IPP' && section.id === 'panelFotograficoLaboratorio') {
         return '';
       }

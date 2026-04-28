@@ -1,4 +1,5 @@
 import { controlImprimacionSchema } from './control-imprimacion.schema.js';
+import { actaConformidadSchema } from './acta-conformidad.schema.js';
 
 describe('controlImprimacionSchema defaults', () => {
   it('deja vacios los valores editables que no deben venir precargados', () => {
@@ -25,5 +26,19 @@ describe('controlImprimacionSchema defaults', () => {
     expect(data.tasaRegistroDatos[0].observaciones).toBe('');
     expect(data.tasaRegistroDatos[8].observaciones).toBe('');
     expect(data.observacionesTasa).toBe('');
+  });
+});
+
+describe('actaConformidadSchema pdf behavior', () => {
+  it('starts photo panel and signatures on a new page', () => {
+    const photoSection = actaConformidadSchema.sections.find(
+      (section) => section.id === 'registroFotografico'
+    );
+    const signaturesSection = actaConformidadSchema.sections.find(
+      (section) => section.id === 'firmas'
+    );
+
+    expect(photoSection?.pageBreakBefore).toBe(true);
+    expect(signaturesSection?.pageBreakBefore).toBe(true);
   });
 });
