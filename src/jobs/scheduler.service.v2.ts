@@ -111,10 +111,15 @@ class JobSchedulerV2 {
 
   async updateJob(jobId: string, updates: Partial<ICronJob>): Promise<ICronJob> {
     try {
-      const { CronJobModel } = await getSharedModels();
+      const { CronJobModel, CompanyModel } = await getSharedModels();
       const job = await CronJobModel.findById(jobId);
       if (!job) {
         throw new Error(`Job ${jobId} not found`);
+      }
+
+      const company = await CompanyModel.findOne({ companyId: job.companyId });
+      if (!company) {
+        throw new Error(`Company ${job.companyId} not found`);
       }
 
       if (
@@ -123,6 +128,19 @@ class JobSchedulerV2 {
         (!updates.message.body || !updates.message.body.trim())
       ) {
         throw new Error('message.body is required when type is "message"');
+      }
+
+      const nextType = updates.type || job.type;
+      const nextMessage = updates.message || job.message;
+      const requiresSender =
+        nextType === 'message' ||
+        Boolean(nextMessage?.chatId) ||
+        Boolean(nextMessage?.body?.trim());
+
+      if (requiresSender && !company.whatsappConfig?.sender) {
+        throw new Error(
+          `Company ${job.companyId} does not have WhatsApp sender configured`
+        );
       }
 
       Object.assign(job, updates, {

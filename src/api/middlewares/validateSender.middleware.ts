@@ -6,9 +6,26 @@ export async function validateSender(
   res: Response,
   next: NextFunction
 ) {
-  const companyId =
+  const directCompanyId =
     (req.body && req.body.companyId) ||
     (req.query && req.query.companyId);
+  const { CompanyModel, CronJobModel } = await getSharedModels();
+
+  let companyId = typeof directCompanyId === 'string' ? directCompanyId : '';
+
+  if (!companyId && req.params?.id) {
+    const job = await CronJobModel.findById(req.params.id)
+      .select('companyId type message')
+      .lean();
+    const currentBody = req.body && typeof req.body === 'object' ? req.body : {};
+    companyId = typeof job?.companyId === 'string' ? job.companyId : '';
+    if (!currentBody.type && typeof job?.type === 'string') {
+      req.body = { ...currentBody, type: job.type };
+    }
+    if (!currentBody.message && job?.message) {
+      req.body = { ...(req.body && typeof req.body === 'object' ? req.body : currentBody), message: job.message };
+    }
+  }
 
   if (!companyId || typeof companyId !== 'string') {
     return res.status(400).json({
@@ -17,7 +34,6 @@ export async function validateSender(
     });
   }
 
-  const { CompanyModel } = await getSharedModels();
   const company = await CompanyModel.findOne({ companyId });
   if (!company) {
     return res.status(404).json({

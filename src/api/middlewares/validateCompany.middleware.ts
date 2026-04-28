@@ -6,9 +6,17 @@ export async function validateCompany(
   res: Response,
   next: NextFunction
 ) {
-  const companyId =
+  const directCompanyId =
     (req.body && req.body.companyId) ||
     (req.query && req.query.companyId);
+  const { CompanyModel, CronJobModel } = await getSharedModels();
+
+  let companyId = typeof directCompanyId === 'string' ? directCompanyId : '';
+
+  if (!companyId && req.params?.id) {
+    const job = await CronJobModel.findById(req.params.id).select('companyId').lean();
+    companyId = typeof job?.companyId === 'string' ? job.companyId : '';
+  }
 
   if (!companyId || typeof companyId !== 'string') {
     return res.status(400).json({
@@ -17,7 +25,6 @@ export async function validateCompany(
     });
   }
 
-  const { CompanyModel } = await getSharedModels();
   const company = await CompanyModel.findOne({ companyId });
   if (!company) {
     return res.status(404).json({
