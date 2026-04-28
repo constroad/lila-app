@@ -40,6 +40,23 @@ type MigrationCopyJob = {
   error?: string;
 };
 
+type MigrationDeleteJobEntry = {
+  filePath: string;
+  status: MigrationCopyJobStatus;
+  size?: number;
+  error?: string;
+};
+
+type MigrationDeleteJob = {
+  id: string;
+  companyId: string;
+  status: MigrationCopyJobStatus;
+  entries: MigrationDeleteJobEntry[];
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+};
+
 const MAX_MIGRATION_COPY_ENTRIES = 500;
 const migrationJobStore = new JsonStore({
   baseDir: path.join(config.storage.root, 'migration-jobs'),
@@ -489,12 +506,19 @@ const buildMigrationJobId = () =>
   `file-migration-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 const getMigrationJobKey = (jobId: string) => `order-file-${jobId}`;
+const getDeleteMigrationJobKey = (jobId: string) => `order-file-delete-${jobId}`;
 
 const saveMigrationCopyJob = (job: MigrationCopyJob) =>
   migrationJobStore.set(getMigrationJobKey(job.id), job);
 
 const getMigrationCopyJob = (jobId: string) =>
   migrationJobStore.get<MigrationCopyJob>(getMigrationJobKey(jobId));
+
+const saveMigrationDeleteJob = (job: MigrationDeleteJob) =>
+  migrationJobStore.set(getDeleteMigrationJobKey(job.id), job);
+
+const getMigrationDeleteJob = (jobId: string) =>
+  migrationJobStore.get<MigrationDeleteJob>(getDeleteMigrationJobKey(jobId));
 
 const getSuperAdminTargetCompanyId = (req: Request) => {
   const targetCompanyId = req.companyId;
@@ -572,6 +596,32 @@ const copyCompanyFileEntry = async (params: {
   return { created: createdTarget, size: sourceStats.size };
 };
 
+const deleteCompanyFileEntry = async (params: {
+  companyId: string;
+  filePath: string;
+}) => {
+  const resolved = storagePathService.resolvePath(params.companyId, params.filePath);
+
+  if (!storagePathService.validateAccess(resolved, params.companyId)) {
+    const error: CustomError = new Error('Access denied: invalid target path');
+    error.statusCode = HTTP_STATUS.FORBIDDEN;
+    throw error;
+  }
+
+  const exists = await fs.pathExists(resolved);
+  if (!exists) {
+    return { deleted: false, size: 0 };
+  }
+
+  const stats = await fs.stat(resolved);
+  const fileSize = stats.isFile() ? stats.size : 0;
+  await fs.remove(resolved);
+  if (fileSize > 0) {
+    await decrementStorageUsage(params.companyId, fileSize);
+  }
+  return { deleted: true, size: fileSize };
+};
+
 async function runMigrationCopyJob(jobId: string) {
   if (activeMigrationCopyJobs.has(jobId)) return;
   const job = await getMigrationCopyJob(jobId);
@@ -619,6 +669,57 @@ async function runMigrationCopyJob(jobId: string) {
     await sendTelegramAlert({
       dedupeKey: `order-migration-files-${job.id}`,
       message: `Migración de archivos ${job.status}: ${job.sourceCompanyId} -> ${job.targetCompanyId}. Archivos: ${job.entries.length}`,
+    });
+  } finally {
+    activeMigrationCopyJobs.delete(jobId);
+  }
+}
+
+async function runMigrationDeleteJob(jobId: string) {
+  if (activeMigrationCopyJobs.has(jobId)) return;
+  const job = await getMigrationDeleteJob(jobId);
+  if (!job) return;
+  if (job.status === 'succeeded' || job.status === 'failed') return;
+  activeMigrationCopyJobs.add(jobId);
+
+  try {
+    job.status = 'running';
+    job.updatedAt = new Date().toISOString();
+    await saveMigrationDeleteJob(job);
+
+    for (const entry of job.entries) {
+      if (entry.status === 'succeeded') continue;
+      try {
+        entry.status = 'running';
+        job.updatedAt = new Date().toISOString();
+        await saveMigrationDeleteJob(job);
+        const deletedEntry = await deleteCompanyFileEntry({
+          companyId: job.companyId,
+          filePath: entry.filePath,
+        });
+        entry.status = 'succeeded';
+        entry.size = deletedEntry.size;
+        job.updatedAt = new Date().toISOString();
+        await saveMigrationDeleteJob(job);
+      } catch (error) {
+        entry.status = 'failed';
+        entry.error = error instanceof Error ? error.message : 'Unknown error';
+        job.status = 'failed';
+        job.error = entry.error;
+        job.updatedAt = new Date().toISOString();
+        await saveMigrationDeleteJob(job);
+        break;
+      }
+    }
+
+    if (job.status !== 'failed') {
+      job.status = 'succeeded';
+    }
+    job.updatedAt = new Date().toISOString();
+    await saveMigrationDeleteJob(job);
+    await sendTelegramAlert({
+      dedupeKey: `order-migration-delete-${job.id}`,
+      message: `Limpieza de archivos ${job.status}: ${job.companyId}. Archivos: ${job.entries.length}`,
     });
   } finally {
     activeMigrationCopyJobs.delete(jobId);
@@ -729,6 +830,80 @@ export async function getCopyCompanyEntriesJob(req: Request, res: Response, next
       setImmediate(() => {
         runMigrationCopyJob(job.id).catch((error) => {
           logger.error('Migration copy job resume failed', error);
+        });
+      });
+    }
+    res.status(HTTP_STATUS.OK).json({ success: true, data: job });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteCompanyEntries(req: Request, res: Response, next: NextFunction) {
+  try {
+    const companyId = getSuperAdminTargetCompanyId(req);
+    const rawEntries = Array.isArray(req.body?.entries) ? req.body.entries : [];
+
+    if (rawEntries.length === 0) {
+      const error: CustomError = new Error('entries are required');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    if (rawEntries.length > MAX_MIGRATION_COPY_ENTRIES) {
+      const error: CustomError = new Error('Too many migration entries');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    const entries = rawEntries
+      .map((rawEntry: Record<string, unknown>) => ({
+        filePath: cleanMigrationPath(companyId, String(rawEntry.filePath || '')),
+        status: 'queued' as const,
+      }))
+      .filter((entry) => entry.filePath);
+
+    if (entries.length !== rawEntries.length) {
+      const error: CustomError = new Error('Invalid migration entry path');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    const now = new Date().toISOString();
+    const job: MigrationDeleteJob = {
+      id: buildMigrationJobId(),
+      companyId,
+      status: 'queued',
+      entries,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await saveMigrationDeleteJob(job);
+    setImmediate(() => {
+      runMigrationDeleteJob(job.id).catch((error) => {
+        logger.error('Migration delete job failed', error);
+      });
+    });
+
+    res.status(HTTP_STATUS.ACCEPTED).json({ success: true, data: job });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getDeleteCompanyEntriesJob(req: Request, res: Response, next: NextFunction) {
+  try {
+    getSuperAdminTargetCompanyId(req);
+    const jobId = String(req.params.jobId || '').trim();
+    const job = await getMigrationDeleteJob(jobId);
+    if (!job) {
+      const error: CustomError = new Error('Migration delete job not found');
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      return next(error);
+    }
+    if (job.status === 'queued' || job.status === 'running') {
+      setImmediate(() => {
+        runMigrationDeleteJob(job.id).catch((error) => {
+          logger.error('Migration delete job resume failed', error);
         });
       });
     }

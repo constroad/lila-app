@@ -7,7 +7,9 @@ import {
   copyCompanyEntries,
   copyCompanyEntry,
   deleteEntry,
+  deleteCompanyEntries,
   getCopyCompanyEntriesJob,
+  getDeleteCompanyEntriesJob,
   getInfo,
   listEntries,
   moveEntry,
@@ -74,6 +76,8 @@ router.patch('/move', requireTenant, moveEntry);
 router.post('/admin/copy-company-entry', requireTenant, copyCompanyEntry);
 router.post('/admin/copy-company-entries', requireTenant, copyCompanyEntries);
 router.get('/admin/copy-company-entries/:jobId', requireTenant, getCopyCompanyEntriesJob);
+router.post('/admin/delete-company-entries', requireTenant, deleteCompanyEntries);
+router.get('/admin/delete-company-entries/:jobId', requireTenant, getDeleteCompanyEntriesJob);
 router.get('/pdf/info', requireTenant, getPdfMetadata);
 router.get('/pdf/page', requireTenant, getPdfPageImage);
 router.get('/pdf/preview-grid', requireTenant, getPdfPagePreviewGrid);
