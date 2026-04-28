@@ -34,6 +34,12 @@ type PublicReceptionInput = {
   materialName: string;
   materialDescription: string;
   materialLevel: number;
+  providerId: string;
+  providerName: string;
+  vendorProviderId?: string;
+  vendorProviderName?: string;
+  purchaseOrderId?: string;
+  purchaseOrderNumber?: string;
   driver?: string;
   m3?: number;
   files: UploadedReceptionFile[];
@@ -89,6 +95,12 @@ type PortalInputRecord = {
   level?: number;
   materialId: string;
   material: string;
+  providerId: string;
+  providerName: string;
+  vendorProviderId?: string;
+  vendorProviderName?: string;
+  purchaseOrderId?: string;
+  purchaseOrderNumber?: string;
   arriveDate: string;
   status?: string;
 };
@@ -207,6 +219,12 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
       materialName: requireString(req.body?.materialName, 'materialName'),
       materialDescription: trimValue(req.body?.materialDescription),
       materialLevel: parseNumber(req.body?.materialLevel, 0),
+      providerId: requireString(req.body?.providerId, 'providerId'),
+      providerName: requireString(req.body?.providerName, 'providerName'),
+      vendorProviderId: trimValue(req.body?.vendorProviderId) || undefined,
+      vendorProviderName: trimValue(req.body?.vendorProviderName) || undefined,
+      purchaseOrderId: trimValue(req.body?.purchaseOrderId) || undefined,
+      purchaseOrderNumber: trimValue(req.body?.purchaseOrderNumber) || undefined,
       driver: trimValue(req.body?.driver),
       m3: parseNumber(req.body?.m3, 0),
       files,
@@ -564,6 +582,8 @@ const buildSuccessStatusMessage = (
     `Empresa: ${input.companyId}`,
     `Recurso: ${options.resourceId}`,
     `Detalle: ${targetName}`,
+    `Transportista: ${input.kind === 'input' ? input.providerName : 'N/A'}`,
+    `Proveedor venta: ${input.kind === 'input' ? input.vendorProviderName || 'N/A' : 'N/A'}`,
     `Evidencias nuevas: ${options.uploadedCount}`,
   ];
 
@@ -597,6 +617,8 @@ const buildFailureStatusMessage = (
       : '❌ Registro de ingreso fallido',
     `Empresa: ${input.companyId}`,
     `Detalle: ${targetName}`,
+    `Transportista: ${input.kind === 'input' ? input.providerName : 'N/A'}`,
+    `Proveedor venta: ${input.kind === 'input' ? input.vendorProviderName || 'N/A' : 'N/A'}`,
     `Motivo: ${message}`,
   ].join('\n');
 };
@@ -644,6 +666,12 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       level: input.materialLevel,
       materialId: input.materialId,
       material: `${input.materialName} ${input.materialDescription}`.trim(),
+      providerId: input.providerId,
+      providerName: input.providerName,
+      vendorProviderId: input.vendorProviderId,
+      vendorProviderName: input.vendorProviderName,
+      purchaseOrderId: input.purchaseOrderId,
+      purchaseOrderNumber: input.purchaseOrderNumber,
       arriveDate: new Date().toLocaleString(),
     });
 
@@ -686,6 +714,12 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       level: input.materialLevel,
       materialId: input.materialId,
       material: `${input.materialName} ${input.materialDescription}`.trim(),
+      providerId: input.providerId,
+      providerName: input.providerName,
+      vendorProviderId: input.vendorProviderId,
+      vendorProviderName: input.vendorProviderName,
+      purchaseOrderId: input.purchaseOrderId,
+      purchaseOrderNumber: input.purchaseOrderNumber,
       arriveDate: new Date().toLocaleString(),
     }));
 
@@ -710,6 +744,12 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
   await updatePortalInput(input.companyId, activeInput._id, {
     ...activeInput,
     materialId: input.materialId,
+    providerId: input.providerId,
+    providerName: input.providerName,
+    vendorProviderId: input.vendorProviderId,
+    vendorProviderName: input.vendorProviderName,
+    purchaseOrderId: input.purchaseOrderId,
+    purchaseOrderNumber: input.purchaseOrderNumber,
     status: 'Completed',
   });
 
