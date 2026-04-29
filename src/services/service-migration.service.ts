@@ -4,6 +4,8 @@ import { sendTelegramAlert } from './telegram-alert.service.js';
 import {
   buildGeneratedDocumentFiles,
   DRIVE_BLOCKER,
+  ORDER_LINKED_FILES_BLOCKER,
+  ORDER_SUBTREE_BLOCKER,
   REPORT_WARNING,
   SERVICE_MIGRATION_WARNING,
   asText,
@@ -145,6 +147,44 @@ const runMigration = async (serviceId: string, request: ServiceMigrationRequest)
   const reportIds = reports.map((report) => asText(report._id)).filter(Boolean);
   const resourceIds = collectResourceIds(serviceId, reports);
   const orderIds = collectOrderIds(sourceService, reports);
+  const linkedOrderMediaDocuments = orderIds.length > 0
+    ? await models.Media.find({
+        companyId: request.sourceCompanyId,
+        resourceId: { $in: orderIds },
+        status: { $ne: 'DELETED' },
+      }).lean()
+    : [];
+  const [
+    linkedDispatches,
+    linkedCertificates,
+    linkedKardexEntries,
+    linkedConsumes,
+    linkedOrderLinks,
+  ] = orderIds.length > 0
+    ? await Promise.all([
+        models.Dispatch.find({
+          companyId: request.sourceCompanyId,
+          orderId: { $in: orderIds },
+        }).lean(),
+        models.Certificate.find({
+          companyId: request.sourceCompanyId,
+          orderId: { $in: orderIds },
+        }).lean(),
+        models.Kardex.find({
+          companyId: request.sourceCompanyId,
+          orderId: { $in: orderIds },
+        }).lean(),
+        models.Consume.find({
+          companyId: request.sourceCompanyId,
+          'orders.orderId': { $in: orderIds },
+        }).lean(),
+        models.PublicLink.find({
+          companyId: request.sourceCompanyId,
+          resourceType: 'order',
+          resourceId: { $in: orderIds },
+        }).lean(),
+      ])
+    : [[], [], [], [], []];
 
   const [
     driveItems,
@@ -219,6 +259,28 @@ const runMigration = async (serviceId: string, request: ServiceMigrationRequest)
   if (!sameCompanyMigration && driveItems.length > 0) {
     throw new Error(DRIVE_BLOCKER);
   }
+  if (
+    !sameCompanyMigration &&
+    (
+      linkedDispatches.length > 0 ||
+      linkedOrderMediaDocuments.length > 0 ||
+      linkedCertificates.length > 0 ||
+      linkedKardexEntries.length > 0 ||
+      linkedConsumes.length > 0 ||
+      linkedOrderLinks.length > 0
+    )
+  ) {
+    const onlyLinkedOrderFiles =
+      linkedOrderMediaDocuments.length > 0 &&
+      linkedDispatches.length === 0 &&
+      linkedCertificates.length === 0 &&
+      linkedKardexEntries.length === 0 &&
+      linkedConsumes.length === 0 &&
+      linkedOrderLinks.length === 0;
+    throw new Error(
+      onlyLinkedOrderFiles ? ORDER_LINKED_FILES_BLOCKER : ORDER_SUBTREE_BLOCKER
+    );
+  }
   if (!sameCompanyMigration) {
     const missingPairings = orderIds.filter(
       (orderId) => !getPairingTarget(request.pairings, 'order', orderId)
@@ -267,6 +329,7 @@ const runMigration = async (serviceId: string, request: ServiceMigrationRequest)
       mediaDocuments: allMediaDocuments,
       files,
       request,
+      orderIds,
       sourceServiceId: serviceId,
       targetServiceId,
     });
@@ -286,9 +349,13 @@ const runMigration = async (serviceId: string, request: ServiceMigrationRequest)
     targetCompanyId: request.targetCompanyId,
     movedCounts: {
       ...emptyCounts(),
-      medias: allMediaDocuments.length,
+      dispatches: linkedDispatches.length,
+      medias: allMediaDocuments.length + linkedOrderMediaDocuments.length,
       folders: folderDocuments.length,
-      publicLinks: publicLinks.length,
+      certificates: linkedCertificates.length,
+      kardexEntries: linkedKardexEntries.length,
+      consumes: linkedConsumes.length,
+      publicLinks: publicLinks.length + linkedOrderLinks.length,
       linkedReports: reports.length,
       linkedOrders: orderIds.length,
       driveItems: driveItems.length,

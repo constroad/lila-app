@@ -71,6 +71,10 @@ export type ServiceMigrationResult = {
 
 export type MigrationModels = {
   Order: MigrationModel;
+  Dispatch: MigrationModel;
+  Certificate: MigrationModel;
+  Kardex: MigrationModel;
+  Consume: MigrationModel;
   ServiceManagement: MigrationModel;
   ServiceManagementReport: MigrationModel;
   ServiceManagementDrive: MigrationModel;
@@ -92,6 +96,10 @@ export const SERVICE_MIGRATION_WARNING =
   'El servicio destino tiene otro cliente. Verifica contratos y visibilidad.';
 export const DRIVE_BLOCKER =
   'El servicio tiene vínculos al drive global. La migración entre empresas requiere revisión manual.';
+export const ORDER_LINKED_FILES_BLOCKER =
+  'El servicio usa archivos ligados a pedidos, despacho o laboratorio. La migración entre empresas aún no remapea ese alcance.';
+export const ORDER_SUBTREE_BLOCKER =
+  'El servicio tiene pedidos con despachos, medias, certificados, kardex, consumos o links propios. La migración entre empresas aún no remapea ese subárbol completo.';
 export const REPORT_WARNING =
   'Revisa el pairing de pedidos antes de migrar reportes y métricas.';
 
@@ -363,6 +371,49 @@ const replaceDeepText = (
   return value;
 };
 
+const replaceDeepExactString = (
+  value: unknown,
+  replacements: Map<string, string>
+): unknown => {
+  if (typeof value === 'string') {
+    return replacements.get(value) ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => replaceDeepExactString(entry, replacements));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, currentValue]) => [
+        key,
+        replaceDeepExactString(currentValue, replacements),
+      ])
+    );
+  }
+  return value;
+};
+
+export const buildOrderIdReplacementMap = (
+  sourceOrderIds: string[],
+  pairings: PairingSelection[]
+) => {
+  const replacements = new Map<string, string>();
+  sourceOrderIds.forEach((sourceOrderId) => {
+    const targetOrderId = getPairingTarget(pairings, 'order', sourceOrderId);
+    if (targetOrderId && targetOrderId !== sourceOrderId) {
+      replacements.set(sourceOrderId, targetOrderId);
+    }
+  });
+  return replacements;
+};
+
+export const rewriteReportOrderReferences = (
+  payload: unknown,
+  replacements: Map<string, string>
+) => {
+  if (replacements.size === 0) return payload;
+  return replaceDeepExactString(payload, replacements);
+};
+
 export const emptyCounts = (): MigrationCounts => ({
   dispatches: 0,
   medias: 0,
@@ -383,6 +434,14 @@ export const emptyCounts = (): MigrationCounts => ({
 export const getModels = (connection: Connection): MigrationModels => ({
   Order: (connection.models.Order ||
     connection.model('Order', looseSchema)) as MigrationModel,
+  Dispatch: (connection.models.Dispatch ||
+    connection.model('Dispatch', looseSchema)) as MigrationModel,
+  Certificate: (connection.models.Certificate ||
+    connection.model('Certificate', looseSchema)) as MigrationModel,
+  Kardex: (connection.models.Kardex ||
+    connection.model('Kardex', looseSchema)) as MigrationModel,
+  Consume: (connection.models.Consume ||
+    connection.model('Consume', looseSchema)) as MigrationModel,
   ServiceManagement: (connection.models.ServiceManagement ||
     connection.model('ServiceManagement', looseSchema)) as MigrationModel,
   ServiceManagementReport: (connection.models.ServiceManagementReport ||
@@ -591,6 +650,7 @@ const rewriteReportPayloads = async (params: {
   targetCompanyId: string;
   sourceServiceId: string;
   targetServiceId: string;
+  orderIdReplacements: Map<string, string>;
   session: ClientSession;
 }) => {
   for (const report of params.reports) {
@@ -610,13 +670,34 @@ const rewriteReportPayloads = async (params: {
       { _id: toMongoIdentifier(reportId), companyId: params.targetCompanyId },
       {
         $set: {
-          schemaData: replaceDeepText(report.schemaData, transform),
-          draftData: replaceDeepText(report.draftData, transform),
-          attachments: replaceDeepText(report.attachments, transform),
-          schemaOverrides: replaceDeepText(report.schemaOverrides, transform),
-          customSections: replaceDeepText(report.customSections, transform),
-          annexes: replaceDeepText(report.annexes, transform),
-          generatedDocuments: replaceDeepText(report.generatedDocuments, transform),
+          schemaData: rewriteReportOrderReferences(
+            replaceDeepText(report.schemaData, transform),
+            params.orderIdReplacements
+          ),
+          draftData: rewriteReportOrderReferences(
+            replaceDeepText(report.draftData, transform),
+            params.orderIdReplacements
+          ),
+          attachments: rewriteReportOrderReferences(
+            replaceDeepText(report.attachments, transform),
+            params.orderIdReplacements
+          ),
+          schemaOverrides: rewriteReportOrderReferences(
+            replaceDeepText(report.schemaOverrides, transform),
+            params.orderIdReplacements
+          ),
+          customSections: rewriteReportOrderReferences(
+            replaceDeepText(report.customSections, transform),
+            params.orderIdReplacements
+          ),
+          annexes: rewriteReportOrderReferences(
+            replaceDeepText(report.annexes, transform),
+            params.orderIdReplacements
+          ),
+          generatedDocuments: rewriteReportOrderReferences(
+            replaceDeepText(report.generatedDocuments, transform),
+            params.orderIdReplacements
+          ),
         },
       },
       params.session
@@ -633,6 +714,7 @@ export const executeDbMigration = async (params: {
   mediaDocuments: PlainDocument[];
   files: MigrationFile[];
   request: ServiceMigrationRequest;
+  orderIds: string[];
   sourceServiceId: string;
   targetServiceId: string;
 }) => {
@@ -642,6 +724,10 @@ export const executeDbMigration = async (params: {
     .filter(Boolean);
   const sourceResourceId = `service-${params.sourceServiceId}`;
   const targetResourceId = `service-${params.targetServiceId}`;
+  const orderIdReplacements = buildOrderIdReplacementMap(
+    params.orderIds,
+    params.request.pairings
+  );
   const mappedOrderIds = Array.from(
     new Set(
       (Array.isArray(params.sourceService.orderIds) ? params.sourceService.orderIds : [])
@@ -701,7 +787,7 @@ export const executeDbMigration = async (params: {
       await rawUpdateMany(params.models.Media, { companyId: params.request.targetCompanyId, _id: { $in: mediaIds.map(toMongoIdentifier) }, resourceId: sourceResourceId }, { $set: { resourceId: targetResourceId } }, session);
 
       await rewriteMediaLocations({ models: params.models, mediaDocuments: params.mediaDocuments, files: params.files, sourceCompanyId: params.request.sourceCompanyId, targetCompanyId: params.request.targetCompanyId, sourceServiceId: params.sourceServiceId, targetServiceId: params.targetServiceId, session });
-      await rewriteReportPayloads({ models: params.models, reports: params.reports, sourceCompanyId: params.request.sourceCompanyId, targetCompanyId: params.request.targetCompanyId, sourceServiceId: params.sourceServiceId, targetServiceId: params.targetServiceId, session });
+      await rewriteReportPayloads({ models: params.models, reports: params.reports, sourceCompanyId: params.request.sourceCompanyId, targetCompanyId: params.request.targetCompanyId, sourceServiceId: params.sourceServiceId, targetServiceId: params.targetServiceId, orderIdReplacements, session });
     });
   } finally {
     await session.endSession();

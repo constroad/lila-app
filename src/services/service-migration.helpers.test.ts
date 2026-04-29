@@ -83,6 +83,52 @@ describe('service-migration.helpers', () => {
       },
     ]);
   });
+
+  it('skips order-linked files during same-company service moves', () => {
+    const files = helpers.buildMigrationFiles(
+      [
+        {
+          _id: 'media-1',
+          metadata: {
+            lilaAppFilePath: 'files/companies/globofast/orders/order-1/DISPATCH_PICTURES/foto.jpg',
+            storageProvider: 'lila-app',
+          },
+        },
+      ],
+      'globofast',
+      'globofast',
+      'service-1',
+      'service-9'
+    );
+
+    expect(files).toEqual([]);
+  });
+
+  it('rewrites exact order ids inside report payloads', () => {
+    const replacements = helpers.buildOrderIdReplacementMap(
+      ['order-1', 'order-2'],
+      [{ kind: 'order', sourceId: 'order-1', targetId: 'target-9' }]
+    );
+
+    const rewritten = helpers.rewriteReportOrderReferences(
+      {
+        control: {
+          orderId: 'order-1',
+          untouched: 'order-10',
+        },
+        orderIds: ['order-1', 'order-2'],
+      },
+      replacements
+    );
+
+    expect(rewritten).toEqual({
+      control: {
+        orderId: 'target-9',
+        untouched: 'order-10',
+      },
+      orderIds: ['target-9', 'order-2'],
+    });
+  });
 });
 
 describe('service-migration.service validations', () => {
