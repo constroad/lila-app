@@ -29,6 +29,7 @@ function buildTestInput(overrides = {}) {
     dispatchFinished: false,
     allDispatched: false,
     pendingCount: 3,
+    dispatchedCount: 4,
     sender: '51902049935',
     plantGroupTarget: 'plant@g.us',
     clientTargets: ['client@g.us'],
@@ -58,10 +59,10 @@ describe('dispatch-notifications.service', () => {
   });
 
   it('builds the exact plant progress message', () => {
-    const message = notifications.buildPlantProgressMessage('Bot', 'Unidad 1', 5);
+    const message = notifications.buildPlantProgressMessage('Bot', 7, 5);
 
     expect(message).toBe(
-      ['Bot', '- 🚛 Unidad 1 *despachado*', '- ⏰ Unidades Pendientes: 5'].join('\n')
+      ['Bot', '- 🚛 Unidad 7 *despachado*', '- ⏰ Unidades Pendientes: 5'].join('\n')
     );
   });
 
@@ -126,9 +127,14 @@ describe('dispatch-notifications.service', () => {
     });
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(3);
+    expect(updateOneMock).toHaveBeenNthCalledWith(
+      1,
+      { key: 'dispatch-progress:constroad:dispatch-1' },
+      expect.anything(),
+      { upsert: true }
+    );
 
-    jest.advanceTimersByTime(1000);
-    await Promise.resolve();
+    await jest.runOnlyPendingTimersAsync();
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(4);
     expect(WhatsAppDirectService.sendMessage).toHaveBeenLastCalledWith(
@@ -149,8 +155,7 @@ describe('dispatch-notifications.service', () => {
       context: { companyBotLabel: 'Bot' },
     });
 
-    jest.advanceTimersByTime(1000);
-    await Promise.resolve();
+    await jest.runOnlyPendingTimersAsync();
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(3);
   });
@@ -165,6 +170,33 @@ describe('dispatch-notifications.service', () => {
     });
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not resend the same dispatch notifications twice', async () => {
+    updateOneMock
+      .mockResolvedValueOnce({
+        acknowledged: true,
+        matchedCount: 0,
+        modifiedCount: 0,
+        upsertedCount: 1,
+      })
+      .mockResolvedValueOnce({
+        acknowledged: true,
+        matchedCount: 1,
+        modifiedCount: 0,
+        upsertedCount: 0,
+      });
+
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput(),
+      context: { companyBotLabel: 'Bot' },
+    });
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput(),
+      context: { companyBotLabel: 'Bot' },
+    });
+
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it('sends the plant end message only once per day', async () => {

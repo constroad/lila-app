@@ -46,6 +46,8 @@ export function validatePostProcessInput(body: unknown): ValidationResult {
       dispatchFinished: payload.dispatchFinished === true,
       allDispatched: payload.allDispatched === true,
       pendingCount: typeof payload.pendingCount === 'number' ? payload.pendingCount : 0,
+      dispatchedCount:
+        typeof payload.dispatchedCount === 'number' ? payload.dispatchedCount : 0,
       sender: typeof payload.sender === 'string' ? payload.sender : '',
       plantGroupTarget:
         typeof payload.plantGroupTarget === 'string'

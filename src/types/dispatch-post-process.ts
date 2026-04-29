@@ -7,6 +7,7 @@ export interface DispatchPostProcessInput {
   dispatchFinished: boolean;
   allDispatched: boolean;
   pendingCount: number;
+  dispatchedCount: number;
   truckDispatched?: boolean;
   note?: string;
   quantity?: number;

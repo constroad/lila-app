@@ -11,6 +11,29 @@ type NotificationParams = {
   context: DispatchPostProcessContext;
 };
 
+async function claimNotificationFlag(key: string, companyId: string) {
+  try {
+    const DispatchNotificationFlagModel = await getDispatchNotificationFlagModel();
+    const updateResult = await DispatchNotificationFlagModel.updateOne(
+      { key },
+      {
+        $setOnInsert: {
+          key,
+          companyId,
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
+    return updateResult.upsertedCount > 0;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[dispatch-notification-flag] Failed: ${message}`);
+    return true;
+  }
+}
+
 function toSafeText(value: unknown, fallback = ''): string {
   const text = String(value || '').trim();
   return text || fallback;
@@ -18,12 +41,12 @@ function toSafeText(value: unknown, fallback = ''): string {
 
 export function buildPlantProgressMessage(
   botLabel: string,
-  note: string,
+  dispatchOrdinal: number,
   pendingCount: number
 ): string {
   return [
     botLabel,
-    `- 🚛 ${note} *despachado*`,
+    `- 🚛 Unidad ${dispatchOrdinal} *despachado*`,
     `- ⏰ Unidades Pendientes: ${pendingCount}`,
   ].join('\n');
 }
@@ -118,6 +141,7 @@ export function resolveClientTargets(input: DispatchPostProcessInput): string[] 
 }
 
 export function scheduleIppReadyNotification(params: {
+  dispatchId: string;
   sender: string;
   targets: string[];
   botLabel: string;
@@ -130,12 +154,20 @@ export function scheduleIppReadyNotification(params: {
 
   const message = buildIppReadyMessage(params.botLabel, params.obra);
   setTimeout(() => {
-    void sendToTargets(params.sender, params.targets, message, params.companyId).catch(
-      (error: unknown) => {
-        const messageText = error instanceof Error ? error.message : String(error);
-        console.error(`[ipp-ready] Failed to send: ${messageText}`);
+    void (async () => {
+      const shouldSend = await claimNotificationFlag(
+        `dispatch-ipp-ready:${params.companyId}:${params.dispatchId}`,
+        params.companyId
+      );
+      if (!shouldSend) {
+        return;
       }
-    );
+
+      await sendToTargets(params.sender, params.targets, message, params.companyId);
+    })().catch((error: unknown) => {
+      const messageText = error instanceof Error ? error.message : String(error);
+      console.error(`[ipp-ready] Failed to send: ${messageText}`);
+    });
   }, DISPATCH_IPP_READY_NOTIFICATION_DELAY_MS);
 }
 
@@ -148,29 +180,12 @@ export async function sendPlantEndIfNotSent(
   const dayKey = new Date().toLocaleDateString('en-CA', {
     timeZone: 'America/Lima',
   });
-  const key = `plant-end:${companyId}:${dayKey}`;
-  try {
-    const DispatchNotificationFlagModel = await getDispatchNotificationFlagModel();
-    const updateResult = await DispatchNotificationFlagModel.updateOne(
-      { key },
-      {
-        $setOnInsert: {
-          key,
-          companyId,
-          createdAt: new Date(),
-        },
-      },
-      {
-        upsert: true,
-      }
-    );
-
-    if (updateResult.upsertedCount === 0) {
-      return;
-    }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[plant-end] Flag persistence failed: ${message}`);
+  const shouldSend = await claimNotificationFlag(
+    `plant-end:${companyId}:${dayKey}`,
+    companyId
+  );
+  if (!shouldSend) {
+    return;
   }
 
   await sendToGroup(
@@ -190,11 +205,24 @@ export async function sendDispatchNotifications(params: NotificationParams) {
   const driverLicense = toSafeText(input.driverLicense);
   const driverPhoneNumber = toSafeText(input.driverPhoneNumber);
   const obra = toSafeText(input.obra, 'No especificada');
+  const dispatchOrdinal = Math.max(Number(input.dispatchedCount) || 0, 1);
+  const dispatchSent = await claimNotificationFlag(
+    `dispatch-progress:${input.companyId}:${input.dispatchId}`,
+    input.companyId
+  );
+
+  if (!dispatchSent) {
+    return;
+  }
 
   await sendToGroup(
     input.sender,
     input.plantGroupTarget,
-    buildPlantProgressMessage(context.companyBotLabel, note, input.pendingCount),
+    buildPlantProgressMessage(
+      context.companyBotLabel,
+      dispatchOrdinal,
+      input.pendingCount
+    ),
     input.companyId
   );
 
@@ -229,6 +257,7 @@ export async function sendDispatchNotifications(params: NotificationParams) {
 
     if (realClientTargets.length > 0) {
       scheduleIppReadyNotification({
+        dispatchId: input.dispatchId,
         sender: input.sender,
         targets: realClientTargets,
         botLabel: context.companyBotLabel,
