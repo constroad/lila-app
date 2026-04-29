@@ -514,6 +514,8 @@ const saveMigrationCopyJob = (job: MigrationCopyJob) =>
 const getMigrationCopyJob = (jobId: string) =>
   migrationJobStore.get<MigrationCopyJob>(getMigrationJobKey(jobId));
 
+export const getMigrationCopyJobSnapshot = (jobId: string) => getMigrationCopyJob(jobId);
+
 const saveMigrationDeleteJob = (job: MigrationDeleteJob) =>
   migrationJobStore.set(getDeleteMigrationJobKey(job.id), job);
 

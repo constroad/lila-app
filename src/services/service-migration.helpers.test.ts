@@ -1,0 +1,159 @@
+export {};
+
+jest.mock('../api/controllers/drive.controller.js', () => ({
+  getMigrationCopyJobSnapshot: jest.fn(),
+}));
+jest.mock('./storage-path.service.js', () => ({
+  storagePathService: {
+    resolvePath: jest.fn(),
+    validateAccess: jest.fn().mockReturnValue(true),
+  },
+}));
+jest.mock('../middleware/quota.middleware.js', () => ({
+  incrementStorageUsage: jest.fn(),
+  decrementStorageUsage: jest.fn(),
+}));
+jest.mock('../database/sharedConnection.js', () => ({
+  getSharedConnection: jest.fn(),
+}));
+jest.mock('./telegram-alert.service.js', () => ({
+  sendTelegramAlert: jest.fn(),
+}));
+
+const { getMigrationCopyJobSnapshot } = require('../api/controllers/drive.controller.js');
+const helpers = require('./service-migration.helpers.js');
+const service = require('./service-migration.service.js');
+
+const createChain = (value: unknown) => ({
+  sort() {
+    return this;
+  },
+  limit() {
+    return this;
+  },
+  lean: jest.fn().mockResolvedValue(value),
+});
+
+describe('service-migration.helpers', () => {
+  it('collects attachment media selectors without duplicates', () => {
+    const filters = helpers.collectAttachmentMediaFilters([
+      {
+        attachmentMediaType: 'GENERAL_EXPENSE',
+        attachmentResourceIds: ['expense-1', 'expense-1'],
+      },
+      {
+        attachmentMediaType: 'SERVICE_FINANCE',
+        attachmentResourceIds: ['finance-1'],
+      },
+    ]);
+
+    expect(filters).toEqual({
+      resourceIds: ['expense-1', 'finance-1'],
+      types: ['GENERAL_EXPENSE', 'SERVICE_FINANCE'],
+    });
+  });
+
+  it('rewrites generated document files under service/reports', () => {
+    const files = helpers.buildGeneratedDocumentFiles(
+      [
+        {
+          _id: 'report-1',
+          generatedDocuments: {
+            pdfUrl: '/files/companies/globofast/service/reports/service-1/acta.pdf',
+            docxUrl: 'https://constroad.com/files/companies/globofast/service/reports/service-1/acta.docx',
+          },
+        },
+      ],
+      'globofast',
+      'constroad',
+      'service-1',
+      'service-9'
+    );
+
+    expect(files).toEqual([
+      {
+        mediaId: 'generated:report-1:service/reports/service-1/acta.pdf',
+        sourcePath: 'companies/globofast/service/reports/service-1/acta.pdf',
+        targetPath: 'companies/constroad/service/reports/service-9/acta.pdf',
+      },
+      {
+        mediaId: 'generated:report-1:service/reports/service-1/acta.docx',
+        sourcePath: 'companies/globofast/service/reports/service-1/acta.docx',
+        targetPath: 'companies/constroad/service/reports/service-9/acta.docx',
+      },
+    ]);
+  });
+});
+
+describe('service-migration.service validations', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('accepts a matching prepared file job', async () => {
+    getMigrationCopyJobSnapshot.mockResolvedValue({
+      status: 'succeeded',
+      sourceCompanyId: 'globofast',
+      targetCompanyId: 'constroad',
+      entries: [{ targetPath: 'companies/constroad/service/reports/service-9/acta.pdf' }],
+    });
+
+    await expect(
+      service.validatePreparedFiles(
+        {
+          sourceCompanyId: 'globofast',
+          targetCompanyId: 'constroad',
+          pairings: [],
+          confirmationText: 'service-1',
+          fileJobId: 'job-1',
+        },
+        [{ sourcePath: 'companies/globofast/service/reports/service-1/acta.pdf', targetPath: 'companies/constroad/service/reports/service-9/acta.pdf' }]
+      )
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects a prepared file job that points to another target', async () => {
+    getMigrationCopyJobSnapshot.mockResolvedValue({
+      status: 'succeeded',
+      sourceCompanyId: 'globofast',
+      targetCompanyId: 'constroad',
+      entries: [{ targetPath: 'companies/constroad/service/reports/service-8/acta.pdf' }],
+    });
+
+    await expect(
+      service.validatePreparedFiles(
+        {
+          sourceCompanyId: 'globofast',
+          targetCompanyId: 'constroad',
+          pairings: [],
+          confirmationText: 'service-1',
+          fileJobId: 'job-1',
+        },
+        [{ sourcePath: 'companies/globofast/service/reports/service-1/acta.pdf', targetPath: 'companies/constroad/service/reports/service-9/acta.pdf' }]
+      )
+    ).rejects.toThrow('Job de archivos apunta a otro destino.');
+  });
+
+  it('rejects invalid order pairings outside the allowed targets', async () => {
+    const recentOrders = [{ _id: 'target-1', cliente: 'Cliente', obra: 'Obra' }];
+    const sourceOrder = { _id: 'source-1', cliente: 'Cliente', obra: 'Obra' };
+    const models = {
+      Order: {
+        find: jest.fn()
+          .mockReturnValueOnce(createChain(recentOrders))
+          .mockReturnValueOnce(createChain(recentOrders)),
+        findOne: jest.fn().mockReturnValue(createChain(sourceOrder)),
+      },
+    };
+
+    await expect(
+      service.validateOrderPairings({
+        models,
+        sourceCompanyId: 'globofast',
+        targetCompanyId: 'constroad',
+        orderIds: ['source-1'],
+        pairings: [{ kind: 'order', sourceId: 'source-1', targetId: 'other-target' }],
+      })
+    ).rejects.toThrow('Pairings inválidos: 1');
+  });
+});
