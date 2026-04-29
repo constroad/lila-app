@@ -1,4 +1,5 @@
 import fs from 'fs-extra';
+import path from 'node:path';
 import {
   Connection,
   Model,
@@ -525,7 +526,14 @@ export const copyPhysicalFiles = async (
         }
         continue;
       }
-      await fs.ensureDir(fs.dirname(targetAbsolute));
+      if (!sourceStats.isFile()) {
+        throw new Error(`Origen no es un archivo regular: ${sourceRelative}`);
+      }
+      const targetDirectory = path.dirname(targetAbsolute);
+      if (!targetDirectory || targetDirectory === '.') {
+        throw new Error(`Directorio destino inválido: ${targetRelative}`);
+      }
+      await fs.ensureDir(targetDirectory);
       await fs.copy(sourceAbsolute, targetAbsolute);
       createdPaths.push(targetAbsolute);
       if (sourceStats.isFile()) {
@@ -574,7 +582,13 @@ export const rollbackCopiedFiles = async (
       if (stats.isFile()) {
         await decrementStorageUsage(targetCompanyId, stats.size);
       }
-    } catch {}
+    } catch (error) {
+      console.error(
+        `[service-migration] rollback failed for ${targetAbsolute}: ${
+          error instanceof Error ? error.message : 'error'
+        }`
+      );
+    }
   }
 };
 

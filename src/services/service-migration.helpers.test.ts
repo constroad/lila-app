@@ -1,5 +1,15 @@
 export {};
 
+jest.mock('fs-extra', () => ({
+  __esModule: true,
+  default: {
+    pathExists: jest.fn(),
+    stat: jest.fn(),
+    ensureDir: jest.fn(),
+    copy: jest.fn(),
+    remove: jest.fn(),
+  },
+}));
 jest.mock('../api/controllers/drive.controller.js', () => ({
   getMigrationCopyJobSnapshot: jest.fn(),
 }));
@@ -13,6 +23,15 @@ jest.mock('../middleware/quota.middleware.js', () => ({
   incrementStorageUsage: jest.fn(),
   decrementStorageUsage: jest.fn(),
 }));
+jest.mock('../utils/logger.js', () => ({
+  __esModule: true,
+  default: {
+    error: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
 jest.mock('../database/sharedConnection.js', () => ({
   getSharedConnection: jest.fn(),
 }));
@@ -21,6 +40,7 @@ jest.mock('./telegram-alert.service.js', () => ({
 }));
 
 const { getMigrationCopyJobSnapshot } = require('../api/controllers/drive.controller.js');
+const fs = require('fs-extra').default;
 const helpers = require('./service-migration.helpers.js');
 const service = require('./service-migration.service.js');
 
@@ -35,6 +55,10 @@ const createChain = (value: unknown) => ({
 });
 
 describe('service-migration.helpers', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('collects attachment media selectors without duplicates', () => {
     const filters = helpers.collectAttachmentMediaFilters([
       {
@@ -128,6 +152,42 @@ describe('service-migration.helpers', () => {
       },
       orderIds: ['target-9', 'order-2'],
     });
+  });
+
+  it('copies files using the target directory path helper', async () => {
+    const { storagePathService } = require('./storage-path.service.js');
+    storagePathService.resolvePath
+      .mockReturnValueOnce('/tmp/source/companies/globofast/service/reports/service-1/acta.pdf')
+      .mockReturnValueOnce('/tmp/target/companies/constroad/service/reports/service-9/acta.pdf');
+    fs.pathExists.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    fs.stat.mockResolvedValueOnce({
+      size: 128,
+      isFile: () => true,
+    });
+
+    await expect(
+      helpers.copyPhysicalFiles(
+        [
+          {
+            mediaId: 'generated:report-1:acta.pdf',
+            sourcePath: 'companies/globofast/service/reports/service-1/acta.pdf',
+            targetPath: 'companies/constroad/service/reports/service-9/acta.pdf',
+          },
+        ],
+        'globofast',
+        'constroad'
+      )
+    ).resolves.toEqual([
+      '/tmp/target/companies/constroad/service/reports/service-9/acta.pdf',
+    ]);
+
+    expect(fs.ensureDir).toHaveBeenCalledWith(
+      '/tmp/target/companies/constroad/service/reports/service-9'
+    );
+    expect(fs.copy).toHaveBeenCalledWith(
+      '/tmp/source/companies/globofast/service/reports/service-1/acta.pdf',
+      '/tmp/target/companies/constroad/service/reports/service-9/acta.pdf'
+    );
   });
 });
 

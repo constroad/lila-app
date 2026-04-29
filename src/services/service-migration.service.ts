@@ -1,6 +1,7 @@
 import { getSharedConnection } from '../database/sharedConnection.js';
 import { getMigrationCopyJobSnapshot } from '../api/controllers/drive.controller.js';
 import { sendTelegramAlert } from './telegram-alert.service.js';
+import logger from '../utils/logger.js';
 import {
   buildGeneratedDocumentFiles,
   DRIVE_BLOCKER,
@@ -27,6 +28,17 @@ import {
 } from './service-migration.helpers.js';
 
 const activeMigrations = new Set<string>();
+
+const notifyMigrationResult = async (dedupeKey: string, message: string) => {
+  try {
+    await sendTelegramAlert({ dedupeKey, message });
+  } catch (error) {
+    logger.error('[service-migration] telegram notify failed', {
+      dedupeKey,
+      error,
+    });
+  }
+};
 
 const normalizeMigrationPath = (companyId: string, value: string) =>
   asText(value)
@@ -395,21 +407,26 @@ export const startServiceMigration = (
   void (async () => {
     try {
       const outcome = await runMigration(serviceId, request);
-      await sendTelegramAlert({
-        dedupeKey: `service-migration:${migrationKey}`,
-        message:
-          `Migración de servicio OK: ${serviceId} -> ${targetServiceId}. ` +
+      await notifyMigrationResult(
+        `service-migration:${migrationKey}`,
+        `Migración de servicio OK: ${serviceId} -> ${targetServiceId}. ` +
           `${request.sourceCompanyId} -> ${request.targetCompanyId}. ` +
-          `Advertencias: ${outcome.warnings.length}`,
-      });
+          `Advertencias: ${outcome.warnings.length}`
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
-      await sendTelegramAlert({
-        dedupeKey: `service-migration:${migrationKey}`,
-        message:
-          `Migración de servicio FALLÓ: ${serviceId} -> ${targetServiceId}. ` +
-          `${request.sourceCompanyId} -> ${request.targetCompanyId}. ${message}`,
+      logger.error('[service-migration] background failed', {
+        serviceId,
+        targetServiceId,
+        sourceCompanyId: request.sourceCompanyId,
+        targetCompanyId: request.targetCompanyId,
+        error,
       });
+      await notifyMigrationResult(
+        `service-migration:${migrationKey}`,
+        `Migración de servicio FALLÓ: ${serviceId} -> ${targetServiceId}. ` +
+          `${request.sourceCompanyId} -> ${request.targetCompanyId}. ${message}`
+      );
     } finally {
       activeMigrations.delete(migrationKey);
     }
