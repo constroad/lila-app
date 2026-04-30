@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
+import { randomUUID } from 'crypto';
 import fs from 'fs-extra';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config/environment.js';
@@ -59,9 +60,24 @@ type PublicMeasureReceptionInput = {
   files: UploadedReceptionFile[];
 };
 
+type PublicCashFlowInput = {
+  kind: 'cash-flow';
+  companyId: string;
+  deviceName?: string;
+  resourceType: 'service' | 'order' | 'project';
+  resourceId: string;
+  resourceLabel: string;
+  movementType: 'income' | 'expense';
+  amountBase: number;
+  description: string;
+  date: string;
+  files: UploadedReceptionFile[];
+};
+
 type PublicReceptionWorkflowInput =
   | PublicReceptionInput
-  | PublicMeasureReceptionInput;
+  | PublicMeasureReceptionInput
+  | PublicCashFlowInput;
 
 type TelegramUploadedMedia = {
   file_name: string;
@@ -113,6 +129,11 @@ type PortalMeasureRecord = {
   date: string | Date;
   status: string;
   typeId: string;
+};
+
+type PortalFinancialMovementRecord = {
+  _id: string;
+  sourceId: string;
 };
 
 type PortalMediaListResponse = {
@@ -258,6 +279,39 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
     };
   }
 
+  if (kind === 'cash-flow') {
+    const resourceType = requireString(req.body?.resourceType, 'resourceType');
+    const movementType = requireString(req.body?.movementType, 'movementType');
+    const parsedDate = new Date(requireString(req.body?.date, 'date'));
+
+    if (!['service', 'order', 'project'].includes(resourceType)) {
+      throw new Error('resourceType is invalid');
+    }
+    if (!['income', 'expense'].includes(movementType)) {
+      throw new Error('movementType is invalid');
+    }
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new Error('date is invalid');
+    }
+    if (files.length === 0) {
+      throw new Error('files are required');
+    }
+
+    return {
+      kind: 'cash-flow',
+      companyId,
+      deviceName: trimValue(req.body?.deviceName) || undefined,
+      resourceType: resourceType as 'service' | 'order' | 'project',
+      resourceId: requireString(req.body?.resourceId, 'resourceId'),
+      resourceLabel: requireString(req.body?.resourceLabel, 'resourceLabel'),
+      movementType: movementType as 'income' | 'expense',
+      amountBase: requirePositiveNumber(req.body?.amountBase, 'amountBase'),
+      description: requireString(req.body?.description, 'description'),
+      date: parsedDate.toISOString(),
+      files,
+    };
+  }
+
   throw new Error('kind is invalid');
 };
 
@@ -374,6 +428,36 @@ const createPortalMedia = async (
     timeout: PORTAL_TIMEOUT_MS,
   });
   return response.data as PortalMediaResponse;
+};
+
+const createPortalFinancialMovement = async (
+  companyId: string,
+  payload: Record<string, unknown>
+): Promise<PortalFinancialMovementRecord> => {
+  const response = await axios.post(
+    buildPortalUrl('/api/financial-movements'),
+    payload,
+    {
+      headers: buildPortalHeaders(companyId),
+      timeout: PORTAL_TIMEOUT_MS,
+    }
+  );
+  return response.data as PortalFinancialMovementRecord;
+};
+
+const updatePortalFinancialMovement = async (
+  companyId: string,
+  movementId: string,
+  payload: Record<string, unknown>
+): Promise<void> => {
+  await axios.put(
+    buildPortalUrl(`/api/financial-movements/${movementId}`),
+    payload,
+    {
+      headers: buildPortalHeaders(companyId),
+      timeout: PORTAL_TIMEOUT_MS,
+    }
+  );
 };
 
 const notifyPortalWhatsApp = async (
@@ -512,10 +596,11 @@ const uploadFileToTelegram = async (
 const createMediaPayload = (
   resourceId: string,
   media: TelegramUploadedMedia,
-  metadata: Record<string, unknown>
+  metadata: Record<string, unknown>,
+  mediaType = 'INPUT_PICTURES'
 ): PortalMediaPayload => ({
   resourceId,
-  type: 'INPUT_PICTURES',
+  type: mediaType,
   name: media.file_name,
   mimeTye: media.mime_type || 'application/octet-stream',
   url: media.fileUrl,
@@ -631,8 +716,10 @@ const processEvidenceUploads = async (params: {
   files: UploadedReceptionFile[];
   telegramChatId: string;
   metadata: Record<string, unknown>;
+  mediaType?: string;
 }): Promise<{ uploadedCount: number; failedCount: number }> => {
-  const { companyId, resourceId, files, telegramChatId, metadata } = params;
+  const { companyId, resourceId, files, telegramChatId, metadata, mediaType } =
+    params;
 
   if (files.length === 0) {
     return { uploadedCount: 0, failedCount: 0 };
@@ -645,7 +732,7 @@ const processEvidenceUploads = async (params: {
       const uploadedFile = await uploadFileToTelegram(telegramChatId, file);
       return createPortalMedia(
         companyId,
-        createMediaPayload(resourceId, uploadedFile, metadata)
+        createMediaPayload(resourceId, uploadedFile, metadata, mediaType)
       );
     }
   );
@@ -848,6 +935,114 @@ export const runPublicReceptionWorkflow = async (
   await runInputReceptionWorkflow(input);
 };
 
+const resolveCashFlowMovementResourceFields = (input: PublicCashFlowInput) => {
+  if (input.resourceType === 'service') {
+    return {
+      projectId: undefined,
+      orderId: undefined,
+      resourceId: input.resourceId,
+      resourceType: 'service',
+      serviceManagementId: input.resourceId,
+    };
+  }
+
+  if (input.resourceType === 'order') {
+    return {
+      orderId: input.resourceId,
+      projectId: undefined,
+      resourceId: input.resourceId,
+      resourceType: 'order',
+      serviceManagementId: undefined,
+    };
+  }
+
+  return {
+    orderId: undefined,
+    projectId: input.resourceId,
+    resourceId: input.resourceId,
+    resourceType: 'project',
+    serviceManagementId: undefined,
+  };
+};
+
+const rollbackPortalFinancialMovement = async (params: {
+  companyId: string;
+  movementId?: string;
+}) => {
+  if (!params.movementId) {
+    return;
+  }
+
+  await updatePortalFinancialMovement(params.companyId, params.movementId, {
+    recordStatus: 'deleted',
+  }).catch(() => undefined);
+};
+
+const runPublicCashFlowWorkflow = async (input: PublicCashFlowInput) => {
+  let movementId: string | undefined;
+
+  try {
+    const storageChatId = trimValue(config.telegram.errorsChatId);
+    if (!storageChatId) {
+      throw new Error('Telegram storage chat not configured');
+    }
+
+    const sourceId = `public-cash-flow-${randomUUID()}`;
+    const movement = await createPortalFinancialMovement(input.companyId, {
+      sourceModule: 'manual',
+      sourceId,
+      movementType: input.movementType,
+      ...resolveCashFlowMovementResourceFields(input),
+      description: input.description,
+      note: '',
+      category: 'public-cash-flow',
+      referenceNumber: '',
+      paymentMethod: 'field',
+      recordStatus: 'active',
+      paymentStatus: 'not_applicable',
+      baseCurrencyCode: 'PEN',
+      currencyCode: 'PEN',
+      exchangeRateToBase: 1,
+      amountInCurrency: input.amountBase,
+      amountBase: input.amountBase,
+      referenceAmountBase: input.amountBase,
+      date: new Date(input.date).toISOString(),
+      attachmentMediaType: 'FINANCIAL_MOVEMENT',
+      attachmentResourceIds: [sourceId],
+      metadata: {
+        deviceName: input.deviceName,
+        resourceLabel: input.resourceLabel,
+        source: 'public-cash-flow',
+      },
+    });
+
+    movementId = movement._id;
+
+    const uploadSummary = await processEvidenceUploads({
+      companyId: input.companyId,
+      files: input.files,
+      mediaType: 'FINANCIAL_MOVEMENT',
+      metadata: {
+        movementId,
+        resourceType: input.resourceType,
+        source: 'public-cash-flow',
+      },
+      resourceId: sourceId,
+      telegramChatId: storageChatId,
+    });
+
+    if (uploadSummary.uploadedCount === 0) {
+      throw new Error('No se pudo registrar ninguna evidencia del movimiento');
+    }
+  } catch (error) {
+    await rollbackPortalFinancialMovement({
+      companyId: input.companyId,
+      movementId,
+    });
+    throw error;
+  }
+};
+
 export const enqueuePublicReceptionWorkflow = (
   input: PublicReceptionWorkflowInput
 ) => {
@@ -946,6 +1141,54 @@ export async function submitPublicReception(req: Request, res: Response) {
     return res.status(202).json({
       success: true,
       data: accepted,
+    });
+  } catch (error) {
+    await cleanupUploadedFiles(files);
+    const message =
+      error instanceof Error ? error.message : 'No se pudo iniciar el registro';
+    return res.status(400).json({
+      success: false,
+      error: {
+        message,
+      },
+    });
+  }
+}
+
+export async function submitPublicFinancialMovement(req: Request, res: Response) {
+  const files = parseReceptionFiles(req);
+
+  try {
+    const input = parseReceptionInput(req);
+    if (input.kind !== 'cash-flow') {
+      throw new Error('kind is invalid');
+    }
+
+    setImmediate(() => {
+      void runPublicCashFlowWorkflow(input)
+        .catch(async (error) => {
+          const message = [
+            '❌ Registro de flujo de caja fallido',
+            `Empresa: ${input.companyId}`,
+            `Recurso: ${input.resourceLabel}`,
+            `Motivo: ${error instanceof Error ? error.message : String(error)}`,
+          ].join('\n');
+          await sendTelegramAlert({
+            dedupeKey: `public-cash-flow:${input.companyId}:${input.resourceId}:${error instanceof Error ? error.message : String(error)}`,
+            message,
+          });
+        })
+        .finally(async () => {
+          await cleanupUploadedFiles(input.files);
+        });
+    });
+
+    return res.status(202).json({
+      success: true,
+      data: {
+        accepted: true,
+        kind: input.kind,
+      },
     });
   } catch (error) {
     await cleanupUploadedFiles(files);

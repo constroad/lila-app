@@ -2,7 +2,11 @@ import { Router } from 'express';
 import multer from 'multer';
 import fs from 'fs-extra';
 import path from 'path';
-import { getCompanyLogin, submitPublicReception } from '../controllers/public.controller.js';
+import {
+  getCompanyLogin,
+  submitPublicFinancialMovement,
+  submitPublicReception,
+} from '../controllers/public.controller.js';
 import { requireTenant } from '../../middleware/tenant.middleware.js';
 import { config } from '../../config/environment.js';
 
@@ -32,5 +36,11 @@ const upload = multer({
 
 router.get('/company-login', getCompanyLogin);
 router.post('/receptions', requireTenant, upload.array('files', 6), submitPublicReception);
+router.post(
+  '/financial-movements',
+  requireTenant,
+  upload.array('files', 4),
+  submitPublicFinancialMovement
+);
 
 export default router;
