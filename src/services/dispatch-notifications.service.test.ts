@@ -30,6 +30,8 @@ function buildTestInput(overrides = {}) {
     allDispatched: false,
     pendingCount: 3,
     dispatchedCount: 4,
+    clientPendingCount: 2,
+    clientDispatchedCount: 1,
     sender: '51902049935',
     plantGroupTarget: 'plant@g.us',
     clientTargets: ['client@g.us'],
@@ -82,6 +84,24 @@ describe('dispatch-notifications.service', () => {
     expect(message).toContain('8m3 *despachado*');
     expect(message).toContain('Placa: ABC-123');
     expect(message).toContain('Chofer: Juan');
+  });
+
+  it('uses the client pending count in customer messages', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({
+        pendingCount: 9,
+        clientPendingCount: 2,
+      }),
+      context: { companyBotLabel: 'Bot' },
+    });
+
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenNthCalledWith(
+      2,
+      '51902049935',
+      'client@g.us',
+      expect.stringContaining('Unidades Pendientes: 2'),
+      expect.anything()
+    );
   });
 
   it('builds the client completion and plant end messages', () => {

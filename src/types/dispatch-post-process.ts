@@ -8,6 +8,8 @@ export interface DispatchPostProcessInput {
   allDispatched: boolean;
   pendingCount: number;
   dispatchedCount: number;
+  clientPendingCount: number;
+  clientDispatchedCount: number;
   truckDispatched?: boolean;
   note?: string;
   quantity?: number;

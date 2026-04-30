@@ -206,6 +206,7 @@ export async function sendDispatchNotifications(params: NotificationParams) {
   const driverPhoneNumber = toSafeText(input.driverPhoneNumber);
   const obra = toSafeText(input.obra, 'No especificada');
   const dispatchOrdinal = Math.max(Number(input.dispatchedCount) || 0, 1);
+  const clientPendingCount = Math.max(Number(input.clientPendingCount) || 0, 0);
   const dispatchSent = await claimNotificationFlag(
     `dispatch-progress:${input.companyId}:${input.dispatchId}`,
     input.companyId
@@ -240,7 +241,7 @@ export async function sendDispatchNotifications(params: NotificationParams) {
         driverLicense,
         driverPhoneNumber,
         obra,
-        pendingCount: input.pendingCount,
+        pendingCount: clientPendingCount,
       }),
       input.companyId
     );

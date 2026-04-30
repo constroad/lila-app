@@ -48,6 +48,14 @@ export function validatePostProcessInput(body: unknown): ValidationResult {
       pendingCount: typeof payload.pendingCount === 'number' ? payload.pendingCount : 0,
       dispatchedCount:
         typeof payload.dispatchedCount === 'number' ? payload.dispatchedCount : 0,
+      clientPendingCount:
+        typeof payload.clientPendingCount === 'number'
+          ? payload.clientPendingCount
+          : 0,
+      clientDispatchedCount:
+        typeof payload.clientDispatchedCount === 'number'
+          ? payload.clientDispatchedCount
+          : 0,
       sender: typeof payload.sender === 'string' ? payload.sender : '',
       plantGroupTarget:
         typeof payload.plantGroupTarget === 'string'

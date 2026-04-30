@@ -41,6 +41,8 @@ function buildInput(overrides = {}) {
     allDispatched: false,
     pendingCount: 2,
     dispatchedCount: 1,
+    clientPendingCount: 1,
+    clientDispatchedCount: 1,
     truckDispatched: false,
     sender: '51902049935',
     plantGroupTarget: 'plant@g.us',
