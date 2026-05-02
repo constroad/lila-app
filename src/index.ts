@@ -26,6 +26,7 @@ import { resolveThumbnailRequestTarget } from './services/thumbnail-request.serv
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './api/docs/openapi.js';
 import jobScheduler from './jobs/scheduler.v2.instance.js';
+import { shouldInitializeBackgroundJobs } from './jobs/executor.utils.js';
 import pdfGenerator from './pdf/generator.service.js';
 // 🔄 USING SIMPLE SESSIONS (notifications approach)
 import { listSessions, disconnectSession } from './whatsapp/baileys/sessions.simple.js';
@@ -311,14 +312,12 @@ async function startServer() {
       publicBaseUrl: config.pdf.tempPublicBaseUrl,
     });
 
-    logger.info('Initializing Job Scheduler...');
-    await jobScheduler.initialize();
-
     // 🔄 WhatsApp sessions (notifications approach)
     restoreAllSessions();
 
     const pdfTempMaxAgeHours = Number(process.env.PDF_TEMP_MAX_AGE_HOURS || 24);
     const pdfTempCleanupCron = process.env.PDF_TEMP_CLEANUP_CRON || '0 * * * *';
+    const shouldRunBackgroundJobs = shouldInitializeBackgroundJobs(config.nodeEnv);
 
     const cleanupPdfTemp = async () => {
       try {
@@ -340,7 +339,13 @@ async function startServer() {
       }
     };
 
-    cron.schedule(pdfTempCleanupCron, cleanupPdfTemp);
+    if (shouldRunBackgroundJobs) {
+      logger.info('Initializing Job Scheduler...');
+      await jobScheduler.initialize();
+      cron.schedule(pdfTempCleanupCron, cleanupPdfTemp);
+    } else {
+      logger.info('Skipping background jobs in development mode');
+    }
 
     // Iniciar servidor HTTP
     const server = app.listen(config.port, () => {
@@ -381,8 +386,9 @@ async function startServer() {
           }
           logger.info('All WhatsApp sessions disconnected');
 
-          // Cerrar scheduler de jobs
-          await jobScheduler.shutdown();
+          if (shouldRunBackgroundJobs) {
+            await jobScheduler.shutdown();
+          }
 
           // Cerrar PDF Generator
           await pdfGenerator.shutdown();

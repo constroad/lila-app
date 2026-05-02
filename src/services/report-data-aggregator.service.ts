@@ -36,6 +36,7 @@ function normalizeIds(ids: string[]): Array<string | mongoose.Types.ObjectId> {
 
 export interface AggregatedReportData {
   service: any;
+  client: any;
   orders: any[];
   dispatches: any[];
   certificates: any[];
@@ -69,6 +70,7 @@ export async function aggregateReportData(
 ): Promise<AggregatedReportData> {
   const ServiceManagement = await getFlexibleModel('ServiceManagement');
   const Order = await getFlexibleModel('Order');
+  const Client = await getFlexibleModel('Client');
   const Dispatch = await getFlexibleModel('Dispatch');
   const Certificate = await getFlexibleModel('Certificate');
   const Invoice = await getFlexibleModel('Invoice');
@@ -79,6 +81,7 @@ export async function aggregateReportData(
   if (!service) {
     return {
       service: null,
+      client: null,
       orders: [],
       dispatches: [],
       certificates: [],
@@ -91,6 +94,14 @@ export async function aggregateReportData(
 
   const orderIds = Array.isArray(service.orderIds) ? service.orderIds : [];
   const orderQueryIds = normalizeIds(orderIds);
+  const clientId = String(service.clientId || '').trim();
+
+  const client =
+    clientId && mongoose.Types.ObjectId.isValid(clientId)
+      ? await Client.findById(new mongoose.Types.ObjectId(clientId)).lean()
+      : clientId
+      ? await Client.findOne({ _id: clientId }).lean()
+      : null;
 
   const orders = orderQueryIds.length
     ? await Order.find({ _id: { $in: orderQueryIds } }).lean()
@@ -118,6 +129,7 @@ export async function aggregateReportData(
 
   return {
     service,
+    client,
     orders,
     dispatches,
     certificates,
@@ -134,6 +146,7 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
   }
 
   const service = rawData.service;
+  const client = rawData.client;
   const orders = rawData.orders;
   const projectData = buildProjectData(service, orders);
 
@@ -189,11 +202,11 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
       };
     case 'CTL-IMP':
       return {
-        ...projectData,
-        proyecto: {
-          ...projectData.proyecto,
-          descripcion: '',
-          documentoReferencia: '',
+        general: {
+          cliente: client?.name || client?.alias || '',
+          proyecto: service.description || service.projectName || '',
+          ubicacion: service.locationUrl || '',
+          responsable: '',
         },
       };
     case 'IPP': {

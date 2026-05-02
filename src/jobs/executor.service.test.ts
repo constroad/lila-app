@@ -1,6 +1,10 @@
 import axios from 'axios';
 import { JobExecutor } from './executor.service.js';
-import { materializeRetryJob, normalizeExecutorApiUrl } from './executor.utils.js';
+import {
+  materializeRetryJob,
+  normalizeExecutorApiUrl,
+  shouldInitializeBackgroundJobs,
+} from './executor.utils.js';
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -110,6 +114,15 @@ describe('JobExecutor helpers', () => {
         'http://localhost:3000'
       )
     ).toBe('https://constroad.com/api/cron/weather-asphalt-forecast');
+  });
+
+  it('skips background jobs in development', () => {
+    expect(shouldInitializeBackgroundJobs('development')).toBe(false);
+  });
+
+  it('keeps background jobs enabled outside development', () => {
+    expect(shouldInitializeBackgroundJobs('production')).toBe(true);
+    expect(shouldInitializeBackgroundJobs('test')).toBe(true);
   });
 
   it('injects company and chat headers from the persisted cron job', async () => {

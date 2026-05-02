@@ -60,6 +60,9 @@ export class ReportHtmlRenderer {
   }
 
   async render(): Promise<string> {
+    if (this.schema.code === 'CTL-IMP') {
+      return this.renderControlImprimacionDocument();
+    }
     const sections: string[] = [];
     for (const section of this.schema.sections) {
       if (!this.shouldRenderSection(section)) {
@@ -119,6 +122,554 @@ export class ReportHtmlRenderer {
   ${sections.join('\n')}
 </body>
 </html>`;
+  }
+
+  private async renderControlImprimacionDocument(): Promise<string> {
+    const pageSections: string[] = [];
+    const headerSection = this.schema.sections.find((section) => section.id === 'header');
+    const controls = this.getCtlImpControls();
+
+    for (let index = 0; index < controls.length; index += 1) {
+      const control = this.normalizeCtlImpControl(controls[index]);
+      const headerHtml = headerSection ? await this.renderHeader(headerSection) : '';
+      const pageBreak = index === 0 ? '' : ' page-break';
+      pageSections.push(`
+        <section class="ctl-imp-page${pageBreak}">
+          ${headerHtml}
+          ${this.renderCtlImpMetadata(control)}
+          ${this.renderCtlImpMaterials(control)}
+          ${this.renderCtlImpRateTable(control)}
+        </section>
+      `);
+    }
+
+    const photoSection = this.schema.sections.find((section) => section.id === 'registroFotografico');
+    if (photoSection) {
+      const photos = this.resolvePhotos(photoSection);
+      if (photos.length > 0) {
+        const title = photoSection.title
+          ? `<h2>${this.escapeHtml(photoSection.title)}</h2>`
+          : '';
+        const table = await this.renderPhotoTable(photos, photoSection);
+        const headerHtml = photoSection.includeHeader && this.headerSection
+          ? await this.renderHeaderWithOverride(photoSection)
+          : '';
+        pageSections.push(`
+          <section class="ctl-imp-page page-break">
+            ${headerHtml}
+            ${title}
+            ${table}
+          </section>
+        `);
+      }
+    }
+
+    const signatureSection = this.schema.sections.find((section) => section.id === 'firmas');
+    if (signatureSection && this.hasCtlImpSignatureContent()) {
+      const headerHtml = signatureSection.includeHeader && this.headerSection
+        ? await this.renderHeaderWithOverride(signatureSection)
+        : headerSection
+        ? await this.renderHeader(headerSection)
+        : '';
+      const signaturesHtml = await this.renderSignatures(signatureSection);
+      pageSections.push(`
+        <section class="ctl-imp-page page-break">
+          ${headerHtml}
+          ${signaturesHtml}
+        </section>
+      `);
+    }
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 10px; color: #111; margin: 0; }
+    h2 { margin: 0 0 8px 0; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { border: 1px solid #222; padding: 4px; vertical-align: middle; }
+    .ctl-imp-page { width: 100%; }
+    .page-break { break-before: page; page-break-before: always; }
+    .ctl-imp-meta td { font-size: 10px; font-weight: 700; }
+    .ctl-imp-meta .label { width: 9%; white-space: nowrap; }
+    .ctl-imp-meta .value { font-weight: 600; }
+    .ctl-imp-title td { font-size: 14px; font-weight: 800; text-align: center; }
+    .ctl-imp-block-title { font-size: 12px; font-weight: 800; text-transform: uppercase; text-decoration: underline; }
+    .ctl-imp-rate-title td { font-size: 13px; font-weight: 800; text-align: center; }
+    .ctl-imp-rate th { background: #f3f3f3; font-weight: 800; }
+    .ctl-imp-rate .left-label { width: 38%; }
+    .ctl-imp-rate .tray-col { width: 11%; text-align: center; }
+    .ctl-imp-rate .unit-col { width: 8%; text-align: center; font-weight: 700; }
+    .ctl-imp-rate .truck-label { width: 24%; }
+    .ctl-imp-rate .truck-value { width: 14%; text-align: center; font-weight: 700; }
+    .ctl-imp-rate .truck-unit { width: 8%; text-align: center; font-weight: 700; }
+    .ctl-imp-rate .center { text-align: center; }
+    .ctl-imp-rate .bold { font-weight: 800; }
+    .ctl-imp-observaciones { min-height: 80px; }
+    .ctl-imp-observaciones .line { border-bottom: 1px solid #555; height: 20px; }
+    .photo-table td { text-align: center; }
+    .photo-table img { max-width: 100%; height: auto; }
+    .caption { font-size: 10px; margin-top: 4px; }
+    @page { size: ${this.schema.pageSize || 'A4'} portrait; margin: 8mm; }
+  </style>
+</head>
+<body>
+  ${pageSections.join('\n')}
+</body>
+</html>`;
+  }
+
+  private buildCtlImpEmptyControl() {
+    return {
+      material: {
+        ligante: 'MC-30',
+        gravilla: '',
+        pesoEspecifico: '',
+        velocidad: '',
+        alturaBarraEsparcidor: '',
+        penetracion: '',
+      },
+      equipo: {
+        camionLabel: 'Camión',
+        camion: '',
+      },
+      bandeja: {
+        pesoBandejaSinAsfalto: { uno: '', dos: '', tres: '' },
+        pesoBandejaConAsfalto: { uno: '', dos: '', tres: '' },
+        pesoAsfalto: { uno: '', dos: '', tres: '' },
+        areaBandeja: { uno: '', dos: '', tres: '' },
+        rangoEsparcido: { uno: '', dos: '', tres: '' },
+        volumenEsparcido: { uno: '', dos: '', tres: '' },
+        volumenCorregido15_6: { uno: '', dos: '', tres: '' },
+        volumenCorregidoGalones: { uno: '', dos: '', tres: '' },
+        rangoEsparcidoPromedio: '',
+      },
+      camionImprimador: {
+        lecturaInicial: '',
+        lecturaFinal: '',
+        consumo: '',
+        longitud: '',
+        ancho: '',
+        areaTerreno: '',
+        tasaRiegoCorregida: '',
+        tasaRiegoCorregidaGalones: '',
+      },
+      temperaturaRiegoAsfaltico: '',
+      temperaturaAmbiente: '',
+      factorCorreccionTemperatura: '',
+      observaciones: '',
+      tramo: '',
+      progresivaDesde: '',
+      progresivaHasta: '',
+      carril: '',
+      horaInicio: '',
+      horaFinal: '',
+    };
+  }
+
+  private getCtlImpControls() {
+    if (Array.isArray(this.data.controles) && this.data.controles.length > 0) {
+      return this.data.controles;
+    }
+    return [this.buildCtlImpLegacyControl()];
+  }
+
+  private buildCtlImpLegacyControl() {
+    const control = this.buildCtlImpEmptyControl();
+    const materiales = Array.isArray(this.data.materialesInsumos)
+      ? this.data.materialesInsumos
+      : [];
+    const firstMaterial = materiales[0] || {};
+    const tasa = this.getValue('tasa') || {};
+    const tasaRows = Array.isArray(this.data.tasaRegistroDatos)
+      ? this.data.tasaRegistroDatos
+      : [];
+    const findRow = (key: string) =>
+      tasaRows.find((row: Record<string, any>) => String(row?.key || '') === key) || {};
+    const mapAxis = (row: Record<string, any>) => ({
+      uno: row?.a ?? '',
+      dos: row?.b ?? '',
+      tres: row?.c ?? '',
+    });
+
+    return {
+      ...control,
+      tramo: String(this.getValue('proyecto.descripcion') || ''),
+      material: {
+        ...control.material,
+        ligante: String(firstMaterial?.tipoLigante || control.material.ligante),
+        pesoEspecifico: tasa?.gravedadEspecifica ?? '',
+      },
+      bandeja: {
+        ...control.bandeja,
+        pesoBandejaSinAsfalto: mapAxis(findRow('pesoBandejaSinAsfalto')),
+        pesoBandejaConAsfalto: mapAxis(findRow('pesoBandejaConAsfalto')),
+        pesoAsfalto: mapAxis(findRow('pesoAsfalto')),
+        areaBandeja: mapAxis(findRow('areaBandeja')),
+        rangoEsparcido: mapAxis(findRow('tasaRiego')),
+        volumenEsparcido: mapAxis(findRow('tasaRiego10')),
+        volumenCorregido15_6: mapAxis(findRow('tasaCorregida')),
+        volumenCorregidoGalones: mapAxis(findRow('tasaPromedio')),
+        rangoEsparcidoPromedio: findRow('criterioAceptacion')?.b ?? '',
+      },
+      temperaturaAmbiente: tasa?.temperaturaAtmosferica ?? '',
+      temperaturaRiegoAsfaltico: tasa?.temperaturaLigante ?? '',
+      observaciones: String(
+        this.getValue('observacionesTasa') || this.getValue('observacionesProtocolo') || ''
+      ),
+    };
+  }
+
+  private normalizeCtlImpControl(control: Record<string, any> = {}) {
+    return {
+      ...this.buildCtlImpEmptyControl(),
+      ...control,
+      material: {
+        ...this.buildCtlImpEmptyControl().material,
+        ...(control.material || {}),
+      },
+      equipo: {
+        ...this.buildCtlImpEmptyControl().equipo,
+        ...(control.equipo || {}),
+      },
+      bandeja: {
+        ...this.buildCtlImpEmptyControl().bandeja,
+        ...(control.bandeja || {}),
+        pesoBandejaSinAsfalto: {
+          ...this.buildCtlImpEmptyControl().bandeja.pesoBandejaSinAsfalto,
+          ...(control.bandeja?.pesoBandejaSinAsfalto || {}),
+        },
+        pesoBandejaConAsfalto: {
+          ...this.buildCtlImpEmptyControl().bandeja.pesoBandejaConAsfalto,
+          ...(control.bandeja?.pesoBandejaConAsfalto || {}),
+        },
+        pesoAsfalto: {
+          ...this.buildCtlImpEmptyControl().bandeja.pesoAsfalto,
+          ...(control.bandeja?.pesoAsfalto || {}),
+        },
+        areaBandeja: {
+          ...this.buildCtlImpEmptyControl().bandeja.areaBandeja,
+          ...(control.bandeja?.areaBandeja || {}),
+        },
+        rangoEsparcido: {
+          ...this.buildCtlImpEmptyControl().bandeja.rangoEsparcido,
+          ...(control.bandeja?.rangoEsparcido || {}),
+        },
+        volumenEsparcido: {
+          ...this.buildCtlImpEmptyControl().bandeja.volumenEsparcido,
+          ...(control.bandeja?.volumenEsparcido || {}),
+        },
+        volumenCorregido15_6: {
+          ...this.buildCtlImpEmptyControl().bandeja.volumenCorregido15_6,
+          ...(control.bandeja?.volumenCorregido15_6 || {}),
+        },
+        volumenCorregidoGalones: {
+          ...this.buildCtlImpEmptyControl().bandeja.volumenCorregidoGalones,
+          ...(control.bandeja?.volumenCorregidoGalones || {}),
+        },
+      },
+      camionImprimador: {
+        ...this.buildCtlImpEmptyControl().camionImprimador,
+        ...(control.camionImprimador || {}),
+      },
+    };
+  }
+
+  private renderCtlImpMetadata(control: Record<string, any>) {
+    const general = this.getValue('general') || {};
+    const legacyProject = this.getValue('proyecto') || {};
+    const fecha = this.formatValue(this.getValue('header.fecha'), 'date');
+    return `
+      <table class="ctl-imp-meta" style="margin-bottom:0;">
+        <tr>
+          <td class="label">CLIENTE</td>
+          <td class="value" style="width:66%;">: ${this.escapeHtml(String(general.cliente || legacyProject.cliente || ''))}</td>
+          <td class="label" style="width:12%;">HECHO POR</td>
+          <td class="value" style="width:13%;">: ${this.escapeHtml(String(general.responsable || ''))}</td>
+        </tr>
+        <tr>
+          <td class="label">PROYECTO</td>
+          <td class="value">: ${this.escapeHtml(String(general.proyecto || legacyProject.obra || ''))}</td>
+          <td class="label">FECHA</td>
+          <td class="value">: ${this.escapeHtml(fecha)}</td>
+        </tr>
+        <tr>
+          <td class="label">UBICACIÓN</td>
+          <td colspan="3" class="value">: ${this.escapeHtml(String(general.ubicacion || legacyProject.ubicacion || ''))}</td>
+        </tr>
+        <tr>
+          <td class="label">TRAMO</td>
+          <td colspan="3" class="value">: ${this.escapeHtml(String(control.tramo || ''))}</td>
+        </tr>
+      </table>
+      <table class="ctl-imp-title" style="margin-bottom:0;">
+        <tr>
+          <td>CONTROL : IMPRIMACIÓN DE BASE GRANULAR CON ${this.escapeHtml(
+            String(control.material?.ligante || 'MC-30').toUpperCase()
+          )}</td>
+        </tr>
+      </table>
+    `;
+  }
+
+  private renderCtlImpMaterials(control: Record<string, any>) {
+    return `
+      <table style="margin-bottom:0;">
+        <tr>
+          <td style="width:60%; border-bottom:none;">
+            <div class="ctl-imp-block-title">Datos de los materiales</div>
+          </td>
+          <td style="width:40%; border-bottom:none;"></td>
+        </tr>
+        <tr>
+          <td style="border-top:none;">
+            <table style="margin:0;">
+              <tr>
+                <td style="width:18%; border:none; font-weight:700;">Ligante</td>
+                <td style="width:82%; border:none;">: ${this.escapeHtml(String(control.material?.ligante || ''))}</td>
+              </tr>
+              <tr>
+                <td style="border:none; font-weight:700;">Gravilla</td>
+                <td style="border:none;">: ${this.escapeHtml(String(control.material?.gravilla || ''))}</td>
+              </tr>
+            </table>
+          </td>
+          <td style="border-top:none;">
+            <table style="margin:0;">
+              <tr>
+                <td style="width:58%; border:none; font-weight:700; text-align:right;">Peso Específico :</td>
+                <td style="width:42%; text-align:center; font-weight:700;">${this.escapeHtml(
+                  this.formatCtlImpNumber(control.material?.pesoEspecifico, 4)
+                )}</td>
+              </tr>
+              <tr>
+                <td style="border:none; font-weight:700; text-align:right;">Altura de Barra del Esparcidor :</td>
+                <td style="text-align:center; font-weight:700;">${this.escapeHtml(String(control.material?.alturaBarraEsparcidor || ''))}</td>
+              </tr>
+              <tr>
+                <td style="border:none; font-weight:700; text-align:right;">Velocidad (km/hr) :</td>
+                <td style="text-align:center; font-weight:700;">${this.escapeHtml(
+                  this.formatCtlImpNumber(control.material?.velocidad, 2)
+                )}</td>
+              </tr>
+              <tr>
+                <td style="border:none; font-weight:700; text-align:right;">Penetración :</td>
+                <td style="text-align:center; font-weight:700;">${this.escapeHtml(String(control.material?.penetracion || ''))}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2">
+            <div class="ctl-imp-block-title">Datos del equipo</div>
+            <div style="margin-top:8px; font-size:12px; font-weight:700;">
+              ${this.escapeHtml(String(control.equipo?.camionLabel || 'Camión'))}
+              <span style="font-weight:600; margin-left:12px;">: ${this.escapeHtml(String(control.equipo?.camion || ''))}</span>
+            </div>
+          </td>
+        </tr>
+      </table>
+    `;
+  }
+
+  private renderCtlImpRateTable(control: Record<string, any>) {
+    const trayValue = (key: string, axis: 'uno' | 'dos' | 'tres', decimals = 3) =>
+      this.escapeHtml(this.formatCtlImpNumber(control.bandeja?.[key]?.[axis], decimals));
+    const truckValue = (key: string, decimals = 3) =>
+      this.escapeHtml(this.formatCtlImpNumber(control.camionImprimador?.[key], decimals));
+    const factorCorreccion = this.escapeHtml(
+      this.formatCtlImpNumber(control.factorCorreccionTemperatura, 2)
+    );
+
+    return `
+      <table class="ctl-imp-rate-title" style="margin-bottom:0;">
+        <tr><td>TASA DE RIEGO DEL IMPRIMANTE</td></tr>
+      </table>
+      <table class="ctl-imp-rate">
+        <tr>
+          <td colspan="3" class="bold">PROGRESIVA (Km.)</td>
+          <td colspan="3" class="center">De: Km ${this.escapeHtml(String(control.progresivaDesde || ''))}</td>
+          <td colspan="3" class="center">Al: Km ${this.escapeHtml(String(control.progresivaHasta || ''))}</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="bold">CARRIL: ${this.escapeHtml(String(control.carril || ''))}</td>
+          <td colspan="3" class="bold center">HORA INICIO: ${this.escapeHtml(String(control.horaInicio || ''))}</td>
+          <td colspan="3" class="bold center">HORA FINAL: ${this.escapeHtml(String(control.horaFinal || ''))}</td>
+        </tr>
+        <tr>
+          <th class="left-label">BANDEJA</th>
+          <th class="tray-col">=</th>
+          <th class="tray-col">1</th>
+          <th class="tray-col">2</th>
+          <th class="tray-col">3</th>
+          <th class="unit-col">Unidad</th>
+          <th class="truck-label center">CAMIÓN IMPRIMADOR</th>
+          <th class="truck-value center">Valor</th>
+          <th class="truck-unit center">Unidad</th>
+        </tr>
+        ${this.renderCtlImpRateRow(
+          '1) Peso de la bandeja sin asfalto',
+          [trayValue('pesoBandejaSinAsfalto', 'uno', 3), trayValue('pesoBandejaSinAsfalto', 'dos', 3), trayValue('pesoBandejaSinAsfalto', 'tres', 3)],
+          'Kgs.',
+          'Lectura Inicial',
+          truckValue('lecturaInicial', 3),
+          'Lts'
+        )}
+        ${this.renderCtlImpRateRow(
+          '2) Peso de la bandeja con asfalto',
+          [trayValue('pesoBandejaConAsfalto', 'uno', 3), trayValue('pesoBandejaConAsfalto', 'dos', 3), trayValue('pesoBandejaConAsfalto', 'tres', 3)],
+          'Kgs.',
+          'Lectura Final',
+          truckValue('lecturaFinal', 3),
+          'Lts'
+        )}
+        ${this.renderCtlImpRateRow(
+          '3) Peso del asfalto (2-1) / 1000',
+          [trayValue('pesoAsfalto', 'uno', 3), trayValue('pesoAsfalto', 'dos', 3), trayValue('pesoAsfalto', 'tres', 3)],
+          'Kgs.',
+          'Consumo',
+          truckValue('consumo', 3),
+          'Lts'
+        )}
+        ${this.renderCtlImpRateRow(
+          '4) Área de la bandeja',
+          [trayValue('areaBandeja', 'uno', 3), trayValue('areaBandeja', 'dos', 3), trayValue('areaBandeja', 'tres', 3)],
+          'm2',
+          'Longitud',
+          truckValue('longitud', 2),
+          'm'
+        )}
+        ${this.renderCtlImpRateRow(
+          '5) Rango de esparcido (3)/(4)',
+          [trayValue('rangoEsparcido', 'uno', 3), trayValue('rangoEsparcido', 'dos', 3), trayValue('rangoEsparcido', 'tres', 3)],
+          'Kg/m2',
+          'Ancho',
+          truckValue('ancho', 2),
+          'm'
+        )}
+        ${this.renderCtlImpRateRow(
+          `6) Volumen de esparcido (5/${this.formatCtlImpNumber(control.material?.pesoEspecifico, 4) || 'pe'})`,
+          [trayValue('volumenEsparcido', 'uno', 3), trayValue('volumenEsparcido', 'dos', 3), trayValue('volumenEsparcido', 'tres', 3)],
+          'lts/m2',
+          'Área Terreno (4*5)',
+          truckValue('areaTerreno', 2),
+          'm2'
+        )}
+        ${this.renderCtlImpRateRow(
+          `7) Volumen Corregido a 15.6°C por factor de corrección (6/${factorCorreccion || '1'})`,
+          [trayValue('volumenCorregido15_6', 'uno', 3), trayValue('volumenCorregido15_6', 'dos', 3), trayValue('volumenCorregido15_6', 'tres', 3)],
+          'lts/m2',
+          'Tasa de Riego en Volumen, Corregida (3/6*3.785*1)',
+          truckValue('tasaRiegoCorregida', 3),
+          'lts/m2'
+        )}
+        ${this.renderCtlImpRateRow(
+          '8) Volumen Corregido en galones m/2 (7/3.785)',
+          [trayValue('volumenCorregidoGalones', 'uno', 3), trayValue('volumenCorregidoGalones', 'dos', 3), trayValue('volumenCorregidoGalones', 'tres', 3)],
+          'Gal/m2',
+          'Tasa de Riego Corregida (7/3.785)',
+          truckValue('tasaRiegoCorregidaGalones', 3),
+          'Gls/m2'
+        )}
+        <tr>
+          <td class="left-label bold">9) Rango Esparcido Promedio</td>
+          <td class="center">=</td>
+          <td class="center"></td>
+          <td class="center bold">${this.escapeHtml(
+            this.formatCtlImpNumber(control.bandeja?.rangoEsparcidoPromedio, 3)
+          )}</td>
+          <td class="center"></td>
+          <td class="unit-col bold">Gal/m2</td>
+          <td colspan="3"></td>
+        </tr>
+        <tr>
+          <td colspan="3">Temperatura Riego Asfaltico</td>
+          <td class="center">=</td>
+          <td class="center bold">${this.escapeHtml(
+            this.formatCtlImpNumber(control.temperaturaRiegoAsfaltico, 2)
+          )}</td>
+          <td class="center bold">° C</td>
+          <td colspan="2" class="center">Factor de Corrección por temperatura</td>
+          <td class="center bold">${factorCorreccion}</td>
+        </tr>
+        <tr>
+          <td colspan="3">Temperatura Ambiente</td>
+          <td class="center">=</td>
+          <td class="center bold">${this.escapeHtml(
+            this.formatCtlImpNumber(control.temperaturaAmbiente, 2)
+          )}</td>
+          <td class="center bold">° C</td>
+          <td colspan="3"></td>
+        </tr>
+        <tr>
+          <td colspan="9" class="ctl-imp-observaciones">
+            <div class="bold" style="margin-bottom:8px;">OBSERVACIONES :</div>
+            ${this.renderCtlImpObservationLines(control.observaciones)}
+          </td>
+        </tr>
+      </table>
+    `;
+  }
+
+  private renderCtlImpRateRow(
+    label: string,
+    values: string[],
+    unit: string,
+    truckLabel: string,
+    truckValue: string,
+    truckUnit: string
+  ) {
+    return `
+      <tr>
+        <td class="left-label">${this.escapeHtml(label)}</td>
+        <td class="center">=</td>
+        <td class="center">${values[0] || ''}</td>
+        <td class="center">${values[1] || ''}</td>
+        <td class="center">${values[2] || ''}</td>
+        <td class="unit-col">${this.escapeHtml(unit)}</td>
+        <td class="truck-label">${this.escapeHtml(truckLabel)}</td>
+        <td class="truck-value">${truckValue || ''}</td>
+        <td class="truck-unit">${this.escapeHtml(truckUnit)}</td>
+      </tr>
+    `;
+  }
+
+  private renderCtlImpObservationLines(value: string) {
+    const lines = String(value || '').split(/\r?\n/).filter((line) => line.trim().length > 0);
+    const paddedLines = [...lines];
+    while (paddedLines.length < 3) {
+      paddedLines.push('');
+    }
+    return paddedLines
+      .slice(0, 4)
+      .map((line) => `<div class="line">${this.escapeHtml(line)}</div>`)
+      .join('');
+  }
+
+  private formatCtlImpNumber(value: any, decimals: number) {
+    if (value === null || value === undefined || value === '') {
+      return '';
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return String(value);
+    }
+    return parsed
+      .toFixed(decimals)
+      .replace(/\.0+$/, '')
+      .replace(/(\.\d*?)0+$/, '$1');
+  }
+
+  private hasCtlImpSignatureContent() {
+    const firmas = this.getValue('firmas') || {};
+    return Object.values(firmas).some((signature: any) =>
+      Boolean(
+        String(signature?.nombre || '').trim() ||
+          String(signature?.empresa || '').trim() ||
+          String(signature?.cip || '').trim()
+      )
+    );
   }
 
   private buildSectionTitleMap(): Map<string, string> {

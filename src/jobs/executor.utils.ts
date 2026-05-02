@@ -1,5 +1,9 @@
 import { ICronJob } from '../models/cronjob.model.js';
 
+export function shouldInitializeBackgroundJobs(nodeEnv?: string): boolean {
+  return String(nodeEnv || '').trim().toLowerCase() !== 'development';
+}
+
 export function materializeRetryJob(job: ICronJob): ICronJob {
   const candidate = job as ICronJob & {
     toObject?: (options?: Record<string, unknown>) => Record<string, unknown>;
