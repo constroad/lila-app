@@ -258,4 +258,8 @@ export interface DocumentSchema {
     excel?: boolean;
   };
   normativeReference?: string[];
+
+  // Background image support (letterhead).
+  // When true, data.branding.backgroundImageUrl is rendered as a full-page watermark.
+  backgroundImageEnabled?: boolean;
 }

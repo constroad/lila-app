@@ -192,6 +192,7 @@ export class PDFGenerator {
         landscape: Boolean(options.landscape),
         margin: options.margin || { top: '20px', right: '20px', bottom: '20px', left: '20px' },
         preferCSSPageSize: true,
+        printBackground: true,
       });
       await page.close();
 

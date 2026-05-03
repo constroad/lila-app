@@ -329,6 +329,58 @@ async function applyHeaderDefaults(
       header.fecha = candidateDates[0];
     }
   }
+
+  // For contracts: inject company legalInfo as proveedor defaults and letterhead.
+  if ((schema?.code || report?.type) === 'CONT-SRV') {
+    await applyContractProviderDefaults(data, companyId);
+  }
+}
+
+async function applyContractProviderDefaults(
+  data: Record<string, any>,
+  companyId: string
+): Promise<void> {
+  try {
+    const CompanyModel = await getCompanyModel();
+    const company = await CompanyModel.findOne({ companyId }).lean() as any;
+    if (!company) return;
+
+    // Pre-fill proveedor from company legalInfo (only empty fields)
+    if (!isPlainObject(data.proveedor)) data.proveedor = {};
+    const prov = data.proveedor as Record<string, any>;
+    if (!String(prov.razonSocial || '').trim()) {
+      prov.razonSocial = company.legalInfo?.businessName || company.name || '';
+    }
+    if (!String(prov.ruc || '').trim()) {
+      prov.ruc = company.legalInfo?.ruc || company.contactInfo?.taxId || '';
+    }
+    if (!String(prov.domicilio || '').trim()) {
+      prov.domicilio = company.contactInfo?.address || '';
+    }
+    if (!String(prov.representante || '').trim()) {
+      prov.representante = company.legalInfo?.legalRepresentative || '';
+    }
+
+    // Pre-fill bank accounts from company bankAccounts (only if contract has none)
+    const existingBanks = Array.isArray(data.cuentasBancarias) ? data.cuentasBancarias : [];
+    if (existingBanks.length === 0 && Array.isArray(company.bankAccounts)) {
+      data.cuentasBancarias = company.bankAccounts.map((b: any) => ({
+        banco: b.bank || '',
+        cuenta: b.accountNumber || '',
+        cci: b.cci || '',
+        tipo: b.accountType || '',
+      }));
+    }
+
+    // Pre-fill letterhead from company branding if not set
+    if (!isPlainObject(data.branding)) data.branding = {};
+    const branding = data.branding as Record<string, any>;
+    if (!String(branding.backgroundImageUrl || '').trim() && company.branding?.letterheadUrl) {
+      branding.backgroundImageUrl = company.branding.letterheadUrl;
+    }
+  } catch {
+    // Non-critical: contract still generates without pre-filled data
+  }
 }
 
 type ReportPayload = {

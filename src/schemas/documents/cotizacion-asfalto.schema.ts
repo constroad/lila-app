@@ -129,6 +129,9 @@ export const cotizacionAsfaltoSchema: DocumentSchema = {
     },
   ],
   defaultData: {
+    branding: {
+      backgroundImageUrl: '',
+    },
     header: {
       logoUrl: '',
       issuerName: '',
@@ -180,4 +183,5 @@ export const cotizacionAsfaltoSchema: DocumentSchema = {
     docx: false,
     excel: false,
   },
+  backgroundImageEnabled: true,
 };

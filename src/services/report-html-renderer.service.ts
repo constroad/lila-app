@@ -6,6 +6,7 @@ import { DocumentSchema, SectionSchema, FieldSchema, ColumnSchema } from '../sch
 import { storagePathService } from './storage-path.service.js';
 import { ImageCompressionService } from './image-compression.service.js';
 import logger from '../utils/logger.js';
+import { numberToWords } from '../utils/number-to-words.js';
 
 interface HtmlRendererOptions {
   companyId?: string;
@@ -63,6 +64,9 @@ export class ReportHtmlRenderer {
     if (this.schema.code === 'CTL-IMP') {
       return this.renderControlImprimacionDocument();
     }
+    if (this.schema.code === 'CONT-SRV') {
+      return this.renderContractDocument();
+    }
     const sections: string[] = [];
     for (const section of this.schema.sections) {
       if (!this.shouldRenderSection(section)) {
@@ -87,13 +91,14 @@ export class ReportHtmlRenderer {
 
     const pageSize = this.schema.pageSize || 'A4';
     const baseOrientation = this.schema.orientation === 'landscape' ? 'landscape' : 'portrait';
+    const backgroundHtml = await this.buildBackgroundHtml();
 
     return `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <style>
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #222; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #222; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     h1 { font-size: 18px; margin: 0 0 6px 0; text-align: center; }
     h2 { font-size: 14px; margin: 16px 0 6px 0; }
     h3 { font-size: 12px; margin: 12px 0 6px 0; }
@@ -113,15 +118,31 @@ export class ReportHtmlRenderer {
     .page-break { break-before: page; page-break-before: always; }
     .page-landscape { page: landscape; }
     .page-portrait { page: portrait; }
+    .letterhead-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+    .letterhead-bg img { width: 100%; height: 100%; object-fit: cover; }
     @page { size: ${pageSize} ${baseOrientation}; }
     @page portrait { size: ${pageSize} portrait; }
     @page landscape { size: ${pageSize} landscape; }
   </style>
 </head>
 <body>
+  ${backgroundHtml}
   ${sections.join('\n')}
 </body>
 </html>`;
+  }
+
+  private async buildBackgroundHtml(): Promise<string> {
+    if (!this.schema.backgroundImageEnabled) return '';
+    const imageUrl = String(this.data?.branding?.backgroundImageUrl || '').trim();
+    if (!imageUrl) return '';
+    try {
+      const src = await this.resolveImageSrc({ url: imageUrl } as any);
+      if (!src) return '';
+      return `<div class="letterhead-bg"><img src="${src}" alt="" /></div>`;
+    } catch {
+      return '';
+    }
   }
 
   private async renderControlImprimacionDocument(): Promise<string> {
@@ -218,6 +239,318 @@ export class ReportHtmlRenderer {
   ${pageSections.join('\n')}
 </body>
 </html>`;
+  }
+
+  private async renderContractDocument(): Promise<string> {
+    const d = this.data;
+    const e = (s: any) => this.escapeHtml(String(s ?? ''));
+    const fmt = (n: any) => (typeof n === 'number' ? n.toFixed(2) : e(n));
+    const backgroundHtml = await this.buildBackgroundHtml();
+    const margins = this.schema.margins || { top: 20, right: 20, bottom: 20, left: 20 };
+
+    const titulo = e(d.titulo?.texto || 'CONTRATO DE SERVICIO');
+    const proveedor = d.proveedor || {};
+    const cliente = d.cliente || {};
+    const monto = d.monto || {};
+
+    const montoTotal = typeof monto.total === 'number' ? monto.total : parseFloat(monto.total) || 0;
+    const montoEnLetras = monto.totalEnLetras && String(monto.totalEnLetras).trim()
+      ? String(monto.totalEnLetras).trim()
+      : montoTotal > 0 ? `SON: ${numberToWords(montoTotal)} SOLES` : '';
+
+    const partiesHtml = `
+<p style="text-align:justify;margin-bottom:12pt;">
+  Conste por el presente documento que celebra de una parte la empresa
+  <strong>${e(cliente.razonSocial)}</strong>${e(cliente.ruc) ? `, identificado con RUC N° ${e(cliente.ruc)}` : ''},
+  con domicilio legal en ${e(cliente.domicilio)},
+  debidamente representada por <strong>${e(cliente.representante)}</strong>${e(cliente.dniRepresentante) ? `, con DNI N° ${e(cliente.dniRepresentante)}` : ''},
+  a quien en adelante se denominará <strong>"EL CLIENTE"</strong>.
+</p>
+<p style="text-align:justify;margin-bottom:12pt;">
+  Y de otra parte, la empresa
+  <strong>${e(proveedor.razonSocial)}</strong>${e(proveedor.ruc) ? `, identificado con RUC N° ${e(proveedor.ruc)}` : ''},
+  domiciliado en ${e(proveedor.domicilio)},
+  debidamente representada por <strong>${e(proveedor.representante)}</strong>${e(proveedor.dniRepresentante) ? `, con DNI N° ${e(proveedor.dniRepresentante)}` : ''},
+  a quien en adelante se denominará <strong>"EL PROVEEDOR"</strong>.
+</p>
+<p style="text-align:justify;margin-bottom:12pt;">
+  En los términos y condiciones del presente contrato, que se sujetan a las siguientes cláusulas:
+</p>`;
+
+    const renderClauseText = (content: string): string => {
+      const lines = content ? content.split(/\r?\n/) : [];
+      return lines.map((line) => {
+        if (!line.trim()) return '';
+        // Lines matching "a) Title" or "a. Title" pattern render as bold sub-headings
+        if (/^[a-z]\)[ \t]/.test(line.trim())) {
+          const [prefix, ...rest] = line.trim().split(/[ \t]/);
+          return `<p style="margin:8pt 0 2pt 0;"><strong>${e(prefix)} ${e(rest.join(' '))}</strong></p>`;
+        }
+        return `<p style="text-align:justify;margin:6pt 0;">${e(line)}</p>`;
+      }).join('');
+    };
+
+    const renderClause = (title: string, content: string) => {
+      const body = renderClauseText(content) || '<p>&nbsp;</p>';
+      return title
+        ? `<h2 style="font-size:12pt;font-weight:bold;text-align:center;margin:14pt 0 6pt 0;">${e(title)}</h2>${body}`
+        : body;
+    };
+
+    const priceRows = Array.isArray(d.preciosUnitarios) ? d.preciosUnitarios : [];
+    const priceTableHtml = priceRows.length > 0 ? `
+<table style="width:100%;border-collapse:collapse;margin:8pt 0;font-size:11pt;">
+  <thead>
+    <tr style="background:#e8e8e8;">
+      <th style="border:1px solid #000;padding:5pt 8pt;text-align:left;">DETALLE</th>
+      <th style="border:1px solid #000;padding:5pt 8pt;text-align:center;">UND.</th>
+      <th style="border:1px solid #000;padding:5pt 8pt;text-align:right;">COSTO (S/)</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${priceRows.map((row: any) => `
+    <tr>
+      <td style="border:1px solid #000;padding:4pt 8pt;">${e(row.detalle)}</td>
+      <td style="border:1px solid #000;padding:4pt 8pt;text-align:center;">${e(row.unidad)}</td>
+      <td style="border:1px solid #000;padding:4pt 8pt;text-align:right;">${fmt(row.costo)}</td>
+    </tr>`).join('')}
+  </tbody>
+</table>` : '';
+
+    const bankRows = Array.isArray(d.cuentasBancarias) ? d.cuentasBancarias : [];
+    const bankTableHtml = bankRows.length > 0 ? `
+<p style="margin:8pt 0 4pt 0;"><strong>Datos bancarios para el pago:</strong></p>
+<table style="width:100%;border-collapse:collapse;margin:4pt 0 8pt 0;font-size:11pt;">
+  <thead>
+    <tr style="background:#e8e8e8;">
+      <th style="border:1px solid #000;padding:5pt 8pt;text-align:left;">BANCO</th>
+      <th style="border:1px solid #000;padding:5pt 8pt;text-align:left;">CUENTA</th>
+      <th style="border:1px solid #000;padding:5pt 8pt;text-align:left;">CCI</th>
+      <th style="border:1px solid #000;padding:5pt 8pt;text-align:left;">TIPO</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${bankRows.map((row: any) => `
+    <tr>
+      <td style="border:1px solid #000;padding:4pt 8pt;">${e(row.banco)}</td>
+      <td style="border:1px solid #000;padding:4pt 8pt;">${e(row.cuenta)}</td>
+      <td style="border:1px solid #000;padding:4pt 8pt;">${e(row.cci)}</td>
+      <td style="border:1px solid #000;padding:4pt 8pt;">${e(row.tipo)}</td>
+    </tr>`).join('')}
+  </tbody>
+</table>` : '';
+
+    const sectorRows = Array.isArray(d.sectoresPago) ? d.sectoresPago : [];
+    const sectorTableHtml = this.renderSectorTables(sectorRows, e, fmt);
+
+    const obra = d.obra || {};
+    const plazos = d.plazos || {};
+    const cierre = d.cierre || {};
+
+    const obraHtml = `
+<p style="text-align:justify;margin:6pt 0;">
+  <strong>OBRA:</strong> ${e(obra.nombre)}${e(obra.cui) ? ` &mdash; CUI N.° ${e(obra.cui)}` : ''}
+  ${e(obra.ubicacion) ? `<br/><strong>UBICACIÓN:</strong> ${e(obra.ubicacion)}` : ''}
+</p>`;
+
+    const montoHtml = `
+<p style="text-align:justify;margin:6pt 0;">
+  El monto total del presente contrato asciende a <strong>S/. ${fmt(montoTotal)}</strong>
+  ${montoEnLetras ? `(<strong>${e(montoEnLetras)}</strong>)` : ''}.
+</p>
+<p style="text-align:justify;margin:6pt 0;">
+  El importe total, podrá tener variación, ya que se rige a nivel de precios unitarios, por tal motivo los precios son los siguientes:
+</p>
+${priceTableHtml}
+${e(monto.descripcionMetrado) ? `<p style="text-align:justify;margin:6pt 0;">${e(monto.descripcionMetrado)}</p>` : ''}`;
+
+    const plazosHtml = `
+${e(plazos.fechaInicio) ? `<p style="margin:6pt 0;"><strong>Inicio:</strong> ${e(plazos.fechaInicio)}</p>` : ''}
+${e(plazos.fechaCulminacion) ? `<p style="margin:6pt 0;"><strong>Culminación:</strong> ${e(plazos.fechaCulminacion)}</p>` : ''}
+${e(plazos.responsableInicio) ? `<p style="margin:6pt 0;"><strong>Responsable:</strong> ${e(plazos.responsableInicio)}</p>` : ''}
+${e(plazos.descripcion) ? `<p style="text-align:justify;margin:6pt 0;">${e(plazos.descripcion)}</p>` : ''}`;
+
+    const signaturesHtml = `
+<div style="display:flex;justify-content:space-around;margin-top:80pt;gap:20pt;page-break-inside:avoid;">
+  <div style="text-align:center;width:45%;">
+    <div style="border-top:2px solid #000;padding-top:10pt;margin-top:60pt;">
+      <div style="font-weight:bold;">${e(cliente.representante) || 'EL CLIENTE'}</div>
+      <div>${e(cliente.razonSocial)}</div>
+      ${e(cliente.ruc) ? `<div>RUC N° ${e(cliente.ruc)}</div>` : ''}
+    </div>
+  </div>
+  <div style="text-align:center;width:45%;">
+    <div style="border-top:2px solid #000;padding-top:10pt;margin-top:60pt;">
+      <div style="font-weight:bold;">${e(proveedor.representante) || 'EL PROVEEDOR'}</div>
+      <div>${e(proveedor.razonSocial)}</div>
+      ${e(proveedor.ruc) ? `<div>RUC N° ${e(proveedor.ruc)}</div>` : ''}
+    </div>
+  </div>
+</div>`;
+
+    const cierreHtml = e(cierre.ciudad) || e(cierre.fechaFirma) ? `
+<p style="text-align:center;margin-top:24pt;">
+  Las partes firman la presente por duplicado en señal de conformidad en la Ciudad de
+  <strong>${e(cierre.ciudad)}</strong>, a los ${e(cierre.fechaFirma)}.
+</p>` : '';
+
+    const body = `
+<h1 style="text-align:center;font-size:14pt;font-weight:bold;margin-bottom:16pt;line-height:1.4;">${titulo}</h1>
+${partiesHtml}
+${renderClause('CLAUSULA PRIMERA: ANTECEDENTES', d.clausula1 || '')}
+<h2 style="font-size:12pt;font-weight:bold;text-align:center;margin:14pt 0 6pt 0;">CLAUSULA SEGUNDA: OBJETO</h2>
+<p style="text-align:justify;margin:6pt 0;">Es objeto del presente contrato la instalación de asfalto resultante al terreno en la cual el contratante está ejecutando la siguiente:</p>
+${obraHtml}
+${renderClause('Descripción de los Trabajos', d.clausula2Trabajos || '')}
+<h2 style="font-size:12pt;font-weight:bold;text-align:center;margin:14pt 0 6pt 0;">CLAUSULA TERCERA: MONTO CONTRACTUAL</h2>
+${montoHtml}
+<h2 style="font-size:12pt;font-weight:bold;text-align:center;margin:14pt 0 6pt 0;">CLAUSULA CUARTA: FORMA DE PAGO Y GARANTÍA DE CRÉDITO</h2>
+${renderClause('', d.clausula4FormaPago || '')}
+${sectorTableHtml}
+${bankTableHtml}
+<h2 style="font-size:12pt;font-weight:bold;text-align:center;margin:14pt 0 6pt 0;">CLAUSULA QUINTA: INICIO Y CULMINACIÓN DE LA PRESTACIÓN</h2>
+${plazosHtml}
+${renderClause('', d.clausula5Texto || '')}
+${renderClause('CLAUSULA SEXTA: MARCO LEGAL DEL CONTRATO', d.clausula6Marco || '')}
+${renderClause('CLAUSULA SEPTIMA: RESPONSABILIDAD DEL CLIENTE Y EL PROVEEDOR', d.clausula7Responsabilidades || '')}
+${renderClause('CLAUSULA OCTAVA: ARBITRAJE', d.clausula8Arbitraje || '')}
+${renderClause('CLAUSULA NOVENA: VERACIDAD DE DOMICILIOS', d.clausula9Domicilios || '')}
+${cierreHtml}
+${signaturesHtml}`;
+
+    const mTop = `${margins.top}mm`;
+    const mRight = `${margins.right}mm`;
+    const mBottom = `${margins.bottom}mm`;
+    const mLeft = `${margins.left}mm`;
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 12pt;
+      line-height: 1.5;
+      color: #000;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .contract-body {
+      padding: ${mTop} ${mRight} ${mBottom} ${mLeft};
+    }
+    .letterhead-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+    }
+    .letterhead-bg img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    @page { size: A4 portrait; }
+    p { margin: 6pt 0; }
+    table { border-collapse: collapse; }
+  </style>
+</head>
+<body>
+  ${backgroundHtml}
+  <div class="contract-body">
+    ${body}
+  </div>
+</body>
+</html>`;
+  }
+
+  private renderSectorTables(
+    rows: any[],
+    e: (s: any) => string,
+    fmt: (n: any) => string,
+  ): string {
+    if (rows.length === 0) return '';
+
+    const IGV_RATE = 0.18;
+    const groups = new Map<string, any[]>();
+    for (const row of rows) {
+      const key = String(row.sector || 'SECTOR 1');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(row);
+    }
+
+    const tables = Array.from(groups.entries()).map(([sector, items]) => {
+      const subtotal = items.reduce((sum: number, r: any) => {
+        const val = typeof r.parcial === 'number' ? r.parcial : (parseFloat(r.parcial) || 0);
+        return sum + val;
+      }, 0);
+      const igv = subtotal * IGV_RATE;
+      const total = subtotal + igv;
+
+      const itemRows = items.map((r: any) => `
+      <tr>
+        <td style="border:1px solid #000;padding:3pt 6pt;text-align:center;">${e(r.itemCode)}</td>
+        <td style="border:1px solid #000;padding:3pt 6pt;">${e(r.descripcion)}</td>
+        <td style="border:1px solid #000;padding:3pt 6pt;text-align:center;">${e(r.unidad)}</td>
+        <td style="border:1px solid #000;padding:3pt 6pt;text-align:right;">${fmt(r.metrado)}</td>
+        <td style="border:1px solid #000;padding:3pt 6pt;text-align:right;">${fmt(r.precioUnit)}</td>
+        <td style="border:1px solid #000;padding:3pt 6pt;text-align:right;">${fmt(r.parcial)}</td>
+      </tr>`).join('');
+
+      return `
+<p style="margin:10pt 0 4pt 0;"><strong>${e(sector)}</strong></p>
+<table style="width:100%;border-collapse:collapse;margin:4pt 0;font-size:10pt;">
+  <thead>
+    <tr style="background:#e8e8e8;">
+      <th style="border:1px solid #000;padding:4pt 6pt;text-align:center;width:8%;">ITEM</th>
+      <th style="border:1px solid #000;padding:4pt 6pt;text-align:left;">DESCRIPCIÓN</th>
+      <th style="border:1px solid #000;padding:4pt 6pt;text-align:center;width:8%;">UNID.</th>
+      <th style="border:1px solid #000;padding:4pt 6pt;text-align:right;width:10%;">METRADO</th>
+      <th style="border:1px solid #000;padding:4pt 6pt;text-align:right;width:12%;">PRECIO UNIT.</th>
+      <th style="border:1px solid #000;padding:4pt 6pt;text-align:right;width:12%;">P. PARCIAL</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${itemRows}
+    <tr>
+      <td colspan="5" style="border:1px solid #000;padding:3pt 6pt;text-align:right;font-weight:bold;">SUBTOTAL</td>
+      <td style="border:1px solid #000;padding:3pt 6pt;text-align:right;font-weight:bold;">${subtotal.toFixed(2)}</td>
+    </tr>
+    <tr>
+      <td colspan="5" style="border:1px solid #000;padding:3pt 6pt;text-align:right;">IGV (18%)</td>
+      <td style="border:1px solid #000;padding:3pt 6pt;text-align:right;">${igv.toFixed(2)}</td>
+    </tr>
+    <tr>
+      <td colspan="5" style="border:1px solid #000;padding:3pt 6pt;text-align:right;font-weight:bold;">TOTAL</td>
+      <td style="border:1px solid #000;padding:3pt 6pt;text-align:right;font-weight:bold;">${total.toFixed(2)}</td>
+    </tr>
+  </tbody>
+</table>`;
+    });
+
+    const grandTotal = rows.reduce((sum: number, r: any) => {
+      const val = typeof r.parcial === 'number' ? r.parcial : (parseFloat(r.parcial) || 0);
+      return sum + val;
+    }, 0);
+    const grandIgv = grandTotal * IGV_RATE;
+    const grandTotalConIgv = grandTotal + grandIgv;
+
+    const totalRow = groups.size > 1 ? `
+<table style="width:100%;border-collapse:collapse;margin:8pt 0;font-size:11pt;">
+  <tbody>
+    <tr>
+      <td style="border:1px solid #000;padding:4pt 8pt;text-align:right;font-weight:bold;width:75%;">TOTAL A PAGAR (incluye IGV)</td>
+      <td style="border:1px solid #000;padding:4pt 8pt;text-align:right;font-weight:bold;">S/. ${grandTotalConIgv.toFixed(2)}</td>
+    </tr>
+  </tbody>
+</table>` : '';
+
+    return tables.join('') + totalRow;
   }
 
   private buildCtlImpEmptyControl() {

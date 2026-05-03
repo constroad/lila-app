@@ -110,6 +110,9 @@ export const cotizacionServicioSchema: DocumentSchema = {
     },
   ],
   defaultData: {
+    branding: {
+      backgroundImageUrl: '',
+    },
     header: {
       logoUrl: '',
       issuerName: '',
@@ -155,4 +158,5 @@ export const cotizacionServicioSchema: DocumentSchema = {
     docx: false,
     excel: false,
   },
+  backgroundImageEnabled: true,
 };

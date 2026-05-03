@@ -321,6 +321,26 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
         }
       };
     }
+    case 'CONT-SRV': {
+      const clientName = client?.name || client?.alias || '';
+      const clientRuc = client?.ruc || client?.taxId || '';
+      const clientAddress = client?.address || client?.domicilio || '';
+      const clientRepresentante = client?.legalRepresentative || client?.representanteLegal || '';
+      return {
+        cliente: {
+          razonSocial: clientName,
+          ruc: clientRuc,
+          domicilio: clientAddress,
+          representante: clientRepresentante,
+          dniRepresentante: '',
+        },
+        obra: {
+          nombre: service.projectName || service.description || '',
+          cui: service.cui || '',
+          ubicacion: service.locationUrl || '',
+        },
+      };
+    }
     default:
       return {
         ...projectData,

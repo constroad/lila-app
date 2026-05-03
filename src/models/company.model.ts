@@ -35,6 +35,7 @@ export interface ICompany extends Document {
     logoLight?: string;
     logoDark?: string;
     favicon?: string;
+    letterheadUrl?: string;
   };
   whatsappConfig?: {
     sender?: string;
