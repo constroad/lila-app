@@ -120,6 +120,7 @@ export const controlPistaSchema: DocumentSchema = {
       id: 'registroFotografico',
       type: 'photoPanel',
       title: 'Panel Fotografico',
+      pageBreakBefore: true,
       maxImages: 100,
       layout: '2x3',
       showFecha: true,

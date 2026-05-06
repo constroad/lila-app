@@ -116,6 +116,7 @@ export class ReportHtmlRenderer {
     .checklist li { margin-bottom: 4px; }
     .page-wrapper { }
     .page-break { break-before: page; page-break-before: always; }
+    .signature-section { break-inside: avoid; page-break-inside: avoid; }
     .page-landscape { page: landscape; }
     .page-portrait { page: portrait; }
     .letterhead-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
@@ -1695,6 +1696,9 @@ ${signaturesHtml}`;
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const photos = this.limitPhotos(this.resolvePhotos(section), section.maxImages);
     if (photos.length === 0) {
+      if (this.schema.code === 'CTL-PIS') {
+        return '';
+      }
       if (this.schema.code === 'ACT-CNF') {
         return '';
       }
@@ -1758,7 +1762,7 @@ ${signaturesHtml}`;
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const signaturePath = section.id || 'firmas';
     const signatures = (section.signatures || []).filter((signature) => {
-      if (this.schema.code !== 'IPP') {
+      if (this.schema.code !== 'IPP' && this.schema.code !== 'CTL-PIS') {
         return true;
       }
 
@@ -1776,7 +1780,9 @@ ${signaturesHtml}`;
       );
     });
     if (signatures.length === 0) {
-      return this.schema.code === 'IPP' ? '' : `<div class="section">${title}</div>`;
+      return this.schema.code === 'IPP' || this.schema.code === 'CTL-PIS'
+        ? ''
+        : `<div class="section">${title}</div>`;
     }
 
     const actaTipo = this.schema.code === 'ACT-CNF'
@@ -1858,7 +1864,7 @@ ${signaturesHtml}`;
       })
     );
 
-    return `<div class="section">${title}<table><tr>${cells.join('')}</tr></table></div>`;
+    return `<div class="section signature-section">${title}<table><tr>${cells.join('')}</tr></table></div>`;
   }
 
   private async resolveSignatureImageSrc(

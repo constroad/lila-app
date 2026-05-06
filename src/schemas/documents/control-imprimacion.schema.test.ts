@@ -16,6 +16,7 @@ jest.mock('../../utils/logger.js', () => ({
 }));
 
 import { controlImprimacionSchema } from './control-imprimacion.schema.js';
+import { controlPistaSchema } from './control-pista.schema.js';
 import { actaConformidadSchema } from './acta-conformidad.schema.js';
 import { ReportHtmlRenderer } from '../../services/report-html-renderer.service.js';
 
@@ -88,5 +89,51 @@ describe('actaConformidadSchema pdf behavior', () => {
 
     expect(photoSection?.pageBreakBefore).toBe(true);
     expect(signaturesSection?.pageBreakBefore).toBe(true);
+  });
+});
+
+describe('controlPistaSchema pdf behavior', () => {
+  it('hides empty photo panel and empty signatures', async () => {
+    const renderer = new ReportHtmlRenderer(controlPistaSchema, {
+      control: { fecha: '2026-05-06', tramo: 'Tramo 1' },
+      controlPista: [],
+      registroFotografico: { fotos: [] },
+      firmas: {
+        elaboradoPor: { nombre: '', cargo: 'Supervisor de Campo', cip: '' },
+        aprobadoPor: { nombre: '', cargo: 'Supervisor de Calidad', cip: '' },
+      },
+    });
+
+    const html = await renderer.render();
+
+    expect(html).not.toContain('Panel Fotografico');
+    expect(html).not.toContain('<h2>Firmas</h2>');
+  });
+
+  it('starts photo panel on a new page and keeps signatures together', async () => {
+    const photoSection = controlPistaSchema.sections.find(
+      (section) => section.id === 'registroFotografico'
+    );
+    const renderer = new ReportHtmlRenderer(controlPistaSchema, {
+      control: { fecha: '2026-05-06', tramo: 'Tramo 1' },
+      registroFotografico: {
+        fotos: [
+          {
+            filename: 'foto.png',
+            base64:
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          },
+        ],
+      },
+      firmas: {
+        elaboradoPor: { nombre: 'Juan Perez', cargo: 'Supervisor', cip: '12345' },
+      },
+    });
+
+    const html = await renderer.render();
+
+    expect(photoSection?.pageBreakBefore).toBe(true);
+    expect(html).toContain('page-break');
+    expect(html).toContain('signature-section');
   });
 });
