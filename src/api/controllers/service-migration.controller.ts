@@ -32,17 +32,23 @@ export async function createServiceMigration(req: Request, res: Response) {
       });
     }
 
-    const response = startServiceMigration(recordId, request);
+    const response = await startServiceMigration(recordId, request);
     return res.status(202).json({
       ok: true,
       data: response,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error desconocido';
     logger.error('[service-migration] create failed', error);
-    const isConflict = String(error?.message || '').includes('Ya existe una migración');
-    return res.status(isConflict ? 409 : 500).json({
+    const isConflict = message.includes('Ya existe una migración');
+    const isValidationError =
+      message.includes('Falta pairing') ||
+      message.includes('Confirmación inválida') ||
+      message.includes('Pedido no existe') ||
+      message.includes('Origen y destino');
+    return res.status(isConflict ? 409 : isValidationError ? 400 : 500).json({
       ok: false,
-      message: error.message,
+      message,
     });
   }
 }

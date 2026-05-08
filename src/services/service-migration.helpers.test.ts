@@ -40,6 +40,7 @@ jest.mock('./telegram-alert.service.js', () => ({
 }));
 
 const { getMigrationCopyJobSnapshot } = require('../api/controllers/drive.controller.js');
+const { getSharedConnection } = require('../database/sharedConnection.js');
 const fs = require('fs-extra').default;
 const helpers = require('./service-migration.helpers.js');
 const service = require('./service-migration.service.js');
@@ -261,5 +262,36 @@ describe('service-migration.service validations', () => {
         pairings: [{ kind: 'order', sourceId: 'source-1', targetId: 'other-target' }],
       })
     ).rejects.toThrow('Pairings inválidos: 1');
+  });
+
+  it('rejects order migration before queueing when asphalt pairing is missing', async () => {
+    const orderModel = {
+      findOne: jest.fn().mockReturnValue(createChain({
+        _id: 'order-1',
+        tipoMAC: 'design-1',
+      })),
+    };
+    const emptyModel = {
+      find: jest.fn().mockReturnValue(createChain([])),
+    };
+    getSharedConnection.mockResolvedValue({
+      models: {
+        Order: orderModel,
+        Dispatch: emptyModel,
+        Kardex: emptyModel,
+        ServiceManagement: emptyModel,
+      },
+      model: jest.fn(),
+    });
+
+    await expect(
+      service.startServiceMigration('order-1', {
+        entityType: 'order',
+        sourceCompanyId: 'globofast',
+        targetCompanyId: 'constroad',
+        pairings: [],
+        confirmationText: 'order-1',
+      })
+    ).rejects.toThrow('Falta pairing asphaltDesign: design-1');
   });
 });

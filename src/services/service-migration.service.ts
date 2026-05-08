@@ -555,6 +555,38 @@ const runOrderMigration = async (
   };
 };
 
+const validateOrderStartRequest = async (
+  orderId: string,
+  request: ServiceMigrationRequest
+) => {
+  if (request.confirmationText !== orderId) throw new Error('Confirmación inválida.');
+  if (request.sourceCompanyId === request.targetCompanyId) {
+    throw new Error('Origen y destino son iguales.');
+  }
+
+  const connection = await getSharedConnection();
+  const models = getModels(connection);
+  const orderDocument = await models.Order.findOne({
+    _id: toMongoIdentifier(orderId),
+    companyId: request.sourceCompanyId,
+  }).lean();
+  if (!orderDocument) throw new Error('Pedido no existe.');
+
+  const [dispatches, kardexEntries, linkedServices] = await Promise.all([
+    models.Dispatch.find({ companyId: request.sourceCompanyId, orderId }).lean(),
+    models.Kardex.find({ companyId: request.sourceCompanyId, orderId }).lean(),
+    models.ServiceManagement.find({ companyId: request.sourceCompanyId, orderIds: orderId }).lean(),
+  ]);
+
+  validateOrderMigrationPairings({
+    orderDocument,
+    dispatches,
+    kardexEntries,
+    linkedServices,
+    request,
+  });
+};
+
 const runServiceMigration = async (serviceId: string, request: ServiceMigrationRequest) => {
   const targetServiceId = asText(request.targetServiceId);
   if (!targetServiceId) throw new Error('Servicio destino requerido.');
@@ -816,7 +848,7 @@ const runServiceMigration = async (serviceId: string, request: ServiceMigrationR
   } satisfies ServiceMigrationResult;
 };
 
-export const startServiceMigration = (
+export const startServiceMigration = async (
   recordId: string,
   request: ServiceMigrationRequest
 ) => {
@@ -832,6 +864,10 @@ export const startServiceMigration = (
 
   if (activeMigrations.has(migrationKey)) {
     throw new Error('Ya existe una migración ejecutándose para este recurso.');
+  }
+
+  if (entityType === 'order') {
+    await validateOrderStartRequest(recordId, request);
   }
 
   activeMigrations.add(migrationKey);
