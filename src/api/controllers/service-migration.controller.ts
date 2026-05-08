@@ -13,12 +13,16 @@ export async function createServiceMigration(req: Request, res: Response) {
       });
     }
 
-    const serviceId = asText(req.body?.serviceId);
     const request = req.body?.request as ServiceMigrationRequest | undefined;
-    if (!serviceId || !request?.sourceCompanyId || !request.targetCompanyId) {
+    const entityType = request?.entityType === 'order' ? 'order' : 'service';
+    const recordId = asText(
+      req.body?.recordId ||
+      (entityType === 'order' ? req.body?.orderId : req.body?.serviceId)
+    );
+    if (!recordId || !request?.sourceCompanyId || !request.targetCompanyId) {
       return res.status(400).json({
         ok: false,
-        message: 'serviceId, sourceCompanyId y targetCompanyId son requeridos',
+        message: 'recordId, sourceCompanyId y targetCompanyId son requeridos',
       });
     }
     if (req.companyId !== request.targetCompanyId) {
@@ -28,7 +32,7 @@ export async function createServiceMigration(req: Request, res: Response) {
       });
     }
 
-    const response = startServiceMigration(serviceId, request);
+    const response = startServiceMigration(recordId, request);
     return res.status(202).json({
       ok: true,
       data: response,

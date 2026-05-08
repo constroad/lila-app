@@ -48,7 +48,7 @@ export type MigrationCounts = {
 
 export type ServiceMigrationQueuedResponse = {
   ok: true;
-  entityType: 'service';
+  entityType: 'order' | 'service';
   queued: true;
   migratedOrderId: string;
   targetServiceId?: string;
@@ -61,9 +61,9 @@ export type ServiceMigrationQueuedResponse = {
 
 export type ServiceMigrationResult = {
   ok: true;
-  entityType: 'service';
+  entityType: 'order' | 'service';
   migratedOrderId: string;
-  targetServiceId: string;
+  targetServiceId?: string;
   sourceCompanyId: string;
   targetCompanyId: string;
   movedCounts: MigrationCounts;
@@ -73,6 +73,10 @@ export type ServiceMigrationResult = {
 export type MigrationModels = {
   Order: MigrationModel;
   Dispatch: MigrationModel;
+  Client: MigrationModel;
+  Transport: MigrationModel;
+  AsphaltDesign: MigrationModel;
+  Material: MigrationModel;
   Certificate: MigrationModel;
   Kardex: MigrationModel;
   Consume: MigrationModel;
@@ -437,6 +441,14 @@ export const getModels = (connection: Connection): MigrationModels => ({
     connection.model('Order', looseSchema)) as MigrationModel,
   Dispatch: (connection.models.Dispatch ||
     connection.model('Dispatch', looseSchema)) as MigrationModel,
+  Client: (connection.models.Client ||
+    connection.model('Client', looseSchema)) as MigrationModel,
+  Transport: (connection.models.Transport ||
+    connection.model('Transport', looseSchema)) as MigrationModel,
+  AsphaltDesign: (connection.models.AsphaltDesign ||
+    connection.model('AsphaltDesign', looseSchema)) as MigrationModel,
+  Material: (connection.models.Material ||
+    connection.model('Material', looseSchema)) as MigrationModel,
   Certificate: (connection.models.Certificate ||
     connection.model('Certificate', looseSchema)) as MigrationModel,
   Kardex: (connection.models.Kardex ||

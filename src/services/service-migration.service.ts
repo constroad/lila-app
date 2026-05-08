@@ -126,7 +126,436 @@ export const validateOrderPairings = async (params: {
   }
 };
 
-const runMigration = async (serviceId: string, request: ServiceMigrationRequest) => {
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const rawUpdateMany = async (
+  model: ReturnType<typeof getModels>[keyof ReturnType<typeof getModels>],
+  filter: Record<string, unknown>,
+  updateOperation: Record<string, unknown>,
+  session?: any
+) => {
+  await model.collection.updateMany(filter, updateOperation, session ? { session } : undefined);
+};
+
+const rawUpdateOne = async (
+  model: ReturnType<typeof getModels>[keyof ReturnType<typeof getModels>],
+  filter: Record<string, unknown>,
+  updateOperation: Record<string, unknown>,
+  session?: any
+) => {
+  await model.collection.updateOne(filter, updateOperation, session ? { session } : undefined);
+};
+
+const getRequiredPairing = (
+  request: ServiceMigrationRequest,
+  kind: string,
+  sourceId: string
+) => {
+  const targetId = getPairingTarget(request.pairings, kind, sourceId);
+  if (!targetId) throw new Error(`Falta pairing ${kind}: ${sourceId}`);
+  return targetId;
+};
+
+const collectOrderMaterialIds = (
+  orderDocument: Record<string, unknown>,
+  kardexDocuments: Record<string, unknown>[]
+) => {
+  const materialIds = new Set<string>();
+  kardexDocuments.forEach((kardexDocument) => {
+    const materialId = asText(kardexDocument.materialId);
+    if (materialId) materialIds.add(materialId);
+  });
+  const productionKardex = orderDocument.productionKardex as Record<string, unknown> | undefined;
+  const materials = Array.isArray(productionKardex?.materials)
+    ? productionKardex.materials
+    : [];
+  materials.forEach((materialDocument) => {
+    if (!materialDocument || typeof materialDocument !== 'object') return;
+    const materialId = asText((materialDocument as Record<string, unknown>).materialId);
+    if (materialId) materialIds.add(materialId);
+  });
+  return Array.from(materialIds);
+};
+
+const replaceProductionMaterials = (
+  orderDocument: Record<string, unknown>,
+  request: ServiceMigrationRequest
+) => {
+  const productionKardex = orderDocument.productionKardex as Record<string, unknown> | undefined;
+  const materials = Array.isArray(productionKardex?.materials)
+    ? productionKardex.materials
+    : [];
+  return materials.map((materialDocument) => {
+    if (!materialDocument || typeof materialDocument !== 'object') return materialDocument;
+    const materialFields = materialDocument as Record<string, unknown>;
+    const targetId = getPairingTarget(request.pairings, 'material', asText(materialFields.materialId));
+    return targetId ? { ...materialFields, materialId: targetId } : materialFields;
+  });
+};
+
+const replaceCompanyPath = (
+  value: unknown,
+  sourceCompanyId: string,
+  targetCompanyId: string
+) => {
+  const textValue = asText(value);
+  if (!textValue) return '';
+  return textValue
+    .replaceAll(`/files/companies/${sourceCompanyId}/`, `/files/companies/${targetCompanyId}/`)
+    .replaceAll(`files/companies/${sourceCompanyId}/`, `files/companies/${targetCompanyId}/`)
+    .replaceAll(`/companies/${sourceCompanyId}/`, `/companies/${targetCompanyId}/`)
+    .replaceAll(`companies/${sourceCompanyId}/`, `companies/${targetCompanyId}/`);
+};
+
+const replaceDeepText = (
+  value: unknown,
+  transform: (currentValue: string) => string
+): unknown => {
+  if (typeof value === 'string') return transform(value);
+  if (Array.isArray(value)) return value.map((entry) => replaceDeepText(entry, transform));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([fieldName, fieldValue]) => [
+        fieldName,
+        replaceDeepText(fieldValue, transform),
+      ])
+    );
+  }
+  return value;
+};
+
+const rewriteOrderMediaLocations = async (params: {
+  models: ReturnType<typeof getModels>;
+  mediaDocuments: Record<string, unknown>[];
+  files: Array<{ mediaId: string; targetPath: string }>;
+  sourceCompanyId: string;
+  targetCompanyId: string;
+  session: any;
+}) => {
+  const filesByMediaId = new Map(params.files.map((file) => [file.mediaId, file]));
+  for (const mediaDocument of params.mediaDocuments) {
+    const mediaId = asText(mediaDocument._id);
+    if (!mediaId) continue;
+    const migrationFile = filesByMediaId.get(mediaId);
+    const transform = (value: string) =>
+      replaceCompanyPath(value, params.sourceCompanyId, params.targetCompanyId);
+    const metadata = mediaDocument.metadata as Record<string, unknown> | undefined;
+    const rewrittenMetadata = replaceDeepText(metadata, transform) as Record<string, unknown> | undefined;
+    const targetPublicUrl = migrationFile?.targetPath
+      ? `/files/${migrationFile.targetPath}`
+      : transform(asText(mediaDocument.url));
+    const targetDirectory = migrationFile?.targetPath
+      ? migrationFile.targetPath.split('/').filter(Boolean).slice(0, -1).join('/')
+      : asText(rewrittenMetadata?.lilaAppPath);
+    const targetLilaPath = targetDirectory.replace(
+      new RegExp(`^companies/${escapeRegex(params.targetCompanyId)}/`),
+      ''
+    );
+
+    await rawUpdateOne(
+      params.models.Media,
+      { _id: toMongoIdentifier(mediaId), companyId: params.targetCompanyId },
+      {
+        $set: {
+          url: transform(asText(mediaDocument.url)) || targetPublicUrl,
+          thumbnailUrl: transform(asText(mediaDocument.thumbnailUrl)) || targetPublicUrl,
+          metadata: {
+            ...(rewrittenMetadata ?? {}),
+            ...(migrationFile
+              ? {
+                  lilaAppUrl: targetPublicUrl,
+                  thumbnailUrl: transform(asText(mediaDocument.thumbnailUrl)) || targetPublicUrl,
+                  lilaAppPath: targetLilaPath,
+                  lilaAppFilePath: migrationFile.targetPath,
+                }
+              : {}),
+          },
+        },
+      },
+      params.session
+    );
+  }
+};
+
+const validateOrderMigrationPairings = (params: {
+  orderDocument: Record<string, unknown>;
+  dispatches: Record<string, unknown>[];
+  kardexEntries: Record<string, unknown>[];
+  linkedServices: Record<string, unknown>[];
+  request: ServiceMigrationRequest;
+}) => {
+  const clientId = asText(params.orderDocument.clienteId);
+  const designId = asText(params.orderDocument.tipoMAC);
+  if (clientId) getRequiredPairing(params.request, 'client', clientId);
+  if (designId) getRequiredPairing(params.request, 'asphaltDesign', designId);
+
+  const transportIds = Array.from(
+    new Set(params.dispatches.map((dispatch) => asText(dispatch.transportId)).filter(Boolean))
+  );
+  transportIds.forEach((transportId) =>
+    getRequiredPairing(params.request, 'transport', transportId)
+  );
+
+  collectOrderMaterialIds(params.orderDocument, params.kardexEntries).forEach((materialId) =>
+    getRequiredPairing(params.request, 'material', materialId)
+  );
+
+  params.linkedServices.forEach((serviceDocument) =>
+    getRequiredPairing(params.request, 'serviceManagement', asText(serviceDocument._id))
+  );
+};
+
+const runOrderMigration = async (
+  orderId: string,
+  request: ServiceMigrationRequest
+): Promise<ServiceMigrationResult> => {
+  if (request.confirmationText !== orderId) throw new Error('Confirmación inválida.');
+  if (request.sourceCompanyId === request.targetCompanyId) {
+    throw new Error('Origen y destino son iguales.');
+  }
+
+  const connection = await getSharedConnection();
+  const models = getModels(connection);
+  const orderDocument = await models.Order.findOne({
+    _id: toMongoIdentifier(orderId),
+    companyId: request.sourceCompanyId,
+  }).lean();
+  if (!orderDocument) throw new Error('Pedido no existe.');
+
+  const [
+    dispatches,
+    mediaDocuments,
+    folderDocuments,
+    certificates,
+    kardexEntries,
+    consumes,
+    publicLinks,
+    linkedServices,
+    financialMovements,
+  ] = await Promise.all([
+    models.Dispatch.find({ companyId: request.sourceCompanyId, orderId }).lean(),
+    models.Media.find({
+      companyId: request.sourceCompanyId,
+      resourceId: orderId,
+      status: { $ne: 'DELETED' },
+    }).lean(),
+    models.Folder.find({
+      companyId: request.sourceCompanyId,
+      resourceId: orderId,
+      status: { $ne: 'DELETED' },
+    }).lean(),
+    models.Certificate.find({ companyId: request.sourceCompanyId, orderId }).lean(),
+    models.Kardex.find({ companyId: request.sourceCompanyId, orderId }).lean(),
+    models.Consume.find({ companyId: request.sourceCompanyId, 'orders.orderId': orderId }).lean(),
+    models.PublicLink.find({
+      companyId: request.sourceCompanyId,
+      resourceType: 'order',
+      resourceId: orderId,
+    }).lean(),
+    models.ServiceManagement.find({ companyId: request.sourceCompanyId, orderIds: orderId }).lean(),
+    models.FinancialMovement.find({
+      companyId: request.sourceCompanyId,
+      $or: [{ orderId }, { resourceType: 'order', resourceId: orderId }],
+    }).lean(),
+  ]);
+
+  const linkedReports = linkedServices.length > 0
+    ? await models.ServiceManagementReport.find({
+        companyId: request.sourceCompanyId,
+        serviceManagementId: { $in: linkedServices.map((service) => asText(service._id)) },
+        orderIds: orderId,
+      }).lean()
+    : [];
+
+  if (linkedReports.length > 0) throw new Error('El pedido tiene informes ligados. Migra el servicio completo primero.');
+  if (consumes.length > 0) throw new Error('El pedido tiene consumos ligados. Requiere revisión operativa.');
+  if (kardexEntries.length > 0) throw new Error('El pedido tiene kardex ligado. Requiere revisión de inventario.');
+
+  validateOrderMigrationPairings({
+    orderDocument,
+    dispatches,
+    kardexEntries,
+    linkedServices,
+    request,
+  });
+
+  const attachmentFilters = collectAttachmentMediaFilters(financialMovements);
+  const attachmentMediaDocuments = attachmentFilters.resourceIds.length > 0
+    ? await models.Media.find({
+        companyId: request.sourceCompanyId,
+        resourceId: { $in: attachmentFilters.resourceIds },
+        type: { $in: attachmentFilters.types },
+        status: { $ne: 'DELETED' },
+      }).lean()
+    : [];
+  const allMediaDocuments = Array.from(
+    new Map(
+      [...mediaDocuments, ...attachmentMediaDocuments].map((mediaDocument) => [
+        asText(mediaDocument._id),
+        mediaDocument,
+      ])
+    ).values()
+  );
+  const files = buildMigrationFiles(
+    allMediaDocuments,
+    request.sourceCompanyId,
+    request.targetCompanyId,
+    '',
+    ''
+  );
+  const createdTargets = await copyPhysicalFiles(
+    files,
+    request.sourceCompanyId,
+    request.targetCompanyId
+  );
+  const session = await connection.startSession();
+
+  try {
+    await session.withTransaction(async () => {
+      const clientId = asText(orderDocument.clienteId);
+      const designId = asText(orderDocument.tipoMAC);
+      const targetClientId = clientId
+        ? getRequiredPairing(request, 'client', clientId)
+        : '';
+      const targetDesignId = designId
+        ? getRequiredPairing(request, 'asphaltDesign', designId)
+        : '';
+      const orderSet: Record<string, unknown> = {
+        companyId: request.targetCompanyId,
+        ...(targetClientId ? { clienteId: targetClientId } : {}),
+        ...(targetDesignId ? { tipoMAC: targetDesignId } : {}),
+      };
+      const productionMaterials = replaceProductionMaterials(orderDocument, request);
+      if (productionMaterials.length > 0) {
+        orderSet['productionKardex.materials'] = productionMaterials;
+      }
+
+      await rawUpdateMany(models.Order, { _id: toMongoIdentifier(orderId) }, { $set: orderSet }, session);
+      await rawUpdateMany(
+        models.Dispatch,
+        { companyId: request.sourceCompanyId, orderId },
+        {
+          $set: {
+            companyId: request.targetCompanyId,
+            ...(targetClientId ? { clientId: targetClientId } : {}),
+          },
+        },
+        session
+      );
+      for (const pairing of request.pairings.filter((item) => item.kind === 'transport')) {
+        await rawUpdateMany(
+          models.Dispatch,
+          {
+            companyId: request.targetCompanyId,
+            orderId,
+            transportId: pairing.sourceId,
+          },
+          { $set: { transportId: pairing.targetId } },
+          session
+        );
+      }
+
+      await rawUpdateMany(
+        models.Certificate,
+        { companyId: request.sourceCompanyId, orderId },
+        { $set: { companyId: request.targetCompanyId } },
+        session
+      );
+      await rawUpdateMany(
+        models.Folder,
+        { companyId: request.sourceCompanyId, resourceId: orderId },
+        { $set: { companyId: request.targetCompanyId } },
+        session
+      );
+      await rawUpdateMany(
+        models.Media,
+        {
+          companyId: request.sourceCompanyId,
+          resourceId: {
+            $in: [
+              orderId,
+              ...attachmentFilters.resourceIds,
+            ],
+          },
+        },
+        { $set: { companyId: request.targetCompanyId } },
+        session
+      );
+      await rawUpdateMany(
+        models.FinancialMovement,
+        {
+          companyId: request.sourceCompanyId,
+          $or: [{ orderId }, { resourceType: 'order', resourceId: orderId }],
+        },
+        { $set: { companyId: request.targetCompanyId } },
+        session
+      );
+      await rawUpdateMany(
+        models.PublicLink,
+        { companyId: request.sourceCompanyId, resourceType: 'order', resourceId: orderId },
+        { $set: { expiresAt: new Date(), title: 'Migrado a otra empresa' } },
+        session
+      );
+      await rawUpdateMany(
+        models.ServiceManagement,
+        { companyId: request.sourceCompanyId, orderIds: orderId },
+        { $pull: { orderIds: { $eq: orderId } } },
+        session
+      );
+      for (const pairing of request.pairings.filter((item) => item.kind === 'serviceManagement')) {
+        await rawUpdateOne(
+          models.ServiceManagement,
+          { _id: toMongoIdentifier(pairing.targetId), companyId: request.targetCompanyId },
+          { $addToSet: { orderIds: orderId } },
+          session
+        );
+      }
+      await rewriteOrderMediaLocations({
+        models,
+        mediaDocuments: allMediaDocuments,
+        files,
+        sourceCompanyId: request.sourceCompanyId,
+        targetCompanyId: request.targetCompanyId,
+        session,
+      });
+    });
+  } catch (error) {
+    await rollbackCopiedFiles(request.targetCompanyId, createdTargets);
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+
+  const cleanupWarnings = await deleteSourceFiles(files, request.sourceCompanyId);
+  return {
+    ok: true,
+    entityType: 'order',
+    migratedOrderId: orderId,
+    sourceCompanyId: request.sourceCompanyId,
+    targetCompanyId: request.targetCompanyId,
+    movedCounts: {
+      ...emptyCounts(),
+      dispatches: dispatches.length,
+      medias: allMediaDocuments.length,
+      folders: folderDocuments.length,
+      certificates: certificates.length,
+      kardexEntries: kardexEntries.length,
+      consumes: consumes.length,
+      publicLinks: publicLinks.length,
+      serviceLinks: linkedServices.length,
+      linkedReports: linkedReports.length,
+      financialMovements: financialMovements.length,
+    },
+    warnings: [
+      ...cleanupWarnings,
+      ...(publicLinks.length > 0
+        ? ['Los enlaces públicos existentes vencieron para evitar acceso con la empresa anterior.']
+        : []),
+    ],
+  };
+};
+
+const runServiceMigration = async (serviceId: string, request: ServiceMigrationRequest) => {
   const targetServiceId = asText(request.targetServiceId);
   if (!targetServiceId) throw new Error('Servicio destino requerido.');
   if (request.confirmationText !== serviceId) throw new Error('Confirmación inválida.');
@@ -388,43 +817,50 @@ const runMigration = async (serviceId: string, request: ServiceMigrationRequest)
 };
 
 export const startServiceMigration = (
-  serviceId: string,
+  recordId: string,
   request: ServiceMigrationRequest
 ) => {
+  const entityType = request.entityType === 'order' ? 'order' : 'service';
   const targetServiceId = asText(request.targetServiceId);
   const migrationKey = [
+    entityType,
     request.sourceCompanyId,
     request.targetCompanyId,
-    serviceId,
+    recordId,
     targetServiceId,
   ].join(':');
 
   if (activeMigrations.has(migrationKey)) {
-    throw new Error('Ya existe una migración ejecutándose para este servicio.');
+    throw new Error('Ya existe una migración ejecutándose para este recurso.');
   }
 
   activeMigrations.add(migrationKey);
   void (async () => {
     try {
-      const outcome = await runMigration(serviceId, request);
+      const outcome = entityType === 'order'
+        ? await runOrderMigration(recordId, request)
+        : await runServiceMigration(recordId, request);
       await notifyMigrationResult(
-        `service-migration:${migrationKey}`,
-        `Migración de servicio OK: ${serviceId} -> ${targetServiceId}. ` +
+        `migration:${migrationKey}`,
+        `Migración de ${entityType} OK: ${recordId}` +
+          `${targetServiceId ? ` -> ${targetServiceId}` : ''}. ` +
           `${request.sourceCompanyId} -> ${request.targetCompanyId}. ` +
           `Advertencias: ${outcome.warnings.length}`
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
       logger.error('[service-migration] background failed', {
-        serviceId,
+        recordId,
+        entityType,
         targetServiceId,
         sourceCompanyId: request.sourceCompanyId,
         targetCompanyId: request.targetCompanyId,
         error,
       });
       await notifyMigrationResult(
-        `service-migration:${migrationKey}`,
-        `Migración de servicio FALLÓ: ${serviceId} -> ${targetServiceId}. ` +
+        `migration:${migrationKey}`,
+        `Migración de ${entityType} FALLÓ: ${recordId}` +
+          `${targetServiceId ? ` -> ${targetServiceId}` : ''}. ` +
           `${request.sourceCompanyId} -> ${request.targetCompanyId}. ${message}`
       );
     } finally {
@@ -434,9 +870,9 @@ export const startServiceMigration = (
 
   return {
     ok: true,
-    entityType: 'service',
+    entityType,
     queued: true,
-    migratedOrderId: serviceId,
+    migratedOrderId: recordId,
     targetServiceId: request.targetServiceId,
     sourceCompanyId: request.sourceCompanyId,
     targetCompanyId: request.targetCompanyId,
