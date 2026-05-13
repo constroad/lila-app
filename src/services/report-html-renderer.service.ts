@@ -31,6 +31,7 @@ interface PhotoItem {
   path?: string;
   buffer?: Buffer;
   category?: string;
+  areaM2?: number;
   tipo?: string;
   purpose?: string;
   includeInPdf?: boolean;
@@ -1539,7 +1540,9 @@ ${signaturesHtml}`;
     const resolvedTitle = this.resolveSectionTitle(section);
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
 
-    const rowsData = this.resolveTableRows(section);
+    const rowsData = this.schema.code === 'IAA'
+      ? this.getIaaAreaRows()
+      : this.resolveTableRows(section);
     const columns = section.columns || [];
     if (columns.length === 0) {
       return `<div class="section">${title}</div>`;
@@ -1609,7 +1612,10 @@ ${signaturesHtml}`;
           return `<tr>${cells}</tr>`;
         })
         .join('');
-      return `<div class="section">${title}<table>${headerRow}${subHeaderRow}${rows}</table></div>`;
+      const totalRow = this.schema.code === 'IAA'
+        ? this.renderIaaTotalAreaRow(displayColumns, rowsData)
+        : '';
+      return `<div class="section">${title}<table>${headerRow}${subHeaderRow}${rows}${totalRow}</table></div>`;
     }
 
     const groups: Array<{ label: string; rows: Array<Record<string, any>> }> = [];
@@ -1692,6 +1698,10 @@ ${signaturesHtml}`;
   }
 
   private async renderPhotoPanel(section: SectionSchema): Promise<string> {
+    if (this.schema.code === 'IAA' && section.id === 'panelFotografico') {
+      return this.renderIaaPhotoPanel(section);
+    }
+
     const resolvedTitle = this.resolveSectionTitle(section);
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const photos = this.limitPhotos(this.resolvePhotos(section), section.maxImages);
@@ -1750,7 +1760,15 @@ ${signaturesHtml}`;
 
     const shouldPageBreak = this.schema.code === 'CTL-PIS' && section.id === 'observaciones';
 
-    if (this.schema.code === 'IAA' && ['antecedentes', 'justificacionTecnica', 'conclusiones'].includes(section.id)) {
+    const iaaTextSections = [
+      'objetoInforme',
+      'antecedentes',
+      'descripcionTrabajos',
+      'justificacionTecnica',
+      'conclusiones',
+    ];
+
+    if (this.schema.code === 'IAA' && iaaTextSections.includes(section.id)) {
       return `<div class="section"${shouldPageBreak ? ' style="page-break-before:always;"' : ''}>${title}<table><tr><td>${html}</td></tr></table></div>`;
     }
 
@@ -2066,6 +2084,81 @@ ${signaturesHtml}`;
     return `<table class="photo-table" style="table-layout:fixed;">${rows.join('')}</table>`;
   }
 
+  private getIaaAreaRows(): Array<Record<string, any>> {
+    const rows = this.getValue('cuadroMetrado');
+    if (!Array.isArray(rows)) return [];
+    const photos = this.resolvePhotos({ id: 'panelFotografico' } as SectionSchema);
+    const totals = photos.reduce<Record<string, { total: number; hasArea: boolean }>>((acc, photo) => {
+      const category = String(photo.category || '');
+      if (!category) return acc;
+      const current = acc[category] || { total: 0, hasArea: false };
+      acc[category] = {
+        total: current.total + Number(photo.areaM2 || 0),
+        hasArea: current.hasArea || photo.areaM2 !== undefined,
+      };
+      return acc;
+    }, {});
+    return rows.map((row) => {
+      const id = String(row?.id || row?.item || '');
+      return {
+        ...row,
+        area: totals[id]?.hasArea ? Number(totals[id].total || 0) : Number(row?.area || 0),
+      };
+    });
+  }
+
+  private renderIaaTotalAreaRow(
+    columns: ColumnSchema[],
+    rowsData: Array<Record<string, any>>
+  ): string {
+    const totalArea = rowsData.reduce((sum, row) => sum + Number(row?.area || 0), 0);
+    const cells = columns.map((column, index) => {
+      if (column.key === 'area') {
+        return `<td style="font-weight:bold;text-align:center;">${this.escapeHtml(this.formatValue(totalArea, 'number'))}</td>`;
+      }
+      if (index === 0) return '<td style="font-weight:bold;">TOTAL ADICIONAL</td>';
+      return '<td></td>';
+    });
+    return `<tr>${cells.join('')}</tr>`;
+  }
+
+  private async renderIaaPhotoPanel(section: SectionSchema): Promise<string> {
+    const resolvedTitle = this.resolveSectionTitle(section);
+    const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
+    const photos = this.limitPhotos(this.resolvePhotos(section), section.maxImages);
+    if (photos.length === 0) return '';
+
+    const groups = this.getIaaAreaRows()
+      .map((row, index) => {
+        const id = String(row?.id || row?.item || '');
+        const label = String(row?.ubicacion || row?.tramoZona || `Zona ${index + 1}`);
+        return {
+          id,
+          label,
+          area: Number(row?.area || 0),
+          photos: photos.filter((photo) => String(photo.category || '') === id),
+        };
+      })
+      .filter((group) => group.photos.length > 0);
+
+    const groupedPhotos = new Set(groups.flatMap((group) => group.photos));
+    const ungrouped = photos.filter((photo) => !groupedPhotos.has(photo));
+    if (ungrouped.length > 0) {
+      groups.push({ id: 'otros', label: 'Sin zona asignada', area: 0, photos: ungrouped });
+    }
+
+    const groupHtml: string[] = [];
+    for (const group of groups) {
+      const areaText = group.area > 0
+        ? ` - Area: ${this.escapeHtml(this.formatValue(group.area, 'number'))} m2`
+        : '';
+      const groupTitle = `<h3>${this.escapeHtml(group.label)}${areaText}</h3>`;
+      groupHtml.push(`${groupTitle}${await this.renderPhotoTable(group.photos, section)}`);
+    }
+
+    return `<div class="section">${title}${groupHtml.join('')}</div>`;
+  }
+
   private buildPhotoCaption(photo: PhotoItem, section: SectionSchema, index: number): string {
     if (this.schema.code === 'IPP') {
       const prefix = section.id === 'panelFotograficoLaboratorio'
@@ -2092,6 +2185,9 @@ ${signaturesHtml}`;
     const parts: string[] = [];
     if (this.schema.code === 'IAA' && section.id === 'panelFotografico') {
       parts.push(`Foto ${index}`);
+      if (photo.areaM2 !== undefined && Number(photo.areaM2) > 0) {
+        parts.push(`Area: ${this.formatValue(Number(photo.areaM2), 'number')} m2`);
+      }
     }
     if (photo.descripcion) {
       parts.push(photo.descripcion);
@@ -2135,8 +2231,8 @@ ${signaturesHtml}`;
     }
 
     const urlCandidate =
-      (photo as any).renderedThumbnailUrl ||
       (photo as any).renderedUrl ||
+      (photo as any).renderedThumbnailUrl ||
       (photo as any).thumbnailUrl ||
       photo.url ||
       (photo as any).fileUrl ||

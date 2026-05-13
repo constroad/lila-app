@@ -18,6 +18,7 @@ jest.mock('../../utils/logger.js', () => ({
 import { controlImprimacionSchema } from './control-imprimacion.schema.js';
 import { controlPistaSchema } from './control-pista.schema.js';
 import { actaConformidadSchema } from './acta-conformidad.schema.js';
+import { informeAreaAdicionalSchema } from './informe-area-adicional.schema.js';
 import { ReportHtmlRenderer } from '../../services/report-html-renderer.service.js';
 
 describe('controlImprimacionSchema defaults', () => {
@@ -135,5 +136,51 @@ describe('controlPistaSchema pdf behavior', () => {
     expect(photoSection?.pageBreakBefore).toBe(true);
     expect(html).toContain('page-break');
     expect(html).toContain('signature-section');
+  });
+});
+
+describe('informeAreaAdicionalSchema behavior', () => {
+  it('removes redundant project fields from the visible schema', () => {
+    const projectSection = informeAreaAdicionalSchema.sections.find(
+      (section) => section.id === 'datosProyecto'
+    );
+    const keys = projectSection?.fields?.map((field) => field.key) || [];
+
+    expect(keys).not.toContain('proyecto.cui');
+    expect(keys).not.toContain('proyecto.contrato');
+    expect(keys).not.toContain('proyecto.ordenCompra');
+    expect(keys).not.toContain('proyecto.ubicacion');
+    expect(keys).not.toContain('proyecto.frente');
+  });
+
+  it('renders grouped photos by additional area row', async () => {
+    const renderer = new ReportHtmlRenderer(informeAreaAdicionalSchema, {
+      cuadroMetrado: [
+        {
+          id: 'area-lluta',
+          item: '1',
+          ubicacion: 'Lluta',
+          descripcion: 'Bacheo localizado',
+          area: 12.97,
+        },
+      ],
+      panelFotografico: {
+        fotos: [
+          {
+            category: 'area-lluta',
+            descripcion: 'Area: 11.02m2',
+            base64:
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          },
+        ],
+      },
+      firmas: {},
+    });
+
+    const html = await renderer.render();
+
+    expect(html).toContain('Lluta - Area: 12.97 m2');
+    expect(html).toContain('TOTAL ADICIONAL');
+    expect(html).toContain('Area: 11.02m2');
   });
 });

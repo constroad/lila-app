@@ -289,6 +289,8 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
           planoReferencia: '',
         },
         antecedentes: '',
+        objetoInforme: '',
+        descripcionTrabajos: '',
         justificacionTecnica: '',
         ubicacionTecnica: [
           {
@@ -303,20 +305,18 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
         cuadroMetrado: metrado.length > 0 ? metrado : [
           {
             item: '01',
-            partida: '',
-            descripcion: '',
-            unidad: '',
-            metodo: '',
-            referencia: '',
+            id: 'area-1',
+            ubicacion: '',
+            descripcion: 'Bacheo localizado',
             area: 0,
-            volumen: 0,
+            observaciones: '',
           },
         ],
         panelFotografico: { fotos: [] },
         conclusiones: '',
         firmas: {
           elaboradoPor: { nombre: '', cargo: 'Supervisor de Campo', cip: '' },
-          revisadoPor: { nombre: '', cargo: 'Residente de Obra', cip: '' },
+          supervisadoPor: { nombre: '', cargo: 'Residente de Obra', cip: '' },
           aprobadoPor: { nombre: '', cargo: 'Residente de Obra', cip: '' }
         }
       };
