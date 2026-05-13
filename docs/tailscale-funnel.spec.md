@@ -460,6 +460,12 @@ lila-pause   && lila-resume
 | 2026-05-07 | Aliases de control manual añadidos a zshrc | `~/.zshrc` |
 | 2026-05-07 | Doc reescrito con secciones, diagramas y changelog | `docs/tailscale-funnel.spec.md` |
 | 2026-05-07 | Doc: aliases completos con bloque `alias x='...'`; sección 6.2 sobre `start-constroad.app` | `docs/tailscale-funnel.spec.md` |
+| 2026-05-08 | Fix: el shutdown del LaunchAgent ya **no** invalida la sesión de WhatsApp. Antes `disconnectSession()` ejecutaba `sock.logout()` durante SIGTERM → cada `lila-restart` mataba el pairing y exigía re-emparejar. Ahora `endSession()` cierra solo el websocket; las creds se preservan y `restoreAllSessions()` las recoge al volver | `src/whatsapp/baileys/sessions.simple.ts`, `src/index.ts` |
+| 2026-05-08 | Doc: agregada sección 13 "Operación tras `git pull`" | `docs/tailscale-funnel.spec.md` |
+| 2026-05-09 | Fix memory leaks en `sessions.simple.ts`: el `setInterval` de `store.writeToFile()` ahora se rastrea por sesión y se cancela en endSession/disconnectSession/clearSession y antes de re-crear; el listener `messaging-history.set` se bind una sola vez en startSession (antes se re-añadía en cada `connection === 'open'` → crecía sin tope) | `src/whatsapp/baileys/sessions.simple.ts` |
+| 2026-05-09 | Auth: `validateApiKey` (header `x-api-key` vs `API_SECRET_KEY`) aplicado a endpoints destructivos / state-changing de `/api/sessions`. Lecturas siguen abiertas. Sección 13.5 actualizada con el flujo de QR autenticado | `src/api/routes/session.routes.ts`, `docs/tailscale-funnel.spec.md` |
+| 2026-05-09 | `restoreAllSessions()` ahora se await y captura errores en `index.ts` para no fallar silencioso al arrancar | `src/index.ts` |
+| 2026-05-09 | Tests añadidos cubriendo los archivos modificados (49 tests, 4 archivos nuevos) — coverage `sessions.simple.ts` 93%, `restore-sessions.simple.ts` 100%, `session.routes.ts` 100% | `src/**/*.test.ts` |
 
 ### Pendientes para el usuario
 
@@ -479,3 +485,81 @@ lila-pause   && lila-resume
 - `~/Library/LaunchAgents/com.lila.app.plist` — LaunchAgent de Node
 - `resilient-dev.cjs` — watchdog del proceso Node (backoff 3-20 s)
 - `~/projects/startup.sh` — limpio, ya no choca con LaunchAgents
+
+---
+
+## 13. Operación tras `git pull`
+
+`resilient-dev.cjs` ejecuta `tsx src/index.ts` — la app corre TypeScript en runtime, no hay etapa de build a invocar. Los archivos en `dist/` no se usan en producción local.
+
+### 13.1 Procedimiento estándar
+
+```bash
+cd /Users/jose/projects/lila-app
+git pull
+# Si cambió package.json o yarn.lock:
+yarn install        # o: npm install
+lila-restart        # alias → launchctl kickstart -k gui/$(id -u)/com.lila.app
+lila-logs           # opcional, verificar arranque limpio
+```
+
+### 13.2 Qué hace `lila-restart`
+
+- `kickstart -k` envía SIGTERM al proceso del LaunchAgent y espera a que vuelva a arrancar.
+- SIGTERM dispara `gracefulShutdown` en `src/index.ts`: cierra HTTP server (espera uploads en curso, máx 30 s), cierra los websockets de WhatsApp **sin logout** (preserva creds desde el fix 2026-05-08), apaga JobScheduler, MongoDB y PDFGenerator.
+- `launchd` re-spawnea el proceso. `resilient-dev.cjs` arranca `tsx src/index.ts`.
+- En el arranque, `restoreAllSessions()` itera `data/sessions/<phone>/` y reconecta cada sesión con sus creds intactas.
+- Mensajes en `data/outbox/<phone>.json` que quedaron pendientes se envían automáticamente cuando la sesión emite `connection === 'open'`.
+
+### 13.3 Qué NO hacer
+
+- ❌ No matar el proceso con `kill -9` ni `pkill -9 tsx` — salta el shutdown graceful y puede dejar archivos `creds.json` en estado inconsistente (escritura a medias por `useMultiFileAuthState`).
+- ❌ No borrar `data/sessions/<phone>/` salvo que quieras forzar re-pairing (la sesión queda muerta y exige escanear QR otra vez).
+- ❌ No correr `npm run start` (eso usa `dist/`, que está desactualizado y no es la ruta soportada bajo el LaunchAgent).
+
+### 13.4 Verificación post-restart
+
+```bash
+# 1. LaunchAgent arriba
+launchctl list | grep com.lila.app          # PID > 0, status 0
+
+# 2. HTTP responde
+curl -sI http://127.0.0.1:3001/health       # 200 OK
+
+# 3. Sesiones de WhatsApp restauradas
+curl -s http://127.0.0.1:3001/api/sessions/list | jq
+
+# 4. Sin errores recientes
+tail -50 logs/lila-app.log | grep -E "ERROR|Disconnect reason|does not exist" || echo "✅ sin errores"
+```
+
+### 13.5 Re-pairing de WhatsApp (cuando es necesario)
+
+Solo necesario si:
+- Los archivos en `data/sessions/<phone>/` se borraron o corrompieron.
+- WhatsApp invalidó la sesión (status 401 = `loggedOut`) — desde el fix 2026-05-08 esto no debería ocurrir por restart.
+- Cambió el dispositivo primario en el celular.
+
+**Auth:** desde 2026-05-09, los endpoints destructivos / state-changing (`POST /` create, `GET /:phone/qr`, `POST /:phone/{logout,clear,request-pairing-code}`, `GET /:phone/syncGroups`, `DELETE /:phone`) exigen el header `x-api-key: $API_SECRET_KEY`. El valor está en `.env`. Las lecturas (`/list`, `/status`, `/groups`, `/contacts`) siguen abiertas.
+
+**Flujo (siempre con QR — pairing-code no funciona en este entorno):**
+
+```bash
+KEY=$(grep '^API_SECRET_KEY=' /Users/jose/projects/lila-app/.env | cut -d= -f2-)
+
+# 1. Verifica que la sesión no exista (lectura, sin auth)
+curl -s http://127.0.0.1:3001/api/sessions/list | jq
+
+# 2. Pide el QR como PNG (escribe a archivo y lo abre)
+curl -s -H "x-api-key: $KEY" \
+  "http://127.0.0.1:3001/api/sessions/51949376824/qr" \
+  -o /tmp/lila-qr.png && open /tmp/lila-qr.png
+
+# 3. En el celular: WhatsApp → Ajustes → Dispositivos vinculados → Vincular dispositivo → escanea
+
+# 4. Confirma el estado (lectura, sin auth)
+curl -s http://127.0.0.1:3001/api/sessions/51949376824/status | jq
+# → status: "connected"
+```
+
+> **Nota seguridad:** no pasar la API key por query string ni por URL del navegador (queda en logs / historial). Header siempre.

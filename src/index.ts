@@ -29,7 +29,7 @@ import jobScheduler from './jobs/scheduler.v2.instance.js';
 import { shouldInitializeBackgroundJobs } from './jobs/executor.utils.js';
 import pdfGenerator from './pdf/generator.service.js';
 // 🔄 USING SIMPLE SESSIONS (notifications approach)
-import { listSessions, disconnectSession } from './whatsapp/baileys/sessions.simple.js';
+import { listSessions, endSession } from './whatsapp/baileys/sessions.simple.js';
 import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.js';
 import cron from 'node-cron';
 import fs from 'fs-extra';
@@ -313,7 +313,11 @@ async function startServer() {
     });
 
     // 🔄 WhatsApp sessions (notifications approach)
-    restoreAllSessions();
+    try {
+      await restoreAllSessions();
+    } catch (err) {
+      logger.error('restoreAllSessions failed:', err);
+    }
 
     const pdfTempMaxAgeHours = Number(process.env.PDF_TEMP_MAX_AGE_HOURS || 24);
     const pdfTempCleanupCron = process.env.PDF_TEMP_CLEANUP_CRON || '0 * * * *';
@@ -375,16 +379,16 @@ async function startServer() {
         logger.info('HTTP server closed');
 
         try {
-          // Desconectar todas las sesiones de WhatsApp
+          // Cerrar sockets sin hacer logout (preserva credenciales para próximo arranque)
           const sessions = listSessions();
           for (const sessionId of sessions) {
             try {
-              await disconnectSession(sessionId);
+              await endSession(sessionId);
             } catch (err) {
-              logger.error(`Error disconnecting ${sessionId}:`, err);
+              logger.error(`Error ending ${sessionId}:`, err);
             }
           }
-          logger.info('All WhatsApp sessions disconnected');
+          logger.info('All WhatsApp sessions closed (creds preserved)');
 
           if (shouldRunBackgroundJobs) {
             await jobScheduler.shutdown();

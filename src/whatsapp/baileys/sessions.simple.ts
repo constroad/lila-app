@@ -30,6 +30,16 @@ const sessions: Record<string, WASocket> = {};
 const stores: Record<string, InMemoryStore> = {};
 const qrCodes: Record<string, string> = {};
 const readyClients: Map<string, boolean> = new Map();
+const shuttingDown: Set<string> = new Set();
+const storeTimers: Record<string, NodeJS.Timeout> = {};
+
+const clearStoreTimer = (sessionId: string) => {
+  const timer = storeTimers[sessionId];
+  if (timer) {
+    clearInterval(timer);
+    delete storeTimers[sessionId];
+  }
+};
 
 /**
  * Get store for session
@@ -91,6 +101,7 @@ export async function startSession(
   sessionId: string,
   qrCb?: (qr: string) => void
 ): Promise<WASocket> {
+  shuttingDown.delete(sessionId);
   const authDir = path.join(config.whatsapp.sessionDir, sessionId);
   const { state, saveCreds } = await useMultiFileAuthState(authDir);
 
@@ -114,10 +125,25 @@ export async function startSession(
   const store = makeInMemoryStore(storeFilePath);
   stores[sessionId] = store;
   store.readFromFile();
-  setInterval(() => store.writeToFile(), 10_000);
+
+  clearStoreTimer(sessionId);
+  storeTimers[sessionId] = setInterval(() => store.writeToFile(), 10_000);
 
   store.bind(sock.ev);
   sock.ev.on('creds.update', saveCreds);
+
+  // Sync history: bind once at session creation (not inside 'open' which fires on every reconnect)
+  sock.ev.on('messaging-history.set', ({ chats, contacts, messages }) => {
+    logger.info(`📥 Received ${chats.length} chats and ${contacts.length} contacts`);
+    chats.forEach((chat) => store.chats.set(chat.id, chat));
+    contacts.forEach((contact) => store.contacts.set(contact.id, contact));
+    messages.forEach((msg) => {
+      const jid = msg.key.remoteJid!;
+      const list = store.messages.get(jid) || [];
+      list.push(msg);
+      store.messages.set(jid, list);
+    });
+  });
 
   // Connection event handler
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
@@ -130,19 +156,6 @@ export async function startSession(
     if (connection === 'open') {
       logger.info(`✅ Session connected successfully for ${sessionId}`);
       readyClients.set(sessionId, true);
-
-      // Listen to sync history
-      sock.ev.on('messaging-history.set', async ({ chats, contacts, messages }) => {
-        logger.info(`📥 Received ${chats.length} chats and ${contacts.length} contacts`);
-        chats.forEach((chat) => store.chats.set(chat.id, chat));
-        contacts.forEach((contact) => store.contacts.set(contact.id, contact));
-        messages.forEach((msg) => {
-          const jid = msg.key.remoteJid!;
-          const list = store.messages.get(jid) || [];
-          list.push(msg);
-          store.messages.set(jid, list);
-        });
-      });
 
       // Populate store with groups (wrap in try/catch)
       try {
@@ -174,11 +187,17 @@ export async function startSession(
       const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
       logger.info(`Disconnect reason: ${code}`);
 
+      if (shuttingDown.has(sessionId)) {
+        logger.info(`Skipping reconnect for ${sessionId} (shutdown in progress)`);
+        return;
+      }
+
       if (code !== DisconnectReason.loggedOut) {
         logger.info(`🔁 Reconnecting session ${sessionId}...`);
         setTimeout(() => startSession(sessionId, qrCb), 3000);
       } else {
         // Clean up
+        clearStoreTimer(sessionId);
         delete sessions[sessionId];
         delete stores[sessionId];
       }
@@ -274,17 +293,43 @@ export async function createPairingSession(
 }
 
 /**
- * Disconnect session manually
+ * Disconnect session manually (logs out from WhatsApp servers).
+ * Use ONLY for explicit user-initiated logout — invalidates credentials
+ * and forces re-pairing. Do NOT call from graceful shutdown.
  */
 export async function disconnectSession(sessionId: string): Promise<void> {
   const sock = sessions[sessionId];
   if (sock) {
     await sock.logout();
+    clearStoreTimer(sessionId);
     delete sessions[sessionId];
     delete stores[sessionId];
     delete qrCodes[sessionId];
     readyClients.delete(sessionId);
     logger.info(`Session ${sessionId} disconnected and removed`);
+  }
+}
+
+/**
+ * End session for graceful shutdown — closes the websocket WITHOUT
+ * calling logout(), so credentials remain valid and the session can be
+ * restored on next startup.
+ */
+export async function endSession(sessionId: string): Promise<void> {
+  const sock = sessions[sessionId];
+  if (sock) {
+    shuttingDown.add(sessionId);
+    try {
+      sock.end(undefined);
+    } catch (err) {
+      logger.warn(`Error ending socket for ${sessionId}:`, err);
+    }
+    clearStoreTimer(sessionId);
+    delete sessions[sessionId];
+    delete stores[sessionId];
+    delete qrCodes[sessionId];
+    readyClients.delete(sessionId);
+    logger.info(`Session ${sessionId} closed (creds preserved)`);
   }
 }
 
@@ -315,6 +360,7 @@ export async function clearSession(sessionId: string): Promise<void> {
     }
 
     // 2. Clean up memory structures
+    clearStoreTimer(sessionId);
     delete sessions[sessionId];
     delete stores[sessionId];
     delete qrCodes[sessionId];
