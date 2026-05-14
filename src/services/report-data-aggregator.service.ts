@@ -309,6 +309,7 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
             ubicacion: '',
             descripcion: 'Bacheo localizado',
             area: 0,
+            volumen: 0,
             observaciones: '',
           },
         ],

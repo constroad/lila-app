@@ -726,4 +726,56 @@ describe('runPublicReceptionWorkflow', () => {
       expect.any(Object)
     );
   });
+
+  it('forwards chancadora when creating standard inputs', async () => {
+    axios.post
+      .mockResolvedValueOnce({
+        data: {
+          _id: 'input-1',
+          driver: 'ABC-123',
+          providerName: 'Transportes Norte',
+        },
+      })
+      .mockResolvedValueOnce({ data: { _id: 'media-1' } });
+
+    const tempFilePath = path.join(os.tmpdir(), `reception-${Date.now()}.jpg`);
+    fs.writeFileSync(tempFilePath, Buffer.from('image'));
+
+    await runPublicReceptionWorkflow({
+      kind: 'input',
+      inputMode: 'standard',
+      companyId: 'constroad',
+      telegramChatId: '-100medias',
+      deviceName: 'Tablet Planta 1',
+      materialId: 'material-1',
+      materialName: 'Arena',
+      materialDescription: 'fina',
+      materialLevel: 0,
+      providerId: 'provider-1',
+      providerName: 'Transportes Norte',
+      chancadora: 'Planta principal',
+      driver: 'ABC-123',
+      m3: 12.5,
+      files: [
+        {
+          path: tempFilePath,
+          originalName: 'evidence.jpg',
+          mimeType: 'image/jpeg',
+          size: 1024,
+        },
+      ],
+    });
+
+    expect(axios.post).toHaveBeenNthCalledWith(
+      1,
+      'https://portal.constroad.com/api/input',
+      expect.objectContaining({
+        chancadora: 'Planta principal',
+        driver: 'ABC-123',
+        m3: 12.5,
+        providerName: 'Transportes Norte',
+      }),
+      expect.any(Object)
+    );
+  });
 });

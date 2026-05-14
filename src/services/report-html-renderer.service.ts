@@ -32,6 +32,7 @@ interface PhotoItem {
   buffer?: Buffer;
   category?: string;
   areaM2?: number;
+  volumeM3?: number;
   tipo?: string;
   purpose?: string;
   includeInPdf?: boolean;
@@ -2088,13 +2089,15 @@ ${signaturesHtml}`;
     const rows = this.getValue('cuadroMetrado');
     if (!Array.isArray(rows)) return [];
     const photos = this.resolvePhotos({ id: 'panelFotografico' } as SectionSchema);
-    const totals = photos.reduce<Record<string, { total: number; hasArea: boolean }>>((acc, photo) => {
+    const totals = photos.reduce<Record<string, { area: number; volume: number; hasArea: boolean; hasVolume: boolean }>>((acc, photo) => {
       const category = String(photo.category || '');
       if (!category) return acc;
-      const current = acc[category] || { total: 0, hasArea: false };
+      const current = acc[category] || { area: 0, volume: 0, hasArea: false, hasVolume: false };
       acc[category] = {
-        total: current.total + Number(photo.areaM2 || 0),
+        area: current.area + Number(photo.areaM2 || 0),
+        volume: current.volume + Number(photo.volumeM3 || 0),
         hasArea: current.hasArea || photo.areaM2 !== undefined,
+        hasVolume: current.hasVolume || photo.volumeM3 !== undefined,
       };
       return acc;
     }, {});
@@ -2102,7 +2105,8 @@ ${signaturesHtml}`;
       const id = String(row?.id || row?.item || '');
       return {
         ...row,
-        area: totals[id]?.hasArea ? Number(totals[id].total || 0) : Number(row?.area || 0),
+        area: totals[id]?.hasArea ? Number(totals[id].area || 0) : Number(row?.area || 0),
+        volumen: totals[id]?.hasVolume ? Number(totals[id].volume || 0) : Number(row?.volumen || 0),
       };
     });
   }
@@ -2112,9 +2116,13 @@ ${signaturesHtml}`;
     rowsData: Array<Record<string, any>>
   ): string {
     const totalArea = rowsData.reduce((sum, row) => sum + Number(row?.area || 0), 0);
+    const totalVolume = rowsData.reduce((sum, row) => sum + Number(row?.volumen || 0), 0);
     const cells = columns.map((column, index) => {
       if (column.key === 'area') {
         return `<td style="font-weight:bold;text-align:center;">${this.escapeHtml(this.formatValue(totalArea, 'number'))}</td>`;
+      }
+      if (column.key === 'volumen') {
+        return `<td style="font-weight:bold;text-align:center;">${this.escapeHtml(this.formatValue(totalVolume, 'number'))}</td>`;
       }
       if (index === 0) return '<td style="font-weight:bold;">TOTAL ADICIONAL</td>';
       return '<td></td>';
@@ -2187,6 +2195,9 @@ ${signaturesHtml}`;
       parts.push(`Foto ${index}`);
       if (photo.areaM2 !== undefined && Number(photo.areaM2) > 0) {
         parts.push(`Area: ${this.formatValue(Number(photo.areaM2), 'number')} m2`);
+      }
+      if (photo.volumeM3 !== undefined && Number(photo.volumeM3) > 0) {
+        parts.push(`Volumen: ${this.formatValue(Number(photo.volumeM3), 'number')} m3`);
       }
     }
     if (photo.descripcion) {

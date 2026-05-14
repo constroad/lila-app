@@ -38,6 +38,7 @@ type PublicReceptionInput = {
   materialLevel: number;
   providerId: string;
   providerName: string;
+  chancadora?: string;
   vendorProviderId?: string;
   vendorProviderName?: string;
   purchaseOrderId?: string;
@@ -114,6 +115,7 @@ type PortalInputRecord = {
   material: string;
   providerId: string;
   providerName: string;
+  chancadora?: string;
   vendorProviderId?: string;
   vendorProviderName?: string;
   purchaseOrderId?: string;
@@ -244,6 +246,7 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
       materialLevel: parseNumber(req.body?.materialLevel, 0),
       providerId: requireString(req.body?.providerId, 'providerId'),
       providerName: requireString(req.body?.providerName, 'providerName'),
+      chancadora: trimValue(req.body?.chancadora) || undefined,
       vendorProviderId: trimValue(req.body?.vendorProviderId) || undefined,
       vendorProviderName: trimValue(req.body?.vendorProviderName) || undefined,
       purchaseOrderId: trimValue(req.body?.purchaseOrderId) || undefined,
@@ -757,6 +760,7 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       material: `${input.materialName} ${input.materialDescription}`.trim(),
       providerId: input.providerId,
       providerName: input.providerName,
+      chancadora: input.chancadora,
       vendorProviderId: input.vendorProviderId,
       vendorProviderName: input.vendorProviderName,
       purchaseOrderId: input.purchaseOrderId,
