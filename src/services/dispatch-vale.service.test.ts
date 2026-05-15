@@ -777,5 +777,10 @@ describe('runPublicReceptionWorkflow', () => {
       }),
       expect.any(Object)
     );
+    const telegramMessageCall = global.fetch.mock.calls.find(([url]) =>
+      String(url).includes('/sendMessage')
+    );
+    expect(telegramMessageCall?.[1]?.body.get('text')).toContain('Cantera: Planta principal');
+    expect(telegramMessageCall?.[1]?.body.get('text')).toContain('Dispositivo: Tablet Planta 1');
   });
 });

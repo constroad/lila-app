@@ -673,6 +673,8 @@ const buildSuccessStatusMessage = (
     `Recurso: ${options.resourceId}`,
     `Detalle: ${targetName}`,
     `Transportista: ${input.kind === 'input' ? input.providerName : 'N/A'}`,
+    `Cantera: ${input.kind === 'input' ? input.chancadora || 'N/A' : 'N/A'}`,
+    `Dispositivo: ${'deviceName' in input ? input.deviceName || 'N/A' : 'N/A'}`,
     `Proveedor venta: ${input.kind === 'input' ? input.vendorProviderName || 'N/A' : 'N/A'}`,
     `Evidencias nuevas: ${options.uploadedCount}`,
   ];
@@ -708,6 +710,8 @@ const buildFailureStatusMessage = (
     `Empresa: ${input.companyId}`,
     `Detalle: ${targetName}`,
     `Transportista: ${input.kind === 'input' ? input.providerName : 'N/A'}`,
+    `Cantera: ${input.kind === 'input' ? input.chancadora || 'N/A' : 'N/A'}`,
+    `Dispositivo: ${'deviceName' in input ? input.deviceName || 'N/A' : 'N/A'}`,
     `Proveedor venta: ${input.kind === 'input' ? input.vendorProviderName || 'N/A' : 'N/A'}`,
     `Motivo: ${message}`,
   ].join('\n');
