@@ -54,6 +54,22 @@ export class JobExecutor {
     return normalizeWhatsAppRecipient(trimmed) ?? trimmed;
   }
 
+  private redactHeaders(headers: Record<string, string>): Record<string, string> {
+    return Object.entries(headers).reduce<Record<string, string>>(
+      (sanitized, [key, value]) => {
+        const lowerKey = key.toLowerCase();
+        const isSensitive =
+          lowerKey.includes('authorization') ||
+          lowerKey.includes('token') ||
+          lowerKey.includes('api-key') ||
+          lowerKey.includes('secret');
+        sanitized[key] = isSensitive ? '[redacted]' : value;
+        return sanitized;
+      },
+      {}
+    );
+  }
+
   private assertValidJob(job: ICronJob): void {
     const hasId = typeof job === 'object' && job !== null && '_id' in job && Boolean(job._id);
     const hasName = typeof job?.name === 'string' && job.name.trim().length > 0;
@@ -146,6 +162,15 @@ export class JobExecutor {
     const resolvedBody = (overrideBody ?? body ?? '').trim();
     const messageBody = this.prependBotPrefix(resolvedBody, prefix ?? '');
 
+    logger.info('[JobExecutor] WhatsApp message request prepared', {
+      jobId: String(job._id),
+      companyId: job.companyId,
+      sender,
+      chatId,
+      mentionsCount: mentions?.length || 0,
+      nodeEnv: config.nodeEnv,
+    });
+
     await WhatsAppDirectService.sendMessage(sender, chatId, messageBody, {
       companyId: job.companyId,
       mentions: mentions || [],
@@ -170,6 +195,13 @@ export class JobExecutor {
       }
       const recipient = this.normalizeRecipient(rawTo);
       const messageBody = this.prependBotPrefix(item.message, prefix ?? '');
+      logger.info('[JobExecutor] WhatsApp batch message request prepared', {
+        companyId,
+        sender,
+        recipient,
+        mentionsCount: item.mentions?.length || 0,
+        nodeEnv: config.nodeEnv,
+      });
       await WhatsAppDirectService.sendMessage(sender, recipient, messageBody, {
         companyId,
         mentions: item.mentions || [],
@@ -288,6 +320,17 @@ export class JobExecutor {
     ) {
       requestHeaders['x-cronjob-return-message'] = '1';
     }
+
+    logger.info('[JobExecutor] API request prepared', {
+      jobId: String(job._id),
+      companyId: job.companyId,
+      method,
+      url: resolvedUrl,
+      headers: this.redactHeaders(requestHeaders),
+      body,
+      timeout: job.timeout || 30000,
+      nodeEnv: config.nodeEnv,
+    });
 
     const response = await axios.request({
       url: resolvedUrl,

@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document } from "mongoose";
 
 export interface ICronJobMessage {
   sender?: string; // legacy (no usar para envio)
@@ -9,13 +9,14 @@ export interface ICronJobMessage {
 
 export interface ICronJobApiConfig {
   url: string;
-  method: 'GET' | 'POST' | 'PUT';
+  method: "GET" | "POST" | "PUT";
   headers?: Record<string, string>;
   body?: any;
 }
 
 export interface ICronJobSchedule {
   cronExpression: string;
+  cronExpressions?: string[];
   timezone?: string;
   nextRun?: Date;
   lastRun?: Date;
@@ -28,7 +29,7 @@ export interface ICronJobRetryPolicy {
 }
 
 export interface ICronJobHistoryEntry {
-  status: 'success' | 'error';
+  status: "success" | "error";
   timestamp: Date;
   duration?: number;
   error?: string;
@@ -48,7 +49,7 @@ export interface ICronJobMetadata {
 export interface ICronJob extends Document {
   companyId: string;
   name: string;
-  type: 'api' | 'message';
+  type: "api" | "message";
   isActive: boolean;
   timeout?: number;
 
@@ -58,7 +59,7 @@ export interface ICronJob extends Document {
   schedule: ICronJobSchedule;
   retryPolicy: ICronJobRetryPolicy;
 
-  status?: 'idle' | 'running' | 'success' | 'error';
+  status?: "idle" | "running" | "success" | "error";
   lastExecution?: Date;
   failureCount: number;
   lastError?: string;
@@ -74,27 +75,28 @@ const CronJobMessageSchema = new Schema<ICronJobMessage>(
     body: { type: String },
     mentions: [{ type: String }],
   },
-  { _id: false }
+  { _id: false },
 );
 
 const CronJobApiConfigSchema = new Schema<ICronJobApiConfig>(
   {
     url: { type: String, required: true },
-    method: { type: String, enum: ['GET', 'POST', 'PUT'], default: 'GET' },
+    method: { type: String, enum: ["GET", "POST", "PUT"], default: "GET" },
     headers: { type: Map, of: String },
     body: Schema.Types.Mixed,
   },
-  { _id: false }
+  { _id: false },
 );
 
 const CronJobScheduleSchema = new Schema<ICronJobSchedule>(
   {
     cronExpression: { type: String, required: true },
-    timezone: { type: String, default: 'America/Lima' },
+    cronExpressions: [{ type: String }],
+    timezone: { type: String, default: "America/Lima" },
     nextRun: Date,
     lastRun: Date,
   },
-  { _id: false }
+  { _id: false },
 );
 
 const CronJobRetryPolicySchema = new Schema<ICronJobRetryPolicy>(
@@ -103,18 +105,18 @@ const CronJobRetryPolicySchema = new Schema<ICronJobRetryPolicy>(
     backoffMultiplier: { type: Number, default: 2 },
     currentRetries: { type: Number, default: 0 },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const CronJobHistoryEntrySchema = new Schema<ICronJobHistoryEntry>(
   {
-    status: { type: String, enum: ['success', 'error'], required: true },
+    status: { type: String, enum: ["success", "error"], required: true },
     timestamp: { type: Date, required: true },
     duration: Number,
     error: String,
     metadata: Schema.Types.Mixed,
   },
-  { _id: false }
+  { _id: false },
 );
 
 const CronJobMetadataSchema = new Schema<ICronJobMetadata>(
@@ -127,7 +129,7 @@ const CronJobMetadataSchema = new Schema<ICronJobMetadata>(
     legacyId: String,
     legacyCompany: String,
   },
-  { _id: false }
+  { _id: false },
 );
 
 const CronJobSchema = new Schema<ICronJob>(
@@ -146,7 +148,7 @@ const CronJobSchema = new Schema<ICronJob>(
     },
     type: {
       type: String,
-      enum: ['api', 'message'],
+      enum: ["api", "message"],
       required: true,
     },
     isActive: {
@@ -176,8 +178,8 @@ const CronJobSchema = new Schema<ICronJob>(
 
     status: {
       type: String,
-      enum: ['idle', 'running', 'success', 'error'],
-      default: 'idle',
+      enum: ["idle", "running", "success", "error"],
+      default: "idle",
     },
     lastExecution: Date,
     failureCount: {
@@ -202,26 +204,32 @@ const CronJobSchema = new Schema<ICronJob>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 CronJobSchema.index({ companyId: 1, isActive: 1 });
 CronJobSchema.index({ companyId: 1, type: 1 });
-CronJobSchema.index({ 'schedule.nextRun': 1 }, { sparse: true });
+CronJobSchema.index({ "schedule.nextRun": 1 }, { sparse: true });
 
-CronJobSchema.pre('validate', function () {
-  if (this.type === 'message' && !this.message) {
-    this.invalidate('message', 'message is required when type is "message"');
+CronJobSchema.pre("validate", function () {
+  if (this.type === "message" && !this.message) {
+    this.invalidate("message", 'message is required when type is "message"');
   }
-  if (this.type === 'message' && (!this.message?.body || !this.message.body.trim())) {
-    this.invalidate('message.body', 'message body is required when type is "message"');
+  if (
+    this.type === "message" &&
+    (!this.message?.body || !this.message.body.trim())
+  ) {
+    this.invalidate(
+      "message.body",
+      'message body is required when type is "message"',
+    );
   }
-  if (this.type === 'api' && !this.apiConfig) {
-    this.invalidate('apiConfig', 'apiConfig is required when type is "api"');
+  if (this.type === "api" && !this.apiConfig) {
+    this.invalidate("apiConfig", 'apiConfig is required when type is "api"');
   }
 });
 
-CronJobSchema.pre('save', function () {
+CronJobSchema.pre("save", function () {
   if (this.history && this.history.length > 50) {
     this.history = this.history.slice(-50);
   }

@@ -1,4 +1,4 @@
-import Joi from 'joi';
+import Joi from "joi";
 
 export interface ValidationError {
   field: string;
@@ -8,7 +8,7 @@ export interface ValidationError {
 export function validatePhone(phone: string): boolean {
   // Validar formato de teléfono peruano (+51, 9)
   const phoneRegex = /^(\+51|0)?9\d{8}$/;
-  return phoneRegex.test(phone.replace(/\s/g, ''));
+  return phoneRegex.test(phone.replace(/\s/g, ""));
 }
 
 export function validateCronExpression(cron: string): boolean {
@@ -16,6 +16,15 @@ export function validateCronExpression(cron: string): boolean {
   const cronRegex = /^((\d+,)*\d+|\*)(\/\d+)?( ((\d+,)*\d+|\*)(\/\d+)?){4}$/;
   return cronRegex.test(cron);
 }
+
+const cronExpressionSchema = Joi.string()
+  .custom((value, helpers) => {
+    if (!validateCronExpression(value)) {
+      return helpers.error("any.invalid");
+    }
+    return value;
+  })
+  .messages({ "any.invalid": "Expresión cron inválida" });
 
 export function validateUrl(url: string): boolean {
   try {
@@ -29,13 +38,13 @@ export function validateUrl(url: string): boolean {
 export function validateSessionPhone(phone: string): boolean {
   // Validar formato de teléfono para sesión (sin +)
   const sessionPhoneRegex = /^51[0-9]{9}$/;
-  return sessionPhoneRegex.test(phone.replace(/\D/g, ''));
+  return sessionPhoneRegex.test(phone.replace(/\D/g, ""));
 }
 
 export function validateMessage(message: any): boolean {
   return (
     message &&
-    typeof message === 'object' &&
+    typeof message === "object" &&
     (message.conversation || message.extendedTextMessage?.text)
   );
 }
@@ -48,23 +57,19 @@ export function validateCronJobCreate(data: any): {
   const schema = Joi.object({
     companyId: Joi.string().required(),
     name: Joi.string().required().min(3).max(100),
-    type: Joi.string().valid('api', 'message').required(),
+    type: Joi.string().valid("api", "message").required(),
     isActive: Joi.boolean().default(true),
     timeout: Joi.number().default(30000).min(5000).max(300000),
     schedule: Joi.object({
-      cronExpression: Joi.string()
-        .required()
-        .custom((value, helpers) => {
-          if (!validateCronExpression(value)) {
-            return helpers.error('any.invalid');
-          }
-          return value;
-        })
-        .messages({ 'any.invalid': 'Expresión cron inválida' }),
-      timezone: Joi.string().default('America/Lima'),
+      cronExpression: cronExpressionSchema.required(),
+      cronExpressions: Joi.array()
+        .items(cronExpressionSchema)
+        .min(1)
+        .optional(),
+      timezone: Joi.string().default("America/Lima"),
     }).required(),
-    message: Joi.when('type', {
-      is: 'message',
+    message: Joi.when("type", {
+      is: "message",
       then: Joi.object({
         sender: Joi.string().optional(),
         chatId: Joi.string().required(),
@@ -74,17 +79,17 @@ export function validateCronJobCreate(data: any): {
       otherwise: Joi.object({
         sender: Joi.string().optional(),
         chatId: Joi.string().required(),
-        body: Joi.string().allow('').optional(),
+        body: Joi.string().allow("").optional(),
         mentions: Joi.array().items(Joi.string()).optional(),
       }).optional(),
     }),
     apiConfig: Joi.object({
       url: Joi.string().required().uri(),
-      method: Joi.string().valid('GET', 'POST', 'PUT').default('GET'),
+      method: Joi.string().valid("GET", "POST", "PUT").default("GET"),
       headers: Joi.object().pattern(Joi.string(), Joi.string()).optional(),
       body: Joi.any(),
-    }).when('type', {
-      is: 'api',
+    }).when("type", {
+      is: "api",
       then: Joi.required(),
       otherwise: Joi.optional(),
     }),
@@ -107,7 +112,7 @@ export function validateCronJobCreate(data: any): {
 
   if (error) {
     const errors: ValidationError[] = error.details.map((detail) => ({
-      field: detail.path.join('.'),
+      field: detail.path.join("."),
       message: detail.message,
     }));
     return { success: false, errors };
@@ -123,29 +128,26 @@ export function validateCronJobUpdate(data: any): {
 } {
   const schema = Joi.object({
     name: Joi.string().min(3).max(100),
-    type: Joi.string().valid('api', 'message'),
+    type: Joi.string().valid("api", "message"),
     isActive: Joi.boolean(),
     timeout: Joi.number().min(5000).max(300000),
     schedule: Joi.object({
-      cronExpression: Joi.string()
-        .custom((value, helpers) => {
-          if (!validateCronExpression(value)) {
-            return helpers.error('any.invalid');
-          }
-          return value;
-        })
-        .messages({ 'any.invalid': 'Expresión cron inválida' }),
+      cronExpression: cronExpressionSchema,
+      cronExpressions: Joi.array()
+        .items(cronExpressionSchema)
+        .min(1)
+        .optional(),
       timezone: Joi.string(),
     }).optional(),
     message: Joi.object({
       sender: Joi.string().optional(),
       chatId: Joi.string().required(),
-      body: Joi.string().allow('').optional(),
+      body: Joi.string().allow("").optional(),
       mentions: Joi.array().items(Joi.string()).optional(),
     }).optional(),
     apiConfig: Joi.object({
       url: Joi.string().required().uri(),
-      method: Joi.string().valid('GET', 'POST', 'PUT'),
+      method: Joi.string().valid("GET", "POST", "PUT"),
       headers: Joi.object().pattern(Joi.string(), Joi.string()).optional(),
       body: Joi.any(),
     }).optional(),
@@ -167,7 +169,7 @@ export function validateCronJobUpdate(data: any): {
 
   if (error) {
     const errors: ValidationError[] = error.details.map((detail) => ({
-      field: detail.path.join('.'),
+      field: detail.path.join("."),
       message: detail.message,
     }));
     return { success: false, errors };

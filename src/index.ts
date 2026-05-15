@@ -348,7 +348,7 @@ async function startServer() {
       await jobScheduler.initialize();
       cron.schedule(pdfTempCleanupCron, cleanupPdfTemp);
     } else {
-      logger.info('Skipping background jobs in development mode');
+      logger.info('Skipping background jobs in test mode');
     }
 
     // Iniciar servidor HTTP

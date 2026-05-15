@@ -3,9 +3,17 @@ import axios from 'axios';
 import { randomUUID } from 'crypto';
 import fs from 'fs-extra';
 import jwt from 'jsonwebtoken';
+import path from 'path';
 import { config } from '../../config/environment.js';
 import { getCompanyModel } from '../../database/models.js';
+import { incrementStorageUsage } from '../../middleware/quota.middleware.js';
+import { buildUniqueStorageFileName } from '../../services/storage-file-name.service.js';
+import { storagePathService } from '../../services/storage-path.service.js';
 import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
+import {
+  buildThumbnailRelativePath,
+  generateThumbnailForFile,
+} from '../../services/thumbnail.service.js';
 
 type CompanyLoginData = {
   companyId: string;
@@ -30,6 +38,7 @@ type PublicReceptionInput = {
   kind: 'input';
   inputMode: 'standard' | 'combustible';
   companyId: string;
+  lilaPublicBaseUrl: string;
   telegramChatId: string;
   deviceName?: string;
   materialId: string;
@@ -51,6 +60,7 @@ type PublicReceptionInput = {
 type PublicMeasureReceptionInput = {
   kind: 'measure';
   companyId: string;
+  lilaPublicBaseUrl: string;
   telegramChatId: string;
   typeId: string;
   measureName: string;
@@ -64,6 +74,7 @@ type PublicMeasureReceptionInput = {
 type PublicCashFlowInput = {
   kind: 'cash-flow';
   companyId: string;
+  lilaPublicBaseUrl: string;
   deviceName?: string;
   resourceType: 'service' | 'order' | 'project';
   resourceId: string;
@@ -80,15 +91,14 @@ type PublicReceptionWorkflowInput =
   | PublicMeasureReceptionInput
   | PublicCashFlowInput;
 
-type TelegramUploadedMedia = {
-  file_name: string;
-  mime_type: string;
-  messageId: string | number;
-  fileId: string;
-  fileUrl: string;
-  thumbnailFileId: string;
+type StoredReceptionMedia = {
+  fileName: string;
+  mimeType: string;
+  publicUrl: string;
   thumbnailUrl?: string;
-  fileSize?: number;
+  fileSize: number;
+  storageFilePath: string;
+  thumbnailStatus: 'ready' | 'pending' | 'unsupported' | 'error';
 };
 
 type PortalMediaPayload = {
@@ -144,7 +154,7 @@ type PortalMediaListResponse = {
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const PORTAL_TIMEOUT_MS = 30_000;
-const TELEGRAM_UPLOAD_CONCURRENCY = 2;
+const EVIDENCE_UPLOAD_CONCURRENCY = 2;
 const companyLoginCache = new Map<
   string,
   { expiresAt: number; data: CompanyLoginData | null }
@@ -207,8 +217,17 @@ const buildPortalHeaders = (companyId: string) => ({
 const buildPortalUrl = (path: string) =>
   `${String(config.portal.baseUrl).replace(/\/+$/, '')}${path}`;
 
-const buildTelegramFileUrl = (filePath: string) =>
-  `https://api.telegram.org/file/bot${config.telegram.botToken}/${filePath}`;
+const buildRequestPublicBaseUrl = (req: Request): string => {
+  const forwardedProto = trimValue(req.headers['x-forwarded-proto']).split(',')[0];
+  const forwardedHost = trimValue(req.headers['x-forwarded-host']).split(',')[0];
+  const protocol = forwardedProto || req.protocol || 'http';
+  const host = forwardedHost || trimValue(req.headers.host) || `localhost:${config.port}`;
+  return `${protocol}://${host}`.replace(/\/+$/, '');
+};
+
+const buildLilaPublicUrl = (baseUrl: string, publicUrl: string) => {
+  return `${baseUrl.replace(/\/+$/, '')}${publicUrl}`;
+};
 
 const parseReceptionFiles = (req: Request): UploadedReceptionFile[] => {
   const rawFiles = Array.isArray(req.files) ? req.files : [];
@@ -238,6 +257,7 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
       kind: 'input',
       inputMode,
       companyId,
+      lilaPublicBaseUrl: buildRequestPublicBaseUrl(req),
       telegramChatId: requireString(req.body?.telegramChatId, 'telegramChatId'),
       deviceName: trimValue(req.body?.deviceName) || undefined,
       materialId: requireString(req.body?.materialId, 'materialId'),
@@ -271,6 +291,7 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
     return {
       kind: 'measure',
       companyId,
+      lilaPublicBaseUrl: buildRequestPublicBaseUrl(req),
       telegramChatId: requireString(req.body?.telegramChatId, 'telegramChatId'),
       typeId: requireString(req.body?.typeId, 'typeId'),
       measureName: requireString(req.body?.measureName, 'measureName'),
@@ -303,6 +324,7 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
     return {
       kind: 'cash-flow',
       companyId,
+      lilaPublicBaseUrl: buildRequestPublicBaseUrl(req),
       deviceName: trimValue(req.body?.deviceName) || undefined,
       resourceType: resourceType as 'service' | 'order' | 'project',
       resourceId: requireString(req.body?.resourceId, 'resourceId'),
@@ -512,113 +534,80 @@ const sendTelegramTextMessage = async (
   }
 };
 
-const fetchTelegramFileInfo = async (fileId: string) => {
-  const response = await fetch(
-    `https://api.telegram.org/bot${config.telegram.botToken}/getFile?file_id=${encodeURIComponent(fileId)}`
-  );
-  const payload = (await response.json().catch(() => null)) as
-    | { ok?: boolean; result?: { file_path?: string } }
-    | null;
-
-  if (!response.ok || !payload?.ok || !payload.result?.file_path) {
-    throw new Error('No se pudo resolver el archivo en Telegram');
-  }
-
-  return {
-    filePath: payload.result.file_path,
-    fileUrl: buildTelegramFileUrl(payload.result.file_path),
-  };
-};
-
-const uploadFileToTelegram = async (
-  chatId: string,
-  file: UploadedReceptionFile
-): Promise<TelegramUploadedMedia> => {
-  if (!config.telegram.botToken) {
-    throw new Error('Telegram bot token not configured');
-  }
-
-  const buffer = await fs.readFile(file.path);
-  const form = new FormData();
-  form.append('chat_id', chatId);
-  form.append(
-    'document',
-    new Blob([buffer], { type: file.mimeType }),
-    file.originalName
-  );
-
-  const response = await fetch(
-    `https://api.telegram.org/bot${config.telegram.botToken}/sendDocument`,
-    {
-      method: 'POST',
-      body: form,
-    }
-  );
-  const payload = (await response.json().catch(() => null)) as
-    | {
-        ok?: boolean;
-        result?: {
-          message_id?: string | number;
-          document?: {
-            file_id?: string;
-            file_name?: string;
-            mime_type?: string;
-            file_size?: number;
-            thumb?: {
-              file_id?: string;
-            };
-          };
-        };
-      }
-    | null;
-
-  const telegramDocument = payload?.result?.document;
-  const telegramFileId = trimValue(telegramDocument?.file_id);
-  if (!response.ok || !payload?.ok || !telegramFileId) {
-    throw new Error('No se pudo subir el archivo a Telegram');
-  }
-
-  const fileInfo = await fetchTelegramFileInfo(telegramFileId);
-  const thumbnailFileId = trimValue(telegramDocument?.thumb?.file_id);
-  const thumbnailInfo = thumbnailFileId
-    ? await fetchTelegramFileInfo(thumbnailFileId).catch(() => null)
-    : null;
-
-  return {
-    file_name: trimValue(telegramDocument?.file_name) || file.originalName,
-    mime_type: trimValue(telegramDocument?.mime_type) || file.mimeType,
-    messageId: payload?.result?.message_id || '',
-    fileId: telegramFileId,
-    fileUrl: fileInfo.fileUrl,
-    thumbnailFileId,
-    thumbnailUrl: thumbnailInfo?.fileUrl,
-    fileSize: Number(telegramDocument?.file_size || file.size || 0),
-  };
-};
-
-const createMediaPayload = (
+const storeFileInLilaDrive = async (
+  companyId: string,
+  lilaPublicBaseUrl: string,
   resourceId: string,
-  media: TelegramUploadedMedia,
+  file: UploadedReceptionFile,
+  mediaType = 'INPUT_PICTURES'
+): Promise<StoredReceptionMedia> => {
+  const relativeDir = `inputs/${resourceId}/${mediaType}`;
+  const targetDir = storagePathService.resolvePath(companyId, relativeDir);
+  await storagePathService.ensureDir(targetDir, companyId);
+
+  const storageFileName = buildUniqueStorageFileName(file.originalName, file.path);
+  const targetPath = path.join(targetDir, storageFileName);
+  if (!storagePathService.validateAccess(targetPath, companyId)) {
+    throw new Error('Ruta de almacenamiento invalida');
+  }
+
+  await fs.copy(file.path, targetPath, { overwrite: false });
+  await incrementStorageUsage(companyId, file.size);
+
+  const publicUrl = `/files/companies/${companyId}/${relativeDir}/${storageFileName}`;
+  let thumbnailUrl: string | undefined;
+  let thumbnailStatus: StoredReceptionMedia['thumbnailStatus'] = 'pending';
+  const thumbnailResult = await generateThumbnailForFile({
+    filePath: targetPath,
+    fileName: storageFileName,
+    mimeType: file.mimeType,
+    outputDir: targetDir,
+  });
+
+  if (thumbnailResult.status === 'ready' && thumbnailResult.thumbnailName) {
+    const thumbPath = buildThumbnailRelativePath(relativeDir, thumbnailResult.thumbnailName);
+    thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
+    if (thumbnailResult.sizeBytes && thumbnailResult.sizeBytes > 0) {
+      await incrementStorageUsage(companyId, thumbnailResult.sizeBytes);
+    }
+    thumbnailStatus = 'ready';
+  } else {
+    thumbnailStatus = thumbnailResult.status;
+  }
+
+  return {
+    fileName: file.originalName,
+    mimeType: file.mimeType,
+    publicUrl: buildLilaPublicUrl(lilaPublicBaseUrl, publicUrl),
+    thumbnailUrl: thumbnailUrl ? buildLilaPublicUrl(lilaPublicBaseUrl, thumbnailUrl) : undefined,
+    fileSize: file.size,
+    storageFilePath: `${relativeDir}/${storageFileName}`,
+    thumbnailStatus,
+  };
+};
+
+const createLilaMediaPayload = (
+  resourceId: string,
+  media: StoredReceptionMedia,
   metadata: Record<string, unknown>,
   mediaType = 'INPUT_PICTURES'
 ): PortalMediaPayload => ({
   resourceId,
   type: mediaType,
-  name: media.file_name,
-  mimeTye: media.mime_type || 'application/octet-stream',
-  url: media.fileUrl,
-  thumbnailUrl: media.thumbnailUrl || media.fileUrl,
+  name: media.fileName,
+  mimeTye: media.mimeType || 'application/octet-stream',
+  url: media.publicUrl,
+  thumbnailUrl: media.thumbnailUrl || media.publicUrl,
   date: new Date().toISOString(),
   metadata: {
     ...metadata,
-    fileId: media.fileId,
-    messageId: media.messageId,
-    file_name: media.file_name,
-    fileUrl: media.fileUrl,
-    thumbnailFileId: media.thumbnailFileId,
-    thumbnailUrl: media.thumbnailUrl,
+    file_name: media.fileName,
     fileSize: media.fileSize,
-    storageProvider: 'telegram',
+    lilaAppUrl: media.publicUrl,
+    lilaAppFilePath: media.storageFilePath,
+    storageProvider: 'lila-app',
+    thumbnailStatus: media.thumbnailStatus,
+    thumbnailUrl: media.thumbnailUrl || media.publicUrl,
   },
 });
 
@@ -719,14 +708,13 @@ const buildFailureStatusMessage = (
 
 const processEvidenceUploads = async (params: {
   companyId: string;
+  lilaPublicBaseUrl: string;
   resourceId: string;
   files: UploadedReceptionFile[];
-  telegramChatId: string;
   metadata: Record<string, unknown>;
   mediaType?: string;
 }): Promise<{ uploadedCount: number; failedCount: number }> => {
-  const { companyId, resourceId, files, telegramChatId, metadata, mediaType } =
-    params;
+  const { companyId, lilaPublicBaseUrl, resourceId, files, metadata, mediaType } = params;
 
   if (files.length === 0) {
     return { uploadedCount: 0, failedCount: 0 };
@@ -734,12 +722,18 @@ const processEvidenceUploads = async (params: {
 
   const settled = await runWithConcurrency(
     files,
-    TELEGRAM_UPLOAD_CONCURRENCY,
+    EVIDENCE_UPLOAD_CONCURRENCY,
     async (file) => {
-      const uploadedFile = await uploadFileToTelegram(telegramChatId, file);
+      const uploadedFile = await storeFileInLilaDrive(
+        companyId,
+        lilaPublicBaseUrl,
+        resourceId,
+        file,
+        mediaType
+      );
       return createPortalMedia(
         companyId,
-        createMediaPayload(resourceId, uploadedFile, metadata, mediaType)
+        createLilaMediaPayload(resourceId, uploadedFile, metadata, mediaType)
       );
     }
   );
@@ -777,9 +771,9 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
 
     const uploadSummary = await processEvidenceUploads({
       companyId: input.companyId,
+      lilaPublicBaseUrl: input.lilaPublicBaseUrl,
       resourceId: createdInput._id,
       files: input.files,
-      telegramChatId,
       metadata: {
         materialId: input.materialId,
       },
@@ -828,9 +822,9 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
 
   const uploadSummary = await processEvidenceUploads({
     companyId: input.companyId,
+    lilaPublicBaseUrl: input.lilaPublicBaseUrl,
     resourceId: activeInput._id,
     files: input.files,
-    telegramChatId,
     metadata: {
       materialId: input.materialId,
     },
@@ -887,9 +881,9 @@ const runMeasureReceptionWorkflow = async (
 
   const uploadSummary = await processEvidenceUploads({
     companyId: input.companyId,
+    lilaPublicBaseUrl: input.lilaPublicBaseUrl,
     resourceId: activeMeasure._id,
     files: input.files,
-    telegramChatId,
     metadata: {
       typeId: input.typeId,
       measure: input.measureValue,
@@ -990,11 +984,6 @@ const runPublicCashFlowWorkflow = async (input: PublicCashFlowInput) => {
   let movementId: string | undefined;
 
   try {
-    const storageChatId = trimValue(config.telegram.errorsChatId);
-    if (!storageChatId) {
-      throw new Error('Telegram storage chat not configured');
-    }
-
     const sourceId = `public-cash-flow-${randomUUID()}`;
     const movement = await createPortalFinancialMovement(input.companyId, {
       sourceModule: 'manual',
@@ -1028,6 +1017,7 @@ const runPublicCashFlowWorkflow = async (input: PublicCashFlowInput) => {
 
     const uploadSummary = await processEvidenceUploads({
       companyId: input.companyId,
+      lilaPublicBaseUrl: input.lilaPublicBaseUrl,
       files: input.files,
       mediaType: 'FINANCIAL_MOVEMENT',
       metadata: {
@@ -1036,7 +1026,6 @@ const runPublicCashFlowWorkflow = async (input: PublicCashFlowInput) => {
         source: 'public-cash-flow',
       },
       resourceId: sourceId,
-      telegramChatId: storageChatId,
     });
 
     if (uploadSummary.uploadedCount === 0) {
