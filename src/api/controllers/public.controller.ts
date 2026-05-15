@@ -1143,6 +1143,23 @@ export async function submitPublicReception(req: Request, res: Response) {
     await cleanupUploadedFiles(files);
     const message =
       error instanceof Error ? error.message : 'No se pudo iniciar el registro';
+    const telegramChatId = trimValue(req.body?.telegramChatId);
+    const companyId = trimValue(req.companyId);
+    const alertMessage = [
+      '❌ Registro de ingreso fallido',
+      `Empresa: ${companyId || 'N/A'}`,
+      `Dispositivo: ${trimValue(req.body?.deviceName) || 'N/A'}`,
+      `Motivo: ${message}`,
+    ].join('\n');
+
+    if (telegramChatId) {
+      await sendTelegramTextMessage(telegramChatId, alertMessage).catch(() => false);
+    }
+    await sendTelegramAlert({
+      dedupeKey: `public-reception-start:${companyId}:${message}`,
+      message: alertMessage,
+    });
+
     return res.status(400).json({
       success: false,
       error: {
