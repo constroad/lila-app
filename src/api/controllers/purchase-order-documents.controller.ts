@@ -10,6 +10,11 @@ import { config } from '../../config/environment.js';
 import { storagePathService } from '../../services/storage-path.service.js';
 import { PDFMergerService } from '../../services/pdf-merger.service.js';
 import { FolioGeneratorService } from '../../services/folio-generator.service.js';
+import {
+  getDocumentLetterhead,
+  getDocumentLetterheadMargins,
+  shouldHideDocumentLogo,
+} from '../../services/document-letterhead.service.js';
 
 interface PurchaseOrderDocumentPayload {
   schemaCode?: string;
@@ -117,6 +122,47 @@ function resolveImageUrl(baseUrl: string, source: unknown): string {
   return `${baseUrl}/${encoded}`;
 }
 
+function buildLetterheadRender(data: Record<string, any>, baseUrl: string) {
+  const letterhead = getDocumentLetterhead(data);
+  if (!letterhead) {
+    return {
+      backgroundHtml: '',
+      pageMargin: '10mm',
+      sheetPadding: '0',
+      hideLogo: false,
+    };
+  }
+  const margins = getDocumentLetterheadMargins(letterhead);
+  const backgroundUrl = resolveImageUrl(baseUrl, letterhead.url || '');
+  return {
+    backgroundHtml: backgroundUrl
+      ? `<div class="letterhead-bg"><img src="${escapeHtml(backgroundUrl)}" alt="" /></div>`
+      : '',
+    pageMargin: '0',
+    sheetPadding: `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`,
+    hideLogo: shouldHideDocumentLogo(data),
+  };
+}
+
+function renderIssuerDetails(hasLetterhead: boolean, header: Record<string, unknown>): string {
+  if (hasLetterhead) return '';
+  return `
+        <div class="issuer">
+          <div class="issuer-name">${escapeHtml(header.issuerName || '')}</div>
+          <div class="issuer-meta">RUC: ${escapeHtml(header.issuerRuc || '')}</div>
+          <div class="issuer-meta">${escapeHtml(header.issuerAddress || '')}</div>
+        </div>
+  `;
+}
+
+function buildFolioOptions(data: Record<string, any>) {
+  const letterhead = getDocumentLetterhead(data);
+  if (!letterhead) return {};
+  return {
+    marginsMm: getDocumentLetterheadMargins(letterhead),
+  };
+}
+
 function renderBankRows(accounts: any[]) {
   if (!accounts.length) {
     return '<div class="empty-row">Sin cuentas bancarias registradas</div>';
@@ -150,11 +196,14 @@ function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
   const totals = data.totals || {};
   const seller = data.seller || {};
   const footer = data.footer || {};
+  const letterheadRender = buildLetterheadRender(data, baseUrl);
+  const hasLetterhead = Boolean(getDocumentLetterhead(data));
   const itemsRaw = Array.isArray(data.items) ? data.items : [];
   const bankAccounts = Array.isArray(data.bankAccounts) ? data.bankAccounts : [];
   const printableItems = itemsRaw.length > 0 ? [...itemsRaw] : [];
 
-  while (printableItems.length < MIN_VISIBLE_ROWS) {
+  const minimumVisibleRows = hasLetterhead ? printableItems.length : MIN_VISIBLE_ROWS;
+  while (printableItems.length < minimumVisibleRows) {
     printableItems.push({ __empty: true });
   }
 
@@ -208,7 +257,7 @@ function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
   <meta charset="UTF-8" />
   <title>Orden de compra</title>
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 portrait; margin: ${letterheadRender.pageMargin}; }
     * { box-sizing: border-box; }
     body {
       font-family: Arial, Helvetica, sans-serif;
@@ -220,9 +269,12 @@ function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
     }
     .sheet {
       width: 100%;
-      max-width: 190mm;
+      max-width: ${hasLetterhead ? '210mm' : '190mm'};
       margin: 0 auto;
+      padding: ${letterheadRender.sheetPadding};
     }
+    .letterhead-bg { position: fixed; inset: 0; z-index: -1; }
+    .letterhead-bg img { width: 100%; height: 100%; object-fit: cover; }
     .top {
       display: flex;
       justify-content: flex-start;
@@ -245,6 +297,7 @@ function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
       justify-content: space-between;
       align-items: center;
     }
+    .issuer-panel-letterhead { justify-content: flex-end; }
     .issuer {
       flex: 1;
       min-height: 24mm;
@@ -463,13 +516,13 @@ function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
       margin-bottom: 6px;
     }
     .signature-image-wrap {
-      min-height: 80px;
+      min-height: ${hasLetterhead ? '48px' : '80px'};
       display: flex;
       align-items: flex-end;
       justify-content: center;
     }
     .signature-image {
-      max-height: 78px;
+      max-height: ${hasLetterhead ? '46px' : '78px'};
       max-width: 230px;
       width: auto;
       object-fit: contain;
@@ -506,17 +559,14 @@ function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
   </style>
 </head>
 <body>
+  ${letterheadRender.backgroundHtml}
   <div class="sheet">
     <div class="top">
-      <div class="logo-block">
+      ${letterheadRender.hideLogo ? '' : `<div class="logo-block">
         ${logoUrl ? `<img class="issuer-logo" src="${escapeHtml(logoUrl)}" alt="Logo" />` : ''}
-      </div>
-      <div class="issuer-panel">
-        <div class="issuer">
-          <div class="issuer-name">${escapeHtml(header.issuerName || '')}</div>
-          <div class="issuer-meta">RUC: ${escapeHtml(header.issuerRuc || '')}</div>
-          <div class="issuer-meta">${escapeHtml(header.issuerAddress || '')}</div>
-        </div>
+      </div>`}
+      <div class="issuer-panel ${hasLetterhead ? 'issuer-panel-letterhead' : ''}">
+        ${renderIssuerDetails(hasLetterhead, header)}
         <div class="doc-head">
           <div class="doc-head-title">ORDEN DE COMPRA</div>
           <div class="doc-head-series">${escapeHtml(header.orderNumber || '')}</div>
@@ -683,7 +733,7 @@ async function buildRenderContext(req: Request) {
 async function previewPurchaseOrder(req: Request, res: Response, next: NextFunction) {
   const startedAt = Date.now();
   try {
-    const { html } = await buildRenderContext(req);
+    const { payload, html } = await buildRenderContext(req);
 
     await fs.ensureDir(config.pdf.tempDir);
 
@@ -707,7 +757,8 @@ async function previewPurchaseOrder(req: Request, res: Response, next: NextFunct
         fontSize: 9,
         includeAnnexes: true,
       },
-      previewPath
+      previewPath,
+      buildFolioOptions(payload.schemaData || {})
     );
 
     const totalPages = await PDFMergerService.getPageCount(previewPath);
@@ -779,7 +830,8 @@ async function generatePurchaseOrder(req: Request, res: Response, next: NextFunc
         fontSize: 9,
         includeAnnexes: true,
       },
-      outputPath
+      outputPath,
+      buildFolioOptions(payload.schemaData || {})
     );
 
     const totalPages = await PDFMergerService.getPageCount(outputPath);

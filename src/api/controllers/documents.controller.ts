@@ -20,6 +20,12 @@ import { FolioGeneratorService } from '../../services/folio-generator.service.js
 import { config } from '../../config/environment.js';
 import { getCompanyModel } from '../../database/models.js';
 import { convertPdfToDocx } from '../../services/pdf-to-docx.service.js';
+import {
+  getDocumentLetterhead,
+  getDocumentLetterheadMargins,
+} from '../../services/document-letterhead.service.js';
+
+const REPORT_LETTERHEAD_CODES = new Set(['VAL-SRV', 'ACT-CNF', 'CONT-SRV']);
 
 function resolveProto(req: Request): string {
   const forwarded = req.headers['x-forwarded-proto'];
@@ -82,7 +88,10 @@ function buildHeaderCodigo(prefix: string, reportCode: string, correlativo?: str
   return `${base}-${correlativo}`;
 }
 
-function buildPdfMargin(schema: any) {
+function buildPdfMargin(schema: any, data?: Record<string, any>) {
+  if (data && getDocumentLetterhead(data)) {
+    return { top: '0', right: '0', bottom: '0', left: '0' };
+  }
   if (!schema?.margins) return undefined;
   const { top, right, bottom, left } = schema.margins;
   return {
@@ -91,6 +100,20 @@ function buildPdfMargin(schema: any) {
     bottom: `${bottom}mm`,
     left: `${left}mm`,
   };
+}
+
+function buildFolioOptions(data: Record<string, any>, limitPages?: number) {
+  const letterhead = getDocumentLetterhead(data);
+  const options: { limitPages?: number; marginsMm?: ReturnType<typeof getDocumentLetterheadMargins> } = {};
+  if (limitPages !== undefined) options.limitPages = limitPages;
+  if (letterhead) options.marginsMm = getDocumentLetterheadMargins(letterhead);
+  return options;
+}
+
+function disableUnsupportedReportLetterhead(schema: any, data: Record<string, any>): void {
+  if (!data?.documentSettings?.letterhead) return;
+  if (REPORT_LETTERHEAD_CODES.has(String(schema?.code || ''))) return;
+  data.documentSettings.letterhead = null;
 }
 
 function toNumber(value: any): number {
@@ -372,12 +395,6 @@ async function applyContractProviderDefaults(
       }));
     }
 
-    // Pre-fill letterhead from company branding if not set
-    if (!isPlainObject(data.branding)) data.branding = {};
-    const branding = data.branding as Record<string, any>;
-    if (!String(branding.backgroundImageUrl || '').trim() && company.branding?.letterheadUrl) {
-      branding.backgroundImageUrl = company.branding.letterheadUrl;
-    }
   } catch {
     // Non-critical: contract still generates without pre-filled data
   }
@@ -629,6 +646,7 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
     } = await resolveDocumentContext(req);
 
     const effectiveSchema = buildEffectiveSchema(schema, schemaOverrides, customSections);
+    disableUnsupportedReportLetterhead(effectiveSchema, data);
 
     await storagePathService.ensureCompanyStructure(companyId);
 
@@ -663,8 +681,21 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
         outputPath: pdfPath,
         format: effectiveSchema.pageSize || 'A4',
         landscape: effectiveSchema.orientation === 'landscape',
-        margin: buildPdfMargin(effectiveSchema),
+        margin: buildPdfMargin(effectiveSchema, data),
       });
+
+      const letterhead = getDocumentLetterhead(data);
+      if (letterhead) {
+        const letterheadPath = path.join(reportsDir, `${baseFilename}-letterhead.pdf`);
+        await PDFMergerService.applyLetterheadBackground(
+          pdfPath,
+          letterhead,
+          letterheadPath,
+          companyId
+        );
+        await fs.copyFile(letterheadPath, pdfPath);
+        await fs.remove(letterheadPath);
+      }
       pdfDuration = Date.now() - pdfStarted;
 
       let currentPdfPath = pdfPath;
@@ -693,7 +724,7 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
           currentPdfPath,
           folioConfig,
           folioPath,
-          { limitPages }
+          buildFolioOptions(data, limitPages)
         );
         currentPdfPath = folioPath;
       }
@@ -803,6 +834,7 @@ export async function previewDocument(req: Request, res: Response, next: NextFun
     } = await resolveDocumentContext(req);
 
     const effectiveSchema = buildEffectiveSchema(schema, schemaOverrides, customSections);
+    disableUnsupportedReportLetterhead(effectiveSchema, data);
     await fs.ensureDir(config.pdf.tempDir);
 
     const baseUrl = buildAbsoluteUrl(req, '');
@@ -817,8 +849,21 @@ export async function previewDocument(req: Request, res: Response, next: NextFun
       outputPath: previewPath,
       format: effectiveSchema.pageSize || 'A4',
       landscape: effectiveSchema.orientation === 'landscape',
-      margin: buildPdfMargin(effectiveSchema),
+      margin: buildPdfMargin(effectiveSchema, data),
     });
+
+    const letterhead = getDocumentLetterhead(data);
+    if (letterhead) {
+      const letterheadPath = path.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
+      await PDFMergerService.applyLetterheadBackground(
+        previewPath,
+        letterhead,
+        letterheadPath,
+        companyId
+      );
+      await fs.copyFile(letterheadPath, previewPath);
+      await fs.remove(letterheadPath);
+    }
 
     let currentPdfPath = previewPath;
     let mainPages = await PDFMergerService.getPageCount(previewPath);
@@ -846,7 +891,7 @@ export async function previewDocument(req: Request, res: Response, next: NextFun
         currentPdfPath,
         folioConfig,
         folioPath,
-        { limitPages }
+        buildFolioOptions(data, limitPages)
       );
       currentPdfPath = folioPath;
     }

@@ -7,6 +7,11 @@ import { storagePathService } from './storage-path.service.js';
 import { ImageCompressionService } from './image-compression.service.js';
 import logger from '../utils/logger.js';
 import { numberToWords } from '../utils/number-to-words.js';
+import {
+  getDocumentLetterhead,
+  getDocumentLetterheadMargins,
+  shouldHideDocumentLogo,
+} from './document-letterhead.service.js';
 
 interface HtmlRendererOptions {
   companyId?: string;
@@ -94,13 +99,21 @@ export class ReportHtmlRenderer {
     const pageSize = this.schema.pageSize || 'A4';
     const baseOrientation = this.schema.orientation === 'landscape' ? 'landscape' : 'portrait';
     const backgroundHtml = await this.buildBackgroundHtml();
+    const letterhead = getDocumentLetterhead(this.data);
+    const margins = letterhead
+      ? getDocumentLetterheadMargins(letterhead, this.schema.margins)
+      : { top: 0, right: 0, bottom: 0, left: 0 };
+    const pageMargin = letterhead
+      ? `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`
+      : '20px';
 
     return `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <style>
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #222; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #222; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     h1 { font-size: 18px; margin: 0 0 6px 0; text-align: center; }
     h2 { font-size: 14px; margin: 16px 0 6px 0; }
     h3 { font-size: 12px; margin: 12px 0 6px 0; }
@@ -121,23 +134,27 @@ export class ReportHtmlRenderer {
     .signature-section { break-inside: avoid; page-break-inside: avoid; }
     .page-landscape { page: landscape; }
     .page-portrait { page: portrait; }
-    .letterhead-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+    .letterhead-bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; }
     .letterhead-bg img { width: 100%; height: 100%; object-fit: cover; }
-    @page { size: ${pageSize} ${baseOrientation}; }
-    @page portrait { size: ${pageSize} portrait; }
-    @page landscape { size: ${pageSize} landscape; }
+    .document-content { padding: 0; }
+    @page { size: ${pageSize} ${baseOrientation}; margin: ${pageMargin}; }
+    @page portrait { size: ${pageSize} portrait; margin: ${pageMargin}; }
+    @page landscape { size: ${pageSize} landscape; margin: ${pageMargin}; }
   </style>
 </head>
 <body>
   ${backgroundHtml}
-  ${sections.join('\n')}
+  <div class="document-content">
+    ${sections.join('\n')}
+  </div>
 </body>
 </html>`;
   }
 
   private async buildBackgroundHtml(): Promise<string> {
-    if (!this.schema.backgroundImageEnabled) return '';
-    const imageUrl = String(this.data?.branding?.backgroundImageUrl || '').trim();
+    if (getDocumentLetterhead(this.data)) return '';
+    const letterhead = getDocumentLetterhead(this.data);
+    const imageUrl = String(letterhead?.url || '').trim();
     if (!imageUrl) return '';
     try {
       const src = await this.resolveImageSrc({ url: imageUrl } as any);
@@ -249,7 +266,13 @@ export class ReportHtmlRenderer {
     const e = (s: any) => this.escapeHtml(String(s ?? ''));
     const fmt = (n: any) => (typeof n === 'number' ? n.toFixed(2) : e(n));
     const backgroundHtml = await this.buildBackgroundHtml();
-    const margins = this.schema.margins || { top: 20, right: 20, bottom: 20, left: 20 };
+    const letterhead = getDocumentLetterhead(this.data);
+    const margins = letterhead
+      ? getDocumentLetterheadMargins(letterhead, this.schema.margins)
+      : this.schema.margins || { top: 20, right: 20, bottom: 20, left: 20 };
+    const pageMargin = letterhead
+      ? `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`
+      : '20px';
 
     const titulo = e(d.titulo?.texto || 'CONTRATO DE SERVICIO');
     const proveedor = d.proveedor || {};
@@ -421,10 +444,9 @@ ${renderClause('CLAUSULA NOVENA: VERACIDAD DE DOMICILIOS', d.clausula9Domicilios
 ${cierreHtml}
 ${signaturesHtml}`;
 
-    const mTop = `${margins.top}mm`;
-    const mRight = `${margins.right}mm`;
-    const mBottom = `${margins.bottom}mm`;
-    const mLeft = `${margins.left}mm`;
+    const bodyPadding = letterhead
+      ? '0'
+      : `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`;
 
     return `<!DOCTYPE html>
 <html lang="es">
@@ -443,12 +465,11 @@ ${signaturesHtml}`;
       print-color-adjust: exact;
     }
     .contract-body {
-      padding: ${mTop} ${mRight} ${mBottom} ${mLeft};
+      padding: ${bodyPadding};
     }
     .letterhead-bg {
       position: fixed;
-      top: 0;
-      left: 0;
+      inset: 0;
       width: 100%;
       height: 100%;
       z-index: -1;
@@ -458,7 +479,7 @@ ${signaturesHtml}`;
       height: 100%;
       object-fit: cover;
     }
-    @page { size: A4 portrait; }
+    @page { size: A4 portrait; margin: ${pageMargin}; }
     p { margin: 6pt 0; }
     table { border-collapse: collapse; }
   </style>
@@ -1162,7 +1183,8 @@ ${signaturesHtml}`;
   private async renderHeader(section: SectionSchema): Promise<string> {
     if (section.headerConfig) {
       const config = section.headerConfig;
-      const logoValue = config.logoUrl || this.getValue(config.logoKey || '');
+      const hideLogo = shouldHideDocumentLogo(this.data);
+      const logoValue = hideLogo ? '' : config.logoUrl || this.getValue(config.logoKey || '');
       const leftText = config.leftTextKey ? this.getValue(config.leftTextKey) : '';
       const logoSrc = logoValue
         ? await this.resolveImageSrc({ url: String(logoValue) } as PhotoItem)
@@ -1222,10 +1244,9 @@ ${signaturesHtml}`;
           </tr>`
         : '';
 
-      return `<div class="section">
-        <table style="width:100%; border:1px solid #333; border-collapse:collapse;">
-          <tr>
-            <td style="width:22%; text-align:center; border:1px solid #333; padding:6px;">
+      const leftCell = hideLogo
+        ? ''
+        : `<td style="width:22%; text-align:center; border:1px solid #333; padding:6px;">
               ${
                 logoSrc
                   ? `<img src="${logoSrc}" style="max-height:60px;max-width:120px;object-fit:contain;" />`
@@ -1233,13 +1254,20 @@ ${signaturesHtml}`;
                   ? `<div style="font-weight:700;font-size:14px;">${this.escapeHtml(String(leftText))}</div>`
                   : ''
               }
-            </td>
-            <td style="width:56%; text-align:center; border:1px solid #333; padding:6px;">
+            </td>`;
+      const centerWidth = hideLogo ? '70%' : '56%';
+      const rightWidth = hideLogo ? '30%' : '22%';
+
+      return `<div class="section">
+        <table style="width:100%; border:1px solid #333; border-collapse:collapse;">
+          <tr>
+            ${leftCell}
+            <td style="width:${centerWidth}; text-align:center; border:1px solid #333; padding:6px;">
               ${centerTitle ? `<div style="font-weight:700;">${this.escapeHtml(String(centerTitle))}</div>` : ''}
               ${centerSubtitle ? `<div>${this.escapeHtml(String(centerSubtitle))}</div>` : ''}
               ${centerLinesHtml}
             </td>
-            <td style="width:22%; border:1px solid #333; padding:6px; font-size:10px;">
+            <td style="width:${rightWidth}; border:1px solid #333; padding:6px; font-size:10px;">
               ${rightHtml}
             </td>
           </tr>

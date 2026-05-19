@@ -35,8 +35,8 @@ export interface ICompany extends Document {
     logoLight?: string;
     logoDark?: string;
     favicon?: string;
-    letterheadUrl?: string;
   };
+  documentSettings?: Record<string, unknown>;
   whatsappConfig?: {
     sender?: string;
     adminGroupId?: string;
@@ -154,6 +154,10 @@ const CompanySchema = new Schema<ICompany>(
       logoLight: { type: String },
       logoDark: { type: String },
       favicon: { type: String },
+    },
+    documentSettings: {
+      type: Schema.Types.Mixed,
+      required: false,
     },
     whatsappConfig: {
       sender: { type: String },

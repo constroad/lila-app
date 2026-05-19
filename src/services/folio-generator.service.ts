@@ -12,6 +12,12 @@ export interface FolioConfig {
 
 interface FolioOptions {
   limitPages?: number;
+  marginsMm?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
 }
 
 export class FolioGeneratorService {
@@ -52,7 +58,8 @@ export class FolioGeneratorService {
         height,
         folioText,
         font,
-        fontSize
+        fontSize,
+        options.marginsMm
       );
 
       page.drawText(folioText, {
@@ -80,25 +87,40 @@ export class FolioGeneratorService {
     pageHeight: number,
     text: string,
     font: any,
-    fontSize: number
+    fontSize: number,
+    marginsMm?: FolioOptions['marginsMm']
   ): { x: number; y: number } {
     const textWidth = font.widthOfTextAtSize(text, fontSize);
-    const margin = 20;
+    const fallbackMargin = 20;
+    const pointPerMm = 72 / 25.4;
+    const margins = marginsMm
+      ? {
+          top: marginsMm.top * pointPerMm,
+          right: marginsMm.right * pointPerMm,
+          bottom: marginsMm.bottom * pointPerMm,
+          left: marginsMm.left * pointPerMm,
+        }
+      : {
+          top: fallbackMargin,
+          right: fallbackMargin,
+          bottom: fallbackMargin,
+          left: fallbackMargin,
+        };
 
     let y: number;
     if (position.startsWith('header')) {
-      y = pageHeight - margin - fontSize;
+      y = pageHeight - margins.top - fontSize;
     } else {
-      y = margin;
+      y = margins.bottom;
     }
 
     let x: number;
     if (position.endsWith('left')) {
-      x = margin;
+      x = margins.left;
     } else if (position.endsWith('center')) {
       x = (pageWidth - textWidth) / 2;
     } else {
-      x = pageWidth - textWidth - margin;
+      x = pageWidth - textWidth - margins.right;
     }
 
     return { x, y };

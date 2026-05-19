@@ -11,6 +11,11 @@ import { config } from '../../config/environment.js';
 import { storagePathService } from '../../services/storage-path.service.js';
 import { PDFMergerService } from '../../services/pdf-merger.service.js';
 import { FolioGeneratorService } from '../../services/folio-generator.service.js';
+import {
+  getDocumentLetterhead,
+  getDocumentLetterheadMargins,
+  shouldHideDocumentLogo,
+} from '../../services/document-letterhead.service.js';
 
 interface QuoteDocumentPayload {
   schemaCode?: string;
@@ -142,6 +147,45 @@ function resolveImageUrl(baseUrl: string, source: unknown): string {
   return `${baseUrl}/${encoded}`;
 }
 
+function buildLetterheadRender(data: Record<string, any>, baseUrl: string) {
+  const letterhead = getDocumentLetterhead(data);
+  if (!letterhead) {
+    return {
+      backgroundHtml: '',
+      pageMargin: '10mm',
+      sheetPadding: '0',
+      hideLogo: false,
+    };
+  }
+  const margins = getDocumentLetterheadMargins(letterhead);
+  const backgroundUrl = resolveImageUrl(baseUrl, letterhead.url || '');
+  return {
+    backgroundHtml: backgroundUrl
+      ? `<div class="letterhead-bg"><img src="${escapeHtml(backgroundUrl)}" alt="" /></div>`
+      : '',
+    pageMargin: '0',
+    sheetPadding: `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`,
+    hideLogo: shouldHideDocumentLogo(data),
+  };
+}
+
+function renderLetterheadIssuerDetails(hasLetterhead: boolean, lines: string[]): string {
+  if (hasLetterhead) return '';
+  return `
+        <div class="issuer">
+          ${lines.filter(Boolean).join('\n')}
+        </div>
+  `;
+}
+
+function buildFolioOptions(data: Record<string, any>) {
+  const letterhead = getDocumentLetterhead(data);
+  if (!letterhead) return {};
+  return {
+    marginsMm: getDocumentLetterheadMargins(letterhead),
+  };
+}
+
 function renderBankItems(bankAccounts: any[]): string {
   if (bankAccounts.length === 0) {
     return '<div class="empty-row">Sin cuentas bancarias configuradas</div>';
@@ -203,6 +247,8 @@ function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): str
   const terms = data.commercialTerms || {};
   const seller = data.seller || {};
   const footer = data.footer || {};
+  const letterheadRender = buildLetterheadRender(data, baseUrl);
+  const hasLetterhead = Boolean(getDocumentLetterhead(data));
 
   const itemsRaw = Array.isArray(data.items) ? data.items : [];
   const items = itemsRaw.length > 0 ? itemsRaw : [
@@ -232,7 +278,8 @@ function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): str
   const sellerRole = String(seller.role || '').trim();
   const formattedQuoteFolio = formatQuoteFolio(header.quoteNumber, 'ASF');
   const printableItems = [...items];
-  while (printableItems.length < MIN_VISIBLE_ITEM_ROWS) {
+  const minimumVisibleRows = hasLetterhead ? items.length : MIN_VISIBLE_ITEM_ROWS;
+  while (printableItems.length < minimumVisibleRows) {
     printableItems.push({ __empty: true });
   }
 
@@ -285,7 +332,8 @@ function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): str
 <head>
   <meta charset="UTF-8" />
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 portrait; margin: ${letterheadRender.pageMargin}; }
+    * { box-sizing: border-box; }
     body {
       font-family: Arial, Helvetica, sans-serif;
       font-size: 11px;
@@ -296,9 +344,12 @@ function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): str
     }
     .sheet {
       width: 100%;
-      max-width: 190mm;
+      max-width: ${hasLetterhead ? '210mm' : '190mm'};
       margin: 0 auto;
+      padding: ${letterheadRender.sheetPadding};
     }
+    .letterhead-bg { position: fixed; inset: 0; z-index: -1; }
+    .letterhead-bg img { width: 100%; height: 100%; object-fit: cover; }
     .top {
       display: flex;
       justify-content: flex-start;
@@ -321,6 +372,7 @@ function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): str
       justify-content: space-between;
       align-items: center;
     }
+    .issuer-panel-letterhead { justify-content: flex-end; }
     .issuer {
       flex: 1;
       min-height: 24mm;
@@ -481,13 +533,13 @@ function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): str
       text-transform: uppercase;
     }
     .seller-image-wrap {
-      min-height: 78px;
+      min-height: ${hasLetterhead ? '46px' : '78px'};
       margin-top: 6px;
       display: flex;
       align-items: flex-end;
     }
     .seller-image {
-      max-height: 76px;
+      max-height: ${hasLetterhead ? '44px' : '76px'};
       max-width: 230px;
       width: auto;
       object-fit: contain;
@@ -548,19 +600,20 @@ function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): str
   </style>
 </head>
 <body>
+  ${letterheadRender.backgroundHtml}
   <div class="sheet">
     <div class="top">
-      <div class="logo-block">
+      ${letterheadRender.hideLogo ? '' : `<div class="logo-block">
         ${logoUrl ? `<img class="issuer-logo" src="${escapeHtml(logoUrl)}" />` : ''}
-      </div>
-      <div class="issuer-panel">
-        <div class="issuer">
-          <div class="issuer-name">${escapeHtml(header.issuerName || '')}</div>
-          <div class="issuer-meta">RUC: ${escapeHtml(header.issuerRuc || '')}</div>
-          <div class="issuer-meta">${escapeHtml(issuerEmail)}</div>
-          <div class="issuer-meta">${escapeHtml(header.issuerPhone || '')}</div>
-          <div class="issuer-meta">${escapeHtml(header.issuerAddress || '')}</div>
-        </div>
+      </div>`}
+      <div class="issuer-panel ${hasLetterhead ? 'issuer-panel-letterhead' : ''}">
+        ${renderLetterheadIssuerDetails(hasLetterhead, [
+          `<div class="issuer-name">${escapeHtml(header.issuerName || '')}</div>`,
+          `<div class="issuer-meta">RUC: ${escapeHtml(header.issuerRuc || '')}</div>`,
+          `<div class="issuer-meta">${escapeHtml(issuerEmail)}</div>`,
+          `<div class="issuer-meta">${escapeHtml(header.issuerPhone || '')}</div>`,
+          `<div class="issuer-meta">${escapeHtml(header.issuerAddress || '')}</div>`,
+        ])}
         <div class="quote-head">
           <div class="quote-head-title">COTIZACION</div>
           <div class="quote-head-series">${escapeHtml(formattedQuoteFolio)}</div>
@@ -660,6 +713,8 @@ function renderServiceQuoteHtml(data: Record<string, any>, baseUrl: string): str
   const totals = data.totals || {};
   const seller = data.seller || {};
   const footer = data.footer || {};
+  const letterheadRender = buildLetterheadRender(data, baseUrl);
+  const hasLetterhead = Boolean(getDocumentLetterhead(data));
   const bankAccounts = Array.isArray(data.issuerBankAccounts) ? data.issuerBankAccounts : [];
   const sections = normalizeServiceSections(Array.isArray(data.sections) ? data.sections : []);
   const intro = String(data.intro || '');
@@ -734,8 +789,9 @@ function renderServiceQuoteHtml(data: Record<string, any>, baseUrl: string): str
     `;
 
   const visibleItemRowCount = serviceGroups.reduce((totalRows, group) => totalRows + group.items.length, 0);
+  const minimumVisibleRows = hasLetterhead ? visibleItemRowCount : MIN_VISIBLE_ITEM_ROWS;
   const fillerRowsHtml = Array.from({
-    length: Math.max(0, MIN_VISIBLE_ITEM_ROWS - visibleItemRowCount),
+    length: Math.max(0, minimumVisibleRows - visibleItemRowCount),
   })
     .map(
       () => `
@@ -776,7 +832,8 @@ function renderServiceQuoteHtml(data: Record<string, any>, baseUrl: string): str
 <head>
   <meta charset="UTF-8" />
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 portrait; margin: ${letterheadRender.pageMargin}; }
+    * { box-sizing: border-box; }
     body {
       font-family: Arial, Helvetica, sans-serif;
       font-size: 10px;
@@ -787,14 +844,17 @@ function renderServiceQuoteHtml(data: Record<string, any>, baseUrl: string): str
     }
     .sheet {
       width: 100%;
-      max-width: 190mm;
+      max-width: ${hasLetterhead ? '210mm' : '190mm'};
       margin: 0 auto;
+      padding: ${letterheadRender.sheetPadding};
     }
+    .letterhead-bg { position: fixed; inset: 0; z-index: -1; }
+    .letterhead-bg img { width: 100%; height: 100%; object-fit: cover; }
     .sheet + .sheet {
       page-break-before: always;
     }
     .sheet-secondary {
-      min-height: 272mm;
+      min-height: ${hasLetterhead ? 'auto' : '272mm'};
       display: flex;
       flex-direction: column;
     }
@@ -820,6 +880,7 @@ function renderServiceQuoteHtml(data: Record<string, any>, baseUrl: string): str
       justify-content: space-between;
       align-items: center;
     }
+    .issuer-panel-letterhead { justify-content: flex-end; }
     .issuer {
       flex: 1;
       min-height: 24mm;
@@ -1027,13 +1088,13 @@ function renderServiceQuoteHtml(data: Record<string, any>, baseUrl: string): str
       margin-top: 1px;
     }
     .seller-image-wrap {
-      min-height: 80px;
+      min-height: ${hasLetterhead ? '48px' : '80px'};
       margin-top: 8px;
       display: flex;
       align-items: flex-end;
     }
     .seller-image {
-      max-height: 78px;
+      max-height: ${hasLetterhead ? '46px' : '78px'};
       max-width: 230px;
       width: auto;
       object-fit: contain;
@@ -1088,19 +1149,20 @@ function renderServiceQuoteHtml(data: Record<string, any>, baseUrl: string): str
   </style>
 </head>
 <body>
+  ${letterheadRender.backgroundHtml}
   <div class="sheet">
     <div class="top">
-      <div class="logo-block">
+      ${letterheadRender.hideLogo ? '' : `<div class="logo-block">
         ${logoUrl ? `<img class="issuer-logo" src="${escapeHtml(logoUrl)}" />` : ''}
-      </div>
-      <div class="issuer-panel">
-        <div class="issuer">
-          <div class="issuer-name">${escapeHtml(header.issuerName || '')}</div>
-          <div class="issuer-meta">RUC: ${escapeHtml(header.issuerRuc || '')}</div>
-          <div class="issuer-meta">${escapeHtml(header.issuerEmail || '')}</div>
-          <div class="issuer-meta">${escapeHtml(header.issuerPhone || '')}</div>
-          <div class="issuer-meta">${escapeHtml(header.issuerAddress || '')}</div>
-        </div>
+      </div>`}
+      <div class="issuer-panel ${hasLetterhead ? 'issuer-panel-letterhead' : ''}">
+        ${renderLetterheadIssuerDetails(hasLetterhead, [
+          `<div class="issuer-name">${escapeHtml(header.issuerName || '')}</div>`,
+          `<div class="issuer-meta">RUC: ${escapeHtml(header.issuerRuc || '')}</div>`,
+          `<div class="issuer-meta">${escapeHtml(header.issuerEmail || '')}</div>`,
+          `<div class="issuer-meta">${escapeHtml(header.issuerPhone || '')}</div>`,
+          `<div class="issuer-meta">${escapeHtml(header.issuerAddress || '')}</div>`,
+        ])}
         <div class="quote-head">
           <div class="quote-head-title">COTIZACION</div>
           <div class="quote-head-series">${escapeHtml(formattedQuoteFolio)}</div>
@@ -1233,7 +1295,7 @@ async function buildRenderContext(req: Request) {
 async function previewQuoteDocument(req: Request, res: Response, next: NextFunction, previewPrefix: string) {
   const startedAt = Date.now();
   try {
-    const { html } = await buildRenderContext(req);
+    const { payload, html } = await buildRenderContext(req);
 
     await fs.ensureDir(config.pdf.tempDir);
 
@@ -1257,7 +1319,8 @@ async function previewQuoteDocument(req: Request, res: Response, next: NextFunct
         fontSize: 9,
         includeAnnexes: true,
       },
-      previewPath
+      previewPath,
+      buildFolioOptions(payload.schemaData || {})
     );
 
     const totalPages = await PDFMergerService.getPageCount(previewPath);
@@ -1337,7 +1400,8 @@ async function generateQuoteDocument(
         fontSize: 9,
         includeAnnexes: true,
       },
-      outputPath
+      outputPath,
+      buildFolioOptions(payload.schemaData || {})
     );
 
     const totalPages = await PDFMergerService.getPageCount(outputPath);
