@@ -23,6 +23,7 @@ export interface DispatchPostProcessInput {
   clientTargets: string[];
   sendDispatchMessage: boolean;
   adminGroupTarget?: string;
+  ippReportUnavailableReason?: string;
   ippReportPayload?: {
     type: string;
     serviceManagementId?: string;

@@ -40,6 +40,7 @@ jest.mock('../utils/logger.js', () => ({
 }));
 
 const axios = require('axios').default;
+const logger = require('../utils/logger.js').default;
 const { WhatsAppDirectService } = require('./whatsapp-direct.service.js');
 const {
   getDispatchNotificationFlagModel,
@@ -303,8 +304,30 @@ describe('dispatch-notifications.service', () => {
       '51902049935',
       'client@g.us',
       expect.objectContaining({
+        caption: expect.stringContaining('Fin de producción'),
         fileName: 'resumen-despacho.png',
         mimeType: 'image/png',
+      })
+    );
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('logs why the IPP payload is unavailable', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({
+        dispatchFinished: true,
+        ippReportUnavailableReason: 'no-linked-service',
+      }),
+      context: { companyBotLabel: 'Bot' },
+    });
+
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'dispatch_ipp_ready.pdf_missing_payload',
+      expect.objectContaining({
+        dispatchId: 'dispatch-1',
+        reason: 'no-linked-service',
       })
     );
   });

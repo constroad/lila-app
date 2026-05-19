@@ -160,7 +160,7 @@ export function buildOrderCompletionCaption(params: {
   return [
     params.botLabel,
     '',
-    '✅ Despacho concluido',
+    '✅ Fin de producción',
     `Cliente: ${params.clientName || 'No identificado'}`,
     `Obra: ${params.obra || 'No especificada'}`,
     `Unidades: ${params.totalUnits}`,
@@ -293,12 +293,14 @@ function isQueuedWhatsAppResponse(value: unknown) {
 async function resolveIppPdfUrl(params: {
   dispatchId: string;
   companyId: string;
+  unavailableReason?: string;
   reportPayload?: DispatchPostProcessInput['ippReportPayload'];
 }) {
   if (!params.reportPayload) {
     logger.warn('dispatch_ipp_ready.pdf_missing_payload', {
       companyId: params.companyId,
       dispatchId: params.dispatchId,
+      reason: params.unavailableReason || 'unknown',
     });
     return '';
   }
@@ -378,6 +380,7 @@ export function scheduleIppReadyNotification(params: {
   botLabel: string;
   obra: string;
   companyId: string;
+  ippReportUnavailableReason?: string;
   ippReportPayload?: DispatchPostProcessInput['ippReportPayload'];
 }) {
   if (!params.sender || params.targets.length === 0) {
@@ -412,6 +415,7 @@ export function scheduleIppReadyNotification(params: {
       const pdfUrl = await resolveIppPdfUrl({
         companyId: params.companyId,
         dispatchId: params.dispatchId,
+        unavailableReason: params.ippReportUnavailableReason,
         reportPayload: params.ippReportPayload,
       });
 
@@ -458,16 +462,26 @@ async function sendOrderCompletionSummary(params: {
   botLabel: string;
   companyId: string;
   completion?: DispatchPostProcessInput['orderCompletion'];
-}) {
-  if (!params.completion || params.targets.length === 0) return;
+}): Promise<boolean> {
+  if (!params.completion || params.targets.length === 0) return false;
 
   const shouldSend = await claimNotificationFlag(
     `dispatch-order-completion:${params.companyId}:${params.completion.orderId || params.completion.rows.map((row) => row.plate).join('|')}`,
     params.companyId
   );
-  if (!shouldSend) return;
+  if (!shouldSend) return true;
 
-  const image = await renderOrderCompletionImage(params.completion);
+  let image: Buffer;
+  try {
+    image = await renderOrderCompletionImage(params.completion);
+  } catch (error) {
+    logger.error('dispatch_order_completion.image_failed', {
+      companyId: params.companyId,
+      error,
+      orderId: params.completion.orderId,
+    });
+    return false;
+  }
   const caption = buildOrderCompletionCaption({
     botLabel: params.botLabel,
     clientName: params.completion.clientName,
@@ -486,6 +500,7 @@ async function sendOrderCompletionSummary(params: {
       queueOnFail: true,
     });
   }
+  return true;
 }
 
 export async function sendPlantEndIfNotSent(
@@ -566,20 +581,21 @@ export async function sendDispatchNotifications(params: NotificationParams) {
 
   const realClientTargets = input.sendDispatchMessage ? input.clientTargets : [];
   if (input.dispatchFinished && clientTargets.length > 0) {
-    await sendToTargets(
-      input.sender,
-      clientTargets,
-      buildClientCompleteMessage(context.companyBotLabel, obra),
-      input.companyId
-    );
-
-    await sendOrderCompletionSummary({
+    const completionSent = await sendOrderCompletionSummary({
       sender: input.sender,
       targets: clientTargets,
       botLabel: context.companyBotLabel,
       companyId: input.companyId,
       completion: input.orderCompletion,
     });
+    if (!completionSent) {
+      await sendToTargets(
+        input.sender,
+        clientTargets,
+        buildClientCompleteMessage(context.companyBotLabel, obra),
+        input.companyId
+      );
+    }
 
     if (realClientTargets.length > 0) {
       scheduleIppReadyNotification({
@@ -589,6 +605,7 @@ export async function sendDispatchNotifications(params: NotificationParams) {
         botLabel: context.companyBotLabel,
         obra,
         companyId: input.companyId,
+        ippReportUnavailableReason: input.ippReportUnavailableReason,
         ippReportPayload: input.ippReportPayload,
       });
     }

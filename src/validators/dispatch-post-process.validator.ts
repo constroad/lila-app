@@ -122,6 +122,10 @@ export function validatePostProcessInput(body: unknown): ValidationResult {
         typeof payload.adminGroupTarget === 'string'
           ? payload.adminGroupTarget
           : '',
+      ippReportUnavailableReason:
+        typeof payload.ippReportUnavailableReason === 'string'
+          ? payload.ippReportUnavailableReason
+          : '',
       ippReportPayload: normalizeIppReportPayload(payload.ippReportPayload),
       orderCompletion: normalizeOrderCompletion(payload.orderCompletion),
     },
