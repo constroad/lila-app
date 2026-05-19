@@ -2,8 +2,10 @@ export {};
 
 jest.mock('../config/environment.js', () => ({
   config: {
+    nodeEnv: 'test',
     portal: { baseUrl: 'https://portal.constroad.com' },
     security: { jwtSecret: 'secret' },
+    storage: { root: '/tmp/lila-app-test-storage' },
     telegram: {
       botToken: 'telegram-token',
       errorsChatId: '-100errors',
@@ -29,12 +31,18 @@ jest.mock('./dispatch-note-document.service.js', () => ({
 }));
 jest.mock('./whatsapp-direct.service.js', () => ({
   WhatsAppDirectService: {
+    getSessions: jest.fn(),
+    isSessionReady: jest.fn(),
     sendDocument: jest.fn(),
     sendMessage: jest.fn(),
   },
 }));
 jest.mock('./telegram-alert.service.js', () => ({
   sendTelegramAlert: jest.fn().mockResolvedValue(true),
+}));
+jest.mock('./thumbnail.service.js', () => ({
+  buildThumbnailRelativePath: jest.fn((filePath: string) => `.thumbs/thumb_${filePath}`),
+  generateThumbnailForFile: jest.fn().mockResolvedValue({ sizeBytes: 100 }),
 }));
 jest.mock('./dispatch-vale-payload.service.js', () => ({
   buildDispatchValePayloadFromPortal: jest.fn(),
@@ -61,6 +69,8 @@ const { buildDispatchValePayloadFromPortal } = require('./dispatch-vale-payload.
 describe('generateDispatchValeWorkflow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    WhatsAppDirectService.getSessions.mockReturnValue([]);
+    WhatsAppDirectService.isSessionReady.mockReturnValue(false);
     getDispatchValeRunModel.mockResolvedValue({
       findOneAndUpdate: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue({
@@ -241,6 +251,56 @@ describe('generateDispatchValeWorkflow', () => {
     expect(result.whatsapp.locationSent).toBe(false);
     expect(result.whatsapp.fileError).toBe('queued');
     expect(result.whatsapp.locationError).toBe('queued');
+  });
+
+  it('uses a ready local sender for test vale notifications', async () => {
+    const findOne = jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        name: 'ConstRoad',
+        whatsappConfig: { sender: '51949376824' },
+      }),
+    });
+    getCompanyModel.mockResolvedValue({ findOne });
+    generateDispatchNoteDocumentFile.mockResolvedValue({
+      pdfUrl: '/files/companies/test/dispatches/vales/nro-2026/file.pdf',
+      pdfUrlAbsolute: 'https://lila.constroad.com/files/companies/test/dispatches/vales/nro-2026/file.pdf',
+      totalPages: 1,
+      sizeBytes: 4096,
+      relativeDir: 'vales/nro-2026',
+      fileName: 'vale unidad 1.pdf',
+      filePath: 'dispatches/vales/nro-2026/file.pdf',
+    });
+    axios.post.mockResolvedValue({
+      data: {
+        media: { _id: 'media-1' },
+        storage: { used: 1, limit: 10, percentage: 10, fileCount: 1 },
+      },
+    });
+    WhatsAppDirectService.getSessions.mockReturnValue(['51911111111']);
+    WhatsAppDirectService.isSessionReady.mockImplementation(
+      (sender: string) => sender === '51911111111'
+    );
+    WhatsAppDirectService.sendDocument.mockResolvedValue({ ok: true });
+
+    await generateDispatchValeWorkflow({
+      companyId: 'test',
+      baseUrl: 'https://lila.constroad.com',
+      dispatchId: 'dispatch-1',
+      orderId: 'order-1',
+      driverPhoneNumber: '999888777',
+      sendDriverPdf: true,
+      documentPayload: {
+        schemaCode: 'DISPATCH-NOTE',
+        orderNumber: '2026-001',
+        schemaData: {},
+      },
+    });
+
+    expect(WhatsAppDirectService.sendDocument).toHaveBeenCalledWith(
+      '51911111111',
+      '51999888777',
+      expect.objectContaining({ companyId: 'test' })
+    );
   });
 
   it('normalizes sender provided by portal during validation', () => {

@@ -18,6 +18,7 @@ jest.mock('../config/constants.js', () => ({
 
 jest.mock('../config/environment.js', () => ({
   config: {
+    nodeEnv: 'test',
     port: 3001,
   },
 }));
@@ -287,6 +288,12 @@ describe('dispatch-notifications.service', () => {
     });
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('bypasses dispatch notification dedupe only in development', () => {
+    expect(notifications.shouldBypassDispatchDedupe('development')).toBe(true);
+    expect(notifications.shouldBypassDispatchDedupe('production')).toBe(false);
+    expect(notifications.shouldBypassDispatchDedupe('test')).toBe(false);
   });
 
   it('sends the plant end message only once per day', async () => {

@@ -17,6 +17,10 @@ type NotificationParams = {
 type CompletionRow = NonNullable<DispatchPostProcessInput['orderCompletion']>['rows'][number];
 
 async function claimNotificationFlag(key: string, companyId: string) {
+  if (shouldBypassDispatchDedupe()) {
+    return true;
+  }
+
   try {
     const DispatchNotificationFlagModel = await getDispatchNotificationFlagModel();
     const updateResult = await DispatchNotificationFlagModel.updateOne(
@@ -37,6 +41,10 @@ async function claimNotificationFlag(key: string, companyId: string) {
     console.error(`[dispatch-notification-flag] Failed: ${message}`);
     return true;
   }
+}
+
+export function shouldBypassDispatchDedupe(nodeEnv = config.nodeEnv) {
+  return nodeEnv === 'development';
 }
 
 function toSafeText(value: unknown, fallback = ''): string {

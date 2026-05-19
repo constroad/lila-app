@@ -38,18 +38,23 @@ type DispatchValeWorkflowInputLike = Partial<DispatchValeWorkflowInput> & {
   orderId?: string;
   documentPayload?: DispatchNoteDocumentPayload;
 };
-
 function cleanUrl(url: string): string {
   return String(url || '').replace(/^"+|"+$/g, '').trim();
 }
-
 function normalizeSender(sender?: string): string {
   return String(sender || '').replace(/\D/g, '').trim();
 }
-
-function isQueuedWhatsAppResult(
-  value: unknown
-): value is { queued: true } {
+function isLocalDispatchValeScope(companyId: string): boolean {
+  return config.nodeEnv === 'development' || companyId.trim().toLowerCase() === 'test';
+}
+function resolveDispatchValeSender(companyId: string, preferredSender: string, companySender: string) {
+  const requestedSender = normalizeSender(preferredSender) || normalizeSender(companySender);
+  if (!isLocalDispatchValeScope(companyId)) return requestedSender;
+  if (requestedSender && WhatsAppDirectService.isSessionReady(requestedSender)) return requestedSender;
+  return WhatsAppDirectService.getSessions()
+    .find((sessionId) => WhatsAppDirectService.isSessionReady(sessionId)) || requestedSender;
+}
+function isQueuedWhatsAppResult(value: unknown): value is { queued: true } {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -394,9 +399,11 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     const CompanyModel = await getCompanyModel();
     const company = await CompanyModel.findOne({ companyId, isActive: true }).lean();
     const companyName = String(company?.name || 'ConstRoad').trim() || 'ConstRoad';
-    const sender =
-      normalizeSender(resolvedInput.sender) ||
-      normalizeSender(String(company?.whatsappConfig?.sender || ''));
+    const sender = resolveDispatchValeSender(
+      companyId,
+      resolvedInput.sender,
+      String(company?.whatsappConfig?.sender || '')
+    );
     const normalizedPhone = normalizeWhatsAppPhoneNumber(driverPhoneNumber);
     const normalizedDriverName = String(driverName || '').trim();
     const normalizedLocation = cleanUrl(String(orderLocation || ''));
