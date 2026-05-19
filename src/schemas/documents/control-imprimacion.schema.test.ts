@@ -19,6 +19,7 @@ import { controlImprimacionSchema } from './control-imprimacion.schema.js';
 import { controlPistaSchema } from './control-pista.schema.js';
 import { actaConformidadSchema } from './acta-conformidad.schema.js';
 import { informeAreaAdicionalSchema } from './informe-area-adicional.schema.js';
+import { informeProduccionPlantaSchema } from './informe-produccion-planta.schema.js';
 import { ReportHtmlRenderer } from '../../services/report-html-renderer.service.js';
 
 describe('controlImprimacionSchema defaults', () => {
@@ -182,5 +183,32 @@ describe('informeAreaAdicionalSchema behavior', () => {
     expect(html).toContain('Lluta - Area: 12.97 m2');
     expect(html).toContain('TOTAL ADICIONAL');
     expect(html).toContain('Area: 11.02m2');
+  });
+});
+
+describe('informeProduccionPlantaSchema behavior', () => {
+  it('renders production summary before dispatch registry', async () => {
+    const renderer = new ReportHtmlRenderer(informeProduccionPlantaSchema, {
+      resumenProduccion: { totalDespachos: 1 },
+      registroDespachos: [{ item: 1, placa: 'ABC-123', nroCubos: 20 }],
+      observaciones: '',
+    });
+
+    const html = await renderer.render();
+
+    expect(html.indexOf('II. Resumen de Produccion')).toBeGreaterThan(-1);
+    expect(html.indexOf('III. Registro de Despachos')).toBeGreaterThan(-1);
+    expect(html.indexOf('II. Resumen de Produccion')).toBeLessThan(
+      html.indexOf('III. Registro de Despachos')
+    );
+    expect(html).not.toContain('VI. Observaciones');
+  });
+
+  it('starts dispatch registry on a new page', () => {
+    const dispatchSection = informeProduccionPlantaSchema.sections.find(
+      (section) => section.id === 'registroDespachos'
+    );
+
+    expect(dispatchSection?.pageBreakBefore).toBe(true);
   });
 });

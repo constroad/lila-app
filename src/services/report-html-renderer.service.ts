@@ -1755,6 +1755,10 @@ ${signaturesHtml}`;
         ? value.map(String)
         : String(value).split(/\r?\n/)
       : [];
+    const hasMeaningfulText = lines.some((line) => line.trim().length > 0);
+    if (this.schema.code === 'IPP' && section.id === 'observaciones' && !hasMeaningfulText) {
+      return '';
+    }
     const html = lines.length > 0
       ? lines.map((line) => `<p>${this.escapeHtml(line)}</p>`).join('')
       : '<p>&nbsp;</p>';

@@ -23,6 +23,33 @@ export interface DispatchPostProcessInput {
   clientTargets: string[];
   sendDispatchMessage: boolean;
   adminGroupTarget?: string;
+  ippReportPayload?: {
+    type: string;
+    serviceManagementId?: string;
+    companyId: string;
+    schemaData: Record<string, unknown>;
+    schemaOverrides?: Record<string, unknown>;
+    customSections?: unknown[];
+    annexes?: unknown[];
+    folioConfig?: unknown;
+  };
+  orderCompletion?: {
+    clientName: string;
+    date: string;
+    locationUrl: string;
+    obra: string;
+    orderId?: string;
+    rows: Array<{
+      date: string;
+      driverName: string;
+      hour: string;
+      note: string;
+      plate: string;
+      quantity: number;
+    }>;
+    totalM3: number;
+    totalUnits: number;
+  };
 }
 
 export interface DispatchPostProcessContext {

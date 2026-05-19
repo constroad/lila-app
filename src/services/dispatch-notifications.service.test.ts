@@ -2,6 +2,8 @@ export {};
 
 jest.mock('./whatsapp-direct.service.js', () => ({
   WhatsAppDirectService: {
+    sendDocument: jest.fn().mockResolvedValue({ ok: true }),
+    sendImageFile: jest.fn().mockResolvedValue({ ok: true }),
     sendMessage: jest.fn().mockResolvedValue({ ok: true }),
   },
 }));
@@ -12,6 +14,12 @@ jest.mock('../models/dispatch-notification-flag.model.js', () => ({
 
 jest.mock('../config/constants.js', () => ({
   DISPATCH_IPP_READY_NOTIFICATION_DELAY_MS: 1000,
+}));
+
+jest.mock('../config/environment.js', () => ({
+  config: {
+    port: 3001,
+  },
 }));
 
 const { WhatsAppDirectService } = require('./whatsapp-direct.service.js');
@@ -117,6 +125,31 @@ describe('dispatch-notifications.service', () => {
     expect(notifications.buildIppReadyMessage('Bot', '')).toContain('No especificada');
   });
 
+  it('builds the order completion image svg with dispatch rows', () => {
+    const svg = notifications.buildOrderCompletionSummarySvg({
+      clientName: 'Cliente Norte',
+      date: '2026-03-17T10:00:00.000Z',
+      locationUrl: 'https://maps.test',
+      obra: 'Obra Central',
+      rows: [
+        {
+          date: '2026-03-17T10:00:00.000Z',
+          driverName: 'Juan Perez',
+          hour: '06:35',
+          note: 'Unidad 1',
+          plate: 'ABC-123',
+          quantity: 25.5,
+        },
+      ],
+      totalM3: 25.5,
+      totalUnits: 1,
+    });
+
+    expect(svg).toContain('Cliente Norte');
+    expect(svg).toContain('ABC-123');
+    expect(svg).toContain('Unidad 1');
+  });
+
   it('resolves the admin group when sendDispatchMessage=false', () => {
     expect(
       notifications.resolveClientTargets(
@@ -162,6 +195,43 @@ describe('dispatch-notifications.service', () => {
       'client@g.us',
       expect.stringContaining('informe IPP'),
       expect.anything()
+    );
+  });
+
+  it('sends an order completion image when the order finishes', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({
+        dispatchFinished: true,
+        orderCompletion: {
+          clientName: 'Cliente Norte',
+          date: '2026-03-17T10:00:00.000Z',
+          locationUrl: '',
+          obra: 'Obra Central',
+          orderId: 'order-1',
+          rows: [
+            {
+              date: '2026-03-17T10:00:00.000Z',
+              driverName: 'Juan Perez',
+              hour: '06:35',
+              note: 'Unidad 1',
+              plate: 'ABC-123',
+              quantity: 25.5,
+            },
+          ],
+          totalM3: 25.5,
+          totalUnits: 1,
+        },
+      }),
+      context: { companyBotLabel: 'Bot' },
+    });
+
+    expect(WhatsAppDirectService.sendImageFile).toHaveBeenCalledWith(
+      '51902049935',
+      'client@g.us',
+      expect.objectContaining({
+        fileName: 'resumen-despacho.png',
+        mimeType: 'image/png',
+      })
     );
   });
 

@@ -4,6 +4,56 @@ type ValidationResult =
   | { ok: true; data: DispatchPostProcessInput }
   | { ok: false; error: string };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeOrderCompletion(value: unknown): DispatchPostProcessInput['orderCompletion'] {
+  if (!isRecord(value)) return undefined;
+
+  const rows = Array.isArray(value.rows)
+    ? value.rows
+        .filter(isRecord)
+        .map((row) => ({
+          date: typeof row.date === 'string' ? row.date : '',
+          driverName: typeof row.driverName === 'string' ? row.driverName : '',
+          hour: typeof row.hour === 'string' ? row.hour : '',
+          note: typeof row.note === 'string' ? row.note : '',
+          plate: typeof row.plate === 'string' ? row.plate : '',
+          quantity: typeof row.quantity === 'number' ? row.quantity : 0,
+        }))
+    : [];
+
+  return {
+    clientName: typeof value.clientName === 'string' ? value.clientName : '',
+    date: typeof value.date === 'string' ? value.date : '',
+    locationUrl: typeof value.locationUrl === 'string' ? value.locationUrl : '',
+    obra: typeof value.obra === 'string' ? value.obra : '',
+    orderId: typeof value.orderId === 'string' ? value.orderId : '',
+    rows,
+    totalM3: typeof value.totalM3 === 'number' ? value.totalM3 : 0,
+    totalUnits: typeof value.totalUnits === 'number' ? value.totalUnits : rows.length,
+  };
+}
+
+function normalizeIppReportPayload(value: unknown): DispatchPostProcessInput['ippReportPayload'] {
+  if (!isRecord(value) || typeof value.type !== 'string' || typeof value.companyId !== 'string') {
+    return undefined;
+  }
+
+  return {
+    type: value.type,
+    companyId: value.companyId,
+    serviceManagementId:
+      typeof value.serviceManagementId === 'string' ? value.serviceManagementId : undefined,
+    schemaData: isRecord(value.schemaData) ? value.schemaData : {},
+    schemaOverrides: isRecord(value.schemaOverrides) ? value.schemaOverrides : {},
+    customSections: Array.isArray(value.customSections) ? value.customSections : [],
+    annexes: Array.isArray(value.annexes) ? value.annexes : [],
+    folioConfig: value.folioConfig,
+  };
+}
+
 export function validatePostProcessInput(body: unknown): ValidationResult {
   if (!body || typeof body !== 'object') {
     return { ok: false, error: 'body must be an object' };
@@ -72,6 +122,8 @@ export function validatePostProcessInput(body: unknown): ValidationResult {
         typeof payload.adminGroupTarget === 'string'
           ? payload.adminGroupTarget
           : '',
+      ippReportPayload: normalizeIppReportPayload(payload.ippReportPayload),
+      orderCompletion: normalizeOrderCompletion(payload.orderCompletion),
     },
   };
 }
