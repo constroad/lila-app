@@ -21,6 +21,7 @@ import {
   getModels,
   getPairingTarget,
   rollbackCopiedFiles,
+  resolveMigratedMediaUrls,
   toMongoIdentifier,
   type ServiceMigrationQueuedResponse,
   type ServiceMigrationRequest,
@@ -251,20 +252,27 @@ const rewriteOrderMediaLocations = async (params: {
       new RegExp(`^companies/${escapeRegex(params.targetCompanyId)}/`),
       ''
     );
+    const targetUrls = resolveMigratedMediaUrls({
+      fallbackUrl: targetPublicUrl,
+      mediaUrl: mediaDocument.url,
+      metadataThumbnailUrl: rewrittenMetadata?.thumbnailUrl,
+      thumbnailUrl: mediaDocument.thumbnailUrl,
+      transform,
+    });
 
     await rawUpdateOne(
       params.models.Media,
       { _id: toMongoIdentifier(mediaId), companyId: params.targetCompanyId },
       {
         $set: {
-          url: transform(asText(mediaDocument.url)) || targetPublicUrl,
-          thumbnailUrl: transform(asText(mediaDocument.thumbnailUrl)) || targetPublicUrl,
+          url: targetUrls.url,
+          thumbnailUrl: targetUrls.thumbnailUrl,
           metadata: {
             ...(rewrittenMetadata ?? {}),
             ...(migrationFile
               ? {
-                  lilaAppUrl: targetPublicUrl,
-                  thumbnailUrl: transform(asText(mediaDocument.thumbnailUrl)) || targetPublicUrl,
+                  lilaAppUrl: targetUrls.url,
+                  thumbnailUrl: targetUrls.thumbnailUrl,
                   lilaAppPath: targetLilaPath,
                   lilaAppFilePath: migrationFile.targetPath,
                 }

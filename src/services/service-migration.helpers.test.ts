@@ -155,6 +155,37 @@ describe('service-migration.helpers', () => {
     });
   });
 
+  it('keeps migrated media metadata on the same absolute URL', () => {
+    const migratedUrls = helpers.resolveMigratedMediaUrls({
+      fallbackUrl: '/files/companies/constroad/orders/order-2/GUIA/file.pdf',
+      mediaUrl: 'https://storage.test/files/companies/globofast/orders/order-1/GUIA/file.pdf',
+      metadataThumbnailUrl: '',
+      thumbnailUrl: 'https://storage.test/files/companies/globofast/orders/order-1/GUIA/.thumbs/file.jpg',
+      transform: (value: string) =>
+        value.replaceAll('/companies/globofast/', '/companies/constroad/'),
+    });
+
+    expect(migratedUrls).toEqual({
+      thumbnailUrl: 'https://storage.test/files/companies/constroad/orders/order-1/GUIA/.thumbs/file.jpg',
+      url: 'https://storage.test/files/companies/constroad/orders/order-1/GUIA/file.pdf',
+    });
+  });
+
+  it('falls back to the copied file URL when media has no previous URL', () => {
+    const migratedUrls = helpers.resolveMigratedMediaUrls({
+      fallbackUrl: '/files/companies/constroad/orders/order-2/VALE/file.pdf',
+      mediaUrl: '',
+      metadataThumbnailUrl: '',
+      thumbnailUrl: '',
+      transform: (value: string) => value,
+    });
+
+    expect(migratedUrls).toEqual({
+      thumbnailUrl: '/files/companies/constroad/orders/order-2/VALE/file.pdf',
+      url: '/files/companies/constroad/orders/order-2/VALE/file.pdf',
+    });
+  });
+
   it('copies files using the target directory path helper', async () => {
     const { storagePathService } = require('./storage-path.service.js');
     storagePathService.resolvePath

@@ -376,6 +376,23 @@ const replaceDeepText = (
   return value;
 };
 
+export const resolveMigratedMediaUrls = (params: {
+  mediaUrl: unknown;
+  thumbnailUrl: unknown;
+  metadataThumbnailUrl: unknown;
+  fallbackUrl: string;
+  transform: (input: string) => string;
+}) => {
+  const url = params.transform(asText(params.mediaUrl)) || params.fallbackUrl;
+  const thumbnailUrl =
+    params.transform(asText(params.thumbnailUrl)) ||
+    params.transform(asText(params.metadataThumbnailUrl)) ||
+    asText(params.thumbnailUrl) ||
+    url;
+
+  return { thumbnailUrl, url };
+};
+
 const replaceDeepExactString = (
   value: unknown,
   replacements: Map<string, string>
@@ -639,24 +656,27 @@ const rewriteMediaLocations = async (params: {
     const targetLilaPath = file
       ? cleanCompanyPath(params.targetCompanyId, targetDirectory)
       : targetDirectory;
-    const targetThumbnailUrl =
-      rewriteText(mediaDocument.thumbnailUrl || rewrittenMetadata?.thumbnailUrl) ||
-      asText(mediaDocument.thumbnailUrl) ||
-      targetPublicUrl;
+    const targetUrls = resolveMigratedMediaUrls({
+      fallbackUrl: targetPublicUrl,
+      mediaUrl: mediaDocument.url,
+      metadataThumbnailUrl: rewrittenMetadata?.thumbnailUrl,
+      thumbnailUrl: mediaDocument.thumbnailUrl,
+      transform: rewriteText,
+    });
 
     await rawUpdateOne(
       params.models.Media,
       { _id: toMongoIdentifier(mediaId), companyId: params.targetCompanyId },
       {
         $set: {
-          url: rewriteText(mediaDocument.url) || targetPublicUrl,
-          thumbnailUrl: targetThumbnailUrl,
+          url: targetUrls.url,
+          thumbnailUrl: targetUrls.thumbnailUrl,
           metadata: {
             ...(rewrittenMetadata ?? {}),
             ...(file
               ? {
-                  lilaAppUrl: rewriteText(metadata?.lilaAppUrl) || targetPublicUrl,
-                  thumbnailUrl: targetThumbnailUrl,
+                  lilaAppUrl: targetUrls.url,
+                  thumbnailUrl: targetUrls.thumbnailUrl,
                   lilaAppPath: targetLilaPath,
                   lilaAppFilePath: file.targetPath,
                 }

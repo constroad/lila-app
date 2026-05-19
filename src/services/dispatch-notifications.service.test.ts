@@ -1,5 +1,12 @@
 export {};
 
+jest.mock('axios', () => ({
+  __esModule: true,
+  default: {
+    post: jest.fn(),
+  },
+}));
+
 jest.mock('./whatsapp-direct.service.js', () => ({
   WhatsAppDirectService: {
     sendDocument: jest.fn().mockResolvedValue({ ok: true }),
@@ -23,6 +30,16 @@ jest.mock('../config/environment.js', () => ({
   },
 }));
 
+jest.mock('../utils/logger.js', () => ({
+  __esModule: true,
+  default: {
+    error: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+  },
+}));
+
+const axios = require('axios').default;
 const { WhatsAppDirectService } = require('./whatsapp-direct.service.js');
 const {
   getDispatchNotificationFlagModel,
@@ -56,6 +73,9 @@ describe('dispatch-notifications.service', () => {
     jest.useFakeTimers();
     getDispatchNotificationFlagModel.mockResolvedValue({
       updateOne: updateOneMock,
+    });
+    axios.post.mockResolvedValue({
+      data: { data: { pdfUrlAbsolute: 'https://files.test/ipp.pdf' } },
     });
     updateOneMock.mockResolvedValue({
       acknowledged: true,
@@ -191,6 +211,59 @@ describe('dispatch-notifications.service', () => {
     await jest.runOnlyPendingTimersAsync();
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(4);
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenLastCalledWith(
+      '51902049935',
+      'client@g.us',
+      expect.stringContaining('informe IPP'),
+      expect.anything()
+    );
+  });
+
+  it('sends the IPP ready notification with the generated PDF', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({
+        dispatchFinished: true,
+        ippReportPayload: { orderId: 'order-1' },
+      }),
+      context: { companyBotLabel: 'Bot' },
+    });
+
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(axios.post).toHaveBeenCalledWith(
+      'http://127.0.0.1:3001/api/documents/generate',
+      expect.objectContaining({
+        format: 'pdf',
+        reportPayload: { orderId: 'order-1' },
+      }),
+      { timeout: 120000 }
+    );
+    expect(WhatsAppDirectService.sendDocument).toHaveBeenCalledWith(
+      '51902049935',
+      'client@g.us',
+      expect.objectContaining({
+        caption: expect.stringContaining('informe IPP'),
+        fileName: 'informe-produccion-planta.pdf',
+        fileUrl: 'https://files.test/ipp.pdf',
+        mimeType: 'application/pdf',
+      })
+    );
+  });
+
+  it('falls back to text when IPP PDF generation fails', async () => {
+    axios.post.mockRejectedValueOnce(new Error('pdf timeout'));
+
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({
+        dispatchFinished: true,
+        ippReportPayload: { orderId: 'order-1' },
+      }),
+      context: { companyBotLabel: 'Bot' },
+    });
+
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(WhatsAppDirectService.sendDocument).not.toHaveBeenCalled();
     expect(WhatsAppDirectService.sendMessage).toHaveBeenLastCalledWith(
       '51902049935',
       'client@g.us',

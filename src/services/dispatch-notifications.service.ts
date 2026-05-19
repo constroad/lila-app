@@ -7,6 +7,7 @@ import type {
   DispatchPostProcessContext,
   DispatchPostProcessInput,
 } from '../types/dispatch-post-process.js';
+import logger from '../utils/logger.js';
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 
 type NotificationParams = {
@@ -280,6 +281,96 @@ export function resolveClientTargets(input: DispatchPostProcessInput): string[] 
   return input.clientTargets;
 }
 
+function isQueuedWhatsAppResponse(value: unknown) {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      'queued' in value &&
+      (value as { queued?: unknown }).queued === true
+  );
+}
+
+async function resolveIppPdfUrl(params: {
+  dispatchId: string;
+  companyId: string;
+  reportPayload?: DispatchPostProcessInput['ippReportPayload'];
+}) {
+  if (!params.reportPayload) {
+    logger.warn('dispatch_ipp_ready.pdf_missing_payload', {
+      companyId: params.companyId,
+      dispatchId: params.dispatchId,
+    });
+    return '';
+  }
+
+  try {
+    const pdfUrl = await generateIppPdfUrl(params.reportPayload);
+    logger.info('dispatch_ipp_ready.pdf_generated', {
+      companyId: params.companyId,
+      dispatchId: params.dispatchId,
+      hasPdfUrl: Boolean(pdfUrl),
+    });
+    return pdfUrl;
+  } catch (error) {
+    logger.error('dispatch_ipp_ready.pdf_generate_failed', {
+      companyId: params.companyId,
+      dispatchId: params.dispatchId,
+      error,
+    });
+    return '';
+  }
+}
+
+type IppReadyTargetParams = {
+  sender: string;
+  target: string;
+  message: string;
+  companyId: string;
+  dispatchId: string;
+  pdfUrl: string;
+};
+
+async function sendIppTextFallback(params: IppReadyTargetParams) {
+  await sendToTargets(params.sender, [params.target], params.message, params.companyId);
+  logger.warn('dispatch_ipp_ready.text_fallback_sent', {
+    companyId: params.companyId,
+    dispatchId: params.dispatchId,
+    target: params.target,
+  });
+}
+
+async function sendIppDocument(params: IppReadyTargetParams) {
+  const sendResponse = await WhatsAppDirectService.sendDocument(params.sender, params.target, {
+    fileUrl: params.pdfUrl,
+    fileName: 'informe-produccion-planta.pdf',
+    caption: params.message,
+    mimeType: 'application/pdf',
+    companyId: params.companyId,
+    queueOnFail: true,
+  });
+  logger.info('dispatch_ipp_ready.document_sent', {
+    companyId: params.companyId,
+    dispatchId: params.dispatchId,
+    queued: isQueuedWhatsAppResponse(sendResponse),
+    target: params.target,
+  });
+}
+
+async function sendIppReadyTarget(params: IppReadyTargetParams) {
+  if (!params.pdfUrl) return sendIppTextFallback(params);
+  try {
+    await sendIppDocument(params);
+  } catch (error) {
+    logger.error('dispatch_ipp_ready.document_failed', {
+      companyId: params.companyId,
+      dispatchId: params.dispatchId,
+      error,
+      target: params.target,
+    });
+    await sendIppTextFallback(params);
+  }
+}
+
 export function scheduleIppReadyNotification(params: {
   dispatchId: string;
   sender: string;
@@ -294,42 +385,52 @@ export function scheduleIppReadyNotification(params: {
   }
 
   const message = buildIppReadyMessage(params.botLabel, params.obra);
+  logger.info('dispatch_ipp_ready.scheduled', {
+    companyId: params.companyId,
+    delayMs: DISPATCH_IPP_READY_NOTIFICATION_DELAY_MS,
+    dispatchId: params.dispatchId,
+    targets: params.targets.length,
+  });
   setTimeout(() => {
     void (async () => {
+      logger.info('dispatch_ipp_ready.started', {
+        companyId: params.companyId,
+        dispatchId: params.dispatchId,
+      });
       const shouldSend = await claimNotificationFlag(
         `dispatch-ipp-ready:${params.companyId}:${params.dispatchId}`,
         params.companyId
       );
       if (!shouldSend) {
+        logger.info('dispatch_ipp_ready.skipped_dedupe', {
+          companyId: params.companyId,
+          dispatchId: params.dispatchId,
+        });
         return;
       }
 
-      const pdfUrl = params.ippReportPayload
-        ? await generateIppPdfUrl(params.ippReportPayload).catch((error: unknown) => {
-            const messageText = error instanceof Error ? error.message : String(error);
-            console.error(`[ipp-ready] PDF generation failed: ${messageText}`);
-            return '';
-          })
-        : '';
-
-      if (!pdfUrl) {
-        await sendToTargets(params.sender, params.targets, message, params.companyId);
-        return;
-      }
+      const pdfUrl = await resolveIppPdfUrl({
+        companyId: params.companyId,
+        dispatchId: params.dispatchId,
+        reportPayload: params.ippReportPayload,
+      });
 
       for (const target of params.targets) {
-        await WhatsAppDirectService.sendDocument(params.sender, target, {
-          fileUrl: pdfUrl,
-          fileName: 'informe-produccion-planta.pdf',
-          caption: message,
-          mimeType: 'application/pdf',
+        await sendIppReadyTarget({
           companyId: params.companyId,
-          queueOnFail: true,
+          dispatchId: params.dispatchId,
+          message,
+          pdfUrl,
+          sender: params.sender,
+          target,
         });
       }
     })().catch((error: unknown) => {
-      const messageText = error instanceof Error ? error.message : String(error);
-      console.error(`[ipp-ready] Failed to send: ${messageText}`);
+      logger.error('dispatch_ipp_ready.failed', {
+        companyId: params.companyId,
+        dispatchId: params.dispatchId,
+        error,
+      });
     });
   }, DISPATCH_IPP_READY_NOTIFICATION_DELAY_MS);
 }
