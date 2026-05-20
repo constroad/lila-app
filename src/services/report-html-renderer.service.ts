@@ -13,6 +13,8 @@ import {
   shouldHideDocumentLogo,
 } from './document-letterhead.service.js';
 
+const LIQUIDACION_IGV_RATE = 0.18;
+
 interface HtmlRendererOptions {
   companyId?: string;
   baseUrl?: string;
@@ -73,6 +75,9 @@ export class ReportHtmlRenderer {
     }
     if (this.schema.code === 'CONT-SRV') {
       return this.renderContractDocument();
+    }
+    if (this.schema.code === 'LIQ-SRV') {
+      return this.renderLiquidacionDocument();
     }
     const sections: string[] = [];
     for (const section of this.schema.sections) {
@@ -489,6 +494,239 @@ ${signaturesHtml}`;
   <div class="contract-body">
     ${body}
   </div>
+</body>
+</html>`;
+  }
+
+  private renderMoney(value: unknown): string {
+    const numericValue = Number(value || 0);
+    const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+    return safeValue.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  private sumRows(rows: any[], key: string): number {
+    return rows.reduce((sum, row) => {
+      const value = Number(row?.[key] || 0);
+      return sum + (Number.isFinite(value) ? value : 0);
+    }, 0);
+  }
+
+  private renderLiquidacionRows(rows: any[]): string {
+    return rows.map((row) => `
+      <tr>
+        <td class="center">${this.escapeHtml(row.item || '')}</td>
+        <td>${this.escapeHtml(row.descripcion || '')}</td>
+        <td class="center">${this.escapeHtml(row.unidad || '')}</td>
+        <td class="right">${this.renderMoney(row.metrado)}</td>
+        <td class="right">S/ ${this.renderMoney(row.precioUnitario)}</td>
+        <td class="right">S/ ${this.renderMoney(row.parcial)}</td>
+      </tr>
+    `).join('');
+  }
+
+  private renderLiquidacionTotals(total: number): string {
+    const igv = total * LIQUIDACION_IGV_RATE;
+    const grandTotal = total + igv;
+    return `
+      <table class="totals-table">
+        <tr><td>SUB TOTAL</td><td>S/ ${this.renderMoney(total)}</td></tr>
+        <tr><td>IGV</td><td>S/ ${this.renderMoney(igv)}</td></tr>
+        <tr class="grand"><td>TOTAL</td><td>S/ ${this.renderMoney(grandTotal)}</td></tr>
+      </table>
+    `;
+  }
+
+  private renderLiquidacionTable(title: string, rows: any[]): string {
+    if (rows.length === 0) return '';
+    const subtotal = this.sumRows(rows, 'parcial');
+    return `
+      <h2>${this.escapeHtml(title)}</h2>
+      <table class="main-table">
+        <thead>
+          <tr>
+            <th>ITEM</th>
+            <th>DESCRIPCION</th>
+            <th>UNID</th>
+            <th>METRADO</th>
+            <th>PRECIO UNIT.</th>
+            <th>P. PARCIAL</th>
+          </tr>
+        </thead>
+        <tbody>${this.renderLiquidacionRows(rows)}</tbody>
+      </table>
+      ${this.renderLiquidacionTotals(subtotal)}
+    `;
+  }
+
+  private renderLiquidacionPayments(rows: any[]): string {
+    if (rows.length === 0) return '';
+    const total = this.sumRows(rows, 'monto');
+    const body = rows.map((row) => `
+      <tr>
+        <td class="center">${this.escapeHtml(row.fecha || '')}</td>
+        <td class="center">${this.escapeHtml(row.operacion || '')}</td>
+        <td>${this.escapeHtml(row.destinatario || '')}</td>
+        <td class="right">S/ ${this.renderMoney(row.monto)}</td>
+      </tr>
+    `).join('');
+    return `
+      <h2>2. MONTO PAGADO</h2>
+      <table class="main-table">
+        <thead><tr><th>FECHA</th><th>N OPERACION</th><th>CUENTA DESTINATARIO</th><th>MONTO</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+      <table class="totals-table"><tr class="grand"><td>TOTAL</td><td>S/ ${this.renderMoney(total)}</td></tr></table>
+    `;
+  }
+
+  private renderLiquidacionSaldo(shouldStartNewPage: boolean): string {
+    const saldo = this.data.saldo || {};
+    const ejecutado = Number(saldo.montoEjecutado || 0);
+    const pagado = Number(saldo.montoPagado || 0);
+    const porPagar = Number(saldo.saldoPorPagar ?? ejecutado - pagado);
+    const pageBreakClass = shouldStartNewPage ? ' class="page-break"' : '';
+    return `
+      <section${pageBreakClass}>
+      <h2>4. MONTO O SALDO POR PAGAR</h2>
+      <table class="saldo-table">
+        <thead><tr><th>CONCEPTO</th><th>MONTO</th></tr></thead>
+        <tbody>
+          <tr><td>MONTO EJECUTADO</td><td>S/ ${this.renderMoney(ejecutado)}</td></tr>
+          <tr><td>MONTO PAGADO</td><td>S/ ${this.renderMoney(pagado)}</td></tr>
+          <tr class="grand"><td>TOTAL A PAGAR</td><td>S/ ${this.renderMoney(porPagar)}</td></tr>
+        </tbody>
+      </table>
+      </section>
+    `;
+  }
+
+  private async renderLiquidacionVoucherTable(photos: PhotoItem[]): Promise<string> {
+    const rows: string[] = [];
+    const columns = 2;
+    const imageHeight = 285;
+    for (let i = 0; i < photos.length; i += columns) {
+      const chunk = photos.slice(i, i + columns);
+      const cells = await Promise.all(chunk.map(async (photo, index) => {
+        const src = await this.resolveImageSrc(photo);
+        const image = src
+          ? `<img src="${src}" style="width:100%;height:${imageHeight}px;object-fit:contain;background:#f8f8f8;" />`
+          : `<div style="height:${imageHeight}px;display:flex;align-items:center;justify-content:center;background:#f8f8f8;">Sin imagen</div>`;
+        const caption = this.buildPhotoCaption(photo, {
+          id: 'vouchers',
+          type: 'photoPanel',
+          layout: '2x2',
+          showFecha: true,
+        }, i + index + 1);
+        return `<td style="width:50%;">${image}${caption ? `<div class="caption">${this.renderCaptionLines(caption)}</div>` : ''}</td>`;
+      }));
+      if (cells.length < columns) {
+        cells.push('<td style="width:50%;"></td>');
+      }
+      rows.push(`<tr>${cells.join('')}</tr>`);
+    }
+    return `<table class="photo-table" style="table-layout:fixed;">${rows.join('')}</table>`;
+  }
+
+  private async renderLiquidacionVouchers(shouldStartNewPage: boolean): Promise<string> {
+    const photos = this.limitPhotos(this.resolvePhotos({ id: 'vouchers', type: 'photoPanel' }), 24);
+    if (photos.length === 0) return '';
+    const table = await this.renderLiquidacionVoucherTable(photos);
+    return `<section${shouldStartNewPage ? ' class="page-break"' : ''}><h2>5. PANEL FOTOGRAFICO DE VOUCHERS</h2>${table}</section>`;
+  }
+
+  private async renderLiquidacionSignatures(): Promise<string> {
+    const firmas = this.data.firmas || {};
+    const hasSignature = ['elaboradoPor', 'aprobadoPor'].some((key) => {
+      const signature = firmas[key] || {};
+      return Boolean(signature.nombre || signature.cargo || signature.cip || signature.firma);
+    });
+    if (!hasSignature) return '';
+    return this.renderSignatures({
+      id: 'firmas',
+      type: 'signatures',
+      title: 'Firmas',
+      signatureStyle: 'line',
+      signatures: [
+        { key: 'elaboradoPor', label: 'ELABORADO POR', sublabel: 'Responsable', showCIP: true },
+        { key: 'aprobadoPor', label: 'APROBADO POR', sublabel: 'Representante', showCIP: true },
+      ],
+    });
+  }
+
+  private async renderLiquidacionDocument(): Promise<string> {
+    const proyecto = this.data.proyecto || {};
+    const cotizacion = Array.isArray(this.data.cotizacionInicial) ? this.data.cotizacionInicial : [];
+    const pagos = Array.isArray(this.data.pagos) ? this.data.pagos : [];
+    const ejecutado = Array.isArray(this.data.montoEjecutado) ? this.data.montoEjecutado : [];
+    const observaciones = String(this.data.observaciones || '').trim();
+    const headerHtml = this.headerSection ? await this.renderHeader(this.headerSection) : '';
+    const letterhead = getDocumentLetterhead(this.data);
+    const hasLetterhead = Boolean(letterhead);
+    const vouchers = await this.renderLiquidacionVouchers(!hasLetterhead);
+    const signatures = await this.renderLiquidacionSignatures();
+    const margins = letterhead
+      ? getDocumentLetterheadMargins(letterhead, this.schema.margins)
+      : this.schema.margins || { top: 20, right: 12, bottom: 18, left: 12 };
+    const pageMargin = letterhead
+      ? `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`
+      : '20px';
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #222; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .title-spacer { height: 28px; }
+    h2 { font-size: 14px; margin: 16px 0 6px 0; }
+    .project-title { text-align: left; font-size: 15px; font-weight: 700; margin-bottom: 18px; }
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; font-size: 13px; margin-bottom: 12px; }
+    table { border-collapse: collapse; }
+    .main-table { width: 100%; margin: 6px 0 8px 0; }
+    .main-table th { background: #f1f1f1; color: #222; border: 1px solid #333; padding: 4px 6px; }
+    .main-table td { border: 1px solid #333; padding: 4px 6px; vertical-align: middle; }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .totals-table { width: 42%; margin: 0 0 0 auto; }
+    .totals-table td { border: 1px solid #333; padding: 4px 6px; font-weight: 700; }
+    .totals-table td:first-child { text-align: right; }
+    .totals-table td:last-child { text-align: right; }
+    .grand td { background: #f1f1f1; font-size: 12px; font-weight: 700; }
+    .saldo-table { width: 44%; margin: 0; font-size: 12px; }
+    .saldo-table th { background: #f1f1f1; border: 1px solid #333; padding: 4px 6px; }
+    .saldo-table td { border: 1px solid #333; padding: 4px 6px; font-weight: 700; }
+    .saldo-table td:last-child { text-align: right; }
+    .section { margin-top: 16px; }
+    .page-break { break-before: page; page-break-before: always; }
+    .photo-table { width: 100%; }
+    .photo-table td { border: 1px solid #333; text-align: center; padding: 6px; }
+    .photo-table img { max-width: 100%; height: auto; }
+    .caption { font-size: 10px; margin-top: 4px; }
+    @page { size: A4 portrait; margin: ${pageMargin}; }
+  </style>
+</head>
+<body>
+  ${headerHtml}
+  <div class="title-spacer"></div>
+  <div class="project-title">PROYECTO: "${this.escapeHtml(proyecto.obra || '')}"</div>
+  <div class="meta-grid">
+    <div><strong>CONTRATISTA:</strong> ${this.escapeHtml(proyecto.contratista || '')}</div>
+    <div><strong>RUC:</strong> ${this.escapeHtml(proyecto.contratistaRuc || '')}</div>
+    <div><strong>PROVEEDOR DEL SERVICIO:</strong> ${this.escapeHtml(proyecto.proveedor || '')}</div>
+    <div><strong>RUC:</strong> ${this.escapeHtml(proyecto.proveedorRuc || '')}</div>
+    <div><strong>SERVICIO:</strong> ${this.escapeHtml(proyecto.servicio || '')}</div>
+  </div>
+  ${this.renderLiquidacionTable('1. MONTO COTIZACION INICIAL', cotizacion)}
+  ${this.renderLiquidacionPayments(pagos)}
+  ${this.renderLiquidacionTable('3. MONTO EJECUTADO', ejecutado)}
+  ${this.renderLiquidacionSaldo(hasLetterhead)}
+  ${observaciones ? `<section><h2>OBSERVACIONES</h2><p>${this.escapeHtml(observaciones)}</p></section>` : ''}
+  ${vouchers}
+  ${signatures}
 </body>
 </html>`;
   }

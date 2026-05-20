@@ -25,7 +25,7 @@ import {
   getDocumentLetterheadMargins,
 } from '../../services/document-letterhead.service.js';
 
-const REPORT_LETTERHEAD_CODES = new Set(['VAL-SRV', 'ACT-CNF', 'CONT-SRV']);
+const REPORT_LETTERHEAD_CODES = new Set(['VAL-SRV', 'ACT-CNF', 'CONT-SRV', 'LIQ-SRV']);
 
 function resolveProto(req: Request): string {
   const forwarded = req.headers['x-forwarded-proto'];

@@ -2,6 +2,31 @@ import mongoose, { Model, Schema } from 'mongoose';
 import { getSharedConnection } from '../database/sharedConnection.js';
 
 const modelCache = new Map<string, Model<any>>();
+const LIQUIDACION_IGV_FACTOR = 1.18;
+
+type ReportRecord = Record<string, unknown>;
+
+type LiquidacionRow = {
+  item: string;
+  descripcion: string;
+  unidad: string;
+  metrado: number;
+  precioUnitario: number;
+  parcial: number;
+  adicional: boolean;
+};
+
+type LiquidacionPayment = {
+  _financeEntryId: string;
+  fecha: unknown;
+  operacion: string;
+  destinatario: string;
+  monto: number;
+};
+
+function asRecord(value: unknown): ReportRecord {
+  return value && typeof value === 'object' ? value as ReportRecord : {};
+}
 
 async function getFlexibleModel(modelName: string): Promise<Model<any>> {
   if (modelCache.has(modelName)) {
@@ -42,6 +67,8 @@ export interface AggregatedReportData {
   certificates: any[];
   invoices: any[];
   payments: any[];
+  financeEntries: ReportRecord[];
+  financeMedia: ReportRecord[];
   serviceMedia: any[];
   orderMedia: any[];
 }
@@ -75,6 +102,8 @@ export async function aggregateReportData(
   const Certificate = await getFlexibleModel('Certificate');
   const Invoice = await getFlexibleModel('Invoice');
   const Payment = await getFlexibleModel('Payment');
+  const FinancialMovement = await getFlexibleModel('FinancialMovement');
+  const Media = await getFlexibleModel('Media');
   const ServiceManagementDriveItem = await getFlexibleModel('ServiceManagementDriveItem');
 
   const service = await ServiceManagement.findById(serviceId).lean();
@@ -87,6 +116,8 @@ export async function aggregateReportData(
       certificates: [],
       invoices: [],
       payments: [],
+      financeEntries: [],
+      financeMedia: [],
       serviceMedia: [],
       orderMedia: [],
     };
@@ -123,6 +154,23 @@ export async function aggregateReportData(
     ? await Payment.find({ orderId: { $in: orderQueryIds } }).lean()
     : [];
 
+  const financeEntries = await FinancialMovement.find({
+    serviceManagementId: serviceId,
+    sourceModule: 'service_finance',
+    recordStatus: { $nin: ['cancelled', 'deleted'] },
+  }).lean();
+  const financeEntryIds = financeEntries
+    .map((entry) => String(entry._id || '').trim())
+    .filter(Boolean);
+  const financeResourceIds = financeEntryIds.flatMap((id) => [id, `service-finance-${id}`]);
+  const financeMedia = financeResourceIds.length
+    ? await Media.find({
+        resourceId: { $in: financeResourceIds },
+        type: 'SERVICE_FINANCE',
+        status: { $ne: 'DELETED' },
+      }).lean()
+    : [];
+
   const serviceMedia = await ServiceManagementDriveItem.find({
     serviceManagementId: serviceId,
   }).lean();
@@ -135,8 +183,113 @@ export async function aggregateReportData(
     certificates,
     invoices,
     payments,
+    financeEntries,
+    financeMedia,
     serviceMedia,
     orderMedia: [],
+  };
+}
+
+function toCurrencyAmount(value: unknown): number {
+  const numericValue = Number(value || 0);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function addLiquidacionIgv(subtotal: number): number {
+  return Number((subtotal * LIQUIDACION_IGV_FACTOR).toFixed(2));
+}
+
+function buildPartidaItemCode(partida: ReportRecord, index: number): string {
+  return String(partida.itemCode || partida.item || index + 1);
+}
+
+function buildLiquidacionRows(partidas: ReportRecord[]): LiquidacionRow[] {
+  return partidas.map((partida, index) => {
+    const quantity = toCurrencyAmount(partida.quantity);
+    const unitPrice = toCurrencyAmount(partida.unitPrice);
+    const total = toCurrencyAmount(partida.total || quantity * unitPrice);
+    return {
+      item: buildPartidaItemCode(partida, index),
+      descripcion: String(partida.description || ''),
+      unidad: String(partida.unit || ''),
+      metrado: quantity,
+      precioUnitario: unitPrice,
+      parcial: total,
+      adicional: Boolean(partida.isAdditional),
+    };
+  });
+}
+
+function buildLiquidacionPayments(entries: ReportRecord[]): LiquidacionPayment[] {
+  return entries
+    .filter((entry) => entry.movementType === 'income' || entry.entryType === 'income')
+    .map((entry) => ({
+      _financeEntryId: String(entry._id || ''),
+      fecha: entry.date || '',
+      operacion: String(entry.referenceNumber || entry.paymentMethod || 'INGRESO'),
+      destinatario: String(entry.description || ''),
+      monto: toCurrencyAmount(entry.amountBase),
+    }));
+}
+
+function buildLiquidacionVoucherPhotos(
+  payments: LiquidacionPayment[],
+  media: ReportRecord[]
+) {
+  const paymentIds = new Set(payments.map((payment) => payment._financeEntryId));
+  return media
+    .filter((file) => {
+      const resourceId = String(file.resourceId || '').replace(/^service-finance-/, '');
+      const mimeType = String(file.mimeTye || '').toLowerCase();
+      return paymentIds.has(resourceId) && mimeType.startsWith('image/');
+    })
+    .map((file) => {
+      const metadata = asRecord(file.metadata);
+      return {
+        id: String(file._id || ''),
+        descripcion: String(file.name || 'Voucher'),
+        fecha: file.date || file.createdAt || '',
+        url: String(file.url || metadata.lilaAppUrl || metadata.fileUrl || ''),
+        renderedUrl: String(metadata.lilaAppUrl || metadata.fileUrl || file.url || ''),
+        thumbnailUrl: String(file.thumbnailUrl || metadata.thumbnailUrl || ''),
+      };
+    });
+}
+
+function buildLiquidacionData(rawData: AggregatedReportData, projectData: Record<string, any>) {
+  const service = rawData.service;
+  const client = rawData.client;
+  const partidas = Array.isArray(service.partidas) ? service.partidas as ReportRecord[] : [];
+  const rows = buildLiquidacionRows(partidas);
+  const payments = buildLiquidacionPayments(rawData.financeEntries || []);
+  const montoEjecutadoSubtotal = rows.reduce((sum, row) => sum + toCurrencyAmount(row.parcial), 0);
+  const montoEjecutado = addLiquidacionIgv(montoEjecutadoSubtotal);
+  const montoPagado = payments.reduce((sum, row) => sum + toCurrencyAmount(row.monto), 0);
+
+  return {
+    ...projectData,
+    proyecto: {
+      ...projectData.proyecto,
+      obra: service.projectName || service.description || projectData.proyecto?.obra || '',
+      contratista: service.contratista || client?.name || projectData.proyecto?.contratista || '',
+      contratistaRuc: client?.ruc || '',
+      proveedor: service.subcontratista || projectData.proyecto?.subcontratista || '',
+      proveedorRuc: service.rucSubcontratista || '',
+      servicio: service.description || service.projectName || '',
+    },
+    cotizacionInicial: rows.filter((row) => !row.adicional),
+    pagos: payments,
+    montoEjecutado: rows,
+    saldo: {
+      montoEjecutado,
+      montoPagado,
+      saldoPorPagar: montoEjecutado - montoPagado,
+    },
+    vouchers: {
+      fotos: buildLiquidacionVoucherPhotos(payments, rawData.financeMedia || []),
+    },
+    observaciones: '',
+    firmas: {},
   };
 }
 
@@ -185,7 +338,7 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
         valorizacion: { numero: '01', moneda: 'PEN' },
         partidas: Array.isArray(service.partidas)
           ? service.partidas.map((p: any, index: number) => ({
-              item: p._id || String(index + 1),
+              item: buildPartidaItemCode(p, index),
               descripcion: p.description || '',
               unidad: p.unit || '',
               cantidad: p.quantity || 0,
@@ -200,6 +353,8 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
         },
         observaciones: '',
       };
+    case 'LIQ-SRV':
+      return buildLiquidacionData(rawData, projectData);
     case 'CTL-IMP':
       return {
         general: {
