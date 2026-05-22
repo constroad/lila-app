@@ -645,6 +645,21 @@ alias probe-resume='launchctl load   ~/Library/LaunchAgents/com.lila.external-pr
 alias probe-restart='launchctl kickstart -k gui/$(id -u)/com.lila.external-probe'
 ```
 
+#### Cuándo usar cada alias
+
+**No tienes que correr nada para que el probe funcione** — `launchd` lo arranca solo al iniciar sesión y lo mantiene vivo. Los aliases son solo para inspeccionar o intervenir cuando hace falta.
+
+| Situación | Alias | Qué pasa |
+|---|---|---|
+| "¿El probe está vivo ahora mismo?" | `probe-status` | Muestra `PID  0  com.lila.external-probe` si está corriendo. Sin output = caído (usa `probe-resume`). |
+| "Un ingeniero reporta que no puede entrar — ¿es el server?" | `probe-logs` | Tail en vivo. Si ves "FAILED" repetido → es server. Si está limpio → es DNS del cliente. |
+| "Quiero confirmar que el probe no esté escondiendo algo" | `probe-logs` (luego Ctrl-C) | Lee el último día sin abrirlo en modo follow: `tail -100 /Users/jose/projects/lila-app/logs/tailscale-external-probe.log` |
+| "Voy a hacer mantenimiento manual del funnel sin que el probe me pelee" | `probe-pause` + (tu trabajo) + `probe-resume` | Detiene y reactiva el probe. Mismo patrón que `funnel-pause`. |
+| "Toqué el script `tailscale-external-probe.sh` y quiero aplicar el cambio" | `probe-restart` | `launchctl kickstart -k` reinicia el proceso para que tome el nuevo código. |
+| "Voy a probar qué pasa si tumbo el funnel" | `funnel-pause && probe-pause` (parar todo) | Para evitar que se peleen entre ellos durante una prueba. |
+
+**Regla práctica:** en operación normal, el único que vas a tocar es `probe-logs` cuando quieras investigar un reporte de "no me conecta". El resto son para emergencias o cambios de código.
+
 ### 14.7 Mitigaciones pendientes (client-side, en el Portal)
 
 La Capa 1 cubre el ~5-10% de fallos reales del lado server. El resto (síntoma DNS) se mitiga en el **Portal Next.js**. Ver handoff `docs/handoff-portal-resiliencia.md` (o pegar el brief en Claude Code allá).
