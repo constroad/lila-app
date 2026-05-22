@@ -563,3 +563,149 @@ curl -s http://127.0.0.1:3001/api/sessions/51949376824/status | jq
 ```
 
 > **Nota seguridad:** no pasar la API key por query string ni por URL del navegador (queda en logs / historial). Header siempre.
+
+---
+
+## 14. Acceso externo intermitente: causa real y mitigaciones
+
+> **Estado (2026-05-22):** diagnóstico cerrado. El servidor está sano; el problema es resolución DNS de `*.ts.net` desde resolvers de terceros (ISPs residenciales, Cloudflare 1.1.1.1, móviles con resolvers strict). Es intermitente y vive en infraestructura de Tailscale — no se arregla desde la Mac mini.
+
+### 14.1 Síntoma reportado
+
+- Usuarios desde otras redes a veces no pueden abrir `https://joses-mac-mini.tail46a1b0.ts.net`.
+- Reportes contradictorios: el mismo dispositivo a veces conecta en datos móviles y otras no; a veces funciona en Wi-Fi y minutos después no.
+- En la Mac mini el server está 200 OK.
+- `funnel-restart` no soluciona el síntoma.
+
+### 14.2 Diagnóstico (resumen del 2026-05-22)
+
+Tests realizados desde una Mac Pro en otra red Starlink:
+
+| Test | Resultado |
+|---|---|
+| `nslookup joses-mac-mini.tail46a1b0.ts.net 8.8.8.8` | ✅ devuelve `209.177.145.97` y `209.177.145.192` (DERP relays) |
+| `nslookup joses-mac-mini.tail46a1b0.ts.net 1.1.1.1` | ❌ NXDOMAIN |
+| `nslookup joses-mac-mini.tail46a1b0.ts.net` (router ISP) | ❌ NXDOMAIN |
+| `curl --resolve <host>:443:209.177.145.97 https://<host>/docs/` | ✅ HTTP/2 200 con cert válido `joses-mac-mini.tail46a1b0.ts.net` (Let's Encrypt E7) |
+
+**Conclusión:** el funnel funciona perfecto desde internet. Los DERP relays responden. El cert es válido. El problema es que algunos resolvers públicos y muchos routers ISP devuelven NXDOMAIN para `*.ts.net` de forma intermitente.
+
+### 14.3 Causas conocidas (lado Tailscale, no se arreglan desde tu lado)
+
+1. **DNSSEC transient failures**: la zona `ts.net` está firmada. Resolvers strict (1.1.1.1) rechazan respuestas con cualquier glitch DNSSEC (firmas casi-expiradas, NS lento). Resolvers laxos (8.8.8.8) responden con la respuesta sin validar.
+2. **Negative caching**: cuando un resolver respondió NXDOMAIN, lo cachea con TTL alto. Todos los clientes detrás de ese resolver verán NXDOMAIN hasta que expire.
+3. **NS de `ts.net` con latencia variable** desde ciertos peerings → timeout → NXDOMAIN.
+
+Confirma esto en la práctica: el mismo dispositivo en la misma red puede resolver bien y minutos después NXDOMAIN, dependiendo del estado del caché del resolver.
+
+### 14.4 Lo que NO es la causa (descartado en diagnóstico)
+
+- **No es Starlink ni CGNAT**: Funnel usa DERP relay sobre HTTPS, CGNAT no impide nada. Probado entre dos Starlinks distintas.
+- **No es la app**: responde 200 OK cuando se le llega.
+- **No es el cert**: Let's Encrypt vigente, SAN correcta.
+- **No es rate limit**: 197/200 disponibles en la ventana al medir.
+- **No es CORS/Helmet/firewall**: la respuesta llega y los headers son consistentes.
+- **No es el listener fantasma del erro antiguo**: el watchdog + `funnel reset` lo cubren si ocurre.
+
+### 14.5 Por qué `funnel-restart` no ayuda con este síntoma
+
+`funnel-restart` mata el proceso del funnel para que el watchdog lo reasiente con `--bg`. Eso arregla el problema antiguo (listener fantasma, sección 3.2). **Pero el síntoma actual ocurre cuando el funnel está sano y el DNS del cliente está roto.** Reiniciar el funnel no cambia nada del lado del cliente.
+
+### 14.6 Mitigaciones implementadas
+
+#### Capa 1 — External probe + auto-restart (server-side, server-side)
+
+Archivo: `scripts/tailscale-external-probe.sh`. LaunchAgent: `com.lila.external-probe.plist`.
+
+Funcionamiento:
+1. Cada 60s resuelve `joses-mac-mini.tail46a1b0.ts.net` vía `dig @8.8.8.8` (resolver público sano).
+2. Para cada IP DERP devuelta, hace `curl --resolve` forzando esa IP y pide `/health`.
+3. Si **3 fallos consecutivos** → `tailscale funnel reset` + `tailscale funnel --bg 3001`.
+4. Loguea solo en fallo o recovery (cero spam en estado normal).
+
+Esto **complementa** `tailscale-funnel-watchdog.sh`:
+
+| Componente | Chequea | Lo que detecta |
+|---|---|---|
+| `tailscale-funnel-watchdog.sh` (existente) | `tailscale funnel status` local | Config del funnel borrada / daemon caído |
+| `tailscale-external-probe.sh` (nuevo) | Conexión real forzando IP DERP pública | Funnel sin tráfico aunque el status local diga OK |
+
+Cuando el probe detecta fallo y el watchdog no, casi siempre es uno de estos:
+- DERP relay con problema (poco frecuente).
+- Tailscaled vivo pero su conexión a control plane está rota.
+- Algún corner case del listener no visible por `funnel status`.
+
+#### Aliases nuevos (`~/.zshrc`)
+
+```bash
+alias probe-logs='tail -f /Users/jose/projects/lila-app/logs/tailscale-external-probe.log'
+alias probe-status='launchctl list | grep com.lila.external-probe'
+alias probe-pause='launchctl unload ~/Library/LaunchAgents/com.lila.external-probe.plist'
+alias probe-resume='launchctl load   ~/Library/LaunchAgents/com.lila.external-probe.plist'
+alias probe-restart='launchctl kickstart -k gui/$(id -u)/com.lila.external-probe'
+```
+
+### 14.7 Mitigaciones pendientes (client-side, en el Portal)
+
+La Capa 1 cubre el ~5-10% de fallos reales del lado server. El resto (síntoma DNS) se mitiga en el **Portal Next.js**. Ver handoff `docs/handoff-portal-resiliencia.md` (o pegar el brief en Claude Code allá).
+
+Resumen de lo que se hará en el Portal:
+
+| Capa | Qué hace | Cubre |
+|---|---|---|
+| Retry con backoff exponencial en fetches | Reintenta 3-5 veces con 5s/15s/30s/60s ante `Failed to fetch` / network errors | Hipos DNS de 30s-3min |
+| SWR / TanStack Query con `staleWhileRevalidate` | Sirve datos del cache mientras revalida en background | Que la UI no se rompa con caídas cortas |
+| Service Worker con queue offline para mutations | Encola POSTs/PUTs si el server no responde, los reintenta al recuperar | Que el ingeniero no pierda trabajo si falla en pleno guardado |
+| Página `/troubleshoot` accesible desde el header | Instrucciones simples: "cambia DNS del móvil a 8.8.8.8" con screenshots iOS/Android | Para los pocos casos donde el resolver del usuario está NXDOMAIN-cached por horas |
+| Toast humano "Reconectando..." | Mensaje claro durante el retry, no error genérico | UX |
+
+### 14.8 Por qué no se usaron las opciones "estándar" (Cloudflare / VPS / Vercel proxy)
+
+| Opción | Por qué no |
+|---|---|
+| Vercel rewrites/proxy | Plan Hobby tiene 10s timeout y 4.5 MB body. Hay endpoints >10s y uploads de hasta 300 MB. |
+| Cloudflare proxy frente al funnel | Decisión del owner: no agregar dependencia de terceros para DNS/TLS. Free tier además tiene cap de 100 MB body. |
+| VPS propio con Caddy + tailnet | Decisión del owner: no pagar infra externa; el objetivo es self-hosted total. |
+
+Las tres existen, las tres funcionan, las tres se reconsideran si el nivel de servicio actual (~99% percibido tras Capa 1 + 7) no es suficiente.
+
+### 14.9 IPv6 directo (exploración pendiente)
+
+Si el TP-Link "BUNKER" pudiera propagar IPv6 desde Starlink, la Mac mini podría exponerse en IPv6 directo (sin funnel) con cert propio para un dominio propio. Status actual:
+
+- `tailscale netcheck` reporta `IPv6: no, but OS has support`.
+- En la app Deco (TP-Link), "IPv6" aparece como **Disabled** y el panel pide "connect your device to the deco network first" para poder configurarlo.
+- **TODO:** la próxima vez que estés físicamente en la ubicación del BUNKER, conéctate al Wi-Fi del Deco, abre la app, intenta activar IPv6 (modo Pass-Through suele ser el adecuado para Starlink). Después correr `tailscale netcheck` y `ifconfig en0 | grep inet6` para ver si tienes prefijo global.
+- Si llegamos a tener IPv6 público, abrimos sección 15 con la opción híbrida (AAAA → directo, A → funnel).
+
+### 14.10 Verificación post-deploy
+
+```bash
+# Probe corriendo
+launchctl list | grep com.lila.external-probe        # PID > 0, status 0
+
+# Una vuelta limpia (debería estar vacío o mostrar solo el "starting")
+tail -20 /Users/jose/projects/lila-app/logs/tailscale-external-probe.log
+
+# Forzar verificación del path externo a mano
+HOST=joses-mac-mini.tail46a1b0.ts.net
+IPS=$(dig @8.8.8.8 +short A $HOST | head -2)
+for ip in $IPS; do
+  echo -n "$ip -> "
+  curl -sS -o /dev/null -w '%{http_code}\n' --max-time 10 \
+    --resolve "$HOST:443:$ip" "https://$HOST/health"
+done
+# Esperado: ambos 200
+```
+
+### 14.11 Cambios aplicados
+
+| Fecha | Cambio | Archivo |
+|---|---|---|
+| 2026-05-22 | Diagnóstico: confirmada causa DNS-side (`*.ts.net` intermitente). Server descartado como culpable. | (este documento) |
+| 2026-05-22 | Creado external-probe: chequeo de path público + auto-reset tras 3 fallos. | `scripts/tailscale-external-probe.sh` |
+| 2026-05-22 | LaunchAgent del probe, mismo patrón que el funnel watchdog. | `~/Library/LaunchAgents/com.lila.external-probe.plist` |
+| 2026-05-22 | Aliases `probe-logs/status/pause/resume/restart`. | `~/.zshrc` |
+| 2026-05-22 | Documentación en sección 14. | `docs/tailscale-funnel.spec.md` |
+| 2026-05-22 (pendiente) | Capa 3 en el Portal (retry, SWR, troubleshooting page). | Handoff a Mac Pro |
+| 2026-05-22 (pendiente) | IPv6 en el Deco (requiere estar in situ). | Físico |
