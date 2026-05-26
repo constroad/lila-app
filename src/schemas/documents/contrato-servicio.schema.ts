@@ -4,7 +4,7 @@ const CLAUSULA1_DEFAULT = `EL CLIENTE está dedicada a la Elaboración de Perfil
 
 EL PROVEEDOR, empresa jurídica, que declara tener conocimiento y todo tipo de obras de pavimentación y que cuenta con especialista y maquinaria necesarias para poder desarrollar la presente obra.`;
 
-const CLAUSULA2_TRABAJOS_DEFAULT = `Los trabajos a realizar tendrán las siguientes características básicas que a su vez no son limitativas:
+const CLAUSULA2_TRABAJOS_DEFAULT = `Los trabajos a realizar tendrán las siguientes características básicas, las cuales no son limitativas:
 
 a) Movilización y desmovilización de maquinarias y herramientas
 Bajo esta partida el subcontratista deberá ejecutar las acciones necesarias para suministrar y transportar los elementos necesarios de su organización al lugar del servicio, incluyendo, equipos mecánicos, materiales, herramientas y en general todo lo necesario para instalar y empezar los trabajos.
@@ -12,8 +12,10 @@ Bajo esta partida el subcontratista deberá ejecutar las acciones necesarias par
 b) Seguridad y salud en el trabajo - Equipos de protección individual
 Comprenden los equipos de protección individual (EPP) que deben ser utilizados por el personal del servicio a ejecutar, para estar protegidos asociados a los trabajos que se realicen, de acuerdo a la Norma G.050 Seguridad durante la construcción, del Reglamento Nacional de Edificaciones.
 
-c) Ensayos y certificaciones de calidad
-Así también EL PROVEEDOR deberá realizar todos los ensayos de los materiales empleados (De acuerdo a la Norma Técnica de Edificaciones CE 010), Pavimentos Urbanos y proporcionar todos los certificados de calidad y garantía de los trabajos efectuados.`;
+c) Fresado, imprimación, riego de liga y carpeta asfáltica en caliente
+Cuando corresponda según las partidas contratadas, EL PROVEEDOR ejecutará fresado de carpeta asfáltica, imprimación asfáltica MC-30, riego de liga, colocación de carpeta asfáltica en caliente y elementos complementarios.
+
+EL PROVEEDOR deberá realizar todos los ensayos de los materiales empleados, de acuerdo a la Norma Técnica de Edificaciones CE 010, Pavimentos Urbanos, y proporcionar los certificados de calidad y garantía de los trabajos efectuados. Las partidas y metrados aplicables constarán en el anexo o cuadro contractual correspondiente.`;
 
 const CLAUSULA4_DEFAULT = `EL CLIENTE se obliga a pagar la contraprestación a EL PROVEEDOR en Soles, de la siguiente manera:
 
@@ -45,11 +47,15 @@ Para la ejecución de trabajos adicionales, distintos a los especificados en el 
 
 EL PROVEEDOR es responsable por el personal que lleva a obra (Cuadrilla), por lo que debe entregar al inicio del servicio copia de los DNI del personal, así como el SCTR al Residente, para que puedan ingresar a obra.
 
-Ni la suscripción del Acta de Recepción del servicio, ni el consentimiento de la liquidación del contrato de obra, enervan el derecho de EL CLIENTE a reclamar, posteriormente, por defectos o vicios ocultos. El plazo máximo de responsabilidad de EL PROVEEDOR es de 7 AÑOS, contados a partir de la conformidad de la recepción del Servicio.`;
+EL PROVEEDOR garantiza que la mezcla asfáltica en caliente llegará al lugar de ejecución con una temperatura mínima de 135 °C, salvo especificación técnica distinta acordada por escrito.
 
-const CLAUSULA8_DEFAULT = `Cualquiera de las partes tiene el derecho a iniciar el arbitraje administrativo a fin de resolver las controversias que se presenten durante la etapa de ejecución contractual.
+El espesor de la carpeta asfáltica será el definido en las partidas o especificaciones técnicas contratadas y será controlado durante la colocación.
 
-Facultativamente, cualquiera de las partes podrá someter a conciliación la referida controversia, sin perjuicio de recurrir al arbitraje.
+Ni la suscripción del Acta de Recepción del servicio, ni el consentimiento de la liquidación del contrato de obra, enervan el derecho de EL CLIENTE a reclamar, posteriormente, por defectos o vicios ocultos, conforme al artículo 40 de la Ley de Contrataciones del Estado y el artículo 146 de su Reglamento. El plazo máximo de responsabilidad de EL PROVEEDOR es de 7 AÑOS, contados a partir de la conformidad de la recepción del Servicio, sin comprender fallas estructurales o de subbase ajenas a la prestación contratada.`;
+
+const CLAUSULA8_DEFAULT = `Cualquiera de las partes tiene el derecho a iniciar el arbitraje administrativo a fin de resolver las controversias que se presenten durante la etapa de ejecución contractual, conforme a los artículos 144, 170, 175 y 177 del Reglamento y el artículo 52 de la Ley.
+
+Facultativamente, cualquiera de las partes podrá someter a conciliación la referida controversia, conforme al artículo 214 del Reglamento de la Ley de Contrataciones del Estado, sin perjuicio de recurrir al arbitraje.
 
 El laudo arbitral emitido es definitivo e inapelable, tiene el valor de cosa juzgada y se ejecuta como una sentencia.`;
 
@@ -61,8 +67,8 @@ export const contratoServicioSchema: DocumentSchema = {
   name: 'Contrato de Servicio',
   description: 'Contrato de colocación de mezclas asfálticas u otros servicios bajo el sistema de precios unitarios.',
   category: 'Administrative',
-  version: '1.1.0',
-  lastUpdated: '2026-05-02',
+  version: '1.2.0',
+  lastUpdated: '2026-05-25',
   orientation: 'portrait',
   pageSize: 'A4',
   margins: { top: 20, right: 20, bottom: 20, left: 20 },
@@ -87,6 +93,7 @@ export const contratoServicioSchema: DocumentSchema = {
       id: 'partes',
       type: 'simpleFields',
       title: 'Partes Contratantes',
+      defaultCollapsed: false,
       gridColumns: 2,
       fields: [
         { key: 'proveedor.razonSocial', label: 'PROVEEDOR - Razón Social', type: 'text', span: 6 },
@@ -126,6 +133,7 @@ export const contratoServicioSchema: DocumentSchema = {
       id: 'clausula3Monto',
       type: 'simpleFields',
       title: 'CLAUSULA TERCERA: MONTO CONTRACTUAL',
+      defaultCollapsed: false,
       gridColumns: 4,
       fields: [
         { key: 'monto.total', label: 'MONTO TOTAL (S/)', type: 'currency', span: 4 },
@@ -137,6 +145,7 @@ export const contratoServicioSchema: DocumentSchema = {
       id: 'preciosUnitarios',
       type: 'dataTable',
       title: 'Precios Unitarios',
+      defaultCollapsed: false,
       dynamicRows: true,
       minRows: 1,
       showTotals: false,
@@ -281,9 +290,21 @@ export const contratoServicioSchema: DocumentSchema = {
       totalEnLetras: '',
       descripcionMetrado: '',
     },
-    preciosUnitarios: [],
+    preciosUnitarios: [
+      { detalle: '', unidad: '', costo: 0 },
+    ],
     clausula4FormaPago: CLAUSULA4_DEFAULT,
-    sectoresPago: [],
+    sectoresPago: [
+      {
+        sector: '',
+        itemCode: '',
+        descripcion: '',
+        unidad: '',
+        metrado: 0,
+        precioUnit: 0,
+        parcial: 0,
+      },
+    ],
     cuentasBancarias: [],
     plazos: {
       fechaInicio: '',

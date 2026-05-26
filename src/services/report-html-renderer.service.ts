@@ -124,6 +124,9 @@ export class ReportHtmlRenderer {
     h3 { font-size: 12px; margin: 12px 0 6px 0; }
     .section { margin-bottom: 12px; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
     th, td { border: 1px solid #333; padding: 4px 6px; vertical-align: top; }
     th { background: #f1f1f1; }
     .kv-table.kv-2 td:first-child { width: 35%; font-weight: bold; }
@@ -1765,7 +1768,7 @@ ${signaturesHtml}`;
       this.schema.code === 'CTL-PIS' && section.id === 'controlPista';
     const tableStyle = useFixedLayout ? ' style="table-layout:fixed;"' : '';
     const totalsRow = this.renderTableTotalsRow(section, displayColumns, rowsData);
-    return `<div class="section">${title}<table${tableStyle}>${headerRow}${subHeaderRow}${rows}${totalsRow}</table></div>`;
+    return `<div class="section">${title}<table${tableStyle}><thead>${headerRow}${subHeaderRow}</thead><tbody>${rows}${totalsRow}</tbody></table></div>`;
   }
 
   private renderTableTotalsRow(

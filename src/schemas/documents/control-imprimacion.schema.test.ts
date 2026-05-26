@@ -138,6 +138,22 @@ describe('controlPistaSchema pdf behavior', () => {
     expect(html).toContain('page-break');
     expect(html).toContain('signature-section');
   });
+
+  it('marks table headings for repetition across printed pages', async () => {
+    const renderer = new ReportHtmlRenderer(controlPistaSchema, {
+      control: { fecha: '2026-05-06', tramo: 'Tramo 1' },
+      controlPista: [{ fecha: '2026-05-06', tramo: 'Tramo 1' }],
+      registroFotografico: { fotos: [] },
+      firmas: {},
+    });
+
+    const html = await renderer.render();
+
+    expect(html).toContain('thead { display: table-header-group; }');
+    expect(html).toContain('<thead><tr>');
+    expect(html).toContain('</thead><tbody>');
+    expect(html).toContain('Registro de Control de Pista');
+  });
 });
 
 describe('informeAreaAdicionalSchema behavior', () => {

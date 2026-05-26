@@ -66,6 +66,64 @@ function mergeDeep<T extends Record<string, any>>(target: T, ...sources: Record<
   return output;
 }
 
+const CONTRACT_AUTOFILL_PATHS = [
+  'cliente.razonSocial',
+  'cliente.ruc',
+  'cliente.domicilio',
+  'cliente.representante',
+  'cliente.dniRepresentante',
+  'obra.nombre',
+  'obra.cui',
+  'obra.ubicacion',
+  'monto.total',
+  'monto.totalEnLetras',
+  'monto.descripcionMetrado',
+];
+
+const CONTRACT_TABLE_KEYS = ['preciosUnitarios', 'sectoresPago'];
+
+function isEmptyContractValue(value: unknown): boolean {
+  return value === undefined || value === null || String(value).trim() === '' || value === 0;
+}
+
+function hasMeaningfulContractRows(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.some((row) => {
+    if (!isPlainObject(row)) return false;
+    return Object.values(row).some((field) => !isEmptyContractValue(field));
+  });
+}
+
+function mergeContractAutofillData(
+  currentData: Record<string, unknown>,
+  serviceData: Record<string, unknown>
+): Record<string, unknown> {
+  const next = mergeDeep({}, currentData);
+
+  CONTRACT_AUTOFILL_PATHS.forEach((path) => {
+    const currentValue = getNestedValue(next, path);
+    const serviceValue = getNestedValue(serviceData, path);
+    if (isEmptyContractValue(currentValue) && !isEmptyContractValue(serviceValue)) {
+      setNestedValue(next, path, serviceValue);
+    }
+  });
+
+  CONTRACT_TABLE_KEYS.forEach((key) => {
+    if (
+      (!Array.isArray(next[key]) || next[key].length === 0) &&
+      Array.isArray(serviceData[key])
+    ) {
+      next[key] = serviceData[key];
+      return;
+    }
+    if (!hasMeaningfulContractRows(next[key]) && hasMeaningfulContractRows(serviceData[key])) {
+      next[key] = serviceData[key];
+    }
+  });
+
+  return next;
+}
+
 function resolveCompanyId(req: Request, report: any, aggregated?: any): string | null {
   const fromRequest = (req as any).companyId;
   if (fromRequest) return String(fromRequest);
@@ -475,13 +533,24 @@ async function resolveDocumentContext(req: Request): Promise<DocumentContext> {
     report.schemaData ||
     report.draftData?.schemaData ||
     {};
+  const serviceId = report.serviceManagementId || reportPayload?.serviceManagementId;
 
   if (!baseData || Object.keys(baseData).length === 0) {
-    const serviceId = report.serviceManagementId || reportPayload?.serviceManagementId;
     if (serviceId) {
       aggregated = await aggregateReportData(serviceId);
       baseData = structureDataForReportType(reportType, aggregated);
     }
+  }
+
+  if (reportType === 'CONT-SRV' && serviceId) {
+    aggregated = aggregated || await aggregateReportData(serviceId);
+    const serviceData = mergeDeep(
+      {},
+      schema.defaultData || {},
+      structureDataForReportType(reportType, aggregated)
+    );
+    const initialData = mergeDeep({}, schema.defaultData || {}, baseData || {});
+    baseData = mergeContractAutofillData(initialData, serviceData);
   }
 
   const schemaOverrides =

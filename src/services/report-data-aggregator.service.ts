@@ -482,6 +482,12 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
       const clientRuc = client?.ruc || client?.taxId || '';
       const clientAddress = client?.address || client?.domicilio || '';
       const clientRepresentante = client?.legalRepresentative || client?.representanteLegal || '';
+      const partidas = Array.isArray(service.partidas) ? service.partidas as ReportRecord[] : [];
+      const contractRows = buildLiquidacionRows(partidas);
+      const contractTotal = contractRows.reduce(
+        (sum, row) => sum + toCurrencyAmount(row.parcial),
+        0
+      );
       return {
         cliente: {
           razonSocial: clientName,
@@ -495,6 +501,25 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
           cui: service.cui || '',
           ubicacion: service.locationUrl || '',
         },
+        ...(contractRows.length > 0
+          ? {
+              monto: { total: contractTotal },
+              preciosUnitarios: contractRows.map((row) => ({
+                detalle: row.descripcion,
+                unidad: row.unidad,
+                costo: row.precioUnitario,
+              })),
+              sectoresPago: contractRows.map((row) => ({
+                sector: '',
+                itemCode: row.item,
+                descripcion: row.descripcion,
+                unidad: row.unidad,
+                metrado: row.metrado,
+                precioUnit: row.precioUnitario,
+                parcial: row.parcial,
+              })),
+            }
+          : {}),
       };
     }
     default:
