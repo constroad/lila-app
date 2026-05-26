@@ -31,6 +31,7 @@ import pdfGenerator from './pdf/generator.service.js';
 // 🔄 USING SIMPLE SESSIONS (notifications approach)
 import { listSessions, endSession } from './whatsapp/baileys/sessions.simple.js';
 import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.js';
+import { startTelegramQueueFlusher } from './services/telegram-alert.service.js';
 import cron from 'node-cron';
 import fs from 'fs-extra';
 import path from 'path';
@@ -358,6 +359,8 @@ async function startServer() {
       logger.info(`📁 WhatsApp sessions dir: ${config.whatsapp.sessionDir}`);
     });
 
+    const stopTelegramQueueFlusher = startTelegramQueueFlusher();
+
     // Phase 1: Extend HTTP server timeouts for large uploads (no breaking changes)
     const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
     server.timeout = UPLOAD_TIMEOUT_MS;
@@ -373,6 +376,9 @@ async function startServer() {
     // Graceful shutdown
     const gracefulShutdown = async (signal: string) => {
       logger.info(`\n📴 Received ${signal}, shutting down gracefully...`);
+
+      // Stop background flushers early so they don't fire during shutdown
+      stopTelegramQueueFlusher();
 
       // Cerrar servidor HTTP
       server.close(async () => {
