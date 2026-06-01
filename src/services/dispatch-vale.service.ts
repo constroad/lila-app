@@ -361,7 +361,9 @@ export function enqueueDispatchValeWorkflow(
 }
 
 export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowInput) {
-  const run = await acquireDispatchValeRun(input.companyId, input.dispatchId);
+  const workflowCompanyId = input.companyId;
+  const workflowDispatchId = input.dispatchId;
+  const run = await acquireDispatchValeRun(workflowCompanyId, workflowDispatchId);
   if (!run) {
     return null;
   }
@@ -591,8 +593,8 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     return result;
   } catch (error) {
     await releaseDispatchValeRun({
-      companyId,
-      dispatchId,
+      companyId: workflowCompanyId,
+      dispatchId: workflowDispatchId,
       error,
     });
     throw error;
