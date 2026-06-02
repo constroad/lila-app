@@ -31,6 +31,7 @@ ENV_FILE="/Users/jose/projects/lila-app/.env"
 STATE_DIR="/tmp"
 LEVEL_FILE="${STATE_DIR}/tailscale-probe-level"
 LAST_ALERT_FILE="${STATE_DIR}/tailscale-probe-last-alert"
+DOWN_SINCE_FILE="${STATE_DIR}/tailscale-probe-down-since"
 CHECK_INTERVAL=60        # seconds between probes
 PROBE_TIMEOUT=10         # per-curl timeout
 FAIL_THRESHOLD=3         # consecutive failures before next escalation step
@@ -82,6 +83,25 @@ send_telegram_alert() {
   fi
 }
 
+send_telegram_recovery() {
+  local dur="$1" level="$2"
+  load_env
+  if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_ERRORS_CHAT_ID" ]; then
+    return 0
+  fi
+  local http_code
+  http_code=$(/usr/bin/curl -sS -o /dev/null -w '%{http_code}' \
+    --max-time 5 \
+    -d "chat_id=${TELEGRAM_ERRORS_CHAT_ID}" \
+    --data-urlencode "text=✅ lila-app funnel RECUPERADO
+
+Host: ${HOST}
+Caída ~${dur} (escaló a nivel ${level}).
+Estado ahora: $(diagnose)" \
+    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" 2>/dev/null || echo "000")
+  log "Telegram recovery sent (HTTP $http_code)"
+}
+
 # ---- escalation state ------------------------------------------------------
 
 get_level() {
@@ -96,6 +116,40 @@ set_level() {
   echo "$1" > "$LEVEL_FILE"
 }
 
+# ---- outage duration tracking ----------------------------------------------
+
+mark_down() {
+  # Records the start of an outage once; subsequent calls are no-ops until cleared.
+  [ -r "$DOWN_SINCE_FILE" ] || date +%s > "$DOWN_SINCE_FILE"
+}
+
+clear_down() {
+  rm -f "$DOWN_SINCE_FILE" 2>/dev/null || true
+}
+
+down_duration_human() {
+  local since now secs
+  if [ ! -r "$DOWN_SINCE_FILE" ]; then echo "desconocido"; return; fi
+  since=$(cat "$DOWN_SINCE_FILE" 2>/dev/null || echo 0)
+  now=$(date +%s)
+  secs=$((now - since))
+  echo "$((secs / 60))m $((secs % 60))s"
+}
+
+# ---- diagnostics -----------------------------------------------------------
+
+diagnose() {
+  # One-line summary of WHERE the path is broken, to tell apart the failure
+  # modes: DNS/control-plane vs local app down vs WAN/DERP route down.
+  local dns local_code local_app inet
+  if [ -n "$(resolve_derp_ips)" ]; then dns="ok"; else dns="FAIL(no-A)"; fi
+  local_code=$(/usr/bin/curl -sS -o /dev/null -w '%{http_code}' \
+    --max-time 5 "http://127.0.0.1:${PORT}${PROBE_PATH}" 2>/dev/null || echo "000")
+  if [[ "$local_code" =~ ^[23] ]]; then local_app="ok"; else local_app="FAIL($local_code)"; fi
+  if /sbin/ping -c1 -t3 8.8.8.8 >/dev/null 2>&1; then inet="ok"; else inet="FAIL"; fi
+  echo "dns=$dns local_app=$local_app internet=$inet"
+}
+
 # ---- probe -----------------------------------------------------------------
 
 resolve_derp_ips() {
@@ -103,22 +157,27 @@ resolve_derp_ips() {
 }
 
 probe_external() {
-  local ips ip http_code
+  local ips ip http_code last_code
+  PROBE_DETAIL=""
   ips=$(resolve_derp_ips)
   if [ -z "$ips" ]; then
     log "WARNING: public DNS ($PUBLIC_RESOLVER) returned no A records for $HOST"
+    PROBE_DETAIL="dns=FAIL(no-A-records)"
     return 1
   fi
+  last_code="000"
   while IFS= read -r ip; do
     [ -z "$ip" ] && continue
     http_code=$(/usr/bin/curl -sS -o /dev/null -w '%{http_code}' \
       --max-time "$PROBE_TIMEOUT" \
       --resolve "${HOST}:443:${ip}" \
       "https://${HOST}${PROBE_PATH}" 2>/dev/null || echo "000")
+    last_code="$http_code"
     if [[ "$http_code" =~ ^[23] ]]; then
       return 0
     fi
   done <<< "$ips"
+  PROBE_DETAIL="dns=ok funnel_https=FAIL(last_code=$last_code)"
   return 1
 }
 
@@ -158,6 +217,9 @@ Path: ${PROBE_PATH}
 Auto-recovery exhausted (funnel reset, down/up, app relaunch).
 Manual intervention required.
 
+Diagnóstico: $(diagnose)
+(local_app=ok + internet=ok => problema en ruta WAN/DERP, no local)
+
 Check:
 - tailscale funnel status
 - dig +short ${HOST} @${PUBLIC_RESOLVER}
@@ -184,14 +246,24 @@ while true; do
   if probe_external; then
     level=$(get_level)
     if [ "$fail_count" -gt 0 ] || [ "$level" -gt 0 ]; then
-      log "Recovered after $fail_count failed probe(s) (was at escalation level $level)"
+      dur=$(down_duration_human)
+      log "Recovered after $fail_count failed probe(s) (was at escalation level $level, down ~$dur)"
+      # Only notify recovery if we had actually alerted (reached level 4).
+      if [ "$level" -ge 4 ]; then
+        send_telegram_recovery "$dur" "$level"
+      fi
       set_level 0
       rm -f "$LAST_ALERT_FILE" 2>/dev/null || true
+      clear_down
     fi
     fail_count=0
   else
     fail_count=$((fail_count + 1))
-    log "External probe FAILED ($fail_count/$FAIL_THRESHOLD)"
+    mark_down
+    log "External probe FAILED ($fail_count/$FAIL_THRESHOLD) [${PROBE_DETAIL:-}]"
+    if [ "$fail_count" -eq 1 ]; then
+      log "Diagnosis: $(diagnose)"
+    fi
     if [ "$fail_count" -ge "$FAIL_THRESHOLD" ]; then
       level=$(get_level)
       next_level=$((level + 1))
