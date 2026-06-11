@@ -63335,6 +63335,7 @@ var parseReceptionInput = (req) => {
       purchaseOrderNumber: trimValue(req.body?.purchaseOrderNumber) || void 0,
       driver: trimValue(req.body?.driver),
       m3: parseNumber(req.body?.m3, 0),
+      arriveDate: trimValue(req.body?.arriveDate) || void 0,
       files
     };
     if (parsedInput.inputMode === "standard" && parsedInput.files.length === 0) {
@@ -63693,7 +63694,7 @@ var runInputReceptionWorkflow = async (input) => {
       vendorProviderName: input.vendorProviderName,
       purchaseOrderId: input.purchaseOrderId,
       purchaseOrderNumber: input.purchaseOrderNumber,
-      arriveDate: (/* @__PURE__ */ new Date()).toLocaleString(),
+      arriveDate: input.arriveDate || (/* @__PURE__ */ new Date()).toLocaleString(),
       source: "public-reception",
       inputMode: input.inputMode,
       deviceName: input.deviceName
@@ -63736,7 +63737,7 @@ var runInputReceptionWorkflow = async (input) => {
     vendorProviderName: input.vendorProviderName,
     purchaseOrderId: input.purchaseOrderId,
     purchaseOrderNumber: input.purchaseOrderNumber,
-    arriveDate: (/* @__PURE__ */ new Date()).toLocaleString(),
+    arriveDate: input.arriveDate || (/* @__PURE__ */ new Date()).toLocaleString(),
     source: "public-reception",
     inputMode: input.inputMode,
     deviceName: input.deviceName
@@ -63766,6 +63767,7 @@ var runInputReceptionWorkflow = async (input) => {
     vendorProviderName: input.vendorProviderName,
     purchaseOrderId: input.purchaseOrderId,
     purchaseOrderNumber: input.purchaseOrderNumber,
+    arriveDate: input.arriveDate || activeInput.arriveDate,
     status: "Completed",
     source: "public-reception",
     inputMode: input.inputMode,

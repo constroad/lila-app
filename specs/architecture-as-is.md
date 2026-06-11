@@ -1,154 +1,255 @@
 # Arquitectura As-Is - lila-app
 
+> **Ultima actualizacion:** Junio 2026
+> **Documentos relacionados:**
+> - `docs/tailscale-funnel.spec.md`
+> - `docs/handoff-portal-resiliencia.md`
+> - `../MULTI-SESSION-WHATSAPP.SPEC.md` (parent)
+> - `../STREAMING-THUMBNAILS-LILA-APP.spec.md`
+> - `../architecture.AS-IS.spec.md` (vision plataforma Portal + lila-app)
+
 ## Resumen
-Sistema API en Node.js/TypeScript que expone endpoints para:
-- Gestionar sesiones WhatsApp con Baileys (multi-sesion).
-- Enviar mensajes y archivos por WhatsApp.
-- Ejecutar cron jobs (API o envio de mensajes).
-- Generar PDFs desde templates Handlebars y desde plantillas PDF (vale).
-- Publicar un mini "drive" local con exploracion y preview de PDF.
-- Integrar un agente de IA con Anthropic (Claude) para respuestas automaticas.
+Microservicio Node.js/TypeScript (Express, ESM) que actua como worker multi-tenant del Portal. Funciones principales:
+- Sesiones WhatsApp con Baileys (multi-empresa, una sesion por company).
+- Envio de mensajes/archivos por WhatsApp y cron jobs.
+- Generacion documental (PDF Handlebars/Puppeteer + plantillas PDF con coordenadas) con membrete por empresa.
+- Drive local multi-tenant (`/mnt/constroad-storage/companies/{companyId}/`) con thumbnails y preview de PDF.
+- Recepcion publica de archivos (inputs, mediciones, movimientos financieros) y callbacks de vuelta al Portal.
+- Generacion de informes de servicio (VAL-SRV, ACT-CNF, CONT-SRV, LIQ-SRV, control de pista, imprimacion, IAA, etc.).
+- Migracion cross-company de ordenes/servicios.
+- Cola persistente de alertas Telegram con flush en background.
+- Validacion de quotas leyendo MongoDB del Portal directamente.
 
-La aplicacion es monolitica, con servicios internos organizados por feature en `src/` y persistencia local en `data/`.
+El servicio sigue siendo monolitico pero con servicios desacoplados en `src/services/` y controllers por dominio en `src/api/controllers/`.
 
-## Contexto y objetivos (as-is)
-- WhatsApp como canal principal de mensajeria.
-- IA orientada a ventas/operaciones (prompt de asfalto) para conversaciones.
-- Automatizacion via cron jobs y generacion de documentos.
-- Operacion en un solo proceso Node, con opcion de PM2.
+## Contexto e integracion con Portal
+- Comunicacion Portal -> lila-app: HTTP + JWT (`JWT_SECRET` aqui = `LILA_APP_JWT_SECRET` en Portal).
+- Comunicacion lila-app -> Portal MongoDB: directa via mongoose (read-only para quotas y catalogos compartidos).
+- Comunicacion lila-app -> Portal HTTP: callbacks JWT (5 min de TTL) para acciones de cliente (reportes, dispatch updates).
+- API Keys publicas formato `lk_fe_{companyId}_{secret}` (hash SHA-256 en MongoDB), validadas para uploads publicos.
 
 ## Componentes principales
-- HTTP API (Express) en `src/index.ts`.
-- WhatsApp:
-  - Conexion y sesiones: `src/whatsapp/baileys/connection.manager.ts`.
-  - Agente IA: `src/whatsapp/ai-agent/agent.service.ts`.
-  - Conversaciones: `src/whatsapp/ai-agent/conversation.manager.ts`.
-  - Listener de mensajes: `src/whatsapp/ai-agent/message.listener.ts`.
-- Cron jobs: `src/jobs/scheduler.service.ts`.
-- PDFs:
-  - HTML/Handlebars + Puppeteer: `src/pdf/generator.service.ts`.
-  - Render/preview de PDFs: `src/pdf/render.service.ts`.
-  - Vale PDF con coordenadas: `src/api/controllers/pdf-vale.controller.ts`.
-- Drive local: `src/api/controllers/drive.controller.ts` + `src/storage/drive.store.ts`.
-- Persistencia JSON: `src/storage/json.store.ts`.
-- Observabilidad: `src/utils/logger.ts`.
 
-## Diagrama logico (alto nivel)
+### HTTP API (Express, `src/index.ts`)
+- helmet/cors dinamico (`LILA_APP_CORS_ORIGINS`), parsing, rate limit, request logger.
+- `trust proxy` configurable (`TRUST_PROXY`).
+- Swagger en `/docs`.
+- Static serving multi-tenant en `/files/companies/{companyId}/...`.
+
+### WhatsApp (Baileys)
+- Sesiones "simple" basadas en diccionario en memoria: `src/whatsapp/baileys/sessions.simple.ts` (modelo final tras refactors; no usa el `ConnectionManager` original).
+- Controller: `src/api/controllers/session.controller.simple.ts`.
+- Envio de mensajes: `src/api/controllers/message.controller.simple.ts`.
+- Servicio directo: `src/services/whatsapp-direct.service.ts`.
+- Listener IA de Anthropic existe (`src/whatsapp/ai-agent/*`) pero esta deshabilitado en produccion (early return en `message.listener.ts`, flag `WHATSAPP_AI_ENABLED`).
+- Una sesion por empresa, credenciales en `data/sessions/{companyPhone}` (volumen montado).
+
+### Documentos / Reportes
+- Registry de schemas: `src/schemas/documents/registry.ts` (20+ codigos: VAL-SRV, ACT-CNF, CONT-SRV, LIQ-SRV, control-imprimacion, control-pista, informe-area-adicional, medidas IAA, etc.).
+- Controllers:
+  - `documents.controller.ts` - generador generico de informes con membrete (REPORT_LETTERHEAD_CODES) y schema customization por empresa.
+  - `service-management-report.controller.ts` - CRUD/lock de informes de servicio.
+  - `dispatch-note-documents.controller.ts`, `purchase-order-documents.controller.ts`, `quote-documents.controller.ts`.
+- Services:
+  - `report-data-aggregator.service.ts` (agrega data desde Portal Mongo).
+  - `report-html-renderer.service.ts` (Handlebars + branding empresa).
+  - `pdf-merger.service.ts`, `pdf-to-docx.service.ts`.
+  - `folio-generator.service.ts` (folios secuenciales).
+  - `document-letterhead.service.ts` (inyeccion de membrete configurado por empresa).
+  - `schema-customization.service.ts` (overrides de campos por empresa).
+
+### Dispatch
+- `dispatch.controller.ts` y `dispatch-post-process.controller.ts` (workflow asincrono).
+- Servicios:
+  - `dispatch-post-process.service.ts` - procesamiento background con alertas Telegram en fallo.
+  - `dispatch-vale.service.ts` + `dispatch-vale-payload.service.ts` - construye payload y genera vale PDF (plantilla `templates/pdf/plantilla_dispatch_note.pdf`).
+  - `dispatch-notifications.service.ts` - notificacion multi-canal (WhatsApp + Telegram).
+  - `dispatch-note-document.service.ts` - PDF de nota de despacho.
+
+### Public Reception (Fase 9)
+- `public.controller.ts` (>1200 lineas) expone endpoints sin login pero con companyId resuelto via JWT firmado por Portal:
+  - Recepcion de inputs (INPUT_PICTURES via Drive de lila-app desde mayo 2026).
+  - Recepcion de mediciones y movimientos financieros.
+  - Subida via TUS (`tus-upload.service.ts`) para archivos grandes.
+- Callbacks a Portal: `portal-actions.service.ts` (POST JWT-signed a `/api/internal/*`).
+
+### Storage Multi-Tenant
+- Raiz: `FILE_STORAGE_ROOT` (default `/mnt/constroad-storage`) en produccion, `./data/` en dev.
+- Path resolution: `storage-path.service.ts` -> `companies/{companyId}/{section}/...`.
+- Naming seguro: `storage-file-name.service.ts`.
+- Thumbnails on-demand: `thumbnail.service.ts`, `thumbnail-request.service.ts`.
+- Compresion de imagenes: `image-compression.service.ts`.
+- Streaming de video: `video-stream.service.ts` (FFmpeg via `ffmpeg.service.ts`).
+
+### Drive local + PDF preview
+- `drive.controller.ts` + `drive.store.ts` (data/drive en dev, multi-tenant en prod).
+- `drive-pdf.controller.ts` renderiza paginas PDF a PNG (pdfjs-dist + canvas) y cachea en `data/drive-cache` o `{storage}/temp/drive-cache`.
+
+### Service Migrations
+- `service-migration.controller.ts` + `service-migration.service.ts` + `service-migration.helpers.ts`.
+- Migracion cross-company de ordenes, servicios, despachos, medias, folders, clientes, transportes.
+
+### Cron Jobs
+- `jobs.controller.v2.ts` + `scheduler.service.ts`.
+- Persistencia migrada a MongoDB Portal (ver `scripts/migrate-cronjobs-to-mongo.ts`); fallback a JSON.
+- Tipos: `api` (axios GET) y `message` (WhatsApp).
+
+### MongoDB Portal (Fase 10 - Quotas)
+- Conexion compartida con pool y circuit breaker: `src/database/sharedConnection.ts`.
+- Modelos read-only del Portal: `src/database/models.ts` (Company, CronJob, Config).
+- `quota-validator.service.ts` (singleton) - valida quotas WhatsApp/storage/usuarios antes de operaciones costosas.
+- Middleware `requireTenant` valida JWT y carga `req.companyId`.
+
+### Telegram (Alertas + Cola)
+- `telegram-alert.service.ts` - alertas de errores con deduplicacion.
+- `telegram-queue.ts` - cola persistente en `data/telegram-alerts/queue.json` con retry (max 5 intentos, TTL 24h).
+- Flusher background arrancado en `src/index.ts:362` via `startTelegramQueueFlusher()`.
+- Usado por: dispatch-post-process, public reception, quota violations, tailscale watchdog.
+
+### Tailscale (resiliencia red)
+- Scripts: `scripts/tailscale-funnel-watchdog.sh`, `scripts/tailscale-external-probe.sh`.
+- Notifica via Telegram cuando el funnel cae (commits "tailscale funnel" mayo 2026).
+
+## Rutas montadas (src/index.ts:197-207)
+
 ```
-[Clients]
-   | HTTP
-   v
-[Express API]-------------------------------+
-   |                                         |
-   | uses                                    | serves
-   v                                         v
-[WhatsApp ConnectionManager]           [Static Files]
-   |                                         |
-   | events                                  | /files (drive)
-   v                                         | /pdf-temp
-[Message Listener]                           |
-   |                                         v
-   | -> AgentService (Claude)           [Local FS]
-   v
-[ConversationManager -> JsonStore]
-
-[JobScheduler] -> (API call via axios) / (WhatsApp message)
-[PDF Generator] -> Puppeteer -> uploads/
-[PDF Render] -> pdfjs + canvas -> drive-cache/
+/api/sessions                     sesiones WhatsApp (alias /api/session)
+/api/jobs                         cron jobs
+/api/message                      envio WhatsApp
+/api/pdf                          generacion PDF generica + vale
+/api/drive                        drive local
+/api/documents                    informes con schemas
+/api/dispatch                     dispatch + post-process + vale
+/api/public                       recepcion publica (JWT firma Portal)
+/api/service-management-report    CRUD informes de servicio (con edit-lock)
+/api/service-migrations           migraciones cross-company
+/files/companies/{companyId}/...  static multi-tenant
 ```
 
-## Flujos principales
+## Flujos clave
 
-### 1) Inicio del servidor
-- `src/index.ts` crea Express, aplica helmet/cors, parsing JSON, logging y rate limit.
-- Inicializa servicios:
-  - PDF Generator (Puppeteer) y asegura `data/pdf-temp`.
-  - Job Scheduler (carga jobs persistidos y programa activos).
-  - Reconexion de sesiones WhatsApp guardadas.
-- Expone UI de Swagger en `/docs` usando `src/api/docs/openapi.ts`.
-- Limpieza semanal del directorio `data/pdf-temp` con `node-cron`.
+### 1) Generacion de vale (dispatch)
+1. Portal llama `POST /api/dispatch/generate-vale` con JWT.
+2. `dispatch-vale.service` arma payload (`dispatch-vale-payload.service`).
+3. Rellena plantilla PDF con coordenadas + membrete empresa (`document-letterhead.service`).
+4. `dispatch-notifications.service` opcionalmente envia por WhatsApp/Telegram.
+5. Callback opcional a Portal con `portal-actions.service`.
 
-### 2) Sesiones WhatsApp
-- Endpoint `POST /api/sessions` y alias `POST /api/session`.
-- `ConnectionManager` crea socket Baileys, guarda credenciales multi-archivo en `data/sessions/{phone}`.
-- QR disponible en `GET /api/sessions/:phone/qr` (PNG o JSON).
-- Estado en `GET /api/sessions/:phone/status`.
-- Reconexion automatica segun `config.whatsapp.autoReconnect`.
+### 2) Recepcion publica (input migration to Drive)
+1. Portal genera enlace publico + JWT corto.
+2. Usuario sube archivo a `/api/public/inputs/...` (TUS para grandes).
+3. lila-app valida JWT, quota (`quota-validator`), guarda en `companies/{companyId}/inputs/`.
+4. Genera thumbnail on-demand, callback a Portal MongoDB para sincronizar Media.
 
-### 3) Envio de mensajes
-- Endpoints bajo `/api/message` (texto, imagen, video, archivo) usando multer en memoria.
-- `message.controller.ts` valida parametros, normaliza destinatario y usa Baileys `sendMessage`.
+### 3) Generacion de informe de servicio (VAL-SRV, etc.)
+1. Portal solicita `POST /api/documents/generate?code=VAL-SRV`.
+2. `report-data-aggregator` lee data desde Portal Mongo (read-only).
+3. `report-html-renderer` aplica template Handlebars + branding empresa.
+4. `document-letterhead.service` inyecta membrete configurado (por tipo de reporte).
+5. Folio sequencial via `folio-generator`.
+6. PDF generado en `uploads/` (o `storage-path` multi-tenant).
 
-### 4) Mensajes entrantes y agente IA
-- `ConnectionManager` escucha `messages.upsert` y pasa a `MessageListener`.
-- **As-is**: `MessageListener.handleIncomingMessage` retorna al inicio (IA deshabilitada temporalmente).
-- Si se habilita, flujo esperado:
-  - Se crea/recupera conversacion en `ConversationManager`.
-  - Se llama a Claude (Anthropic) con prompt y contexto.
-  - Se simula escritura humana y se responde por WhatsApp.
+### 4) Migracion cross-company
+1. Portal solicita `POST /api/service-migrations` (source + target companyId).
+2. Validacion preflight (`service-migration.helpers`).
+3. Copia ordenes, despachos, medias, folders, clientes, transportes con normalizacion (placas, etc.).
 
-### 5) Cron jobs
-- CRUD en `/api/jobs`.
-- `JobScheduler` persiste en `data/cronjobs.json` via `JsonStore`.
-- Dos tipos de job:
-  - `api`: request GET via axios con timeout.
-  - `message`: envio WhatsApp usando `ConnectionManager`.
-- Historial basico en el mismo JSON (max 10 entradas).
-
-### 6) PDFs
-- `POST /api/pdf/generate`: usa Handlebars + Puppeteer y guarda en `uploads/`.
-- `POST /api/pdf/templates`: crea template `.hbs` en `templates/pdf/`.
-- `POST /api/pdf/generate-vale`: llena una plantilla PDF (por defecto `templates/pdf/plantilla_dispatch_note.pdf`) con coordenadas y opcionalmente notifica por WhatsApp/Telegram.
-- `GET /api/pdf/templates/preview-grid`: genera preview con grilla para ubicar coordenadas.
-
-### 7) Drive local y preview PDF
-- `GET /api/drive/list`, `POST /api/drive/files`, etc. manejan archivos en `data/drive`.
-- Se publica contenido en `config.drive.publicBaseUrl` (default `/files`).
-- `drive-pdf.controller.ts` renderiza paginas PDF a PNG y guarda cache en `data/drive-cache`.
+### 5) Cron de alertas
+- Tailscale watchdog (script externo) detecta caida -> notifica Telegram.
+- Quota validator -> excede 95% -> encola alerta Telegram para admin.
 
 ## Persistencia y artefactos
-- `data/sessions/`: credenciales y estado de Baileys por sesion.
-- `data/conversations/`: conversaciones por chat via `JsonStore`.
-- `data/cronjobs.json`: definicion e historial de cron jobs.
-- `data/drive/`: almacenamiento de archivos.
-- `data/drive-cache/`: cache de previews PDF.
-- `data/pdf-temp/`: temporales PDF (limpieza semanal).
-- `uploads/`: PDFs generados.
-- `logs/`: logs de Winston (error.log, combined.log).
-- `dist/`: salida compilada (generada).
+- `data/sessions/`: credenciales Baileys por sesion.
+- `data/conversations/`: historial IA (no usado en prod actualmente).
+- `data/cronjobs.json`: fallback si no hay MongoDB.
+- `data/drive/`, `data/drive-cache/`: drive local en dev.
+- `data/pdf-temp/`: PDF temporales (limpieza programada).
+- `data/telegram-alerts/queue.json`: cola persistente de alertas.
+- `{FILE_STORAGE_ROOT}/companies/{companyId}/`: archivos multi-tenant en prod.
+- `uploads/`: PDFs generados (legacy/non-tenant).
+- `logs/`: Winston (error.log, combined.log).
+- `dist/`: build esbuild.
 
-## Configuracion
-Definida en `src/config/environment.ts` y alimentada por `.env` / `.env.development`.
-Principales claves:
-- `PORT`, `NODE_ENV`.
-- `ANTHROPIC_API_KEY`.
-- `WHATSAPP_SESSION_DIR`, `WHATSAPP_AUTO_RECONNECT`, `WHATSAPP_AI_ENABLED`, `WHATSAPP_AI_TEST_NUMBER`.
-- `CRONJOBS_STORAGE`.
-- `PDF_TEMPLATES_DIR`, `PDF_UPLOADS_DIR`, `PDF_TEMP_DIR`, `PDF_TEMP_PUBLIC_BASE_URL`.
-- `DRIVE_ROOT_DIR`, `DRIVE_PUBLIC_BASE_URL`, `DRIVE_CACHE_DIR`, `DRIVE_MAX_FILE_SIZE_MB`.
-- `API_SECRET_KEY`, `RATE_LIMIT_MAX`, `LOG_LEVEL`, `LOG_DIR`.
+## Configuracion (src/config/environment.ts)
 
-## Seguridad y observabilidad
-- `helmet` y `cors` habilitados globalmente.
-- Rate limiting por IP en `apiLimiter` con excepciones por host/origin.
-- `validateApiKey` existe pero no esta aplicado en rutas (as-is).
-- Winston escribe logs estructurados en `logs/`.
+| Variable | Default | Uso |
+|----------|---------|-----|
+| `PORT` | 3001 | HTTP port |
+| `NODE_ENV` | development | |
+| `WHATSAPP_SESSION_DIR` | `./data/sessions` | Baileys creds |
+| `WHATSAPP_AUTO_RECONNECT` | true | |
+| `WHATSAPP_MAX_RECONNECT_ATTEMPTS` | 0 | 0 = unlimited |
+| `WHATSAPP_AI_ENABLED` | false | Listener Claude (deshabilitado) |
+| `WHATSAPP_AI_TEST_NUMBER` | 51949376824 | Solo whitelist en test |
+| `WHATSAPP_BAILEYS_LOG_LEVEL` | fatal | |
+| `ANTHROPIC_API_KEY` | - | Claude API |
+| `TELEGRAM_BOT_TOKEN` | - | Bot Telegram para alertas |
+| `TELEGRAM_ALERTS_CHAT_ID` | - | Chat destino (fallback `TELEGRAM_ERRORS_CHAT_ID`) |
+| `PORTAL_MONGO_URI` | mongodb://localhost:27017 | Mongo Portal (mismo cluster) |
+| `PORTAL_SHARED_DB` | constroad_db | DB unificada multi-tenant |
+| `PORTAL_BASE_URL` | http://localhost:3000 | Callbacks HTTP a Portal |
+| `CRONJOBS_STORAGE` | `./data/cronjobs.json` | Fallback storage |
+| `PDF_TEMPLATES_DIR` | `./templates/pdf` | Handlebars + PDF base |
+| `PDF_UPLOADS_DIR` | `./uploads` | |
+| `PDF_TEMP_DIR` | `./data/pdf-temp` o `{STORAGE_ROOT}/temp/pdf-preview` | |
+| `PDF_TEMP_PUBLIC_BASE_URL` | `/pdf-temp` | |
+| `FILE_STORAGE_ROOT` | `/mnt/constroad-storage` | Raiz multi-tenant |
+| `DRIVE_MAX_FILE_SIZE_MB` | 25 | |
+| `DRIVE_CACHE_DIR` | derivado | |
+| `API_SECRET_KEY` | dev-secret-key | API key legacy |
+| `JWT_SECRET` | dev-jwt-secret | **Debe igualar `LILA_APP_JWT_SECRET` del Portal** |
+| `RATE_LIMIT_WINDOW` / `RATE_LIMIT_MAX` | 5m / 200 | Por IP |
+| `LILA_APP_CORS_ORIGINS` | - | CSV de origenes permitidos |
+| `TRUST_PROXY` | 1 en prod | Header X-Forwarded-* |
+| `LOG_LEVEL` / `LOG_DIR` | info / `./logs` | Winston |
 
-## Ejecucion y build
-- `npm run dev`: `tsx src/index.ts`.
-- `npm run build`: bundle con esbuild a `dist/`.
+## Seguridad
+- `helmet` + `cors` (origenes via env).
+- Rate limiting por IP (`apiLimiter`) con excepciones por host/origin de Portal.
+- JWT por request via middleware `requireTenant`; companyId nunca proviene del cliente.
+- API keys publicas hasheadas SHA-256 en Mongo Portal.
+- Path traversal blocks en `storage-path.service`.
+- File name sanitization en `storage-file-name.service`.
+
+## Observabilidad
+- Winston logs estructurados en `logs/`.
+- Request logger middleware.
+- Tailscale watchdog notifica Telegram en caidas de red.
+- Quota validator emite alertas a 80%, 95%, 100%.
+
+## Ejecucion
+- `npm run dev`: `tsx src/index.ts` con hot reload.
+- `npm run dev:resilient`: `resilient-dev.cjs` con auto-restart.
+- `npm run build`: bundle esbuild a `dist/`.
 - `npm start`: ejecuta `dist/index.js`.
+- PM2 opcional (ver `nodemon.json` legacy).
 
 ## Dependencias externas
 - WhatsApp: `@whiskeysockets/baileys`.
-- IA: `@anthropic-ai/sdk`.
+- IA: `@anthropic-ai/sdk` (instalado, no usado en runtime).
+- DB: `mongoose` (Portal MongoDB).
 - Cron: `node-cron`.
-- HTTP jobs: `axios`.
+- HTTP: `axios`.
 - PDF: `puppeteer`, `handlebars`, `pdf-lib`, `pdfjs-dist`, `@napi-rs/canvas`.
-- API: `express`, `helmet`, `cors`, `express-rate-limit`, `multer`.
+- Imagenes/video: `sharp`, `ffmpeg-static`, `fluent-ffmpeg`.
+- API: `express`, `helmet`, `cors`, `express-rate-limit`, `multer`, `formidable`.
+- TUS: `@tus/server` para uploads resumibles.
+- Logs: `winston`.
 
-## Observaciones as-is
-- Listener de IA esta deshabilitado por un `return` temprano en `message.listener.ts`.
-- Endpoints de mensajes se montan bajo `/api/message` (singular), mientras que la documentacion menciona `/api/messages`.
-- Seguridad por API key no esta aplicada en las rutas (solo existe helper y excepciones en rate limiter).
-- PDFs generados con Puppeteer requieren entorno con Chromium y permisos adecuados.
+## Tests
+- Jest configurado (`jest.config.cjs`).
+- Tests existentes: `telegram-queue`, `telegram-alert`, `service-migration.helpers`, `dispatch-post-process`, `dispatch-vale`, `dispatch-notifications`, `storage-file-name`, `thumbnail-request`, `whatsapp-media-source.util`.
+- Cobertura: parcial, foco en services criticos.
+
+## Observaciones as-is / deuda
+- Listener IA permanece en repo pero deshabilitado (early return + flag).
+- `/api/message` (singular) ya no es `messages.controller.ts` original sino la version `.simple.ts`.
+- `data/cronjobs.json` aun se lee como fallback; migracion completa a Mongo en `scripts/migrate-cronjobs-to-mongo.ts`.
+- Validacion API key legacy (`validateApiKey`) coexiste con JWT multi-tenant.
+- PDFs requieren Chromium para Puppeteer (verificar imagen Docker / runtime PM2).
+- Algunos tests dependen de fixtures locales sin mocking del Mongo Portal.
+
+## Cambios recientes (Mayo - Junio 2026)
+- **Junio 2026**: enhancements de red (`network enhancements`), control tanks integrados con Portal, alertas Telegram cuando Tailscale cae.
+- **Mayo 2026**: cola Telegram persistente, multiples mejoras de informe IAA y dispatch, refactor dispatch IPP, migracion de inputs Telegram -> Drive lila-app (paths `companies/{id}/inputs/`), migracion de ordenes y servicios cross-company, informe liquidacion (LIQ-SRV), control de pista, imprimacion reportes.
+- **Abril 2026**: dispatch post-process workflow, expense public + duplicate WhatsApp message fix, service migration v2.
