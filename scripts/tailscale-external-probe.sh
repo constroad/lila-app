@@ -195,6 +195,9 @@ action_tailscale_down_up() {
   "$TAILSCALE" down >> "$LOG_FILE" 2>&1 || true
   sleep 3
   "$TAILSCALE" up >> "$LOG_FILE" 2>&1 || true
+  # Keep DNS decoupled from Tailscale: MagicDNS (100.100.100.100) flapping on
+  # down/up was breaking the app's MongoDB SRV lookups (querySrv ECONNREFUSED).
+  "$TAILSCALE" set --accept-dns=false >> "$LOG_FILE" 2>&1 || true
   sleep 5
   "$TAILSCALE" funnel --bg "$PORT" >> "$LOG_FILE" 2>&1 || true
 }
