@@ -54,6 +54,7 @@ type PublicReceptionInput = {
   purchaseOrderNumber?: string;
   driver?: string;
   m3?: number;
+  arriveDate?: string;
   files: UploadedReceptionFile[];
 };
 
@@ -273,6 +274,7 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
       purchaseOrderNumber: trimValue(req.body?.purchaseOrderNumber) || undefined,
       driver: trimValue(req.body?.driver),
       m3: parseNumber(req.body?.m3, 0),
+      arriveDate: trimValue(req.body?.arriveDate) || undefined,
       files,
     };
 
@@ -763,7 +765,7 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       vendorProviderName: input.vendorProviderName,
       purchaseOrderId: input.purchaseOrderId,
       purchaseOrderNumber: input.purchaseOrderNumber,
-      arriveDate: new Date().toLocaleString(),
+      arriveDate: input.arriveDate || new Date().toLocaleString(),
       source: 'public-reception',
       inputMode: input.inputMode,
       deviceName: input.deviceName,
@@ -814,7 +816,7 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       vendorProviderName: input.vendorProviderName,
       purchaseOrderId: input.purchaseOrderId,
       purchaseOrderNumber: input.purchaseOrderNumber,
-      arriveDate: new Date().toLocaleString(),
+      arriveDate: input.arriveDate || new Date().toLocaleString(),
       source: 'public-reception',
       inputMode: input.inputMode,
       deviceName: input.deviceName,
@@ -847,6 +849,7 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
     vendorProviderName: input.vendorProviderName,
     purchaseOrderId: input.purchaseOrderId,
     purchaseOrderNumber: input.purchaseOrderNumber,
+    arriveDate: input.arriveDate || activeInput.arriveDate,
     status: 'Completed',
     source: 'public-reception',
     inputMode: input.inputMode,

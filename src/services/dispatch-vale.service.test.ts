@@ -50,6 +50,22 @@ jest.mock('./dispatch-vale-payload.service.js', () => ({
 jest.mock('../models/dispatch-vale-run.model.js', () => ({
   getDispatchValeRunModel: jest.fn(),
 }));
+jest.mock('../middleware/quota.middleware.js', () => ({
+  incrementStorageUsage: jest.fn().mockResolvedValue(0),
+  decrementStorageUsage: jest.fn().mockResolvedValue(0),
+}));
+jest.mock('./storage-path.service.js', () => ({
+  storagePathService: {
+    resolvePath: jest.fn((companyId: string, relativePath: string) =>
+      `/tmp/lila-app-test-storage/companies/${companyId}/${relativePath}`
+    ),
+    ensureDir: jest.fn((dirPath: string) => {
+      const fsExtra = jest.requireActual('fs-extra');
+      return fsExtra.ensureDir(dirPath);
+    }),
+    validateAccess: jest.fn().mockReturnValue(true),
+  },
+}));
 
 const axios = require('axios');
 const { getCompanyModel } = require('../database/models.js');
@@ -730,6 +746,7 @@ describe('runPublicReceptionWorkflow', () => {
     await runPublicReceptionWorkflow({
       kind: 'measure',
       companyId: 'constroad',
+      lilaPublicBaseUrl: 'https://lila.constroad.com',
       telegramChatId: '-100medias',
       typeId: 'tanque-pen-3',
       measureName: 'PEN #3',
@@ -805,6 +822,7 @@ describe('runPublicReceptionWorkflow', () => {
       kind: 'input',
       inputMode: 'standard',
       companyId: 'constroad',
+      lilaPublicBaseUrl: 'https://lila.constroad.com',
       telegramChatId: '-100medias',
       deviceName: 'Tablet Planta 1',
       materialId: 'material-1',
@@ -816,6 +834,7 @@ describe('runPublicReceptionWorkflow', () => {
       chancadora: 'Planta principal',
       driver: 'ABC-123',
       m3: 12.5,
+      arriveDate: '08/06/2026, 7:45:00 p. m.',
       files: [
         {
           path: tempFilePath,
@@ -833,6 +852,8 @@ describe('runPublicReceptionWorkflow', () => {
         chancadora: 'Planta principal',
         driver: 'ABC-123',
         m3: 12.5,
+        arriveDate: '08/06/2026, 7:45:00 p. m.',
+        deviceName: 'Tablet Planta 1',
         providerName: 'Transportes Norte',
       }),
       expect.any(Object)
