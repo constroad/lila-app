@@ -12,9 +12,53 @@ export function validatePhone(phone: string): boolean {
 }
 
 export function validateCronExpression(cron: string): boolean {
-  // Validación básica de expresión cron (5 campos)
-  const cronRegex = /^((\d+,)*\d+|\*)(\/\d+)?( ((\d+,)*\d+|\*)(\/\d+)?){4}$/;
-  return cronRegex.test(cron);
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+
+  const ranges = [
+    { min: 0, max: 59 },
+    { min: 0, max: 23 },
+    { min: 1, max: 31 },
+    { min: 1, max: 12 },
+    { min: 0, max: 7 },
+  ];
+
+  return parts.every((part, index) => isValidCronField(part, ranges[index]));
+}
+
+function isValidCronField(field: string, range: { min: number; max: number }): boolean {
+  if (!field) return false;
+  return field.split(",").every((segment) => isValidCronSegment(segment, range));
+}
+
+function isValidCronSegment(segment: string, range: { min: number; max: number }): boolean {
+  const parts = segment.split("/");
+  if (parts.length > 2) return false;
+
+  const [base, stepText] = parts;
+  if (!base) return false;
+
+  if (stepText !== undefined) {
+    if (!/^\d+$/.test(stepText)) return false;
+    const step = Number(stepText);
+    if (step < 1 || step > range.max) return false;
+  }
+
+  if (base === "*") return true;
+
+  const rangeMatch = base.match(/^(\d+)-(\d+)$/);
+  if (rangeMatch) {
+    const start = Number(rangeMatch[1]);
+    const end = Number(rangeMatch[2]);
+    return start >= range.min && end <= range.max && start <= end;
+  }
+
+  if (/^\d+$/.test(base)) {
+    const value = Number(base);
+    return value >= range.min && value <= range.max;
+  }
+
+  return false;
 }
 
 const cronExpressionSchema = Joi.string()

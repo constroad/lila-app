@@ -6,6 +6,7 @@ import {
   calculateEarliestNextRun,
   normalizeCronExpressions,
 } from "../utils/cronHelpers.js";
+import { validateCronExpression } from "../utils/validators.js";
 import logger from "../utils/logger.js";
 
 interface ScheduledTask {
@@ -267,7 +268,30 @@ class JobSchedulerV2 {
         job.schedule.cronExpression,
         job.schedule.cronExpressions,
       );
-      const tasks = expressions.map((expression) => ({
+      const validExpressions = expressions.filter(validateCronExpression);
+      const invalidExpressions = expressions.filter(
+        (expression) => !validateCronExpression(expression),
+      );
+
+      if (invalidExpressions.length > 0) {
+        logger.error("[JobScheduler] Ignoring invalid cron expressions", {
+          jobId,
+          name: job.name,
+          companyId: job.companyId,
+          invalidExpressions,
+        });
+      }
+
+      if (validExpressions.length === 0) {
+        logger.error("[JobScheduler] Job has no valid cron expressions", {
+          jobId,
+          name: job.name,
+          companyId: job.companyId,
+        });
+        return;
+      }
+
+      const tasks = validExpressions.map((expression) => ({
         jobId,
         task: cron.schedule(
           expression,
@@ -288,7 +312,7 @@ class JobSchedulerV2 {
           jobId,
           name: job.name,
           companyId: job.companyId,
-          expressions,
+          expressions: validExpressions,
           timezone: job.schedule.timezone || "America/Lima",
         });
       }

@@ -1,4 +1,8 @@
-import { validateCronJobCreate, validateCronJobUpdate } from "../validators";
+import {
+  validateCronExpression,
+  validateCronJobCreate,
+  validateCronJobUpdate,
+} from "../validators";
 
 describe("validators", () => {
   it("valida la creacion de un cronjob de mensaje", () => {
@@ -61,6 +65,14 @@ describe("validators", () => {
         (error) => error.field === "schedule.cronExpressions.0",
       ),
     ).toBe(true);
+  });
+
+  it("rechaza intervalos cron fuera del rango del campo", () => {
+    expect(validateCronExpression("*/240 * * * *")).toBe(false);
+  });
+
+  it("acepta el formato correcto para correr cada 4 horas", () => {
+    expect(validateCronExpression("0 */4 * * *")).toBe(true);
   });
 
   it("rechaza creacion sin companyId", () => {

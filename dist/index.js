@@ -23255,8 +23255,43 @@ import { Router as Router2 } from "express";
 // src/utils/validators.ts
 import Joi from "joi";
 function validateCronExpression(cron3) {
-  const cronRegex = /^((\d+,)*\d+|\*)(\/\d+)?( ((\d+,)*\d+|\*)(\/\d+)?){4}$/;
-  return cronRegex.test(cron3);
+  const parts = cron3.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const ranges = [
+    { min: 0, max: 59 },
+    { min: 0, max: 23 },
+    { min: 1, max: 31 },
+    { min: 1, max: 12 },
+    { min: 0, max: 7 }
+  ];
+  return parts.every((part, index) => isValidCronField(part, ranges[index]));
+}
+function isValidCronField(field, range) {
+  if (!field) return false;
+  return field.split(",").every((segment) => isValidCronSegment(segment, range));
+}
+function isValidCronSegment(segment, range) {
+  const parts = segment.split("/");
+  if (parts.length > 2) return false;
+  const [base, stepText] = parts;
+  if (!base) return false;
+  if (stepText !== void 0) {
+    if (!/^\d+$/.test(stepText)) return false;
+    const step = Number(stepText);
+    if (step < 1 || step > range.max) return false;
+  }
+  if (base === "*") return true;
+  const rangeMatch = base.match(/^(\d+)-(\d+)$/);
+  if (rangeMatch) {
+    const start = Number(rangeMatch[1]);
+    const end = Number(rangeMatch[2]);
+    return start >= range.min && end <= range.max && start <= end;
+  }
+  if (/^\d+$/.test(base)) {
+    const value = Number(base);
+    return value >= range.min && value <= range.max;
+  }
+  return false;
 }
 var cronExpressionSchema = Joi.string().custom((value, helpers) => {
   if (!validateCronExpression(value)) {
@@ -24161,7 +24196,27 @@ var JobSchedulerV2 = class {
         job.schedule.cronExpression,
         job.schedule.cronExpressions
       );
-      const tasks = expressions.map((expression) => ({
+      const validExpressions = expressions.filter(validateCronExpression);
+      const invalidExpressions = expressions.filter(
+        (expression) => !validateCronExpression(expression)
+      );
+      if (invalidExpressions.length > 0) {
+        logger_default.error("[JobScheduler] Ignoring invalid cron expressions", {
+          jobId,
+          name: job.name,
+          companyId: job.companyId,
+          invalidExpressions
+        });
+      }
+      if (validExpressions.length === 0) {
+        logger_default.error("[JobScheduler] Job has no valid cron expressions", {
+          jobId,
+          name: job.name,
+          companyId: job.companyId
+        });
+        return;
+      }
+      const tasks = validExpressions.map((expression) => ({
         jobId,
         task: cron.schedule(
           expression,
@@ -24180,7 +24235,7 @@ var JobSchedulerV2 = class {
           jobId,
           name: job.name,
           companyId: job.companyId,
-          expressions,
+          expressions: validExpressions,
           timezone: job.schedule.timezone || "America/Lima"
         });
       }
