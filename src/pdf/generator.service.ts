@@ -2,10 +2,73 @@ import puppeteer, { Browser, Page } from 'puppeteer';
 import Handlebars from 'handlebars';
 import fs from 'fs-extra';
 import path from 'path';
+import os from 'os';
 import { randomUUID } from 'crypto';
 import logger from '../utils/logger.js';
 import { PDFGenerationRequest } from '../types/index.js';
 import { config } from '../config/environment.js';
+
+/**
+ * Resuelve el ejecutable de Chrome a usar por Puppeteer.
+ *
+ * El Chromium que Puppeteer 21 descarga por defecto (Chrome 121) se rompe tras
+ * actualizaciones de macOS ("Failed to launch the browser process" / exit 133 /
+ * "unexpected crash info version"). Para evitarlo preferimos el Chrome del
+ * sistema (canal estable, se auto-actualiza con el OS) y, si no, el build de
+ * Puppeteer más nuevo en caché — saltando explícitamente las versiones viejas
+ * y rotas. Override manual con PUPPETEER_EXECUTABLE_PATH.
+ */
+function resolveChromeExecutable(): string | undefined {
+  const candidates: string[] = [];
+
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    candidates.push(process.env.PUPPETEER_EXECUTABLE_PATH);
+  }
+
+  // Chrome estable del sistema (macOS): se mantiene compatible con el OS.
+  candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+
+  // Builds de Puppeteer en caché, del más nuevo al más viejo, descartando los
+  // anteriores a la 130 que crashean en macOS recientes.
+  try {
+    const cacheRoot = path.join(os.homedir(), '.cache', 'puppeteer', 'chrome');
+    const builds = fs
+      .readdirSync(cacheRoot)
+      .map((name) => {
+        const major = Number((name.match(/mac_arm-(\d+)\./) || [])[1] || 0);
+        return { name, major };
+      })
+      .filter((b) => b.major >= 130)
+      .sort((a, b) => b.major - a.major);
+    for (const b of builds) {
+      candidates.push(
+        path.join(
+          cacheRoot,
+          b.name,
+          'chrome-mac-arm64',
+          'Google Chrome for Testing.app',
+          'Contents',
+          'MacOS',
+          'Google Chrome for Testing'
+        )
+      );
+    }
+  } catch {
+    // sin caché legible: seguimos con los demás candidatos
+  }
+
+  for (const candidate of candidates) {
+    try {
+      if (candidate && fs.existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {
+      // ignorar candidato inaccesible
+    }
+  }
+
+  return undefined; // último recurso: dejar que Puppeteer use su default
+}
 
 export class PDFGenerator {
   private browser: Browser | null = null;
@@ -42,9 +105,15 @@ export class PDFGenerator {
       const headlessMode: boolean | 'new' =
         headlessEnv === 'true' ? true : headlessEnv === 'false' ? false : 'new';
 
+      const executablePath = resolveChromeExecutable();
+      logger.info(
+        `Puppeteer usará Chrome: ${executablePath || '(default de Puppeteer)'}`
+      );
+
       const launchBrowser = async (headless: boolean | 'new') =>
         puppeteer.launch({
           headless,
+          ...(executablePath ? { executablePath } : {}),
           protocolTimeout: this.protocolTimeout,
           args: [
             '--no-sandbox',
