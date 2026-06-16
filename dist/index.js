@@ -304,6 +304,243 @@ var init_json_store = __esm({
   }
 });
 
+// src/services/telegram-queue.ts
+import path4 from "path";
+import { randomUUID } from "crypto";
+var TELEGRAM_QUEUE_LIMITS, STORE_KEY, TelegramQueue, telegramQueueInstance, telegram_queue_default;
+var init_telegram_queue = __esm({
+  "src/services/telegram-queue.ts"() {
+    init_json_store();
+    init_logger();
+    init_environment();
+    TELEGRAM_QUEUE_LIMITS = {
+      MAX_ATTEMPTS: 5,
+      MAX_AGE_MS: 24 * 60 * 60 * 1e3,
+      MAX_QUEUE_SIZE: 1e3
+    };
+    STORE_KEY = "queue";
+    TelegramQueue = class {
+      constructor() {
+        const baseDir = path4.join(config.whatsapp.sessionDir, "../telegram-alerts");
+        this.store = new json_store_default({ baseDir, autoBackup: true });
+      }
+      async list() {
+        const data = await this.store.get(STORE_KEY);
+        return Array.isArray(data) ? data : [];
+      }
+      /**
+       * Enqueue an alert for later retry.
+       * Returns null when an item with the same dedupeKey is already pending
+       * (so dedupe-blocked alerts don't pile up).
+       * Drops the oldest item when MAX_QUEUE_SIZE is reached.
+       */
+      async enqueue(params) {
+        const { message, dedupeKey } = params;
+        const queue2 = await this.list();
+        if (dedupeKey && queue2.some((entry) => entry.dedupeKey === dedupeKey)) {
+          return null;
+        }
+        const item = {
+          id: randomUUID(),
+          message,
+          dedupeKey,
+          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          attempts: 0
+        };
+        queue2.push(item);
+        while (queue2.length > TELEGRAM_QUEUE_LIMITS.MAX_QUEUE_SIZE) {
+          queue2.shift();
+        }
+        await this.store.set(STORE_KEY, queue2);
+        logger_default.info(`[telegram-queue] enqueued alert ${item.id} (pending=${queue2.length})`);
+        return item;
+      }
+      async update(item) {
+        const queue2 = await this.list();
+        const index = queue2.findIndex((entry) => entry.id === item.id);
+        if (index === -1) return;
+        queue2[index] = item;
+        await this.store.set(STORE_KEY, queue2);
+      }
+      async remove(id) {
+        const queue2 = await this.list();
+        const next = queue2.filter((item) => item.id !== id);
+        if (next.length !== queue2.length) {
+          await this.store.set(STORE_KEY, next);
+        }
+      }
+      /**
+       * Drop items that exceed MAX_ATTEMPTS or MAX_AGE_MS.
+       * Returns the count of items dropped.
+       */
+      async prune(now = Date.now()) {
+        const queue2 = await this.list();
+        const remaining = queue2.filter((item) => {
+          const tooOld = now - Date.parse(item.createdAt) > TELEGRAM_QUEUE_LIMITS.MAX_AGE_MS;
+          const tooManyAttempts = item.attempts >= TELEGRAM_QUEUE_LIMITS.MAX_ATTEMPTS;
+          if (tooOld || tooManyAttempts) {
+            logger_default.warn(
+              `[telegram-queue] dropping alert ${item.id} (attempts=${item.attempts}, age=${now - Date.parse(item.createdAt)}ms)`
+            );
+            return false;
+          }
+          return true;
+        });
+        const dropped = queue2.length - remaining.length;
+        if (dropped > 0) {
+          await this.store.set(STORE_KEY, remaining);
+        }
+        return dropped;
+      }
+    };
+    telegramQueueInstance = new TelegramQueue();
+    telegram_queue_default = telegramQueueInstance;
+  }
+});
+
+// src/services/telegram-alert.service.ts
+var telegram_alert_service_exports = {};
+__export(telegram_alert_service_exports, {
+  flushTelegramQueue: () => flushTelegramQueue,
+  resetTelegramAlertCacheForTests: () => resetTelegramAlertCacheForTests,
+  sendTelegramAlert: () => sendTelegramAlert,
+  startTelegramQueueFlusher: () => startTelegramQueueFlusher
+});
+function shouldSendAlert(key) {
+  const now = Date.now();
+  const last = alertCache.get(key);
+  if (last && now - last < ALERT_WINDOW_MS) return false;
+  alertCache.set(key, now);
+  return true;
+}
+function resetTelegramAlertCacheForTests() {
+  alertCache.clear();
+  isFlushing = false;
+}
+function isPermanentHttpStatus(status) {
+  if (status === 408 || status === 429) return false;
+  return status >= 400 && status < 500;
+}
+async function sendOnce(message) {
+  const body = new URLSearchParams();
+  body.append("chat_id", config.telegram.errorsChatId);
+  body.append("text", message);
+  try {
+    const res = await fetch(
+      `https://api.telegram.org/bot${config.telegram.botToken}/sendMessage`,
+      {
+        method: "POST",
+        body,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      }
+    );
+    if (res.ok) return { ok: true };
+    return {
+      ok: false,
+      permanent: isPermanentHttpStatus(res.status),
+      reason: `HTTP ${res.status}`
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      permanent: false,
+      reason: error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+    };
+  }
+}
+async function sendTelegramAlert(params) {
+  const { dedupeKey, message } = params;
+  if (!config.telegram.botToken || !config.telegram.errorsChatId) return false;
+  if (dedupeKey && !shouldSendAlert(dedupeKey)) return false;
+  const result = await sendOnce(message);
+  if (result.ok) return true;
+  if (result.permanent) {
+    logger_default.warn("Telegram alert permanently rejected (not enqueuing)", {
+      reason: result.reason
+    });
+    return false;
+  }
+  logger_default.warn("Failed to send Telegram alert, enqueuing for retry", {
+    reason: result.reason
+  });
+  try {
+    await telegram_queue_default.enqueue({ message, dedupeKey });
+  } catch (queueError) {
+    logger_default.error("Failed to enqueue Telegram alert", queueError);
+  }
+  return false;
+}
+async function flushTelegramQueue() {
+  if (isFlushing) {
+    const remaining = (await telegram_queue_default.list()).length;
+    return { sent: 0, dropped: 0, remaining, skipped: true };
+  }
+  isFlushing = true;
+  let sent = 0;
+  let dropped = 0;
+  try {
+    dropped += await telegram_queue_default.prune();
+    const items = await telegram_queue_default.list();
+    if (items.length === 0) {
+      return { sent: 0, dropped, remaining: 0 };
+    }
+    for (const item of items) {
+      const result = await sendOnce(item.message);
+      if (result.ok) {
+        await telegram_queue_default.remove(item.id);
+        sent++;
+        continue;
+      }
+      if (result.permanent) {
+        logger_default.warn(`[telegram-queue] dropping ${item.id} (permanent ${result.reason})`);
+        await telegram_queue_default.remove(item.id);
+        dropped++;
+        continue;
+      }
+      await telegram_queue_default.update({
+        ...item,
+        attempts: item.attempts + 1,
+        lastError: result.reason
+      });
+      logger_default.warn(
+        `[telegram-queue] transient failure for ${item.id} (attempt ${item.attempts + 1}): ${result.reason}`
+      );
+      break;
+    }
+    const remaining = (await telegram_queue_default.list()).length;
+    return { sent, dropped, remaining };
+  } finally {
+    isFlushing = false;
+  }
+}
+function startTelegramQueueFlusher(intervalMs = DEFAULT_FLUSH_INTERVAL_MS) {
+  const tick = () => {
+    flushTelegramQueue().catch((err) => {
+      logger_default.error("[telegram-queue] flush tick failed", err);
+    });
+  };
+  const handle = setInterval(tick, intervalMs);
+  if (typeof handle.unref === "function") handle.unref();
+  logger_default.info(`[telegram-queue] flusher started (interval=${intervalMs}ms)`);
+  return () => {
+    clearInterval(handle);
+    logger_default.info("[telegram-queue] flusher stopped");
+  };
+}
+var ALERT_WINDOW_MS, FETCH_TIMEOUT_MS, DEFAULT_FLUSH_INTERVAL_MS, alertCache, isFlushing;
+var init_telegram_alert_service = __esm({
+  "src/services/telegram-alert.service.ts"() {
+    init_logger();
+    init_environment();
+    init_telegram_queue();
+    ALERT_WINDOW_MS = 5 * 60 * 1e3;
+    FETCH_TIMEOUT_MS = 5e3;
+    DEFAULT_FLUSH_INTERVAL_MS = 60 * 1e3;
+    alertCache = /* @__PURE__ */ new Map();
+    isFlushing = false;
+  }
+});
+
 // src/whatsapp/baileys/store.manager.ts
 import fs3 from "fs-extra";
 import path5 from "path";
@@ -12680,7 +12917,7 @@ var require_sharp = __commonJS({
     if (sharp5) {
       module.exports = sharp5;
     } else {
-      const [isLinux, isMacOs, isWindows] = ["linux", "darwin", "win32"].map((os) => runtimePlatform.startsWith(os));
+      const [isLinux, isMacOs, isWindows] = ["linux", "darwin", "win32"].map((os2) => runtimePlatform.startsWith(os2));
       const help = [`Could not load the "sharp" module using the ${runtimePlatform} runtime`];
       errors.forEach((err) => {
         if (err.code !== "MODULE_NOT_FOUND") {
@@ -12697,15 +12934,15 @@ var require_sharp = __commonJS({
           `    Requires ${expected}`
         );
       } else if (prebuiltPlatforms.includes(runtimePlatform)) {
-        const [os, cpu] = runtimePlatform.split("-");
-        const libc = os.endsWith("musl") ? " --libc=musl" : "";
+        const [os2, cpu] = runtimePlatform.split("-");
+        const libc = os2.endsWith("musl") ? " --libc=musl" : "";
         help.push(
           "- Ensure optional dependencies can be installed:",
           "    npm install --include=optional sharp",
           "- Ensure your package manager supports multi-platform installation:",
           "    See https://sharp.pixelplumbing.com/install#cross-platform",
           "- Add platform-specific dependencies:",
-          `    npm install --os=${os.replace("musl", "")}${libc} --cpu=${cpu} sharp`
+          `    npm install --os=${os2.replace("musl", "")}${libc} --cpu=${cpu} sharp`
         );
       } else {
         help.push(
@@ -20006,7 +20243,7 @@ var require_has_flag = __commonJS({
 var require_supports_color = __commonJS({
   "node_modules/supports-color/index.js"(exports, module) {
     "use strict";
-    var os = __require("os");
+    var os2 = __require("os");
     var tty = __require("tty");
     var hasFlag = require_has_flag();
     var { env } = process;
@@ -20054,7 +20291,7 @@ var require_supports_color = __commonJS({
         return min;
       }
       if (process.platform === "win32") {
-        const osRelease = os.release().split(".");
+        const osRelease = os2.release().split(".");
         if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
           return Number(osRelease[2]) >= 14931 ? 3 : 2;
         }
@@ -22667,224 +22904,8 @@ var HTTP_STATUS = {
   SERVICE_UNAVAILABLE: 503
 };
 
-// src/services/telegram-alert.service.ts
-init_logger();
-init_environment();
-
-// src/services/telegram-queue.ts
-init_json_store();
-init_logger();
-init_environment();
-import path4 from "path";
-import { randomUUID } from "crypto";
-var TELEGRAM_QUEUE_LIMITS = {
-  MAX_ATTEMPTS: 5,
-  MAX_AGE_MS: 24 * 60 * 60 * 1e3,
-  MAX_QUEUE_SIZE: 1e3
-};
-var STORE_KEY = "queue";
-var TelegramQueue = class {
-  constructor() {
-    const baseDir = path4.join(config.whatsapp.sessionDir, "../telegram-alerts");
-    this.store = new json_store_default({ baseDir, autoBackup: true });
-  }
-  async list() {
-    const data = await this.store.get(STORE_KEY);
-    return Array.isArray(data) ? data : [];
-  }
-  /**
-   * Enqueue an alert for later retry.
-   * Returns null when an item with the same dedupeKey is already pending
-   * (so dedupe-blocked alerts don't pile up).
-   * Drops the oldest item when MAX_QUEUE_SIZE is reached.
-   */
-  async enqueue(params) {
-    const { message, dedupeKey } = params;
-    const queue2 = await this.list();
-    if (dedupeKey && queue2.some((entry) => entry.dedupeKey === dedupeKey)) {
-      return null;
-    }
-    const item = {
-      id: randomUUID(),
-      message,
-      dedupeKey,
-      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      attempts: 0
-    };
-    queue2.push(item);
-    while (queue2.length > TELEGRAM_QUEUE_LIMITS.MAX_QUEUE_SIZE) {
-      queue2.shift();
-    }
-    await this.store.set(STORE_KEY, queue2);
-    logger_default.info(`[telegram-queue] enqueued alert ${item.id} (pending=${queue2.length})`);
-    return item;
-  }
-  async update(item) {
-    const queue2 = await this.list();
-    const index = queue2.findIndex((entry) => entry.id === item.id);
-    if (index === -1) return;
-    queue2[index] = item;
-    await this.store.set(STORE_KEY, queue2);
-  }
-  async remove(id) {
-    const queue2 = await this.list();
-    const next = queue2.filter((item) => item.id !== id);
-    if (next.length !== queue2.length) {
-      await this.store.set(STORE_KEY, next);
-    }
-  }
-  /**
-   * Drop items that exceed MAX_ATTEMPTS or MAX_AGE_MS.
-   * Returns the count of items dropped.
-   */
-  async prune(now = Date.now()) {
-    const queue2 = await this.list();
-    const remaining = queue2.filter((item) => {
-      const tooOld = now - Date.parse(item.createdAt) > TELEGRAM_QUEUE_LIMITS.MAX_AGE_MS;
-      const tooManyAttempts = item.attempts >= TELEGRAM_QUEUE_LIMITS.MAX_ATTEMPTS;
-      if (tooOld || tooManyAttempts) {
-        logger_default.warn(
-          `[telegram-queue] dropping alert ${item.id} (attempts=${item.attempts}, age=${now - Date.parse(item.createdAt)}ms)`
-        );
-        return false;
-      }
-      return true;
-    });
-    const dropped = queue2.length - remaining.length;
-    if (dropped > 0) {
-      await this.store.set(STORE_KEY, remaining);
-    }
-    return dropped;
-  }
-};
-var telegramQueueInstance = new TelegramQueue();
-var telegram_queue_default = telegramQueueInstance;
-
-// src/services/telegram-alert.service.ts
-var ALERT_WINDOW_MS = 5 * 60 * 1e3;
-var FETCH_TIMEOUT_MS = 5e3;
-var DEFAULT_FLUSH_INTERVAL_MS = 60 * 1e3;
-var alertCache = /* @__PURE__ */ new Map();
-function shouldSendAlert(key) {
-  const now = Date.now();
-  const last = alertCache.get(key);
-  if (last && now - last < ALERT_WINDOW_MS) return false;
-  alertCache.set(key, now);
-  return true;
-}
-function isPermanentHttpStatus(status) {
-  if (status === 408 || status === 429) return false;
-  return status >= 400 && status < 500;
-}
-async function sendOnce(message) {
-  const body = new URLSearchParams();
-  body.append("chat_id", config.telegram.errorsChatId);
-  body.append("text", message);
-  try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${config.telegram.botToken}/sendMessage`,
-      {
-        method: "POST",
-        body,
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
-      }
-    );
-    if (res.ok) return { ok: true };
-    return {
-      ok: false,
-      permanent: isPermanentHttpStatus(res.status),
-      reason: `HTTP ${res.status}`
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      permanent: false,
-      reason: error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-    };
-  }
-}
-async function sendTelegramAlert(params) {
-  const { dedupeKey, message } = params;
-  if (!config.telegram.botToken || !config.telegram.errorsChatId) return false;
-  if (dedupeKey && !shouldSendAlert(dedupeKey)) return false;
-  const result = await sendOnce(message);
-  if (result.ok) return true;
-  if (result.permanent) {
-    logger_default.warn("Telegram alert permanently rejected (not enqueuing)", {
-      reason: result.reason
-    });
-    return false;
-  }
-  logger_default.warn("Failed to send Telegram alert, enqueuing for retry", {
-    reason: result.reason
-  });
-  try {
-    await telegram_queue_default.enqueue({ message, dedupeKey });
-  } catch (queueError) {
-    logger_default.error("Failed to enqueue Telegram alert", queueError);
-  }
-  return false;
-}
-var isFlushing = false;
-async function flushTelegramQueue() {
-  if (isFlushing) {
-    const remaining = (await telegram_queue_default.list()).length;
-    return { sent: 0, dropped: 0, remaining, skipped: true };
-  }
-  isFlushing = true;
-  let sent = 0;
-  let dropped = 0;
-  try {
-    dropped += await telegram_queue_default.prune();
-    const items = await telegram_queue_default.list();
-    if (items.length === 0) {
-      return { sent: 0, dropped, remaining: 0 };
-    }
-    for (const item of items) {
-      const result = await sendOnce(item.message);
-      if (result.ok) {
-        await telegram_queue_default.remove(item.id);
-        sent++;
-        continue;
-      }
-      if (result.permanent) {
-        logger_default.warn(`[telegram-queue] dropping ${item.id} (permanent ${result.reason})`);
-        await telegram_queue_default.remove(item.id);
-        dropped++;
-        continue;
-      }
-      await telegram_queue_default.update({
-        ...item,
-        attempts: item.attempts + 1,
-        lastError: result.reason
-      });
-      logger_default.warn(
-        `[telegram-queue] transient failure for ${item.id} (attempt ${item.attempts + 1}): ${result.reason}`
-      );
-      break;
-    }
-    const remaining = (await telegram_queue_default.list()).length;
-    return { sent, dropped, remaining };
-  } finally {
-    isFlushing = false;
-  }
-}
-function startTelegramQueueFlusher(intervalMs = DEFAULT_FLUSH_INTERVAL_MS) {
-  const tick = () => {
-    flushTelegramQueue().catch((err) => {
-      logger_default.error("[telegram-queue] flush tick failed", err);
-    });
-  };
-  const handle = setInterval(tick, intervalMs);
-  if (typeof handle.unref === "function") handle.unref();
-  logger_default.info(`[telegram-queue] flusher started (interval=${intervalMs}ms)`);
-  return () => {
-    clearInterval(handle);
-    logger_default.info("[telegram-queue] flusher stopped");
-  };
-}
-
 // src/api/middlewares/errorHandler.ts
+init_telegram_alert_service();
 function errorHandler(err, req, res, next) {
   const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_ERROR;
   const message = err.message || "Internal Server Error";
@@ -24722,7 +24743,45 @@ import puppeteer from "puppeteer";
 import Handlebars from "handlebars";
 import fs8 from "fs-extra";
 import path11 from "path";
+import os from "os";
 import { randomUUID as randomUUID3 } from "crypto";
+function resolveChromeExecutable() {
+  const candidates = [];
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    candidates.push(process.env.PUPPETEER_EXECUTABLE_PATH);
+  }
+  candidates.push("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
+  try {
+    const cacheRoot = path11.join(os.homedir(), ".cache", "puppeteer", "chrome");
+    const builds = fs8.readdirSync(cacheRoot).map((name) => {
+      const major = Number((name.match(/mac_arm-(\d+)\./) || [])[1] || 0);
+      return { name, major };
+    }).filter((b63) => b63.major >= 130).sort((a49, b63) => b63.major - a49.major);
+    for (const b63 of builds) {
+      candidates.push(
+        path11.join(
+          cacheRoot,
+          b63.name,
+          "chrome-mac-arm64",
+          "Google Chrome for Testing.app",
+          "Contents",
+          "MacOS",
+          "Google Chrome for Testing"
+        )
+      );
+    }
+  } catch {
+  }
+  for (const candidate of candidates) {
+    try {
+      if (candidate && fs8.existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {
+    }
+  }
+  return void 0;
+}
 var PDFGenerator = class {
   constructor() {
     this.browser = null;
@@ -24743,8 +24802,13 @@ var PDFGenerator = class {
       await fs8.ensureDir(this.uploadsDir);
       const headlessEnv = process.env.PUPPETEER_HEADLESS;
       const headlessMode = headlessEnv === "true" ? true : headlessEnv === "false" ? false : "new";
+      const executablePath = resolveChromeExecutable();
+      logger_default.info(
+        `Puppeteer usar\xE1 Chrome: ${executablePath || "(default de Puppeteer)"}`
+      );
       const launchBrowser = async (headless) => puppeteer.launch({
         headless,
+        ...executablePath ? { executablePath } : {},
         protocolTimeout: this.protocolTimeout,
         args: [
           "--no-sandbox",
@@ -25744,6 +25808,7 @@ function buildUniqueStorageFileName(originalName, uniqueSeed) {
 }
 
 // src/api/controllers/drive.controller.ts
+init_telegram_alert_service();
 init_json_store();
 init_environment();
 var MAX_MIGRATION_COPY_ENTRIES = 500;
@@ -61820,6 +61885,7 @@ init_environment();
 init_models();
 import axios5 from "axios";
 init_whatsapp_direct_service();
+init_telegram_alert_service();
 init_whatsapp_phone();
 
 // src/services/dispatch-vale-payload.service.ts
@@ -63165,6 +63231,9 @@ async function processPostDispatch(input) {
   });
 }
 
+// src/api/controllers/dispatch-post-process.controller.ts
+init_telegram_alert_service();
+
 // src/validators/dispatch-post-process.validator.ts
 function isRecord(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -63296,6 +63365,7 @@ import { randomUUID as randomUUID5 } from "crypto";
 import fs25 from "fs-extra";
 import path26 from "path";
 init_storage_path_service();
+init_telegram_alert_service();
 var CACHE_TTL_MS = 5 * 60 * 1e3;
 var PORTAL_TIMEOUT_MS = 3e4;
 var EVIDENCE_UPLOAD_CONCURRENCY = 2;
@@ -64168,8 +64238,281 @@ router8.post(
 );
 var public_routes_default = router8;
 
-// src/api/routes/service-management-report.routes.ts
+// src/api/routes/cron.routes.ts
 import { Router as Router9 } from "express";
+
+// src/services/weather-asphalt-forecast.service.ts
+var WEATHER_ASPHALT_FORECAST = {
+  fetchTimeoutMs: 25e3,
+  timezone: "America/Lima"
+};
+var LOCATIONS = [
+  { name: "Constroad", lat: -11.9894172, lon: -76.8789932 },
+  { name: "Ancon", lat: -11.769, lon: -77.153 },
+  { name: "Ate", lat: -12.016, lon: -76.981 },
+  { name: "Barranco", lat: -12.147, lon: -77.021 },
+  { name: "Brena", lat: -12.062, lon: -77.041 },
+  { name: "Carabayllo", lat: -11.983, lon: -77.081 },
+  { name: "Chaclacayo", lat: -12.049, lon: -76.859 },
+  { name: "Chorrillos", lat: -12.168, lon: -77.026 },
+  { name: "Cieneguilla", lat: -12.116, lon: -76.822 },
+  { name: "Comas", lat: -11.999, lon: -77.06 },
+  { name: "El Agustino", lat: -12.053, lon: -77.033 },
+  { name: "Independencia", lat: -12.008, lon: -77.062 },
+  { name: "Jesus Maria", lat: -12.075, lon: -77.047 },
+  { name: "La Molina", lat: -12.083, lon: -76.926 },
+  { name: "La Victoria", lat: -12.06, lon: -77.017 },
+  { name: "Lima Cercado", lat: -12.046, lon: -77.03 },
+  { name: "Lince", lat: -12.082, lon: -77.021 },
+  { name: "Los Olivos", lat: -11.976, lon: -77.075 },
+  { name: "Lurigancho", lat: -12.016, lon: -76.916 },
+  { name: "Lurin", lat: -12.332, lon: -76.892 },
+  { name: "Magdalena del Mar", lat: -12.098, lon: -77.053 },
+  { name: "Miraflores", lat: -12.121, lon: -77.03 },
+  { name: "Pueblo Libre", lat: -12.1, lon: -77.061 },
+  { name: "Punta Hermosa", lat: -12.343, lon: -77.023 },
+  { name: "Punta Negra", lat: -12.398, lon: -76.946 },
+  { name: "Rimac", lat: -12.042, lon: -77.062 },
+  { name: "San Bartolo", lat: -12.467, lon: -76.78 },
+  { name: "San Borja", lat: -12.092, lon: -77.027 },
+  { name: "San Isidro", lat: -12.097, lon: -77.036 },
+  { name: "San Juan de Lurigancho", lat: -12.016, lon: -77.03 },
+  { name: "San Juan de Miraflores", lat: -12.092, lon: -76.979 },
+  { name: "San Luis", lat: -12.058, lon: -77.025 },
+  { name: "San Martin de Porres", lat: -12.034, lon: -77.055 },
+  { name: "San Miguel", lat: -12.071, lon: -77.093 },
+  { name: "Santa Anita", lat: -12.045, lon: -76.972 },
+  { name: "Santa Maria del Mar", lat: -12.371, lon: -77.019 },
+  { name: "Santa Rosa", lat: -12.119, lon: -77.011 },
+  { name: "Santiago de Surco", lat: -12.117, lon: -77.036 },
+  { name: "Surquillo", lat: -12.103, lon: -77.03 },
+  { name: "Villa El Salvador", lat: -12.174, lon: -76.977 },
+  { name: "Villa Maria del Triunfo", lat: -12.118, lon: -76.983 }
+];
+var WEATHER_API_BASE = "https://api.open-meteo.com/v1/forecast?daily=temperature_2m_mean,precipitation_probability_max,precipitation_sum&timezone=America/Lima";
+var MM_VERY_LOW_MAX = 0.5;
+var MM_LOW_MAX = 1;
+var MM_MODERATE_MAX = 2;
+function getProbBand(prob) {
+  if (prob <= 10) return "none";
+  if (prob <= 24) return "low";
+  if (prob <= 44) return "moderate";
+  return "high";
+}
+function getMmBand(mm) {
+  if (mm < MM_VERY_LOW_MAX) return "very_low";
+  if (mm < MM_LOW_MAX) return "low";
+  if (mm < MM_MODERATE_MAX) return "moderate";
+  return "high";
+}
+function getCombinedRiskLevel(prob, mm) {
+  const probBand = getProbBand(prob);
+  const mmBand = getMmBand(mm);
+  if (mmBand === "very_low") return "ok";
+  if (probBand === "none") return mmBand === "high" ? "moderate_risk" : "ok";
+  if (probBand === "low") {
+    if (mmBand === "moderate") return "moderate_risk";
+    if (mmBand === "high") return "high_risk";
+    return "ok";
+  }
+  if (probBand === "moderate") {
+    if (mmBand === "high") return "high_risk";
+    if (mmBand === "low" || mmBand === "moderate") return "moderate_risk";
+    return "ok";
+  }
+  return "high_risk";
+}
+function getConstroadDecision(level) {
+  if (level === "high_risk") return "NO APTO PARA PRODUCIR";
+  if (level === "moderate_risk") return "RIESGO MODERADO DE LLUVIA";
+  return "APTO PARA PRODUCIR";
+}
+function formatDate2(date) {
+  const opts = { timeZone: WEATHER_ASPHALT_FORECAST.timezone };
+  const dayName = date.toLocaleDateString("es-PE", { ...opts, weekday: "long" });
+  const dayNumber = date.toLocaleDateString("es-PE", { ...opts, day: "numeric" });
+  const month = date.toLocaleDateString("es-PE", { ...opts, month: "long" });
+  return `${dayName.charAt(0).toUpperCase()}${dayName.slice(1)} ${dayNumber} ${month}`;
+}
+function resolveReportDate(run, now = /* @__PURE__ */ new Date()) {
+  const is6amRun = String(run || "").toLowerCase() === "6am" || String(run || "").toLowerCase() === "6";
+  const todayLima = now.toLocaleDateString("en-CA", {
+    timeZone: WEATHER_ASPHALT_FORECAST.timezone
+  });
+  const [year, month, day] = todayLima.split("-").map(Number);
+  const targetDate = new Date(Date.UTC(year, month - 1, day + (is6amRun ? 0 : 1)));
+  return {
+    is6amRun,
+    date: targetDate,
+    dateString: targetDate.toISOString().slice(0, 10)
+  };
+}
+function buildWeatherUrl(forecastDays) {
+  const latitudeParam = LOCATIONS.map((location) => location.lat).join(",");
+  const longitudeParam = LOCATIONS.map((location) => location.lon).join(",");
+  return `${WEATHER_API_BASE}&forecast_days=${forecastDays}&latitude=${latitudeParam}&longitude=${longitudeParam}`;
+}
+async function fetchWithTimeout(url, fetcher) {
+  return fetcher(url, {
+    headers: { Accept: "application/json", "User-Agent": "lila-app-cron/1.0" },
+    signal: AbortSignal.timeout(WEATHER_ASPHALT_FORECAST.fetchTimeoutMs)
+  });
+}
+function parseOpenMeteoResults(payload) {
+  const results = JSON.parse(payload);
+  if (!Array.isArray(results) || results.length !== LOCATIONS.length) {
+    throw new Error(`Open-Meteo response length mismatch: ${results?.length ?? "none"}`);
+  }
+  return results;
+}
+function buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate) {
+  if (constroadRiskyDays.length === 0 && forecastsWithRisk.length === 0) return null;
+  let message = "REPORTE DE CLIMA\n\n";
+  if (constroadRiskyDays.length > 0) {
+    message += "Constroad (Planta de asfalto):\n\n";
+    for (const day of constroadRiskyDays) {
+      message += `  ${formatDate2(day.date)}:
+`;
+      message += `    Prob. lluvia: ${day.prob}% - (${day.mm} mm)
+`;
+      message += `    ${day.decision}
+
+`;
+    }
+  }
+  if (forecastsWithRisk.length > 0) {
+    message += `Distritos con riesgo de lluvia (${formatDate2(reportDate)}):
+
+`;
+    const highRisk = forecastsWithRisk.filter((forecast) => forecast.level === "high_risk");
+    const moderateRisk = forecastsWithRisk.filter((forecast) => forecast.level === "moderate_risk");
+    if (highRisk.length > 0) {
+      message += "NO ASFALTAR - RIESGO ALTO:\n";
+      for (const forecast of highRisk) {
+        message += `  - ${forecast.name.toUpperCase()}:
+`;
+        message += `    Prob. lluvia: ${forecast.prob}% - (${forecast.mm} mm)
+
+`;
+      }
+    }
+    if (moderateRisk.length > 0) {
+      message += "RIESGO MODERADO:\n";
+      for (const forecast of moderateRisk) {
+        message += `  - ${forecast.name.toUpperCase()}:
+`;
+        message += `    Prob. lluvia: ${forecast.prob}% - (${forecast.mm} mm)
+
+`;
+      }
+    }
+  }
+  return message;
+}
+function collectConstroadRisk(results, reportDateString) {
+  const constroadIndex = LOCATIONS.findIndex((location) => location.name === "Constroad");
+  const daily = results[constroadIndex]?.daily;
+  const startIdx = daily?.time?.indexOf(reportDateString) ?? -1;
+  if (!daily || startIdx < 0 || daily.time.length < startIdx + 3) return [];
+  const days = [];
+  for (let offset = 0; offset < 3; offset++) {
+    const idx = startIdx + offset;
+    const prob = daily.precipitation_probability_max[idx];
+    const mm = daily.precipitation_sum[idx];
+    const level = getCombinedRiskLevel(prob, mm);
+    if (level === "ok") continue;
+    days.push({
+      date: /* @__PURE__ */ new Date(`${daily.time[idx]}T12:00:00Z`),
+      prob,
+      mm,
+      decision: getConstroadDecision(level),
+      level
+    });
+  }
+  return days;
+}
+function collectDistrictRisk(results, reportDateString) {
+  const constroadIndex = LOCATIONS.findIndex((location) => location.name === "Constroad");
+  const forecasts = [];
+  for (let index = 0; index < LOCATIONS.length; index++) {
+    if (index === constroadIndex) continue;
+    const daily = results[index]?.daily;
+    const dayIndex = daily?.time?.indexOf(reportDateString) ?? -1;
+    if (!daily || dayIndex < 0) continue;
+    const prob = daily.precipitation_probability_max[dayIndex];
+    const mm = daily.precipitation_sum[dayIndex];
+    const level = getCombinedRiskLevel(prob, mm);
+    if (level === "ok") continue;
+    forecasts.push({ name: LOCATIONS[index].name, prob, mm, level });
+  }
+  return forecasts;
+}
+function buildFailureAlert(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return [
+    "ALERTA: weather-asphalt-forecast fallo",
+    "Servicio: lila-app",
+    `Detalle: ${message}`,
+    `Fecha: ${(/* @__PURE__ */ new Date()).toISOString()}`
+  ].join("\n");
+}
+async function generateWeatherAsphaltForecast(params = {}) {
+  const fetcher = params.fetcher || fetch;
+  const notifyError = params.notifyError || (async (alertParams) => {
+    const { sendTelegramAlert: sendTelegramAlert2 } = await Promise.resolve().then(() => (init_telegram_alert_service(), telegram_alert_service_exports));
+    return sendTelegramAlert2(alertParams);
+  });
+  const reportDate = resolveReportDate(params.run);
+  const forecastDays = reportDate.is6amRun ? 3 : 4;
+  try {
+    const response = await fetchWithTimeout(buildWeatherUrl(forecastDays), fetcher);
+    const responseText = await response.text();
+    if (!response.ok) throw new Error(`Open-Meteo API error: ${response.status}`);
+    const results = parseOpenMeteoResults(responseText);
+    const constroadRiskyDays = collectConstroadRisk(results, reportDate.dateString);
+    const forecastsWithRisk = collectDistrictRisk(results, reportDate.dateString);
+    const message = buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate.date);
+    return {
+      status: "ok",
+      hasRainRisk: Boolean(message),
+      message,
+      mensaje: message
+    };
+  } catch (error) {
+    const telegramAlert = await notifyError({
+      dedupeKey: "weather-asphalt-forecast",
+      message: buildFailureAlert(error)
+    });
+    return {
+      status: "degraded",
+      hasRainRisk: false,
+      message: null,
+      mensaje: null,
+      telegramAlert,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+// src/api/routes/cron.routes.ts
+var router9 = Router9();
+router9.get("/weather-asphalt-forecast", async (req, res, next) => {
+  try {
+    const result = await generateWeatherAsphaltForecast({
+      run: typeof req.query.run === "string" ? req.query.run : void 0
+    });
+    res.status(200).json({
+      ok: true,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+var cron_routes_default = router9;
+
+// src/api/routes/service-management-report.routes.ts
+import { Router as Router10 } from "express";
 
 // src/api/controllers/service-management-report.controller.ts
 init_logger();
@@ -64399,22 +64742,23 @@ function requireAdmin(req, _res, next) {
 }
 
 // src/api/routes/service-management-report.routes.ts
-var router9 = Router9();
-router9.get("/", listReports);
-router9.post("/", requireAdmin, createReport);
-router9.get("/:id", getReport);
-router9.put("/:id", requireAdmin, updateReport);
-router9.delete("/:id", requireAdmin, deleteReport);
-router9.post("/:id/lock", requireAdmin, acquireLock);
-router9.post("/:id/unlock", requireAdmin, releaseLock);
-router9.post("/:id/heartbeat", requireAdmin, heartbeatLock);
-var service_management_report_routes_default = router9;
+var router10 = Router10();
+router10.get("/", listReports);
+router10.post("/", requireAdmin, createReport);
+router10.get("/:id", getReport);
+router10.put("/:id", requireAdmin, updateReport);
+router10.delete("/:id", requireAdmin, deleteReport);
+router10.post("/:id/lock", requireAdmin, acquireLock);
+router10.post("/:id/unlock", requireAdmin, releaseLock);
+router10.post("/:id/heartbeat", requireAdmin, heartbeatLock);
+var service_management_report_routes_default = router10;
 
 // src/api/routes/service-migration.routes.ts
-import { Router as Router10 } from "express";
+import { Router as Router11 } from "express";
 
 // src/services/service-migration.service.ts
 init_sharedConnection();
+init_telegram_alert_service();
 init_logger();
 
 // src/services/service-migration.helpers.ts
@@ -65719,9 +66063,9 @@ async function createServiceMigration(req, res) {
 }
 
 // src/api/routes/service-migration.routes.ts
-var router10 = Router10();
-router10.post("/", requireTenant, createServiceMigration);
-var service_migration_routes_default = router10;
+var router11 = Router11();
+router11.post("/", requireTenant, createServiceMigration);
+var service_migration_routes_default = router11;
 
 // src/services/thumbnail-request.service.ts
 import fs28 from "fs-extra";
@@ -67673,6 +68017,7 @@ var restoreAllSessions = async () => {
 };
 
 // src/index.ts
+init_telegram_alert_service();
 import cron2 from "node-cron";
 import fs30 from "fs-extra";
 import path30 from "path";
@@ -67810,6 +68155,7 @@ app.use("/api/drive", drive_routes_default);
 app.use("/api/documents", documents_routes_default);
 app.use("/api/dispatch", dispatch_routes_default);
 app.use("/api/public", public_routes_default);
+app.use("/api/cron", cron_routes_default);
 app.use("/api/service-management-report", service_management_report_routes_default);
 app.use("/api/service-migrations", service_migration_routes_default);
 var companiesRoot = `${config.storage.root}/companies`;

@@ -20,6 +20,7 @@ import driveRoutes from './api/routes/drive.routes.js';
 import documentsRoutes from './api/routes/documents.routes.js';
 import dispatchRoutes from './api/routes/dispatch.routes.js';
 import publicRoutes from './api/routes/public.routes.js';
+import cronRoutes from './api/routes/cron.routes.js';
 import serviceManagementReportRoutes from './api/routes/service-management-report.routes.js';
 import serviceMigrationRoutes from './api/routes/service-migration.routes.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
@@ -203,6 +204,7 @@ app.use('/api/drive', driveRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/dispatch', dispatchRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/cron', cronRoutes);
 app.use('/api/service-management-report', serviceManagementReportRoutes);
 app.use('/api/service-migrations', serviceMigrationRoutes);
 
