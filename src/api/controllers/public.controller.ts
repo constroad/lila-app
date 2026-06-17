@@ -45,6 +45,8 @@ type PublicReceptionInput = {
   materialName: string;
   materialDescription: string;
   materialLevel: number;
+  locationId?: string;
+  locationName?: string;
   providerId: string;
   providerName: string;
   chancadora?: string;
@@ -124,6 +126,8 @@ type PortalInputRecord = {
   level?: number;
   materialId: string;
   material: string;
+  locationId?: string;
+  locationName?: string;
   providerId: string;
   providerName: string;
   chancadora?: string;
@@ -265,6 +269,8 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
       materialName: requireString(req.body?.materialName, 'materialName'),
       materialDescription: trimValue(req.body?.materialDescription),
       materialLevel: parseNumber(req.body?.materialLevel, 0),
+      locationId: trimValue(req.body?.locationId) || undefined,
+      locationName: trimValue(req.body?.locationName) || undefined,
       providerId: requireString(req.body?.providerId, 'providerId'),
       providerName: requireString(req.body?.providerName, 'providerName'),
       chancadora: trimValue(req.body?.chancadora) || undefined,
@@ -664,6 +670,7 @@ const buildSuccessStatusMessage = (
     `Recurso: ${options.resourceId}`,
     `Detalle: ${targetName}`,
     `Transportista: ${input.kind === 'input' ? input.providerName : 'N/A'}`,
+    `Ubicación: ${input.kind === 'input' ? input.locationName || 'Sin ubicación' : 'N/A'}`,
     `Cantera: ${input.kind === 'input' ? input.chancadora || 'N/A' : 'N/A'}`,
     `Dispositivo: ${'deviceName' in input ? input.deviceName || 'N/A' : 'N/A'}`,
     `Proveedor venta: ${input.kind === 'input' ? input.vendorProviderName || 'N/A' : 'N/A'}`,
@@ -701,6 +708,7 @@ const buildFailureStatusMessage = (
     `Empresa: ${input.companyId}`,
     `Detalle: ${targetName}`,
     `Transportista: ${input.kind === 'input' ? input.providerName : 'N/A'}`,
+    `Ubicación: ${input.kind === 'input' ? input.locationName || 'Sin ubicación' : 'N/A'}`,
     `Cantera: ${input.kind === 'input' ? input.chancadora || 'N/A' : 'N/A'}`,
     `Dispositivo: ${'deviceName' in input ? input.deviceName || 'N/A' : 'N/A'}`,
     `Proveedor venta: ${input.kind === 'input' ? input.vendorProviderName || 'N/A' : 'N/A'}`,
@@ -757,6 +765,8 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       m3: input.m3 || 0,
       level: input.materialLevel,
       materialId: input.materialId,
+      locationId: input.locationId,
+      locationName: input.locationName,
       material: `${input.materialName} ${input.materialDescription}`.trim(),
       providerId: input.providerId,
       providerName: input.providerName,
@@ -809,6 +819,8 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       m3: 0,
       level: input.materialLevel,
       materialId: input.materialId,
+      locationId: input.locationId,
+      locationName: input.locationName,
       material: `${input.materialName} ${input.materialDescription}`.trim(),
       providerId: input.providerId,
       providerName: input.providerName,
@@ -843,6 +855,8 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
   await updatePortalInput(input.companyId, activeInput._id, {
     ...activeInput,
     materialId: input.materialId,
+    locationId: input.locationId || activeInput.locationId,
+    locationName: input.locationName || activeInput.locationName,
     providerId: input.providerId,
     providerName: input.providerName,
     vendorProviderId: input.vendorProviderId,
