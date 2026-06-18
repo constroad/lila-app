@@ -4,11 +4,63 @@ import { config } from '../config/environment.js';
 
 const logDir = config.logging.dir;
 
+// Recorta valores largos (cuerpos de respuesta, HTML, etc.) para que el log
+// siga siendo legible.
+const truncate = (val: unknown, max = 500): unknown => {
+  if (typeof val === 'string') {
+    return val.length > max ? `${val.slice(0, max)}… (${val.length} chars)` : val;
+  }
+  if (val && typeof val === 'object') {
+    const str = (() => {
+      try {
+        return JSON.stringify(val);
+      } catch {
+        return String(val);
+      }
+    })();
+    return str.length > max ? `${str.slice(0, max)}… (${str.length} chars)` : val;
+  }
+  return val;
+};
+
+// Un AxiosError trae adjunto el config, request, headers y _header completos.
+// Cuando winston lo aplana en la metadata, el log se vuelve ilegible. Lo
+// reducimos a lo que realmente importa para diagnosticar.
+const isAxiosErrorLike = (val: any): boolean =>
+  !!val &&
+  typeof val === 'object' &&
+  (val.isAxiosError === true || val.name === 'AxiosError');
+
+const summarizeAxiosError = (err: any): Record<string, unknown> => {
+  const cfg = err.config || {};
+  const resp = err.response;
+  const summary: Record<string, unknown> = {
+    axiosError: err.message,
+    code: err.code,
+    method: typeof cfg.method === 'string' ? cfg.method.toUpperCase() : undefined,
+    url: cfg.url,
+    timeout: cfg.timeout,
+    status: resp?.status ?? err.status,
+    statusText: resp?.statusText,
+    responseData: resp ? truncate(resp.data) : undefined,
+  };
+  // Quitar campos vacíos para no ensuciar la salida.
+  for (const key of Object.keys(summary)) {
+    if (summary[key] === undefined) delete summary[key];
+  }
+  return summary;
+};
+
 const safeStringify = (value: unknown, spacing: number = 0): string => {
   const seen = new WeakSet();
   return JSON.stringify(
     value,
     (key, val) => {
+      // Detectar primero los errores de axios (también son Error, pero el
+      // branch genérico de Error perdería status/url/responseData).
+      if (isAxiosErrorLike(val)) {
+        return summarizeAxiosError(val);
+      }
       if (val instanceof Error) {
         return {
           message: val.message,
