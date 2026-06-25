@@ -79,6 +79,10 @@ export interface ICompany extends Document {
     };
     usage?: {
       cronJobs?: number;
+      whatsappMessages?: number;
+      storage?: number;
+      whatsappSessions?: number;
+      apiCallsThisMinute?: number;
     };
   };
 

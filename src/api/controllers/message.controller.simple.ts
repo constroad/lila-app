@@ -11,7 +11,6 @@ import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js
 import logger from '../../utils/logger.js';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
-import { incrementWhatsAppUsage } from '../../middleware/quota.middleware.js';
 import { replaceLegacyBotLabelForCompanyId } from '../../utils/company-bot.js';
 
 /**
@@ -46,11 +45,6 @@ export async function sendTextMessage(req: Request, res: Response, next: NextFun
         companyId: req.companyId,
         tenantId: req.tenantId,
       });
-
-      // Increment quota if tenant exists
-      if (req.tenantId) {
-        await incrementWhatsAppUsage(req.tenantId);
-      }
 
       res.status(HTTP_STATUS.OK).json({
         success: true,
@@ -158,10 +152,6 @@ export async function sendImage(req: Request, res: Response, next: NextFunction)
 
     await WhatsAppDirectService.sendImageFile(sessionPhone, to, sendOptions);
 
-    if (req.tenantId) {
-      await incrementWhatsAppUsage(req.tenantId);
-    }
-
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: 'Image sent successfully',
@@ -236,10 +226,6 @@ export async function sendVideo(req: Request, res: Response, next: NextFunction)
 
     await WhatsAppDirectService.sendVideoFile(sessionPhone, to, sendOptions);
 
-    if (req.tenantId) {
-      await incrementWhatsAppUsage(req.tenantId);
-    }
-
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: 'Video sent successfully',
@@ -313,10 +299,6 @@ export async function sendFile(req: Request, res: Response, next: NextFunction) 
     }
 
     await WhatsAppDirectService.sendDocument(sessionPhone, to, sendOptions);
-
-    if (req.tenantId) {
-      await incrementWhatsAppUsage(req.tenantId);
-    }
 
     res.status(HTTP_STATUS.OK).json({
       success: true,

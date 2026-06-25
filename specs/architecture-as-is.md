@@ -23,6 +23,7 @@ Microservicio Node.js/TypeScript (Express, ESM) que actua como worker multi-tena
 El servicio sigue siendo monolitico pero con servicios desacoplados en `src/services/` y controllers por dominio en `src/api/controllers/`.
 
 ## Contexto e integracion con Portal
+- **Frontend (Portal):** migrando progresivamente de Chakra UI v2 a **shadcn/ui + Tailwind** (publico mobile-first, admin desktop-first; branding de company = acento). Esto es solo capa de UI del Portal; **no afecta a lila-app** (este backend no tiene UI/React/Chakra). Detalle en `../Portal/specs/ARCHITECTURE-Portal.as-is.md` §17 y `../Portal/MIGRATION-SHADCN*.SPEC.md`. Los contratos HTTP/JWT y los callbacks de cliente no cambian con la migracion.
 - Comunicacion Portal -> lila-app: HTTP + JWT (`JWT_SECRET` aqui = `LILA_APP_JWT_SECRET` en Portal).
 - Comunicacion lila-app -> Portal MongoDB: directa via mongoose (read-only para quotas y catalogos compartidos).
 - Comunicacion lila-app -> Portal HTTP: callbacks JWT (5 min de TTL) para acciones de cliente (reportes, dispatch updates).
@@ -96,8 +97,8 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 
 ### MongoDB Portal (Fase 10 - Quotas)
 - Conexion compartida con pool y circuit breaker: `src/database/sharedConnection.ts`.
-- Modelos read-only del Portal: `src/database/models.ts` (Company, CronJob, Config).
-- `quota-validator.service.ts` (singleton) - valida quotas WhatsApp/storage/usuarios antes de operaciones costosas.
+- Modelos del Portal: `src/database/models.ts` (Company, CronJob, Config) y `src/models/usage-metric.model.ts`.
+- `quota-validator.service.ts` (singleton) - valida quotas WhatsApp/storage/usuarios antes de operaciones costosas y registra consumo WhatsApp mensual en `usage_metrics`.
 - Middleware `requireTenant` valida JWT y carga `req.companyId`.
 
 ### Telegram (Alertas + Cola)
@@ -253,3 +254,10 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - **Junio 2026**: enhancements de red (`network enhancements`), control tanks integrados con Portal, alertas Telegram cuando Tailscale cae.
 - **Mayo 2026**: cola Telegram persistente, multiples mejoras de informe IAA y dispatch, refactor dispatch IPP, migracion de inputs Telegram -> Drive lila-app (paths `companies/{id}/inputs/`), migracion de ordenes y servicios cross-company, informe liquidacion (LIQ-SRV), control de pista, imprimacion reportes.
 - **Abril 2026**: dispatch post-process workflow, expense public + duplicate WhatsApp message fix, service migration v2.
+
+## Pendiente — consolidación de uso para billing (ver Portal spec)
+Para el modelo de suscripciones de Portal (`/projects/SUBSCRIPTION-BILLING-MULTITENANT.spec.md`), lila-app debe exponer un endpoint **tenant-scoped** de uso que Portal consolide periódicamente:
+- `GET /api/tenant/usage` (JWT/api-key) → `{ storageBytes, whatsappMessagesThisMonth, apiCallsThisMonth }`.
+- **storage**: suma real del tenant en `/mnt/constroad-storage/companies/{companyId}` (absoluto, no mensual).
+- **whatsappMessages / apiCalls**: contadores mensuales (reset por período en Portal).
+Portal lo ingiere vía cron (`UsageTracker.updateStorage` + `usage_metrics`) para que `/admin/suscripcion/uso` muestre números reales independientes del plan.

@@ -141,16 +141,54 @@ var init_environment = __esm({
 // src/utils/logger.ts
 import winston from "winston";
 import path2 from "path";
-var logDir, safeStringify, logger, logger_default;
+var logDir, truncate, isAxiosErrorLike, summarizeAxiosError, safeStringify, logger, logger_default;
 var init_logger = __esm({
   "src/utils/logger.ts"() {
     init_environment();
     logDir = config.logging.dir;
+    truncate = (val, max = 500) => {
+      if (typeof val === "string") {
+        return val.length > max ? `${val.slice(0, max)}\u2026 (${val.length} chars)` : val;
+      }
+      if (val && typeof val === "object") {
+        const str = (() => {
+          try {
+            return JSON.stringify(val);
+          } catch {
+            return String(val);
+          }
+        })();
+        return str.length > max ? `${str.slice(0, max)}\u2026 (${str.length} chars)` : val;
+      }
+      return val;
+    };
+    isAxiosErrorLike = (val) => !!val && typeof val === "object" && (val.isAxiosError === true || val.name === "AxiosError");
+    summarizeAxiosError = (err) => {
+      const cfg = err.config || {};
+      const resp = err.response;
+      const summary = {
+        axiosError: err.message,
+        code: err.code,
+        method: typeof cfg.method === "string" ? cfg.method.toUpperCase() : void 0,
+        url: cfg.url,
+        timeout: cfg.timeout,
+        status: resp?.status ?? err.status,
+        statusText: resp?.statusText,
+        responseData: resp ? truncate(resp.data) : void 0
+      };
+      for (const key of Object.keys(summary)) {
+        if (summary[key] === void 0) delete summary[key];
+      }
+      return summary;
+    };
     safeStringify = (value, spacing = 0) => {
       const seen = /* @__PURE__ */ new WeakSet();
       return JSON.stringify(
         value,
         (key, val) => {
+          if (isAxiosErrorLike(val)) {
+            return summarizeAxiosError(val);
+          }
           if (val instanceof Error) {
             return {
               message: val.message,
@@ -231,51 +269,111 @@ var init_json_store = __esm({
     init_logger();
     JsonStore = class {
       constructor(options2) {
+        // Serializa las operaciones por clave para evitar carreras entre escrituras
+        // concurrentes (que antes corrompían y borraban el archivo).
+        this.chains = /* @__PURE__ */ new Map();
+        this.tmpCounter = 0;
         this.baseDir = options2.baseDir;
         this.autoBackup = options2.autoBackup ?? true;
       }
+      // Encadena las operaciones de una misma clave: la siguiente no empieza hasta
+      // que termina la anterior (resuelva o falle).
+      withLock(key, fn) {
+        const prev = this.chains.get(key) ?? Promise.resolve();
+        const run = prev.then(fn, fn);
+        this.chains.set(
+          key,
+          run.then(
+            () => void 0,
+            () => void 0
+          )
+        );
+        return run;
+      }
       async get(key) {
+        return this.withLock(key, () => this.getUnlocked(key));
+      }
+      async getUnlocked(key) {
+        const filePath = path3.join(this.baseDir, `${key}.json`);
+        const backupPath = `${filePath}.backup`;
         try {
-          const filePath = path3.join(this.baseDir, `${key}.json`);
-          const exists = await fs2.pathExists(filePath);
-          if (!exists) {
-            return null;
+          if (await fs2.pathExists(filePath)) {
+            return await fs2.readJSON(filePath);
           }
-          const data = await fs2.readJSON(filePath);
-          return data;
         } catch (error) {
-          logger_default.error(`Error reading ${key} from store:`, error);
-          return null;
+          logger_default.warn(`Store ${key} corrupt, attempting recovery from backup`, {
+            reason: error instanceof Error ? error.message : String(error)
+          });
         }
+        try {
+          if (await fs2.pathExists(backupPath)) {
+            const data = await fs2.readJSON(backupPath);
+            await this.atomicWrite(
+              filePath,
+              data,
+              /* skipBackup */
+              true
+            );
+            logger_default.info(`Store ${key} restored from backup`);
+            return data;
+          }
+        } catch (error) {
+          logger_default.error(`Error recovering ${key} from backup:`, error);
+        }
+        return null;
       }
       async set(key, value) {
-        try {
+        return this.withLock(key, async () => {
           const filePath = path3.join(this.baseDir, `${key}.json`);
-          await fs2.ensureDir(path3.dirname(filePath));
-          if (this.autoBackup && await fs2.pathExists(filePath)) {
-            const backupPath = `${filePath}.backup`;
-            await fs2.copy(filePath, backupPath);
+          try {
+            await this.atomicWrite(filePath, value, false);
+            logger_default.debug(`Successfully wrote ${key} to store`);
+          } catch (error) {
+            logger_default.error(`Error writing ${key} to store:`, error);
+            throw error;
           }
-          const tempPath = `${filePath}.tmp`;
+        });
+      }
+      // Escritura atómica segura ante concurrencia:
+      //  - temp ÚNICO por escritura (no compartido) → sin contenido entrelazado.
+      //  - fs.rename reemplaza el destino de forma atómica (sin borrarlo antes),
+      //    así el archivo final siempre existe y completo (a diferencia de
+      //    fs.move con overwrite, que hace remove+rename y deja un hueco).
+      //  - backup best-effort: un fallo de backup no aborta la escritura.
+      async atomicWrite(filePath, value, skipBackup) {
+        await fs2.ensureDir(path3.dirname(filePath));
+        const tempPath = `${filePath}.${process.pid}.${Date.now()}.${++this.tmpCounter}.tmp`;
+        try {
           await fs2.writeJSON(tempPath, value, { spaces: 2 });
-          await fs2.move(tempPath, filePath, { overwrite: true });
-          logger_default.debug(`Successfully wrote ${key} to store`);
+          if (!skipBackup && this.autoBackup && await fs2.pathExists(filePath)) {
+            try {
+              await fs2.copy(filePath, `${filePath}.backup`, { overwrite: true });
+            } catch (backupError) {
+              logger_default.warn("Store backup failed (continuing)", {
+                filePath,
+                reason: backupError instanceof Error ? backupError.message : String(backupError)
+              });
+            }
+          }
+          await fs2.rename(tempPath, filePath);
         } catch (error) {
-          logger_default.error(`Error writing ${key} to store:`, error);
+          await fs2.remove(tempPath).catch(() => void 0);
           throw error;
         }
       }
       async delete(key) {
-        try {
+        return this.withLock(key, async () => {
           const filePath = path3.join(this.baseDir, `${key}.json`);
-          if (await fs2.pathExists(filePath)) {
-            await fs2.remove(filePath);
-            logger_default.debug(`Successfully deleted ${key} from store`);
+          try {
+            if (await fs2.pathExists(filePath)) {
+              await fs2.remove(filePath);
+              logger_default.debug(`Successfully deleted ${key} from store`);
+            }
+          } catch (error) {
+            logger_default.error(`Error deleting ${key} from store:`, error);
+            throw error;
           }
-        } catch (error) {
-          logger_default.error(`Error deleting ${key} from store:`, error);
-          throw error;
-        }
+        });
       }
       async getAllKeys() {
         try {
@@ -1344,6 +1442,663 @@ var init_whatsapp_phone = __esm({
   }
 });
 
+// src/models/company.model.ts
+import { Schema } from "mongoose";
+var CompanyLimitsSchema, CompanySchema;
+var init_company_model = __esm({
+  "src/models/company.model.ts"() {
+    CompanyLimitsSchema = new Schema(
+      {
+        whatsappMessages: {
+          type: Number,
+          required: true,
+          default: 1e3,
+          min: 0
+        },
+        storage: {
+          type: Number,
+          required: true,
+          default: 10,
+          // 10 GB
+          min: 0
+        },
+        users: {
+          type: Number,
+          required: true,
+          default: 5,
+          min: 1
+        },
+        orders: {
+          type: Number,
+          required: true,
+          default: 100,
+          min: 0
+        }
+      },
+      { _id: false }
+    );
+    CompanySchema = new Schema(
+      {
+        companyId: {
+          type: String,
+          required: true,
+          unique: true
+        },
+        name: {
+          type: String,
+          required: true
+        },
+        slug: {
+          type: String,
+          index: true
+        },
+        ruc: {
+          type: String,
+          sparse: true
+        },
+        email: {
+          type: String,
+          sparse: true
+        },
+        phone: {
+          type: String
+        },
+        address: {
+          type: String
+        },
+        branding: {
+          logoLight: { type: String },
+          logoDark: { type: String },
+          favicon: { type: String }
+        },
+        documentSettings: {
+          type: Schema.Types.Mixed,
+          required: false
+        },
+        whatsappConfig: {
+          sender: { type: String },
+          adminGroupId: { type: String },
+          aiEnabled: { type: Boolean, default: false },
+          cronjobPrefix: { type: String }
+        },
+        limits: {
+          type: CompanyLimitsSchema,
+          required: true,
+          default: () => ({})
+          // Usa defaults del sub-schema
+        },
+        features: {
+          modules: {
+            drive: { type: Boolean, default: false }
+          }
+        },
+        isActive: {
+          type: Boolean,
+          required: true,
+          default: true
+        },
+        subscription: {
+          limits: {
+            cronJobs: { type: Number }
+          },
+          usage: {
+            cronJobs: { type: Number }
+          }
+        },
+        // API Key for lila-app direct access (FE)
+        "api-key-lila-access": {
+          keyHash: { type: String },
+          keyEncrypted: { type: String },
+          keyPrefix: { type: String },
+          last4: { type: String },
+          isActive: { type: Boolean, default: false },
+          createdAt: { type: Date },
+          rotatedAt: { type: Date },
+          lastUsedAt: { type: Date },
+          lastUsedIp: { type: String },
+          allowedOrigins: { type: [String], default: [] },
+          allowedSenders: { type: [String], default: [] },
+          rateLimit: {
+            limit: { type: Number },
+            windowMs: { type: Number }
+          }
+        }
+      },
+      {
+        timestamps: true,
+        collection: "companies"
+        // Nombre de la colección en Portal
+      }
+    );
+    CompanySchema.index({ isActive: 1 });
+    CompanySchema.index({ slug: 1 }, { unique: true, sparse: true });
+  }
+});
+
+// src/models/usage-metric.model.ts
+import { Schema as Schema2 } from "mongoose";
+var UsageMetricSchema;
+var init_usage_metric_model = __esm({
+  "src/models/usage-metric.model.ts"() {
+    UsageMetricSchema = new Schema2(
+      {
+        companyId: {
+          type: String,
+          required: true,
+          ref: "Company",
+          index: true
+        },
+        period: {
+          type: String,
+          required: true,
+          match: /^\d{4}-\d{2}$/,
+          index: true
+        },
+        whatsapp: {
+          total: { type: Number, default: 0 },
+          daily: { type: Map, of: Number, default: {} }
+        },
+        storage: {
+          total: { type: Number, default: 0 },
+          byModule: { type: Map, of: Number, default: {} }
+        },
+        apiCalls: {
+          total: { type: Number, default: 0 },
+          byEndpoint: { type: Map, of: Number, default: {} }
+        },
+        users: {
+          active: { type: Number, default: 0 },
+          total: { type: Number, default: 0 }
+        }
+      },
+      {
+        timestamps: true,
+        collection: "usage_metrics"
+      }
+    );
+    UsageMetricSchema.index({ companyId: 1, period: 1 }, { unique: true });
+  }
+});
+
+// src/services/quota-validator.service.ts
+var quota_validator_service_exports = {};
+__export(quota_validator_service_exports, {
+  QuotaValidatorService: () => QuotaValidatorService,
+  default: () => quota_validator_service_default,
+  quotaValidatorService: () => quotaValidatorService
+});
+import mongoose3 from "mongoose";
+var getPeriod, getDayKey, QuotaValidatorService, quotaValidatorService, quota_validator_service_default;
+var init_quota_validator_service = __esm({
+  "src/services/quota-validator.service.ts"() {
+    init_environment();
+    init_company_model();
+    init_usage_metric_model();
+    init_logger();
+    getPeriod = (date = /* @__PURE__ */ new Date()) => date.toISOString().slice(0, 7);
+    getDayKey = (date = /* @__PURE__ */ new Date()) => date.toISOString().slice(0, 10);
+    QuotaValidatorService = class _QuotaValidatorService {
+      constructor() {
+        this.portalMongoConn = null;
+        this.CompanyModel = null;
+        this.UsageMetricModel = null;
+        this.isConnected = false;
+        this.isConnecting = false;
+        // Circuit breaker
+        this.circuitBreaker = {
+          isOpen: false,
+          failures: 0,
+          lastFailure: 0,
+          nextRetry: 0
+        };
+        // Configuration
+        this.CIRCUIT_BREAKER_THRESHOLD = 5;
+        this.CIRCUIT_BREAKER_TIMEOUT = 60 * 1e3;
+        // 1 min
+        this.CONNECTION_TIMEOUT = 1e4;
+        // 10 sec
+        this.IS_PROD = process.env.NODE_ENV === "production";
+        process.once("SIGINT", () => this.disconnect());
+        process.once("SIGTERM", () => this.disconnect());
+      }
+      /**
+       * Get singleton instance (global cache para hot reloads)
+       */
+      static getInstance() {
+        if (!global.__quotaValidatorService) {
+          global.__quotaValidatorService = new _QuotaValidatorService();
+        }
+        return global.__quotaValidatorService;
+      }
+      // ==========================================================================
+      // CONNECTION
+      // ==========================================================================
+      /**
+       * Conecta a MongoDB de Portal (lazy, solo si es necesario)
+       */
+      async connect() {
+        if (this.isConnected && this.portalMongoConn && this.portalMongoConn.readyState === 1) {
+          return;
+        }
+        if (this.isConnecting) {
+          return this.waitForConnection();
+        }
+        if (this.isCircuitBreakerOpen()) {
+          throw new Error("Circuit breaker is open. Too many connection failures.");
+        }
+        this.isConnecting = true;
+        try {
+          if (!this.portalMongoConn || !this.IS_PROD) {
+            logger_default.info("\u{1F4E1} Connecting to Portal MongoDB (constroad_db)...");
+          }
+          const connection = mongoose3.createConnection(config.mongodb.portalUri, {
+            dbName: config.mongodb.sharedDb,
+            serverSelectionTimeoutMS: this.CONNECTION_TIMEOUT,
+            socketTimeoutMS: 45e3,
+            maxPoolSize: this.IS_PROD ? 5 : 3,
+            minPoolSize: 1,
+            family: 4,
+            // Force IPv4
+            retryWrites: true,
+            heartbeatFrequencyMS: 1e4
+          });
+          this.setupConnectionListeners(connection);
+          this.portalMongoConn = await connection.asPromise();
+          if (this.portalMongoConn.models.Company) {
+            this.CompanyModel = this.portalMongoConn.models.Company;
+          } else {
+            this.CompanyModel = this.portalMongoConn.model("Company", CompanySchema);
+          }
+          if (this.portalMongoConn.models.UsageMetric) {
+            this.UsageMetricModel = this.portalMongoConn.models.UsageMetric;
+          } else {
+            this.UsageMetricModel = this.portalMongoConn.model("UsageMetric", UsageMetricSchema);
+          }
+          this.isConnected = true;
+          this.isConnecting = false;
+          this.resetCircuitBreaker();
+          logger_default.info("\u2705 QuotaValidator connected to Portal MongoDB");
+        } catch (error) {
+          this.isConnecting = false;
+          this.isConnected = false;
+          this.recordCircuitBreakerFailure();
+          logger_default.error("\u274C Failed to connect to Portal MongoDB:", error);
+          throw error;
+        }
+      }
+      /**
+       * Wait for connection in progress
+       */
+      async waitForConnection() {
+        const maxWait = 3e4;
+        const checkInterval = 100;
+        let waited = 0;
+        while (waited < maxWait) {
+          if (this.isConnected && this.portalMongoConn?.readyState === 1) {
+            return;
+          }
+          if (!this.isConnecting) {
+            throw new Error("Connection attempt failed");
+          }
+          await new Promise((resolve2) => setTimeout(resolve2, checkInterval));
+          waited += checkInterval;
+        }
+        throw new Error("Connection timeout");
+      }
+      /**
+       * Setup connection event listeners (evita duplicados)
+       */
+      setupConnectionListeners(conn) {
+        conn.removeAllListeners("error");
+        conn.removeAllListeners("disconnected");
+        conn.removeAllListeners("reconnected");
+        conn.on("error", (err) => {
+          if (this.IS_PROD) {
+            logger_default.error("\u274C Portal MongoDB error:", err.message);
+          }
+          this.isConnected = false;
+        });
+        conn.on("disconnected", () => {
+          this.isConnected = false;
+        });
+        conn.on("reconnected", () => {
+          this.isConnected = true;
+          if (this.IS_PROD) {
+            logger_default.info("\u{1F504} Portal MongoDB reconnected");
+          }
+        });
+      }
+      /**
+       * Circuit breaker: Check if open
+       */
+      isCircuitBreakerOpen() {
+        if (!this.circuitBreaker.isOpen) return false;
+        if (Date.now() > this.circuitBreaker.nextRetry) {
+          this.circuitBreaker.isOpen = false;
+          this.circuitBreaker.failures = 0;
+          logger_default.info("\u{1F513} Circuit breaker closed - retrying connections");
+          return false;
+        }
+        return true;
+      }
+      /**
+       * Circuit breaker: Record failure
+       */
+      recordCircuitBreakerFailure() {
+        this.circuitBreaker.failures++;
+        this.circuitBreaker.lastFailure = Date.now();
+        if (this.circuitBreaker.failures >= this.CIRCUIT_BREAKER_THRESHOLD) {
+          this.circuitBreaker.isOpen = true;
+          this.circuitBreaker.nextRetry = Date.now() + this.CIRCUIT_BREAKER_TIMEOUT;
+          logger_default.error(
+            `\u{1F512} Circuit breaker OPEN - Too many failures (${this.circuitBreaker.failures}). Will retry in ${this.CIRCUIT_BREAKER_TIMEOUT / 1e3}s`
+          );
+        }
+      }
+      /**
+       * Circuit breaker: Reset
+       */
+      resetCircuitBreaker() {
+        if (this.circuitBreaker.failures > 0 || this.circuitBreaker.isOpen) {
+          this.circuitBreaker.isOpen = false;
+          this.circuitBreaker.failures = 0;
+          logger_default.info("\u2705 Circuit breaker reset");
+        }
+      }
+      /**
+       * Desconecta de MongoDB
+       */
+      async disconnect() {
+        if (this.portalMongoConn) {
+          try {
+            await this.portalMongoConn.close();
+            this.portalMongoConn = null;
+            this.CompanyModel = null;
+            this.UsageMetricModel = null;
+            this.isConnected = false;
+            logger_default.info("\u{1F50C} QuotaValidator disconnected from Portal MongoDB");
+          } catch (error) {
+            logger_default.error("\u274C Error disconnecting QuotaValidator:", error);
+          }
+        }
+      }
+      /**
+       * Verifica si está conectado y listo
+       */
+      isReady() {
+        return this.isConnected && this.portalMongoConn !== null && this.portalMongoConn.readyState === 1;
+      }
+      // ==========================================================================
+      // COMPANY HELPERS
+      // ==========================================================================
+      /**
+       * Obtiene los datos de una empresa desde Portal MongoDB
+       * (auto-conecta si es necesario)
+       */
+      async getCompany(companyId) {
+        if (!this.isReady()) {
+          await this.connect();
+        }
+        if (!this.CompanyModel) {
+          throw new Error("QuotaValidator not initialized");
+        }
+        const company = await this.CompanyModel.findOne({ companyId, isActive: true });
+        if (!company) {
+          logger_default.warn(`Company not found or inactive: ${companyId}`);
+          throw new Error(`Company not found: ${companyId}`);
+        }
+        return company;
+      }
+      /**
+       * Obtiene la empresa por número de WhatsApp configurado (sender)
+       */
+      async getCompanyByWhatsappSender(sender) {
+        if (!sender) return null;
+        if (!this.isReady()) {
+          await this.connect();
+        }
+        if (!this.CompanyModel) {
+          throw new Error("QuotaValidator not initialized");
+        }
+        const digits = sender.replace(/[^\d]/g, "");
+        const candidates = Array.from(new Set([
+          sender,
+          digits,
+          digits ? `+${digits}` : ""
+        ].filter(Boolean)));
+        const company = await this.CompanyModel.findOne({
+          isActive: true,
+          $or: candidates.map((value) => ({ "whatsappConfig.sender": value }))
+        });
+        return company || null;
+      }
+      /**
+       * Obtiene el periodo actual (YYYY-MM)
+       */
+      getCurrentPeriod() {
+        const now = /* @__PURE__ */ new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        return `${year}-${month}`;
+      }
+      // ==========================================================================
+      // WHATSAPP QUOTA
+      // ==========================================================================
+      /**
+       * Verifica si una empresa puede enviar un mensaje de WhatsApp
+       * @param companyId ID de la empresa
+       * @returns true si está permitido, false si excede el límite
+       */
+      async checkWhatsAppQuota(companyId) {
+        try {
+          const company = await this.getCompany(companyId);
+          const limit = company.limits.whatsappMessages;
+          const used = company.subscription?.usage?.whatsappMessages || 0;
+          if (limit === -1) {
+            return true;
+          }
+          const allowed = used < limit;
+          if (!allowed) {
+            logger_default.warn(`WhatsApp quota exceeded for ${companyId}: ${used}/${limit}`);
+          }
+          return allowed;
+        } catch (error) {
+          logger_default.error(`Error checking WhatsApp quota for ${companyId}:`, error);
+          return true;
+        }
+      }
+      /**
+       * Obtiene información detallada de la quota de WhatsApp
+       */
+      async getWhatsAppQuotaInfo(companyId) {
+        const company = await this.getCompany(companyId);
+        const limit = company.limits.whatsappMessages;
+        const current = company.subscription?.usage?.whatsappMessages || 0;
+        if (limit === -1) {
+          return {
+            allowed: true,
+            current,
+            limit,
+            remaining: -1,
+            // Ilimitado
+            period: this.getCurrentPeriod()
+          };
+        }
+        const remaining = Math.max(0, limit - current);
+        const allowed = current < limit;
+        const period = this.getCurrentPeriod();
+        return { allowed, current, limit, remaining, period };
+      }
+      /**
+       * Incrementa el contador de mensajes de WhatsApp en MongoDB
+       */
+      async incrementWhatsAppUsage(companyId, count = 1) {
+        if (!this.isReady()) {
+          await this.connect();
+        }
+        if (!this.CompanyModel) {
+          throw new Error("QuotaValidator not initialized");
+        }
+        const result = await this.CompanyModel.findOneAndUpdate(
+          { companyId, isActive: true },
+          { $inc: { "subscription.usage.whatsappMessages": count } },
+          { new: true }
+        );
+        if (!result) {
+          throw new Error(`Company not found: ${companyId}`);
+        }
+        const newValue = result.subscription?.usage?.whatsappMessages || 0;
+        logger_default.debug(`WhatsApp usage for ${companyId}: ${newValue}`);
+        if (this.UsageMetricModel) {
+          const period = getPeriod();
+          const dayKey = getDayKey();
+          try {
+            await this.UsageMetricModel.updateOne(
+              { companyId, period },
+              {
+                $inc: {
+                  "whatsapp.total": count,
+                  [`whatsapp.daily.${dayKey}`]: count
+                }
+              },
+              { upsert: true }
+            );
+          } catch (error) {
+            logger_default.warn(`Failed to update WhatsApp usage metrics for ${companyId}:`, error);
+          }
+        }
+        return newValue;
+      }
+      // ==========================================================================
+      // STORAGE QUOTA
+      // ==========================================================================
+      /**
+       * Verifica si una empresa puede almacenar un archivo
+       */
+      async checkStorageQuota(companyId, fileSize) {
+        try {
+          const company = await this.getCompany(companyId);
+          const limitGb = company.limits.storage;
+          if (limitGb === -1) {
+            return true;
+          }
+          const limitBytes = limitGb * 1024 * 1024 * 1024;
+          const usedGb = company.subscription?.usage?.storage || 0;
+          const usedBytes = usedGb * 1024 * 1024 * 1024;
+          const allowed = usedBytes + fileSize <= limitBytes;
+          if (!allowed) {
+            logger_default.warn(
+              `Storage quota exceeded for ${companyId}: ${this.formatBytes(usedBytes + fileSize)}/${limitGb} GB`
+            );
+          }
+          return allowed;
+        } catch (error) {
+          logger_default.error(`Error checking storage quota for ${companyId}:`, error);
+          return true;
+        }
+      }
+      /**
+       * Obtiene información detallada de la quota de almacenamiento
+       */
+      async getStorageQuotaInfo(companyId) {
+        const company = await this.getCompany(companyId);
+        const limitGb = company.limits.storage;
+        const usedGb = company.subscription?.usage?.storage || 0;
+        const current = usedGb * 1024 * 1024 * 1024;
+        if (limitGb === -1) {
+          return {
+            allowed: true,
+            current,
+            limit: -1,
+            remaining: -1,
+            // Ilimitado
+            period: this.getCurrentPeriod()
+          };
+        }
+        const limit = limitGb * 1024 * 1024 * 1024;
+        const remaining = Math.max(0, limit - current);
+        const allowed = current < limit;
+        const period = this.getCurrentPeriod();
+        return { allowed, current, limit, remaining, period };
+      }
+      /**
+       * Incrementa el contador de almacenamiento en MongoDB
+       */
+      async incrementStorageUsage(companyId, fileSize) {
+        if (!this.isReady()) {
+          await this.connect();
+        }
+        if (!this.CompanyModel) {
+          throw new Error("QuotaValidator not initialized");
+        }
+        const fileSizeGb = fileSize / (1024 * 1024 * 1024);
+        const result = await this.CompanyModel.findOneAndUpdate(
+          { companyId, isActive: true },
+          { $inc: { "subscription.usage.storage": fileSizeGb } },
+          { new: true }
+        );
+        if (!result) {
+          throw new Error(`Company not found: ${companyId}`);
+        }
+        const newValueGb = result.subscription?.usage?.storage || 0;
+        const newValueBytes = newValueGb * 1024 * 1024 * 1024;
+        logger_default.debug(`Storage usage for ${companyId}: ${newValueGb.toFixed(4)} GB`);
+        return newValueBytes;
+      }
+      /**
+       * Decrementa el contador de almacenamiento en MongoDB
+       */
+      async decrementStorageUsage(companyId, fileSize) {
+        if (!this.isReady()) {
+          await this.connect();
+        }
+        if (!this.CompanyModel) {
+          throw new Error("QuotaValidator not initialized");
+        }
+        const fileSizeGb = fileSize / (1024 * 1024 * 1024);
+        const result = await this.CompanyModel.findOneAndUpdate(
+          { companyId, isActive: true },
+          { $inc: { "subscription.usage.storage": -fileSizeGb } },
+          { new: true }
+        );
+        if (!result) {
+          throw new Error(`Company not found: ${companyId}`);
+        }
+        const newValueGb = result.subscription?.usage?.storage || 0;
+        const newValueBytes = newValueGb * 1024 * 1024 * 1024;
+        logger_default.debug(`Storage usage for ${companyId}: ${newValueGb.toFixed(4)} GB`);
+        return newValueBytes;
+      }
+      // ==========================================================================
+      // GENERAL QUOTA INFO
+      // ==========================================================================
+      /**
+       * Obtiene información completa de todas las quotas
+       */
+      async getQuotaInfo(companyId) {
+        const whatsappMessages = await this.getWhatsAppQuotaInfo(companyId);
+        const storage = await this.getStorageQuotaInfo(companyId);
+        return { whatsappMessages, storage };
+      }
+      // ==========================================================================
+      // UTILITIES
+      // ==========================================================================
+      /**
+       * Formatea bytes a formato legible
+       */
+      formatBytes(bytes) {
+        if (bytes === 0) return "0 Bytes";
+        const k60 = 1024;
+        const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+        const i50 = Math.floor(Math.log(bytes) / Math.log(k60));
+        return `${parseFloat((bytes / Math.pow(k60, i50)).toFixed(2))} ${sizes[i50]}`;
+      }
+    };
+    quotaValidatorService = QuotaValidatorService.getInstance();
+    quota_validator_service_default = quotaValidatorService;
+  }
+});
+
 // src/services/whatsapp-direct.service.ts
 var whatsapp_direct_service_exports = {};
 __export(whatsapp_direct_service_exports, {
@@ -1351,7 +2106,7 @@ __export(whatsapp_direct_service_exports, {
 });
 import path8 from "path";
 import fs6 from "fs/promises";
-var WhatsAppDirectService;
+var resolveUsageCompanyId, trackWhatsAppUsage, WhatsAppDirectService;
 var init_whatsapp_direct_service = __esm({
   "src/services/whatsapp-direct.service.ts"() {
     init_sessions_simple();
@@ -1363,6 +2118,18 @@ var init_whatsapp_direct_service = __esm({
     init_whatsapp_recipient_routing();
     init_whatsapp_media_source_util();
     init_whatsapp_phone();
+    init_quota_validator_service();
+    resolveUsageCompanyId = (options2 = {}) => options2.companyId || options2.tenantId || "";
+    trackWhatsAppUsage = async (options2 = {}, context) => {
+      if (options2.trackUsage === false) return;
+      const companyId = resolveUsageCompanyId(options2);
+      if (!companyId) return;
+      try {
+        await quotaValidatorService.incrementWhatsAppUsage(companyId, 1);
+      } catch (error) {
+        logger_default.warn(`Failed to track WhatsApp usage for ${companyId} (${context}): ${String(error)}`);
+      }
+    };
     WhatsAppDirectService = {
       /**
        * Create session with QR code
@@ -1389,7 +2156,11 @@ var init_whatsapp_direct_service = __esm({
         const sock = getSession(id);
         if (!sock) {
           if (queueOnFail) {
-            await outbox_queue_default.enqueue(id, routedTo, message, options2.mentions);
+            await outbox_queue_default.enqueue(id, routedTo, message, options2.mentions, {
+              companyId: options2.companyId,
+              tenantId: options2.tenantId,
+              trackUsage: options2.trackUsage
+            });
             logger_default.info(`\u{1F4E5} Queued text message for ${id} (session not found)`);
             return { queued: true };
           }
@@ -1397,7 +2168,11 @@ var init_whatsapp_direct_service = __esm({
         }
         if (!isSessionReady(id)) {
           if (queueOnFail) {
-            await outbox_queue_default.enqueue(id, routedTo, message, options2.mentions);
+            await outbox_queue_default.enqueue(id, routedTo, message, options2.mentions, {
+              companyId: options2.companyId,
+              tenantId: options2.tenantId,
+              trackUsage: options2.trackUsage
+            });
             logger_default.info(`\u{1F4E5} Queued text message for ${id} (session not ready)`);
             return { queued: true };
           }
@@ -1406,11 +2181,17 @@ var init_whatsapp_direct_service = __esm({
         try {
           const validTo = assertWhatsAppRecipient(routedTo);
           const sendOptions = getSendOptions(validTo);
-          return await sock.sendMessage(validTo, { text: message }, sendOptions);
+          const result = await sock.sendMessage(validTo, { text: message }, sendOptions);
+          await trackWhatsAppUsage(options2, "text");
+          return result;
         } catch (error) {
           logger_default.warn(`Failed to send message via ${id}: ${String(error)}`);
           if (queueOnFail) {
-            await outbox_queue_default.enqueue(id, routedTo, message, options2.mentions);
+            await outbox_queue_default.enqueue(id, routedTo, message, options2.mentions, {
+              companyId: options2.companyId,
+              tenantId: options2.tenantId,
+              trackUsage: options2.trackUsage
+            });
             logger_default.info(`\u{1F4E5} Queued text message for ${id} (send failed)`);
             return { queued: true };
           }
@@ -1494,7 +2275,7 @@ var init_whatsapp_direct_service = __esm({
           throw new Error("One of buffer, fileName, filePath, or fileUrl is required");
         }
         try {
-          await sock.sendMessage(
+          const result = await sock.sendMessage(
             validTo,
             {
               video: videoBuffer,
@@ -1505,11 +2286,13 @@ var init_whatsapp_direct_service = __esm({
             },
             sendOptions
           );
+          await trackWhatsAppUsage(options2, "video");
           if (shouldCleanup && cleanupPath) {
             await fs6.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
             );
           }
+          return result;
         } catch (error) {
           logger_default.warn(`Failed to send video via ${id}: ${String(error)}`);
           if (queueOnFail) {
@@ -1600,7 +2383,7 @@ var init_whatsapp_direct_service = __esm({
           throw new Error("One of buffer, fileName, filePath, or fileUrl is required");
         }
         try {
-          await sock.sendMessage(
+          const result = await sock.sendMessage(
             validTo,
             {
               image: imageBuffer,
@@ -1609,11 +2392,13 @@ var init_whatsapp_direct_service = __esm({
             },
             sendOptions
           );
+          await trackWhatsAppUsage(options2, "image");
           if (shouldCleanup && cleanupPath) {
             await fs6.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
             );
           }
+          return result;
         } catch (error) {
           logger_default.warn(`Failed to send image via ${id}: ${String(error)}`);
           if (queueOnFail) {
@@ -1707,7 +2492,7 @@ var init_whatsapp_direct_service = __esm({
           throw new Error("One of buffer, fileName, filePath, or fileUrl is required");
         }
         try {
-          await sock.sendMessage(
+          const result = await sock.sendMessage(
             validTo,
             {
               document: documentBuffer,
@@ -1718,11 +2503,13 @@ var init_whatsapp_direct_service = __esm({
             },
             sendOptions
           );
+          await trackWhatsAppUsage(options2, "document");
           if (shouldCleanup && cleanupPath) {
             await fs6.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
             );
           }
+          return result;
         } catch (error) {
           logger_default.warn(`Failed to send document via ${id}: ${String(error)}`);
           if (queueOnFail) {
@@ -1821,7 +2608,13 @@ var init_whatsapp_direct_service = __esm({
         for (const item of queue2) {
           try {
             if (item.messageType === "text") {
-              await sock.sendMessage(item.recipient, { text: item.text });
+              await this.sendMessage(id, item.recipient, item.text, {
+                mentions: item.mentions,
+                companyId: item.companyId,
+                tenantId: item.tenantId,
+                trackUsage: item.trackUsage,
+                queueOnFail: false
+              });
               await outbox_queue_default.remove(id, item.id);
               logger_default.info(`\u2705 Sent queued text message ${item.id}`);
             } else if (item.messageType === "image" && item.mediaOptions) {
@@ -1894,7 +2687,7 @@ var init_outbox_queue = __esm({
       /**
        * Enqueue a text message
        */
-      async enqueue(sessionPhone, recipient, text, mentions) {
+      async enqueue(sessionPhone, recipient, text, mentions, metadata = {}) {
         const queue2 = await this.list(sessionPhone);
         const item = {
           id: randomUUID2(),
@@ -1903,6 +2696,9 @@ var init_outbox_queue = __esm({
           messageType: "text",
           text,
           mentions,
+          companyId: metadata.companyId,
+          tenantId: metadata.tenantId,
+          trackUsage: metadata.trackUsage,
           createdAt: (/* @__PURE__ */ new Date()).toISOString(),
           attempts: 0
         };
@@ -2249,7 +3045,7 @@ var init_sessions_simple = __esm({
 });
 
 // src/database/sharedConnection.ts
-import mongoose from "mongoose";
+import mongoose4 from "mongoose";
 async function getSharedConnection() {
   if (sharedConnection && sharedConnection.readyState === 1) {
     return sharedConnection;
@@ -2258,7 +3054,7 @@ async function getSharedConnection() {
     return connecting;
   }
   logger_default.info("[SharedDB] Connecting to constroad_db...");
-  connecting = mongoose.createConnection(config.mongodb.portalUri, {
+  connecting = mongoose4.createConnection(config.mongodb.portalUri, {
     dbName: config.mongodb.sharedDb,
     serverSelectionTimeoutMS: 1e4,
     socketTimeoutMS: 45e3,
@@ -2290,11 +3086,11 @@ var init_sharedConnection = __esm({
 });
 
 // src/models/cronjob.model.ts
-import { Schema } from "mongoose";
+import { Schema as Schema3 } from "mongoose";
 var CronJobMessageSchema, CronJobApiConfigSchema, CronJobScheduleSchema, CronJobRetryPolicySchema, CronJobHistoryEntrySchema, CronJobMetadataSchema, CronJobSchema;
 var init_cronjob_model = __esm({
   "src/models/cronjob.model.ts"() {
-    CronJobMessageSchema = new Schema(
+    CronJobMessageSchema = new Schema3(
       {
         sender: { type: String },
         chatId: { type: String, required: true },
@@ -2303,16 +3099,16 @@ var init_cronjob_model = __esm({
       },
       { _id: false }
     );
-    CronJobApiConfigSchema = new Schema(
+    CronJobApiConfigSchema = new Schema3(
       {
         url: { type: String, required: true },
         method: { type: String, enum: ["GET", "POST", "PUT"], default: "GET" },
         headers: { type: Map, of: String },
-        body: Schema.Types.Mixed
+        body: Schema3.Types.Mixed
       },
       { _id: false }
     );
-    CronJobScheduleSchema = new Schema(
+    CronJobScheduleSchema = new Schema3(
       {
         cronExpression: { type: String, required: true },
         cronExpressions: [{ type: String }],
@@ -2322,7 +3118,7 @@ var init_cronjob_model = __esm({
       },
       { _id: false }
     );
-    CronJobRetryPolicySchema = new Schema(
+    CronJobRetryPolicySchema = new Schema3(
       {
         maxRetries: { type: Number, default: 3 },
         backoffMultiplier: { type: Number, default: 2 },
@@ -2330,17 +3126,17 @@ var init_cronjob_model = __esm({
       },
       { _id: false }
     );
-    CronJobHistoryEntrySchema = new Schema(
+    CronJobHistoryEntrySchema = new Schema3(
       {
         status: { type: String, enum: ["success", "error"], required: true },
         timestamp: { type: Date, required: true },
         duration: Number,
         error: String,
-        metadata: Schema.Types.Mixed
+        metadata: Schema3.Types.Mixed
       },
       { _id: false }
     );
-    CronJobMetadataSchema = new Schema(
+    CronJobMetadataSchema = new Schema3(
       {
         createdBy: String,
         updatedBy: String,
@@ -2352,7 +3148,7 @@ var init_cronjob_model = __esm({
       },
       { _id: false }
     );
-    CronJobSchema = new Schema(
+    CronJobSchema = new Schema3(
       {
         companyId: {
           type: String,
@@ -2444,139 +3240,6 @@ var init_cronjob_model = __esm({
   }
 });
 
-// src/models/company.model.ts
-import { Schema as Schema2 } from "mongoose";
-var CompanyLimitsSchema, CompanySchema;
-var init_company_model = __esm({
-  "src/models/company.model.ts"() {
-    CompanyLimitsSchema = new Schema2(
-      {
-        whatsappMessages: {
-          type: Number,
-          required: true,
-          default: 1e3,
-          min: 0
-        },
-        storage: {
-          type: Number,
-          required: true,
-          default: 10,
-          // 10 GB
-          min: 0
-        },
-        users: {
-          type: Number,
-          required: true,
-          default: 5,
-          min: 1
-        },
-        orders: {
-          type: Number,
-          required: true,
-          default: 100,
-          min: 0
-        }
-      },
-      { _id: false }
-    );
-    CompanySchema = new Schema2(
-      {
-        companyId: {
-          type: String,
-          required: true,
-          unique: true
-        },
-        name: {
-          type: String,
-          required: true
-        },
-        slug: {
-          type: String,
-          index: true
-        },
-        ruc: {
-          type: String,
-          sparse: true
-        },
-        email: {
-          type: String,
-          sparse: true
-        },
-        phone: {
-          type: String
-        },
-        address: {
-          type: String
-        },
-        branding: {
-          logoLight: { type: String },
-          logoDark: { type: String },
-          favicon: { type: String }
-        },
-        documentSettings: {
-          type: Schema2.Types.Mixed,
-          required: false
-        },
-        whatsappConfig: {
-          sender: { type: String },
-          adminGroupId: { type: String },
-          aiEnabled: { type: Boolean, default: false },
-          cronjobPrefix: { type: String }
-        },
-        limits: {
-          type: CompanyLimitsSchema,
-          required: true,
-          default: () => ({})
-          // Usa defaults del sub-schema
-        },
-        features: {
-          modules: {
-            drive: { type: Boolean, default: false }
-          }
-        },
-        isActive: {
-          type: Boolean,
-          required: true,
-          default: true
-        },
-        subscription: {
-          limits: {
-            cronJobs: { type: Number }
-          },
-          usage: {
-            cronJobs: { type: Number }
-          }
-        },
-        // API Key for lila-app direct access (FE)
-        "api-key-lila-access": {
-          keyHash: { type: String },
-          keyEncrypted: { type: String },
-          keyPrefix: { type: String },
-          last4: { type: String },
-          isActive: { type: Boolean, default: false },
-          createdAt: { type: Date },
-          rotatedAt: { type: Date },
-          lastUsedAt: { type: Date },
-          lastUsedIp: { type: String },
-          allowedOrigins: { type: [String], default: [] },
-          allowedSenders: { type: [String], default: [] },
-          rateLimit: {
-            limit: { type: Number },
-            windowMs: { type: Number }
-          }
-        }
-      },
-      {
-        timestamps: true,
-        collection: "companies"
-        // Nombre de la colección en Portal
-      }
-    );
-    CompanySchema.index({ isActive: 1 });
-    CompanySchema.index({ slug: 1 }, { unique: true, sparse: true });
-  }
-});
-
 // src/database/models.ts
 var models_exports = {};
 __export(models_exports, {
@@ -2585,7 +3248,7 @@ __export(models_exports, {
   getCronJobModel: () => getCronJobModel,
   getSharedModels: () => getSharedModels
 });
-import { Schema as Schema3 } from "mongoose";
+import { Schema as Schema4 } from "mongoose";
 async function getCronJobModel() {
   if (cronJobModel) {
     return cronJobModel;
@@ -2627,7 +3290,7 @@ var init_models = __esm({
     cronJobModel = null;
     companyModel = null;
     configModel = null;
-    looseSchema = new Schema3({}, { strict: false });
+    looseSchema = new Schema4({}, { strict: false });
   }
 });
 
@@ -10404,457 +11067,6 @@ var require_parser = __commonJS({
       });
     };
     module.exports = CronParser;
-  }
-});
-
-// src/services/quota-validator.service.ts
-var quota_validator_service_exports = {};
-__export(quota_validator_service_exports, {
-  QuotaValidatorService: () => QuotaValidatorService,
-  default: () => quota_validator_service_default,
-  quotaValidatorService: () => quotaValidatorService
-});
-import mongoose4 from "mongoose";
-var QuotaValidatorService, quotaValidatorService, quota_validator_service_default;
-var init_quota_validator_service = __esm({
-  "src/services/quota-validator.service.ts"() {
-    init_environment();
-    init_company_model();
-    init_logger();
-    QuotaValidatorService = class _QuotaValidatorService {
-      constructor() {
-        this.portalMongoConn = null;
-        this.CompanyModel = null;
-        this.isConnected = false;
-        this.isConnecting = false;
-        // Circuit breaker
-        this.circuitBreaker = {
-          isOpen: false,
-          failures: 0,
-          lastFailure: 0,
-          nextRetry: 0
-        };
-        // Configuration
-        this.CIRCUIT_BREAKER_THRESHOLD = 5;
-        this.CIRCUIT_BREAKER_TIMEOUT = 60 * 1e3;
-        // 1 min
-        this.CONNECTION_TIMEOUT = 1e4;
-        // 10 sec
-        this.IS_PROD = process.env.NODE_ENV === "production";
-        process.once("SIGINT", () => this.disconnect());
-        process.once("SIGTERM", () => this.disconnect());
-      }
-      /**
-       * Get singleton instance (global cache para hot reloads)
-       */
-      static getInstance() {
-        if (!global.__quotaValidatorService) {
-          global.__quotaValidatorService = new _QuotaValidatorService();
-        }
-        return global.__quotaValidatorService;
-      }
-      // ==========================================================================
-      // CONNECTION
-      // ==========================================================================
-      /**
-       * Conecta a MongoDB de Portal (lazy, solo si es necesario)
-       */
-      async connect() {
-        if (this.isConnected && this.portalMongoConn && this.portalMongoConn.readyState === 1) {
-          return;
-        }
-        if (this.isConnecting) {
-          return this.waitForConnection();
-        }
-        if (this.isCircuitBreakerOpen()) {
-          throw new Error("Circuit breaker is open. Too many connection failures.");
-        }
-        this.isConnecting = true;
-        try {
-          if (!this.portalMongoConn || !this.IS_PROD) {
-            logger_default.info("\u{1F4E1} Connecting to Portal MongoDB (constroad_db)...");
-          }
-          const connection = mongoose4.createConnection(config.mongodb.portalUri, {
-            dbName: config.mongodb.sharedDb,
-            serverSelectionTimeoutMS: this.CONNECTION_TIMEOUT,
-            socketTimeoutMS: 45e3,
-            maxPoolSize: this.IS_PROD ? 5 : 3,
-            minPoolSize: 1,
-            family: 4,
-            // Force IPv4
-            retryWrites: true,
-            heartbeatFrequencyMS: 1e4
-          });
-          this.setupConnectionListeners(connection);
-          this.portalMongoConn = await connection.asPromise();
-          if (this.portalMongoConn.models.Company) {
-            this.CompanyModel = this.portalMongoConn.models.Company;
-          } else {
-            this.CompanyModel = this.portalMongoConn.model("Company", CompanySchema);
-          }
-          this.isConnected = true;
-          this.isConnecting = false;
-          this.resetCircuitBreaker();
-          logger_default.info("\u2705 QuotaValidator connected to Portal MongoDB");
-        } catch (error) {
-          this.isConnecting = false;
-          this.isConnected = false;
-          this.recordCircuitBreakerFailure();
-          logger_default.error("\u274C Failed to connect to Portal MongoDB:", error);
-          throw error;
-        }
-      }
-      /**
-       * Wait for connection in progress
-       */
-      async waitForConnection() {
-        const maxWait = 3e4;
-        const checkInterval = 100;
-        let waited = 0;
-        while (waited < maxWait) {
-          if (this.isConnected && this.portalMongoConn?.readyState === 1) {
-            return;
-          }
-          if (!this.isConnecting) {
-            throw new Error("Connection attempt failed");
-          }
-          await new Promise((resolve2) => setTimeout(resolve2, checkInterval));
-          waited += checkInterval;
-        }
-        throw new Error("Connection timeout");
-      }
-      /**
-       * Setup connection event listeners (evita duplicados)
-       */
-      setupConnectionListeners(conn) {
-        conn.removeAllListeners("error");
-        conn.removeAllListeners("disconnected");
-        conn.removeAllListeners("reconnected");
-        conn.on("error", (err) => {
-          if (this.IS_PROD) {
-            logger_default.error("\u274C Portal MongoDB error:", err.message);
-          }
-          this.isConnected = false;
-        });
-        conn.on("disconnected", () => {
-          this.isConnected = false;
-        });
-        conn.on("reconnected", () => {
-          this.isConnected = true;
-          if (this.IS_PROD) {
-            logger_default.info("\u{1F504} Portal MongoDB reconnected");
-          }
-        });
-      }
-      /**
-       * Circuit breaker: Check if open
-       */
-      isCircuitBreakerOpen() {
-        if (!this.circuitBreaker.isOpen) return false;
-        if (Date.now() > this.circuitBreaker.nextRetry) {
-          this.circuitBreaker.isOpen = false;
-          this.circuitBreaker.failures = 0;
-          logger_default.info("\u{1F513} Circuit breaker closed - retrying connections");
-          return false;
-        }
-        return true;
-      }
-      /**
-       * Circuit breaker: Record failure
-       */
-      recordCircuitBreakerFailure() {
-        this.circuitBreaker.failures++;
-        this.circuitBreaker.lastFailure = Date.now();
-        if (this.circuitBreaker.failures >= this.CIRCUIT_BREAKER_THRESHOLD) {
-          this.circuitBreaker.isOpen = true;
-          this.circuitBreaker.nextRetry = Date.now() + this.CIRCUIT_BREAKER_TIMEOUT;
-          logger_default.error(
-            `\u{1F512} Circuit breaker OPEN - Too many failures (${this.circuitBreaker.failures}). Will retry in ${this.CIRCUIT_BREAKER_TIMEOUT / 1e3}s`
-          );
-        }
-      }
-      /**
-       * Circuit breaker: Reset
-       */
-      resetCircuitBreaker() {
-        if (this.circuitBreaker.failures > 0 || this.circuitBreaker.isOpen) {
-          this.circuitBreaker.isOpen = false;
-          this.circuitBreaker.failures = 0;
-          logger_default.info("\u2705 Circuit breaker reset");
-        }
-      }
-      /**
-       * Desconecta de MongoDB
-       */
-      async disconnect() {
-        if (this.portalMongoConn) {
-          try {
-            await this.portalMongoConn.close();
-            this.portalMongoConn = null;
-            this.CompanyModel = null;
-            this.isConnected = false;
-            logger_default.info("\u{1F50C} QuotaValidator disconnected from Portal MongoDB");
-          } catch (error) {
-            logger_default.error("\u274C Error disconnecting QuotaValidator:", error);
-          }
-        }
-      }
-      /**
-       * Verifica si está conectado y listo
-       */
-      isReady() {
-        return this.isConnected && this.portalMongoConn !== null && this.portalMongoConn.readyState === 1;
-      }
-      // ==========================================================================
-      // COMPANY HELPERS
-      // ==========================================================================
-      /**
-       * Obtiene los datos de una empresa desde Portal MongoDB
-       * (auto-conecta si es necesario)
-       */
-      async getCompany(companyId) {
-        if (!this.isReady()) {
-          await this.connect();
-        }
-        if (!this.CompanyModel) {
-          throw new Error("QuotaValidator not initialized");
-        }
-        const company = await this.CompanyModel.findOne({ companyId, isActive: true });
-        if (!company) {
-          logger_default.warn(`Company not found or inactive: ${companyId}`);
-          throw new Error(`Company not found: ${companyId}`);
-        }
-        return company;
-      }
-      /**
-       * Obtiene la empresa por número de WhatsApp configurado (sender)
-       */
-      async getCompanyByWhatsappSender(sender) {
-        if (!sender) return null;
-        if (!this.isReady()) {
-          await this.connect();
-        }
-        if (!this.CompanyModel) {
-          throw new Error("QuotaValidator not initialized");
-        }
-        const digits = sender.replace(/[^\d]/g, "");
-        const candidates = Array.from(new Set([
-          sender,
-          digits,
-          digits ? `+${digits}` : ""
-        ].filter(Boolean)));
-        const company = await this.CompanyModel.findOne({
-          isActive: true,
-          $or: candidates.map((value) => ({ "whatsappConfig.sender": value }))
-        });
-        return company || null;
-      }
-      /**
-       * Obtiene el periodo actual (YYYY-MM)
-       */
-      getCurrentPeriod() {
-        const now = /* @__PURE__ */ new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, "0");
-        return `${year}-${month}`;
-      }
-      // ==========================================================================
-      // WHATSAPP QUOTA
-      // ==========================================================================
-      /**
-       * Verifica si una empresa puede enviar un mensaje de WhatsApp
-       * @param companyId ID de la empresa
-       * @returns true si está permitido, false si excede el límite
-       */
-      async checkWhatsAppQuota(companyId) {
-        try {
-          const company = await this.getCompany(companyId);
-          const limit = company.limits.whatsappMessages;
-          const used = company.subscription?.usage?.whatsappMessages || 0;
-          if (limit === -1) {
-            return true;
-          }
-          const allowed = used < limit;
-          if (!allowed) {
-            logger_default.warn(`WhatsApp quota exceeded for ${companyId}: ${used}/${limit}`);
-          }
-          return allowed;
-        } catch (error) {
-          logger_default.error(`Error checking WhatsApp quota for ${companyId}:`, error);
-          return true;
-        }
-      }
-      /**
-       * Obtiene información detallada de la quota de WhatsApp
-       */
-      async getWhatsAppQuotaInfo(companyId) {
-        const company = await this.getCompany(companyId);
-        const limit = company.limits.whatsappMessages;
-        const current = company.subscription?.usage?.whatsappMessages || 0;
-        if (limit === -1) {
-          return {
-            allowed: true,
-            current,
-            limit,
-            remaining: -1,
-            // Ilimitado
-            period: this.getCurrentPeriod()
-          };
-        }
-        const remaining = Math.max(0, limit - current);
-        const allowed = current < limit;
-        const period = this.getCurrentPeriod();
-        return { allowed, current, limit, remaining, period };
-      }
-      /**
-       * Incrementa el contador de mensajes de WhatsApp en MongoDB
-       */
-      async incrementWhatsAppUsage(companyId, count = 1) {
-        if (!this.isReady()) {
-          await this.connect();
-        }
-        if (!this.CompanyModel) {
-          throw new Error("QuotaValidator not initialized");
-        }
-        const result = await this.CompanyModel.findOneAndUpdate(
-          { companyId, isActive: true },
-          { $inc: { "subscription.usage.whatsappMessages": count } },
-          { new: true }
-        );
-        if (!result) {
-          throw new Error(`Company not found: ${companyId}`);
-        }
-        const newValue = result.subscription?.usage?.whatsappMessages || 0;
-        logger_default.debug(`WhatsApp usage for ${companyId}: ${newValue}`);
-        return newValue;
-      }
-      // ==========================================================================
-      // STORAGE QUOTA
-      // ==========================================================================
-      /**
-       * Verifica si una empresa puede almacenar un archivo
-       */
-      async checkStorageQuota(companyId, fileSize) {
-        try {
-          const company = await this.getCompany(companyId);
-          const limitGb = company.limits.storage;
-          if (limitGb === -1) {
-            return true;
-          }
-          const limitBytes = limitGb * 1024 * 1024 * 1024;
-          const usedGb = company.subscription?.usage?.storage || 0;
-          const usedBytes = usedGb * 1024 * 1024 * 1024;
-          const allowed = usedBytes + fileSize <= limitBytes;
-          if (!allowed) {
-            logger_default.warn(
-              `Storage quota exceeded for ${companyId}: ${this.formatBytes(usedBytes + fileSize)}/${limitGb} GB`
-            );
-          }
-          return allowed;
-        } catch (error) {
-          logger_default.error(`Error checking storage quota for ${companyId}:`, error);
-          return true;
-        }
-      }
-      /**
-       * Obtiene información detallada de la quota de almacenamiento
-       */
-      async getStorageQuotaInfo(companyId) {
-        const company = await this.getCompany(companyId);
-        const limitGb = company.limits.storage;
-        const usedGb = company.subscription?.usage?.storage || 0;
-        const current = usedGb * 1024 * 1024 * 1024;
-        if (limitGb === -1) {
-          return {
-            allowed: true,
-            current,
-            limit: -1,
-            remaining: -1,
-            // Ilimitado
-            period: this.getCurrentPeriod()
-          };
-        }
-        const limit = limitGb * 1024 * 1024 * 1024;
-        const remaining = Math.max(0, limit - current);
-        const allowed = current < limit;
-        const period = this.getCurrentPeriod();
-        return { allowed, current, limit, remaining, period };
-      }
-      /**
-       * Incrementa el contador de almacenamiento en MongoDB
-       */
-      async incrementStorageUsage(companyId, fileSize) {
-        if (!this.isReady()) {
-          await this.connect();
-        }
-        if (!this.CompanyModel) {
-          throw new Error("QuotaValidator not initialized");
-        }
-        const fileSizeGb = fileSize / (1024 * 1024 * 1024);
-        const result = await this.CompanyModel.findOneAndUpdate(
-          { companyId, isActive: true },
-          { $inc: { "subscription.usage.storage": fileSizeGb } },
-          { new: true }
-        );
-        if (!result) {
-          throw new Error(`Company not found: ${companyId}`);
-        }
-        const newValueGb = result.subscription?.usage?.storage || 0;
-        const newValueBytes = newValueGb * 1024 * 1024 * 1024;
-        logger_default.debug(`Storage usage for ${companyId}: ${newValueGb.toFixed(4)} GB`);
-        return newValueBytes;
-      }
-      /**
-       * Decrementa el contador de almacenamiento en MongoDB
-       */
-      async decrementStorageUsage(companyId, fileSize) {
-        if (!this.isReady()) {
-          await this.connect();
-        }
-        if (!this.CompanyModel) {
-          throw new Error("QuotaValidator not initialized");
-        }
-        const fileSizeGb = fileSize / (1024 * 1024 * 1024);
-        const result = await this.CompanyModel.findOneAndUpdate(
-          { companyId, isActive: true },
-          { $inc: { "subscription.usage.storage": -fileSizeGb } },
-          { new: true }
-        );
-        if (!result) {
-          throw new Error(`Company not found: ${companyId}`);
-        }
-        const newValueGb = result.subscription?.usage?.storage || 0;
-        const newValueBytes = newValueGb * 1024 * 1024 * 1024;
-        logger_default.debug(`Storage usage for ${companyId}: ${newValueGb.toFixed(4)} GB`);
-        return newValueBytes;
-      }
-      // ==========================================================================
-      // GENERAL QUOTA INFO
-      // ==========================================================================
-      /**
-       * Obtiene información completa de todas las quotas
-       */
-      async getQuotaInfo(companyId) {
-        const whatsappMessages = await this.getWhatsAppQuotaInfo(companyId);
-        const storage = await this.getStorageQuotaInfo(companyId);
-        return { whatsappMessages, storage };
-      }
-      // ==========================================================================
-      // UTILITIES
-      // ==========================================================================
-      /**
-       * Formatea bytes a formato legible
-       */
-      formatBytes(bytes) {
-        if (bytes === 0) return "0 Bytes";
-        const k60 = 1024;
-        const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-        const i50 = Math.floor(Math.log(bytes) / Math.log(k60));
-        return `${parseFloat((bytes / Math.pow(k60, i50)).toFixed(2))} ${sizes[i50]}`;
-      }
-    };
-    quotaValidatorService = QuotaValidatorService.getInstance();
-    quota_validator_service_default = quotaValidatorService;
   }
 });
 
@@ -22906,6 +23118,12 @@ var HTTP_STATUS = {
 
 // src/api/middlewares/errorHandler.ts
 init_telegram_alert_service();
+function normalizeAlertPath(p64) {
+  return p64.replace(/\/files\/.*/i, "/files/*").replace(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+    ":uuid"
+  ).replace(/[a-f0-9]{24}/gi, ":id");
+}
 function errorHandler(err, req, res, next) {
   const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_ERROR;
   const message = err.message || "Internal Server Error";
@@ -22918,9 +23136,10 @@ function errorHandler(err, req, res, next) {
   });
   const shouldAlert = statusCode >= 500 || req.path.startsWith("/api/drive") || req.path.startsWith("/api/message");
   if (shouldAlert) {
-    const alertKey = `${statusCode}:${req.path}:${message}`;
+    const normalizedPath = normalizeAlertPath(req.path);
+    const alertKey = `${statusCode}:${normalizedPath}:${message}`;
     const companyId = req.companyId || "N/A";
-    const errorMessage = [
+    const lines = [
       "LILA-APP ERROR!",
       "---------------------",
       `path: ${req.path}`,
@@ -22928,10 +23147,13 @@ function errorHandler(err, req, res, next) {
       `companyId: ${companyId}`,
       `status: ${statusCode}`,
       `message: ${message}`
-    ].join("\n");
+    ];
+    if (normalizedPath !== req.path) {
+      lines.push(`(agrupado: m\xE1x 1 alerta/5min para "${normalizedPath}")`);
+    }
     sendTelegramAlert({
       dedupeKey: alertKey,
-      message: errorMessage
+      message: lines.join("\n")
     }).catch((error) => {
       logger_default.warn("Failed to send Telegram alert", error);
     });
@@ -24384,113 +24606,6 @@ import multer from "multer";
 // src/api/controllers/message.controller.simple.ts
 init_whatsapp_direct_service();
 init_logger();
-
-// src/middleware/quota.middleware.ts
-init_quota_validator_service();
-init_logger();
-async function requireStorageQuota(req, res, next) {
-  try {
-    const companyId = req.companyId;
-    if (!companyId) {
-      const error = new Error("Company ID is required");
-      error.statusCode = 401;
-      error.code = "COMPANY_ID_REQUIRED";
-      throw error;
-    }
-    const file = req.file;
-    if (!file) {
-      const error = new Error("File is required");
-      error.statusCode = 400;
-      error.code = "FILE_REQUIRED";
-      throw error;
-    }
-    const fileSize = file.size;
-    if (!quotaValidatorService.isReady()) {
-      logger_default.warn("QuotaValidator not ready, allowing operation");
-      return next();
-    }
-    const allowed = await quotaValidatorService.checkStorageQuota(companyId, fileSize);
-    if (!allowed) {
-      const quotaInfo = await quotaValidatorService.getStorageQuotaInfo(companyId);
-      logger_default.warn(`Storage quota exceeded for company ${companyId}`, {
-        fileSize,
-        ...quotaInfo
-      });
-      res.status(429).json({
-        success: false,
-        error: {
-          message: "Storage quota exceeded",
-          code: "STORAGE_QUOTA_EXCEEDED",
-          statusCode: 429,
-          quota: {
-            current: quotaInfo.current,
-            limit: quotaInfo.limit,
-            remaining: quotaInfo.remaining,
-            period: quotaInfo.period,
-            currentFormatted: formatBytes(quotaInfo.current),
-            limitFormatted: formatBytes(quotaInfo.limit),
-            remainingFormatted: formatBytes(quotaInfo.remaining),
-            fileSizeFormatted: formatBytes(fileSize)
-          }
-        }
-      });
-      return;
-    }
-    logger_default.debug(`Storage quota check passed for company ${companyId}: ${fileSize} bytes`);
-    next();
-  } catch (error) {
-    const err = error;
-    const statusCode = err.statusCode || 500;
-    logger_default.error("Storage quota validation error:", error);
-    res.status(statusCode).json({
-      success: false,
-      error: {
-        message: err.message || "Error validating storage quota",
-        code: err.code || "QUOTA_VALIDATION_ERROR",
-        statusCode
-      }
-    });
-  }
-}
-async function incrementWhatsAppUsage(companyId) {
-  try {
-    if (quotaValidatorService.isReady()) {
-      await quotaValidatorService.incrementWhatsAppUsage(companyId, 1);
-      logger_default.debug(`Incremented WhatsApp usage for company ${companyId}`);
-    }
-  } catch (error) {
-    logger_default.error("Error incrementing WhatsApp usage:", error);
-  }
-}
-async function incrementStorageUsage(companyId, fileSize) {
-  try {
-    if (quotaValidatorService.isReady()) {
-      await quotaValidatorService.incrementStorageUsage(companyId, fileSize);
-      logger_default.debug(`Incremented storage usage for company ${companyId}: ${fileSize} bytes`);
-    }
-  } catch (error) {
-    logger_default.error("Error incrementing storage usage:", error);
-  }
-}
-async function decrementStorageUsage(companyId, fileSize) {
-  try {
-    if (quotaValidatorService.isReady()) {
-      await quotaValidatorService.decrementStorageUsage(companyId, fileSize);
-      logger_default.debug(`Decremented storage usage for company ${companyId}: ${fileSize} bytes`);
-    }
-  } catch (error) {
-    logger_default.error("Error decrementing storage usage:", error);
-  }
-}
-function formatBytes(bytes) {
-  if (bytes === 0) return "0 Bytes";
-  const k60 = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-  const i50 = Math.floor(Math.log(bytes) / Math.log(k60));
-  return `${parseFloat((bytes / Math.pow(k60, i50)).toFixed(2))} ${sizes[i50]}`;
-}
-
-// src/api/controllers/message.controller.simple.ts
 async function sendTextMessage(req, res, next) {
   try {
     const { sessionPhone } = req.params;
@@ -24512,9 +24627,6 @@ async function sendTextMessage(req, res, next) {
         companyId: req.companyId,
         tenantId: req.tenantId
       });
-      if (req.tenantId) {
-        await incrementWhatsAppUsage(req.tenantId);
-      }
       res.status(HTTP_STATUS.OK).json({
         success: true,
         message: "Message sent successfully",
@@ -24583,9 +24695,6 @@ async function sendImage(req, res, next) {
       return next(error);
     }
     await WhatsAppDirectService.sendImageFile(sessionPhone, to3, sendOptions);
-    if (req.tenantId) {
-      await incrementWhatsAppUsage(req.tenantId);
-    }
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: "Image sent successfully"
@@ -24634,9 +24743,6 @@ async function sendVideo(req, res, next) {
       return next(error);
     }
     await WhatsAppDirectService.sendVideoFile(sessionPhone, to3, sendOptions);
-    if (req.tenantId) {
-      await incrementWhatsAppUsage(req.tenantId);
-    }
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: "Video sent successfully"
@@ -24685,9 +24791,6 @@ async function sendFile(req, res, next) {
       return next(error);
     }
     await WhatsAppDirectService.sendDocument(sessionPhone, to3, sendOptions);
-    if (req.tenantId) {
-      await incrementWhatsAppUsage(req.tenantId);
-    }
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: "File sent successfully"
@@ -25463,6 +25566,103 @@ import path20 from "path";
 import fs13 from "fs-extra";
 import path17 from "path";
 init_storage_path_service();
+
+// src/middleware/quota.middleware.ts
+init_quota_validator_service();
+init_logger();
+async function requireStorageQuota(req, res, next) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      const error = new Error("Company ID is required");
+      error.statusCode = 401;
+      error.code = "COMPANY_ID_REQUIRED";
+      throw error;
+    }
+    const file = req.file;
+    if (!file) {
+      const error = new Error("File is required");
+      error.statusCode = 400;
+      error.code = "FILE_REQUIRED";
+      throw error;
+    }
+    const fileSize = file.size;
+    if (!quotaValidatorService.isReady()) {
+      logger_default.warn("QuotaValidator not ready, allowing operation");
+      return next();
+    }
+    const allowed = await quotaValidatorService.checkStorageQuota(companyId, fileSize);
+    if (!allowed) {
+      const quotaInfo = await quotaValidatorService.getStorageQuotaInfo(companyId);
+      logger_default.warn(`Storage quota exceeded for company ${companyId}`, {
+        fileSize,
+        ...quotaInfo
+      });
+      res.status(429).json({
+        success: false,
+        error: {
+          message: "Storage quota exceeded",
+          code: "STORAGE_QUOTA_EXCEEDED",
+          statusCode: 429,
+          quota: {
+            current: quotaInfo.current,
+            limit: quotaInfo.limit,
+            remaining: quotaInfo.remaining,
+            period: quotaInfo.period,
+            currentFormatted: formatBytes(quotaInfo.current),
+            limitFormatted: formatBytes(quotaInfo.limit),
+            remainingFormatted: formatBytes(quotaInfo.remaining),
+            fileSizeFormatted: formatBytes(fileSize)
+          }
+        }
+      });
+      return;
+    }
+    logger_default.debug(`Storage quota check passed for company ${companyId}: ${fileSize} bytes`);
+    next();
+  } catch (error) {
+    const err = error;
+    const statusCode = err.statusCode || 500;
+    logger_default.error("Storage quota validation error:", error);
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        message: err.message || "Error validating storage quota",
+        code: err.code || "QUOTA_VALIDATION_ERROR",
+        statusCode
+      }
+    });
+  }
+}
+async function incrementStorageUsage(companyId, fileSize) {
+  try {
+    if (quotaValidatorService.isReady()) {
+      await quotaValidatorService.incrementStorageUsage(companyId, fileSize);
+      logger_default.debug(`Incremented storage usage for company ${companyId}: ${fileSize} bytes`);
+    }
+  } catch (error) {
+    logger_default.error("Error incrementing storage usage:", error);
+  }
+}
+async function decrementStorageUsage(companyId, fileSize) {
+  try {
+    if (quotaValidatorService.isReady()) {
+      await quotaValidatorService.decrementStorageUsage(companyId, fileSize);
+      logger_default.debug(`Decremented storage usage for company ${companyId}: ${fileSize} bytes`);
+    }
+  } catch (error) {
+    logger_default.error("Error decrementing storage usage:", error);
+  }
+}
+function formatBytes(bytes) {
+  if (bytes === 0) return "0 Bytes";
+  const k60 = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+  const i50 = Math.floor(Math.log(bytes) / Math.log(k60));
+  return `${parseFloat((bytes / Math.pow(k60, i50)).toFixed(2))} ${sizes[i50]}`;
+}
+
+// src/api/controllers/drive.controller.ts
 init_logger();
 
 // src/services/thumbnail.service.ts
@@ -37232,7 +37432,7 @@ function generateRandomDataForSchema(schema) {
 
 // src/services/report-data-aggregator.service.ts
 init_sharedConnection();
-import mongoose5, { Schema as Schema4 } from "mongoose";
+import mongoose6, { Schema as Schema5 } from "mongoose";
 var modelCache = /* @__PURE__ */ new Map();
 var LIQUIDACION_IGV_FACTOR = 1.18;
 function asRecord(value) {
@@ -37243,7 +37443,7 @@ async function getFlexibleModel(modelName) {
     return modelCache.get(modelName);
   }
   const conn = await getSharedConnection();
-  const model = conn.models[modelName] || conn.model(modelName, new Schema4({}, { strict: false }));
+  const model = conn.models[modelName] || conn.model(modelName, new Schema5({}, { strict: false }));
   modelCache.set(modelName, model);
   return model;
 }
@@ -37254,8 +37454,8 @@ function normalizeIds(ids) {
   });
   const results = [];
   for (const value of unique) {
-    if (mongoose5.Types.ObjectId.isValid(value)) {
-      results.push(new mongoose5.Types.ObjectId(value));
+    if (mongoose6.Types.ObjectId.isValid(value)) {
+      results.push(new mongoose6.Types.ObjectId(value));
     }
     results.push(value);
   }
@@ -37305,7 +37505,7 @@ async function aggregateReportData(serviceId) {
   const orderIds = Array.isArray(service.orderIds) ? service.orderIds : [];
   const orderQueryIds = normalizeIds(orderIds);
   const clientId = String(service.clientId || "").trim();
-  const client = clientId && mongoose5.Types.ObjectId.isValid(clientId) ? await Client.findById(new mongoose5.Types.ObjectId(clientId)).lean() : clientId ? await Client.findOne({ _id: clientId }).lean() : null;
+  const client = clientId && mongoose6.Types.ObjectId.isValid(clientId) ? await Client.findById(new mongoose6.Types.ObjectId(clientId)).lean() : clientId ? await Client.findOne({ _id: clientId }).lean() : null;
   const orders = orderQueryIds.length ? await Order.find({ _id: { $in: orderQueryIds } }).lean() : [];
   const dispatches = orderQueryIds.length ? await Dispatch.find({ orderId: { $in: orderQueryIds } }).lean() : [];
   const certificates = orderQueryIds.length ? await Certificate.find({ orderId: { $in: orderQueryIds } }).lean() : [];
@@ -37656,15 +37856,15 @@ function structureDataForReportType(reportType, rawData) {
 
 // src/models/service-report.model.ts
 init_sharedConnection();
-import { Schema as Schema5 } from "mongoose";
-var ServiceReportSchema = new Schema5(
+import { Schema as Schema6 } from "mongoose";
+var ServiceReportSchema = new Schema6(
   {
     serviceManagementId: { type: String, required: true },
     type: { type: String, required: true },
     status: { type: String, required: true, default: "draft" },
     title: { type: String, required: false },
     description: { type: String, required: false },
-    schemaData: { type: Schema5.Types.Mixed, required: false },
+    schemaData: { type: Schema6.Types.Mixed, required: false },
     generatedDocuments: {
       docxUrl: { type: String, required: false },
       pdfUrl: { type: String, required: false },
@@ -37674,11 +37874,11 @@ var ServiceReportSchema = new Schema5(
       annexPages: { type: Number, required: false }
     },
     draftData: {
-      schemaData: { type: Schema5.Types.Mixed, required: false },
-      schemaOverrides: { type: Schema5.Types.Mixed, required: false },
-      customSections: { type: [Schema5.Types.Mixed], required: false, default: [] },
-      annexes: { type: [Schema5.Types.Mixed], required: false, default: [] },
-      folioConfig: { type: Schema5.Types.Mixed, required: false },
+      schemaData: { type: Schema6.Types.Mixed, required: false },
+      schemaOverrides: { type: Schema6.Types.Mixed, required: false },
+      customSections: { type: [Schema6.Types.Mixed], required: false, default: [] },
+      annexes: { type: [Schema6.Types.Mixed], required: false, default: [] },
+      folioConfig: { type: Schema6.Types.Mixed, required: false },
       savedAt: { type: String, required: false },
       savedBy: { type: String, required: false }
     },
@@ -37687,14 +37887,14 @@ var ServiceReportSchema = new Schema5(
       lockedAt: { type: String, required: false },
       expiresAt: { type: String, required: false }
     },
-    auditLog: { type: [Schema5.Types.Mixed], required: false, default: [] },
-    attachments: { type: [Schema5.Types.Mixed], required: false, default: [] },
-    schemaOverrides: { type: Schema5.Types.Mixed, required: false },
-    customSections: { type: [Schema5.Types.Mixed], required: false, default: [] },
-    annexes: { type: [Schema5.Types.Mixed], required: false, default: [] },
-    folioConfig: { type: Schema5.Types.Mixed, required: false },
-    sections: { type: Schema5.Types.Mixed, required: false },
-    metrics: { type: Schema5.Types.Mixed, required: false },
+    auditLog: { type: [Schema6.Types.Mixed], required: false, default: [] },
+    attachments: { type: [Schema6.Types.Mixed], required: false, default: [] },
+    schemaOverrides: { type: Schema6.Types.Mixed, required: false },
+    customSections: { type: [Schema6.Types.Mixed], required: false, default: [] },
+    annexes: { type: [Schema6.Types.Mixed], required: false, default: [] },
+    folioConfig: { type: Schema6.Types.Mixed, required: false },
+    sections: { type: Schema6.Types.Mixed, required: false },
+    metrics: { type: Schema6.Types.Mixed, required: false },
     visibility: { type: Boolean, required: false, default: false }
   },
   { timestamps: true }
@@ -52285,7 +52485,7 @@ var DocumentBackground = class extends XmlComponent {
     );
   }
 };
-var Document4 = class extends XmlComponent {
+var Document5 = class extends XmlComponent {
   constructor(options2) {
     super("w:document");
     __publicField(this, "body");
@@ -52370,7 +52570,7 @@ var DocumentWrapper = class {
   constructor(options2) {
     __publicField(this, "document");
     __publicField(this, "relationships");
-    this.document = new Document4(options2);
+    this.document = new Document5(options2);
     this.relationships = new Relationships();
   }
   get View() {
@@ -61891,8 +62091,8 @@ init_whatsapp_phone();
 // src/services/dispatch-vale-payload.service.ts
 init_sharedConnection();
 init_models();
-import { Schema as Schema6, Types } from "mongoose";
-var looseSchema2 = new Schema6({}, { strict: false });
+import { Schema as Schema7, Types } from "mongoose";
+var looseSchema2 = new Schema7({}, { strict: false });
 async function getPortalModel(name, collection) {
   const conn = await getSharedConnection();
   return conn.models[name] || conn.model(name, looseSchema2, collection);
@@ -62046,8 +62246,8 @@ async function buildDispatchValePayloadFromPortal(params) {
 
 // src/models/dispatch-vale-run.model.ts
 init_sharedConnection();
-import mongoose7, { Schema as Schema7 } from "mongoose";
-var DispatchValeRunSchema = new Schema7(
+import mongoose8, { Schema as Schema8 } from "mongoose";
+var DispatchValeRunSchema = new Schema8(
   {
     companyId: { type: String, required: true, index: true },
     dispatchId: { type: String, required: true, index: true },
@@ -62082,9 +62282,9 @@ async function getDispatchValeRunModel() {
 }
 var DispatchValeRun;
 try {
-  DispatchValeRun = mongoose7.model("DispatchValeRun");
+  DispatchValeRun = mongoose8.model("DispatchValeRun");
 } catch {
-  DispatchValeRun = mongoose7.model(
+  DispatchValeRun = mongoose8.model(
     "DispatchValeRun",
     DispatchValeRunSchema
   );
@@ -62655,8 +62855,8 @@ init_environment();
 
 // src/models/dispatch-notification-flag.model.ts
 init_sharedConnection();
-import { Schema as Schema8 } from "mongoose";
-var dispatchNotificationFlagSchema = new Schema8(
+import { Schema as Schema9 } from "mongoose";
+var dispatchNotificationFlagSchema = new Schema9(
   {
     key: { type: String, required: true, unique: true },
     companyId: { type: String, required: true },
@@ -64350,7 +64550,7 @@ function resolveReportDate(run, now = /* @__PURE__ */ new Date()) {
     timeZone: WEATHER_ASPHALT_FORECAST.timezone
   });
   const [year, month, day] = todayLima.split("-").map(Number);
-  const targetDate = new Date(Date.UTC(year, month - 1, day + (is6amRun ? 0 : 1)));
+  const targetDate = new Date(Date.UTC(year, month - 1, day + (is6amRun ? 0 : 1), 12));
   return {
     is6amRun,
     date: targetDate,
@@ -64776,7 +64976,7 @@ init_storage_path_service();
 import fs27 from "fs-extra";
 import path28 from "node:path";
 import {
-  Schema as Schema9,
+  Schema as Schema10,
   Types as Types2
 } from "mongoose";
 var SERVICE_MIGRATION_WARNING = "El servicio destino tiene otro cliente. Verifica contratos y visibilidad.";
@@ -64784,7 +64984,7 @@ var DRIVE_BLOCKER = "El servicio tiene v\xEDnculos al drive global. La migraci\x
 var ORDER_LINKED_FILES_BLOCKER = "El servicio usa archivos ligados a pedidos, despacho o laboratorio. La migraci\xF3n entre empresas a\xFAn no remapea ese alcance.";
 var ORDER_SUBTREE_BLOCKER = "El servicio tiene pedidos con despachos, medias, certificados, kardex, consumos o links propios. La migraci\xF3n entre empresas a\xFAn no remapea ese sub\xE1rbol completo.";
 var REPORT_WARNING = "Revisa el pairing de pedidos antes de migrar reportes y m\xE9tricas.";
-var looseSchema3 = new Schema9({}, { strict: false });
+var looseSchema3 = new Schema10({}, { strict: false });
 var asText = (value) => String(value ?? "").trim();
 var normalizePath = (value) => value.replace(/\\/g, "/").replace(/^\/+/, "");
 var toMongoIdentifier = (value) => Types2.ObjectId.isValid(value) ? new Types2.ObjectId(value) : value;
