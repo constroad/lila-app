@@ -40384,9 +40384,7 @@ ${signaturesHtml}`;
       return num.toLocaleString("es-PE");
     }
     if (type === "date" || type === "datetime") {
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return String(value);
-      return date.toLocaleDateString("es-PE");
+      return this.formatDateValue(value, type);
     }
     if (type === "select" && field && "options" in field && field.options) {
       const option = field.options.find((opt) => opt.value === value);
@@ -40402,6 +40400,19 @@ ${signaturesHtml}`;
       return JSON.stringify(value);
     }
     return String(value);
+  }
+  formatDateValue(value, type) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T00:00:00(?:\.000)?Z?$)/);
+      if (dateOnlyMatch && type === "date") {
+        const [, year, month, day] = dateOnlyMatch;
+        return `${day}/${month}/${year}`;
+      }
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleDateString("es-PE", { timeZone: "America/Lima" });
   }
   formatCurrency(value) {
     const num = Number(value);
