@@ -7,6 +7,11 @@ export interface IUsageMetric extends Document {
     total: number;
     daily: Record<string, number>;
   };
+  /** Ejecuciones de cron jobs en el mes (mensual; se incrementa por disparo). */
+  cronRuns: {
+    total: number;
+    daily: Record<string, number>;
+  };
   storage: {
     total: number;
     byModule: Record<string, number>;
@@ -38,6 +43,10 @@ const UsageMetricSchema = new Schema<IUsageMetric>(
       index: true,
     },
     whatsapp: {
+      total: { type: Number, default: 0 },
+      daily: { type: Map, of: Number, default: {} },
+    },
+    cronRuns: {
       total: { type: Number, default: 0 },
       daily: { type: Map, of: Number, default: {} },
     },

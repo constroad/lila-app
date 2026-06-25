@@ -1,12 +1,16 @@
 import axios from 'axios';
 import config from '../config/environment.js';
-import { getSharedModels } from '../database/models.js';
+import { getSharedModels, getUsageMetricModel } from '../database/models.js';
 import { ICronJob } from '../models/cronjob.model.js';
 import { WhatsAppDirectService } from '../services/whatsapp-direct.service.js';
 import logger from '../utils/logger.js';
 import { getCompanyBotLabel, replaceLegacyBotLabel } from '../utils/company-bot.js';
 import { normalizeWhatsAppRecipient } from '../utils/whatsapp-phone.js';
 import { materializeRetryJob, normalizeExecutorApiUrl } from './executor.utils.js';
+
+/** Período mensual ('YYYY-MM') y día ('YYYY-MM-DD') para métricas de uso. */
+const getUsagePeriod = (date = new Date()) => date.toISOString().slice(0, 7);
+const getUsageDayKey = (date = new Date()) => date.toISOString().slice(0, 10);
 
 type ApiMessageItem = {
   to?: string;
@@ -382,6 +386,31 @@ export class JobExecutor {
         },
       }
     );
+
+    // Métrica mensual de ejecuciones de cron por empresa (usage_metrics.cronRuns).
+    // No debe romper la ejecución del job si falla la escritura de la métrica.
+    if (job.companyId) {
+      try {
+        const UsageMetricModel = await getUsageMetricModel();
+        const period = getUsagePeriod();
+        const dayKey = getUsageDayKey();
+        await UsageMetricModel.updateOne(
+          { companyId: job.companyId, period },
+          {
+            $inc: {
+              'cronRuns.total': 1,
+              [`cronRuns.daily.${dayKey}`]: 1,
+            },
+          },
+          { upsert: true }
+        );
+      } catch (error) {
+        logger.warn(
+          `[JobExecutor] Failed to record cron run metric for company ${job.companyId}:`,
+          error
+        );
+      }
+    }
   }
 
   private async recordError(

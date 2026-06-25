@@ -2,10 +2,12 @@ import { Schema, type Model } from 'mongoose';
 import { getSharedConnection } from './sharedConnection.js';
 import { CronJobSchema, ICronJob } from '../models/cronjob.model.js';
 import { CompanySchema, ICompany } from '../models/company.model.js';
+import { UsageMetricSchema, IUsageMetric } from '../models/usage-metric.model.js';
 
 let cronJobModel: Model<ICronJob> | null = null;
 let companyModel: Model<ICompany> | null = null;
 let configModel: Model<Record<string, unknown>> | null = null;
+let usageMetricModel: Model<IUsageMetric> | null = null;
 const looseSchema = new Schema({}, { strict: false });
 
 export async function getCronJobModel(): Promise<Model<ICronJob>> {
@@ -42,6 +44,18 @@ export async function getConfigModel(): Promise<Model<Record<string, unknown>>> 
     (conn.models.Config as Model<Record<string, unknown>>) ||
     conn.model<Record<string, unknown>>('Config', looseSchema, 'configs');
   return configModel;
+}
+
+export async function getUsageMetricModel(): Promise<Model<IUsageMetric>> {
+  if (usageMetricModel) {
+    return usageMetricModel;
+  }
+
+  const conn = await getSharedConnection();
+  usageMetricModel =
+    (conn.models.UsageMetric as Model<IUsageMetric>) ||
+    conn.model<IUsageMetric>('UsageMetric', UsageMetricSchema);
+  return usageMetricModel;
 }
 
 export async function getSharedModels(): Promise<{
