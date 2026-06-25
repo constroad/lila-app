@@ -15,6 +15,9 @@ export type OutboxMessage = {
   // Text message
   text?: string;
   mentions?: string[];
+  companyId?: string;
+  tenantId?: string;
+  trackUsage?: boolean;
   // Media message (image, video, document)
   mediaOptions?: {
     buffer?: string; // Base64 encoded buffer
@@ -24,6 +27,8 @@ export type OutboxMessage = {
     caption?: string;
     mimeType?: string;
     companyId?: string;
+    tenantId?: string;
+    trackUsage?: boolean;
   };
 };
 
@@ -43,7 +48,13 @@ export class OutboxQueue {
   /**
    * Enqueue a text message
    */
-  async enqueue(sessionPhone: string, recipient: string, text: string, mentions?: string[]): Promise<OutboxMessage> {
+  async enqueue(
+    sessionPhone: string,
+    recipient: string,
+    text: string,
+    mentions?: string[],
+    metadata: { companyId?: string; tenantId?: string; trackUsage?: boolean } = {}
+  ): Promise<OutboxMessage> {
     const queue = await this.list(sessionPhone);
     const item: OutboxMessage = {
       id: randomUUID(),
@@ -52,6 +63,9 @@ export class OutboxQueue {
       messageType: 'text',
       text,
       mentions,
+      companyId: metadata.companyId,
+      tenantId: metadata.tenantId,
+      trackUsage: metadata.trackUsage,
       createdAt: new Date().toISOString(),
       attempts: 0,
     };
@@ -76,6 +90,8 @@ export class OutboxQueue {
       caption?: string;
       mimeType?: string;
       companyId?: string;
+      tenantId?: string;
+      trackUsage?: boolean;
     }
   ): Promise<OutboxMessage> {
     const queue = await this.list(sessionPhone);

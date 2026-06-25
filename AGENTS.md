@@ -1,6 +1,7 @@
 # lila-app — Backend
 > Calidad/respuesta: `/projects/QUALITY-CODE-SHORT.SPEC.md` (canónico).
 > Backend WhatsApp AI. No UI, no Chakra, no React.
+> **Contexto de toda la app:** al iniciar sesión, lee **una vez** `specs/architecture-as-is.md` (este proyecto) y `../Portal/specs/ARCHITECTURE-Portal.as-is.md` (frontend, incl. integración con este backend). Fuente de verdad; actualízalos ante cambios significativos.
 
 ## Stack
 TypeScript ESM (`type: module`) · Express · Baileys (WhatsApp) · Mongoose · Anthropic SDK · Puppeteer/PDF.

@@ -147,7 +147,7 @@ function resolveReportDate(run?: string, now: Date = new Date()) {
     timeZone: WEATHER_ASPHALT_FORECAST.timezone,
   });
   const [year, month, day] = todayLima.split('-').map(Number);
-  const targetDate = new Date(Date.UTC(year, month - 1, day + (is6amRun ? 0 : 1)));
+  const targetDate = new Date(Date.UTC(year, month - 1, day + (is6amRun ? 0 : 1), 12));
   return {
     is6amRun,
     date: targetDate,

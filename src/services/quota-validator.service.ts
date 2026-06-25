@@ -30,6 +30,7 @@
 import mongoose, { Connection, Model } from 'mongoose';
 import { config } from '../config/environment.js';
 import { CompanySchema, ICompany } from '../models/company.model.js';
+import { UsageMetricSchema, IUsageMetric } from '../models/usage-metric.model.js';
 import logger from '../utils/logger.js';
 
 // ============================================================================
@@ -56,6 +57,9 @@ interface CircuitBreakerState {
   nextRetry: number;
 }
 
+const getPeriod = (date = new Date()) => date.toISOString().slice(0, 7);
+const getDayKey = (date = new Date()) => date.toISOString().slice(0, 10);
+
 // ============================================================================
 // GLOBAL CACHE (sobrevive hot reloads en desarrollo)
 // ============================================================================
@@ -72,6 +76,7 @@ declare global {
 export class QuotaValidatorService {
   private portalMongoConn: Connection | null = null;
   private CompanyModel: Model<ICompany> | null = null;
+  private UsageMetricModel: Model<IUsageMetric> | null = null;
   private isConnected = false;
   private isConnecting = false;
 
@@ -161,6 +166,12 @@ export class QuotaValidatorService {
         this.CompanyModel = this.portalMongoConn.models.Company as Model<ICompany>;
       } else {
         this.CompanyModel = this.portalMongoConn.model<ICompany>('Company', CompanySchema);
+      }
+
+      if (this.portalMongoConn.models.UsageMetric) {
+        this.UsageMetricModel = this.portalMongoConn.models.UsageMetric as Model<IUsageMetric>;
+      } else {
+        this.UsageMetricModel = this.portalMongoConn.model<IUsageMetric>('UsageMetric', UsageMetricSchema);
       }
 
       this.isConnected = true;
@@ -289,6 +300,7 @@ export class QuotaValidatorService {
         await this.portalMongoConn.close();
         this.portalMongoConn = null;
         this.CompanyModel = null;
+        this.UsageMetricModel = null;
         this.isConnected = false;
         logger.info('🔌 QuotaValidator disconnected from Portal MongoDB');
       } catch (error) {
@@ -455,6 +467,26 @@ export class QuotaValidatorService {
 
     const newValue = result.subscription?.usage?.whatsappMessages || 0;
     logger.debug(`WhatsApp usage for ${companyId}: ${newValue}`);
+
+    if (this.UsageMetricModel) {
+      const period = getPeriod();
+      const dayKey = getDayKey();
+
+      try {
+        await this.UsageMetricModel.updateOne(
+          { companyId, period },
+          {
+            $inc: {
+              'whatsapp.total': count,
+              [`whatsapp.daily.${dayKey}`]: count,
+            },
+          },
+          { upsert: true }
+        );
+      } catch (error) {
+        logger.warn(`Failed to update WhatsApp usage metrics for ${companyId}:`, error);
+      }
+    }
 
     return newValue;
   }

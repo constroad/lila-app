@@ -34,6 +34,32 @@ import {
   resolveWhatsAppMediaSourceKind,
 } from './whatsapp-media-source.util.js';
 import { assertWhatsAppRecipient } from '../utils/whatsapp-phone.js';
+import { quotaValidatorService } from './quota-validator.service.js';
+
+type WhatsAppUsageOptions = {
+  companyId?: string;
+  tenantId?: string;
+  trackUsage?: boolean;
+};
+
+const resolveUsageCompanyId = (options: WhatsAppUsageOptions = {}) =>
+  options.companyId || options.tenantId || '';
+
+const trackWhatsAppUsage = async (
+  options: WhatsAppUsageOptions = {},
+  context: string
+) => {
+  if (options.trackUsage === false) return;
+
+  const companyId = resolveUsageCompanyId(options);
+  if (!companyId) return;
+
+  try {
+    await quotaValidatorService.incrementWhatsAppUsage(companyId, 1);
+  } catch (error) {
+    logger.warn(`Failed to track WhatsApp usage for ${companyId} (${context}): ${String(error)}`);
+  }
+};
 
 export const WhatsAppDirectService = {
   /**
@@ -58,7 +84,13 @@ export const WhatsAppDirectService = {
     id: string,
     to: string,
     message: string,
-    options: { queueOnFail?: boolean; mentions?: string[]; companyId?: string; tenantId?: string } = {}
+    options: {
+      queueOnFail?: boolean;
+      mentions?: string[];
+      companyId?: string;
+      tenantId?: string;
+      trackUsage?: boolean;
+    } = {}
   ) {
     const queueOnFail = options.queueOnFail !== false;
     const routedTo = resolveWhatsAppRecipient(to, {
@@ -69,7 +101,11 @@ export const WhatsAppDirectService = {
     const sock = getSession(id);
     if (!sock) {
       if (queueOnFail) {
-        await outboxQueue.enqueue(id, routedTo, message, options.mentions);
+        await outboxQueue.enqueue(id, routedTo, message, options.mentions, {
+          companyId: options.companyId,
+          tenantId: options.tenantId,
+          trackUsage: options.trackUsage,
+        });
         logger.info(`📥 Queued text message for ${id} (session not found)`);
         return { queued: true };
       }
@@ -78,7 +114,11 @@ export const WhatsAppDirectService = {
 
     if (!isSessionReady(id)) {
       if (queueOnFail) {
-        await outboxQueue.enqueue(id, routedTo, message, options.mentions);
+        await outboxQueue.enqueue(id, routedTo, message, options.mentions, {
+          companyId: options.companyId,
+          tenantId: options.tenantId,
+          trackUsage: options.trackUsage,
+        });
         logger.info(`📥 Queued text message for ${id} (session not ready)`);
         return { queued: true };
       }
@@ -88,11 +128,17 @@ export const WhatsAppDirectService = {
     try {
       const validTo = assertWhatsAppRecipient(routedTo);
       const sendOptions = getSendOptions(validTo);
-      return await sock.sendMessage(validTo, { text: message }, sendOptions);
+      const result = await sock.sendMessage(validTo, { text: message }, sendOptions);
+      await trackWhatsAppUsage(options, 'text');
+      return result;
     } catch (error) {
       logger.warn(`Failed to send message via ${id}: ${String(error)}`);
       if (queueOnFail) {
-        await outboxQueue.enqueue(id, routedTo, message, options.mentions);
+        await outboxQueue.enqueue(id, routedTo, message, options.mentions, {
+          companyId: options.companyId,
+          tenantId: options.tenantId,
+          trackUsage: options.trackUsage,
+        });
         logger.info(`📥 Queued text message for ${id} (send failed)`);
         return { queued: true };
       }
@@ -124,6 +170,7 @@ export const WhatsAppDirectService = {
       companyId?: string;
       tenantId?: string;
       queueOnFail?: boolean;
+      trackUsage?: boolean;
     }
   ) {
     const queueOnFail = options.queueOnFail !== false;
@@ -204,7 +251,7 @@ export const WhatsAppDirectService = {
 
     try {
       // Send video
-      await sock.sendMessage(
+      const result = await sock.sendMessage(
         validTo,
         {
           video: videoBuffer,
@@ -214,6 +261,7 @@ export const WhatsAppDirectService = {
         },
         sendOptions
       );
+      await trackWhatsAppUsage(options, 'video');
 
       // Cleanup temp files
       if (shouldCleanup && cleanupPath) {
@@ -221,6 +269,7 @@ export const WhatsAppDirectService = {
           console.error(`⚠️ Could not delete temp file ${cleanupPath}:`, err)
         );
       }
+      return result;
     } catch (error) {
       logger.warn(`Failed to send video via ${id}: ${String(error)}`);
       if (queueOnFail) {
@@ -259,6 +308,7 @@ export const WhatsAppDirectService = {
       companyId?: string;
       tenantId?: string;
       queueOnFail?: boolean;
+      trackUsage?: boolean;
     }
   ) {
     const queueOnFail = options.queueOnFail !== false;
@@ -337,7 +387,7 @@ export const WhatsAppDirectService = {
 
     try {
       // Send image
-      await sock.sendMessage(
+      const result = await sock.sendMessage(
         validTo,
         {
           image: imageBuffer,
@@ -346,6 +396,7 @@ export const WhatsAppDirectService = {
         },
         sendOptions
       );
+      await trackWhatsAppUsage(options, 'image');
 
       // Cleanup temp files
       if (shouldCleanup && cleanupPath) {
@@ -353,6 +404,7 @@ export const WhatsAppDirectService = {
           console.error(`⚠️ Could not delete temp file ${cleanupPath}:`, err)
         );
       }
+      return result;
     } catch (error) {
       logger.warn(`Failed to send image via ${id}: ${String(error)}`);
       if (queueOnFail) {
@@ -389,6 +441,7 @@ export const WhatsAppDirectService = {
       companyId?: string;
       tenantId?: string;
       queueOnFail?: boolean;
+      trackUsage?: boolean;
     }
   ) {
     const queueOnFail = options.queueOnFail !== false;
@@ -474,7 +527,7 @@ export const WhatsAppDirectService = {
 
     try {
       // Send document
-      await sock.sendMessage(
+      const result = await sock.sendMessage(
         validTo,
         {
           document: documentBuffer,
@@ -484,6 +537,7 @@ export const WhatsAppDirectService = {
         },
         sendOptions
       );
+      await trackWhatsAppUsage(options, 'document');
 
       // Cleanup temp files
       if (shouldCleanup && cleanupPath) {
@@ -491,6 +545,7 @@ export const WhatsAppDirectService = {
           console.error(`⚠️ Could not delete temp file ${cleanupPath}:`, err)
         );
       }
+      return result;
     } catch (error) {
       logger.warn(`Failed to send document via ${id}: ${String(error)}`);
       if (queueOnFail) {
@@ -606,7 +661,13 @@ export const WhatsAppDirectService = {
       try {
         if (item.messageType === 'text') {
           // Send text message
-          await sock.sendMessage(item.recipient, { text: item.text! });
+          await this.sendMessage(id, item.recipient, item.text!, {
+            mentions: item.mentions,
+            companyId: item.companyId,
+            tenantId: item.tenantId,
+            trackUsage: item.trackUsage,
+            queueOnFail: false,
+          });
           await outboxQueue.remove(id, item.id);
           logger.info(`✅ Sent queued text message ${item.id}`);
         } else if (item.messageType === 'image' && item.mediaOptions) {

@@ -3,10 +3,19 @@ import {
   getCombinedRiskLevel,
 } from './weather-asphalt-forecast.service';
 
+/** Genera 3 fechas consecutivas empezando desde hoy en formato yyyy-mm-dd. */
+function dailyDates(): string[] {
+  const now = new Date();
+  return [0, 1, 2].map((offset) => {
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + offset, 12));
+    return d.toISOString().slice(0, 10);
+  });
+}
+
 function buildDailyPayload(prob: number, mm: number) {
   return {
     daily: {
-      time: ['2026-06-16', '2026-06-17', '2026-06-18'],
+      time: dailyDates(),
       temperature_2m_mean: [18, 18, 18],
       precipitation_probability_max: [prob, prob, prob],
       precipitation_sum: [mm, mm, mm],
