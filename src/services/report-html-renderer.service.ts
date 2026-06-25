@@ -38,6 +38,12 @@ interface PhotoItem {
   path?: string;
   buffer?: Buffer;
   category?: string;
+  mimeType?: string;
+  fileUrl?: string;
+  activityId?: string;
+  activityLabel?: string;
+  activityIndex?: number;
+  activitySourceId?: string;
   areaM2?: number;
   volumeM3?: number;
   tipo?: string;
@@ -1997,6 +2003,9 @@ ${signaturesHtml}`;
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : '';
     const groups = this.resolvePhotoGroups(section);
     if (groups.length === 0) {
+      if (this.schema.code === 'INF-ACT' && section.id === 'registroFotografico') {
+        return '';
+      }
       return `<div class="section">${title}<div>Sin fotos registradas.</div></div>`;
     }
 
@@ -2237,6 +2246,13 @@ ${signaturesHtml}`;
       return [];
     }
 
+    if (this.schema.code === 'INF-ACT' && section.id === 'registroFotografico') {
+      const activityGroups = this.resolvePhotoGroupsByActivity(photos);
+      if (activityGroups.length > 0) {
+        return activityGroups;
+      }
+    }
+
     if (!section.categories || section.categories.length === 0) {
       return [{ photos }];
     }
@@ -2255,6 +2271,30 @@ ${signaturesHtml}`;
     }
 
     return groups.filter((group) => group.photos.length > 0);
+  }
+
+  private resolvePhotoGroupsByActivity(photos: PhotoItem[]): PhotoGroup[] {
+    const groups = new Map<string, PhotoGroup>();
+    let hasActivityMetadata = false;
+
+    photos.forEach((photo) => {
+      const activityLabel = String((photo as any).activityLabel || '').trim();
+      const activityId = String((photo as any).activityId || '').trim();
+      if (activityLabel || activityId) {
+        hasActivityMetadata = true;
+      }
+      const key = activityId || activityLabel || 'sin-actividad';
+      const label = activityLabel || (activityId ? `Actividad ${activityId}` : 'Sin actividad asignada');
+      const current = groups.get(key) || { label, photos: [] };
+      current.photos.push(photo);
+      groups.set(key, current);
+    });
+
+    if (!hasActivityMetadata) {
+      return [];
+    }
+
+    return Array.from(groups.values()).filter((group) => group.photos.length > 0);
   }
 
   private limitPhotos(photos: PhotoItem[], max?: number): PhotoItem[] {
@@ -2323,19 +2363,30 @@ ${signaturesHtml}`;
   }
 
   private async renderPhotoTable(photos: PhotoItem[], section: SectionSchema): Promise<string> {
-    const imagePhotos = photos.filter((photo) => this.isImagePhoto(photo));
+    const supportsDocumentTiles = this.schema.code === 'INF-ACT' && section.id === 'registroFotografico';
+    const tablePhotos = supportsDocumentTiles ? photos : photos.filter((photo) => this.isImagePhoto(photo));
     const [columns] = this.parseLayout(section.layout);
     const imageHeight = this.resolvePhotoHeight(columns);
     const rows: string[] = [];
 
-    for (let i = 0; i < imagePhotos.length; i += columns) {
-      const chunk = imagePhotos.slice(i, i + columns);
+    for (let i = 0; i < tablePhotos.length; i += columns) {
+      const chunk = tablePhotos.slice(i, i + columns);
       const cells = await Promise.all(
         chunk.map(async (photo, index) => {
-          const src = await this.resolveImageSrc(photo);
-          const imgTag = src
-            ? `<img src="${src}" style="width:100%;height:${imageHeight}px;object-fit:contain;background:#f8f8f8;" />`
-            : `<div style="height:${imageHeight}px;display:flex;align-items:center;justify-content:center;background:#f8f8f8;">Sin imagen</div>`;
+          const isImage = this.isImagePhoto(photo);
+          const src = isImage ? await this.resolveImageSrc(photo) : null;
+          const fileUrl = this.resolvePhotoFileUrl(photo);
+          const fileName = this.escapeHtml(photo.filename || (photo as any).name || 'Documento');
+          const imgTag = isImage
+            ? (src
+              ? `<img src="${src}" style="width:100%;height:${imageHeight}px;object-fit:contain;background:#f8f8f8;" />`
+              : `<div style="height:${imageHeight}px;display:flex;align-items:center;justify-content:center;background:#f8f8f8;">Sin imagen</div>`)
+            : `<div style="height:${imageHeight}px;display:flex;align-items:center;justify-content:center;text-align:center;background:#f8f8f8;border:1px solid #e5e7eb;padding:12px;font-size:12px;line-height:1.35;">
+                <div>
+                  <div style="font-weight:bold;margin-bottom:6px;">PDF / Documento</div>
+                  ${fileUrl ? `<a href="${this.escapeHtml(fileUrl)}">${fileName}</a>` : fileName}
+                </div>
+              </div>`;
           const caption = this.buildPhotoCaption(photo, section, i + index + 1);
           const captionHtml = caption
             ? `<div class="caption">${this.renderCaptionLines(caption)}</div>`
@@ -2356,6 +2407,17 @@ ${signaturesHtml}`;
     }
 
     return `<table class="photo-table" style="table-layout:fixed;">${rows.join('')}</table>`;
+  }
+
+  private resolvePhotoFileUrl(photo: PhotoItem): string {
+    return (
+      (photo as any).fileUrl ||
+      photo.url ||
+      (photo as any).lilaAppUrl ||
+      (photo as any).metadata?.lilaAppUrl ||
+      (photo as any).metadata?.fileUrl ||
+      ''
+    );
   }
 
   private getIaaAreaRows(): Array<Record<string, any>> {

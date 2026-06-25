@@ -1598,6 +1598,10 @@ var init_usage_metric_model = __esm({
           total: { type: Number, default: 0 },
           daily: { type: Map, of: Number, default: {} }
         },
+        cronRuns: {
+          total: { type: Number, default: 0 },
+          daily: { type: Map, of: Number, default: {} }
+        },
         storage: {
           total: { type: Number, default: 0 },
           byModule: { type: Map, of: Number, default: {} }
@@ -3246,7 +3250,8 @@ __export(models_exports, {
   getCompanyModel: () => getCompanyModel,
   getConfigModel: () => getConfigModel,
   getCronJobModel: () => getCronJobModel,
-  getSharedModels: () => getSharedModels
+  getSharedModels: () => getSharedModels,
+  getUsageMetricModel: () => getUsageMetricModel
 });
 import { Schema as Schema4 } from "mongoose";
 async function getCronJobModel() {
@@ -3273,6 +3278,14 @@ async function getConfigModel() {
   configModel = conn.models.Config || conn.model("Config", looseSchema, "configs");
   return configModel;
 }
+async function getUsageMetricModel() {
+  if (usageMetricModel) {
+    return usageMetricModel;
+  }
+  const conn = await getSharedConnection();
+  usageMetricModel = conn.models.UsageMetric || conn.model("UsageMetric", UsageMetricSchema);
+  return usageMetricModel;
+}
 async function getSharedModels() {
   const [CronJobModel, CompanyModel, ConfigModel] = await Promise.all([
     getCronJobModel(),
@@ -3281,15 +3294,17 @@ async function getSharedModels() {
   ]);
   return { CronJobModel, CompanyModel, ConfigModel };
 }
-var cronJobModel, companyModel, configModel, looseSchema;
+var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema;
 var init_models = __esm({
   "src/database/models.ts"() {
     init_sharedConnection();
     init_cronjob_model();
     init_company_model();
+    init_usage_metric_model();
     cronJobModel = null;
     companyModel = null;
     configModel = null;
+    usageMetricModel = null;
     looseSchema = new Schema4({}, { strict: false });
   }
 });
@@ -23876,6 +23891,8 @@ function normalizeExecutorApiUrl(rawUrl, portalBaseUrl) {
 }
 
 // src/jobs/executor.service.ts
+var getUsagePeriod = (date = /* @__PURE__ */ new Date()) => date.toISOString().slice(0, 7);
+var getUsageDayKey = (date = /* @__PURE__ */ new Date()) => date.toISOString().slice(0, 10);
 var JobExecutor = class {
   constructor() {
   }
@@ -24166,6 +24183,28 @@ ${normalized}`;
         }
       }
     );
+    if (job.companyId) {
+      try {
+        const UsageMetricModel = await getUsageMetricModel();
+        const period = getUsagePeriod();
+        const dayKey = getUsageDayKey();
+        await UsageMetricModel.updateOne(
+          { companyId: job.companyId, period },
+          {
+            $inc: {
+              "cronRuns.total": 1,
+              [`cronRuns.daily.${dayKey}`]: 1
+            }
+          },
+          { upsert: true }
+        );
+      } catch (error) {
+        logger_default.warn(
+          `[JobExecutor] Failed to record cron run metric for company ${job.companyId}:`,
+          error
+        );
+      }
+    }
   }
   async recordError(job, error, duration) {
     const { CronJobModel } = await getSharedModels();
@@ -39732,6 +39771,9 @@ ${signaturesHtml}`;
     const title = resolvedTitle ? `<h2>${this.escapeHtml(resolvedTitle)}</h2>` : "";
     const groups = this.resolvePhotoGroups(section);
     if (groups.length === 0) {
+      if (this.schema.code === "INF-ACT" && section.id === "registroFotografico") {
+        return "";
+      }
       return `<div class="section">${title}<div>Sin fotos registradas.</div></div>`;
     }
     const groupHtml = [];
@@ -39902,6 +39944,12 @@ ${signaturesHtml}`;
     if (photos.length === 0) {
       return [];
     }
+    if (this.schema.code === "INF-ACT" && section.id === "registroFotografico") {
+      const activityGroups = this.resolvePhotoGroupsByActivity(photos);
+      if (activityGroups.length > 0) {
+        return activityGroups;
+      }
+    }
     if (!section.categories || section.categories.length === 0) {
       return [{ photos }];
     }
@@ -39917,6 +39965,26 @@ ${signaturesHtml}`;
       return [{ photos }];
     }
     return groups.filter((group) => group.photos.length > 0);
+  }
+  resolvePhotoGroupsByActivity(photos) {
+    const groups = /* @__PURE__ */ new Map();
+    let hasActivityMetadata = false;
+    photos.forEach((photo) => {
+      const activityLabel = String(photo.activityLabel || "").trim();
+      const activityId = String(photo.activityId || "").trim();
+      if (activityLabel || activityId) {
+        hasActivityMetadata = true;
+      }
+      const key = activityId || activityLabel || "sin-actividad";
+      const label = activityLabel || (activityId ? `Actividad ${activityId}` : "Sin actividad asignada");
+      const current = groups.get(key) || { label, photos: [] };
+      current.photos.push(photo);
+      groups.set(key, current);
+    });
+    if (!hasActivityMetadata) {
+      return [];
+    }
+    return Array.from(groups.values()).filter((group) => group.photos.length > 0);
   }
   limitPhotos(photos, max) {
     if (!max || photos.length <= max) {
@@ -39963,16 +40031,25 @@ ${signaturesHtml}`;
     return hasImageExtension;
   }
   async renderPhotoTable(photos, section) {
-    const imagePhotos = photos.filter((photo) => this.isImagePhoto(photo));
+    const supportsDocumentTiles = this.schema.code === "INF-ACT" && section.id === "registroFotografico";
+    const tablePhotos = supportsDocumentTiles ? photos : photos.filter((photo) => this.isImagePhoto(photo));
     const [columns] = this.parseLayout(section.layout);
     const imageHeight = this.resolvePhotoHeight(columns);
     const rows = [];
-    for (let i50 = 0; i50 < imagePhotos.length; i50 += columns) {
-      const chunk = imagePhotos.slice(i50, i50 + columns);
+    for (let i50 = 0; i50 < tablePhotos.length; i50 += columns) {
+      const chunk = tablePhotos.slice(i50, i50 + columns);
       const cells = await Promise.all(
         chunk.map(async (photo, index) => {
-          const src = await this.resolveImageSrc(photo);
-          const imgTag = src ? `<img src="${src}" style="width:100%;height:${imageHeight}px;object-fit:contain;background:#f8f8f8;" />` : `<div style="height:${imageHeight}px;display:flex;align-items:center;justify-content:center;background:#f8f8f8;">Sin imagen</div>`;
+          const isImage = this.isImagePhoto(photo);
+          const src = isImage ? await this.resolveImageSrc(photo) : null;
+          const fileUrl = this.resolvePhotoFileUrl(photo);
+          const fileName = this.escapeHtml(photo.filename || photo.name || "Documento");
+          const imgTag = isImage ? src ? `<img src="${src}" style="width:100%;height:${imageHeight}px;object-fit:contain;background:#f8f8f8;" />` : `<div style="height:${imageHeight}px;display:flex;align-items:center;justify-content:center;background:#f8f8f8;">Sin imagen</div>` : `<div style="height:${imageHeight}px;display:flex;align-items:center;justify-content:center;text-align:center;background:#f8f8f8;border:1px solid #e5e7eb;padding:12px;font-size:12px;line-height:1.35;">
+                <div>
+                  <div style="font-weight:bold;margin-bottom:6px;">PDF / Documento</div>
+                  ${fileUrl ? `<a href="${this.escapeHtml(fileUrl)}">${fileName}</a>` : fileName}
+                </div>
+              </div>`;
           const caption = this.buildPhotoCaption(photo, section, i50 + index + 1);
           const captionHtml = caption ? `<div class="caption">${this.renderCaptionLines(caption)}</div>` : "";
           const cellWidth = `${(100 / columns).toFixed(2)}%`;
@@ -39988,6 +40065,9 @@ ${signaturesHtml}`;
       rows.push(`<tr>${cells.join("")}</tr>`);
     }
     return `<table class="photo-table" style="table-layout:fixed;">${rows.join("")}</table>`;
+  }
+  resolvePhotoFileUrl(photo) {
+    return photo.fileUrl || photo.url || photo.lilaAppUrl || photo.metadata?.lilaAppUrl || photo.metadata?.fileUrl || "";
   }
   getIaaAreaRows() {
     const rows = this.getValue("cuadroMetrado");
