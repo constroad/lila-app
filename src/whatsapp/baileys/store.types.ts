@@ -13,6 +13,8 @@ export interface InMemoryStore {
   contacts: Map<string, Contact>;
   messages: MessageMap;
   readFromFile: () => void;
-  writeToFile: () => void;
+  writeToFile: () => void | Promise<void>;
   bind: (ev: any) => void;
+  /** Marca el store como modificado para que el próximo writeToFile persista. */
+  markDirty: () => void;
 }

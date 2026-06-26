@@ -70,7 +70,12 @@ var init_environment = __esm({
         // 60 segundos
         aiEnabled: process.env.WHATSAPP_AI_ENABLED === "true",
         aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || "51949376824",
-        baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || "fatal"
+        baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || "fatal",
+        // RLS de envío: cuando true exige auth de tenant + ownership de sender en /message
+        // y BLOQUEA cross-tenant. Default false = solo identifica/avisa (backward-compatible).
+        // Es un toggle de comportamiento por entorno (off en dev, on en prod tras validar logs),
+        // por eso vive en env y no en constants. Ver SCALABILITY-MULTI-SESSION.spec §4.
+        rlsEnforce: process.env.WHATSAPP_RLS_ENFORCE === "true"
       },
       // Claude API
       anthropic: {
@@ -125,7 +130,15 @@ var init_environment = __esm({
         jwtSecret: process.env.JWT_SECRET || "dev-jwt-secret",
         rateLimitWindow: process.env.RATE_LIMIT_WINDOW || "5m",
         rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || "200", 10),
-        trustProxy: resolvedTrustProxy
+        trustProxy: resolvedTrustProxy,
+        // Límites por IP (anti-abuso). Ajustables por env. Para límites por TENANT
+        // (producto/billing) ver SCALABILITY-MULTI-SESSION.spec §4.5 y QUOTAS spec.
+        sessionRateMax: parseInt(process.env.SESSION_RATE_MAX || "5", 10),
+        // sesiones/min
+        jobsRateMax: parseInt(process.env.JOBS_RATE_MAX || "10", 10),
+        // cron ops/min
+        messageRateMax: parseInt(process.env.MESSAGE_RATE_MAX || "100", 10)
+        // mensajes/min
       },
       // Features
       features: {
@@ -257,6 +270,3871 @@ ${safeStringify(meta, 2)}` : ` ${safeStringify(meta)}` : "";
       })
     );
     logger_default = logger;
+  }
+});
+
+// node_modules/safe-buffer/index.js
+var require_safe_buffer = __commonJS({
+  "node_modules/safe-buffer/index.js"(exports, module) {
+    var buffer2 = __require("buffer");
+    var Buffer2 = buffer2.Buffer;
+    function copyProps(src, dst) {
+      for (var key in src) {
+        dst[key] = src[key];
+      }
+    }
+    if (Buffer2.from && Buffer2.alloc && Buffer2.allocUnsafe && Buffer2.allocUnsafeSlow) {
+      module.exports = buffer2;
+    } else {
+      copyProps(buffer2, exports);
+      exports.Buffer = SafeBuffer;
+    }
+    function SafeBuffer(arg, encodingOrOffset, length) {
+      return Buffer2(arg, encodingOrOffset, length);
+    }
+    SafeBuffer.prototype = Object.create(Buffer2.prototype);
+    copyProps(Buffer2, SafeBuffer);
+    SafeBuffer.from = function(arg, encodingOrOffset, length) {
+      if (typeof arg === "number") {
+        throw new TypeError("Argument must not be a number");
+      }
+      return Buffer2(arg, encodingOrOffset, length);
+    };
+    SafeBuffer.alloc = function(size, fill, encoding) {
+      if (typeof size !== "number") {
+        throw new TypeError("Argument must be a number");
+      }
+      var buf = Buffer2(size);
+      if (fill !== void 0) {
+        if (typeof encoding === "string") {
+          buf.fill(fill, encoding);
+        } else {
+          buf.fill(fill);
+        }
+      } else {
+        buf.fill(0);
+      }
+      return buf;
+    };
+    SafeBuffer.allocUnsafe = function(size) {
+      if (typeof size !== "number") {
+        throw new TypeError("Argument must be a number");
+      }
+      return Buffer2(size);
+    };
+    SafeBuffer.allocUnsafeSlow = function(size) {
+      if (typeof size !== "number") {
+        throw new TypeError("Argument must be a number");
+      }
+      return buffer2.SlowBuffer(size);
+    };
+  }
+});
+
+// node_modules/jws/lib/data-stream.js
+var require_data_stream = __commonJS({
+  "node_modules/jws/lib/data-stream.js"(exports, module) {
+    var Buffer2 = require_safe_buffer().Buffer;
+    var Stream2 = __require("stream");
+    var util2 = __require("util");
+    function DataStream(data) {
+      this.buffer = null;
+      this.writable = true;
+      this.readable = true;
+      if (!data) {
+        this.buffer = Buffer2.alloc(0);
+        return this;
+      }
+      if (typeof data.pipe === "function") {
+        this.buffer = Buffer2.alloc(0);
+        data.pipe(this);
+        return this;
+      }
+      if (data.length || typeof data === "object") {
+        this.buffer = data;
+        this.writable = false;
+        process.nextTick(function() {
+          this.emit("end", data);
+          this.readable = false;
+          this.emit("close");
+        }.bind(this));
+        return this;
+      }
+      throw new TypeError("Unexpected data type (" + typeof data + ")");
+    }
+    util2.inherits(DataStream, Stream2);
+    DataStream.prototype.write = function write(data) {
+      this.buffer = Buffer2.concat([this.buffer, Buffer2.from(data)]);
+      this.emit("data", data);
+    };
+    DataStream.prototype.end = function end(data) {
+      if (data)
+        this.write(data);
+      this.emit("end", data);
+      this.emit("close");
+      this.writable = false;
+      this.readable = false;
+    };
+    module.exports = DataStream;
+  }
+});
+
+// node_modules/ecdsa-sig-formatter/src/param-bytes-for-alg.js
+var require_param_bytes_for_alg = __commonJS({
+  "node_modules/ecdsa-sig-formatter/src/param-bytes-for-alg.js"(exports, module) {
+    "use strict";
+    function getParamSize(keySize) {
+      var result = (keySize / 8 | 0) + (keySize % 8 === 0 ? 0 : 1);
+      return result;
+    }
+    var paramBytesForAlg = {
+      ES256: getParamSize(256),
+      ES384: getParamSize(384),
+      ES512: getParamSize(521)
+    };
+    function getParamBytesForAlg(alg) {
+      var paramBytes = paramBytesForAlg[alg];
+      if (paramBytes) {
+        return paramBytes;
+      }
+      throw new Error('Unknown algorithm "' + alg + '"');
+    }
+    module.exports = getParamBytesForAlg;
+  }
+});
+
+// node_modules/ecdsa-sig-formatter/src/ecdsa-sig-formatter.js
+var require_ecdsa_sig_formatter = __commonJS({
+  "node_modules/ecdsa-sig-formatter/src/ecdsa-sig-formatter.js"(exports, module) {
+    "use strict";
+    var Buffer2 = require_safe_buffer().Buffer;
+    var getParamBytesForAlg = require_param_bytes_for_alg();
+    var MAX_OCTET = 128;
+    var CLASS_UNIVERSAL = 0;
+    var PRIMITIVE_BIT = 32;
+    var TAG_SEQ = 16;
+    var TAG_INT = 2;
+    var ENCODED_TAG_SEQ = TAG_SEQ | PRIMITIVE_BIT | CLASS_UNIVERSAL << 6;
+    var ENCODED_TAG_INT = TAG_INT | CLASS_UNIVERSAL << 6;
+    function base64Url(base64) {
+      return base64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+    }
+    function signatureAsBuffer(signature) {
+      if (Buffer2.isBuffer(signature)) {
+        return signature;
+      } else if ("string" === typeof signature) {
+        return Buffer2.from(signature, "base64");
+      }
+      throw new TypeError("ECDSA signature must be a Base64 string or a Buffer");
+    }
+    function derToJose(signature, alg) {
+      signature = signatureAsBuffer(signature);
+      var paramBytes = getParamBytesForAlg(alg);
+      var maxEncodedParamLength = paramBytes + 1;
+      var inputLength = signature.length;
+      var offset = 0;
+      if (signature[offset++] !== ENCODED_TAG_SEQ) {
+        throw new Error('Could not find expected "seq"');
+      }
+      var seqLength = signature[offset++];
+      if (seqLength === (MAX_OCTET | 1)) {
+        seqLength = signature[offset++];
+      }
+      if (inputLength - offset < seqLength) {
+        throw new Error('"seq" specified length of "' + seqLength + '", only "' + (inputLength - offset) + '" remaining');
+      }
+      if (signature[offset++] !== ENCODED_TAG_INT) {
+        throw new Error('Could not find expected "int" for "r"');
+      }
+      var rLength = signature[offset++];
+      if (inputLength - offset - 2 < rLength) {
+        throw new Error('"r" specified length of "' + rLength + '", only "' + (inputLength - offset - 2) + '" available');
+      }
+      if (maxEncodedParamLength < rLength) {
+        throw new Error('"r" specified length of "' + rLength + '", max of "' + maxEncodedParamLength + '" is acceptable');
+      }
+      var rOffset = offset;
+      offset += rLength;
+      if (signature[offset++] !== ENCODED_TAG_INT) {
+        throw new Error('Could not find expected "int" for "s"');
+      }
+      var sLength = signature[offset++];
+      if (inputLength - offset !== sLength) {
+        throw new Error('"s" specified length of "' + sLength + '", expected "' + (inputLength - offset) + '"');
+      }
+      if (maxEncodedParamLength < sLength) {
+        throw new Error('"s" specified length of "' + sLength + '", max of "' + maxEncodedParamLength + '" is acceptable');
+      }
+      var sOffset = offset;
+      offset += sLength;
+      if (offset !== inputLength) {
+        throw new Error('Expected to consume entire buffer, but "' + (inputLength - offset) + '" bytes remain');
+      }
+      var rPadding = paramBytes - rLength, sPadding = paramBytes - sLength;
+      var dst = Buffer2.allocUnsafe(rPadding + rLength + sPadding + sLength);
+      for (offset = 0; offset < rPadding; ++offset) {
+        dst[offset] = 0;
+      }
+      signature.copy(dst, offset, rOffset + Math.max(-rPadding, 0), rOffset + rLength);
+      offset = paramBytes;
+      for (var o37 = offset; offset < o37 + sPadding; ++offset) {
+        dst[offset] = 0;
+      }
+      signature.copy(dst, offset, sOffset + Math.max(-sPadding, 0), sOffset + sLength);
+      dst = dst.toString("base64");
+      dst = base64Url(dst);
+      return dst;
+    }
+    function countPadding(buf, start, stop) {
+      var padding = 0;
+      while (start + padding < stop && buf[start + padding] === 0) {
+        ++padding;
+      }
+      var needsSign = buf[start + padding] >= MAX_OCTET;
+      if (needsSign) {
+        --padding;
+      }
+      return padding;
+    }
+    function joseToDer(signature, alg) {
+      signature = signatureAsBuffer(signature);
+      var paramBytes = getParamBytesForAlg(alg);
+      var signatureBytes = signature.length;
+      if (signatureBytes !== paramBytes * 2) {
+        throw new TypeError('"' + alg + '" signatures must be "' + paramBytes * 2 + '" bytes, saw "' + signatureBytes + '"');
+      }
+      var rPadding = countPadding(signature, 0, paramBytes);
+      var sPadding = countPadding(signature, paramBytes, signature.length);
+      var rLength = paramBytes - rPadding;
+      var sLength = paramBytes - sPadding;
+      var rsBytes = 1 + 1 + rLength + 1 + 1 + sLength;
+      var shortLength = rsBytes < MAX_OCTET;
+      var dst = Buffer2.allocUnsafe((shortLength ? 2 : 3) + rsBytes);
+      var offset = 0;
+      dst[offset++] = ENCODED_TAG_SEQ;
+      if (shortLength) {
+        dst[offset++] = rsBytes;
+      } else {
+        dst[offset++] = MAX_OCTET | 1;
+        dst[offset++] = rsBytes & 255;
+      }
+      dst[offset++] = ENCODED_TAG_INT;
+      dst[offset++] = rLength;
+      if (rPadding < 0) {
+        dst[offset++] = 0;
+        offset += signature.copy(dst, offset, 0, paramBytes);
+      } else {
+        offset += signature.copy(dst, offset, rPadding, paramBytes);
+      }
+      dst[offset++] = ENCODED_TAG_INT;
+      dst[offset++] = sLength;
+      if (sPadding < 0) {
+        dst[offset++] = 0;
+        signature.copy(dst, offset, paramBytes);
+      } else {
+        signature.copy(dst, offset, paramBytes + sPadding);
+      }
+      return dst;
+    }
+    module.exports = {
+      derToJose,
+      joseToDer
+    };
+  }
+});
+
+// node_modules/buffer-equal-constant-time/index.js
+var require_buffer_equal_constant_time = __commonJS({
+  "node_modules/buffer-equal-constant-time/index.js"(exports, module) {
+    "use strict";
+    var Buffer2 = __require("buffer").Buffer;
+    var SlowBuffer = __require("buffer").SlowBuffer;
+    module.exports = bufferEq;
+    function bufferEq(a49, b63) {
+      if (!Buffer2.isBuffer(a49) || !Buffer2.isBuffer(b63)) {
+        return false;
+      }
+      if (a49.length !== b63.length) {
+        return false;
+      }
+      var c66 = 0;
+      for (var i50 = 0; i50 < a49.length; i50++) {
+        c66 |= a49[i50] ^ b63[i50];
+      }
+      return c66 === 0;
+    }
+    bufferEq.install = function() {
+      Buffer2.prototype.equal = SlowBuffer.prototype.equal = function equal(that) {
+        return bufferEq(this, that);
+      };
+    };
+    var origBufEqual = Buffer2.prototype.equal;
+    var origSlowBufEqual = SlowBuffer.prototype.equal;
+    bufferEq.restore = function() {
+      Buffer2.prototype.equal = origBufEqual;
+      SlowBuffer.prototype.equal = origSlowBufEqual;
+    };
+  }
+});
+
+// node_modules/jwa/index.js
+var require_jwa = __commonJS({
+  "node_modules/jwa/index.js"(exports, module) {
+    var Buffer2 = require_safe_buffer().Buffer;
+    var crypto6 = __require("crypto");
+    var formatEcdsa = require_ecdsa_sig_formatter();
+    var util2 = __require("util");
+    var MSG_INVALID_ALGORITHM = '"%s" is not a valid algorithm.\n  Supported algorithms are:\n  "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512" and "none".';
+    var MSG_INVALID_SECRET = "secret must be a string or buffer";
+    var MSG_INVALID_VERIFIER_KEY = "key must be a string or a buffer";
+    var MSG_INVALID_SIGNER_KEY = "key must be a string, a buffer or an object";
+    var supportsKeyObjects = typeof crypto6.createPublicKey === "function";
+    if (supportsKeyObjects) {
+      MSG_INVALID_VERIFIER_KEY += " or a KeyObject";
+      MSG_INVALID_SECRET += "or a KeyObject";
+    }
+    function checkIsPublicKey(key) {
+      if (Buffer2.isBuffer(key)) {
+        return;
+      }
+      if (typeof key === "string") {
+        return;
+      }
+      if (!supportsKeyObjects) {
+        throw typeError(MSG_INVALID_VERIFIER_KEY);
+      }
+      if (typeof key !== "object") {
+        throw typeError(MSG_INVALID_VERIFIER_KEY);
+      }
+      if (typeof key.type !== "string") {
+        throw typeError(MSG_INVALID_VERIFIER_KEY);
+      }
+      if (typeof key.asymmetricKeyType !== "string") {
+        throw typeError(MSG_INVALID_VERIFIER_KEY);
+      }
+      if (typeof key.export !== "function") {
+        throw typeError(MSG_INVALID_VERIFIER_KEY);
+      }
+    }
+    function checkIsPrivateKey(key) {
+      if (Buffer2.isBuffer(key)) {
+        return;
+      }
+      if (typeof key === "string") {
+        return;
+      }
+      if (typeof key === "object") {
+        return;
+      }
+      throw typeError(MSG_INVALID_SIGNER_KEY);
+    }
+    function checkIsSecretKey(key) {
+      if (Buffer2.isBuffer(key)) {
+        return;
+      }
+      if (typeof key === "string") {
+        return key;
+      }
+      if (!supportsKeyObjects) {
+        throw typeError(MSG_INVALID_SECRET);
+      }
+      if (typeof key !== "object") {
+        throw typeError(MSG_INVALID_SECRET);
+      }
+      if (key.type !== "secret") {
+        throw typeError(MSG_INVALID_SECRET);
+      }
+      if (typeof key.export !== "function") {
+        throw typeError(MSG_INVALID_SECRET);
+      }
+    }
+    function fromBase64(base64) {
+      return base64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+    }
+    function toBase64(base64url) {
+      base64url = base64url.toString();
+      var padding = 4 - base64url.length % 4;
+      if (padding !== 4) {
+        for (var i50 = 0; i50 < padding; ++i50) {
+          base64url += "=";
+        }
+      }
+      return base64url.replace(/\-/g, "+").replace(/_/g, "/");
+    }
+    function typeError(template) {
+      var args = [].slice.call(arguments, 1);
+      var errMsg = util2.format.bind(util2, template).apply(null, args);
+      return new TypeError(errMsg);
+    }
+    function bufferOrString(obj) {
+      return Buffer2.isBuffer(obj) || typeof obj === "string";
+    }
+    function normalizeInput(thing) {
+      if (!bufferOrString(thing))
+        thing = JSON.stringify(thing);
+      return thing;
+    }
+    function createHmacSigner(bits) {
+      return function sign(thing, secret) {
+        checkIsSecretKey(secret);
+        thing = normalizeInput(thing);
+        var hmac = crypto6.createHmac("sha" + bits, secret);
+        var sig = (hmac.update(thing), hmac.digest("base64"));
+        return fromBase64(sig);
+      };
+    }
+    var bufferEqual;
+    var timingSafeEqual2 = "timingSafeEqual" in crypto6 ? function timingSafeEqual3(a49, b63) {
+      if (a49.byteLength !== b63.byteLength) {
+        return false;
+      }
+      return crypto6.timingSafeEqual(a49, b63);
+    } : function timingSafeEqual3(a49, b63) {
+      if (!bufferEqual) {
+        bufferEqual = require_buffer_equal_constant_time();
+      }
+      return bufferEqual(a49, b63);
+    };
+    function createHmacVerifier(bits) {
+      return function verify(thing, signature, secret) {
+        var computedSig = createHmacSigner(bits)(thing, secret);
+        return timingSafeEqual2(Buffer2.from(signature), Buffer2.from(computedSig));
+      };
+    }
+    function createKeySigner(bits) {
+      return function sign(thing, privateKey) {
+        checkIsPrivateKey(privateKey);
+        thing = normalizeInput(thing);
+        var signer = crypto6.createSign("RSA-SHA" + bits);
+        var sig = (signer.update(thing), signer.sign(privateKey, "base64"));
+        return fromBase64(sig);
+      };
+    }
+    function createKeyVerifier(bits) {
+      return function verify(thing, signature, publicKey) {
+        checkIsPublicKey(publicKey);
+        thing = normalizeInput(thing);
+        signature = toBase64(signature);
+        var verifier = crypto6.createVerify("RSA-SHA" + bits);
+        verifier.update(thing);
+        return verifier.verify(publicKey, signature, "base64");
+      };
+    }
+    function createPSSKeySigner(bits) {
+      return function sign(thing, privateKey) {
+        checkIsPrivateKey(privateKey);
+        thing = normalizeInput(thing);
+        var signer = crypto6.createSign("RSA-SHA" + bits);
+        var sig = (signer.update(thing), signer.sign({
+          key: privateKey,
+          padding: crypto6.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto6.constants.RSA_PSS_SALTLEN_DIGEST
+        }, "base64"));
+        return fromBase64(sig);
+      };
+    }
+    function createPSSKeyVerifier(bits) {
+      return function verify(thing, signature, publicKey) {
+        checkIsPublicKey(publicKey);
+        thing = normalizeInput(thing);
+        signature = toBase64(signature);
+        var verifier = crypto6.createVerify("RSA-SHA" + bits);
+        verifier.update(thing);
+        return verifier.verify({
+          key: publicKey,
+          padding: crypto6.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto6.constants.RSA_PSS_SALTLEN_DIGEST
+        }, signature, "base64");
+      };
+    }
+    function createECDSASigner(bits) {
+      var inner = createKeySigner(bits);
+      return function sign() {
+        var signature = inner.apply(null, arguments);
+        signature = formatEcdsa.derToJose(signature, "ES" + bits);
+        return signature;
+      };
+    }
+    function createECDSAVerifer(bits) {
+      var inner = createKeyVerifier(bits);
+      return function verify(thing, signature, publicKey) {
+        signature = formatEcdsa.joseToDer(signature, "ES" + bits).toString("base64");
+        var result = inner(thing, signature, publicKey);
+        return result;
+      };
+    }
+    function createNoneSigner() {
+      return function sign() {
+        return "";
+      };
+    }
+    function createNoneVerifier() {
+      return function verify(thing, signature) {
+        return signature === "";
+      };
+    }
+    module.exports = function jwa(algorithm) {
+      var signerFactories = {
+        hs: createHmacSigner,
+        rs: createKeySigner,
+        ps: createPSSKeySigner,
+        es: createECDSASigner,
+        none: createNoneSigner
+      };
+      var verifierFactories = {
+        hs: createHmacVerifier,
+        rs: createKeyVerifier,
+        ps: createPSSKeyVerifier,
+        es: createECDSAVerifer,
+        none: createNoneVerifier
+      };
+      var match = algorithm.match(/^(RS|PS|ES|HS)(256|384|512)$|^(none)$/);
+      if (!match)
+        throw typeError(MSG_INVALID_ALGORITHM, algorithm);
+      var algo = (match[1] || match[3]).toLowerCase();
+      var bits = match[2];
+      return {
+        sign: signerFactories[algo](bits),
+        verify: verifierFactories[algo](bits)
+      };
+    };
+  }
+});
+
+// node_modules/jws/lib/tostring.js
+var require_tostring = __commonJS({
+  "node_modules/jws/lib/tostring.js"(exports, module) {
+    var Buffer2 = __require("buffer").Buffer;
+    module.exports = function toString(obj) {
+      if (typeof obj === "string")
+        return obj;
+      if (typeof obj === "number" || Buffer2.isBuffer(obj))
+        return obj.toString();
+      return JSON.stringify(obj);
+    };
+  }
+});
+
+// node_modules/jws/lib/sign-stream.js
+var require_sign_stream = __commonJS({
+  "node_modules/jws/lib/sign-stream.js"(exports, module) {
+    var Buffer2 = require_safe_buffer().Buffer;
+    var DataStream = require_data_stream();
+    var jwa = require_jwa();
+    var Stream2 = __require("stream");
+    var toString = require_tostring();
+    var util2 = __require("util");
+    function base64url(string, encoding) {
+      return Buffer2.from(string, encoding).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+    }
+    function jwsSecuredInput(header, payload, encoding) {
+      encoding = encoding || "utf8";
+      var encodedHeader = base64url(toString(header), "binary");
+      var encodedPayload = base64url(toString(payload), encoding);
+      return util2.format("%s.%s", encodedHeader, encodedPayload);
+    }
+    function jwsSign(opts) {
+      var header = opts.header;
+      var payload = opts.payload;
+      var secretOrKey = opts.secret || opts.privateKey;
+      var encoding = opts.encoding;
+      var algo = jwa(header.alg);
+      var securedInput = jwsSecuredInput(header, payload, encoding);
+      var signature = algo.sign(securedInput, secretOrKey);
+      return util2.format("%s.%s", securedInput, signature);
+    }
+    function SignStream(opts) {
+      var secret = opts.secret;
+      secret = secret == null ? opts.privateKey : secret;
+      secret = secret == null ? opts.key : secret;
+      if (/^hs/i.test(opts.header.alg) === true && secret == null) {
+        throw new TypeError("secret must be a string or buffer or a KeyObject");
+      }
+      var secretStream = new DataStream(secret);
+      this.readable = true;
+      this.header = opts.header;
+      this.encoding = opts.encoding;
+      this.secret = this.privateKey = this.key = secretStream;
+      this.payload = new DataStream(opts.payload);
+      this.secret.once("close", function() {
+        if (!this.payload.writable && this.readable)
+          this.sign();
+      }.bind(this));
+      this.payload.once("close", function() {
+        if (!this.secret.writable && this.readable)
+          this.sign();
+      }.bind(this));
+    }
+    util2.inherits(SignStream, Stream2);
+    SignStream.prototype.sign = function sign() {
+      try {
+        var signature = jwsSign({
+          header: this.header,
+          payload: this.payload.buffer,
+          secret: this.secret.buffer,
+          encoding: this.encoding
+        });
+        this.emit("done", signature);
+        this.emit("data", signature);
+        this.emit("end");
+        this.readable = false;
+        return signature;
+      } catch (e29) {
+        this.readable = false;
+        this.emit("error", e29);
+        this.emit("close");
+      }
+    };
+    SignStream.sign = jwsSign;
+    module.exports = SignStream;
+  }
+});
+
+// node_modules/jws/lib/verify-stream.js
+var require_verify_stream = __commonJS({
+  "node_modules/jws/lib/verify-stream.js"(exports, module) {
+    var Buffer2 = require_safe_buffer().Buffer;
+    var DataStream = require_data_stream();
+    var jwa = require_jwa();
+    var Stream2 = __require("stream");
+    var toString = require_tostring();
+    var util2 = __require("util");
+    var JWS_REGEX = /^[a-zA-Z0-9\-_]+?\.[a-zA-Z0-9\-_]+?\.([a-zA-Z0-9\-_]+)?$/;
+    function isObject(thing) {
+      return Object.prototype.toString.call(thing) === "[object Object]";
+    }
+    function safeJsonParse(thing) {
+      if (isObject(thing))
+        return thing;
+      try {
+        return JSON.parse(thing);
+      } catch (e29) {
+        return void 0;
+      }
+    }
+    function headerFromJWS(jwsSig) {
+      var encodedHeader = jwsSig.split(".", 1)[0];
+      return safeJsonParse(Buffer2.from(encodedHeader, "base64").toString("binary"));
+    }
+    function securedInputFromJWS(jwsSig) {
+      return jwsSig.split(".", 2).join(".");
+    }
+    function signatureFromJWS(jwsSig) {
+      return jwsSig.split(".")[2];
+    }
+    function payloadFromJWS(jwsSig, encoding) {
+      encoding = encoding || "utf8";
+      var payload = jwsSig.split(".")[1];
+      return Buffer2.from(payload, "base64").toString(encoding);
+    }
+    function isValidJws(string) {
+      return JWS_REGEX.test(string) && !!headerFromJWS(string);
+    }
+    function jwsVerify(jwsSig, algorithm, secretOrKey) {
+      if (!algorithm) {
+        var err = new Error("Missing algorithm parameter for jws.verify");
+        err.code = "MISSING_ALGORITHM";
+        throw err;
+      }
+      jwsSig = toString(jwsSig);
+      var signature = signatureFromJWS(jwsSig);
+      var securedInput = securedInputFromJWS(jwsSig);
+      var algo = jwa(algorithm);
+      return algo.verify(securedInput, signature, secretOrKey);
+    }
+    function jwsDecode(jwsSig, opts) {
+      opts = opts || {};
+      jwsSig = toString(jwsSig);
+      if (!isValidJws(jwsSig))
+        return null;
+      var header = headerFromJWS(jwsSig);
+      if (!header)
+        return null;
+      var payload = payloadFromJWS(jwsSig);
+      if (header.typ === "JWT" || opts.json)
+        payload = JSON.parse(payload, opts.encoding);
+      return {
+        header,
+        payload,
+        signature: signatureFromJWS(jwsSig)
+      };
+    }
+    function VerifyStream(opts) {
+      opts = opts || {};
+      var secretOrKey = opts.secret;
+      secretOrKey = secretOrKey == null ? opts.publicKey : secretOrKey;
+      secretOrKey = secretOrKey == null ? opts.key : secretOrKey;
+      if (/^hs/i.test(opts.algorithm) === true && secretOrKey == null) {
+        throw new TypeError("secret must be a string or buffer or a KeyObject");
+      }
+      var secretStream = new DataStream(secretOrKey);
+      this.readable = true;
+      this.algorithm = opts.algorithm;
+      this.encoding = opts.encoding;
+      this.secret = this.publicKey = this.key = secretStream;
+      this.signature = new DataStream(opts.signature);
+      this.secret.once("close", function() {
+        if (!this.signature.writable && this.readable)
+          this.verify();
+      }.bind(this));
+      this.signature.once("close", function() {
+        if (!this.secret.writable && this.readable)
+          this.verify();
+      }.bind(this));
+    }
+    util2.inherits(VerifyStream, Stream2);
+    VerifyStream.prototype.verify = function verify() {
+      try {
+        var valid = jwsVerify(this.signature.buffer, this.algorithm, this.key.buffer);
+        var obj = jwsDecode(this.signature.buffer, this.encoding);
+        this.emit("done", valid, obj);
+        this.emit("data", valid);
+        this.emit("end");
+        this.readable = false;
+        return valid;
+      } catch (e29) {
+        this.readable = false;
+        this.emit("error", e29);
+        this.emit("close");
+      }
+    };
+    VerifyStream.decode = jwsDecode;
+    VerifyStream.isValid = isValidJws;
+    VerifyStream.verify = jwsVerify;
+    module.exports = VerifyStream;
+  }
+});
+
+// node_modules/jws/index.js
+var require_jws = __commonJS({
+  "node_modules/jws/index.js"(exports) {
+    var SignStream = require_sign_stream();
+    var VerifyStream = require_verify_stream();
+    var ALGORITHMS = [
+      "HS256",
+      "HS384",
+      "HS512",
+      "RS256",
+      "RS384",
+      "RS512",
+      "PS256",
+      "PS384",
+      "PS512",
+      "ES256",
+      "ES384",
+      "ES512"
+    ];
+    exports.ALGORITHMS = ALGORITHMS;
+    exports.sign = SignStream.sign;
+    exports.verify = VerifyStream.verify;
+    exports.decode = VerifyStream.decode;
+    exports.isValid = VerifyStream.isValid;
+    exports.createSign = function createSign(opts) {
+      return new SignStream(opts);
+    };
+    exports.createVerify = function createVerify(opts) {
+      return new VerifyStream(opts);
+    };
+  }
+});
+
+// node_modules/jsonwebtoken/decode.js
+var require_decode = __commonJS({
+  "node_modules/jsonwebtoken/decode.js"(exports, module) {
+    var jws = require_jws();
+    module.exports = function(jwt5, options2) {
+      options2 = options2 || {};
+      var decoded = jws.decode(jwt5, options2);
+      if (!decoded) {
+        return null;
+      }
+      var payload = decoded.payload;
+      if (typeof payload === "string") {
+        try {
+          var obj = JSON.parse(payload);
+          if (obj !== null && typeof obj === "object") {
+            payload = obj;
+          }
+        } catch (e29) {
+        }
+      }
+      if (options2.complete === true) {
+        return {
+          header: decoded.header,
+          payload,
+          signature: decoded.signature
+        };
+      }
+      return payload;
+    };
+  }
+});
+
+// node_modules/jsonwebtoken/lib/JsonWebTokenError.js
+var require_JsonWebTokenError = __commonJS({
+  "node_modules/jsonwebtoken/lib/JsonWebTokenError.js"(exports, module) {
+    var JsonWebTokenError = function(message, error) {
+      Error.call(this, message);
+      if (Error.captureStackTrace) {
+        Error.captureStackTrace(this, this.constructor);
+      }
+      this.name = "JsonWebTokenError";
+      this.message = message;
+      if (error) this.inner = error;
+    };
+    JsonWebTokenError.prototype = Object.create(Error.prototype);
+    JsonWebTokenError.prototype.constructor = JsonWebTokenError;
+    module.exports = JsonWebTokenError;
+  }
+});
+
+// node_modules/jsonwebtoken/lib/NotBeforeError.js
+var require_NotBeforeError = __commonJS({
+  "node_modules/jsonwebtoken/lib/NotBeforeError.js"(exports, module) {
+    var JsonWebTokenError = require_JsonWebTokenError();
+    var NotBeforeError = function(message, date) {
+      JsonWebTokenError.call(this, message);
+      this.name = "NotBeforeError";
+      this.date = date;
+    };
+    NotBeforeError.prototype = Object.create(JsonWebTokenError.prototype);
+    NotBeforeError.prototype.constructor = NotBeforeError;
+    module.exports = NotBeforeError;
+  }
+});
+
+// node_modules/jsonwebtoken/lib/TokenExpiredError.js
+var require_TokenExpiredError = __commonJS({
+  "node_modules/jsonwebtoken/lib/TokenExpiredError.js"(exports, module) {
+    var JsonWebTokenError = require_JsonWebTokenError();
+    var TokenExpiredError = function(message, expiredAt) {
+      JsonWebTokenError.call(this, message);
+      this.name = "TokenExpiredError";
+      this.expiredAt = expiredAt;
+    };
+    TokenExpiredError.prototype = Object.create(JsonWebTokenError.prototype);
+    TokenExpiredError.prototype.constructor = TokenExpiredError;
+    module.exports = TokenExpiredError;
+  }
+});
+
+// node_modules/ms/index.js
+var require_ms = __commonJS({
+  "node_modules/ms/index.js"(exports, module) {
+    var s59 = 1e3;
+    var m59 = s59 * 60;
+    var h65 = m59 * 60;
+    var d67 = h65 * 24;
+    var w54 = d67 * 7;
+    var y65 = d67 * 365.25;
+    module.exports = function(val, options2) {
+      options2 = options2 || {};
+      var type = typeof val;
+      if (type === "string" && val.length > 0) {
+        return parse(val);
+      } else if (type === "number" && isFinite(val)) {
+        return options2.long ? fmtLong(val) : fmtShort(val);
+      }
+      throw new Error(
+        "val is not a non-empty string or a valid number. val=" + JSON.stringify(val)
+      );
+    };
+    function parse(str) {
+      str = String(str);
+      if (str.length > 100) {
+        return;
+      }
+      var match = /^(-?(?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
+        str
+      );
+      if (!match) {
+        return;
+      }
+      var n43 = parseFloat(match[1]);
+      var type = (match[2] || "ms").toLowerCase();
+      switch (type) {
+        case "years":
+        case "year":
+        case "yrs":
+        case "yr":
+        case "y":
+          return n43 * y65;
+        case "weeks":
+        case "week":
+        case "w":
+          return n43 * w54;
+        case "days":
+        case "day":
+        case "d":
+          return n43 * d67;
+        case "hours":
+        case "hour":
+        case "hrs":
+        case "hr":
+        case "h":
+          return n43 * h65;
+        case "minutes":
+        case "minute":
+        case "mins":
+        case "min":
+        case "m":
+          return n43 * m59;
+        case "seconds":
+        case "second":
+        case "secs":
+        case "sec":
+        case "s":
+          return n43 * s59;
+        case "milliseconds":
+        case "millisecond":
+        case "msecs":
+        case "msec":
+        case "ms":
+          return n43;
+        default:
+          return void 0;
+      }
+    }
+    function fmtShort(ms) {
+      var msAbs = Math.abs(ms);
+      if (msAbs >= d67) {
+        return Math.round(ms / d67) + "d";
+      }
+      if (msAbs >= h65) {
+        return Math.round(ms / h65) + "h";
+      }
+      if (msAbs >= m59) {
+        return Math.round(ms / m59) + "m";
+      }
+      if (msAbs >= s59) {
+        return Math.round(ms / s59) + "s";
+      }
+      return ms + "ms";
+    }
+    function fmtLong(ms) {
+      var msAbs = Math.abs(ms);
+      if (msAbs >= d67) {
+        return plural(ms, msAbs, d67, "day");
+      }
+      if (msAbs >= h65) {
+        return plural(ms, msAbs, h65, "hour");
+      }
+      if (msAbs >= m59) {
+        return plural(ms, msAbs, m59, "minute");
+      }
+      if (msAbs >= s59) {
+        return plural(ms, msAbs, s59, "second");
+      }
+      return ms + " ms";
+    }
+    function plural(ms, msAbs, n43, name) {
+      var isPlural = msAbs >= n43 * 1.5;
+      return Math.round(ms / n43) + " " + name + (isPlural ? "s" : "");
+    }
+  }
+});
+
+// node_modules/jsonwebtoken/lib/timespan.js
+var require_timespan = __commonJS({
+  "node_modules/jsonwebtoken/lib/timespan.js"(exports, module) {
+    var ms = require_ms();
+    module.exports = function(time, iat) {
+      var timestamp = iat || Math.floor(Date.now() / 1e3);
+      if (typeof time === "string") {
+        var milliseconds = ms(time);
+        if (typeof milliseconds === "undefined") {
+          return;
+        }
+        return Math.floor(timestamp + milliseconds / 1e3);
+      } else if (typeof time === "number") {
+        return timestamp + time;
+      } else {
+        return;
+      }
+    };
+  }
+});
+
+// node_modules/semver/internal/constants.js
+var require_constants = __commonJS({
+  "node_modules/semver/internal/constants.js"(exports, module) {
+    "use strict";
+    var SEMVER_SPEC_VERSION = "2.0.0";
+    var MAX_LENGTH = 256;
+    var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER || /* istanbul ignore next */
+    9007199254740991;
+    var MAX_SAFE_COMPONENT_LENGTH = 16;
+    var MAX_SAFE_BUILD_LENGTH = MAX_LENGTH - 6;
+    var RELEASE_TYPES = [
+      "major",
+      "premajor",
+      "minor",
+      "preminor",
+      "patch",
+      "prepatch",
+      "prerelease"
+    ];
+    module.exports = {
+      MAX_LENGTH,
+      MAX_SAFE_COMPONENT_LENGTH,
+      MAX_SAFE_BUILD_LENGTH,
+      MAX_SAFE_INTEGER,
+      RELEASE_TYPES,
+      SEMVER_SPEC_VERSION,
+      FLAG_INCLUDE_PRERELEASE: 1,
+      FLAG_LOOSE: 2
+    };
+  }
+});
+
+// node_modules/semver/internal/debug.js
+var require_debug = __commonJS({
+  "node_modules/semver/internal/debug.js"(exports, module) {
+    "use strict";
+    var debug = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
+    };
+    module.exports = debug;
+  }
+});
+
+// node_modules/semver/internal/re.js
+var require_re = __commonJS({
+  "node_modules/semver/internal/re.js"(exports, module) {
+    "use strict";
+    var {
+      MAX_SAFE_COMPONENT_LENGTH,
+      MAX_SAFE_BUILD_LENGTH,
+      MAX_LENGTH
+    } = require_constants();
+    var debug = require_debug();
+    exports = module.exports = {};
+    var re12 = exports.re = [];
+    var safeRe = exports.safeRe = [];
+    var src = exports.src = [];
+    var safeSrc = exports.safeSrc = [];
+    var t44 = exports.t = {};
+    var R54 = 0;
+    var LETTERDASHNUMBER = "[a-zA-Z0-9-]";
+    var safeRegexReplacements = [
+      ["\\s", 1],
+      ["\\d", MAX_LENGTH],
+      [LETTERDASHNUMBER, MAX_SAFE_BUILD_LENGTH]
+    ];
+    var makeSafeRegex = (value) => {
+      for (const [token, max] of safeRegexReplacements) {
+        value = value.split(`${token}*`).join(`${token}{0,${max}}`).split(`${token}+`).join(`${token}{1,${max}}`);
+      }
+      return value;
+    };
+    var createToken = (name, value, isGlobal) => {
+      const safe = makeSafeRegex(value);
+      const index = R54++;
+      debug(name, index, value);
+      t44[name] = index;
+      src[index] = value;
+      safeSrc[index] = safe;
+      re12[index] = new RegExp(value, isGlobal ? "g" : void 0);
+      safeRe[index] = new RegExp(safe, isGlobal ? "g" : void 0);
+    };
+    createToken("NUMERICIDENTIFIER", "0|[1-9]\\d*");
+    createToken("NUMERICIDENTIFIERLOOSE", "\\d+");
+    createToken("NONNUMERICIDENTIFIER", `\\d*[a-zA-Z-]${LETTERDASHNUMBER}*`);
+    createToken("MAINVERSION", `(${src[t44.NUMERICIDENTIFIER]})\\.(${src[t44.NUMERICIDENTIFIER]})\\.(${src[t44.NUMERICIDENTIFIER]})`);
+    createToken("MAINVERSIONLOOSE", `(${src[t44.NUMERICIDENTIFIERLOOSE]})\\.(${src[t44.NUMERICIDENTIFIERLOOSE]})\\.(${src[t44.NUMERICIDENTIFIERLOOSE]})`);
+    createToken("PRERELEASEIDENTIFIER", `(?:${src[t44.NONNUMERICIDENTIFIER]}|${src[t44.NUMERICIDENTIFIER]})`);
+    createToken("PRERELEASEIDENTIFIERLOOSE", `(?:${src[t44.NONNUMERICIDENTIFIER]}|${src[t44.NUMERICIDENTIFIERLOOSE]})`);
+    createToken("PRERELEASE", `(?:-(${src[t44.PRERELEASEIDENTIFIER]}(?:\\.${src[t44.PRERELEASEIDENTIFIER]})*))`);
+    createToken("PRERELEASELOOSE", `(?:-?(${src[t44.PRERELEASEIDENTIFIERLOOSE]}(?:\\.${src[t44.PRERELEASEIDENTIFIERLOOSE]})*))`);
+    createToken("BUILDIDENTIFIER", `${LETTERDASHNUMBER}+`);
+    createToken("BUILD", `(?:\\+(${src[t44.BUILDIDENTIFIER]}(?:\\.${src[t44.BUILDIDENTIFIER]})*))`);
+    createToken("FULLPLAIN", `v?${src[t44.MAINVERSION]}${src[t44.PRERELEASE]}?${src[t44.BUILD]}?`);
+    createToken("FULL", `^${src[t44.FULLPLAIN]}$`);
+    createToken("LOOSEPLAIN", `[v=\\s]*${src[t44.MAINVERSIONLOOSE]}${src[t44.PRERELEASELOOSE]}?${src[t44.BUILD]}?`);
+    createToken("LOOSE", `^${src[t44.LOOSEPLAIN]}$`);
+    createToken("GTLT", "((?:<|>)?=?)");
+    createToken("XRANGEIDENTIFIERLOOSE", `${src[t44.NUMERICIDENTIFIERLOOSE]}|x|X|\\*`);
+    createToken("XRANGEIDENTIFIER", `${src[t44.NUMERICIDENTIFIER]}|x|X|\\*`);
+    createToken("XRANGEPLAIN", `[v=\\s]*(${src[t44.XRANGEIDENTIFIER]})(?:\\.(${src[t44.XRANGEIDENTIFIER]})(?:\\.(${src[t44.XRANGEIDENTIFIER]})(?:${src[t44.PRERELEASE]})?${src[t44.BUILD]}?)?)?`);
+    createToken("XRANGEPLAINLOOSE", `[v=\\s]*(${src[t44.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t44.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t44.XRANGEIDENTIFIERLOOSE]})(?:${src[t44.PRERELEASELOOSE]})?${src[t44.BUILD]}?)?)?`);
+    createToken("XRANGE", `^${src[t44.GTLT]}\\s*${src[t44.XRANGEPLAIN]}$`);
+    createToken("XRANGELOOSE", `^${src[t44.GTLT]}\\s*${src[t44.XRANGEPLAINLOOSE]}$`);
+    createToken("COERCEPLAIN", `${"(^|[^\\d])(\\d{1,"}${MAX_SAFE_COMPONENT_LENGTH}})(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?`);
+    createToken("COERCE", `${src[t44.COERCEPLAIN]}(?:$|[^\\d])`);
+    createToken("COERCEFULL", src[t44.COERCEPLAIN] + `(?:${src[t44.PRERELEASE]})?(?:${src[t44.BUILD]})?(?:$|[^\\d])`);
+    createToken("COERCERTL", src[t44.COERCE], true);
+    createToken("COERCERTLFULL", src[t44.COERCEFULL], true);
+    createToken("LONETILDE", "(?:~>?)");
+    createToken("TILDETRIM", `(\\s*)${src[t44.LONETILDE]}\\s+`, true);
+    exports.tildeTrimReplace = "$1~";
+    createToken("TILDE", `^${src[t44.LONETILDE]}${src[t44.XRANGEPLAIN]}$`);
+    createToken("TILDELOOSE", `^${src[t44.LONETILDE]}${src[t44.XRANGEPLAINLOOSE]}$`);
+    createToken("LONECARET", "(?:\\^)");
+    createToken("CARETTRIM", `(\\s*)${src[t44.LONECARET]}\\s+`, true);
+    exports.caretTrimReplace = "$1^";
+    createToken("CARET", `^${src[t44.LONECARET]}${src[t44.XRANGEPLAIN]}$`);
+    createToken("CARETLOOSE", `^${src[t44.LONECARET]}${src[t44.XRANGEPLAINLOOSE]}$`);
+    createToken("COMPARATORLOOSE", `^${src[t44.GTLT]}\\s*(${src[t44.LOOSEPLAIN]})$|^$`);
+    createToken("COMPARATOR", `^${src[t44.GTLT]}\\s*(${src[t44.FULLPLAIN]})$|^$`);
+    createToken("COMPARATORTRIM", `(\\s*)${src[t44.GTLT]}\\s*(${src[t44.LOOSEPLAIN]}|${src[t44.XRANGEPLAIN]})`, true);
+    exports.comparatorTrimReplace = "$1$2$3";
+    createToken("HYPHENRANGE", `^\\s*(${src[t44.XRANGEPLAIN]})\\s+-\\s+(${src[t44.XRANGEPLAIN]})\\s*$`);
+    createToken("HYPHENRANGELOOSE", `^\\s*(${src[t44.XRANGEPLAINLOOSE]})\\s+-\\s+(${src[t44.XRANGEPLAINLOOSE]})\\s*$`);
+    createToken("STAR", "(<|>)?=?\\s*\\*");
+    createToken("GTE0", "^\\s*>=\\s*0\\.0\\.0\\s*$");
+    createToken("GTE0PRE", "^\\s*>=\\s*0\\.0\\.0-0\\s*$");
+  }
+});
+
+// node_modules/semver/internal/parse-options.js
+var require_parse_options = __commonJS({
+  "node_modules/semver/internal/parse-options.js"(exports, module) {
+    "use strict";
+    var looseOption = Object.freeze({ loose: true });
+    var emptyOpts = Object.freeze({});
+    var parseOptions = (options2) => {
+      if (!options2) {
+        return emptyOpts;
+      }
+      if (typeof options2 !== "object") {
+        return looseOption;
+      }
+      return options2;
+    };
+    module.exports = parseOptions;
+  }
+});
+
+// node_modules/semver/internal/identifiers.js
+var require_identifiers = __commonJS({
+  "node_modules/semver/internal/identifiers.js"(exports, module) {
+    "use strict";
+    var numeric = /^[0-9]+$/;
+    var compareIdentifiers = (a49, b63) => {
+      if (typeof a49 === "number" && typeof b63 === "number") {
+        return a49 === b63 ? 0 : a49 < b63 ? -1 : 1;
+      }
+      const anum = numeric.test(a49);
+      const bnum = numeric.test(b63);
+      if (anum && bnum) {
+        a49 = +a49;
+        b63 = +b63;
+      }
+      return a49 === b63 ? 0 : anum && !bnum ? -1 : bnum && !anum ? 1 : a49 < b63 ? -1 : 1;
+    };
+    var rcompareIdentifiers = (a49, b63) => compareIdentifiers(b63, a49);
+    module.exports = {
+      compareIdentifiers,
+      rcompareIdentifiers
+    };
+  }
+});
+
+// node_modules/semver/classes/semver.js
+var require_semver = __commonJS({
+  "node_modules/semver/classes/semver.js"(exports, module) {
+    "use strict";
+    var debug = require_debug();
+    var { MAX_LENGTH, MAX_SAFE_INTEGER } = require_constants();
+    var { safeRe: re12, t: t44 } = require_re();
+    var parseOptions = require_parse_options();
+    var { compareIdentifiers } = require_identifiers();
+    var SemVer = class _SemVer {
+      constructor(version, options2) {
+        options2 = parseOptions(options2);
+        if (version instanceof _SemVer) {
+          if (version.loose === !!options2.loose && version.includePrerelease === !!options2.includePrerelease) {
+            return version;
+          } else {
+            version = version.version;
+          }
+        } else if (typeof version !== "string") {
+          throw new TypeError(`Invalid version. Must be a string. Got type "${typeof version}".`);
+        }
+        if (version.length > MAX_LENGTH) {
+          throw new TypeError(
+            `version is longer than ${MAX_LENGTH} characters`
+          );
+        }
+        debug("SemVer", version, options2);
+        this.options = options2;
+        this.loose = !!options2.loose;
+        this.includePrerelease = !!options2.includePrerelease;
+        const m59 = version.trim().match(options2.loose ? re12[t44.LOOSE] : re12[t44.FULL]);
+        if (!m59) {
+          throw new TypeError(`Invalid Version: ${version}`);
+        }
+        this.raw = version;
+        this.major = +m59[1];
+        this.minor = +m59[2];
+        this.patch = +m59[3];
+        if (this.major > MAX_SAFE_INTEGER || this.major < 0) {
+          throw new TypeError("Invalid major version");
+        }
+        if (this.minor > MAX_SAFE_INTEGER || this.minor < 0) {
+          throw new TypeError("Invalid minor version");
+        }
+        if (this.patch > MAX_SAFE_INTEGER || this.patch < 0) {
+          throw new TypeError("Invalid patch version");
+        }
+        if (!m59[4]) {
+          this.prerelease = [];
+        } else {
+          this.prerelease = m59[4].split(".").map((id) => {
+            if (/^[0-9]+$/.test(id)) {
+              const num = +id;
+              if (num >= 0 && num < MAX_SAFE_INTEGER) {
+                return num;
+              }
+            }
+            return id;
+          });
+        }
+        this.build = m59[5] ? m59[5].split(".") : [];
+        this.format();
+      }
+      format() {
+        this.version = `${this.major}.${this.minor}.${this.patch}`;
+        if (this.prerelease.length) {
+          this.version += `-${this.prerelease.join(".")}`;
+        }
+        return this.version;
+      }
+      toString() {
+        return this.version;
+      }
+      compare(other) {
+        debug("SemVer.compare", this.version, this.options, other);
+        if (!(other instanceof _SemVer)) {
+          if (typeof other === "string" && other === this.version) {
+            return 0;
+          }
+          other = new _SemVer(other, this.options);
+        }
+        if (other.version === this.version) {
+          return 0;
+        }
+        return this.compareMain(other) || this.comparePre(other);
+      }
+      compareMain(other) {
+        if (!(other instanceof _SemVer)) {
+          other = new _SemVer(other, this.options);
+        }
+        if (this.major < other.major) {
+          return -1;
+        }
+        if (this.major > other.major) {
+          return 1;
+        }
+        if (this.minor < other.minor) {
+          return -1;
+        }
+        if (this.minor > other.minor) {
+          return 1;
+        }
+        if (this.patch < other.patch) {
+          return -1;
+        }
+        if (this.patch > other.patch) {
+          return 1;
+        }
+        return 0;
+      }
+      comparePre(other) {
+        if (!(other instanceof _SemVer)) {
+          other = new _SemVer(other, this.options);
+        }
+        if (this.prerelease.length && !other.prerelease.length) {
+          return -1;
+        } else if (!this.prerelease.length && other.prerelease.length) {
+          return 1;
+        } else if (!this.prerelease.length && !other.prerelease.length) {
+          return 0;
+        }
+        let i50 = 0;
+        do {
+          const a49 = this.prerelease[i50];
+          const b63 = other.prerelease[i50];
+          debug("prerelease compare", i50, a49, b63);
+          if (a49 === void 0 && b63 === void 0) {
+            return 0;
+          } else if (b63 === void 0) {
+            return 1;
+          } else if (a49 === void 0) {
+            return -1;
+          } else if (a49 === b63) {
+            continue;
+          } else {
+            return compareIdentifiers(a49, b63);
+          }
+        } while (++i50);
+      }
+      compareBuild(other) {
+        if (!(other instanceof _SemVer)) {
+          other = new _SemVer(other, this.options);
+        }
+        let i50 = 0;
+        do {
+          const a49 = this.build[i50];
+          const b63 = other.build[i50];
+          debug("build compare", i50, a49, b63);
+          if (a49 === void 0 && b63 === void 0) {
+            return 0;
+          } else if (b63 === void 0) {
+            return 1;
+          } else if (a49 === void 0) {
+            return -1;
+          } else if (a49 === b63) {
+            continue;
+          } else {
+            return compareIdentifiers(a49, b63);
+          }
+        } while (++i50);
+      }
+      // preminor will bump the version up to the next minor release, and immediately
+      // down to pre-release. premajor and prepatch work the same way.
+      inc(release, identifier, identifierBase) {
+        if (release.startsWith("pre")) {
+          if (!identifier && identifierBase === false) {
+            throw new Error("invalid increment argument: identifier is empty");
+          }
+          if (identifier) {
+            const match = `-${identifier}`.match(this.options.loose ? re12[t44.PRERELEASELOOSE] : re12[t44.PRERELEASE]);
+            if (!match || match[1] !== identifier) {
+              throw new Error(`invalid identifier: ${identifier}`);
+            }
+          }
+        }
+        switch (release) {
+          case "premajor":
+            this.prerelease.length = 0;
+            this.patch = 0;
+            this.minor = 0;
+            this.major++;
+            this.inc("pre", identifier, identifierBase);
+            break;
+          case "preminor":
+            this.prerelease.length = 0;
+            this.patch = 0;
+            this.minor++;
+            this.inc("pre", identifier, identifierBase);
+            break;
+          case "prepatch":
+            this.prerelease.length = 0;
+            this.inc("patch", identifier, identifierBase);
+            this.inc("pre", identifier, identifierBase);
+            break;
+          // If the input is a non-prerelease version, this acts the same as
+          // prepatch.
+          case "prerelease":
+            if (this.prerelease.length === 0) {
+              this.inc("patch", identifier, identifierBase);
+            }
+            this.inc("pre", identifier, identifierBase);
+            break;
+          case "release":
+            if (this.prerelease.length === 0) {
+              throw new Error(`version ${this.raw} is not a prerelease`);
+            }
+            this.prerelease.length = 0;
+            break;
+          case "major":
+            if (this.minor !== 0 || this.patch !== 0 || this.prerelease.length === 0) {
+              this.major++;
+            }
+            this.minor = 0;
+            this.patch = 0;
+            this.prerelease = [];
+            break;
+          case "minor":
+            if (this.patch !== 0 || this.prerelease.length === 0) {
+              this.minor++;
+            }
+            this.patch = 0;
+            this.prerelease = [];
+            break;
+          case "patch":
+            if (this.prerelease.length === 0) {
+              this.patch++;
+            }
+            this.prerelease = [];
+            break;
+          // This probably shouldn't be used publicly.
+          // 1.0.0 'pre' would become 1.0.0-0 which is the wrong direction.
+          case "pre": {
+            const base = Number(identifierBase) ? 1 : 0;
+            if (this.prerelease.length === 0) {
+              this.prerelease = [base];
+            } else {
+              let i50 = this.prerelease.length;
+              while (--i50 >= 0) {
+                if (typeof this.prerelease[i50] === "number") {
+                  this.prerelease[i50]++;
+                  i50 = -2;
+                }
+              }
+              if (i50 === -1) {
+                if (identifier === this.prerelease.join(".") && identifierBase === false) {
+                  throw new Error("invalid increment argument: identifier already exists");
+                }
+                this.prerelease.push(base);
+              }
+            }
+            if (identifier) {
+              let prerelease = [identifier, base];
+              if (identifierBase === false) {
+                prerelease = [identifier];
+              }
+              if (compareIdentifiers(this.prerelease[0], identifier) === 0) {
+                if (isNaN(this.prerelease[1])) {
+                  this.prerelease = prerelease;
+                }
+              } else {
+                this.prerelease = prerelease;
+              }
+            }
+            break;
+          }
+          default:
+            throw new Error(`invalid increment argument: ${release}`);
+        }
+        this.raw = this.format();
+        if (this.build.length) {
+          this.raw += `+${this.build.join(".")}`;
+        }
+        return this;
+      }
+    };
+    module.exports = SemVer;
+  }
+});
+
+// node_modules/semver/functions/parse.js
+var require_parse = __commonJS({
+  "node_modules/semver/functions/parse.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var parse = (version, options2, throwErrors = false) => {
+      if (version instanceof SemVer) {
+        return version;
+      }
+      try {
+        return new SemVer(version, options2);
+      } catch (er3) {
+        if (!throwErrors) {
+          return null;
+        }
+        throw er3;
+      }
+    };
+    module.exports = parse;
+  }
+});
+
+// node_modules/semver/functions/valid.js
+var require_valid = __commonJS({
+  "node_modules/semver/functions/valid.js"(exports, module) {
+    "use strict";
+    var parse = require_parse();
+    var valid = (version, options2) => {
+      const v55 = parse(version, options2);
+      return v55 ? v55.version : null;
+    };
+    module.exports = valid;
+  }
+});
+
+// node_modules/semver/functions/clean.js
+var require_clean = __commonJS({
+  "node_modules/semver/functions/clean.js"(exports, module) {
+    "use strict";
+    var parse = require_parse();
+    var clean = (version, options2) => {
+      const s59 = parse(version.trim().replace(/^[=v]+/, ""), options2);
+      return s59 ? s59.version : null;
+    };
+    module.exports = clean;
+  }
+});
+
+// node_modules/semver/functions/inc.js
+var require_inc = __commonJS({
+  "node_modules/semver/functions/inc.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var inc = (version, release, options2, identifier, identifierBase) => {
+      if (typeof options2 === "string") {
+        identifierBase = identifier;
+        identifier = options2;
+        options2 = void 0;
+      }
+      try {
+        return new SemVer(
+          version instanceof SemVer ? version.version : version,
+          options2
+        ).inc(release, identifier, identifierBase).version;
+      } catch (er3) {
+        return null;
+      }
+    };
+    module.exports = inc;
+  }
+});
+
+// node_modules/semver/functions/diff.js
+var require_diff = __commonJS({
+  "node_modules/semver/functions/diff.js"(exports, module) {
+    "use strict";
+    var parse = require_parse();
+    var diff = (version1, version2) => {
+      const v1 = parse(version1, null, true);
+      const v210 = parse(version2, null, true);
+      const comparison = v1.compare(v210);
+      if (comparison === 0) {
+        return null;
+      }
+      const v1Higher = comparison > 0;
+      const highVersion = v1Higher ? v1 : v210;
+      const lowVersion = v1Higher ? v210 : v1;
+      const highHasPre = !!highVersion.prerelease.length;
+      const lowHasPre = !!lowVersion.prerelease.length;
+      if (lowHasPre && !highHasPre) {
+        if (!lowVersion.patch && !lowVersion.minor) {
+          return "major";
+        }
+        if (lowVersion.compareMain(highVersion) === 0) {
+          if (lowVersion.minor && !lowVersion.patch) {
+            return "minor";
+          }
+          return "patch";
+        }
+      }
+      const prefix = highHasPre ? "pre" : "";
+      if (v1.major !== v210.major) {
+        return prefix + "major";
+      }
+      if (v1.minor !== v210.minor) {
+        return prefix + "minor";
+      }
+      if (v1.patch !== v210.patch) {
+        return prefix + "patch";
+      }
+      return "prerelease";
+    };
+    module.exports = diff;
+  }
+});
+
+// node_modules/semver/functions/major.js
+var require_major = __commonJS({
+  "node_modules/semver/functions/major.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var major = (a49, loose) => new SemVer(a49, loose).major;
+    module.exports = major;
+  }
+});
+
+// node_modules/semver/functions/minor.js
+var require_minor = __commonJS({
+  "node_modules/semver/functions/minor.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var minor = (a49, loose) => new SemVer(a49, loose).minor;
+    module.exports = minor;
+  }
+});
+
+// node_modules/semver/functions/patch.js
+var require_patch = __commonJS({
+  "node_modules/semver/functions/patch.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var patch = (a49, loose) => new SemVer(a49, loose).patch;
+    module.exports = patch;
+  }
+});
+
+// node_modules/semver/functions/prerelease.js
+var require_prerelease = __commonJS({
+  "node_modules/semver/functions/prerelease.js"(exports, module) {
+    "use strict";
+    var parse = require_parse();
+    var prerelease = (version, options2) => {
+      const parsed = parse(version, options2);
+      return parsed && parsed.prerelease.length ? parsed.prerelease : null;
+    };
+    module.exports = prerelease;
+  }
+});
+
+// node_modules/semver/functions/compare.js
+var require_compare = __commonJS({
+  "node_modules/semver/functions/compare.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var compare = (a49, b63, loose) => new SemVer(a49, loose).compare(new SemVer(b63, loose));
+    module.exports = compare;
+  }
+});
+
+// node_modules/semver/functions/rcompare.js
+var require_rcompare = __commonJS({
+  "node_modules/semver/functions/rcompare.js"(exports, module) {
+    "use strict";
+    var compare = require_compare();
+    var rcompare = (a49, b63, loose) => compare(b63, a49, loose);
+    module.exports = rcompare;
+  }
+});
+
+// node_modules/semver/functions/compare-loose.js
+var require_compare_loose = __commonJS({
+  "node_modules/semver/functions/compare-loose.js"(exports, module) {
+    "use strict";
+    var compare = require_compare();
+    var compareLoose = (a49, b63) => compare(a49, b63, true);
+    module.exports = compareLoose;
+  }
+});
+
+// node_modules/semver/functions/compare-build.js
+var require_compare_build = __commonJS({
+  "node_modules/semver/functions/compare-build.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var compareBuild = (a49, b63, loose) => {
+      const versionA = new SemVer(a49, loose);
+      const versionB = new SemVer(b63, loose);
+      return versionA.compare(versionB) || versionA.compareBuild(versionB);
+    };
+    module.exports = compareBuild;
+  }
+});
+
+// node_modules/semver/functions/sort.js
+var require_sort = __commonJS({
+  "node_modules/semver/functions/sort.js"(exports, module) {
+    "use strict";
+    var compareBuild = require_compare_build();
+    var sort = (list, loose) => list.sort((a49, b63) => compareBuild(a49, b63, loose));
+    module.exports = sort;
+  }
+});
+
+// node_modules/semver/functions/rsort.js
+var require_rsort = __commonJS({
+  "node_modules/semver/functions/rsort.js"(exports, module) {
+    "use strict";
+    var compareBuild = require_compare_build();
+    var rsort = (list, loose) => list.sort((a49, b63) => compareBuild(b63, a49, loose));
+    module.exports = rsort;
+  }
+});
+
+// node_modules/semver/functions/gt.js
+var require_gt = __commonJS({
+  "node_modules/semver/functions/gt.js"(exports, module) {
+    "use strict";
+    var compare = require_compare();
+    var gt2 = (a49, b63, loose) => compare(a49, b63, loose) > 0;
+    module.exports = gt2;
+  }
+});
+
+// node_modules/semver/functions/lt.js
+var require_lt = __commonJS({
+  "node_modules/semver/functions/lt.js"(exports, module) {
+    "use strict";
+    var compare = require_compare();
+    var lt3 = (a49, b63, loose) => compare(a49, b63, loose) < 0;
+    module.exports = lt3;
+  }
+});
+
+// node_modules/semver/functions/eq.js
+var require_eq = __commonJS({
+  "node_modules/semver/functions/eq.js"(exports, module) {
+    "use strict";
+    var compare = require_compare();
+    var eq = (a49, b63, loose) => compare(a49, b63, loose) === 0;
+    module.exports = eq;
+  }
+});
+
+// node_modules/semver/functions/neq.js
+var require_neq = __commonJS({
+  "node_modules/semver/functions/neq.js"(exports, module) {
+    "use strict";
+    var compare = require_compare();
+    var neq = (a49, b63, loose) => compare(a49, b63, loose) !== 0;
+    module.exports = neq;
+  }
+});
+
+// node_modules/semver/functions/gte.js
+var require_gte = __commonJS({
+  "node_modules/semver/functions/gte.js"(exports, module) {
+    "use strict";
+    var compare = require_compare();
+    var gte = (a49, b63, loose) => compare(a49, b63, loose) >= 0;
+    module.exports = gte;
+  }
+});
+
+// node_modules/semver/functions/lte.js
+var require_lte = __commonJS({
+  "node_modules/semver/functions/lte.js"(exports, module) {
+    "use strict";
+    var compare = require_compare();
+    var lte = (a49, b63, loose) => compare(a49, b63, loose) <= 0;
+    module.exports = lte;
+  }
+});
+
+// node_modules/semver/functions/cmp.js
+var require_cmp = __commonJS({
+  "node_modules/semver/functions/cmp.js"(exports, module) {
+    "use strict";
+    var eq = require_eq();
+    var neq = require_neq();
+    var gt2 = require_gt();
+    var gte = require_gte();
+    var lt3 = require_lt();
+    var lte = require_lte();
+    var cmp = (a49, op, b63, loose) => {
+      switch (op) {
+        case "===":
+          if (typeof a49 === "object") {
+            a49 = a49.version;
+          }
+          if (typeof b63 === "object") {
+            b63 = b63.version;
+          }
+          return a49 === b63;
+        case "!==":
+          if (typeof a49 === "object") {
+            a49 = a49.version;
+          }
+          if (typeof b63 === "object") {
+            b63 = b63.version;
+          }
+          return a49 !== b63;
+        case "":
+        case "=":
+        case "==":
+          return eq(a49, b63, loose);
+        case "!=":
+          return neq(a49, b63, loose);
+        case ">":
+          return gt2(a49, b63, loose);
+        case ">=":
+          return gte(a49, b63, loose);
+        case "<":
+          return lt3(a49, b63, loose);
+        case "<=":
+          return lte(a49, b63, loose);
+        default:
+          throw new TypeError(`Invalid operator: ${op}`);
+      }
+    };
+    module.exports = cmp;
+  }
+});
+
+// node_modules/semver/functions/coerce.js
+var require_coerce = __commonJS({
+  "node_modules/semver/functions/coerce.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var parse = require_parse();
+    var { safeRe: re12, t: t44 } = require_re();
+    var coerce = (version, options2) => {
+      if (version instanceof SemVer) {
+        return version;
+      }
+      if (typeof version === "number") {
+        version = String(version);
+      }
+      if (typeof version !== "string") {
+        return null;
+      }
+      options2 = options2 || {};
+      let match = null;
+      if (!options2.rtl) {
+        match = version.match(options2.includePrerelease ? re12[t44.COERCEFULL] : re12[t44.COERCE]);
+      } else {
+        const coerceRtlRegex = options2.includePrerelease ? re12[t44.COERCERTLFULL] : re12[t44.COERCERTL];
+        let next;
+        while ((next = coerceRtlRegex.exec(version)) && (!match || match.index + match[0].length !== version.length)) {
+          if (!match || next.index + next[0].length !== match.index + match[0].length) {
+            match = next;
+          }
+          coerceRtlRegex.lastIndex = next.index + next[1].length + next[2].length;
+        }
+        coerceRtlRegex.lastIndex = -1;
+      }
+      if (match === null) {
+        return null;
+      }
+      const major = match[2];
+      const minor = match[3] || "0";
+      const patch = match[4] || "0";
+      const prerelease = options2.includePrerelease && match[5] ? `-${match[5]}` : "";
+      const build = options2.includePrerelease && match[6] ? `+${match[6]}` : "";
+      return parse(`${major}.${minor}.${patch}${prerelease}${build}`, options2);
+    };
+    module.exports = coerce;
+  }
+});
+
+// node_modules/semver/internal/lrucache.js
+var require_lrucache = __commonJS({
+  "node_modules/semver/internal/lrucache.js"(exports, module) {
+    "use strict";
+    var LRUCache = class {
+      constructor() {
+        this.max = 1e3;
+        this.map = /* @__PURE__ */ new Map();
+      }
+      get(key) {
+        const value = this.map.get(key);
+        if (value === void 0) {
+          return void 0;
+        } else {
+          this.map.delete(key);
+          this.map.set(key, value);
+          return value;
+        }
+      }
+      delete(key) {
+        return this.map.delete(key);
+      }
+      set(key, value) {
+        const deleted = this.delete(key);
+        if (!deleted && value !== void 0) {
+          if (this.map.size >= this.max) {
+            const firstKey = this.map.keys().next().value;
+            this.delete(firstKey);
+          }
+          this.map.set(key, value);
+        }
+        return this;
+      }
+    };
+    module.exports = LRUCache;
+  }
+});
+
+// node_modules/semver/classes/range.js
+var require_range = __commonJS({
+  "node_modules/semver/classes/range.js"(exports, module) {
+    "use strict";
+    var SPACE_CHARACTERS = /\s+/g;
+    var Range = class _Range {
+      constructor(range, options2) {
+        options2 = parseOptions(options2);
+        if (range instanceof _Range) {
+          if (range.loose === !!options2.loose && range.includePrerelease === !!options2.includePrerelease) {
+            return range;
+          } else {
+            return new _Range(range.raw, options2);
+          }
+        }
+        if (range instanceof Comparator) {
+          this.raw = range.value;
+          this.set = [[range]];
+          this.formatted = void 0;
+          return this;
+        }
+        this.options = options2;
+        this.loose = !!options2.loose;
+        this.includePrerelease = !!options2.includePrerelease;
+        this.raw = range.trim().replace(SPACE_CHARACTERS, " ");
+        this.set = this.raw.split("||").map((r39) => this.parseRange(r39.trim())).filter((c66) => c66.length);
+        if (!this.set.length) {
+          throw new TypeError(`Invalid SemVer Range: ${this.raw}`);
+        }
+        if (this.set.length > 1) {
+          const first = this.set[0];
+          this.set = this.set.filter((c66) => !isNullSet(c66[0]));
+          if (this.set.length === 0) {
+            this.set = [first];
+          } else if (this.set.length > 1) {
+            for (const c66 of this.set) {
+              if (c66.length === 1 && isAny(c66[0])) {
+                this.set = [c66];
+                break;
+              }
+            }
+          }
+        }
+        this.formatted = void 0;
+      }
+      get range() {
+        if (this.formatted === void 0) {
+          this.formatted = "";
+          for (let i50 = 0; i50 < this.set.length; i50++) {
+            if (i50 > 0) {
+              this.formatted += "||";
+            }
+            const comps = this.set[i50];
+            for (let k60 = 0; k60 < comps.length; k60++) {
+              if (k60 > 0) {
+                this.formatted += " ";
+              }
+              this.formatted += comps[k60].toString().trim();
+            }
+          }
+        }
+        return this.formatted;
+      }
+      format() {
+        return this.range;
+      }
+      toString() {
+        return this.range;
+      }
+      parseRange(range) {
+        const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
+        const memoKey = memoOpts + ":" + range;
+        const cached = cache.get(memoKey);
+        if (cached) {
+          return cached;
+        }
+        const loose = this.options.loose;
+        const hr2 = loose ? re12[t44.HYPHENRANGELOOSE] : re12[t44.HYPHENRANGE];
+        range = range.replace(hr2, hyphenReplace(this.options.includePrerelease));
+        debug("hyphen replace", range);
+        range = range.replace(re12[t44.COMPARATORTRIM], comparatorTrimReplace);
+        debug("comparator trim", range);
+        range = range.replace(re12[t44.TILDETRIM], tildeTrimReplace);
+        debug("tilde trim", range);
+        range = range.replace(re12[t44.CARETTRIM], caretTrimReplace);
+        debug("caret trim", range);
+        let rangeList = range.split(" ").map((comp) => parseComparator(comp, this.options)).join(" ").split(/\s+/).map((comp) => replaceGTE0(comp, this.options));
+        if (loose) {
+          rangeList = rangeList.filter((comp) => {
+            debug("loose invalid filter", comp, this.options);
+            return !!comp.match(re12[t44.COMPARATORLOOSE]);
+          });
+        }
+        debug("range list", rangeList);
+        const rangeMap = /* @__PURE__ */ new Map();
+        const comparators = rangeList.map((comp) => new Comparator(comp, this.options));
+        for (const comp of comparators) {
+          if (isNullSet(comp)) {
+            return [comp];
+          }
+          rangeMap.set(comp.value, comp);
+        }
+        if (rangeMap.size > 1 && rangeMap.has("")) {
+          rangeMap.delete("");
+        }
+        const result = [...rangeMap.values()];
+        cache.set(memoKey, result);
+        return result;
+      }
+      intersects(range, options2) {
+        if (!(range instanceof _Range)) {
+          throw new TypeError("a Range is required");
+        }
+        return this.set.some((thisComparators) => {
+          return isSatisfiable(thisComparators, options2) && range.set.some((rangeComparators) => {
+            return isSatisfiable(rangeComparators, options2) && thisComparators.every((thisComparator) => {
+              return rangeComparators.every((rangeComparator) => {
+                return thisComparator.intersects(rangeComparator, options2);
+              });
+            });
+          });
+        });
+      }
+      // if ANY of the sets match ALL of its comparators, then pass
+      test(version) {
+        if (!version) {
+          return false;
+        }
+        if (typeof version === "string") {
+          try {
+            version = new SemVer(version, this.options);
+          } catch (er3) {
+            return false;
+          }
+        }
+        for (let i50 = 0; i50 < this.set.length; i50++) {
+          if (testSet(this.set[i50], version, this.options)) {
+            return true;
+          }
+        }
+        return false;
+      }
+    };
+    module.exports = Range;
+    var LRU = require_lrucache();
+    var cache = new LRU();
+    var parseOptions = require_parse_options();
+    var Comparator = require_comparator();
+    var debug = require_debug();
+    var SemVer = require_semver();
+    var {
+      safeRe: re12,
+      t: t44,
+      comparatorTrimReplace,
+      tildeTrimReplace,
+      caretTrimReplace
+    } = require_re();
+    var { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = require_constants();
+    var isNullSet = (c66) => c66.value === "<0.0.0-0";
+    var isAny = (c66) => c66.value === "";
+    var isSatisfiable = (comparators, options2) => {
+      let result = true;
+      const remainingComparators = comparators.slice();
+      let testComparator = remainingComparators.pop();
+      while (result && remainingComparators.length) {
+        result = remainingComparators.every((otherComparator) => {
+          return testComparator.intersects(otherComparator, options2);
+        });
+        testComparator = remainingComparators.pop();
+      }
+      return result;
+    };
+    var parseComparator = (comp, options2) => {
+      comp = comp.replace(re12[t44.BUILD], "");
+      debug("comp", comp, options2);
+      comp = replaceCarets(comp, options2);
+      debug("caret", comp);
+      comp = replaceTildes(comp, options2);
+      debug("tildes", comp);
+      comp = replaceXRanges(comp, options2);
+      debug("xrange", comp);
+      comp = replaceStars(comp, options2);
+      debug("stars", comp);
+      return comp;
+    };
+    var isX = (id) => !id || id.toLowerCase() === "x" || id === "*";
+    var replaceTildes = (comp, options2) => {
+      return comp.trim().split(/\s+/).map((c66) => replaceTilde(c66, options2)).join(" ");
+    };
+    var replaceTilde = (comp, options2) => {
+      const r39 = options2.loose ? re12[t44.TILDELOOSE] : re12[t44.TILDE];
+      return comp.replace(r39, (_57, M61, m59, p64, pr2) => {
+        debug("tilde", comp, _57, M61, m59, p64, pr2);
+        let ret;
+        if (isX(M61)) {
+          ret = "";
+        } else if (isX(m59)) {
+          ret = `>=${M61}.0.0 <${+M61 + 1}.0.0-0`;
+        } else if (isX(p64)) {
+          ret = `>=${M61}.${m59}.0 <${M61}.${+m59 + 1}.0-0`;
+        } else if (pr2) {
+          debug("replaceTilde pr", pr2);
+          ret = `>=${M61}.${m59}.${p64}-${pr2} <${M61}.${+m59 + 1}.0-0`;
+        } else {
+          ret = `>=${M61}.${m59}.${p64} <${M61}.${+m59 + 1}.0-0`;
+        }
+        debug("tilde return", ret);
+        return ret;
+      });
+    };
+    var replaceCarets = (comp, options2) => {
+      return comp.trim().split(/\s+/).map((c66) => replaceCaret(c66, options2)).join(" ");
+    };
+    var replaceCaret = (comp, options2) => {
+      debug("caret", comp, options2);
+      const r39 = options2.loose ? re12[t44.CARETLOOSE] : re12[t44.CARET];
+      const z50 = options2.includePrerelease ? "-0" : "";
+      return comp.replace(r39, (_57, M61, m59, p64, pr2) => {
+        debug("caret", comp, _57, M61, m59, p64, pr2);
+        let ret;
+        if (isX(M61)) {
+          ret = "";
+        } else if (isX(m59)) {
+          ret = `>=${M61}.0.0${z50} <${+M61 + 1}.0.0-0`;
+        } else if (isX(p64)) {
+          if (M61 === "0") {
+            ret = `>=${M61}.${m59}.0${z50} <${M61}.${+m59 + 1}.0-0`;
+          } else {
+            ret = `>=${M61}.${m59}.0${z50} <${+M61 + 1}.0.0-0`;
+          }
+        } else if (pr2) {
+          debug("replaceCaret pr", pr2);
+          if (M61 === "0") {
+            if (m59 === "0") {
+              ret = `>=${M61}.${m59}.${p64}-${pr2} <${M61}.${m59}.${+p64 + 1}-0`;
+            } else {
+              ret = `>=${M61}.${m59}.${p64}-${pr2} <${M61}.${+m59 + 1}.0-0`;
+            }
+          } else {
+            ret = `>=${M61}.${m59}.${p64}-${pr2} <${+M61 + 1}.0.0-0`;
+          }
+        } else {
+          debug("no pr");
+          if (M61 === "0") {
+            if (m59 === "0") {
+              ret = `>=${M61}.${m59}.${p64}${z50} <${M61}.${m59}.${+p64 + 1}-0`;
+            } else {
+              ret = `>=${M61}.${m59}.${p64}${z50} <${M61}.${+m59 + 1}.0-0`;
+            }
+          } else {
+            ret = `>=${M61}.${m59}.${p64} <${+M61 + 1}.0.0-0`;
+          }
+        }
+        debug("caret return", ret);
+        return ret;
+      });
+    };
+    var replaceXRanges = (comp, options2) => {
+      debug("replaceXRanges", comp, options2);
+      return comp.split(/\s+/).map((c66) => replaceXRange(c66, options2)).join(" ");
+    };
+    var replaceXRange = (comp, options2) => {
+      comp = comp.trim();
+      const r39 = options2.loose ? re12[t44.XRANGELOOSE] : re12[t44.XRANGE];
+      return comp.replace(r39, (ret, gtlt, M61, m59, p64, pr2) => {
+        debug("xRange", comp, ret, gtlt, M61, m59, p64, pr2);
+        const xM = isX(M61);
+        const xm = xM || isX(m59);
+        const xp = xm || isX(p64);
+        const anyX = xp;
+        if (gtlt === "=" && anyX) {
+          gtlt = "";
+        }
+        pr2 = options2.includePrerelease ? "-0" : "";
+        if (xM) {
+          if (gtlt === ">" || gtlt === "<") {
+            ret = "<0.0.0-0";
+          } else {
+            ret = "*";
+          }
+        } else if (gtlt && anyX) {
+          if (xm) {
+            m59 = 0;
+          }
+          p64 = 0;
+          if (gtlt === ">") {
+            gtlt = ">=";
+            if (xm) {
+              M61 = +M61 + 1;
+              m59 = 0;
+              p64 = 0;
+            } else {
+              m59 = +m59 + 1;
+              p64 = 0;
+            }
+          } else if (gtlt === "<=") {
+            gtlt = "<";
+            if (xm) {
+              M61 = +M61 + 1;
+            } else {
+              m59 = +m59 + 1;
+            }
+          }
+          if (gtlt === "<") {
+            pr2 = "-0";
+          }
+          ret = `${gtlt + M61}.${m59}.${p64}${pr2}`;
+        } else if (xm) {
+          ret = `>=${M61}.0.0${pr2} <${+M61 + 1}.0.0-0`;
+        } else if (xp) {
+          ret = `>=${M61}.${m59}.0${pr2} <${M61}.${+m59 + 1}.0-0`;
+        }
+        debug("xRange return", ret);
+        return ret;
+      });
+    };
+    var replaceStars = (comp, options2) => {
+      debug("replaceStars", comp, options2);
+      return comp.trim().replace(re12[t44.STAR], "");
+    };
+    var replaceGTE0 = (comp, options2) => {
+      debug("replaceGTE0", comp, options2);
+      return comp.trim().replace(re12[options2.includePrerelease ? t44.GTE0PRE : t44.GTE0], "");
+    };
+    var hyphenReplace = (incPr) => ($0, from, fM, fm, fp, fpr, fb, to3, tM, tm, tp, tpr) => {
+      if (isX(fM)) {
+        from = "";
+      } else if (isX(fm)) {
+        from = `>=${fM}.0.0${incPr ? "-0" : ""}`;
+      } else if (isX(fp)) {
+        from = `>=${fM}.${fm}.0${incPr ? "-0" : ""}`;
+      } else if (fpr) {
+        from = `>=${from}`;
+      } else {
+        from = `>=${from}${incPr ? "-0" : ""}`;
+      }
+      if (isX(tM)) {
+        to3 = "";
+      } else if (isX(tm)) {
+        to3 = `<${+tM + 1}.0.0-0`;
+      } else if (isX(tp)) {
+        to3 = `<${tM}.${+tm + 1}.0-0`;
+      } else if (tpr) {
+        to3 = `<=${tM}.${tm}.${tp}-${tpr}`;
+      } else if (incPr) {
+        to3 = `<${tM}.${tm}.${+tp + 1}-0`;
+      } else {
+        to3 = `<=${to3}`;
+      }
+      return `${from} ${to3}`.trim();
+    };
+    var testSet = (set, version, options2) => {
+      for (let i50 = 0; i50 < set.length; i50++) {
+        if (!set[i50].test(version)) {
+          return false;
+        }
+      }
+      if (version.prerelease.length && !options2.includePrerelease) {
+        for (let i50 = 0; i50 < set.length; i50++) {
+          debug(set[i50].semver);
+          if (set[i50].semver === Comparator.ANY) {
+            continue;
+          }
+          if (set[i50].semver.prerelease.length > 0) {
+            const allowed = set[i50].semver;
+            if (allowed.major === version.major && allowed.minor === version.minor && allowed.patch === version.patch) {
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+      return true;
+    };
+  }
+});
+
+// node_modules/semver/classes/comparator.js
+var require_comparator = __commonJS({
+  "node_modules/semver/classes/comparator.js"(exports, module) {
+    "use strict";
+    var ANY = /* @__PURE__ */ Symbol("SemVer ANY");
+    var Comparator = class _Comparator {
+      static get ANY() {
+        return ANY;
+      }
+      constructor(comp, options2) {
+        options2 = parseOptions(options2);
+        if (comp instanceof _Comparator) {
+          if (comp.loose === !!options2.loose) {
+            return comp;
+          } else {
+            comp = comp.value;
+          }
+        }
+        comp = comp.trim().split(/\s+/).join(" ");
+        debug("comparator", comp, options2);
+        this.options = options2;
+        this.loose = !!options2.loose;
+        this.parse(comp);
+        if (this.semver === ANY) {
+          this.value = "";
+        } else {
+          this.value = this.operator + this.semver.version;
+        }
+        debug("comp", this);
+      }
+      parse(comp) {
+        const r39 = this.options.loose ? re12[t44.COMPARATORLOOSE] : re12[t44.COMPARATOR];
+        const m59 = comp.match(r39);
+        if (!m59) {
+          throw new TypeError(`Invalid comparator: ${comp}`);
+        }
+        this.operator = m59[1] !== void 0 ? m59[1] : "";
+        if (this.operator === "=") {
+          this.operator = "";
+        }
+        if (!m59[2]) {
+          this.semver = ANY;
+        } else {
+          this.semver = new SemVer(m59[2], this.options.loose);
+        }
+      }
+      toString() {
+        return this.value;
+      }
+      test(version) {
+        debug("Comparator.test", version, this.options.loose);
+        if (this.semver === ANY || version === ANY) {
+          return true;
+        }
+        if (typeof version === "string") {
+          try {
+            version = new SemVer(version, this.options);
+          } catch (er3) {
+            return false;
+          }
+        }
+        return cmp(version, this.operator, this.semver, this.options);
+      }
+      intersects(comp, options2) {
+        if (!(comp instanceof _Comparator)) {
+          throw new TypeError("a Comparator is required");
+        }
+        if (this.operator === "") {
+          if (this.value === "") {
+            return true;
+          }
+          return new Range(comp.value, options2).test(this.value);
+        } else if (comp.operator === "") {
+          if (comp.value === "") {
+            return true;
+          }
+          return new Range(this.value, options2).test(comp.semver);
+        }
+        options2 = parseOptions(options2);
+        if (options2.includePrerelease && (this.value === "<0.0.0-0" || comp.value === "<0.0.0-0")) {
+          return false;
+        }
+        if (!options2.includePrerelease && (this.value.startsWith("<0.0.0") || comp.value.startsWith("<0.0.0"))) {
+          return false;
+        }
+        if (this.operator.startsWith(">") && comp.operator.startsWith(">")) {
+          return true;
+        }
+        if (this.operator.startsWith("<") && comp.operator.startsWith("<")) {
+          return true;
+        }
+        if (this.semver.version === comp.semver.version && this.operator.includes("=") && comp.operator.includes("=")) {
+          return true;
+        }
+        if (cmp(this.semver, "<", comp.semver, options2) && this.operator.startsWith(">") && comp.operator.startsWith("<")) {
+          return true;
+        }
+        if (cmp(this.semver, ">", comp.semver, options2) && this.operator.startsWith("<") && comp.operator.startsWith(">")) {
+          return true;
+        }
+        return false;
+      }
+    };
+    module.exports = Comparator;
+    var parseOptions = require_parse_options();
+    var { safeRe: re12, t: t44 } = require_re();
+    var cmp = require_cmp();
+    var debug = require_debug();
+    var SemVer = require_semver();
+    var Range = require_range();
+  }
+});
+
+// node_modules/semver/functions/satisfies.js
+var require_satisfies = __commonJS({
+  "node_modules/semver/functions/satisfies.js"(exports, module) {
+    "use strict";
+    var Range = require_range();
+    var satisfies = (version, range, options2) => {
+      try {
+        range = new Range(range, options2);
+      } catch (er3) {
+        return false;
+      }
+      return range.test(version);
+    };
+    module.exports = satisfies;
+  }
+});
+
+// node_modules/semver/ranges/to-comparators.js
+var require_to_comparators = __commonJS({
+  "node_modules/semver/ranges/to-comparators.js"(exports, module) {
+    "use strict";
+    var Range = require_range();
+    var toComparators = (range, options2) => new Range(range, options2).set.map((comp) => comp.map((c66) => c66.value).join(" ").trim().split(" "));
+    module.exports = toComparators;
+  }
+});
+
+// node_modules/semver/ranges/max-satisfying.js
+var require_max_satisfying = __commonJS({
+  "node_modules/semver/ranges/max-satisfying.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var Range = require_range();
+    var maxSatisfying = (versions, range, options2) => {
+      let max = null;
+      let maxSV = null;
+      let rangeObj = null;
+      try {
+        rangeObj = new Range(range, options2);
+      } catch (er3) {
+        return null;
+      }
+      versions.forEach((v55) => {
+        if (rangeObj.test(v55)) {
+          if (!max || maxSV.compare(v55) === -1) {
+            max = v55;
+            maxSV = new SemVer(max, options2);
+          }
+        }
+      });
+      return max;
+    };
+    module.exports = maxSatisfying;
+  }
+});
+
+// node_modules/semver/ranges/min-satisfying.js
+var require_min_satisfying = __commonJS({
+  "node_modules/semver/ranges/min-satisfying.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var Range = require_range();
+    var minSatisfying = (versions, range, options2) => {
+      let min = null;
+      let minSV = null;
+      let rangeObj = null;
+      try {
+        rangeObj = new Range(range, options2);
+      } catch (er3) {
+        return null;
+      }
+      versions.forEach((v55) => {
+        if (rangeObj.test(v55)) {
+          if (!min || minSV.compare(v55) === 1) {
+            min = v55;
+            minSV = new SemVer(min, options2);
+          }
+        }
+      });
+      return min;
+    };
+    module.exports = minSatisfying;
+  }
+});
+
+// node_modules/semver/ranges/min-version.js
+var require_min_version = __commonJS({
+  "node_modules/semver/ranges/min-version.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var Range = require_range();
+    var gt2 = require_gt();
+    var minVersion = (range, loose) => {
+      range = new Range(range, loose);
+      let minver = new SemVer("0.0.0");
+      if (range.test(minver)) {
+        return minver;
+      }
+      minver = new SemVer("0.0.0-0");
+      if (range.test(minver)) {
+        return minver;
+      }
+      minver = null;
+      for (let i50 = 0; i50 < range.set.length; ++i50) {
+        const comparators = range.set[i50];
+        let setMin = null;
+        comparators.forEach((comparator) => {
+          const compver = new SemVer(comparator.semver.version);
+          switch (comparator.operator) {
+            case ">":
+              if (compver.prerelease.length === 0) {
+                compver.patch++;
+              } else {
+                compver.prerelease.push(0);
+              }
+              compver.raw = compver.format();
+            /* fallthrough */
+            case "":
+            case ">=":
+              if (!setMin || gt2(compver, setMin)) {
+                setMin = compver;
+              }
+              break;
+            case "<":
+            case "<=":
+              break;
+            /* istanbul ignore next */
+            default:
+              throw new Error(`Unexpected operation: ${comparator.operator}`);
+          }
+        });
+        if (setMin && (!minver || gt2(minver, setMin))) {
+          minver = setMin;
+        }
+      }
+      if (minver && range.test(minver)) {
+        return minver;
+      }
+      return null;
+    };
+    module.exports = minVersion;
+  }
+});
+
+// node_modules/semver/ranges/valid.js
+var require_valid2 = __commonJS({
+  "node_modules/semver/ranges/valid.js"(exports, module) {
+    "use strict";
+    var Range = require_range();
+    var validRange = (range, options2) => {
+      try {
+        return new Range(range, options2).range || "*";
+      } catch (er3) {
+        return null;
+      }
+    };
+    module.exports = validRange;
+  }
+});
+
+// node_modules/semver/ranges/outside.js
+var require_outside = __commonJS({
+  "node_modules/semver/ranges/outside.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var Comparator = require_comparator();
+    var { ANY } = Comparator;
+    var Range = require_range();
+    var satisfies = require_satisfies();
+    var gt2 = require_gt();
+    var lt3 = require_lt();
+    var lte = require_lte();
+    var gte = require_gte();
+    var outside = (version, range, hilo, options2) => {
+      version = new SemVer(version, options2);
+      range = new Range(range, options2);
+      let gtfn, ltefn, ltfn, comp, ecomp;
+      switch (hilo) {
+        case ">":
+          gtfn = gt2;
+          ltefn = lte;
+          ltfn = lt3;
+          comp = ">";
+          ecomp = ">=";
+          break;
+        case "<":
+          gtfn = lt3;
+          ltefn = gte;
+          ltfn = gt2;
+          comp = "<";
+          ecomp = "<=";
+          break;
+        default:
+          throw new TypeError('Must provide a hilo val of "<" or ">"');
+      }
+      if (satisfies(version, range, options2)) {
+        return false;
+      }
+      for (let i50 = 0; i50 < range.set.length; ++i50) {
+        const comparators = range.set[i50];
+        let high = null;
+        let low = null;
+        comparators.forEach((comparator) => {
+          if (comparator.semver === ANY) {
+            comparator = new Comparator(">=0.0.0");
+          }
+          high = high || comparator;
+          low = low || comparator;
+          if (gtfn(comparator.semver, high.semver, options2)) {
+            high = comparator;
+          } else if (ltfn(comparator.semver, low.semver, options2)) {
+            low = comparator;
+          }
+        });
+        if (high.operator === comp || high.operator === ecomp) {
+          return false;
+        }
+        if ((!low.operator || low.operator === comp) && ltefn(version, low.semver)) {
+          return false;
+        } else if (low.operator === ecomp && ltfn(version, low.semver)) {
+          return false;
+        }
+      }
+      return true;
+    };
+    module.exports = outside;
+  }
+});
+
+// node_modules/semver/ranges/gtr.js
+var require_gtr = __commonJS({
+  "node_modules/semver/ranges/gtr.js"(exports, module) {
+    "use strict";
+    var outside = require_outside();
+    var gtr = (version, range, options2) => outside(version, range, ">", options2);
+    module.exports = gtr;
+  }
+});
+
+// node_modules/semver/ranges/ltr.js
+var require_ltr = __commonJS({
+  "node_modules/semver/ranges/ltr.js"(exports, module) {
+    "use strict";
+    var outside = require_outside();
+    var ltr = (version, range, options2) => outside(version, range, "<", options2);
+    module.exports = ltr;
+  }
+});
+
+// node_modules/semver/ranges/intersects.js
+var require_intersects = __commonJS({
+  "node_modules/semver/ranges/intersects.js"(exports, module) {
+    "use strict";
+    var Range = require_range();
+    var intersects = (r1, r210, options2) => {
+      r1 = new Range(r1, options2);
+      r210 = new Range(r210, options2);
+      return r1.intersects(r210, options2);
+    };
+    module.exports = intersects;
+  }
+});
+
+// node_modules/semver/ranges/simplify.js
+var require_simplify = __commonJS({
+  "node_modules/semver/ranges/simplify.js"(exports, module) {
+    "use strict";
+    var satisfies = require_satisfies();
+    var compare = require_compare();
+    module.exports = (versions, range, options2) => {
+      const set = [];
+      let first = null;
+      let prev = null;
+      const v55 = versions.sort((a49, b63) => compare(a49, b63, options2));
+      for (const version of v55) {
+        const included = satisfies(version, range, options2);
+        if (included) {
+          prev = version;
+          if (!first) {
+            first = version;
+          }
+        } else {
+          if (prev) {
+            set.push([first, prev]);
+          }
+          prev = null;
+          first = null;
+        }
+      }
+      if (first) {
+        set.push([first, null]);
+      }
+      const ranges = [];
+      for (const [min, max] of set) {
+        if (min === max) {
+          ranges.push(min);
+        } else if (!max && min === v55[0]) {
+          ranges.push("*");
+        } else if (!max) {
+          ranges.push(`>=${min}`);
+        } else if (min === v55[0]) {
+          ranges.push(`<=${max}`);
+        } else {
+          ranges.push(`${min} - ${max}`);
+        }
+      }
+      const simplified = ranges.join(" || ");
+      const original = typeof range.raw === "string" ? range.raw : String(range);
+      return simplified.length < original.length ? simplified : range;
+    };
+  }
+});
+
+// node_modules/semver/ranges/subset.js
+var require_subset = __commonJS({
+  "node_modules/semver/ranges/subset.js"(exports, module) {
+    "use strict";
+    var Range = require_range();
+    var Comparator = require_comparator();
+    var { ANY } = Comparator;
+    var satisfies = require_satisfies();
+    var compare = require_compare();
+    var subset = (sub, dom, options2 = {}) => {
+      if (sub === dom) {
+        return true;
+      }
+      sub = new Range(sub, options2);
+      dom = new Range(dom, options2);
+      let sawNonNull = false;
+      OUTER: for (const simpleSub of sub.set) {
+        for (const simpleDom of dom.set) {
+          const isSub = simpleSubset(simpleSub, simpleDom, options2);
+          sawNonNull = sawNonNull || isSub !== null;
+          if (isSub) {
+            continue OUTER;
+          }
+        }
+        if (sawNonNull) {
+          return false;
+        }
+      }
+      return true;
+    };
+    var minimumVersionWithPreRelease = [new Comparator(">=0.0.0-0")];
+    var minimumVersion = [new Comparator(">=0.0.0")];
+    var simpleSubset = (sub, dom, options2) => {
+      if (sub === dom) {
+        return true;
+      }
+      if (sub.length === 1 && sub[0].semver === ANY) {
+        if (dom.length === 1 && dom[0].semver === ANY) {
+          return true;
+        } else if (options2.includePrerelease) {
+          sub = minimumVersionWithPreRelease;
+        } else {
+          sub = minimumVersion;
+        }
+      }
+      if (dom.length === 1 && dom[0].semver === ANY) {
+        if (options2.includePrerelease) {
+          return true;
+        } else {
+          dom = minimumVersion;
+        }
+      }
+      const eqSet = /* @__PURE__ */ new Set();
+      let gt2, lt3;
+      for (const c66 of sub) {
+        if (c66.operator === ">" || c66.operator === ">=") {
+          gt2 = higherGT(gt2, c66, options2);
+        } else if (c66.operator === "<" || c66.operator === "<=") {
+          lt3 = lowerLT(lt3, c66, options2);
+        } else {
+          eqSet.add(c66.semver);
+        }
+      }
+      if (eqSet.size > 1) {
+        return null;
+      }
+      let gtltComp;
+      if (gt2 && lt3) {
+        gtltComp = compare(gt2.semver, lt3.semver, options2);
+        if (gtltComp > 0) {
+          return null;
+        } else if (gtltComp === 0 && (gt2.operator !== ">=" || lt3.operator !== "<=")) {
+          return null;
+        }
+      }
+      for (const eq of eqSet) {
+        if (gt2 && !satisfies(eq, String(gt2), options2)) {
+          return null;
+        }
+        if (lt3 && !satisfies(eq, String(lt3), options2)) {
+          return null;
+        }
+        for (const c66 of dom) {
+          if (!satisfies(eq, String(c66), options2)) {
+            return false;
+          }
+        }
+        return true;
+      }
+      let higher, lower;
+      let hasDomLT, hasDomGT;
+      let needDomLTPre = lt3 && !options2.includePrerelease && lt3.semver.prerelease.length ? lt3.semver : false;
+      let needDomGTPre = gt2 && !options2.includePrerelease && gt2.semver.prerelease.length ? gt2.semver : false;
+      if (needDomLTPre && needDomLTPre.prerelease.length === 1 && lt3.operator === "<" && needDomLTPre.prerelease[0] === 0) {
+        needDomLTPre = false;
+      }
+      for (const c66 of dom) {
+        hasDomGT = hasDomGT || c66.operator === ">" || c66.operator === ">=";
+        hasDomLT = hasDomLT || c66.operator === "<" || c66.operator === "<=";
+        if (gt2) {
+          if (needDomGTPre) {
+            if (c66.semver.prerelease && c66.semver.prerelease.length && c66.semver.major === needDomGTPre.major && c66.semver.minor === needDomGTPre.minor && c66.semver.patch === needDomGTPre.patch) {
+              needDomGTPre = false;
+            }
+          }
+          if (c66.operator === ">" || c66.operator === ">=") {
+            higher = higherGT(gt2, c66, options2);
+            if (higher === c66 && higher !== gt2) {
+              return false;
+            }
+          } else if (gt2.operator === ">=" && !satisfies(gt2.semver, String(c66), options2)) {
+            return false;
+          }
+        }
+        if (lt3) {
+          if (needDomLTPre) {
+            if (c66.semver.prerelease && c66.semver.prerelease.length && c66.semver.major === needDomLTPre.major && c66.semver.minor === needDomLTPre.minor && c66.semver.patch === needDomLTPre.patch) {
+              needDomLTPre = false;
+            }
+          }
+          if (c66.operator === "<" || c66.operator === "<=") {
+            lower = lowerLT(lt3, c66, options2);
+            if (lower === c66 && lower !== lt3) {
+              return false;
+            }
+          } else if (lt3.operator === "<=" && !satisfies(lt3.semver, String(c66), options2)) {
+            return false;
+          }
+        }
+        if (!c66.operator && (lt3 || gt2) && gtltComp !== 0) {
+          return false;
+        }
+      }
+      if (gt2 && hasDomLT && !lt3 && gtltComp !== 0) {
+        return false;
+      }
+      if (lt3 && hasDomGT && !gt2 && gtltComp !== 0) {
+        return false;
+      }
+      if (needDomGTPre || needDomLTPre) {
+        return false;
+      }
+      return true;
+    };
+    var higherGT = (a49, b63, options2) => {
+      if (!a49) {
+        return b63;
+      }
+      const comp = compare(a49.semver, b63.semver, options2);
+      return comp > 0 ? a49 : comp < 0 ? b63 : b63.operator === ">" && a49.operator === ">=" ? b63 : a49;
+    };
+    var lowerLT = (a49, b63, options2) => {
+      if (!a49) {
+        return b63;
+      }
+      const comp = compare(a49.semver, b63.semver, options2);
+      return comp < 0 ? a49 : comp > 0 ? b63 : b63.operator === "<" && a49.operator === "<=" ? b63 : a49;
+    };
+    module.exports = subset;
+  }
+});
+
+// node_modules/semver/index.js
+var require_semver2 = __commonJS({
+  "node_modules/semver/index.js"(exports, module) {
+    "use strict";
+    var internalRe = require_re();
+    var constants = require_constants();
+    var SemVer = require_semver();
+    var identifiers = require_identifiers();
+    var parse = require_parse();
+    var valid = require_valid();
+    var clean = require_clean();
+    var inc = require_inc();
+    var diff = require_diff();
+    var major = require_major();
+    var minor = require_minor();
+    var patch = require_patch();
+    var prerelease = require_prerelease();
+    var compare = require_compare();
+    var rcompare = require_rcompare();
+    var compareLoose = require_compare_loose();
+    var compareBuild = require_compare_build();
+    var sort = require_sort();
+    var rsort = require_rsort();
+    var gt2 = require_gt();
+    var lt3 = require_lt();
+    var eq = require_eq();
+    var neq = require_neq();
+    var gte = require_gte();
+    var lte = require_lte();
+    var cmp = require_cmp();
+    var coerce = require_coerce();
+    var Comparator = require_comparator();
+    var Range = require_range();
+    var satisfies = require_satisfies();
+    var toComparators = require_to_comparators();
+    var maxSatisfying = require_max_satisfying();
+    var minSatisfying = require_min_satisfying();
+    var minVersion = require_min_version();
+    var validRange = require_valid2();
+    var outside = require_outside();
+    var gtr = require_gtr();
+    var ltr = require_ltr();
+    var intersects = require_intersects();
+    var simplifyRange = require_simplify();
+    var subset = require_subset();
+    module.exports = {
+      parse,
+      valid,
+      clean,
+      inc,
+      diff,
+      major,
+      minor,
+      patch,
+      prerelease,
+      compare,
+      rcompare,
+      compareLoose,
+      compareBuild,
+      sort,
+      rsort,
+      gt: gt2,
+      lt: lt3,
+      eq,
+      neq,
+      gte,
+      lte,
+      cmp,
+      coerce,
+      Comparator,
+      Range,
+      satisfies,
+      toComparators,
+      maxSatisfying,
+      minSatisfying,
+      minVersion,
+      validRange,
+      outside,
+      gtr,
+      ltr,
+      intersects,
+      simplifyRange,
+      subset,
+      SemVer,
+      re: internalRe.re,
+      src: internalRe.src,
+      tokens: internalRe.t,
+      SEMVER_SPEC_VERSION: constants.SEMVER_SPEC_VERSION,
+      RELEASE_TYPES: constants.RELEASE_TYPES,
+      compareIdentifiers: identifiers.compareIdentifiers,
+      rcompareIdentifiers: identifiers.rcompareIdentifiers
+    };
+  }
+});
+
+// node_modules/jsonwebtoken/lib/asymmetricKeyDetailsSupported.js
+var require_asymmetricKeyDetailsSupported = __commonJS({
+  "node_modules/jsonwebtoken/lib/asymmetricKeyDetailsSupported.js"(exports, module) {
+    var semver = require_semver2();
+    module.exports = semver.satisfies(process.version, ">=15.7.0");
+  }
+});
+
+// node_modules/jsonwebtoken/lib/rsaPssKeyDetailsSupported.js
+var require_rsaPssKeyDetailsSupported = __commonJS({
+  "node_modules/jsonwebtoken/lib/rsaPssKeyDetailsSupported.js"(exports, module) {
+    var semver = require_semver2();
+    module.exports = semver.satisfies(process.version, ">=16.9.0");
+  }
+});
+
+// node_modules/jsonwebtoken/lib/validateAsymmetricKey.js
+var require_validateAsymmetricKey = __commonJS({
+  "node_modules/jsonwebtoken/lib/validateAsymmetricKey.js"(exports, module) {
+    var ASYMMETRIC_KEY_DETAILS_SUPPORTED = require_asymmetricKeyDetailsSupported();
+    var RSA_PSS_KEY_DETAILS_SUPPORTED = require_rsaPssKeyDetailsSupported();
+    var allowedAlgorithmsForKeys = {
+      "ec": ["ES256", "ES384", "ES512"],
+      "rsa": ["RS256", "PS256", "RS384", "PS384", "RS512", "PS512"],
+      "rsa-pss": ["PS256", "PS384", "PS512"]
+    };
+    var allowedCurves = {
+      ES256: "prime256v1",
+      ES384: "secp384r1",
+      ES512: "secp521r1"
+    };
+    module.exports = function(algorithm, key) {
+      if (!algorithm || !key) return;
+      const keyType = key.asymmetricKeyType;
+      if (!keyType) return;
+      const allowedAlgorithms = allowedAlgorithmsForKeys[keyType];
+      if (!allowedAlgorithms) {
+        throw new Error(`Unknown key type "${keyType}".`);
+      }
+      if (!allowedAlgorithms.includes(algorithm)) {
+        throw new Error(`"alg" parameter for "${keyType}" key type must be one of: ${allowedAlgorithms.join(", ")}.`);
+      }
+      if (ASYMMETRIC_KEY_DETAILS_SUPPORTED) {
+        switch (keyType) {
+          case "ec":
+            const keyCurve = key.asymmetricKeyDetails.namedCurve;
+            const allowedCurve = allowedCurves[algorithm];
+            if (keyCurve !== allowedCurve) {
+              throw new Error(`"alg" parameter "${algorithm}" requires curve "${allowedCurve}".`);
+            }
+            break;
+          case "rsa-pss":
+            if (RSA_PSS_KEY_DETAILS_SUPPORTED) {
+              const length = parseInt(algorithm.slice(-3), 10);
+              const { hashAlgorithm, mgf1HashAlgorithm, saltLength } = key.asymmetricKeyDetails;
+              if (hashAlgorithm !== `sha${length}` || mgf1HashAlgorithm !== hashAlgorithm) {
+                throw new Error(`Invalid key for this operation, its RSA-PSS parameters do not meet the requirements of "alg" ${algorithm}.`);
+              }
+              if (saltLength !== void 0 && saltLength > length >> 3) {
+                throw new Error(`Invalid key for this operation, its RSA-PSS parameter saltLength does not meet the requirements of "alg" ${algorithm}.`);
+              }
+            }
+            break;
+        }
+      }
+    };
+  }
+});
+
+// node_modules/jsonwebtoken/lib/psSupported.js
+var require_psSupported = __commonJS({
+  "node_modules/jsonwebtoken/lib/psSupported.js"(exports, module) {
+    var semver = require_semver2();
+    module.exports = semver.satisfies(process.version, "^6.12.0 || >=8.0.0");
+  }
+});
+
+// node_modules/jsonwebtoken/verify.js
+var require_verify = __commonJS({
+  "node_modules/jsonwebtoken/verify.js"(exports, module) {
+    var JsonWebTokenError = require_JsonWebTokenError();
+    var NotBeforeError = require_NotBeforeError();
+    var TokenExpiredError = require_TokenExpiredError();
+    var decode = require_decode();
+    var timespan = require_timespan();
+    var validateAsymmetricKey = require_validateAsymmetricKey();
+    var PS_SUPPORTED = require_psSupported();
+    var jws = require_jws();
+    var { KeyObject, createSecretKey, createPublicKey } = __require("crypto");
+    var PUB_KEY_ALGS = ["RS256", "RS384", "RS512"];
+    var EC_KEY_ALGS = ["ES256", "ES384", "ES512"];
+    var RSA_KEY_ALGS = ["RS256", "RS384", "RS512"];
+    var HS_ALGS = ["HS256", "HS384", "HS512"];
+    if (PS_SUPPORTED) {
+      PUB_KEY_ALGS.splice(PUB_KEY_ALGS.length, 0, "PS256", "PS384", "PS512");
+      RSA_KEY_ALGS.splice(RSA_KEY_ALGS.length, 0, "PS256", "PS384", "PS512");
+    }
+    module.exports = function(jwtString, secretOrPublicKey, options2, callback) {
+      if (typeof options2 === "function" && !callback) {
+        callback = options2;
+        options2 = {};
+      }
+      if (!options2) {
+        options2 = {};
+      }
+      options2 = Object.assign({}, options2);
+      let done;
+      if (callback) {
+        done = callback;
+      } else {
+        done = function(err, data) {
+          if (err) throw err;
+          return data;
+        };
+      }
+      if (options2.clockTimestamp && typeof options2.clockTimestamp !== "number") {
+        return done(new JsonWebTokenError("clockTimestamp must be a number"));
+      }
+      if (options2.nonce !== void 0 && (typeof options2.nonce !== "string" || options2.nonce.trim() === "")) {
+        return done(new JsonWebTokenError("nonce must be a non-empty string"));
+      }
+      if (options2.allowInvalidAsymmetricKeyTypes !== void 0 && typeof options2.allowInvalidAsymmetricKeyTypes !== "boolean") {
+        return done(new JsonWebTokenError("allowInvalidAsymmetricKeyTypes must be a boolean"));
+      }
+      const clockTimestamp = options2.clockTimestamp || Math.floor(Date.now() / 1e3);
+      if (!jwtString) {
+        return done(new JsonWebTokenError("jwt must be provided"));
+      }
+      if (typeof jwtString !== "string") {
+        return done(new JsonWebTokenError("jwt must be a string"));
+      }
+      const parts = jwtString.split(".");
+      if (parts.length !== 3) {
+        return done(new JsonWebTokenError("jwt malformed"));
+      }
+      let decodedToken;
+      try {
+        decodedToken = decode(jwtString, { complete: true });
+      } catch (err) {
+        return done(err);
+      }
+      if (!decodedToken) {
+        return done(new JsonWebTokenError("invalid token"));
+      }
+      const header = decodedToken.header;
+      let getSecret;
+      if (typeof secretOrPublicKey === "function") {
+        if (!callback) {
+          return done(new JsonWebTokenError("verify must be called asynchronous if secret or public key is provided as a callback"));
+        }
+        getSecret = secretOrPublicKey;
+      } else {
+        getSecret = function(header2, secretCallback) {
+          return secretCallback(null, secretOrPublicKey);
+        };
+      }
+      return getSecret(header, function(err, secretOrPublicKey2) {
+        if (err) {
+          return done(new JsonWebTokenError("error in secret or public key callback: " + err.message));
+        }
+        const hasSignature = parts[2].trim() !== "";
+        if (!hasSignature && secretOrPublicKey2) {
+          return done(new JsonWebTokenError("jwt signature is required"));
+        }
+        if (hasSignature && !secretOrPublicKey2) {
+          return done(new JsonWebTokenError("secret or public key must be provided"));
+        }
+        if (!hasSignature && !options2.algorithms) {
+          return done(new JsonWebTokenError('please specify "none" in "algorithms" to verify unsigned tokens'));
+        }
+        if (secretOrPublicKey2 != null && !(secretOrPublicKey2 instanceof KeyObject)) {
+          try {
+            secretOrPublicKey2 = createPublicKey(secretOrPublicKey2);
+          } catch (_57) {
+            try {
+              secretOrPublicKey2 = createSecretKey(typeof secretOrPublicKey2 === "string" ? Buffer.from(secretOrPublicKey2) : secretOrPublicKey2);
+            } catch (_58) {
+              return done(new JsonWebTokenError("secretOrPublicKey is not valid key material"));
+            }
+          }
+        }
+        if (!options2.algorithms) {
+          if (secretOrPublicKey2.type === "secret") {
+            options2.algorithms = HS_ALGS;
+          } else if (["rsa", "rsa-pss"].includes(secretOrPublicKey2.asymmetricKeyType)) {
+            options2.algorithms = RSA_KEY_ALGS;
+          } else if (secretOrPublicKey2.asymmetricKeyType === "ec") {
+            options2.algorithms = EC_KEY_ALGS;
+          } else {
+            options2.algorithms = PUB_KEY_ALGS;
+          }
+        }
+        if (options2.algorithms.indexOf(decodedToken.header.alg) === -1) {
+          return done(new JsonWebTokenError("invalid algorithm"));
+        }
+        if (header.alg.startsWith("HS") && secretOrPublicKey2.type !== "secret") {
+          return done(new JsonWebTokenError(`secretOrPublicKey must be a symmetric key when using ${header.alg}`));
+        } else if (/^(?:RS|PS|ES)/.test(header.alg) && secretOrPublicKey2.type !== "public") {
+          return done(new JsonWebTokenError(`secretOrPublicKey must be an asymmetric key when using ${header.alg}`));
+        }
+        if (!options2.allowInvalidAsymmetricKeyTypes) {
+          try {
+            validateAsymmetricKey(header.alg, secretOrPublicKey2);
+          } catch (e29) {
+            return done(e29);
+          }
+        }
+        let valid;
+        try {
+          valid = jws.verify(jwtString, decodedToken.header.alg, secretOrPublicKey2);
+        } catch (e29) {
+          return done(e29);
+        }
+        if (!valid) {
+          return done(new JsonWebTokenError("invalid signature"));
+        }
+        const payload = decodedToken.payload;
+        if (typeof payload.nbf !== "undefined" && !options2.ignoreNotBefore) {
+          if (typeof payload.nbf !== "number") {
+            return done(new JsonWebTokenError("invalid nbf value"));
+          }
+          if (payload.nbf > clockTimestamp + (options2.clockTolerance || 0)) {
+            return done(new NotBeforeError("jwt not active", new Date(payload.nbf * 1e3)));
+          }
+        }
+        if (typeof payload.exp !== "undefined" && !options2.ignoreExpiration) {
+          if (typeof payload.exp !== "number") {
+            return done(new JsonWebTokenError("invalid exp value"));
+          }
+          if (clockTimestamp >= payload.exp + (options2.clockTolerance || 0)) {
+            return done(new TokenExpiredError("jwt expired", new Date(payload.exp * 1e3)));
+          }
+        }
+        if (options2.audience) {
+          const audiences = Array.isArray(options2.audience) ? options2.audience : [options2.audience];
+          const target = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+          const match = target.some(function(targetAudience) {
+            return audiences.some(function(audience) {
+              return audience instanceof RegExp ? audience.test(targetAudience) : audience === targetAudience;
+            });
+          });
+          if (!match) {
+            return done(new JsonWebTokenError("jwt audience invalid. expected: " + audiences.join(" or ")));
+          }
+        }
+        if (options2.issuer) {
+          const invalid_issuer = typeof options2.issuer === "string" && payload.iss !== options2.issuer || Array.isArray(options2.issuer) && options2.issuer.indexOf(payload.iss) === -1;
+          if (invalid_issuer) {
+            return done(new JsonWebTokenError("jwt issuer invalid. expected: " + options2.issuer));
+          }
+        }
+        if (options2.subject) {
+          if (payload.sub !== options2.subject) {
+            return done(new JsonWebTokenError("jwt subject invalid. expected: " + options2.subject));
+          }
+        }
+        if (options2.jwtid) {
+          if (payload.jti !== options2.jwtid) {
+            return done(new JsonWebTokenError("jwt jwtid invalid. expected: " + options2.jwtid));
+          }
+        }
+        if (options2.nonce) {
+          if (payload.nonce !== options2.nonce) {
+            return done(new JsonWebTokenError("jwt nonce invalid. expected: " + options2.nonce));
+          }
+        }
+        if (options2.maxAge) {
+          if (typeof payload.iat !== "number") {
+            return done(new JsonWebTokenError("iat required when maxAge is specified"));
+          }
+          const maxAgeTimestamp = timespan(options2.maxAge, payload.iat);
+          if (typeof maxAgeTimestamp === "undefined") {
+            return done(new JsonWebTokenError('"maxAge" should be a number of seconds or string representing a timespan eg: "1d", "20h", 60'));
+          }
+          if (clockTimestamp >= maxAgeTimestamp + (options2.clockTolerance || 0)) {
+            return done(new TokenExpiredError("maxAge exceeded", new Date(maxAgeTimestamp * 1e3)));
+          }
+        }
+        if (options2.complete === true) {
+          const signature = decodedToken.signature;
+          return done(null, {
+            header,
+            payload,
+            signature
+          });
+        }
+        return done(null, payload);
+      });
+    };
+  }
+});
+
+// node_modules/lodash.includes/index.js
+var require_lodash = __commonJS({
+  "node_modules/lodash.includes/index.js"(exports, module) {
+    var INFINITY = 1 / 0;
+    var MAX_SAFE_INTEGER = 9007199254740991;
+    var MAX_INTEGER = 17976931348623157e292;
+    var NAN = 0 / 0;
+    var argsTag = "[object Arguments]";
+    var funcTag = "[object Function]";
+    var genTag = "[object GeneratorFunction]";
+    var stringTag = "[object String]";
+    var symbolTag = "[object Symbol]";
+    var reTrim = /^\s+|\s+$/g;
+    var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
+    var reIsBinary = /^0b[01]+$/i;
+    var reIsOctal = /^0o[0-7]+$/i;
+    var reIsUint = /^(?:0|[1-9]\d*)$/;
+    var freeParseInt = parseInt;
+    function arrayMap(array, iteratee) {
+      var index = -1, length = array ? array.length : 0, result = Array(length);
+      while (++index < length) {
+        result[index] = iteratee(array[index], index, array);
+      }
+      return result;
+    }
+    function baseFindIndex(array, predicate, fromIndex, fromRight) {
+      var length = array.length, index = fromIndex + (fromRight ? 1 : -1);
+      while (fromRight ? index-- : ++index < length) {
+        if (predicate(array[index], index, array)) {
+          return index;
+        }
+      }
+      return -1;
+    }
+    function baseIndexOf(array, value, fromIndex) {
+      if (value !== value) {
+        return baseFindIndex(array, baseIsNaN, fromIndex);
+      }
+      var index = fromIndex - 1, length = array.length;
+      while (++index < length) {
+        if (array[index] === value) {
+          return index;
+        }
+      }
+      return -1;
+    }
+    function baseIsNaN(value) {
+      return value !== value;
+    }
+    function baseTimes(n43, iteratee) {
+      var index = -1, result = Array(n43);
+      while (++index < n43) {
+        result[index] = iteratee(index);
+      }
+      return result;
+    }
+    function baseValues(object, props) {
+      return arrayMap(props, function(key) {
+        return object[key];
+      });
+    }
+    function overArg(func, transform) {
+      return function(arg) {
+        return func(transform(arg));
+      };
+    }
+    var objectProto = Object.prototype;
+    var hasOwnProperty = objectProto.hasOwnProperty;
+    var objectToString = objectProto.toString;
+    var propertyIsEnumerable = objectProto.propertyIsEnumerable;
+    var nativeKeys = overArg(Object.keys, Object);
+    var nativeMax = Math.max;
+    function arrayLikeKeys(value, inherited) {
+      var result = isArray2(value) || isArguments2(value) ? baseTimes(value.length, String) : [];
+      var length = result.length, skipIndexes = !!length;
+      for (var key in value) {
+        if ((inherited || hasOwnProperty.call(value, key)) && !(skipIndexes && (key == "length" || isIndex(key, length)))) {
+          result.push(key);
+        }
+      }
+      return result;
+    }
+    function baseKeys(object) {
+      if (!isPrototype(object)) {
+        return nativeKeys(object);
+      }
+      var result = [];
+      for (var key in Object(object)) {
+        if (hasOwnProperty.call(object, key) && key != "constructor") {
+          result.push(key);
+        }
+      }
+      return result;
+    }
+    function isIndex(value, length) {
+      length = length == null ? MAX_SAFE_INTEGER : length;
+      return !!length && (typeof value == "number" || reIsUint.test(value)) && (value > -1 && value % 1 == 0 && value < length);
+    }
+    function isPrototype(value) {
+      var Ctor = value && value.constructor, proto3 = typeof Ctor == "function" && Ctor.prototype || objectProto;
+      return value === proto3;
+    }
+    function includes(collection, value, fromIndex, guard) {
+      collection = isArrayLike(collection) ? collection : values(collection);
+      fromIndex = fromIndex && !guard ? toInteger(fromIndex) : 0;
+      var length = collection.length;
+      if (fromIndex < 0) {
+        fromIndex = nativeMax(length + fromIndex, 0);
+      }
+      return isString(collection) ? fromIndex <= length && collection.indexOf(value, fromIndex) > -1 : !!length && baseIndexOf(collection, value, fromIndex) > -1;
+    }
+    function isArguments2(value) {
+      return isArrayLikeObject(value) && hasOwnProperty.call(value, "callee") && (!propertyIsEnumerable.call(value, "callee") || objectToString.call(value) == argsTag);
+    }
+    var isArray2 = Array.isArray;
+    function isArrayLike(value) {
+      return value != null && isLength(value.length) && !isFunction(value);
+    }
+    function isArrayLikeObject(value) {
+      return isObjectLike(value) && isArrayLike(value);
+    }
+    function isFunction(value) {
+      var tag = isObject(value) ? objectToString.call(value) : "";
+      return tag == funcTag || tag == genTag;
+    }
+    function isLength(value) {
+      return typeof value == "number" && value > -1 && value % 1 == 0 && value <= MAX_SAFE_INTEGER;
+    }
+    function isObject(value) {
+      var type = typeof value;
+      return !!value && (type == "object" || type == "function");
+    }
+    function isObjectLike(value) {
+      return !!value && typeof value == "object";
+    }
+    function isString(value) {
+      return typeof value == "string" || !isArray2(value) && isObjectLike(value) && objectToString.call(value) == stringTag;
+    }
+    function isSymbol(value) {
+      return typeof value == "symbol" || isObjectLike(value) && objectToString.call(value) == symbolTag;
+    }
+    function toFinite(value) {
+      if (!value) {
+        return value === 0 ? value : 0;
+      }
+      value = toNumber3(value);
+      if (value === INFINITY || value === -INFINITY) {
+        var sign = value < 0 ? -1 : 1;
+        return sign * MAX_INTEGER;
+      }
+      return value === value ? value : 0;
+    }
+    function toInteger(value) {
+      var result = toFinite(value), remainder = result % 1;
+      return result === result ? remainder ? result - remainder : result : 0;
+    }
+    function toNumber3(value) {
+      if (typeof value == "number") {
+        return value;
+      }
+      if (isSymbol(value)) {
+        return NAN;
+      }
+      if (isObject(value)) {
+        var other = typeof value.valueOf == "function" ? value.valueOf() : value;
+        value = isObject(other) ? other + "" : other;
+      }
+      if (typeof value != "string") {
+        return value === 0 ? value : +value;
+      }
+      value = value.replace(reTrim, "");
+      var isBinary = reIsBinary.test(value);
+      return isBinary || reIsOctal.test(value) ? freeParseInt(value.slice(2), isBinary ? 2 : 8) : reIsBadHex.test(value) ? NAN : +value;
+    }
+    function keys(object) {
+      return isArrayLike(object) ? arrayLikeKeys(object) : baseKeys(object);
+    }
+    function values(object) {
+      return object ? baseValues(object, keys(object)) : [];
+    }
+    module.exports = includes;
+  }
+});
+
+// node_modules/lodash.isboolean/index.js
+var require_lodash2 = __commonJS({
+  "node_modules/lodash.isboolean/index.js"(exports, module) {
+    var boolTag = "[object Boolean]";
+    var objectProto = Object.prototype;
+    var objectToString = objectProto.toString;
+    function isBoolean(value) {
+      return value === true || value === false || isObjectLike(value) && objectToString.call(value) == boolTag;
+    }
+    function isObjectLike(value) {
+      return !!value && typeof value == "object";
+    }
+    module.exports = isBoolean;
+  }
+});
+
+// node_modules/lodash.isinteger/index.js
+var require_lodash3 = __commonJS({
+  "node_modules/lodash.isinteger/index.js"(exports, module) {
+    var INFINITY = 1 / 0;
+    var MAX_INTEGER = 17976931348623157e292;
+    var NAN = 0 / 0;
+    var symbolTag = "[object Symbol]";
+    var reTrim = /^\s+|\s+$/g;
+    var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
+    var reIsBinary = /^0b[01]+$/i;
+    var reIsOctal = /^0o[0-7]+$/i;
+    var freeParseInt = parseInt;
+    var objectProto = Object.prototype;
+    var objectToString = objectProto.toString;
+    function isInteger(value) {
+      return typeof value == "number" && value == toInteger(value);
+    }
+    function isObject(value) {
+      var type = typeof value;
+      return !!value && (type == "object" || type == "function");
+    }
+    function isObjectLike(value) {
+      return !!value && typeof value == "object";
+    }
+    function isSymbol(value) {
+      return typeof value == "symbol" || isObjectLike(value) && objectToString.call(value) == symbolTag;
+    }
+    function toFinite(value) {
+      if (!value) {
+        return value === 0 ? value : 0;
+      }
+      value = toNumber3(value);
+      if (value === INFINITY || value === -INFINITY) {
+        var sign = value < 0 ? -1 : 1;
+        return sign * MAX_INTEGER;
+      }
+      return value === value ? value : 0;
+    }
+    function toInteger(value) {
+      var result = toFinite(value), remainder = result % 1;
+      return result === result ? remainder ? result - remainder : result : 0;
+    }
+    function toNumber3(value) {
+      if (typeof value == "number") {
+        return value;
+      }
+      if (isSymbol(value)) {
+        return NAN;
+      }
+      if (isObject(value)) {
+        var other = typeof value.valueOf == "function" ? value.valueOf() : value;
+        value = isObject(other) ? other + "" : other;
+      }
+      if (typeof value != "string") {
+        return value === 0 ? value : +value;
+      }
+      value = value.replace(reTrim, "");
+      var isBinary = reIsBinary.test(value);
+      return isBinary || reIsOctal.test(value) ? freeParseInt(value.slice(2), isBinary ? 2 : 8) : reIsBadHex.test(value) ? NAN : +value;
+    }
+    module.exports = isInteger;
+  }
+});
+
+// node_modules/lodash.isnumber/index.js
+var require_lodash4 = __commonJS({
+  "node_modules/lodash.isnumber/index.js"(exports, module) {
+    var numberTag = "[object Number]";
+    var objectProto = Object.prototype;
+    var objectToString = objectProto.toString;
+    function isObjectLike(value) {
+      return !!value && typeof value == "object";
+    }
+    function isNumber(value) {
+      return typeof value == "number" || isObjectLike(value) && objectToString.call(value) == numberTag;
+    }
+    module.exports = isNumber;
+  }
+});
+
+// node_modules/lodash.isplainobject/index.js
+var require_lodash5 = __commonJS({
+  "node_modules/lodash.isplainobject/index.js"(exports, module) {
+    var objectTag = "[object Object]";
+    function isHostObject(value) {
+      var result = false;
+      if (value != null && typeof value.toString != "function") {
+        try {
+          result = !!(value + "");
+        } catch (e29) {
+        }
+      }
+      return result;
+    }
+    function overArg(func, transform) {
+      return function(arg) {
+        return func(transform(arg));
+      };
+    }
+    var funcProto = Function.prototype;
+    var objectProto = Object.prototype;
+    var funcToString = funcProto.toString;
+    var hasOwnProperty = objectProto.hasOwnProperty;
+    var objectCtorString = funcToString.call(Object);
+    var objectToString = objectProto.toString;
+    var getPrototype = overArg(Object.getPrototypeOf, Object);
+    function isObjectLike(value) {
+      return !!value && typeof value == "object";
+    }
+    function isPlainObject6(value) {
+      if (!isObjectLike(value) || objectToString.call(value) != objectTag || isHostObject(value)) {
+        return false;
+      }
+      var proto3 = getPrototype(value);
+      if (proto3 === null) {
+        return true;
+      }
+      var Ctor = hasOwnProperty.call(proto3, "constructor") && proto3.constructor;
+      return typeof Ctor == "function" && Ctor instanceof Ctor && funcToString.call(Ctor) == objectCtorString;
+    }
+    module.exports = isPlainObject6;
+  }
+});
+
+// node_modules/lodash.isstring/index.js
+var require_lodash6 = __commonJS({
+  "node_modules/lodash.isstring/index.js"(exports, module) {
+    var stringTag = "[object String]";
+    var objectProto = Object.prototype;
+    var objectToString = objectProto.toString;
+    var isArray2 = Array.isArray;
+    function isObjectLike(value) {
+      return !!value && typeof value == "object";
+    }
+    function isString(value) {
+      return typeof value == "string" || !isArray2(value) && isObjectLike(value) && objectToString.call(value) == stringTag;
+    }
+    module.exports = isString;
+  }
+});
+
+// node_modules/lodash.once/index.js
+var require_lodash7 = __commonJS({
+  "node_modules/lodash.once/index.js"(exports, module) {
+    var FUNC_ERROR_TEXT = "Expected a function";
+    var INFINITY = 1 / 0;
+    var MAX_INTEGER = 17976931348623157e292;
+    var NAN = 0 / 0;
+    var symbolTag = "[object Symbol]";
+    var reTrim = /^\s+|\s+$/g;
+    var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
+    var reIsBinary = /^0b[01]+$/i;
+    var reIsOctal = /^0o[0-7]+$/i;
+    var freeParseInt = parseInt;
+    var objectProto = Object.prototype;
+    var objectToString = objectProto.toString;
+    function before(n43, func) {
+      var result;
+      if (typeof func != "function") {
+        throw new TypeError(FUNC_ERROR_TEXT);
+      }
+      n43 = toInteger(n43);
+      return function() {
+        if (--n43 > 0) {
+          result = func.apply(this, arguments);
+        }
+        if (n43 <= 1) {
+          func = void 0;
+        }
+        return result;
+      };
+    }
+    function once3(func) {
+      return before(2, func);
+    }
+    function isObject(value) {
+      var type = typeof value;
+      return !!value && (type == "object" || type == "function");
+    }
+    function isObjectLike(value) {
+      return !!value && typeof value == "object";
+    }
+    function isSymbol(value) {
+      return typeof value == "symbol" || isObjectLike(value) && objectToString.call(value) == symbolTag;
+    }
+    function toFinite(value) {
+      if (!value) {
+        return value === 0 ? value : 0;
+      }
+      value = toNumber3(value);
+      if (value === INFINITY || value === -INFINITY) {
+        var sign = value < 0 ? -1 : 1;
+        return sign * MAX_INTEGER;
+      }
+      return value === value ? value : 0;
+    }
+    function toInteger(value) {
+      var result = toFinite(value), remainder = result % 1;
+      return result === result ? remainder ? result - remainder : result : 0;
+    }
+    function toNumber3(value) {
+      if (typeof value == "number") {
+        return value;
+      }
+      if (isSymbol(value)) {
+        return NAN;
+      }
+      if (isObject(value)) {
+        var other = typeof value.valueOf == "function" ? value.valueOf() : value;
+        value = isObject(other) ? other + "" : other;
+      }
+      if (typeof value != "string") {
+        return value === 0 ? value : +value;
+      }
+      value = value.replace(reTrim, "");
+      var isBinary = reIsBinary.test(value);
+      return isBinary || reIsOctal.test(value) ? freeParseInt(value.slice(2), isBinary ? 2 : 8) : reIsBadHex.test(value) ? NAN : +value;
+    }
+    module.exports = once3;
+  }
+});
+
+// node_modules/jsonwebtoken/sign.js
+var require_sign = __commonJS({
+  "node_modules/jsonwebtoken/sign.js"(exports, module) {
+    var timespan = require_timespan();
+    var PS_SUPPORTED = require_psSupported();
+    var validateAsymmetricKey = require_validateAsymmetricKey();
+    var jws = require_jws();
+    var includes = require_lodash();
+    var isBoolean = require_lodash2();
+    var isInteger = require_lodash3();
+    var isNumber = require_lodash4();
+    var isPlainObject6 = require_lodash5();
+    var isString = require_lodash6();
+    var once3 = require_lodash7();
+    var { KeyObject, createSecretKey, createPrivateKey } = __require("crypto");
+    var SUPPORTED_ALGS = ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "HS256", "HS384", "HS512", "none"];
+    if (PS_SUPPORTED) {
+      SUPPORTED_ALGS.splice(3, 0, "PS256", "PS384", "PS512");
+    }
+    var sign_options_schema = {
+      expiresIn: { isValid: function(value) {
+        return isInteger(value) || isString(value) && value;
+      }, message: '"expiresIn" should be a number of seconds or string representing a timespan' },
+      notBefore: { isValid: function(value) {
+        return isInteger(value) || isString(value) && value;
+      }, message: '"notBefore" should be a number of seconds or string representing a timespan' },
+      audience: { isValid: function(value) {
+        return isString(value) || Array.isArray(value);
+      }, message: '"audience" must be a string or array' },
+      algorithm: { isValid: includes.bind(null, SUPPORTED_ALGS), message: '"algorithm" must be a valid string enum value' },
+      header: { isValid: isPlainObject6, message: '"header" must be an object' },
+      encoding: { isValid: isString, message: '"encoding" must be a string' },
+      issuer: { isValid: isString, message: '"issuer" must be a string' },
+      subject: { isValid: isString, message: '"subject" must be a string' },
+      jwtid: { isValid: isString, message: '"jwtid" must be a string' },
+      noTimestamp: { isValid: isBoolean, message: '"noTimestamp" must be a boolean' },
+      keyid: { isValid: isString, message: '"keyid" must be a string' },
+      mutatePayload: { isValid: isBoolean, message: '"mutatePayload" must be a boolean' },
+      allowInsecureKeySizes: { isValid: isBoolean, message: '"allowInsecureKeySizes" must be a boolean' },
+      allowInvalidAsymmetricKeyTypes: { isValid: isBoolean, message: '"allowInvalidAsymmetricKeyTypes" must be a boolean' }
+    };
+    var registered_claims_schema = {
+      iat: { isValid: isNumber, message: '"iat" should be a number of seconds' },
+      exp: { isValid: isNumber, message: '"exp" should be a number of seconds' },
+      nbf: { isValid: isNumber, message: '"nbf" should be a number of seconds' }
+    };
+    function validate2(schema, allowUnknown, object, parameterName) {
+      if (!isPlainObject6(object)) {
+        throw new Error('Expected "' + parameterName + '" to be a plain object.');
+      }
+      Object.keys(object).forEach(function(key) {
+        const validator = schema[key];
+        if (!validator) {
+          if (!allowUnknown) {
+            throw new Error('"' + key + '" is not allowed in "' + parameterName + '"');
+          }
+          return;
+        }
+        if (!validator.isValid(object[key])) {
+          throw new Error(validator.message);
+        }
+      });
+    }
+    function validateOptions2(options2) {
+      return validate2(sign_options_schema, false, options2, "options");
+    }
+    function validatePayload(payload) {
+      return validate2(registered_claims_schema, true, payload, "payload");
+    }
+    var options_to_payload = {
+      "audience": "aud",
+      "issuer": "iss",
+      "subject": "sub",
+      "jwtid": "jti"
+    };
+    var options_for_objects = [
+      "expiresIn",
+      "notBefore",
+      "noTimestamp",
+      "audience",
+      "issuer",
+      "subject",
+      "jwtid"
+    ];
+    module.exports = function(payload, secretOrPrivateKey, options2, callback) {
+      if (typeof options2 === "function") {
+        callback = options2;
+        options2 = {};
+      } else {
+        options2 = options2 || {};
+      }
+      const isObjectPayload = typeof payload === "object" && !Buffer.isBuffer(payload);
+      const header = Object.assign({
+        alg: options2.algorithm || "HS256",
+        typ: isObjectPayload ? "JWT" : void 0,
+        kid: options2.keyid
+      }, options2.header);
+      function failure(err) {
+        if (callback) {
+          return callback(err);
+        }
+        throw err;
+      }
+      if (!secretOrPrivateKey && options2.algorithm !== "none") {
+        return failure(new Error("secretOrPrivateKey must have a value"));
+      }
+      if (secretOrPrivateKey != null && !(secretOrPrivateKey instanceof KeyObject)) {
+        try {
+          secretOrPrivateKey = createPrivateKey(secretOrPrivateKey);
+        } catch (_57) {
+          try {
+            secretOrPrivateKey = createSecretKey(typeof secretOrPrivateKey === "string" ? Buffer.from(secretOrPrivateKey) : secretOrPrivateKey);
+          } catch (_58) {
+            return failure(new Error("secretOrPrivateKey is not valid key material"));
+          }
+        }
+      }
+      if (header.alg.startsWith("HS") && secretOrPrivateKey.type !== "secret") {
+        return failure(new Error(`secretOrPrivateKey must be a symmetric key when using ${header.alg}`));
+      } else if (/^(?:RS|PS|ES)/.test(header.alg)) {
+        if (secretOrPrivateKey.type !== "private") {
+          return failure(new Error(`secretOrPrivateKey must be an asymmetric key when using ${header.alg}`));
+        }
+        if (!options2.allowInsecureKeySizes && !header.alg.startsWith("ES") && secretOrPrivateKey.asymmetricKeyDetails !== void 0 && //KeyObject.asymmetricKeyDetails is supported in Node 15+
+        secretOrPrivateKey.asymmetricKeyDetails.modulusLength < 2048) {
+          return failure(new Error(`secretOrPrivateKey has a minimum key size of 2048 bits for ${header.alg}`));
+        }
+      }
+      if (typeof payload === "undefined") {
+        return failure(new Error("payload is required"));
+      } else if (isObjectPayload) {
+        try {
+          validatePayload(payload);
+        } catch (error) {
+          return failure(error);
+        }
+        if (!options2.mutatePayload) {
+          payload = Object.assign({}, payload);
+        }
+      } else {
+        const invalid_options = options_for_objects.filter(function(opt) {
+          return typeof options2[opt] !== "undefined";
+        });
+        if (invalid_options.length > 0) {
+          return failure(new Error("invalid " + invalid_options.join(",") + " option for " + typeof payload + " payload"));
+        }
+      }
+      if (typeof payload.exp !== "undefined" && typeof options2.expiresIn !== "undefined") {
+        return failure(new Error('Bad "options.expiresIn" option the payload already has an "exp" property.'));
+      }
+      if (typeof payload.nbf !== "undefined" && typeof options2.notBefore !== "undefined") {
+        return failure(new Error('Bad "options.notBefore" option the payload already has an "nbf" property.'));
+      }
+      try {
+        validateOptions2(options2);
+      } catch (error) {
+        return failure(error);
+      }
+      if (!options2.allowInvalidAsymmetricKeyTypes) {
+        try {
+          validateAsymmetricKey(header.alg, secretOrPrivateKey);
+        } catch (error) {
+          return failure(error);
+        }
+      }
+      const timestamp = payload.iat || Math.floor(Date.now() / 1e3);
+      if (options2.noTimestamp) {
+        delete payload.iat;
+      } else if (isObjectPayload) {
+        payload.iat = timestamp;
+      }
+      if (typeof options2.notBefore !== "undefined") {
+        try {
+          payload.nbf = timespan(options2.notBefore, timestamp);
+        } catch (err) {
+          return failure(err);
+        }
+        if (typeof payload.nbf === "undefined") {
+          return failure(new Error('"notBefore" should be a number of seconds or string representing a timespan eg: "1d", "20h", 60'));
+        }
+      }
+      if (typeof options2.expiresIn !== "undefined" && typeof payload === "object") {
+        try {
+          payload.exp = timespan(options2.expiresIn, timestamp);
+        } catch (err) {
+          return failure(err);
+        }
+        if (typeof payload.exp === "undefined") {
+          return failure(new Error('"expiresIn" should be a number of seconds or string representing a timespan eg: "1d", "20h", 60'));
+        }
+      }
+      Object.keys(options_to_payload).forEach(function(key) {
+        const claim = options_to_payload[key];
+        if (typeof options2[key] !== "undefined") {
+          if (typeof payload[claim] !== "undefined") {
+            return failure(new Error('Bad "options.' + key + '" option. The payload already has an "' + claim + '" property.'));
+          }
+          payload[claim] = options2[key];
+        }
+      });
+      const encoding = options2.encoding || "utf8";
+      if (typeof callback === "function") {
+        callback = callback && once3(callback);
+        jws.createSign({
+          header,
+          privateKey: secretOrPrivateKey,
+          payload,
+          encoding
+        }).once("error", callback).once("done", function(signature) {
+          if (!options2.allowInsecureKeySizes && /^(?:RS|PS)/.test(header.alg) && signature.length < 256) {
+            return callback(new Error(`secretOrPrivateKey has a minimum key size of 2048 bits for ${header.alg}`));
+          }
+          callback(null, signature);
+        });
+      } else {
+        let signature = jws.sign({ header, payload, secret: secretOrPrivateKey, encoding });
+        if (!options2.allowInsecureKeySizes && /^(?:RS|PS)/.test(header.alg) && signature.length < 256) {
+          throw new Error(`secretOrPrivateKey has a minimum key size of 2048 bits for ${header.alg}`);
+        }
+        return signature;
+      }
+    };
+  }
+});
+
+// node_modules/jsonwebtoken/index.js
+var require_jsonwebtoken = __commonJS({
+  "node_modules/jsonwebtoken/index.js"(exports, module) {
+    module.exports = {
+      decode: require_decode(),
+      verify: require_verify(),
+      sign: require_sign(),
+      JsonWebTokenError: require_JsonWebTokenError(),
+      NotBeforeError: require_NotBeforeError(),
+      TokenExpiredError: require_TokenExpiredError()
+    };
   }
 });
 
@@ -646,6 +4524,7 @@ function makeInMemoryStore(filePath) {
   const chats = /* @__PURE__ */ new Map();
   const contacts = /* @__PURE__ */ new Map();
   const messages = /* @__PURE__ */ new Map();
+  let dirty = false;
   const readFromFile = () => {
     if (!fs3.existsSync(filePath)) {
       logger_default.debug(`\u26A0\uFE0F Store file not found: ${filePath}, will create on first write`);
@@ -662,28 +4541,26 @@ function makeInMemoryStore(filePath) {
         data.contacts.forEach((c66) => contacts.set(c66.id, c66));
         logger_default.info(`\u2705 Loaded ${data.contacts.length} contacts from store: ${filePath}`);
       }
-      if (data.messages) {
-        Object.entries(data.messages).forEach(([jid, msgs]) => {
-          messages.set(jid, msgs);
-        });
-        logger_default.info(`\u2705 Loaded messages for ${Object.keys(data.messages).length} chats`);
-      }
     } catch (error) {
       logger_default.error(`\u274C Error reading store file ${filePath}: ${error}`);
     }
   };
-  const writeToFile = () => {
+  const writeToFile = async () => {
+    if (!dirty) return;
+    dirty = false;
     try {
       const dir = path5.dirname(filePath);
-      fs3.ensureDirSync(dir);
+      await fs3.ensureDir(dir);
       const data = {
         chats: Array.from(chats.values()),
-        contacts: Array.from(contacts.values()),
-        messages: Object.fromEntries(messages)
+        contacts: Array.from(contacts.values())
       };
-      fs3.writeFileSync(filePath, JSON.stringify(data, null, 2));
+      const tmpPath = `${filePath}.tmp`;
+      await fs3.writeFile(tmpPath, JSON.stringify(data));
+      await fs3.rename(tmpPath, filePath);
       logger_default.debug(`\u{1F4BE} Store persisted: ${chats.size} chats, ${contacts.size} contacts \u2192 ${filePath}`);
     } catch (error) {
+      dirty = true;
       logger_default.error(`\u274C Error writing store file ${filePath}: ${error}`);
     }
   };
@@ -692,6 +4569,7 @@ function makeInMemoryStore(filePath) {
       newChats.forEach((chat) => {
         chats.set(chat.id, chat);
       });
+      dirty = true;
       logger_default.debug(`\u{1F4E5} Upserted ${newChats.length} chats to store`);
     });
     ev.on("chats.update", (updates) => {
@@ -700,6 +4578,7 @@ function makeInMemoryStore(filePath) {
           const existing = chats.get(update.id);
           if (existing) {
             chats.set(update.id, { ...existing, ...update });
+            dirty = true;
           }
         }
       });
@@ -709,6 +4588,7 @@ function makeInMemoryStore(filePath) {
       newContacts.forEach((contact) => {
         contacts.set(contact.id, contact);
       });
+      dirty = true;
       logger_default.debug(`\u{1F4E5} Upserted ${newContacts.length} contacts to store`);
     });
     ev.on("contacts.update", (updates) => {
@@ -717,23 +4597,15 @@ function makeInMemoryStore(filePath) {
           const existing = contacts.get(update.id);
           if (existing) {
             contacts.set(update.id, { ...existing, ...update });
+            dirty = true;
           }
         }
       });
       logger_default.debug(`\u{1F504} Updated ${updates.length} contacts in store`);
     });
-    ev.on("messages.upsert", ({ messages: msgs }) => {
-      msgs.forEach((msg) => {
-        const jid = msg.key.remoteJid;
-        if (!messages.has(jid)) {
-          messages.set(jid, []);
-        }
-        const list = messages.get(jid);
-        list.push(msg);
-        messages.set(jid, list);
-      });
-      logger_default.debug(`\u{1F4E8} Received ${msgs.length} messages`);
-    });
+  };
+  const markDirty = () => {
+    dirty = true;
   };
   return {
     chats,
@@ -741,7 +4613,8 @@ function makeInMemoryStore(filePath) {
     messages,
     readFromFile,
     writeToFile,
-    bind
+    bind,
+    markDirty
   };
 }
 var init_store_manager = __esm({
@@ -761,6 +4634,17 @@ var init_populate_store_simple = __esm({
       try {
         const groups = await sock.groupFetchAllParticipating();
         const groupIds = Object.keys(groups);
+        const authoritativeIds = new Set(groupIds);
+        let removed = 0;
+        for (const chatId of Array.from(store.chats.keys())) {
+          if (chatId.endsWith("@g.us") && !authoritativeIds.has(chatId)) {
+            store.chats.delete(chatId);
+            removed += 1;
+          }
+        }
+        if (removed > 0) {
+          logger_default.info(`\u{1F9F9} Removed ${removed} stale group(s) from store (no longer participating)`);
+        }
         for (const group of Object.values(groups)) {
           const existing = store.chats.get(group.id);
           if (!existing) {
@@ -784,6 +4668,7 @@ var init_populate_store_simple = __esm({
         if (sock.user && !store.contacts.has(sock.user.id)) {
           store.contacts.set(sock.user.id, sock.user);
         }
+        store.markDirty();
         logger_default.info(`\u2705 Synced ${Object.keys(groups).length} groups to store`);
         return {
           success: true,
@@ -1870,11 +5755,16 @@ var init_quota_validator_service = __esm({
           digits,
           digits ? `+${digits}` : ""
         ].filter(Boolean)));
-        const company = await this.CompanyModel.findOne({
+        const matches = await this.CompanyModel.find({
           isActive: true,
           $or: candidates.map((value) => ({ "whatsappConfig.sender": value }))
-        });
-        return company || null;
+        }).sort({ companyId: 1 }).limit(2);
+        if (matches.length > 1) {
+          logger_default.warn(
+            `Ambiguous WhatsApp sender ${sender}: maps to ${matches.length}+ companies (${matches.map((c66) => c66.companyId).join(", ")}). Using first; fix duplicate sender config.`
+          );
+        }
+        return matches[0] || null;
       }
       /**
        * Obtiene el periodo actual (YYYY-MM)
@@ -2124,14 +6014,21 @@ var init_whatsapp_direct_service = __esm({
     init_whatsapp_phone();
     init_quota_validator_service();
     resolveUsageCompanyId = (options2 = {}) => options2.companyId || options2.tenantId || "";
-    trackWhatsAppUsage = async (options2 = {}, context) => {
+    trackWhatsAppUsage = async (sessionId, options2 = {}, context) => {
       if (options2.trackUsage === false) return;
-      const companyId = resolveUsageCompanyId(options2);
-      if (!companyId) return;
       try {
+        let companyId = resolveUsageCompanyId(options2);
+        if (!companyId) {
+          const company = await quotaValidatorService.getCompanyByWhatsappSender(sessionId);
+          companyId = company?.companyId || "";
+        }
+        if (!companyId) {
+          logger_default.warn(`Skipping WhatsApp usage: no company for sender ${sessionId} (${context})`);
+          return;
+        }
         await quotaValidatorService.incrementWhatsAppUsage(companyId, 1);
       } catch (error) {
-        logger_default.warn(`Failed to track WhatsApp usage for ${companyId} (${context}): ${String(error)}`);
+        logger_default.warn(`Failed to track WhatsApp usage for sender ${sessionId} (${context}): ${String(error)}`);
       }
     };
     WhatsAppDirectService = {
@@ -2186,7 +6083,7 @@ var init_whatsapp_direct_service = __esm({
           const validTo = assertWhatsAppRecipient(routedTo);
           const sendOptions = getSendOptions(validTo);
           const result = await sock.sendMessage(validTo, { text: message }, sendOptions);
-          await trackWhatsAppUsage(options2, "text");
+          await trackWhatsAppUsage(id, options2, "text");
           return result;
         } catch (error) {
           logger_default.warn(`Failed to send message via ${id}: ${String(error)}`);
@@ -2290,7 +6187,7 @@ var init_whatsapp_direct_service = __esm({
             },
             sendOptions
           );
-          await trackWhatsAppUsage(options2, "video");
+          await trackWhatsAppUsage(id, options2, "video");
           if (shouldCleanup && cleanupPath) {
             await fs6.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
@@ -2396,7 +6293,7 @@ var init_whatsapp_direct_service = __esm({
             },
             sendOptions
           );
-          await trackWhatsAppUsage(options2, "image");
+          await trackWhatsAppUsage(id, options2, "image");
           if (shouldCleanup && cleanupPath) {
             await fs6.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
@@ -2507,7 +6404,7 @@ var init_whatsapp_direct_service = __esm({
             },
             sendOptions
           );
-          await trackWhatsAppUsage(options2, "document");
+          await trackWhatsAppUsage(id, options2, "document");
           if (shouldCleanup && cleanupPath) {
             await fs6.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
@@ -2758,13 +6655,155 @@ var init_outbox_queue = __esm({
   }
 });
 
+// src/database/sharedConnection.ts
+import mongoose4 from "mongoose";
+async function getSharedConnection() {
+  if (sharedConnection && sharedConnection.readyState === 1) {
+    return sharedConnection;
+  }
+  if (connecting) {
+    return connecting;
+  }
+  logger_default.info("[SharedDB] Connecting to constroad_db...");
+  connecting = mongoose4.createConnection(config.mongodb.portalUri, {
+    dbName: config.mongodb.sharedDb,
+    serverSelectionTimeoutMS: 1e4,
+    socketTimeoutMS: 45e3,
+    maxPoolSize: 5,
+    minPoolSize: 1,
+    family: 4,
+    retryWrites: true,
+    heartbeatFrequencyMS: 1e4
+  }).asPromise().then((conn) => {
+    sharedConnection = conn;
+    connecting = null;
+    logger_default.info("[SharedDB] Connected");
+    return conn;
+  }).catch((error) => {
+    connecting = null;
+    logger_default.error("[SharedDB] Connection failed:", error);
+    throw error;
+  });
+  return connecting;
+}
+var sharedConnection, connecting;
+var init_sharedConnection = __esm({
+  "src/database/sharedConnection.ts"() {
+    init_logger();
+    init_environment();
+    sharedConnection = null;
+    connecting = null;
+  }
+});
+
+// src/whatsapp/baileys/mongo-auth-state.ts
+import { initAuthCreds, BufferJSON } from "@whiskeysockets/baileys";
+import * as baileysNs from "@whiskeysockets/baileys";
+async function ensureSessionIndex(col) {
+  if (indexEnsured) return;
+  indexEnsured = true;
+  try {
+    await col.createIndex({ sessionId: 1 }, { name: "sessionId_1" });
+  } catch {
+    indexEnsured = false;
+  }
+}
+async function useMongoAuthState(sessionId) {
+  const conn = await getSharedConnection();
+  const col = conn.collection(COLLECTION);
+  await ensureSessionIndex(col);
+  const writeData = async (key, value) => {
+    const serialized = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
+    await col.updateOne(
+      { _id: docId(sessionId, key) },
+      { $set: { sessionId, value: serialized } },
+      { upsert: true }
+    );
+  };
+  const readData = async (key) => {
+    const doc = await col.findOne({ _id: docId(sessionId, key) });
+    if (!doc) return null;
+    return JSON.parse(JSON.stringify(doc.value), BufferJSON.reviver);
+  };
+  const removeData = async (key) => {
+    await col.deleteOne({ _id: docId(sessionId, key) });
+  };
+  const creds = await readData("creds") || initAuthCreds();
+  return {
+    state: {
+      creds,
+      keys: {
+        get: async (type, ids) => {
+          const data = {};
+          await Promise.all(
+            ids.map(async (id) => {
+              let value = await readData(`${type}-${id}`);
+              if (type === "app-state-sync-key" && value) {
+                value = proto2.Message.AppStateSyncKeyData.fromObject(value);
+              }
+              data[id] = value;
+            })
+          );
+          return data;
+        },
+        set: async (data) => {
+          const tasks = [];
+          for (const category in data) {
+            const entries = data[category];
+            for (const id in entries) {
+              const value = entries[id];
+              const key = `${category}-${id}`;
+              tasks.push(value ? writeData(key, value) : removeData(key));
+            }
+          }
+          await Promise.all(tasks);
+        }
+      }
+    },
+    saveCreds: async () => {
+      await writeData("creds", creds);
+    },
+    clearAuth: async () => {
+      try {
+        await col.deleteMany({ sessionId });
+      } catch (error) {
+        logger_default.warn(`Failed to clear Mongo auth for ${sessionId}: ${String(error)}`);
+      }
+    }
+  };
+}
+async function listMongoAuthSessions() {
+  const conn = await getSharedConnection();
+  const col = conn.collection(COLLECTION);
+  const ids = await col.distinct("sessionId", { _id: { $regex: /:creds$/ } });
+  return ids.filter(Boolean);
+}
+async function clearMongoAuthState(sessionId) {
+  try {
+    const conn = await getSharedConnection();
+    await conn.collection(COLLECTION).deleteMany({ sessionId });
+  } catch (error) {
+    logger_default.warn(`Failed to clear Mongo auth for ${sessionId}: ${String(error)}`);
+  }
+}
+var proto2, COLLECTION, indexEnsured, docId;
+var init_mongo_auth_state = __esm({
+  "src/whatsapp/baileys/mongo-auth-state.ts"() {
+    init_sharedConnection();
+    init_logger();
+    proto2 = baileysNs.proto;
+    COLLECTION = "whatsapp_auth";
+    indexEnsured = false;
+    docId = (sessionId, key) => `${sessionId}:${key}`;
+  }
+});
+
 // src/whatsapp/baileys/sessions.simple.ts
 import {
   makeWASocket,
   Browsers,
   DisconnectReason,
-  fetchLatestBaileysVersion,
-  useMultiFileAuthState
+  fetchLatestBaileysVersion
 } from "@whiskeysockets/baileys";
 import path10 from "path";
 import fs7 from "fs-extra";
@@ -2799,9 +6838,28 @@ function getQRCode(sessionId) {
   return qrCodes[sessionId];
 }
 async function startSession(sessionId, qrCb) {
+  const inFlight = startingPromises[sessionId];
+  if (inFlight) {
+    logger_default.info(`[${sessionId}] Session init in progress, reusing in-flight start`);
+    return inFlight;
+  }
+  const existing = sessions[sessionId];
+  if (existing && isSessionReady(sessionId)) {
+    logger_default.info(`[${sessionId}] Session already ready, reusing existing socket`);
+    return existing;
+  }
+  const promise = initSession(sessionId, qrCb);
+  startingPromises[sessionId] = promise;
+  try {
+    return await promise;
+  } finally {
+    delete startingPromises[sessionId];
+  }
+}
+async function initSession(sessionId, qrCb) {
   shuttingDown.delete(sessionId);
   const authDir = path10.join(config.whatsapp.sessionDir, sessionId);
-  const { state: state2, saveCreds } = await useMultiFileAuthState(authDir);
+  const { state: state2, saveCreds } = await useMongoAuthState(sessionId);
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger_default.info(`Using WA v${version.join(".")}, isLatest: ${isLatest}`);
   const pinoLogger = pino({ level: "silent" });
@@ -2812,7 +6870,12 @@ async function startSession(sessionId, qrCb) {
     // Baileys expects pino logger
     browser: Browsers.ubuntu("Chrome"),
     generateHighQualityLinkPreview: true,
-    printQRInTerminal: false
+    printQRInTerminal: false,
+    // Baileys NO tiene API para "traer todos los contactos": llegan por history-sync y
+    // eventos (contacts.upsert es poco fiable en WhatsApp personal — issue #522). Pedir el
+    // history completo maximiza chats+contactos al conectar. Sin costo de memoria porque ya
+    // no almacenamos mensajes (store.manager). Ver SCALABILITY-MULTI-SESSION.spec §2.3.
+    syncFullHistory: true
   });
   const storeFilePath = path10.join(authDir, "baileys_store.json");
   const store = makeInMemoryStore(storeFilePath);
@@ -2822,16 +6885,11 @@ async function startSession(sessionId, qrCb) {
   storeTimers[sessionId] = setInterval(() => store.writeToFile(), 1e4);
   store.bind(sock.ev);
   sock.ev.on("creds.update", saveCreds);
-  sock.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
+  sock.ev.on("messaging-history.set", ({ chats, contacts }) => {
     logger_default.info(`\u{1F4E5} Received ${chats.length} chats and ${contacts.length} contacts`);
     chats.forEach((chat) => store.chats.set(chat.id, chat));
     contacts.forEach((contact) => store.contacts.set(contact.id, contact));
-    messages.forEach((msg) => {
-      const jid = msg.key.remoteJid;
-      const list = store.messages.get(jid) || [];
-      list.push(msg);
-      store.messages.set(jid, list);
-    });
+    store.markDirty();
   });
   sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
@@ -2884,7 +6942,7 @@ async function startSession(sessionId, qrCb) {
 async function createPairingSession(phone, sendCode) {
   const sessionId = phone.replace("+", "");
   const authDir = path10.join(config.whatsapp.sessionDir, sessionId);
-  const { state: state2, saveCreds } = await useMultiFileAuthState(authDir);
+  const { state: state2, saveCreds } = await useMongoAuthState(sessionId);
   const { version } = await fetchLatestBaileysVersion();
   const pinoLogger = pino({ level: "silent" });
   const sock = makeWASocket({
@@ -2892,13 +6950,16 @@ async function createPairingSession(phone, sendCode) {
     auth: state2,
     logger: pinoLogger,
     // Baileys expects pino logger
-    browser: Browsers.macOS("Lila")
+    browser: Browsers.macOS("Lila"),
+    syncFullHistory: true
+    // maximiza contactos al conectar (ver startSession)
   });
   const storeFilePath = path10.join(authDir, "baileys_store.json");
   const store = makeInMemoryStore(storeFilePath);
   stores[sessionId] = store;
   store.readFromFile();
-  setInterval(() => store.writeToFile(), 1e4);
+  clearStoreTimer(sessionId);
+  storeTimers[sessionId] = setInterval(() => store.writeToFile(), 1e4);
   store.bind(sock.ev);
   sock.ev.on("creds.update", saveCreds);
   let pairingDone = false;
@@ -3000,6 +7061,8 @@ async function clearSession(sessionId) {
     } catch (error) {
       logger_default.error(`\u274C Failed to delete session directory ${sessionDir}:`, error);
     }
+    await clearMongoAuthState(sessionId);
+    logger_default.info(`\u2705 Cleared Mongo auth for ${sessionId}`);
     const backupDir = path10.join(config.whatsapp.sessionDir, "backups", sessionId);
     try {
       if (await fs7.pathExists(backupDir)) {
@@ -3023,7 +7086,7 @@ async function clearSession(sessionId) {
     throw error;
   }
 }
-var sessions, stores, qrCodes, readyClients, shuttingDown, storeTimers, clearStoreTimer;
+var sessions, stores, qrCodes, readyClients, shuttingDown, storeTimers, startingPromises, clearStoreTimer;
 var init_sessions_simple = __esm({
   "src/whatsapp/baileys/sessions.simple.ts"() {
     init_store_manager();
@@ -3032,12 +7095,14 @@ var init_sessions_simple = __esm({
     init_populate_store_simple();
     init_outbox_queue();
     init_outbox_queue();
+    init_mongo_auth_state();
     sessions = {};
     stores = {};
     qrCodes = {};
     readyClients = /* @__PURE__ */ new Map();
     shuttingDown = /* @__PURE__ */ new Set();
     storeTimers = {};
+    startingPromises = {};
     clearStoreTimer = (sessionId) => {
       const timer = storeTimers[sessionId];
       if (timer) {
@@ -3045,47 +7110,6 @@ var init_sessions_simple = __esm({
         delete storeTimers[sessionId];
       }
     };
-  }
-});
-
-// src/database/sharedConnection.ts
-import mongoose4 from "mongoose";
-async function getSharedConnection() {
-  if (sharedConnection && sharedConnection.readyState === 1) {
-    return sharedConnection;
-  }
-  if (connecting) {
-    return connecting;
-  }
-  logger_default.info("[SharedDB] Connecting to constroad_db...");
-  connecting = mongoose4.createConnection(config.mongodb.portalUri, {
-    dbName: config.mongodb.sharedDb,
-    serverSelectionTimeoutMS: 1e4,
-    socketTimeoutMS: 45e3,
-    maxPoolSize: 5,
-    minPoolSize: 1,
-    family: 4,
-    retryWrites: true,
-    heartbeatFrequencyMS: 1e4
-  }).asPromise().then((conn) => {
-    sharedConnection = conn;
-    connecting = null;
-    logger_default.info("[SharedDB] Connected");
-    return conn;
-  }).catch((error) => {
-    connecting = null;
-    logger_default.error("[SharedDB] Connection failed:", error);
-    throw error;
-  });
-  return connecting;
-}
-var sharedConnection, connecting;
-var init_sharedConnection = __esm({
-  "src/database/sharedConnection.ts"() {
-    init_logger();
-    init_environment();
-    sharedConnection = null;
-    connecting = null;
   }
 });
 
@@ -7205,10 +11229,10 @@ var require_luxon = __commonJS({
        * @return {boolean}
        */
       static hasDST(zone = Settings2.defaultZone) {
-        const proto = DateTime.now().setZone(zone).set({
+        const proto3 = DateTime.now().setZone(zone).set({
           month: 12
         });
-        return !zone.isUniversal && proto.offset !== proto.set({
+        return !zone.isUniversal && proto3.offset !== proto3.set({
           month: 6
         }).offset;
       }
@@ -11198,27 +15222,27 @@ var require_process = __commonJS({
 var require_filesystem = __commonJS({
   "node_modules/detect-libc/lib/filesystem.js"(exports, module) {
     "use strict";
-    var fs31 = __require("fs");
+    var fs30 = __require("fs");
     var LDD_PATH = "/usr/bin/ldd";
     var SELF_PATH = "/proc/self/exe";
     var MAX_LENGTH = 2048;
     var readFileSync = (path31) => {
-      const fd = fs31.openSync(path31, "r");
+      const fd = fs30.openSync(path31, "r");
       const buffer2 = Buffer.alloc(MAX_LENGTH);
-      const bytesRead = fs31.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
-      fs31.close(fd, () => {
+      const bytesRead = fs30.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
+      fs30.close(fd, () => {
       });
       return buffer2.subarray(0, bytesRead);
     };
     var readFile = (path31) => new Promise((resolve2, reject) => {
-      fs31.open(path31, "r", (err, fd) => {
+      fs30.open(path31, "r", (err, fd) => {
         if (err) {
           reject(err);
         } else {
           const buffer2 = Buffer.alloc(MAX_LENGTH);
-          fs31.read(fd, buffer2, 0, MAX_LENGTH, 0, (_57, bytesRead) => {
+          fs30.read(fd, buffer2, 0, MAX_LENGTH, 0, (_57, bytesRead) => {
             resolve2(buffer2.subarray(0, bytesRead));
-            fs31.close(fd, () => {
+            fs30.close(fd, () => {
             });
           });
         }
@@ -11522,1192 +15546,6 @@ var require_detect_libc = __commonJS({
       version,
       versionSync
     };
-  }
-});
-
-// node_modules/semver/internal/debug.js
-var require_debug = __commonJS({
-  "node_modules/semver/internal/debug.js"(exports, module) {
-    "use strict";
-    var debug = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
-    };
-    module.exports = debug;
-  }
-});
-
-// node_modules/semver/internal/constants.js
-var require_constants = __commonJS({
-  "node_modules/semver/internal/constants.js"(exports, module) {
-    "use strict";
-    var SEMVER_SPEC_VERSION = "2.0.0";
-    var MAX_LENGTH = 256;
-    var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER || /* istanbul ignore next */
-    9007199254740991;
-    var MAX_SAFE_COMPONENT_LENGTH = 16;
-    var MAX_SAFE_BUILD_LENGTH = MAX_LENGTH - 6;
-    var RELEASE_TYPES = [
-      "major",
-      "premajor",
-      "minor",
-      "preminor",
-      "patch",
-      "prepatch",
-      "prerelease"
-    ];
-    module.exports = {
-      MAX_LENGTH,
-      MAX_SAFE_COMPONENT_LENGTH,
-      MAX_SAFE_BUILD_LENGTH,
-      MAX_SAFE_INTEGER,
-      RELEASE_TYPES,
-      SEMVER_SPEC_VERSION,
-      FLAG_INCLUDE_PRERELEASE: 1,
-      FLAG_LOOSE: 2
-    };
-  }
-});
-
-// node_modules/semver/internal/re.js
-var require_re = __commonJS({
-  "node_modules/semver/internal/re.js"(exports, module) {
-    "use strict";
-    var {
-      MAX_SAFE_COMPONENT_LENGTH,
-      MAX_SAFE_BUILD_LENGTH,
-      MAX_LENGTH
-    } = require_constants();
-    var debug = require_debug();
-    exports = module.exports = {};
-    var re12 = exports.re = [];
-    var safeRe = exports.safeRe = [];
-    var src = exports.src = [];
-    var safeSrc = exports.safeSrc = [];
-    var t44 = exports.t = {};
-    var R54 = 0;
-    var LETTERDASHNUMBER = "[a-zA-Z0-9-]";
-    var safeRegexReplacements = [
-      ["\\s", 1],
-      ["\\d", MAX_LENGTH],
-      [LETTERDASHNUMBER, MAX_SAFE_BUILD_LENGTH]
-    ];
-    var makeSafeRegex = (value) => {
-      for (const [token, max] of safeRegexReplacements) {
-        value = value.split(`${token}*`).join(`${token}{0,${max}}`).split(`${token}+`).join(`${token}{1,${max}}`);
-      }
-      return value;
-    };
-    var createToken = (name, value, isGlobal) => {
-      const safe = makeSafeRegex(value);
-      const index = R54++;
-      debug(name, index, value);
-      t44[name] = index;
-      src[index] = value;
-      safeSrc[index] = safe;
-      re12[index] = new RegExp(value, isGlobal ? "g" : void 0);
-      safeRe[index] = new RegExp(safe, isGlobal ? "g" : void 0);
-    };
-    createToken("NUMERICIDENTIFIER", "0|[1-9]\\d*");
-    createToken("NUMERICIDENTIFIERLOOSE", "\\d+");
-    createToken("NONNUMERICIDENTIFIER", `\\d*[a-zA-Z-]${LETTERDASHNUMBER}*`);
-    createToken("MAINVERSION", `(${src[t44.NUMERICIDENTIFIER]})\\.(${src[t44.NUMERICIDENTIFIER]})\\.(${src[t44.NUMERICIDENTIFIER]})`);
-    createToken("MAINVERSIONLOOSE", `(${src[t44.NUMERICIDENTIFIERLOOSE]})\\.(${src[t44.NUMERICIDENTIFIERLOOSE]})\\.(${src[t44.NUMERICIDENTIFIERLOOSE]})`);
-    createToken("PRERELEASEIDENTIFIER", `(?:${src[t44.NONNUMERICIDENTIFIER]}|${src[t44.NUMERICIDENTIFIER]})`);
-    createToken("PRERELEASEIDENTIFIERLOOSE", `(?:${src[t44.NONNUMERICIDENTIFIER]}|${src[t44.NUMERICIDENTIFIERLOOSE]})`);
-    createToken("PRERELEASE", `(?:-(${src[t44.PRERELEASEIDENTIFIER]}(?:\\.${src[t44.PRERELEASEIDENTIFIER]})*))`);
-    createToken("PRERELEASELOOSE", `(?:-?(${src[t44.PRERELEASEIDENTIFIERLOOSE]}(?:\\.${src[t44.PRERELEASEIDENTIFIERLOOSE]})*))`);
-    createToken("BUILDIDENTIFIER", `${LETTERDASHNUMBER}+`);
-    createToken("BUILD", `(?:\\+(${src[t44.BUILDIDENTIFIER]}(?:\\.${src[t44.BUILDIDENTIFIER]})*))`);
-    createToken("FULLPLAIN", `v?${src[t44.MAINVERSION]}${src[t44.PRERELEASE]}?${src[t44.BUILD]}?`);
-    createToken("FULL", `^${src[t44.FULLPLAIN]}$`);
-    createToken("LOOSEPLAIN", `[v=\\s]*${src[t44.MAINVERSIONLOOSE]}${src[t44.PRERELEASELOOSE]}?${src[t44.BUILD]}?`);
-    createToken("LOOSE", `^${src[t44.LOOSEPLAIN]}$`);
-    createToken("GTLT", "((?:<|>)?=?)");
-    createToken("XRANGEIDENTIFIERLOOSE", `${src[t44.NUMERICIDENTIFIERLOOSE]}|x|X|\\*`);
-    createToken("XRANGEIDENTIFIER", `${src[t44.NUMERICIDENTIFIER]}|x|X|\\*`);
-    createToken("XRANGEPLAIN", `[v=\\s]*(${src[t44.XRANGEIDENTIFIER]})(?:\\.(${src[t44.XRANGEIDENTIFIER]})(?:\\.(${src[t44.XRANGEIDENTIFIER]})(?:${src[t44.PRERELEASE]})?${src[t44.BUILD]}?)?)?`);
-    createToken("XRANGEPLAINLOOSE", `[v=\\s]*(${src[t44.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t44.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t44.XRANGEIDENTIFIERLOOSE]})(?:${src[t44.PRERELEASELOOSE]})?${src[t44.BUILD]}?)?)?`);
-    createToken("XRANGE", `^${src[t44.GTLT]}\\s*${src[t44.XRANGEPLAIN]}$`);
-    createToken("XRANGELOOSE", `^${src[t44.GTLT]}\\s*${src[t44.XRANGEPLAINLOOSE]}$`);
-    createToken("COERCEPLAIN", `${"(^|[^\\d])(\\d{1,"}${MAX_SAFE_COMPONENT_LENGTH}})(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?`);
-    createToken("COERCE", `${src[t44.COERCEPLAIN]}(?:$|[^\\d])`);
-    createToken("COERCEFULL", src[t44.COERCEPLAIN] + `(?:${src[t44.PRERELEASE]})?(?:${src[t44.BUILD]})?(?:$|[^\\d])`);
-    createToken("COERCERTL", src[t44.COERCE], true);
-    createToken("COERCERTLFULL", src[t44.COERCEFULL], true);
-    createToken("LONETILDE", "(?:~>?)");
-    createToken("TILDETRIM", `(\\s*)${src[t44.LONETILDE]}\\s+`, true);
-    exports.tildeTrimReplace = "$1~";
-    createToken("TILDE", `^${src[t44.LONETILDE]}${src[t44.XRANGEPLAIN]}$`);
-    createToken("TILDELOOSE", `^${src[t44.LONETILDE]}${src[t44.XRANGEPLAINLOOSE]}$`);
-    createToken("LONECARET", "(?:\\^)");
-    createToken("CARETTRIM", `(\\s*)${src[t44.LONECARET]}\\s+`, true);
-    exports.caretTrimReplace = "$1^";
-    createToken("CARET", `^${src[t44.LONECARET]}${src[t44.XRANGEPLAIN]}$`);
-    createToken("CARETLOOSE", `^${src[t44.LONECARET]}${src[t44.XRANGEPLAINLOOSE]}$`);
-    createToken("COMPARATORLOOSE", `^${src[t44.GTLT]}\\s*(${src[t44.LOOSEPLAIN]})$|^$`);
-    createToken("COMPARATOR", `^${src[t44.GTLT]}\\s*(${src[t44.FULLPLAIN]})$|^$`);
-    createToken("COMPARATORTRIM", `(\\s*)${src[t44.GTLT]}\\s*(${src[t44.LOOSEPLAIN]}|${src[t44.XRANGEPLAIN]})`, true);
-    exports.comparatorTrimReplace = "$1$2$3";
-    createToken("HYPHENRANGE", `^\\s*(${src[t44.XRANGEPLAIN]})\\s+-\\s+(${src[t44.XRANGEPLAIN]})\\s*$`);
-    createToken("HYPHENRANGELOOSE", `^\\s*(${src[t44.XRANGEPLAINLOOSE]})\\s+-\\s+(${src[t44.XRANGEPLAINLOOSE]})\\s*$`);
-    createToken("STAR", "(<|>)?=?\\s*\\*");
-    createToken("GTE0", "^\\s*>=\\s*0\\.0\\.0\\s*$");
-    createToken("GTE0PRE", "^\\s*>=\\s*0\\.0\\.0-0\\s*$");
-  }
-});
-
-// node_modules/semver/internal/parse-options.js
-var require_parse_options = __commonJS({
-  "node_modules/semver/internal/parse-options.js"(exports, module) {
-    "use strict";
-    var looseOption = Object.freeze({ loose: true });
-    var emptyOpts = Object.freeze({});
-    var parseOptions = (options2) => {
-      if (!options2) {
-        return emptyOpts;
-      }
-      if (typeof options2 !== "object") {
-        return looseOption;
-      }
-      return options2;
-    };
-    module.exports = parseOptions;
-  }
-});
-
-// node_modules/semver/internal/identifiers.js
-var require_identifiers = __commonJS({
-  "node_modules/semver/internal/identifiers.js"(exports, module) {
-    "use strict";
-    var numeric = /^[0-9]+$/;
-    var compareIdentifiers = (a49, b63) => {
-      if (typeof a49 === "number" && typeof b63 === "number") {
-        return a49 === b63 ? 0 : a49 < b63 ? -1 : 1;
-      }
-      const anum = numeric.test(a49);
-      const bnum = numeric.test(b63);
-      if (anum && bnum) {
-        a49 = +a49;
-        b63 = +b63;
-      }
-      return a49 === b63 ? 0 : anum && !bnum ? -1 : bnum && !anum ? 1 : a49 < b63 ? -1 : 1;
-    };
-    var rcompareIdentifiers = (a49, b63) => compareIdentifiers(b63, a49);
-    module.exports = {
-      compareIdentifiers,
-      rcompareIdentifiers
-    };
-  }
-});
-
-// node_modules/semver/classes/semver.js
-var require_semver = __commonJS({
-  "node_modules/semver/classes/semver.js"(exports, module) {
-    "use strict";
-    var debug = require_debug();
-    var { MAX_LENGTH, MAX_SAFE_INTEGER } = require_constants();
-    var { safeRe: re12, t: t44 } = require_re();
-    var parseOptions = require_parse_options();
-    var { compareIdentifiers } = require_identifiers();
-    var SemVer = class _SemVer {
-      constructor(version, options2) {
-        options2 = parseOptions(options2);
-        if (version instanceof _SemVer) {
-          if (version.loose === !!options2.loose && version.includePrerelease === !!options2.includePrerelease) {
-            return version;
-          } else {
-            version = version.version;
-          }
-        } else if (typeof version !== "string") {
-          throw new TypeError(`Invalid version. Must be a string. Got type "${typeof version}".`);
-        }
-        if (version.length > MAX_LENGTH) {
-          throw new TypeError(
-            `version is longer than ${MAX_LENGTH} characters`
-          );
-        }
-        debug("SemVer", version, options2);
-        this.options = options2;
-        this.loose = !!options2.loose;
-        this.includePrerelease = !!options2.includePrerelease;
-        const m59 = version.trim().match(options2.loose ? re12[t44.LOOSE] : re12[t44.FULL]);
-        if (!m59) {
-          throw new TypeError(`Invalid Version: ${version}`);
-        }
-        this.raw = version;
-        this.major = +m59[1];
-        this.minor = +m59[2];
-        this.patch = +m59[3];
-        if (this.major > MAX_SAFE_INTEGER || this.major < 0) {
-          throw new TypeError("Invalid major version");
-        }
-        if (this.minor > MAX_SAFE_INTEGER || this.minor < 0) {
-          throw new TypeError("Invalid minor version");
-        }
-        if (this.patch > MAX_SAFE_INTEGER || this.patch < 0) {
-          throw new TypeError("Invalid patch version");
-        }
-        if (!m59[4]) {
-          this.prerelease = [];
-        } else {
-          this.prerelease = m59[4].split(".").map((id) => {
-            if (/^[0-9]+$/.test(id)) {
-              const num = +id;
-              if (num >= 0 && num < MAX_SAFE_INTEGER) {
-                return num;
-              }
-            }
-            return id;
-          });
-        }
-        this.build = m59[5] ? m59[5].split(".") : [];
-        this.format();
-      }
-      format() {
-        this.version = `${this.major}.${this.minor}.${this.patch}`;
-        if (this.prerelease.length) {
-          this.version += `-${this.prerelease.join(".")}`;
-        }
-        return this.version;
-      }
-      toString() {
-        return this.version;
-      }
-      compare(other) {
-        debug("SemVer.compare", this.version, this.options, other);
-        if (!(other instanceof _SemVer)) {
-          if (typeof other === "string" && other === this.version) {
-            return 0;
-          }
-          other = new _SemVer(other, this.options);
-        }
-        if (other.version === this.version) {
-          return 0;
-        }
-        return this.compareMain(other) || this.comparePre(other);
-      }
-      compareMain(other) {
-        if (!(other instanceof _SemVer)) {
-          other = new _SemVer(other, this.options);
-        }
-        if (this.major < other.major) {
-          return -1;
-        }
-        if (this.major > other.major) {
-          return 1;
-        }
-        if (this.minor < other.minor) {
-          return -1;
-        }
-        if (this.minor > other.minor) {
-          return 1;
-        }
-        if (this.patch < other.patch) {
-          return -1;
-        }
-        if (this.patch > other.patch) {
-          return 1;
-        }
-        return 0;
-      }
-      comparePre(other) {
-        if (!(other instanceof _SemVer)) {
-          other = new _SemVer(other, this.options);
-        }
-        if (this.prerelease.length && !other.prerelease.length) {
-          return -1;
-        } else if (!this.prerelease.length && other.prerelease.length) {
-          return 1;
-        } else if (!this.prerelease.length && !other.prerelease.length) {
-          return 0;
-        }
-        let i50 = 0;
-        do {
-          const a49 = this.prerelease[i50];
-          const b63 = other.prerelease[i50];
-          debug("prerelease compare", i50, a49, b63);
-          if (a49 === void 0 && b63 === void 0) {
-            return 0;
-          } else if (b63 === void 0) {
-            return 1;
-          } else if (a49 === void 0) {
-            return -1;
-          } else if (a49 === b63) {
-            continue;
-          } else {
-            return compareIdentifiers(a49, b63);
-          }
-        } while (++i50);
-      }
-      compareBuild(other) {
-        if (!(other instanceof _SemVer)) {
-          other = new _SemVer(other, this.options);
-        }
-        let i50 = 0;
-        do {
-          const a49 = this.build[i50];
-          const b63 = other.build[i50];
-          debug("build compare", i50, a49, b63);
-          if (a49 === void 0 && b63 === void 0) {
-            return 0;
-          } else if (b63 === void 0) {
-            return 1;
-          } else if (a49 === void 0) {
-            return -1;
-          } else if (a49 === b63) {
-            continue;
-          } else {
-            return compareIdentifiers(a49, b63);
-          }
-        } while (++i50);
-      }
-      // preminor will bump the version up to the next minor release, and immediately
-      // down to pre-release. premajor and prepatch work the same way.
-      inc(release, identifier, identifierBase) {
-        if (release.startsWith("pre")) {
-          if (!identifier && identifierBase === false) {
-            throw new Error("invalid increment argument: identifier is empty");
-          }
-          if (identifier) {
-            const match = `-${identifier}`.match(this.options.loose ? re12[t44.PRERELEASELOOSE] : re12[t44.PRERELEASE]);
-            if (!match || match[1] !== identifier) {
-              throw new Error(`invalid identifier: ${identifier}`);
-            }
-          }
-        }
-        switch (release) {
-          case "premajor":
-            this.prerelease.length = 0;
-            this.patch = 0;
-            this.minor = 0;
-            this.major++;
-            this.inc("pre", identifier, identifierBase);
-            break;
-          case "preminor":
-            this.prerelease.length = 0;
-            this.patch = 0;
-            this.minor++;
-            this.inc("pre", identifier, identifierBase);
-            break;
-          case "prepatch":
-            this.prerelease.length = 0;
-            this.inc("patch", identifier, identifierBase);
-            this.inc("pre", identifier, identifierBase);
-            break;
-          // If the input is a non-prerelease version, this acts the same as
-          // prepatch.
-          case "prerelease":
-            if (this.prerelease.length === 0) {
-              this.inc("patch", identifier, identifierBase);
-            }
-            this.inc("pre", identifier, identifierBase);
-            break;
-          case "release":
-            if (this.prerelease.length === 0) {
-              throw new Error(`version ${this.raw} is not a prerelease`);
-            }
-            this.prerelease.length = 0;
-            break;
-          case "major":
-            if (this.minor !== 0 || this.patch !== 0 || this.prerelease.length === 0) {
-              this.major++;
-            }
-            this.minor = 0;
-            this.patch = 0;
-            this.prerelease = [];
-            break;
-          case "minor":
-            if (this.patch !== 0 || this.prerelease.length === 0) {
-              this.minor++;
-            }
-            this.patch = 0;
-            this.prerelease = [];
-            break;
-          case "patch":
-            if (this.prerelease.length === 0) {
-              this.patch++;
-            }
-            this.prerelease = [];
-            break;
-          // This probably shouldn't be used publicly.
-          // 1.0.0 'pre' would become 1.0.0-0 which is the wrong direction.
-          case "pre": {
-            const base = Number(identifierBase) ? 1 : 0;
-            if (this.prerelease.length === 0) {
-              this.prerelease = [base];
-            } else {
-              let i50 = this.prerelease.length;
-              while (--i50 >= 0) {
-                if (typeof this.prerelease[i50] === "number") {
-                  this.prerelease[i50]++;
-                  i50 = -2;
-                }
-              }
-              if (i50 === -1) {
-                if (identifier === this.prerelease.join(".") && identifierBase === false) {
-                  throw new Error("invalid increment argument: identifier already exists");
-                }
-                this.prerelease.push(base);
-              }
-            }
-            if (identifier) {
-              let prerelease = [identifier, base];
-              if (identifierBase === false) {
-                prerelease = [identifier];
-              }
-              if (compareIdentifiers(this.prerelease[0], identifier) === 0) {
-                if (isNaN(this.prerelease[1])) {
-                  this.prerelease = prerelease;
-                }
-              } else {
-                this.prerelease = prerelease;
-              }
-            }
-            break;
-          }
-          default:
-            throw new Error(`invalid increment argument: ${release}`);
-        }
-        this.raw = this.format();
-        if (this.build.length) {
-          this.raw += `+${this.build.join(".")}`;
-        }
-        return this;
-      }
-    };
-    module.exports = SemVer;
-  }
-});
-
-// node_modules/semver/functions/parse.js
-var require_parse = __commonJS({
-  "node_modules/semver/functions/parse.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var parse = (version, options2, throwErrors = false) => {
-      if (version instanceof SemVer) {
-        return version;
-      }
-      try {
-        return new SemVer(version, options2);
-      } catch (er3) {
-        if (!throwErrors) {
-          return null;
-        }
-        throw er3;
-      }
-    };
-    module.exports = parse;
-  }
-});
-
-// node_modules/semver/functions/coerce.js
-var require_coerce = __commonJS({
-  "node_modules/semver/functions/coerce.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var parse = require_parse();
-    var { safeRe: re12, t: t44 } = require_re();
-    var coerce = (version, options2) => {
-      if (version instanceof SemVer) {
-        return version;
-      }
-      if (typeof version === "number") {
-        version = String(version);
-      }
-      if (typeof version !== "string") {
-        return null;
-      }
-      options2 = options2 || {};
-      let match = null;
-      if (!options2.rtl) {
-        match = version.match(options2.includePrerelease ? re12[t44.COERCEFULL] : re12[t44.COERCE]);
-      } else {
-        const coerceRtlRegex = options2.includePrerelease ? re12[t44.COERCERTLFULL] : re12[t44.COERCERTL];
-        let next;
-        while ((next = coerceRtlRegex.exec(version)) && (!match || match.index + match[0].length !== version.length)) {
-          if (!match || next.index + next[0].length !== match.index + match[0].length) {
-            match = next;
-          }
-          coerceRtlRegex.lastIndex = next.index + next[1].length + next[2].length;
-        }
-        coerceRtlRegex.lastIndex = -1;
-      }
-      if (match === null) {
-        return null;
-      }
-      const major = match[2];
-      const minor = match[3] || "0";
-      const patch = match[4] || "0";
-      const prerelease = options2.includePrerelease && match[5] ? `-${match[5]}` : "";
-      const build = options2.includePrerelease && match[6] ? `+${match[6]}` : "";
-      return parse(`${major}.${minor}.${patch}${prerelease}${build}`, options2);
-    };
-    module.exports = coerce;
-  }
-});
-
-// node_modules/semver/functions/compare.js
-var require_compare = __commonJS({
-  "node_modules/semver/functions/compare.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var compare = (a49, b63, loose) => new SemVer(a49, loose).compare(new SemVer(b63, loose));
-    module.exports = compare;
-  }
-});
-
-// node_modules/semver/functions/gte.js
-var require_gte = __commonJS({
-  "node_modules/semver/functions/gte.js"(exports, module) {
-    "use strict";
-    var compare = require_compare();
-    var gte = (a49, b63, loose) => compare(a49, b63, loose) >= 0;
-    module.exports = gte;
-  }
-});
-
-// node_modules/semver/internal/lrucache.js
-var require_lrucache = __commonJS({
-  "node_modules/semver/internal/lrucache.js"(exports, module) {
-    "use strict";
-    var LRUCache = class {
-      constructor() {
-        this.max = 1e3;
-        this.map = /* @__PURE__ */ new Map();
-      }
-      get(key) {
-        const value = this.map.get(key);
-        if (value === void 0) {
-          return void 0;
-        } else {
-          this.map.delete(key);
-          this.map.set(key, value);
-          return value;
-        }
-      }
-      delete(key) {
-        return this.map.delete(key);
-      }
-      set(key, value) {
-        const deleted = this.delete(key);
-        if (!deleted && value !== void 0) {
-          if (this.map.size >= this.max) {
-            const firstKey = this.map.keys().next().value;
-            this.delete(firstKey);
-          }
-          this.map.set(key, value);
-        }
-        return this;
-      }
-    };
-    module.exports = LRUCache;
-  }
-});
-
-// node_modules/semver/functions/eq.js
-var require_eq = __commonJS({
-  "node_modules/semver/functions/eq.js"(exports, module) {
-    "use strict";
-    var compare = require_compare();
-    var eq = (a49, b63, loose) => compare(a49, b63, loose) === 0;
-    module.exports = eq;
-  }
-});
-
-// node_modules/semver/functions/neq.js
-var require_neq = __commonJS({
-  "node_modules/semver/functions/neq.js"(exports, module) {
-    "use strict";
-    var compare = require_compare();
-    var neq = (a49, b63, loose) => compare(a49, b63, loose) !== 0;
-    module.exports = neq;
-  }
-});
-
-// node_modules/semver/functions/gt.js
-var require_gt = __commonJS({
-  "node_modules/semver/functions/gt.js"(exports, module) {
-    "use strict";
-    var compare = require_compare();
-    var gt2 = (a49, b63, loose) => compare(a49, b63, loose) > 0;
-    module.exports = gt2;
-  }
-});
-
-// node_modules/semver/functions/lt.js
-var require_lt = __commonJS({
-  "node_modules/semver/functions/lt.js"(exports, module) {
-    "use strict";
-    var compare = require_compare();
-    var lt3 = (a49, b63, loose) => compare(a49, b63, loose) < 0;
-    module.exports = lt3;
-  }
-});
-
-// node_modules/semver/functions/lte.js
-var require_lte = __commonJS({
-  "node_modules/semver/functions/lte.js"(exports, module) {
-    "use strict";
-    var compare = require_compare();
-    var lte = (a49, b63, loose) => compare(a49, b63, loose) <= 0;
-    module.exports = lte;
-  }
-});
-
-// node_modules/semver/functions/cmp.js
-var require_cmp = __commonJS({
-  "node_modules/semver/functions/cmp.js"(exports, module) {
-    "use strict";
-    var eq = require_eq();
-    var neq = require_neq();
-    var gt2 = require_gt();
-    var gte = require_gte();
-    var lt3 = require_lt();
-    var lte = require_lte();
-    var cmp = (a49, op, b63, loose) => {
-      switch (op) {
-        case "===":
-          if (typeof a49 === "object") {
-            a49 = a49.version;
-          }
-          if (typeof b63 === "object") {
-            b63 = b63.version;
-          }
-          return a49 === b63;
-        case "!==":
-          if (typeof a49 === "object") {
-            a49 = a49.version;
-          }
-          if (typeof b63 === "object") {
-            b63 = b63.version;
-          }
-          return a49 !== b63;
-        case "":
-        case "=":
-        case "==":
-          return eq(a49, b63, loose);
-        case "!=":
-          return neq(a49, b63, loose);
-        case ">":
-          return gt2(a49, b63, loose);
-        case ">=":
-          return gte(a49, b63, loose);
-        case "<":
-          return lt3(a49, b63, loose);
-        case "<=":
-          return lte(a49, b63, loose);
-        default:
-          throw new TypeError(`Invalid operator: ${op}`);
-      }
-    };
-    module.exports = cmp;
-  }
-});
-
-// node_modules/semver/classes/comparator.js
-var require_comparator = __commonJS({
-  "node_modules/semver/classes/comparator.js"(exports, module) {
-    "use strict";
-    var ANY = /* @__PURE__ */ Symbol("SemVer ANY");
-    var Comparator = class _Comparator {
-      static get ANY() {
-        return ANY;
-      }
-      constructor(comp, options2) {
-        options2 = parseOptions(options2);
-        if (comp instanceof _Comparator) {
-          if (comp.loose === !!options2.loose) {
-            return comp;
-          } else {
-            comp = comp.value;
-          }
-        }
-        comp = comp.trim().split(/\s+/).join(" ");
-        debug("comparator", comp, options2);
-        this.options = options2;
-        this.loose = !!options2.loose;
-        this.parse(comp);
-        if (this.semver === ANY) {
-          this.value = "";
-        } else {
-          this.value = this.operator + this.semver.version;
-        }
-        debug("comp", this);
-      }
-      parse(comp) {
-        const r39 = this.options.loose ? re12[t44.COMPARATORLOOSE] : re12[t44.COMPARATOR];
-        const m59 = comp.match(r39);
-        if (!m59) {
-          throw new TypeError(`Invalid comparator: ${comp}`);
-        }
-        this.operator = m59[1] !== void 0 ? m59[1] : "";
-        if (this.operator === "=") {
-          this.operator = "";
-        }
-        if (!m59[2]) {
-          this.semver = ANY;
-        } else {
-          this.semver = new SemVer(m59[2], this.options.loose);
-        }
-      }
-      toString() {
-        return this.value;
-      }
-      test(version) {
-        debug("Comparator.test", version, this.options.loose);
-        if (this.semver === ANY || version === ANY) {
-          return true;
-        }
-        if (typeof version === "string") {
-          try {
-            version = new SemVer(version, this.options);
-          } catch (er3) {
-            return false;
-          }
-        }
-        return cmp(version, this.operator, this.semver, this.options);
-      }
-      intersects(comp, options2) {
-        if (!(comp instanceof _Comparator)) {
-          throw new TypeError("a Comparator is required");
-        }
-        if (this.operator === "") {
-          if (this.value === "") {
-            return true;
-          }
-          return new Range(comp.value, options2).test(this.value);
-        } else if (comp.operator === "") {
-          if (comp.value === "") {
-            return true;
-          }
-          return new Range(this.value, options2).test(comp.semver);
-        }
-        options2 = parseOptions(options2);
-        if (options2.includePrerelease && (this.value === "<0.0.0-0" || comp.value === "<0.0.0-0")) {
-          return false;
-        }
-        if (!options2.includePrerelease && (this.value.startsWith("<0.0.0") || comp.value.startsWith("<0.0.0"))) {
-          return false;
-        }
-        if (this.operator.startsWith(">") && comp.operator.startsWith(">")) {
-          return true;
-        }
-        if (this.operator.startsWith("<") && comp.operator.startsWith("<")) {
-          return true;
-        }
-        if (this.semver.version === comp.semver.version && this.operator.includes("=") && comp.operator.includes("=")) {
-          return true;
-        }
-        if (cmp(this.semver, "<", comp.semver, options2) && this.operator.startsWith(">") && comp.operator.startsWith("<")) {
-          return true;
-        }
-        if (cmp(this.semver, ">", comp.semver, options2) && this.operator.startsWith("<") && comp.operator.startsWith(">")) {
-          return true;
-        }
-        return false;
-      }
-    };
-    module.exports = Comparator;
-    var parseOptions = require_parse_options();
-    var { safeRe: re12, t: t44 } = require_re();
-    var cmp = require_cmp();
-    var debug = require_debug();
-    var SemVer = require_semver();
-    var Range = require_range();
-  }
-});
-
-// node_modules/semver/classes/range.js
-var require_range = __commonJS({
-  "node_modules/semver/classes/range.js"(exports, module) {
-    "use strict";
-    var SPACE_CHARACTERS = /\s+/g;
-    var Range = class _Range {
-      constructor(range, options2) {
-        options2 = parseOptions(options2);
-        if (range instanceof _Range) {
-          if (range.loose === !!options2.loose && range.includePrerelease === !!options2.includePrerelease) {
-            return range;
-          } else {
-            return new _Range(range.raw, options2);
-          }
-        }
-        if (range instanceof Comparator) {
-          this.raw = range.value;
-          this.set = [[range]];
-          this.formatted = void 0;
-          return this;
-        }
-        this.options = options2;
-        this.loose = !!options2.loose;
-        this.includePrerelease = !!options2.includePrerelease;
-        this.raw = range.trim().replace(SPACE_CHARACTERS, " ");
-        this.set = this.raw.split("||").map((r39) => this.parseRange(r39.trim())).filter((c66) => c66.length);
-        if (!this.set.length) {
-          throw new TypeError(`Invalid SemVer Range: ${this.raw}`);
-        }
-        if (this.set.length > 1) {
-          const first = this.set[0];
-          this.set = this.set.filter((c66) => !isNullSet(c66[0]));
-          if (this.set.length === 0) {
-            this.set = [first];
-          } else if (this.set.length > 1) {
-            for (const c66 of this.set) {
-              if (c66.length === 1 && isAny(c66[0])) {
-                this.set = [c66];
-                break;
-              }
-            }
-          }
-        }
-        this.formatted = void 0;
-      }
-      get range() {
-        if (this.formatted === void 0) {
-          this.formatted = "";
-          for (let i50 = 0; i50 < this.set.length; i50++) {
-            if (i50 > 0) {
-              this.formatted += "||";
-            }
-            const comps = this.set[i50];
-            for (let k60 = 0; k60 < comps.length; k60++) {
-              if (k60 > 0) {
-                this.formatted += " ";
-              }
-              this.formatted += comps[k60].toString().trim();
-            }
-          }
-        }
-        return this.formatted;
-      }
-      format() {
-        return this.range;
-      }
-      toString() {
-        return this.range;
-      }
-      parseRange(range) {
-        const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
-        const memoKey = memoOpts + ":" + range;
-        const cached = cache.get(memoKey);
-        if (cached) {
-          return cached;
-        }
-        const loose = this.options.loose;
-        const hr2 = loose ? re12[t44.HYPHENRANGELOOSE] : re12[t44.HYPHENRANGE];
-        range = range.replace(hr2, hyphenReplace(this.options.includePrerelease));
-        debug("hyphen replace", range);
-        range = range.replace(re12[t44.COMPARATORTRIM], comparatorTrimReplace);
-        debug("comparator trim", range);
-        range = range.replace(re12[t44.TILDETRIM], tildeTrimReplace);
-        debug("tilde trim", range);
-        range = range.replace(re12[t44.CARETTRIM], caretTrimReplace);
-        debug("caret trim", range);
-        let rangeList = range.split(" ").map((comp) => parseComparator(comp, this.options)).join(" ").split(/\s+/).map((comp) => replaceGTE0(comp, this.options));
-        if (loose) {
-          rangeList = rangeList.filter((comp) => {
-            debug("loose invalid filter", comp, this.options);
-            return !!comp.match(re12[t44.COMPARATORLOOSE]);
-          });
-        }
-        debug("range list", rangeList);
-        const rangeMap = /* @__PURE__ */ new Map();
-        const comparators = rangeList.map((comp) => new Comparator(comp, this.options));
-        for (const comp of comparators) {
-          if (isNullSet(comp)) {
-            return [comp];
-          }
-          rangeMap.set(comp.value, comp);
-        }
-        if (rangeMap.size > 1 && rangeMap.has("")) {
-          rangeMap.delete("");
-        }
-        const result = [...rangeMap.values()];
-        cache.set(memoKey, result);
-        return result;
-      }
-      intersects(range, options2) {
-        if (!(range instanceof _Range)) {
-          throw new TypeError("a Range is required");
-        }
-        return this.set.some((thisComparators) => {
-          return isSatisfiable(thisComparators, options2) && range.set.some((rangeComparators) => {
-            return isSatisfiable(rangeComparators, options2) && thisComparators.every((thisComparator) => {
-              return rangeComparators.every((rangeComparator) => {
-                return thisComparator.intersects(rangeComparator, options2);
-              });
-            });
-          });
-        });
-      }
-      // if ANY of the sets match ALL of its comparators, then pass
-      test(version) {
-        if (!version) {
-          return false;
-        }
-        if (typeof version === "string") {
-          try {
-            version = new SemVer(version, this.options);
-          } catch (er3) {
-            return false;
-          }
-        }
-        for (let i50 = 0; i50 < this.set.length; i50++) {
-          if (testSet(this.set[i50], version, this.options)) {
-            return true;
-          }
-        }
-        return false;
-      }
-    };
-    module.exports = Range;
-    var LRU = require_lrucache();
-    var cache = new LRU();
-    var parseOptions = require_parse_options();
-    var Comparator = require_comparator();
-    var debug = require_debug();
-    var SemVer = require_semver();
-    var {
-      safeRe: re12,
-      t: t44,
-      comparatorTrimReplace,
-      tildeTrimReplace,
-      caretTrimReplace
-    } = require_re();
-    var { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = require_constants();
-    var isNullSet = (c66) => c66.value === "<0.0.0-0";
-    var isAny = (c66) => c66.value === "";
-    var isSatisfiable = (comparators, options2) => {
-      let result = true;
-      const remainingComparators = comparators.slice();
-      let testComparator = remainingComparators.pop();
-      while (result && remainingComparators.length) {
-        result = remainingComparators.every((otherComparator) => {
-          return testComparator.intersects(otherComparator, options2);
-        });
-        testComparator = remainingComparators.pop();
-      }
-      return result;
-    };
-    var parseComparator = (comp, options2) => {
-      comp = comp.replace(re12[t44.BUILD], "");
-      debug("comp", comp, options2);
-      comp = replaceCarets(comp, options2);
-      debug("caret", comp);
-      comp = replaceTildes(comp, options2);
-      debug("tildes", comp);
-      comp = replaceXRanges(comp, options2);
-      debug("xrange", comp);
-      comp = replaceStars(comp, options2);
-      debug("stars", comp);
-      return comp;
-    };
-    var isX = (id) => !id || id.toLowerCase() === "x" || id === "*";
-    var replaceTildes = (comp, options2) => {
-      return comp.trim().split(/\s+/).map((c66) => replaceTilde(c66, options2)).join(" ");
-    };
-    var replaceTilde = (comp, options2) => {
-      const r39 = options2.loose ? re12[t44.TILDELOOSE] : re12[t44.TILDE];
-      return comp.replace(r39, (_57, M61, m59, p64, pr2) => {
-        debug("tilde", comp, _57, M61, m59, p64, pr2);
-        let ret;
-        if (isX(M61)) {
-          ret = "";
-        } else if (isX(m59)) {
-          ret = `>=${M61}.0.0 <${+M61 + 1}.0.0-0`;
-        } else if (isX(p64)) {
-          ret = `>=${M61}.${m59}.0 <${M61}.${+m59 + 1}.0-0`;
-        } else if (pr2) {
-          debug("replaceTilde pr", pr2);
-          ret = `>=${M61}.${m59}.${p64}-${pr2} <${M61}.${+m59 + 1}.0-0`;
-        } else {
-          ret = `>=${M61}.${m59}.${p64} <${M61}.${+m59 + 1}.0-0`;
-        }
-        debug("tilde return", ret);
-        return ret;
-      });
-    };
-    var replaceCarets = (comp, options2) => {
-      return comp.trim().split(/\s+/).map((c66) => replaceCaret(c66, options2)).join(" ");
-    };
-    var replaceCaret = (comp, options2) => {
-      debug("caret", comp, options2);
-      const r39 = options2.loose ? re12[t44.CARETLOOSE] : re12[t44.CARET];
-      const z50 = options2.includePrerelease ? "-0" : "";
-      return comp.replace(r39, (_57, M61, m59, p64, pr2) => {
-        debug("caret", comp, _57, M61, m59, p64, pr2);
-        let ret;
-        if (isX(M61)) {
-          ret = "";
-        } else if (isX(m59)) {
-          ret = `>=${M61}.0.0${z50} <${+M61 + 1}.0.0-0`;
-        } else if (isX(p64)) {
-          if (M61 === "0") {
-            ret = `>=${M61}.${m59}.0${z50} <${M61}.${+m59 + 1}.0-0`;
-          } else {
-            ret = `>=${M61}.${m59}.0${z50} <${+M61 + 1}.0.0-0`;
-          }
-        } else if (pr2) {
-          debug("replaceCaret pr", pr2);
-          if (M61 === "0") {
-            if (m59 === "0") {
-              ret = `>=${M61}.${m59}.${p64}-${pr2} <${M61}.${m59}.${+p64 + 1}-0`;
-            } else {
-              ret = `>=${M61}.${m59}.${p64}-${pr2} <${M61}.${+m59 + 1}.0-0`;
-            }
-          } else {
-            ret = `>=${M61}.${m59}.${p64}-${pr2} <${+M61 + 1}.0.0-0`;
-          }
-        } else {
-          debug("no pr");
-          if (M61 === "0") {
-            if (m59 === "0") {
-              ret = `>=${M61}.${m59}.${p64}${z50} <${M61}.${m59}.${+p64 + 1}-0`;
-            } else {
-              ret = `>=${M61}.${m59}.${p64}${z50} <${M61}.${+m59 + 1}.0-0`;
-            }
-          } else {
-            ret = `>=${M61}.${m59}.${p64} <${+M61 + 1}.0.0-0`;
-          }
-        }
-        debug("caret return", ret);
-        return ret;
-      });
-    };
-    var replaceXRanges = (comp, options2) => {
-      debug("replaceXRanges", comp, options2);
-      return comp.split(/\s+/).map((c66) => replaceXRange(c66, options2)).join(" ");
-    };
-    var replaceXRange = (comp, options2) => {
-      comp = comp.trim();
-      const r39 = options2.loose ? re12[t44.XRANGELOOSE] : re12[t44.XRANGE];
-      return comp.replace(r39, (ret, gtlt, M61, m59, p64, pr2) => {
-        debug("xRange", comp, ret, gtlt, M61, m59, p64, pr2);
-        const xM = isX(M61);
-        const xm = xM || isX(m59);
-        const xp = xm || isX(p64);
-        const anyX = xp;
-        if (gtlt === "=" && anyX) {
-          gtlt = "";
-        }
-        pr2 = options2.includePrerelease ? "-0" : "";
-        if (xM) {
-          if (gtlt === ">" || gtlt === "<") {
-            ret = "<0.0.0-0";
-          } else {
-            ret = "*";
-          }
-        } else if (gtlt && anyX) {
-          if (xm) {
-            m59 = 0;
-          }
-          p64 = 0;
-          if (gtlt === ">") {
-            gtlt = ">=";
-            if (xm) {
-              M61 = +M61 + 1;
-              m59 = 0;
-              p64 = 0;
-            } else {
-              m59 = +m59 + 1;
-              p64 = 0;
-            }
-          } else if (gtlt === "<=") {
-            gtlt = "<";
-            if (xm) {
-              M61 = +M61 + 1;
-            } else {
-              m59 = +m59 + 1;
-            }
-          }
-          if (gtlt === "<") {
-            pr2 = "-0";
-          }
-          ret = `${gtlt + M61}.${m59}.${p64}${pr2}`;
-        } else if (xm) {
-          ret = `>=${M61}.0.0${pr2} <${+M61 + 1}.0.0-0`;
-        } else if (xp) {
-          ret = `>=${M61}.${m59}.0${pr2} <${M61}.${+m59 + 1}.0-0`;
-        }
-        debug("xRange return", ret);
-        return ret;
-      });
-    };
-    var replaceStars = (comp, options2) => {
-      debug("replaceStars", comp, options2);
-      return comp.trim().replace(re12[t44.STAR], "");
-    };
-    var replaceGTE0 = (comp, options2) => {
-      debug("replaceGTE0", comp, options2);
-      return comp.trim().replace(re12[options2.includePrerelease ? t44.GTE0PRE : t44.GTE0], "");
-    };
-    var hyphenReplace = (incPr) => ($0, from, fM, fm, fp, fpr, fb, to3, tM, tm, tp, tpr) => {
-      if (isX(fM)) {
-        from = "";
-      } else if (isX(fm)) {
-        from = `>=${fM}.0.0${incPr ? "-0" : ""}`;
-      } else if (isX(fp)) {
-        from = `>=${fM}.${fm}.0${incPr ? "-0" : ""}`;
-      } else if (fpr) {
-        from = `>=${from}`;
-      } else {
-        from = `>=${from}${incPr ? "-0" : ""}`;
-      }
-      if (isX(tM)) {
-        to3 = "";
-      } else if (isX(tm)) {
-        to3 = `<${+tM + 1}.0.0-0`;
-      } else if (isX(tp)) {
-        to3 = `<${tM}.${+tm + 1}.0-0`;
-      } else if (tpr) {
-        to3 = `<=${tM}.${tm}.${tp}-${tpr}`;
-      } else if (incPr) {
-        to3 = `<${tM}.${tm}.${+tp + 1}-0`;
-      } else {
-        to3 = `<=${to3}`;
-      }
-      return `${from} ${to3}`.trim();
-    };
-    var testSet = (set, version, options2) => {
-      for (let i50 = 0; i50 < set.length; i50++) {
-        if (!set[i50].test(version)) {
-          return false;
-        }
-      }
-      if (version.prerelease.length && !options2.includePrerelease) {
-        for (let i50 = 0; i50 < set.length; i50++) {
-          debug(set[i50].semver);
-          if (set[i50].semver === Comparator.ANY) {
-            continue;
-          }
-          if (set[i50].semver.prerelease.length > 0) {
-            const allowed = set[i50].semver;
-            if (allowed.major === version.major && allowed.minor === version.minor && allowed.patch === version.patch) {
-              return true;
-            }
-          }
-        }
-        return false;
-      }
-      return true;
-    };
-  }
-});
-
-// node_modules/semver/functions/satisfies.js
-var require_satisfies = __commonJS({
-  "node_modules/semver/functions/satisfies.js"(exports, module) {
-    "use strict";
-    var Range = require_range();
-    var satisfies = (version, range, options2) => {
-      try {
-        range = new Range(range, options2);
-      } catch (er3) {
-        return false;
-      }
-      return range.test(version);
-    };
-    module.exports = satisfies;
   }
 });
 
@@ -17427,2685 +20265,6 @@ var require_lib = __commonJS({
   }
 });
 
-// node_modules/safe-buffer/index.js
-var require_safe_buffer = __commonJS({
-  "node_modules/safe-buffer/index.js"(exports, module) {
-    var buffer2 = __require("buffer");
-    var Buffer2 = buffer2.Buffer;
-    function copyProps(src, dst) {
-      for (var key in src) {
-        dst[key] = src[key];
-      }
-    }
-    if (Buffer2.from && Buffer2.alloc && Buffer2.allocUnsafe && Buffer2.allocUnsafeSlow) {
-      module.exports = buffer2;
-    } else {
-      copyProps(buffer2, exports);
-      exports.Buffer = SafeBuffer;
-    }
-    function SafeBuffer(arg, encodingOrOffset, length) {
-      return Buffer2(arg, encodingOrOffset, length);
-    }
-    SafeBuffer.prototype = Object.create(Buffer2.prototype);
-    copyProps(Buffer2, SafeBuffer);
-    SafeBuffer.from = function(arg, encodingOrOffset, length) {
-      if (typeof arg === "number") {
-        throw new TypeError("Argument must not be a number");
-      }
-      return Buffer2(arg, encodingOrOffset, length);
-    };
-    SafeBuffer.alloc = function(size, fill, encoding) {
-      if (typeof size !== "number") {
-        throw new TypeError("Argument must be a number");
-      }
-      var buf = Buffer2(size);
-      if (fill !== void 0) {
-        if (typeof encoding === "string") {
-          buf.fill(fill, encoding);
-        } else {
-          buf.fill(fill);
-        }
-      } else {
-        buf.fill(0);
-      }
-      return buf;
-    };
-    SafeBuffer.allocUnsafe = function(size) {
-      if (typeof size !== "number") {
-        throw new TypeError("Argument must be a number");
-      }
-      return Buffer2(size);
-    };
-    SafeBuffer.allocUnsafeSlow = function(size) {
-      if (typeof size !== "number") {
-        throw new TypeError("Argument must be a number");
-      }
-      return buffer2.SlowBuffer(size);
-    };
-  }
-});
-
-// node_modules/jws/lib/data-stream.js
-var require_data_stream = __commonJS({
-  "node_modules/jws/lib/data-stream.js"(exports, module) {
-    var Buffer2 = require_safe_buffer().Buffer;
-    var Stream2 = __require("stream");
-    var util2 = __require("util");
-    function DataStream(data) {
-      this.buffer = null;
-      this.writable = true;
-      this.readable = true;
-      if (!data) {
-        this.buffer = Buffer2.alloc(0);
-        return this;
-      }
-      if (typeof data.pipe === "function") {
-        this.buffer = Buffer2.alloc(0);
-        data.pipe(this);
-        return this;
-      }
-      if (data.length || typeof data === "object") {
-        this.buffer = data;
-        this.writable = false;
-        process.nextTick(function() {
-          this.emit("end", data);
-          this.readable = false;
-          this.emit("close");
-        }.bind(this));
-        return this;
-      }
-      throw new TypeError("Unexpected data type (" + typeof data + ")");
-    }
-    util2.inherits(DataStream, Stream2);
-    DataStream.prototype.write = function write(data) {
-      this.buffer = Buffer2.concat([this.buffer, Buffer2.from(data)]);
-      this.emit("data", data);
-    };
-    DataStream.prototype.end = function end(data) {
-      if (data)
-        this.write(data);
-      this.emit("end", data);
-      this.emit("close");
-      this.writable = false;
-      this.readable = false;
-    };
-    module.exports = DataStream;
-  }
-});
-
-// node_modules/ecdsa-sig-formatter/src/param-bytes-for-alg.js
-var require_param_bytes_for_alg = __commonJS({
-  "node_modules/ecdsa-sig-formatter/src/param-bytes-for-alg.js"(exports, module) {
-    "use strict";
-    function getParamSize(keySize) {
-      var result = (keySize / 8 | 0) + (keySize % 8 === 0 ? 0 : 1);
-      return result;
-    }
-    var paramBytesForAlg = {
-      ES256: getParamSize(256),
-      ES384: getParamSize(384),
-      ES512: getParamSize(521)
-    };
-    function getParamBytesForAlg(alg) {
-      var paramBytes = paramBytesForAlg[alg];
-      if (paramBytes) {
-        return paramBytes;
-      }
-      throw new Error('Unknown algorithm "' + alg + '"');
-    }
-    module.exports = getParamBytesForAlg;
-  }
-});
-
-// node_modules/ecdsa-sig-formatter/src/ecdsa-sig-formatter.js
-var require_ecdsa_sig_formatter = __commonJS({
-  "node_modules/ecdsa-sig-formatter/src/ecdsa-sig-formatter.js"(exports, module) {
-    "use strict";
-    var Buffer2 = require_safe_buffer().Buffer;
-    var getParamBytesForAlg = require_param_bytes_for_alg();
-    var MAX_OCTET = 128;
-    var CLASS_UNIVERSAL = 0;
-    var PRIMITIVE_BIT = 32;
-    var TAG_SEQ = 16;
-    var TAG_INT = 2;
-    var ENCODED_TAG_SEQ = TAG_SEQ | PRIMITIVE_BIT | CLASS_UNIVERSAL << 6;
-    var ENCODED_TAG_INT = TAG_INT | CLASS_UNIVERSAL << 6;
-    function base64Url(base64) {
-      return base64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-    }
-    function signatureAsBuffer(signature) {
-      if (Buffer2.isBuffer(signature)) {
-        return signature;
-      } else if ("string" === typeof signature) {
-        return Buffer2.from(signature, "base64");
-      }
-      throw new TypeError("ECDSA signature must be a Base64 string or a Buffer");
-    }
-    function derToJose(signature, alg) {
-      signature = signatureAsBuffer(signature);
-      var paramBytes = getParamBytesForAlg(alg);
-      var maxEncodedParamLength = paramBytes + 1;
-      var inputLength = signature.length;
-      var offset = 0;
-      if (signature[offset++] !== ENCODED_TAG_SEQ) {
-        throw new Error('Could not find expected "seq"');
-      }
-      var seqLength = signature[offset++];
-      if (seqLength === (MAX_OCTET | 1)) {
-        seqLength = signature[offset++];
-      }
-      if (inputLength - offset < seqLength) {
-        throw new Error('"seq" specified length of "' + seqLength + '", only "' + (inputLength - offset) + '" remaining');
-      }
-      if (signature[offset++] !== ENCODED_TAG_INT) {
-        throw new Error('Could not find expected "int" for "r"');
-      }
-      var rLength = signature[offset++];
-      if (inputLength - offset - 2 < rLength) {
-        throw new Error('"r" specified length of "' + rLength + '", only "' + (inputLength - offset - 2) + '" available');
-      }
-      if (maxEncodedParamLength < rLength) {
-        throw new Error('"r" specified length of "' + rLength + '", max of "' + maxEncodedParamLength + '" is acceptable');
-      }
-      var rOffset = offset;
-      offset += rLength;
-      if (signature[offset++] !== ENCODED_TAG_INT) {
-        throw new Error('Could not find expected "int" for "s"');
-      }
-      var sLength = signature[offset++];
-      if (inputLength - offset !== sLength) {
-        throw new Error('"s" specified length of "' + sLength + '", expected "' + (inputLength - offset) + '"');
-      }
-      if (maxEncodedParamLength < sLength) {
-        throw new Error('"s" specified length of "' + sLength + '", max of "' + maxEncodedParamLength + '" is acceptable');
-      }
-      var sOffset = offset;
-      offset += sLength;
-      if (offset !== inputLength) {
-        throw new Error('Expected to consume entire buffer, but "' + (inputLength - offset) + '" bytes remain');
-      }
-      var rPadding = paramBytes - rLength, sPadding = paramBytes - sLength;
-      var dst = Buffer2.allocUnsafe(rPadding + rLength + sPadding + sLength);
-      for (offset = 0; offset < rPadding; ++offset) {
-        dst[offset] = 0;
-      }
-      signature.copy(dst, offset, rOffset + Math.max(-rPadding, 0), rOffset + rLength);
-      offset = paramBytes;
-      for (var o37 = offset; offset < o37 + sPadding; ++offset) {
-        dst[offset] = 0;
-      }
-      signature.copy(dst, offset, sOffset + Math.max(-sPadding, 0), sOffset + sLength);
-      dst = dst.toString("base64");
-      dst = base64Url(dst);
-      return dst;
-    }
-    function countPadding(buf, start, stop) {
-      var padding = 0;
-      while (start + padding < stop && buf[start + padding] === 0) {
-        ++padding;
-      }
-      var needsSign = buf[start + padding] >= MAX_OCTET;
-      if (needsSign) {
-        --padding;
-      }
-      return padding;
-    }
-    function joseToDer(signature, alg) {
-      signature = signatureAsBuffer(signature);
-      var paramBytes = getParamBytesForAlg(alg);
-      var signatureBytes = signature.length;
-      if (signatureBytes !== paramBytes * 2) {
-        throw new TypeError('"' + alg + '" signatures must be "' + paramBytes * 2 + '" bytes, saw "' + signatureBytes + '"');
-      }
-      var rPadding = countPadding(signature, 0, paramBytes);
-      var sPadding = countPadding(signature, paramBytes, signature.length);
-      var rLength = paramBytes - rPadding;
-      var sLength = paramBytes - sPadding;
-      var rsBytes = 1 + 1 + rLength + 1 + 1 + sLength;
-      var shortLength = rsBytes < MAX_OCTET;
-      var dst = Buffer2.allocUnsafe((shortLength ? 2 : 3) + rsBytes);
-      var offset = 0;
-      dst[offset++] = ENCODED_TAG_SEQ;
-      if (shortLength) {
-        dst[offset++] = rsBytes;
-      } else {
-        dst[offset++] = MAX_OCTET | 1;
-        dst[offset++] = rsBytes & 255;
-      }
-      dst[offset++] = ENCODED_TAG_INT;
-      dst[offset++] = rLength;
-      if (rPadding < 0) {
-        dst[offset++] = 0;
-        offset += signature.copy(dst, offset, 0, paramBytes);
-      } else {
-        offset += signature.copy(dst, offset, rPadding, paramBytes);
-      }
-      dst[offset++] = ENCODED_TAG_INT;
-      dst[offset++] = sLength;
-      if (sPadding < 0) {
-        dst[offset++] = 0;
-        signature.copy(dst, offset, paramBytes);
-      } else {
-        signature.copy(dst, offset, paramBytes + sPadding);
-      }
-      return dst;
-    }
-    module.exports = {
-      derToJose,
-      joseToDer
-    };
-  }
-});
-
-// node_modules/buffer-equal-constant-time/index.js
-var require_buffer_equal_constant_time = __commonJS({
-  "node_modules/buffer-equal-constant-time/index.js"(exports, module) {
-    "use strict";
-    var Buffer2 = __require("buffer").Buffer;
-    var SlowBuffer = __require("buffer").SlowBuffer;
-    module.exports = bufferEq;
-    function bufferEq(a49, b63) {
-      if (!Buffer2.isBuffer(a49) || !Buffer2.isBuffer(b63)) {
-        return false;
-      }
-      if (a49.length !== b63.length) {
-        return false;
-      }
-      var c66 = 0;
-      for (var i50 = 0; i50 < a49.length; i50++) {
-        c66 |= a49[i50] ^ b63[i50];
-      }
-      return c66 === 0;
-    }
-    bufferEq.install = function() {
-      Buffer2.prototype.equal = SlowBuffer.prototype.equal = function equal(that) {
-        return bufferEq(this, that);
-      };
-    };
-    var origBufEqual = Buffer2.prototype.equal;
-    var origSlowBufEqual = SlowBuffer.prototype.equal;
-    bufferEq.restore = function() {
-      Buffer2.prototype.equal = origBufEqual;
-      SlowBuffer.prototype.equal = origSlowBufEqual;
-    };
-  }
-});
-
-// node_modules/jwa/index.js
-var require_jwa = __commonJS({
-  "node_modules/jwa/index.js"(exports, module) {
-    var Buffer2 = require_safe_buffer().Buffer;
-    var crypto6 = __require("crypto");
-    var formatEcdsa = require_ecdsa_sig_formatter();
-    var util2 = __require("util");
-    var MSG_INVALID_ALGORITHM = '"%s" is not a valid algorithm.\n  Supported algorithms are:\n  "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512" and "none".';
-    var MSG_INVALID_SECRET = "secret must be a string or buffer";
-    var MSG_INVALID_VERIFIER_KEY = "key must be a string or a buffer";
-    var MSG_INVALID_SIGNER_KEY = "key must be a string, a buffer or an object";
-    var supportsKeyObjects = typeof crypto6.createPublicKey === "function";
-    if (supportsKeyObjects) {
-      MSG_INVALID_VERIFIER_KEY += " or a KeyObject";
-      MSG_INVALID_SECRET += "or a KeyObject";
-    }
-    function checkIsPublicKey(key) {
-      if (Buffer2.isBuffer(key)) {
-        return;
-      }
-      if (typeof key === "string") {
-        return;
-      }
-      if (!supportsKeyObjects) {
-        throw typeError(MSG_INVALID_VERIFIER_KEY);
-      }
-      if (typeof key !== "object") {
-        throw typeError(MSG_INVALID_VERIFIER_KEY);
-      }
-      if (typeof key.type !== "string") {
-        throw typeError(MSG_INVALID_VERIFIER_KEY);
-      }
-      if (typeof key.asymmetricKeyType !== "string") {
-        throw typeError(MSG_INVALID_VERIFIER_KEY);
-      }
-      if (typeof key.export !== "function") {
-        throw typeError(MSG_INVALID_VERIFIER_KEY);
-      }
-    }
-    function checkIsPrivateKey(key) {
-      if (Buffer2.isBuffer(key)) {
-        return;
-      }
-      if (typeof key === "string") {
-        return;
-      }
-      if (typeof key === "object") {
-        return;
-      }
-      throw typeError(MSG_INVALID_SIGNER_KEY);
-    }
-    function checkIsSecretKey(key) {
-      if (Buffer2.isBuffer(key)) {
-        return;
-      }
-      if (typeof key === "string") {
-        return key;
-      }
-      if (!supportsKeyObjects) {
-        throw typeError(MSG_INVALID_SECRET);
-      }
-      if (typeof key !== "object") {
-        throw typeError(MSG_INVALID_SECRET);
-      }
-      if (key.type !== "secret") {
-        throw typeError(MSG_INVALID_SECRET);
-      }
-      if (typeof key.export !== "function") {
-        throw typeError(MSG_INVALID_SECRET);
-      }
-    }
-    function fromBase64(base64) {
-      return base64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-    }
-    function toBase64(base64url) {
-      base64url = base64url.toString();
-      var padding = 4 - base64url.length % 4;
-      if (padding !== 4) {
-        for (var i50 = 0; i50 < padding; ++i50) {
-          base64url += "=";
-        }
-      }
-      return base64url.replace(/\-/g, "+").replace(/_/g, "/");
-    }
-    function typeError(template) {
-      var args = [].slice.call(arguments, 1);
-      var errMsg = util2.format.bind(util2, template).apply(null, args);
-      return new TypeError(errMsg);
-    }
-    function bufferOrString(obj) {
-      return Buffer2.isBuffer(obj) || typeof obj === "string";
-    }
-    function normalizeInput(thing) {
-      if (!bufferOrString(thing))
-        thing = JSON.stringify(thing);
-      return thing;
-    }
-    function createHmacSigner(bits) {
-      return function sign(thing, secret) {
-        checkIsSecretKey(secret);
-        thing = normalizeInput(thing);
-        var hmac = crypto6.createHmac("sha" + bits, secret);
-        var sig = (hmac.update(thing), hmac.digest("base64"));
-        return fromBase64(sig);
-      };
-    }
-    var bufferEqual;
-    var timingSafeEqual2 = "timingSafeEqual" in crypto6 ? function timingSafeEqual3(a49, b63) {
-      if (a49.byteLength !== b63.byteLength) {
-        return false;
-      }
-      return crypto6.timingSafeEqual(a49, b63);
-    } : function timingSafeEqual3(a49, b63) {
-      if (!bufferEqual) {
-        bufferEqual = require_buffer_equal_constant_time();
-      }
-      return bufferEqual(a49, b63);
-    };
-    function createHmacVerifier(bits) {
-      return function verify(thing, signature, secret) {
-        var computedSig = createHmacSigner(bits)(thing, secret);
-        return timingSafeEqual2(Buffer2.from(signature), Buffer2.from(computedSig));
-      };
-    }
-    function createKeySigner(bits) {
-      return function sign(thing, privateKey) {
-        checkIsPrivateKey(privateKey);
-        thing = normalizeInput(thing);
-        var signer = crypto6.createSign("RSA-SHA" + bits);
-        var sig = (signer.update(thing), signer.sign(privateKey, "base64"));
-        return fromBase64(sig);
-      };
-    }
-    function createKeyVerifier(bits) {
-      return function verify(thing, signature, publicKey) {
-        checkIsPublicKey(publicKey);
-        thing = normalizeInput(thing);
-        signature = toBase64(signature);
-        var verifier = crypto6.createVerify("RSA-SHA" + bits);
-        verifier.update(thing);
-        return verifier.verify(publicKey, signature, "base64");
-      };
-    }
-    function createPSSKeySigner(bits) {
-      return function sign(thing, privateKey) {
-        checkIsPrivateKey(privateKey);
-        thing = normalizeInput(thing);
-        var signer = crypto6.createSign("RSA-SHA" + bits);
-        var sig = (signer.update(thing), signer.sign({
-          key: privateKey,
-          padding: crypto6.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto6.constants.RSA_PSS_SALTLEN_DIGEST
-        }, "base64"));
-        return fromBase64(sig);
-      };
-    }
-    function createPSSKeyVerifier(bits) {
-      return function verify(thing, signature, publicKey) {
-        checkIsPublicKey(publicKey);
-        thing = normalizeInput(thing);
-        signature = toBase64(signature);
-        var verifier = crypto6.createVerify("RSA-SHA" + bits);
-        verifier.update(thing);
-        return verifier.verify({
-          key: publicKey,
-          padding: crypto6.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto6.constants.RSA_PSS_SALTLEN_DIGEST
-        }, signature, "base64");
-      };
-    }
-    function createECDSASigner(bits) {
-      var inner = createKeySigner(bits);
-      return function sign() {
-        var signature = inner.apply(null, arguments);
-        signature = formatEcdsa.derToJose(signature, "ES" + bits);
-        return signature;
-      };
-    }
-    function createECDSAVerifer(bits) {
-      var inner = createKeyVerifier(bits);
-      return function verify(thing, signature, publicKey) {
-        signature = formatEcdsa.joseToDer(signature, "ES" + bits).toString("base64");
-        var result = inner(thing, signature, publicKey);
-        return result;
-      };
-    }
-    function createNoneSigner() {
-      return function sign() {
-        return "";
-      };
-    }
-    function createNoneVerifier() {
-      return function verify(thing, signature) {
-        return signature === "";
-      };
-    }
-    module.exports = function jwa(algorithm) {
-      var signerFactories = {
-        hs: createHmacSigner,
-        rs: createKeySigner,
-        ps: createPSSKeySigner,
-        es: createECDSASigner,
-        none: createNoneSigner
-      };
-      var verifierFactories = {
-        hs: createHmacVerifier,
-        rs: createKeyVerifier,
-        ps: createPSSKeyVerifier,
-        es: createECDSAVerifer,
-        none: createNoneVerifier
-      };
-      var match = algorithm.match(/^(RS|PS|ES|HS)(256|384|512)$|^(none)$/);
-      if (!match)
-        throw typeError(MSG_INVALID_ALGORITHM, algorithm);
-      var algo = (match[1] || match[3]).toLowerCase();
-      var bits = match[2];
-      return {
-        sign: signerFactories[algo](bits),
-        verify: verifierFactories[algo](bits)
-      };
-    };
-  }
-});
-
-// node_modules/jws/lib/tostring.js
-var require_tostring = __commonJS({
-  "node_modules/jws/lib/tostring.js"(exports, module) {
-    var Buffer2 = __require("buffer").Buffer;
-    module.exports = function toString(obj) {
-      if (typeof obj === "string")
-        return obj;
-      if (typeof obj === "number" || Buffer2.isBuffer(obj))
-        return obj.toString();
-      return JSON.stringify(obj);
-    };
-  }
-});
-
-// node_modules/jws/lib/sign-stream.js
-var require_sign_stream = __commonJS({
-  "node_modules/jws/lib/sign-stream.js"(exports, module) {
-    var Buffer2 = require_safe_buffer().Buffer;
-    var DataStream = require_data_stream();
-    var jwa = require_jwa();
-    var Stream2 = __require("stream");
-    var toString = require_tostring();
-    var util2 = __require("util");
-    function base64url(string, encoding) {
-      return Buffer2.from(string, encoding).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-    }
-    function jwsSecuredInput(header, payload, encoding) {
-      encoding = encoding || "utf8";
-      var encodedHeader = base64url(toString(header), "binary");
-      var encodedPayload = base64url(toString(payload), encoding);
-      return util2.format("%s.%s", encodedHeader, encodedPayload);
-    }
-    function jwsSign(opts) {
-      var header = opts.header;
-      var payload = opts.payload;
-      var secretOrKey = opts.secret || opts.privateKey;
-      var encoding = opts.encoding;
-      var algo = jwa(header.alg);
-      var securedInput = jwsSecuredInput(header, payload, encoding);
-      var signature = algo.sign(securedInput, secretOrKey);
-      return util2.format("%s.%s", securedInput, signature);
-    }
-    function SignStream(opts) {
-      var secret = opts.secret;
-      secret = secret == null ? opts.privateKey : secret;
-      secret = secret == null ? opts.key : secret;
-      if (/^hs/i.test(opts.header.alg) === true && secret == null) {
-        throw new TypeError("secret must be a string or buffer or a KeyObject");
-      }
-      var secretStream = new DataStream(secret);
-      this.readable = true;
-      this.header = opts.header;
-      this.encoding = opts.encoding;
-      this.secret = this.privateKey = this.key = secretStream;
-      this.payload = new DataStream(opts.payload);
-      this.secret.once("close", function() {
-        if (!this.payload.writable && this.readable)
-          this.sign();
-      }.bind(this));
-      this.payload.once("close", function() {
-        if (!this.secret.writable && this.readable)
-          this.sign();
-      }.bind(this));
-    }
-    util2.inherits(SignStream, Stream2);
-    SignStream.prototype.sign = function sign() {
-      try {
-        var signature = jwsSign({
-          header: this.header,
-          payload: this.payload.buffer,
-          secret: this.secret.buffer,
-          encoding: this.encoding
-        });
-        this.emit("done", signature);
-        this.emit("data", signature);
-        this.emit("end");
-        this.readable = false;
-        return signature;
-      } catch (e29) {
-        this.readable = false;
-        this.emit("error", e29);
-        this.emit("close");
-      }
-    };
-    SignStream.sign = jwsSign;
-    module.exports = SignStream;
-  }
-});
-
-// node_modules/jws/lib/verify-stream.js
-var require_verify_stream = __commonJS({
-  "node_modules/jws/lib/verify-stream.js"(exports, module) {
-    var Buffer2 = require_safe_buffer().Buffer;
-    var DataStream = require_data_stream();
-    var jwa = require_jwa();
-    var Stream2 = __require("stream");
-    var toString = require_tostring();
-    var util2 = __require("util");
-    var JWS_REGEX = /^[a-zA-Z0-9\-_]+?\.[a-zA-Z0-9\-_]+?\.([a-zA-Z0-9\-_]+)?$/;
-    function isObject(thing) {
-      return Object.prototype.toString.call(thing) === "[object Object]";
-    }
-    function safeJsonParse(thing) {
-      if (isObject(thing))
-        return thing;
-      try {
-        return JSON.parse(thing);
-      } catch (e29) {
-        return void 0;
-      }
-    }
-    function headerFromJWS(jwsSig) {
-      var encodedHeader = jwsSig.split(".", 1)[0];
-      return safeJsonParse(Buffer2.from(encodedHeader, "base64").toString("binary"));
-    }
-    function securedInputFromJWS(jwsSig) {
-      return jwsSig.split(".", 2).join(".");
-    }
-    function signatureFromJWS(jwsSig) {
-      return jwsSig.split(".")[2];
-    }
-    function payloadFromJWS(jwsSig, encoding) {
-      encoding = encoding || "utf8";
-      var payload = jwsSig.split(".")[1];
-      return Buffer2.from(payload, "base64").toString(encoding);
-    }
-    function isValidJws(string) {
-      return JWS_REGEX.test(string) && !!headerFromJWS(string);
-    }
-    function jwsVerify(jwsSig, algorithm, secretOrKey) {
-      if (!algorithm) {
-        var err = new Error("Missing algorithm parameter for jws.verify");
-        err.code = "MISSING_ALGORITHM";
-        throw err;
-      }
-      jwsSig = toString(jwsSig);
-      var signature = signatureFromJWS(jwsSig);
-      var securedInput = securedInputFromJWS(jwsSig);
-      var algo = jwa(algorithm);
-      return algo.verify(securedInput, signature, secretOrKey);
-    }
-    function jwsDecode(jwsSig, opts) {
-      opts = opts || {};
-      jwsSig = toString(jwsSig);
-      if (!isValidJws(jwsSig))
-        return null;
-      var header = headerFromJWS(jwsSig);
-      if (!header)
-        return null;
-      var payload = payloadFromJWS(jwsSig);
-      if (header.typ === "JWT" || opts.json)
-        payload = JSON.parse(payload, opts.encoding);
-      return {
-        header,
-        payload,
-        signature: signatureFromJWS(jwsSig)
-      };
-    }
-    function VerifyStream(opts) {
-      opts = opts || {};
-      var secretOrKey = opts.secret;
-      secretOrKey = secretOrKey == null ? opts.publicKey : secretOrKey;
-      secretOrKey = secretOrKey == null ? opts.key : secretOrKey;
-      if (/^hs/i.test(opts.algorithm) === true && secretOrKey == null) {
-        throw new TypeError("secret must be a string or buffer or a KeyObject");
-      }
-      var secretStream = new DataStream(secretOrKey);
-      this.readable = true;
-      this.algorithm = opts.algorithm;
-      this.encoding = opts.encoding;
-      this.secret = this.publicKey = this.key = secretStream;
-      this.signature = new DataStream(opts.signature);
-      this.secret.once("close", function() {
-        if (!this.signature.writable && this.readable)
-          this.verify();
-      }.bind(this));
-      this.signature.once("close", function() {
-        if (!this.secret.writable && this.readable)
-          this.verify();
-      }.bind(this));
-    }
-    util2.inherits(VerifyStream, Stream2);
-    VerifyStream.prototype.verify = function verify() {
-      try {
-        var valid = jwsVerify(this.signature.buffer, this.algorithm, this.key.buffer);
-        var obj = jwsDecode(this.signature.buffer, this.encoding);
-        this.emit("done", valid, obj);
-        this.emit("data", valid);
-        this.emit("end");
-        this.readable = false;
-        return valid;
-      } catch (e29) {
-        this.readable = false;
-        this.emit("error", e29);
-        this.emit("close");
-      }
-    };
-    VerifyStream.decode = jwsDecode;
-    VerifyStream.isValid = isValidJws;
-    VerifyStream.verify = jwsVerify;
-    module.exports = VerifyStream;
-  }
-});
-
-// node_modules/jws/index.js
-var require_jws = __commonJS({
-  "node_modules/jws/index.js"(exports) {
-    var SignStream = require_sign_stream();
-    var VerifyStream = require_verify_stream();
-    var ALGORITHMS = [
-      "HS256",
-      "HS384",
-      "HS512",
-      "RS256",
-      "RS384",
-      "RS512",
-      "PS256",
-      "PS384",
-      "PS512",
-      "ES256",
-      "ES384",
-      "ES512"
-    ];
-    exports.ALGORITHMS = ALGORITHMS;
-    exports.sign = SignStream.sign;
-    exports.verify = VerifyStream.verify;
-    exports.decode = VerifyStream.decode;
-    exports.isValid = VerifyStream.isValid;
-    exports.createSign = function createSign(opts) {
-      return new SignStream(opts);
-    };
-    exports.createVerify = function createVerify(opts) {
-      return new VerifyStream(opts);
-    };
-  }
-});
-
-// node_modules/jsonwebtoken/decode.js
-var require_decode = __commonJS({
-  "node_modules/jsonwebtoken/decode.js"(exports, module) {
-    var jws = require_jws();
-    module.exports = function(jwt4, options2) {
-      options2 = options2 || {};
-      var decoded = jws.decode(jwt4, options2);
-      if (!decoded) {
-        return null;
-      }
-      var payload = decoded.payload;
-      if (typeof payload === "string") {
-        try {
-          var obj = JSON.parse(payload);
-          if (obj !== null && typeof obj === "object") {
-            payload = obj;
-          }
-        } catch (e29) {
-        }
-      }
-      if (options2.complete === true) {
-        return {
-          header: decoded.header,
-          payload,
-          signature: decoded.signature
-        };
-      }
-      return payload;
-    };
-  }
-});
-
-// node_modules/jsonwebtoken/lib/JsonWebTokenError.js
-var require_JsonWebTokenError = __commonJS({
-  "node_modules/jsonwebtoken/lib/JsonWebTokenError.js"(exports, module) {
-    var JsonWebTokenError = function(message, error) {
-      Error.call(this, message);
-      if (Error.captureStackTrace) {
-        Error.captureStackTrace(this, this.constructor);
-      }
-      this.name = "JsonWebTokenError";
-      this.message = message;
-      if (error) this.inner = error;
-    };
-    JsonWebTokenError.prototype = Object.create(Error.prototype);
-    JsonWebTokenError.prototype.constructor = JsonWebTokenError;
-    module.exports = JsonWebTokenError;
-  }
-});
-
-// node_modules/jsonwebtoken/lib/NotBeforeError.js
-var require_NotBeforeError = __commonJS({
-  "node_modules/jsonwebtoken/lib/NotBeforeError.js"(exports, module) {
-    var JsonWebTokenError = require_JsonWebTokenError();
-    var NotBeforeError = function(message, date) {
-      JsonWebTokenError.call(this, message);
-      this.name = "NotBeforeError";
-      this.date = date;
-    };
-    NotBeforeError.prototype = Object.create(JsonWebTokenError.prototype);
-    NotBeforeError.prototype.constructor = NotBeforeError;
-    module.exports = NotBeforeError;
-  }
-});
-
-// node_modules/jsonwebtoken/lib/TokenExpiredError.js
-var require_TokenExpiredError = __commonJS({
-  "node_modules/jsonwebtoken/lib/TokenExpiredError.js"(exports, module) {
-    var JsonWebTokenError = require_JsonWebTokenError();
-    var TokenExpiredError = function(message, expiredAt) {
-      JsonWebTokenError.call(this, message);
-      this.name = "TokenExpiredError";
-      this.expiredAt = expiredAt;
-    };
-    TokenExpiredError.prototype = Object.create(JsonWebTokenError.prototype);
-    TokenExpiredError.prototype.constructor = TokenExpiredError;
-    module.exports = TokenExpiredError;
-  }
-});
-
-// node_modules/ms/index.js
-var require_ms = __commonJS({
-  "node_modules/ms/index.js"(exports, module) {
-    var s59 = 1e3;
-    var m59 = s59 * 60;
-    var h65 = m59 * 60;
-    var d67 = h65 * 24;
-    var w54 = d67 * 7;
-    var y65 = d67 * 365.25;
-    module.exports = function(val, options2) {
-      options2 = options2 || {};
-      var type = typeof val;
-      if (type === "string" && val.length > 0) {
-        return parse(val);
-      } else if (type === "number" && isFinite(val)) {
-        return options2.long ? fmtLong(val) : fmtShort(val);
-      }
-      throw new Error(
-        "val is not a non-empty string or a valid number. val=" + JSON.stringify(val)
-      );
-    };
-    function parse(str) {
-      str = String(str);
-      if (str.length > 100) {
-        return;
-      }
-      var match = /^(-?(?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
-        str
-      );
-      if (!match) {
-        return;
-      }
-      var n43 = parseFloat(match[1]);
-      var type = (match[2] || "ms").toLowerCase();
-      switch (type) {
-        case "years":
-        case "year":
-        case "yrs":
-        case "yr":
-        case "y":
-          return n43 * y65;
-        case "weeks":
-        case "week":
-        case "w":
-          return n43 * w54;
-        case "days":
-        case "day":
-        case "d":
-          return n43 * d67;
-        case "hours":
-        case "hour":
-        case "hrs":
-        case "hr":
-        case "h":
-          return n43 * h65;
-        case "minutes":
-        case "minute":
-        case "mins":
-        case "min":
-        case "m":
-          return n43 * m59;
-        case "seconds":
-        case "second":
-        case "secs":
-        case "sec":
-        case "s":
-          return n43 * s59;
-        case "milliseconds":
-        case "millisecond":
-        case "msecs":
-        case "msec":
-        case "ms":
-          return n43;
-        default:
-          return void 0;
-      }
-    }
-    function fmtShort(ms) {
-      var msAbs = Math.abs(ms);
-      if (msAbs >= d67) {
-        return Math.round(ms / d67) + "d";
-      }
-      if (msAbs >= h65) {
-        return Math.round(ms / h65) + "h";
-      }
-      if (msAbs >= m59) {
-        return Math.round(ms / m59) + "m";
-      }
-      if (msAbs >= s59) {
-        return Math.round(ms / s59) + "s";
-      }
-      return ms + "ms";
-    }
-    function fmtLong(ms) {
-      var msAbs = Math.abs(ms);
-      if (msAbs >= d67) {
-        return plural(ms, msAbs, d67, "day");
-      }
-      if (msAbs >= h65) {
-        return plural(ms, msAbs, h65, "hour");
-      }
-      if (msAbs >= m59) {
-        return plural(ms, msAbs, m59, "minute");
-      }
-      if (msAbs >= s59) {
-        return plural(ms, msAbs, s59, "second");
-      }
-      return ms + " ms";
-    }
-    function plural(ms, msAbs, n43, name) {
-      var isPlural = msAbs >= n43 * 1.5;
-      return Math.round(ms / n43) + " " + name + (isPlural ? "s" : "");
-    }
-  }
-});
-
-// node_modules/jsonwebtoken/lib/timespan.js
-var require_timespan = __commonJS({
-  "node_modules/jsonwebtoken/lib/timespan.js"(exports, module) {
-    var ms = require_ms();
-    module.exports = function(time, iat) {
-      var timestamp = iat || Math.floor(Date.now() / 1e3);
-      if (typeof time === "string") {
-        var milliseconds = ms(time);
-        if (typeof milliseconds === "undefined") {
-          return;
-        }
-        return Math.floor(timestamp + milliseconds / 1e3);
-      } else if (typeof time === "number") {
-        return timestamp + time;
-      } else {
-        return;
-      }
-    };
-  }
-});
-
-// node_modules/semver/functions/valid.js
-var require_valid = __commonJS({
-  "node_modules/semver/functions/valid.js"(exports, module) {
-    "use strict";
-    var parse = require_parse();
-    var valid = (version, options2) => {
-      const v55 = parse(version, options2);
-      return v55 ? v55.version : null;
-    };
-    module.exports = valid;
-  }
-});
-
-// node_modules/semver/functions/clean.js
-var require_clean = __commonJS({
-  "node_modules/semver/functions/clean.js"(exports, module) {
-    "use strict";
-    var parse = require_parse();
-    var clean = (version, options2) => {
-      const s59 = parse(version.trim().replace(/^[=v]+/, ""), options2);
-      return s59 ? s59.version : null;
-    };
-    module.exports = clean;
-  }
-});
-
-// node_modules/semver/functions/inc.js
-var require_inc = __commonJS({
-  "node_modules/semver/functions/inc.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var inc = (version, release, options2, identifier, identifierBase) => {
-      if (typeof options2 === "string") {
-        identifierBase = identifier;
-        identifier = options2;
-        options2 = void 0;
-      }
-      try {
-        return new SemVer(
-          version instanceof SemVer ? version.version : version,
-          options2
-        ).inc(release, identifier, identifierBase).version;
-      } catch (er3) {
-        return null;
-      }
-    };
-    module.exports = inc;
-  }
-});
-
-// node_modules/semver/functions/diff.js
-var require_diff = __commonJS({
-  "node_modules/semver/functions/diff.js"(exports, module) {
-    "use strict";
-    var parse = require_parse();
-    var diff = (version1, version2) => {
-      const v1 = parse(version1, null, true);
-      const v210 = parse(version2, null, true);
-      const comparison = v1.compare(v210);
-      if (comparison === 0) {
-        return null;
-      }
-      const v1Higher = comparison > 0;
-      const highVersion = v1Higher ? v1 : v210;
-      const lowVersion = v1Higher ? v210 : v1;
-      const highHasPre = !!highVersion.prerelease.length;
-      const lowHasPre = !!lowVersion.prerelease.length;
-      if (lowHasPre && !highHasPre) {
-        if (!lowVersion.patch && !lowVersion.minor) {
-          return "major";
-        }
-        if (lowVersion.compareMain(highVersion) === 0) {
-          if (lowVersion.minor && !lowVersion.patch) {
-            return "minor";
-          }
-          return "patch";
-        }
-      }
-      const prefix = highHasPre ? "pre" : "";
-      if (v1.major !== v210.major) {
-        return prefix + "major";
-      }
-      if (v1.minor !== v210.minor) {
-        return prefix + "minor";
-      }
-      if (v1.patch !== v210.patch) {
-        return prefix + "patch";
-      }
-      return "prerelease";
-    };
-    module.exports = diff;
-  }
-});
-
-// node_modules/semver/functions/major.js
-var require_major = __commonJS({
-  "node_modules/semver/functions/major.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var major = (a49, loose) => new SemVer(a49, loose).major;
-    module.exports = major;
-  }
-});
-
-// node_modules/semver/functions/minor.js
-var require_minor = __commonJS({
-  "node_modules/semver/functions/minor.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var minor = (a49, loose) => new SemVer(a49, loose).minor;
-    module.exports = minor;
-  }
-});
-
-// node_modules/semver/functions/patch.js
-var require_patch = __commonJS({
-  "node_modules/semver/functions/patch.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var patch = (a49, loose) => new SemVer(a49, loose).patch;
-    module.exports = patch;
-  }
-});
-
-// node_modules/semver/functions/prerelease.js
-var require_prerelease = __commonJS({
-  "node_modules/semver/functions/prerelease.js"(exports, module) {
-    "use strict";
-    var parse = require_parse();
-    var prerelease = (version, options2) => {
-      const parsed = parse(version, options2);
-      return parsed && parsed.prerelease.length ? parsed.prerelease : null;
-    };
-    module.exports = prerelease;
-  }
-});
-
-// node_modules/semver/functions/rcompare.js
-var require_rcompare = __commonJS({
-  "node_modules/semver/functions/rcompare.js"(exports, module) {
-    "use strict";
-    var compare = require_compare();
-    var rcompare = (a49, b63, loose) => compare(b63, a49, loose);
-    module.exports = rcompare;
-  }
-});
-
-// node_modules/semver/functions/compare-loose.js
-var require_compare_loose = __commonJS({
-  "node_modules/semver/functions/compare-loose.js"(exports, module) {
-    "use strict";
-    var compare = require_compare();
-    var compareLoose = (a49, b63) => compare(a49, b63, true);
-    module.exports = compareLoose;
-  }
-});
-
-// node_modules/semver/functions/compare-build.js
-var require_compare_build = __commonJS({
-  "node_modules/semver/functions/compare-build.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var compareBuild = (a49, b63, loose) => {
-      const versionA = new SemVer(a49, loose);
-      const versionB = new SemVer(b63, loose);
-      return versionA.compare(versionB) || versionA.compareBuild(versionB);
-    };
-    module.exports = compareBuild;
-  }
-});
-
-// node_modules/semver/functions/sort.js
-var require_sort = __commonJS({
-  "node_modules/semver/functions/sort.js"(exports, module) {
-    "use strict";
-    var compareBuild = require_compare_build();
-    var sort = (list, loose) => list.sort((a49, b63) => compareBuild(a49, b63, loose));
-    module.exports = sort;
-  }
-});
-
-// node_modules/semver/functions/rsort.js
-var require_rsort = __commonJS({
-  "node_modules/semver/functions/rsort.js"(exports, module) {
-    "use strict";
-    var compareBuild = require_compare_build();
-    var rsort = (list, loose) => list.sort((a49, b63) => compareBuild(b63, a49, loose));
-    module.exports = rsort;
-  }
-});
-
-// node_modules/semver/ranges/to-comparators.js
-var require_to_comparators = __commonJS({
-  "node_modules/semver/ranges/to-comparators.js"(exports, module) {
-    "use strict";
-    var Range = require_range();
-    var toComparators = (range, options2) => new Range(range, options2).set.map((comp) => comp.map((c66) => c66.value).join(" ").trim().split(" "));
-    module.exports = toComparators;
-  }
-});
-
-// node_modules/semver/ranges/max-satisfying.js
-var require_max_satisfying = __commonJS({
-  "node_modules/semver/ranges/max-satisfying.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var Range = require_range();
-    var maxSatisfying = (versions, range, options2) => {
-      let max = null;
-      let maxSV = null;
-      let rangeObj = null;
-      try {
-        rangeObj = new Range(range, options2);
-      } catch (er3) {
-        return null;
-      }
-      versions.forEach((v55) => {
-        if (rangeObj.test(v55)) {
-          if (!max || maxSV.compare(v55) === -1) {
-            max = v55;
-            maxSV = new SemVer(max, options2);
-          }
-        }
-      });
-      return max;
-    };
-    module.exports = maxSatisfying;
-  }
-});
-
-// node_modules/semver/ranges/min-satisfying.js
-var require_min_satisfying = __commonJS({
-  "node_modules/semver/ranges/min-satisfying.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var Range = require_range();
-    var minSatisfying = (versions, range, options2) => {
-      let min = null;
-      let minSV = null;
-      let rangeObj = null;
-      try {
-        rangeObj = new Range(range, options2);
-      } catch (er3) {
-        return null;
-      }
-      versions.forEach((v55) => {
-        if (rangeObj.test(v55)) {
-          if (!min || minSV.compare(v55) === 1) {
-            min = v55;
-            minSV = new SemVer(min, options2);
-          }
-        }
-      });
-      return min;
-    };
-    module.exports = minSatisfying;
-  }
-});
-
-// node_modules/semver/ranges/min-version.js
-var require_min_version = __commonJS({
-  "node_modules/semver/ranges/min-version.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var Range = require_range();
-    var gt2 = require_gt();
-    var minVersion = (range, loose) => {
-      range = new Range(range, loose);
-      let minver = new SemVer("0.0.0");
-      if (range.test(minver)) {
-        return minver;
-      }
-      minver = new SemVer("0.0.0-0");
-      if (range.test(minver)) {
-        return minver;
-      }
-      minver = null;
-      for (let i50 = 0; i50 < range.set.length; ++i50) {
-        const comparators = range.set[i50];
-        let setMin = null;
-        comparators.forEach((comparator) => {
-          const compver = new SemVer(comparator.semver.version);
-          switch (comparator.operator) {
-            case ">":
-              if (compver.prerelease.length === 0) {
-                compver.patch++;
-              } else {
-                compver.prerelease.push(0);
-              }
-              compver.raw = compver.format();
-            /* fallthrough */
-            case "":
-            case ">=":
-              if (!setMin || gt2(compver, setMin)) {
-                setMin = compver;
-              }
-              break;
-            case "<":
-            case "<=":
-              break;
-            /* istanbul ignore next */
-            default:
-              throw new Error(`Unexpected operation: ${comparator.operator}`);
-          }
-        });
-        if (setMin && (!minver || gt2(minver, setMin))) {
-          minver = setMin;
-        }
-      }
-      if (minver && range.test(minver)) {
-        return minver;
-      }
-      return null;
-    };
-    module.exports = minVersion;
-  }
-});
-
-// node_modules/semver/ranges/valid.js
-var require_valid2 = __commonJS({
-  "node_modules/semver/ranges/valid.js"(exports, module) {
-    "use strict";
-    var Range = require_range();
-    var validRange = (range, options2) => {
-      try {
-        return new Range(range, options2).range || "*";
-      } catch (er3) {
-        return null;
-      }
-    };
-    module.exports = validRange;
-  }
-});
-
-// node_modules/semver/ranges/outside.js
-var require_outside = __commonJS({
-  "node_modules/semver/ranges/outside.js"(exports, module) {
-    "use strict";
-    var SemVer = require_semver();
-    var Comparator = require_comparator();
-    var { ANY } = Comparator;
-    var Range = require_range();
-    var satisfies = require_satisfies();
-    var gt2 = require_gt();
-    var lt3 = require_lt();
-    var lte = require_lte();
-    var gte = require_gte();
-    var outside = (version, range, hilo, options2) => {
-      version = new SemVer(version, options2);
-      range = new Range(range, options2);
-      let gtfn, ltefn, ltfn, comp, ecomp;
-      switch (hilo) {
-        case ">":
-          gtfn = gt2;
-          ltefn = lte;
-          ltfn = lt3;
-          comp = ">";
-          ecomp = ">=";
-          break;
-        case "<":
-          gtfn = lt3;
-          ltefn = gte;
-          ltfn = gt2;
-          comp = "<";
-          ecomp = "<=";
-          break;
-        default:
-          throw new TypeError('Must provide a hilo val of "<" or ">"');
-      }
-      if (satisfies(version, range, options2)) {
-        return false;
-      }
-      for (let i50 = 0; i50 < range.set.length; ++i50) {
-        const comparators = range.set[i50];
-        let high = null;
-        let low = null;
-        comparators.forEach((comparator) => {
-          if (comparator.semver === ANY) {
-            comparator = new Comparator(">=0.0.0");
-          }
-          high = high || comparator;
-          low = low || comparator;
-          if (gtfn(comparator.semver, high.semver, options2)) {
-            high = comparator;
-          } else if (ltfn(comparator.semver, low.semver, options2)) {
-            low = comparator;
-          }
-        });
-        if (high.operator === comp || high.operator === ecomp) {
-          return false;
-        }
-        if ((!low.operator || low.operator === comp) && ltefn(version, low.semver)) {
-          return false;
-        } else if (low.operator === ecomp && ltfn(version, low.semver)) {
-          return false;
-        }
-      }
-      return true;
-    };
-    module.exports = outside;
-  }
-});
-
-// node_modules/semver/ranges/gtr.js
-var require_gtr = __commonJS({
-  "node_modules/semver/ranges/gtr.js"(exports, module) {
-    "use strict";
-    var outside = require_outside();
-    var gtr = (version, range, options2) => outside(version, range, ">", options2);
-    module.exports = gtr;
-  }
-});
-
-// node_modules/semver/ranges/ltr.js
-var require_ltr = __commonJS({
-  "node_modules/semver/ranges/ltr.js"(exports, module) {
-    "use strict";
-    var outside = require_outside();
-    var ltr = (version, range, options2) => outside(version, range, "<", options2);
-    module.exports = ltr;
-  }
-});
-
-// node_modules/semver/ranges/intersects.js
-var require_intersects = __commonJS({
-  "node_modules/semver/ranges/intersects.js"(exports, module) {
-    "use strict";
-    var Range = require_range();
-    var intersects = (r1, r210, options2) => {
-      r1 = new Range(r1, options2);
-      r210 = new Range(r210, options2);
-      return r1.intersects(r210, options2);
-    };
-    module.exports = intersects;
-  }
-});
-
-// node_modules/semver/ranges/simplify.js
-var require_simplify = __commonJS({
-  "node_modules/semver/ranges/simplify.js"(exports, module) {
-    "use strict";
-    var satisfies = require_satisfies();
-    var compare = require_compare();
-    module.exports = (versions, range, options2) => {
-      const set = [];
-      let first = null;
-      let prev = null;
-      const v55 = versions.sort((a49, b63) => compare(a49, b63, options2));
-      for (const version of v55) {
-        const included = satisfies(version, range, options2);
-        if (included) {
-          prev = version;
-          if (!first) {
-            first = version;
-          }
-        } else {
-          if (prev) {
-            set.push([first, prev]);
-          }
-          prev = null;
-          first = null;
-        }
-      }
-      if (first) {
-        set.push([first, null]);
-      }
-      const ranges = [];
-      for (const [min, max] of set) {
-        if (min === max) {
-          ranges.push(min);
-        } else if (!max && min === v55[0]) {
-          ranges.push("*");
-        } else if (!max) {
-          ranges.push(`>=${min}`);
-        } else if (min === v55[0]) {
-          ranges.push(`<=${max}`);
-        } else {
-          ranges.push(`${min} - ${max}`);
-        }
-      }
-      const simplified = ranges.join(" || ");
-      const original = typeof range.raw === "string" ? range.raw : String(range);
-      return simplified.length < original.length ? simplified : range;
-    };
-  }
-});
-
-// node_modules/semver/ranges/subset.js
-var require_subset = __commonJS({
-  "node_modules/semver/ranges/subset.js"(exports, module) {
-    "use strict";
-    var Range = require_range();
-    var Comparator = require_comparator();
-    var { ANY } = Comparator;
-    var satisfies = require_satisfies();
-    var compare = require_compare();
-    var subset = (sub, dom, options2 = {}) => {
-      if (sub === dom) {
-        return true;
-      }
-      sub = new Range(sub, options2);
-      dom = new Range(dom, options2);
-      let sawNonNull = false;
-      OUTER: for (const simpleSub of sub.set) {
-        for (const simpleDom of dom.set) {
-          const isSub = simpleSubset(simpleSub, simpleDom, options2);
-          sawNonNull = sawNonNull || isSub !== null;
-          if (isSub) {
-            continue OUTER;
-          }
-        }
-        if (sawNonNull) {
-          return false;
-        }
-      }
-      return true;
-    };
-    var minimumVersionWithPreRelease = [new Comparator(">=0.0.0-0")];
-    var minimumVersion = [new Comparator(">=0.0.0")];
-    var simpleSubset = (sub, dom, options2) => {
-      if (sub === dom) {
-        return true;
-      }
-      if (sub.length === 1 && sub[0].semver === ANY) {
-        if (dom.length === 1 && dom[0].semver === ANY) {
-          return true;
-        } else if (options2.includePrerelease) {
-          sub = minimumVersionWithPreRelease;
-        } else {
-          sub = minimumVersion;
-        }
-      }
-      if (dom.length === 1 && dom[0].semver === ANY) {
-        if (options2.includePrerelease) {
-          return true;
-        } else {
-          dom = minimumVersion;
-        }
-      }
-      const eqSet = /* @__PURE__ */ new Set();
-      let gt2, lt3;
-      for (const c66 of sub) {
-        if (c66.operator === ">" || c66.operator === ">=") {
-          gt2 = higherGT(gt2, c66, options2);
-        } else if (c66.operator === "<" || c66.operator === "<=") {
-          lt3 = lowerLT(lt3, c66, options2);
-        } else {
-          eqSet.add(c66.semver);
-        }
-      }
-      if (eqSet.size > 1) {
-        return null;
-      }
-      let gtltComp;
-      if (gt2 && lt3) {
-        gtltComp = compare(gt2.semver, lt3.semver, options2);
-        if (gtltComp > 0) {
-          return null;
-        } else if (gtltComp === 0 && (gt2.operator !== ">=" || lt3.operator !== "<=")) {
-          return null;
-        }
-      }
-      for (const eq of eqSet) {
-        if (gt2 && !satisfies(eq, String(gt2), options2)) {
-          return null;
-        }
-        if (lt3 && !satisfies(eq, String(lt3), options2)) {
-          return null;
-        }
-        for (const c66 of dom) {
-          if (!satisfies(eq, String(c66), options2)) {
-            return false;
-          }
-        }
-        return true;
-      }
-      let higher, lower;
-      let hasDomLT, hasDomGT;
-      let needDomLTPre = lt3 && !options2.includePrerelease && lt3.semver.prerelease.length ? lt3.semver : false;
-      let needDomGTPre = gt2 && !options2.includePrerelease && gt2.semver.prerelease.length ? gt2.semver : false;
-      if (needDomLTPre && needDomLTPre.prerelease.length === 1 && lt3.operator === "<" && needDomLTPre.prerelease[0] === 0) {
-        needDomLTPre = false;
-      }
-      for (const c66 of dom) {
-        hasDomGT = hasDomGT || c66.operator === ">" || c66.operator === ">=";
-        hasDomLT = hasDomLT || c66.operator === "<" || c66.operator === "<=";
-        if (gt2) {
-          if (needDomGTPre) {
-            if (c66.semver.prerelease && c66.semver.prerelease.length && c66.semver.major === needDomGTPre.major && c66.semver.minor === needDomGTPre.minor && c66.semver.patch === needDomGTPre.patch) {
-              needDomGTPre = false;
-            }
-          }
-          if (c66.operator === ">" || c66.operator === ">=") {
-            higher = higherGT(gt2, c66, options2);
-            if (higher === c66 && higher !== gt2) {
-              return false;
-            }
-          } else if (gt2.operator === ">=" && !satisfies(gt2.semver, String(c66), options2)) {
-            return false;
-          }
-        }
-        if (lt3) {
-          if (needDomLTPre) {
-            if (c66.semver.prerelease && c66.semver.prerelease.length && c66.semver.major === needDomLTPre.major && c66.semver.minor === needDomLTPre.minor && c66.semver.patch === needDomLTPre.patch) {
-              needDomLTPre = false;
-            }
-          }
-          if (c66.operator === "<" || c66.operator === "<=") {
-            lower = lowerLT(lt3, c66, options2);
-            if (lower === c66 && lower !== lt3) {
-              return false;
-            }
-          } else if (lt3.operator === "<=" && !satisfies(lt3.semver, String(c66), options2)) {
-            return false;
-          }
-        }
-        if (!c66.operator && (lt3 || gt2) && gtltComp !== 0) {
-          return false;
-        }
-      }
-      if (gt2 && hasDomLT && !lt3 && gtltComp !== 0) {
-        return false;
-      }
-      if (lt3 && hasDomGT && !gt2 && gtltComp !== 0) {
-        return false;
-      }
-      if (needDomGTPre || needDomLTPre) {
-        return false;
-      }
-      return true;
-    };
-    var higherGT = (a49, b63, options2) => {
-      if (!a49) {
-        return b63;
-      }
-      const comp = compare(a49.semver, b63.semver, options2);
-      return comp > 0 ? a49 : comp < 0 ? b63 : b63.operator === ">" && a49.operator === ">=" ? b63 : a49;
-    };
-    var lowerLT = (a49, b63, options2) => {
-      if (!a49) {
-        return b63;
-      }
-      const comp = compare(a49.semver, b63.semver, options2);
-      return comp < 0 ? a49 : comp > 0 ? b63 : b63.operator === "<" && a49.operator === "<=" ? b63 : a49;
-    };
-    module.exports = subset;
-  }
-});
-
-// node_modules/semver/index.js
-var require_semver2 = __commonJS({
-  "node_modules/semver/index.js"(exports, module) {
-    "use strict";
-    var internalRe = require_re();
-    var constants = require_constants();
-    var SemVer = require_semver();
-    var identifiers = require_identifiers();
-    var parse = require_parse();
-    var valid = require_valid();
-    var clean = require_clean();
-    var inc = require_inc();
-    var diff = require_diff();
-    var major = require_major();
-    var minor = require_minor();
-    var patch = require_patch();
-    var prerelease = require_prerelease();
-    var compare = require_compare();
-    var rcompare = require_rcompare();
-    var compareLoose = require_compare_loose();
-    var compareBuild = require_compare_build();
-    var sort = require_sort();
-    var rsort = require_rsort();
-    var gt2 = require_gt();
-    var lt3 = require_lt();
-    var eq = require_eq();
-    var neq = require_neq();
-    var gte = require_gte();
-    var lte = require_lte();
-    var cmp = require_cmp();
-    var coerce = require_coerce();
-    var Comparator = require_comparator();
-    var Range = require_range();
-    var satisfies = require_satisfies();
-    var toComparators = require_to_comparators();
-    var maxSatisfying = require_max_satisfying();
-    var minSatisfying = require_min_satisfying();
-    var minVersion = require_min_version();
-    var validRange = require_valid2();
-    var outside = require_outside();
-    var gtr = require_gtr();
-    var ltr = require_ltr();
-    var intersects = require_intersects();
-    var simplifyRange = require_simplify();
-    var subset = require_subset();
-    module.exports = {
-      parse,
-      valid,
-      clean,
-      inc,
-      diff,
-      major,
-      minor,
-      patch,
-      prerelease,
-      compare,
-      rcompare,
-      compareLoose,
-      compareBuild,
-      sort,
-      rsort,
-      gt: gt2,
-      lt: lt3,
-      eq,
-      neq,
-      gte,
-      lte,
-      cmp,
-      coerce,
-      Comparator,
-      Range,
-      satisfies,
-      toComparators,
-      maxSatisfying,
-      minSatisfying,
-      minVersion,
-      validRange,
-      outside,
-      gtr,
-      ltr,
-      intersects,
-      simplifyRange,
-      subset,
-      SemVer,
-      re: internalRe.re,
-      src: internalRe.src,
-      tokens: internalRe.t,
-      SEMVER_SPEC_VERSION: constants.SEMVER_SPEC_VERSION,
-      RELEASE_TYPES: constants.RELEASE_TYPES,
-      compareIdentifiers: identifiers.compareIdentifiers,
-      rcompareIdentifiers: identifiers.rcompareIdentifiers
-    };
-  }
-});
-
-// node_modules/jsonwebtoken/lib/asymmetricKeyDetailsSupported.js
-var require_asymmetricKeyDetailsSupported = __commonJS({
-  "node_modules/jsonwebtoken/lib/asymmetricKeyDetailsSupported.js"(exports, module) {
-    var semver = require_semver2();
-    module.exports = semver.satisfies(process.version, ">=15.7.0");
-  }
-});
-
-// node_modules/jsonwebtoken/lib/rsaPssKeyDetailsSupported.js
-var require_rsaPssKeyDetailsSupported = __commonJS({
-  "node_modules/jsonwebtoken/lib/rsaPssKeyDetailsSupported.js"(exports, module) {
-    var semver = require_semver2();
-    module.exports = semver.satisfies(process.version, ">=16.9.0");
-  }
-});
-
-// node_modules/jsonwebtoken/lib/validateAsymmetricKey.js
-var require_validateAsymmetricKey = __commonJS({
-  "node_modules/jsonwebtoken/lib/validateAsymmetricKey.js"(exports, module) {
-    var ASYMMETRIC_KEY_DETAILS_SUPPORTED = require_asymmetricKeyDetailsSupported();
-    var RSA_PSS_KEY_DETAILS_SUPPORTED = require_rsaPssKeyDetailsSupported();
-    var allowedAlgorithmsForKeys = {
-      "ec": ["ES256", "ES384", "ES512"],
-      "rsa": ["RS256", "PS256", "RS384", "PS384", "RS512", "PS512"],
-      "rsa-pss": ["PS256", "PS384", "PS512"]
-    };
-    var allowedCurves = {
-      ES256: "prime256v1",
-      ES384: "secp384r1",
-      ES512: "secp521r1"
-    };
-    module.exports = function(algorithm, key) {
-      if (!algorithm || !key) return;
-      const keyType = key.asymmetricKeyType;
-      if (!keyType) return;
-      const allowedAlgorithms = allowedAlgorithmsForKeys[keyType];
-      if (!allowedAlgorithms) {
-        throw new Error(`Unknown key type "${keyType}".`);
-      }
-      if (!allowedAlgorithms.includes(algorithm)) {
-        throw new Error(`"alg" parameter for "${keyType}" key type must be one of: ${allowedAlgorithms.join(", ")}.`);
-      }
-      if (ASYMMETRIC_KEY_DETAILS_SUPPORTED) {
-        switch (keyType) {
-          case "ec":
-            const keyCurve = key.asymmetricKeyDetails.namedCurve;
-            const allowedCurve = allowedCurves[algorithm];
-            if (keyCurve !== allowedCurve) {
-              throw new Error(`"alg" parameter "${algorithm}" requires curve "${allowedCurve}".`);
-            }
-            break;
-          case "rsa-pss":
-            if (RSA_PSS_KEY_DETAILS_SUPPORTED) {
-              const length = parseInt(algorithm.slice(-3), 10);
-              const { hashAlgorithm, mgf1HashAlgorithm, saltLength } = key.asymmetricKeyDetails;
-              if (hashAlgorithm !== `sha${length}` || mgf1HashAlgorithm !== hashAlgorithm) {
-                throw new Error(`Invalid key for this operation, its RSA-PSS parameters do not meet the requirements of "alg" ${algorithm}.`);
-              }
-              if (saltLength !== void 0 && saltLength > length >> 3) {
-                throw new Error(`Invalid key for this operation, its RSA-PSS parameter saltLength does not meet the requirements of "alg" ${algorithm}.`);
-              }
-            }
-            break;
-        }
-      }
-    };
-  }
-});
-
-// node_modules/jsonwebtoken/lib/psSupported.js
-var require_psSupported = __commonJS({
-  "node_modules/jsonwebtoken/lib/psSupported.js"(exports, module) {
-    var semver = require_semver2();
-    module.exports = semver.satisfies(process.version, "^6.12.0 || >=8.0.0");
-  }
-});
-
-// node_modules/jsonwebtoken/verify.js
-var require_verify = __commonJS({
-  "node_modules/jsonwebtoken/verify.js"(exports, module) {
-    var JsonWebTokenError = require_JsonWebTokenError();
-    var NotBeforeError = require_NotBeforeError();
-    var TokenExpiredError = require_TokenExpiredError();
-    var decode = require_decode();
-    var timespan = require_timespan();
-    var validateAsymmetricKey = require_validateAsymmetricKey();
-    var PS_SUPPORTED = require_psSupported();
-    var jws = require_jws();
-    var { KeyObject, createSecretKey, createPublicKey } = __require("crypto");
-    var PUB_KEY_ALGS = ["RS256", "RS384", "RS512"];
-    var EC_KEY_ALGS = ["ES256", "ES384", "ES512"];
-    var RSA_KEY_ALGS = ["RS256", "RS384", "RS512"];
-    var HS_ALGS = ["HS256", "HS384", "HS512"];
-    if (PS_SUPPORTED) {
-      PUB_KEY_ALGS.splice(PUB_KEY_ALGS.length, 0, "PS256", "PS384", "PS512");
-      RSA_KEY_ALGS.splice(RSA_KEY_ALGS.length, 0, "PS256", "PS384", "PS512");
-    }
-    module.exports = function(jwtString, secretOrPublicKey, options2, callback) {
-      if (typeof options2 === "function" && !callback) {
-        callback = options2;
-        options2 = {};
-      }
-      if (!options2) {
-        options2 = {};
-      }
-      options2 = Object.assign({}, options2);
-      let done;
-      if (callback) {
-        done = callback;
-      } else {
-        done = function(err, data) {
-          if (err) throw err;
-          return data;
-        };
-      }
-      if (options2.clockTimestamp && typeof options2.clockTimestamp !== "number") {
-        return done(new JsonWebTokenError("clockTimestamp must be a number"));
-      }
-      if (options2.nonce !== void 0 && (typeof options2.nonce !== "string" || options2.nonce.trim() === "")) {
-        return done(new JsonWebTokenError("nonce must be a non-empty string"));
-      }
-      if (options2.allowInvalidAsymmetricKeyTypes !== void 0 && typeof options2.allowInvalidAsymmetricKeyTypes !== "boolean") {
-        return done(new JsonWebTokenError("allowInvalidAsymmetricKeyTypes must be a boolean"));
-      }
-      const clockTimestamp = options2.clockTimestamp || Math.floor(Date.now() / 1e3);
-      if (!jwtString) {
-        return done(new JsonWebTokenError("jwt must be provided"));
-      }
-      if (typeof jwtString !== "string") {
-        return done(new JsonWebTokenError("jwt must be a string"));
-      }
-      const parts = jwtString.split(".");
-      if (parts.length !== 3) {
-        return done(new JsonWebTokenError("jwt malformed"));
-      }
-      let decodedToken;
-      try {
-        decodedToken = decode(jwtString, { complete: true });
-      } catch (err) {
-        return done(err);
-      }
-      if (!decodedToken) {
-        return done(new JsonWebTokenError("invalid token"));
-      }
-      const header = decodedToken.header;
-      let getSecret;
-      if (typeof secretOrPublicKey === "function") {
-        if (!callback) {
-          return done(new JsonWebTokenError("verify must be called asynchronous if secret or public key is provided as a callback"));
-        }
-        getSecret = secretOrPublicKey;
-      } else {
-        getSecret = function(header2, secretCallback) {
-          return secretCallback(null, secretOrPublicKey);
-        };
-      }
-      return getSecret(header, function(err, secretOrPublicKey2) {
-        if (err) {
-          return done(new JsonWebTokenError("error in secret or public key callback: " + err.message));
-        }
-        const hasSignature = parts[2].trim() !== "";
-        if (!hasSignature && secretOrPublicKey2) {
-          return done(new JsonWebTokenError("jwt signature is required"));
-        }
-        if (hasSignature && !secretOrPublicKey2) {
-          return done(new JsonWebTokenError("secret or public key must be provided"));
-        }
-        if (!hasSignature && !options2.algorithms) {
-          return done(new JsonWebTokenError('please specify "none" in "algorithms" to verify unsigned tokens'));
-        }
-        if (secretOrPublicKey2 != null && !(secretOrPublicKey2 instanceof KeyObject)) {
-          try {
-            secretOrPublicKey2 = createPublicKey(secretOrPublicKey2);
-          } catch (_57) {
-            try {
-              secretOrPublicKey2 = createSecretKey(typeof secretOrPublicKey2 === "string" ? Buffer.from(secretOrPublicKey2) : secretOrPublicKey2);
-            } catch (_58) {
-              return done(new JsonWebTokenError("secretOrPublicKey is not valid key material"));
-            }
-          }
-        }
-        if (!options2.algorithms) {
-          if (secretOrPublicKey2.type === "secret") {
-            options2.algorithms = HS_ALGS;
-          } else if (["rsa", "rsa-pss"].includes(secretOrPublicKey2.asymmetricKeyType)) {
-            options2.algorithms = RSA_KEY_ALGS;
-          } else if (secretOrPublicKey2.asymmetricKeyType === "ec") {
-            options2.algorithms = EC_KEY_ALGS;
-          } else {
-            options2.algorithms = PUB_KEY_ALGS;
-          }
-        }
-        if (options2.algorithms.indexOf(decodedToken.header.alg) === -1) {
-          return done(new JsonWebTokenError("invalid algorithm"));
-        }
-        if (header.alg.startsWith("HS") && secretOrPublicKey2.type !== "secret") {
-          return done(new JsonWebTokenError(`secretOrPublicKey must be a symmetric key when using ${header.alg}`));
-        } else if (/^(?:RS|PS|ES)/.test(header.alg) && secretOrPublicKey2.type !== "public") {
-          return done(new JsonWebTokenError(`secretOrPublicKey must be an asymmetric key when using ${header.alg}`));
-        }
-        if (!options2.allowInvalidAsymmetricKeyTypes) {
-          try {
-            validateAsymmetricKey(header.alg, secretOrPublicKey2);
-          } catch (e29) {
-            return done(e29);
-          }
-        }
-        let valid;
-        try {
-          valid = jws.verify(jwtString, decodedToken.header.alg, secretOrPublicKey2);
-        } catch (e29) {
-          return done(e29);
-        }
-        if (!valid) {
-          return done(new JsonWebTokenError("invalid signature"));
-        }
-        const payload = decodedToken.payload;
-        if (typeof payload.nbf !== "undefined" && !options2.ignoreNotBefore) {
-          if (typeof payload.nbf !== "number") {
-            return done(new JsonWebTokenError("invalid nbf value"));
-          }
-          if (payload.nbf > clockTimestamp + (options2.clockTolerance || 0)) {
-            return done(new NotBeforeError("jwt not active", new Date(payload.nbf * 1e3)));
-          }
-        }
-        if (typeof payload.exp !== "undefined" && !options2.ignoreExpiration) {
-          if (typeof payload.exp !== "number") {
-            return done(new JsonWebTokenError("invalid exp value"));
-          }
-          if (clockTimestamp >= payload.exp + (options2.clockTolerance || 0)) {
-            return done(new TokenExpiredError("jwt expired", new Date(payload.exp * 1e3)));
-          }
-        }
-        if (options2.audience) {
-          const audiences = Array.isArray(options2.audience) ? options2.audience : [options2.audience];
-          const target = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-          const match = target.some(function(targetAudience) {
-            return audiences.some(function(audience) {
-              return audience instanceof RegExp ? audience.test(targetAudience) : audience === targetAudience;
-            });
-          });
-          if (!match) {
-            return done(new JsonWebTokenError("jwt audience invalid. expected: " + audiences.join(" or ")));
-          }
-        }
-        if (options2.issuer) {
-          const invalid_issuer = typeof options2.issuer === "string" && payload.iss !== options2.issuer || Array.isArray(options2.issuer) && options2.issuer.indexOf(payload.iss) === -1;
-          if (invalid_issuer) {
-            return done(new JsonWebTokenError("jwt issuer invalid. expected: " + options2.issuer));
-          }
-        }
-        if (options2.subject) {
-          if (payload.sub !== options2.subject) {
-            return done(new JsonWebTokenError("jwt subject invalid. expected: " + options2.subject));
-          }
-        }
-        if (options2.jwtid) {
-          if (payload.jti !== options2.jwtid) {
-            return done(new JsonWebTokenError("jwt jwtid invalid. expected: " + options2.jwtid));
-          }
-        }
-        if (options2.nonce) {
-          if (payload.nonce !== options2.nonce) {
-            return done(new JsonWebTokenError("jwt nonce invalid. expected: " + options2.nonce));
-          }
-        }
-        if (options2.maxAge) {
-          if (typeof payload.iat !== "number") {
-            return done(new JsonWebTokenError("iat required when maxAge is specified"));
-          }
-          const maxAgeTimestamp = timespan(options2.maxAge, payload.iat);
-          if (typeof maxAgeTimestamp === "undefined") {
-            return done(new JsonWebTokenError('"maxAge" should be a number of seconds or string representing a timespan eg: "1d", "20h", 60'));
-          }
-          if (clockTimestamp >= maxAgeTimestamp + (options2.clockTolerance || 0)) {
-            return done(new TokenExpiredError("maxAge exceeded", new Date(maxAgeTimestamp * 1e3)));
-          }
-        }
-        if (options2.complete === true) {
-          const signature = decodedToken.signature;
-          return done(null, {
-            header,
-            payload,
-            signature
-          });
-        }
-        return done(null, payload);
-      });
-    };
-  }
-});
-
-// node_modules/lodash.includes/index.js
-var require_lodash = __commonJS({
-  "node_modules/lodash.includes/index.js"(exports, module) {
-    var INFINITY = 1 / 0;
-    var MAX_SAFE_INTEGER = 9007199254740991;
-    var MAX_INTEGER = 17976931348623157e292;
-    var NAN = 0 / 0;
-    var argsTag = "[object Arguments]";
-    var funcTag = "[object Function]";
-    var genTag = "[object GeneratorFunction]";
-    var stringTag = "[object String]";
-    var symbolTag = "[object Symbol]";
-    var reTrim = /^\s+|\s+$/g;
-    var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
-    var reIsBinary = /^0b[01]+$/i;
-    var reIsOctal = /^0o[0-7]+$/i;
-    var reIsUint = /^(?:0|[1-9]\d*)$/;
-    var freeParseInt = parseInt;
-    function arrayMap(array, iteratee) {
-      var index = -1, length = array ? array.length : 0, result = Array(length);
-      while (++index < length) {
-        result[index] = iteratee(array[index], index, array);
-      }
-      return result;
-    }
-    function baseFindIndex(array, predicate, fromIndex, fromRight) {
-      var length = array.length, index = fromIndex + (fromRight ? 1 : -1);
-      while (fromRight ? index-- : ++index < length) {
-        if (predicate(array[index], index, array)) {
-          return index;
-        }
-      }
-      return -1;
-    }
-    function baseIndexOf(array, value, fromIndex) {
-      if (value !== value) {
-        return baseFindIndex(array, baseIsNaN, fromIndex);
-      }
-      var index = fromIndex - 1, length = array.length;
-      while (++index < length) {
-        if (array[index] === value) {
-          return index;
-        }
-      }
-      return -1;
-    }
-    function baseIsNaN(value) {
-      return value !== value;
-    }
-    function baseTimes(n43, iteratee) {
-      var index = -1, result = Array(n43);
-      while (++index < n43) {
-        result[index] = iteratee(index);
-      }
-      return result;
-    }
-    function baseValues(object, props) {
-      return arrayMap(props, function(key) {
-        return object[key];
-      });
-    }
-    function overArg(func, transform) {
-      return function(arg) {
-        return func(transform(arg));
-      };
-    }
-    var objectProto = Object.prototype;
-    var hasOwnProperty = objectProto.hasOwnProperty;
-    var objectToString = objectProto.toString;
-    var propertyIsEnumerable = objectProto.propertyIsEnumerable;
-    var nativeKeys = overArg(Object.keys, Object);
-    var nativeMax = Math.max;
-    function arrayLikeKeys(value, inherited) {
-      var result = isArray2(value) || isArguments2(value) ? baseTimes(value.length, String) : [];
-      var length = result.length, skipIndexes = !!length;
-      for (var key in value) {
-        if ((inherited || hasOwnProperty.call(value, key)) && !(skipIndexes && (key == "length" || isIndex(key, length)))) {
-          result.push(key);
-        }
-      }
-      return result;
-    }
-    function baseKeys(object) {
-      if (!isPrototype(object)) {
-        return nativeKeys(object);
-      }
-      var result = [];
-      for (var key in Object(object)) {
-        if (hasOwnProperty.call(object, key) && key != "constructor") {
-          result.push(key);
-        }
-      }
-      return result;
-    }
-    function isIndex(value, length) {
-      length = length == null ? MAX_SAFE_INTEGER : length;
-      return !!length && (typeof value == "number" || reIsUint.test(value)) && (value > -1 && value % 1 == 0 && value < length);
-    }
-    function isPrototype(value) {
-      var Ctor = value && value.constructor, proto = typeof Ctor == "function" && Ctor.prototype || objectProto;
-      return value === proto;
-    }
-    function includes(collection, value, fromIndex, guard) {
-      collection = isArrayLike(collection) ? collection : values(collection);
-      fromIndex = fromIndex && !guard ? toInteger(fromIndex) : 0;
-      var length = collection.length;
-      if (fromIndex < 0) {
-        fromIndex = nativeMax(length + fromIndex, 0);
-      }
-      return isString(collection) ? fromIndex <= length && collection.indexOf(value, fromIndex) > -1 : !!length && baseIndexOf(collection, value, fromIndex) > -1;
-    }
-    function isArguments2(value) {
-      return isArrayLikeObject(value) && hasOwnProperty.call(value, "callee") && (!propertyIsEnumerable.call(value, "callee") || objectToString.call(value) == argsTag);
-    }
-    var isArray2 = Array.isArray;
-    function isArrayLike(value) {
-      return value != null && isLength(value.length) && !isFunction(value);
-    }
-    function isArrayLikeObject(value) {
-      return isObjectLike(value) && isArrayLike(value);
-    }
-    function isFunction(value) {
-      var tag = isObject(value) ? objectToString.call(value) : "";
-      return tag == funcTag || tag == genTag;
-    }
-    function isLength(value) {
-      return typeof value == "number" && value > -1 && value % 1 == 0 && value <= MAX_SAFE_INTEGER;
-    }
-    function isObject(value) {
-      var type = typeof value;
-      return !!value && (type == "object" || type == "function");
-    }
-    function isObjectLike(value) {
-      return !!value && typeof value == "object";
-    }
-    function isString(value) {
-      return typeof value == "string" || !isArray2(value) && isObjectLike(value) && objectToString.call(value) == stringTag;
-    }
-    function isSymbol(value) {
-      return typeof value == "symbol" || isObjectLike(value) && objectToString.call(value) == symbolTag;
-    }
-    function toFinite(value) {
-      if (!value) {
-        return value === 0 ? value : 0;
-      }
-      value = toNumber3(value);
-      if (value === INFINITY || value === -INFINITY) {
-        var sign = value < 0 ? -1 : 1;
-        return sign * MAX_INTEGER;
-      }
-      return value === value ? value : 0;
-    }
-    function toInteger(value) {
-      var result = toFinite(value), remainder = result % 1;
-      return result === result ? remainder ? result - remainder : result : 0;
-    }
-    function toNumber3(value) {
-      if (typeof value == "number") {
-        return value;
-      }
-      if (isSymbol(value)) {
-        return NAN;
-      }
-      if (isObject(value)) {
-        var other = typeof value.valueOf == "function" ? value.valueOf() : value;
-        value = isObject(other) ? other + "" : other;
-      }
-      if (typeof value != "string") {
-        return value === 0 ? value : +value;
-      }
-      value = value.replace(reTrim, "");
-      var isBinary = reIsBinary.test(value);
-      return isBinary || reIsOctal.test(value) ? freeParseInt(value.slice(2), isBinary ? 2 : 8) : reIsBadHex.test(value) ? NAN : +value;
-    }
-    function keys(object) {
-      return isArrayLike(object) ? arrayLikeKeys(object) : baseKeys(object);
-    }
-    function values(object) {
-      return object ? baseValues(object, keys(object)) : [];
-    }
-    module.exports = includes;
-  }
-});
-
-// node_modules/lodash.isboolean/index.js
-var require_lodash2 = __commonJS({
-  "node_modules/lodash.isboolean/index.js"(exports, module) {
-    var boolTag = "[object Boolean]";
-    var objectProto = Object.prototype;
-    var objectToString = objectProto.toString;
-    function isBoolean(value) {
-      return value === true || value === false || isObjectLike(value) && objectToString.call(value) == boolTag;
-    }
-    function isObjectLike(value) {
-      return !!value && typeof value == "object";
-    }
-    module.exports = isBoolean;
-  }
-});
-
-// node_modules/lodash.isinteger/index.js
-var require_lodash3 = __commonJS({
-  "node_modules/lodash.isinteger/index.js"(exports, module) {
-    var INFINITY = 1 / 0;
-    var MAX_INTEGER = 17976931348623157e292;
-    var NAN = 0 / 0;
-    var symbolTag = "[object Symbol]";
-    var reTrim = /^\s+|\s+$/g;
-    var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
-    var reIsBinary = /^0b[01]+$/i;
-    var reIsOctal = /^0o[0-7]+$/i;
-    var freeParseInt = parseInt;
-    var objectProto = Object.prototype;
-    var objectToString = objectProto.toString;
-    function isInteger(value) {
-      return typeof value == "number" && value == toInteger(value);
-    }
-    function isObject(value) {
-      var type = typeof value;
-      return !!value && (type == "object" || type == "function");
-    }
-    function isObjectLike(value) {
-      return !!value && typeof value == "object";
-    }
-    function isSymbol(value) {
-      return typeof value == "symbol" || isObjectLike(value) && objectToString.call(value) == symbolTag;
-    }
-    function toFinite(value) {
-      if (!value) {
-        return value === 0 ? value : 0;
-      }
-      value = toNumber3(value);
-      if (value === INFINITY || value === -INFINITY) {
-        var sign = value < 0 ? -1 : 1;
-        return sign * MAX_INTEGER;
-      }
-      return value === value ? value : 0;
-    }
-    function toInteger(value) {
-      var result = toFinite(value), remainder = result % 1;
-      return result === result ? remainder ? result - remainder : result : 0;
-    }
-    function toNumber3(value) {
-      if (typeof value == "number") {
-        return value;
-      }
-      if (isSymbol(value)) {
-        return NAN;
-      }
-      if (isObject(value)) {
-        var other = typeof value.valueOf == "function" ? value.valueOf() : value;
-        value = isObject(other) ? other + "" : other;
-      }
-      if (typeof value != "string") {
-        return value === 0 ? value : +value;
-      }
-      value = value.replace(reTrim, "");
-      var isBinary = reIsBinary.test(value);
-      return isBinary || reIsOctal.test(value) ? freeParseInt(value.slice(2), isBinary ? 2 : 8) : reIsBadHex.test(value) ? NAN : +value;
-    }
-    module.exports = isInteger;
-  }
-});
-
-// node_modules/lodash.isnumber/index.js
-var require_lodash4 = __commonJS({
-  "node_modules/lodash.isnumber/index.js"(exports, module) {
-    var numberTag = "[object Number]";
-    var objectProto = Object.prototype;
-    var objectToString = objectProto.toString;
-    function isObjectLike(value) {
-      return !!value && typeof value == "object";
-    }
-    function isNumber(value) {
-      return typeof value == "number" || isObjectLike(value) && objectToString.call(value) == numberTag;
-    }
-    module.exports = isNumber;
-  }
-});
-
-// node_modules/lodash.isplainobject/index.js
-var require_lodash5 = __commonJS({
-  "node_modules/lodash.isplainobject/index.js"(exports, module) {
-    var objectTag = "[object Object]";
-    function isHostObject(value) {
-      var result = false;
-      if (value != null && typeof value.toString != "function") {
-        try {
-          result = !!(value + "");
-        } catch (e29) {
-        }
-      }
-      return result;
-    }
-    function overArg(func, transform) {
-      return function(arg) {
-        return func(transform(arg));
-      };
-    }
-    var funcProto = Function.prototype;
-    var objectProto = Object.prototype;
-    var funcToString = funcProto.toString;
-    var hasOwnProperty = objectProto.hasOwnProperty;
-    var objectCtorString = funcToString.call(Object);
-    var objectToString = objectProto.toString;
-    var getPrototype = overArg(Object.getPrototypeOf, Object);
-    function isObjectLike(value) {
-      return !!value && typeof value == "object";
-    }
-    function isPlainObject5(value) {
-      if (!isObjectLike(value) || objectToString.call(value) != objectTag || isHostObject(value)) {
-        return false;
-      }
-      var proto = getPrototype(value);
-      if (proto === null) {
-        return true;
-      }
-      var Ctor = hasOwnProperty.call(proto, "constructor") && proto.constructor;
-      return typeof Ctor == "function" && Ctor instanceof Ctor && funcToString.call(Ctor) == objectCtorString;
-    }
-    module.exports = isPlainObject5;
-  }
-});
-
-// node_modules/lodash.isstring/index.js
-var require_lodash6 = __commonJS({
-  "node_modules/lodash.isstring/index.js"(exports, module) {
-    var stringTag = "[object String]";
-    var objectProto = Object.prototype;
-    var objectToString = objectProto.toString;
-    var isArray2 = Array.isArray;
-    function isObjectLike(value) {
-      return !!value && typeof value == "object";
-    }
-    function isString(value) {
-      return typeof value == "string" || !isArray2(value) && isObjectLike(value) && objectToString.call(value) == stringTag;
-    }
-    module.exports = isString;
-  }
-});
-
-// node_modules/lodash.once/index.js
-var require_lodash7 = __commonJS({
-  "node_modules/lodash.once/index.js"(exports, module) {
-    var FUNC_ERROR_TEXT = "Expected a function";
-    var INFINITY = 1 / 0;
-    var MAX_INTEGER = 17976931348623157e292;
-    var NAN = 0 / 0;
-    var symbolTag = "[object Symbol]";
-    var reTrim = /^\s+|\s+$/g;
-    var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
-    var reIsBinary = /^0b[01]+$/i;
-    var reIsOctal = /^0o[0-7]+$/i;
-    var freeParseInt = parseInt;
-    var objectProto = Object.prototype;
-    var objectToString = objectProto.toString;
-    function before(n43, func) {
-      var result;
-      if (typeof func != "function") {
-        throw new TypeError(FUNC_ERROR_TEXT);
-      }
-      n43 = toInteger(n43);
-      return function() {
-        if (--n43 > 0) {
-          result = func.apply(this, arguments);
-        }
-        if (n43 <= 1) {
-          func = void 0;
-        }
-        return result;
-      };
-    }
-    function once3(func) {
-      return before(2, func);
-    }
-    function isObject(value) {
-      var type = typeof value;
-      return !!value && (type == "object" || type == "function");
-    }
-    function isObjectLike(value) {
-      return !!value && typeof value == "object";
-    }
-    function isSymbol(value) {
-      return typeof value == "symbol" || isObjectLike(value) && objectToString.call(value) == symbolTag;
-    }
-    function toFinite(value) {
-      if (!value) {
-        return value === 0 ? value : 0;
-      }
-      value = toNumber3(value);
-      if (value === INFINITY || value === -INFINITY) {
-        var sign = value < 0 ? -1 : 1;
-        return sign * MAX_INTEGER;
-      }
-      return value === value ? value : 0;
-    }
-    function toInteger(value) {
-      var result = toFinite(value), remainder = result % 1;
-      return result === result ? remainder ? result - remainder : result : 0;
-    }
-    function toNumber3(value) {
-      if (typeof value == "number") {
-        return value;
-      }
-      if (isSymbol(value)) {
-        return NAN;
-      }
-      if (isObject(value)) {
-        var other = typeof value.valueOf == "function" ? value.valueOf() : value;
-        value = isObject(other) ? other + "" : other;
-      }
-      if (typeof value != "string") {
-        return value === 0 ? value : +value;
-      }
-      value = value.replace(reTrim, "");
-      var isBinary = reIsBinary.test(value);
-      return isBinary || reIsOctal.test(value) ? freeParseInt(value.slice(2), isBinary ? 2 : 8) : reIsBadHex.test(value) ? NAN : +value;
-    }
-    module.exports = once3;
-  }
-});
-
-// node_modules/jsonwebtoken/sign.js
-var require_sign = __commonJS({
-  "node_modules/jsonwebtoken/sign.js"(exports, module) {
-    var timespan = require_timespan();
-    var PS_SUPPORTED = require_psSupported();
-    var validateAsymmetricKey = require_validateAsymmetricKey();
-    var jws = require_jws();
-    var includes = require_lodash();
-    var isBoolean = require_lodash2();
-    var isInteger = require_lodash3();
-    var isNumber = require_lodash4();
-    var isPlainObject5 = require_lodash5();
-    var isString = require_lodash6();
-    var once3 = require_lodash7();
-    var { KeyObject, createSecretKey, createPrivateKey } = __require("crypto");
-    var SUPPORTED_ALGS = ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "HS256", "HS384", "HS512", "none"];
-    if (PS_SUPPORTED) {
-      SUPPORTED_ALGS.splice(3, 0, "PS256", "PS384", "PS512");
-    }
-    var sign_options_schema = {
-      expiresIn: { isValid: function(value) {
-        return isInteger(value) || isString(value) && value;
-      }, message: '"expiresIn" should be a number of seconds or string representing a timespan' },
-      notBefore: { isValid: function(value) {
-        return isInteger(value) || isString(value) && value;
-      }, message: '"notBefore" should be a number of seconds or string representing a timespan' },
-      audience: { isValid: function(value) {
-        return isString(value) || Array.isArray(value);
-      }, message: '"audience" must be a string or array' },
-      algorithm: { isValid: includes.bind(null, SUPPORTED_ALGS), message: '"algorithm" must be a valid string enum value' },
-      header: { isValid: isPlainObject5, message: '"header" must be an object' },
-      encoding: { isValid: isString, message: '"encoding" must be a string' },
-      issuer: { isValid: isString, message: '"issuer" must be a string' },
-      subject: { isValid: isString, message: '"subject" must be a string' },
-      jwtid: { isValid: isString, message: '"jwtid" must be a string' },
-      noTimestamp: { isValid: isBoolean, message: '"noTimestamp" must be a boolean' },
-      keyid: { isValid: isString, message: '"keyid" must be a string' },
-      mutatePayload: { isValid: isBoolean, message: '"mutatePayload" must be a boolean' },
-      allowInsecureKeySizes: { isValid: isBoolean, message: '"allowInsecureKeySizes" must be a boolean' },
-      allowInvalidAsymmetricKeyTypes: { isValid: isBoolean, message: '"allowInvalidAsymmetricKeyTypes" must be a boolean' }
-    };
-    var registered_claims_schema = {
-      iat: { isValid: isNumber, message: '"iat" should be a number of seconds' },
-      exp: { isValid: isNumber, message: '"exp" should be a number of seconds' },
-      nbf: { isValid: isNumber, message: '"nbf" should be a number of seconds' }
-    };
-    function validate2(schema, allowUnknown, object, parameterName) {
-      if (!isPlainObject5(object)) {
-        throw new Error('Expected "' + parameterName + '" to be a plain object.');
-      }
-      Object.keys(object).forEach(function(key) {
-        const validator = schema[key];
-        if (!validator) {
-          if (!allowUnknown) {
-            throw new Error('"' + key + '" is not allowed in "' + parameterName + '"');
-          }
-          return;
-        }
-        if (!validator.isValid(object[key])) {
-          throw new Error(validator.message);
-        }
-      });
-    }
-    function validateOptions2(options2) {
-      return validate2(sign_options_schema, false, options2, "options");
-    }
-    function validatePayload(payload) {
-      return validate2(registered_claims_schema, true, payload, "payload");
-    }
-    var options_to_payload = {
-      "audience": "aud",
-      "issuer": "iss",
-      "subject": "sub",
-      "jwtid": "jti"
-    };
-    var options_for_objects = [
-      "expiresIn",
-      "notBefore",
-      "noTimestamp",
-      "audience",
-      "issuer",
-      "subject",
-      "jwtid"
-    ];
-    module.exports = function(payload, secretOrPrivateKey, options2, callback) {
-      if (typeof options2 === "function") {
-        callback = options2;
-        options2 = {};
-      } else {
-        options2 = options2 || {};
-      }
-      const isObjectPayload = typeof payload === "object" && !Buffer.isBuffer(payload);
-      const header = Object.assign({
-        alg: options2.algorithm || "HS256",
-        typ: isObjectPayload ? "JWT" : void 0,
-        kid: options2.keyid
-      }, options2.header);
-      function failure(err) {
-        if (callback) {
-          return callback(err);
-        }
-        throw err;
-      }
-      if (!secretOrPrivateKey && options2.algorithm !== "none") {
-        return failure(new Error("secretOrPrivateKey must have a value"));
-      }
-      if (secretOrPrivateKey != null && !(secretOrPrivateKey instanceof KeyObject)) {
-        try {
-          secretOrPrivateKey = createPrivateKey(secretOrPrivateKey);
-        } catch (_57) {
-          try {
-            secretOrPrivateKey = createSecretKey(typeof secretOrPrivateKey === "string" ? Buffer.from(secretOrPrivateKey) : secretOrPrivateKey);
-          } catch (_58) {
-            return failure(new Error("secretOrPrivateKey is not valid key material"));
-          }
-        }
-      }
-      if (header.alg.startsWith("HS") && secretOrPrivateKey.type !== "secret") {
-        return failure(new Error(`secretOrPrivateKey must be a symmetric key when using ${header.alg}`));
-      } else if (/^(?:RS|PS|ES)/.test(header.alg)) {
-        if (secretOrPrivateKey.type !== "private") {
-          return failure(new Error(`secretOrPrivateKey must be an asymmetric key when using ${header.alg}`));
-        }
-        if (!options2.allowInsecureKeySizes && !header.alg.startsWith("ES") && secretOrPrivateKey.asymmetricKeyDetails !== void 0 && //KeyObject.asymmetricKeyDetails is supported in Node 15+
-        secretOrPrivateKey.asymmetricKeyDetails.modulusLength < 2048) {
-          return failure(new Error(`secretOrPrivateKey has a minimum key size of 2048 bits for ${header.alg}`));
-        }
-      }
-      if (typeof payload === "undefined") {
-        return failure(new Error("payload is required"));
-      } else if (isObjectPayload) {
-        try {
-          validatePayload(payload);
-        } catch (error) {
-          return failure(error);
-        }
-        if (!options2.mutatePayload) {
-          payload = Object.assign({}, payload);
-        }
-      } else {
-        const invalid_options = options_for_objects.filter(function(opt) {
-          return typeof options2[opt] !== "undefined";
-        });
-        if (invalid_options.length > 0) {
-          return failure(new Error("invalid " + invalid_options.join(",") + " option for " + typeof payload + " payload"));
-        }
-      }
-      if (typeof payload.exp !== "undefined" && typeof options2.expiresIn !== "undefined") {
-        return failure(new Error('Bad "options.expiresIn" option the payload already has an "exp" property.'));
-      }
-      if (typeof payload.nbf !== "undefined" && typeof options2.notBefore !== "undefined") {
-        return failure(new Error('Bad "options.notBefore" option the payload already has an "nbf" property.'));
-      }
-      try {
-        validateOptions2(options2);
-      } catch (error) {
-        return failure(error);
-      }
-      if (!options2.allowInvalidAsymmetricKeyTypes) {
-        try {
-          validateAsymmetricKey(header.alg, secretOrPrivateKey);
-        } catch (error) {
-          return failure(error);
-        }
-      }
-      const timestamp = payload.iat || Math.floor(Date.now() / 1e3);
-      if (options2.noTimestamp) {
-        delete payload.iat;
-      } else if (isObjectPayload) {
-        payload.iat = timestamp;
-      }
-      if (typeof options2.notBefore !== "undefined") {
-        try {
-          payload.nbf = timespan(options2.notBefore, timestamp);
-        } catch (err) {
-          return failure(err);
-        }
-        if (typeof payload.nbf === "undefined") {
-          return failure(new Error('"notBefore" should be a number of seconds or string representing a timespan eg: "1d", "20h", 60'));
-        }
-      }
-      if (typeof options2.expiresIn !== "undefined" && typeof payload === "object") {
-        try {
-          payload.exp = timespan(options2.expiresIn, timestamp);
-        } catch (err) {
-          return failure(err);
-        }
-        if (typeof payload.exp === "undefined") {
-          return failure(new Error('"expiresIn" should be a number of seconds or string representing a timespan eg: "1d", "20h", 60'));
-        }
-      }
-      Object.keys(options_to_payload).forEach(function(key) {
-        const claim = options_to_payload[key];
-        if (typeof options2[key] !== "undefined") {
-          if (typeof payload[claim] !== "undefined") {
-            return failure(new Error('Bad "options.' + key + '" option. The payload already has an "' + claim + '" property.'));
-          }
-          payload[claim] = options2[key];
-        }
-      });
-      const encoding = options2.encoding || "utf8";
-      if (typeof callback === "function") {
-        callback = callback && once3(callback);
-        jws.createSign({
-          header,
-          privateKey: secretOrPrivateKey,
-          payload,
-          encoding
-        }).once("error", callback).once("done", function(signature) {
-          if (!options2.allowInsecureKeySizes && /^(?:RS|PS)/.test(header.alg) && signature.length < 256) {
-            return callback(new Error(`secretOrPrivateKey has a minimum key size of 2048 bits for ${header.alg}`));
-          }
-          callback(null, signature);
-        });
-      } else {
-        let signature = jws.sign({ header, payload, secret: secretOrPrivateKey, encoding });
-        if (!options2.allowInsecureKeySizes && /^(?:RS|PS)/.test(header.alg) && signature.length < 256) {
-          throw new Error(`secretOrPrivateKey has a minimum key size of 2048 bits for ${header.alg}`);
-        }
-        return signature;
-      }
-    };
-  }
-});
-
-// node_modules/jsonwebtoken/index.js
-var require_jsonwebtoken = __commonJS({
-  "node_modules/jsonwebtoken/index.js"(exports, module) {
-    module.exports = {
-      decode: require_decode(),
-      verify: require_verify(),
-      sign: require_sign(),
-      JsonWebTokenError: require_JsonWebTokenError(),
-      NotBeforeError: require_NotBeforeError(),
-      TokenExpiredError: require_TokenExpiredError()
-    };
-  }
-});
-
 // node_modules/debug/src/common.js
 var require_common = __commonJS({
   "node_modules/debug/src/common.js"(exports, module) {
@@ -21650,9 +21809,9 @@ var require_BaseHandler = __commonJS({
       generateUrl(req, id) {
         const path31 = this.options.path === "/" ? "" : this.options.path;
         if (this.options.generateUrl) {
-          const { proto: proto2, host: host2 } = this.extractHostAndProto(req);
+          const { proto: proto4, host: host2 } = this.extractHostAndProto(req);
           return this.options.generateUrl(req, {
-            proto: proto2,
+            proto: proto4,
             host: host2,
             path: path31,
             id
@@ -21661,8 +21820,8 @@ var require_BaseHandler = __commonJS({
         if (this.options.relativeLocation) {
           return `${path31}/${id}`;
         }
-        const { proto, host } = this.extractHostAndProto(req);
-        return `${proto}://${host}${path31}/${id}`;
+        const { proto: proto3, host } = this.extractHostAndProto(req);
+        return `${proto3}://${host}${path31}/${id}`;
       }
       getFileIdFromRequest(req) {
         const match = reExtractFileID.exec(req.url);
@@ -21676,24 +21835,24 @@ var require_BaseHandler = __commonJS({
         return decodeURIComponent(match[1]);
       }
       extractHostAndProto(req) {
-        let proto;
+        let proto3;
         let host;
         if (this.options.respectForwardedHeaders) {
           const forwarded = req.headers.forwarded;
           if (forwarded) {
             host ?? (host = reForwardedHost.exec(forwarded)?.[1]);
-            proto ?? (proto = reForwardedProto.exec(forwarded)?.[1]);
+            proto3 ?? (proto3 = reForwardedProto.exec(forwarded)?.[1]);
           }
           const forwardHost = req.headers["x-forwarded-host"];
           const forwardProto = req.headers["x-forwarded-proto"];
           if (["http", "https"].includes(forwardProto)) {
-            proto ?? (proto = forwardProto);
+            proto3 ?? (proto3 = forwardProto);
           }
           host ?? (host = forwardHost);
         }
         host ?? (host = req.headers.host);
-        proto ?? (proto = "http");
-        return { host, proto };
+        proto3 ?? (proto3 = "http");
+        return { host, proto: proto3 };
       }
       async getLocker(req) {
         if (typeof this.options.locker === "function") {
@@ -23056,8 +23215,22 @@ import cors from "cors";
 import helmet from "helmet";
 
 // src/api/middlewares/rateLimiter.ts
+var import_jsonwebtoken = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 import rateLimit from "express-rate-limit";
+var hasValidTenantCredential = (req) => {
+  const auth = req.headers["authorization"];
+  if (typeof auth === "string" && auth.startsWith("Bearer ")) {
+    try {
+      const decoded = import_jsonwebtoken.default.verify(auth.slice(7), config.security.jwtSecret);
+      if (decoded?.companyId) return true;
+    } catch {
+    }
+  }
+  const apiKey = req.headers["x-api-key"];
+  if (typeof apiKey === "string" && apiKey.startsWith("lk_fe_")) return true;
+  return false;
+};
 var apiLimiter = rateLimit({
   windowMs: 5 * 60 * 1e3,
   // 5 minutos
@@ -23070,6 +23243,9 @@ var apiLimiter = rateLimit({
   // Deshabilitar los headers `X-RateLimit-*`
   skip: (req) => {
     if (req.headers["x-api-key"] === process.env.API_SECRET_KEY) {
+      return true;
+    }
+    if (hasValidTenantCredential(req)) {
       return true;
     }
     const host = (req.hostname || req.get("host") || "").toLowerCase();
@@ -23091,8 +23267,8 @@ var apiLimiter = rateLimit({
 var sessionLimiter = rateLimit({
   windowMs: 1 * 60 * 1e3,
   // 1 minuto
-  max: 5,
-  // máximo 5 conexiones por minuto
+  max: config.security.sessionRateMax,
+  // máx conexiones por minuto (env SESSION_RATE_MAX)
   keyGenerator: (req) => {
     return req.body?.phoneNumber || req.ip || "unknown";
   }
@@ -23100,16 +23276,44 @@ var sessionLimiter = rateLimit({
 var jobsLimiter = rateLimit({
   windowMs: 60 * 1e3,
   // 1 minuto
-  max: 10
+  max: config.security.jobsRateMax
+  // env JOBS_RATE_MAX
 });
 var messageLimiter = rateLimit({
   windowMs: 60 * 1e3,
   // 1 minuto
-  max: 100,
+  max: config.security.messageRateMax,
+  // env MESSAGE_RATE_MAX
   keyGenerator: (req) => {
     return req.body?.chatId || req.ip || "unknown";
   }
 });
+
+// src/middleware/mongo-sanitize.middleware.ts
+var isPlainObject = (value) => typeof value === "object" && value !== null && !Buffer.isBuffer(value);
+var sanitize = (value) => {
+  if (Array.isArray(value)) {
+    value.forEach(sanitize);
+    return;
+  }
+  if (!isPlainObject(value)) return;
+  for (const key of Object.keys(value)) {
+    if (key.startsWith("$") || key.includes(".")) {
+      delete value[key];
+      continue;
+    }
+    sanitize(value[key]);
+  }
+};
+function mongoSanitize(req, _res, next) {
+  try {
+    if (req.body) sanitize(req.body);
+    if (req.query) sanitize(req.query);
+    if (req.params) sanitize(req.params);
+  } catch {
+  }
+  next();
+}
 
 // src/api/middlewares/errorHandler.ts
 init_logger();
@@ -23203,16 +23407,6 @@ function requestLogger(req, res, next) {
     }
     logger_default.info(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
   });
-  next();
-}
-function validateApiKey(req, res, next) {
-  const apiKey = req.headers["x-api-key"];
-  const expectedKey = process.env.API_SECRET_KEY;
-  if (!expectedKey || apiKey !== expectedKey) {
-    const error = new Error("Unauthorized: Invalid API Key");
-    error.statusCode = HTTP_STATUS.UNAUTHORIZED;
-    return next(error);
-  }
   next();
 }
 
@@ -23491,19 +23685,260 @@ var getQRCodeImage = getQRCodeImageHandler;
 var getGroupList = getGroupListHandler;
 var syncGroups = syncGroupsHandler;
 
+// src/middleware/tenant.middleware.ts
+var import_jsonwebtoken2 = __toESM(require_jsonwebtoken(), 1);
+init_environment();
+init_logger();
+init_models();
+init_quota_validator_service();
+import crypto2 from "crypto";
+var API_KEY_PREFIX = "lk_fe_";
+var normalizeSender = (value) => value.replace(/[^\d]/g, "");
+var extractApiKey = (req) => {
+  const headerKey = req.headers["x-api-key"];
+  if (typeof headerKey === "string" && headerKey.trim()) {
+    return headerKey.trim();
+  }
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === "string" && authHeader.startsWith("ApiKey ")) {
+    return authHeader.replace("ApiKey ", "").trim();
+  }
+  return null;
+};
+var parseApiKey = (apiKey) => {
+  if (!apiKey.startsWith(API_KEY_PREFIX)) {
+    return null;
+  }
+  const rest = apiKey.slice(API_KEY_PREFIX.length);
+  const separatorIndex = rest.indexOf("_");
+  if (separatorIndex <= 0) {
+    return null;
+  }
+  const companyId = rest.slice(0, separatorIndex).trim();
+  const secret = rest.slice(separatorIndex + 1).trim();
+  if (!companyId || !secret) {
+    return null;
+  }
+  return { companyId, secret };
+};
+var hashApiKey = (apiKey) => crypto2.createHash("sha256").update(apiKey).digest("hex");
+var timingSafeEqual = (a49, b63) => {
+  try {
+    const aBuf = Buffer.from(a49);
+    const bBuf = Buffer.from(b63);
+    if (aBuf.length !== bBuf.length) return false;
+    return crypto2.timingSafeEqual(aBuf, bBuf);
+  } catch {
+    return false;
+  }
+};
+async function requireTenant(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const parts = authHeader.split(" ");
+      const token = parts[1];
+      if (!token) {
+        const error = new Error("No token provided");
+        error.statusCode = 401;
+        throw error;
+      }
+      let decoded;
+      try {
+        decoded = import_jsonwebtoken2.default.verify(token, config.security.jwtSecret);
+      } catch (err) {
+        const error = new Error("Invalid or expired token");
+        error.statusCode = 401;
+        throw error;
+      }
+      if (!decoded.companyId) {
+        const error = new Error("Token does not contain companyId");
+        error.statusCode = 401;
+        throw error;
+      }
+      req.companyId = decoded.companyId;
+      req.auth = { type: "jwt", role: decoded.role };
+      logger_default.info(`Tenant validated: ${decoded.companyId}`, {
+        path: req.path,
+        method: req.method,
+        userId: decoded.userId
+      });
+      return next();
+    }
+    const apiKey = extractApiKey(req);
+    if (!apiKey) {
+      const error = new Error("No authorization header provided");
+      error.statusCode = 401;
+      throw error;
+    }
+    const parsed = parseApiKey(apiKey);
+    if (!parsed) {
+      const error = new Error("Invalid API key format");
+      error.statusCode = 401;
+      throw error;
+    }
+    const CompanyModel = await getCompanyModel();
+    const company = await CompanyModel.findOne({ companyId: parsed.companyId, isActive: true }).lean();
+    if (!company) {
+      const error = new Error("Company not found");
+      error.statusCode = 401;
+      throw error;
+    }
+    const keyData = company["api-key-lila-access"] || {};
+    if (!keyData.keyHash || keyData.isActive !== true) {
+      const error = new Error("API key inactive or not configured");
+      error.statusCode = 401;
+      throw error;
+    }
+    const computedHash = hashApiKey(apiKey);
+    if (!timingSafeEqual(computedHash, String(keyData.keyHash))) {
+      const error = new Error("Invalid API key");
+      error.statusCode = 401;
+      throw error;
+    }
+    const origin = req.headers.origin;
+    if (Array.isArray(keyData.allowedOrigins) && keyData.allowedOrigins.length > 0 && typeof origin === "string") {
+      if (!keyData.allowedOrigins.includes(origin)) {
+        const error = new Error("Origin not allowed");
+        error.statusCode = 403;
+        throw error;
+      }
+    }
+    req.companyId = parsed.companyId;
+    req.auth = { type: "apiKey", keyPrefix: keyData.keyPrefix };
+    req.apiKeyAllowedSenders = Array.isArray(keyData.allowedSenders) ? keyData.allowedSenders.map((sender) => normalizeSender(String(sender))) : void 0;
+    const baseUrl = req.baseUrl || "";
+    if (baseUrl.startsWith("/api/drive") && company.features?.modules?.drive === false) {
+      const error = new Error("Drive module not enabled for this company");
+      error.statusCode = 403;
+      throw error;
+    }
+    if (baseUrl.startsWith("/api/message") && !company.whatsappConfig?.sender) {
+      const error = new Error("WhatsApp sender not configured for this company");
+      error.statusCode = 403;
+      throw error;
+    }
+    if (baseUrl.startsWith("/api/message") && req.apiKeyAllowedSenders?.length) {
+      const sessionPhoneRaw = req.params?.sessionPhone;
+      const sessionPhone = sessionPhoneRaw ? normalizeSender(String(sessionPhoneRaw)) : "";
+      const ownSender = normalizeSender(String(company.whatsappConfig?.sender || ""));
+      const isAllowed = req.apiKeyAllowedSenders.includes(sessionPhone) || Boolean(ownSender) && sessionPhone === ownSender;
+      if (sessionPhone && !isAllowed) {
+        const error = new Error("Sender not allowed for this API key");
+        error.statusCode = 403;
+        throw error;
+      }
+    }
+    await CompanyModel.updateOne(
+      { companyId: parsed.companyId },
+      {
+        $set: {
+          "api-key-lila-access.lastUsedAt": /* @__PURE__ */ new Date(),
+          "api-key-lila-access.lastUsedIp": req.ip
+        }
+      }
+    );
+    logger_default.info(`Tenant validated (apiKey): ${parsed.companyId}`, {
+      path: req.path,
+      method: req.method
+    });
+    return next();
+  } catch (err) {
+    const error = err;
+    const statusCode = error.statusCode || 401;
+    logger_default.warn("Tenant validation failed:", {
+      path: req.path,
+      method: req.method,
+      error: error.message
+    });
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        message: error.message,
+        statusCode
+      }
+    });
+  }
+}
+function optionalTenant(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return next();
+    }
+    const parts = authHeader.split(" ");
+    if (parts.length !== 2 || parts[0] !== "Bearer") {
+      return next();
+    }
+    const token = parts[1];
+    if (!token) {
+      return next();
+    }
+    try {
+      const decoded = import_jsonwebtoken2.default.verify(token, config.security.jwtSecret);
+      if (decoded.companyId) {
+        req.companyId = decoded.companyId;
+        logger_default.info(`Optional tenant identified: ${decoded.companyId}`);
+      }
+    } catch (err) {
+      logger_default.debug("Optional tenant validation failed (ignored):", err);
+    }
+    next();
+  } catch (err) {
+    next();
+  }
+}
+async function requireTenantOrApiKey(req, res, next) {
+  const legacyKey = req.headers["x-api-key"];
+  const expected = process.env.API_SECRET_KEY;
+  if (typeof legacyKey === "string" && expected && legacyKey === expected) {
+    return next();
+  }
+  return requireTenant(req, res, next);
+}
+async function requireSenderOwnership(req, res, next) {
+  const companyId = req.companyId;
+  const sessionPhone = req.params?.sessionPhone;
+  if (!companyId || !sessionPhone) {
+    return next();
+  }
+  const enforce = config.whatsapp.rlsEnforce;
+  try {
+    const owner = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
+    if (owner && owner.companyId === companyId) {
+      return next();
+    }
+    logger_default.warn(
+      `Sender ownership mismatch: company ${companyId} intent\xF3 usar sender ${sessionPhone} (owner=${owner?.companyId ?? "desconocido"})${enforce ? " [BLOQUEADO]" : " [solo aviso]"}`
+    );
+    if (enforce) {
+      const error = new Error("El sender no pertenece a la empresa autenticada");
+      error.statusCode = 403;
+      throw error;
+    }
+    return next();
+  } catch (err) {
+    if (enforce && err?.statusCode === 403) {
+      return next(err);
+    }
+    logger_default.debug("requireSenderOwnership lookup fall\xF3 (ignorado):", err);
+    return next();
+  }
+}
+
 // src/api/routes/session.routes.ts
 var router = Router();
 router.get("/list", listActiveSessions);
-router.post("/", validateApiKey, createSession);
-router.get("/:phoneNumber/qr", validateApiKey, getQRCodeImage);
-router.post("/:phoneNumber/request-pairing-code", validateApiKey, createPairingSessionHandler);
+router.post("/", requireTenantOrApiKey, createSession);
+router.get("/:phoneNumber/qr", requireTenantOrApiKey, getQRCodeImage);
+router.post("/:phoneNumber/request-pairing-code", requireTenantOrApiKey, createPairingSessionHandler);
 router.get("/:phoneNumber/status", getSessionStatus);
-router.post("/:phoneNumber/logout", validateApiKey, logoutSession);
-router.post("/:phoneNumber/clear", validateApiKey, clearSession2);
+router.post("/:phoneNumber/logout", requireTenantOrApiKey, logoutSession);
+router.post("/:phoneNumber/clear", requireTenantOrApiKey, clearSession2);
 router.get("/:phoneNumber/groups", getGroupList);
-router.get("/:phoneNumber/syncGroups", validateApiKey, syncGroups);
+router.get("/:phoneNumber/syncGroups", requireTenantOrApiKey, syncGroups);
 router.get("/:phoneNumber/contacts", getContactsHandler);
-router.delete("/:phoneNumber", validateApiKey, disconnectSession2);
+router.delete("/:phoneNumber", requireTenantOrApiKey, disconnectSession2);
 router.get("/", getAllSessions);
 var session_routes_default = router;
 
@@ -24645,6 +25080,21 @@ import multer from "multer";
 // src/api/controllers/message.controller.simple.ts
 init_whatsapp_direct_service();
 init_logger();
+function getGroupReachabilityError(sessionPhone, to3) {
+  if (!to3 || !to3.includes("@g.us")) return null;
+  try {
+    const groups = WhatsAppDirectService.listGroups(sessionPhone);
+    if (!groups.length) return null;
+    if (groups.some((group) => group.id === to3)) return null;
+  } catch {
+    return null;
+  }
+  const error = new Error(
+    "GROUP_NOT_IN_SESSION: el grupo no pertenece al n\xFAmero conectado. Reasigna el grupo."
+  );
+  error.statusCode = HTTP_STATUS.CONFLICT;
+  return error;
+}
 async function sendTextMessage(req, res, next) {
   try {
     const { sessionPhone } = req.params;
@@ -24659,6 +25109,8 @@ async function sendTextMessage(req, res, next) {
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
+    const groupError = getGroupReachabilityError(sessionPhone, to3);
+    if (groupError) return next(groupError);
     logger_default.info(`\u{1F4E4} Sending text message from ${sessionPhone} to ${to3}`);
     try {
       const normalizedMessage = await replaceLegacyBotLabelForCompanyId(req.companyId, message);
@@ -24709,6 +25161,8 @@ async function sendImage(req, res, next) {
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
+    const groupError = getGroupReachabilityError(sessionPhone, to3);
+    if (groupError) return next(groupError);
     logger_default.info(`\u{1F4E4} Sending image from ${sessionPhone} to ${to3}`);
     const sendOptions = {
       caption,
@@ -24758,6 +25212,8 @@ async function sendVideo(req, res, next) {
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
+    const groupError = getGroupReachabilityError(sessionPhone, to3);
+    if (groupError) return next(groupError);
     logger_default.info(`\u{1F4E4} Sending video from ${sessionPhone} to ${to3}`);
     const sendOptions = {
       caption,
@@ -24806,6 +25262,8 @@ async function sendFile(req, res, next) {
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
+    const groupError = getGroupReachabilityError(sessionPhone, to3);
+    if (groupError) return next(groupError);
     logger_default.info(`\u{1F4E4} Sending file from ${sessionPhone} to ${to3}`);
     const sendOptions = {
       caption,
@@ -24840,36 +25298,37 @@ async function sendFile(req, res, next) {
 }
 
 // src/api/routes/message.routes.ts
+init_environment();
 var router3 = Router3();
 var upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }
 });
+var messageAuth = config.whatsapp.rlsEnforce ? requireTenantOrApiKey : optionalTenant;
 router3.post(
   "/:sessionPhone/text",
+  messageAuth,
+  requireSenderOwnership,
   sendTextMessage
 );
 router3.post(
   "/:sessionPhone/image",
-  // requireTenant,
-  // whatsappRateLimiter,
-  // requireWhatsAppQuota,
+  messageAuth,
+  requireSenderOwnership,
   upload.single("file"),
   sendImage
 );
 router3.post(
   "/:sessionPhone/video",
-  // requireTenant,
-  // whatsappRateLimiter,
-  // requireWhatsAppQuota,
+  messageAuth,
+  requireSenderOwnership,
   upload.single("file"),
   sendVideo
 );
 router3.post(
   "/:sessionPhone/file",
-  // requireTenant,
-  // whatsappRateLimiter,
-  // requireWhatsAppQuota,
+  messageAuth,
+  requireSenderOwnership,
   upload.single("file"),
   sendFile
 );
@@ -25211,12 +25670,12 @@ init_environment();
 init_environment();
 import fs9 from "fs-extra";
 import path12 from "path";
-import crypto2 from "crypto";
+import crypto3 from "crypto";
 import { createCanvas } from "@napi-rs/canvas";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 function getCacheKey(filePath, stat, page, scale) {
   const raw = `${filePath}:${stat.size}:${stat.mtimeMs}:${page}:${scale}`;
-  return crypto2.createHash("sha1").update(raw).digest("hex");
+  return crypto3.createHash("sha1").update(raw).digest("hex");
 }
 function clampScale(value) {
   if (Number.isNaN(value)) return 1;
@@ -25397,8 +25856,8 @@ function resolveProto(req) {
 function buildAbsoluteUrl(req, relativeUrl) {
   const host = req.get("x-forwarded-host") || req.get("host");
   if (!host) return relativeUrl;
-  const proto = resolveProto(req);
-  return `${proto}://${host}${relativeUrl}`;
+  const proto3 = resolveProto(req);
+  return `${proto3}://${host}${relativeUrl}`;
 }
 async function generateVale(req, res, next) {
   try {
@@ -25708,7 +26167,7 @@ init_logger();
 var import_sharp = __toESM(require_lib(), 1);
 import fs11 from "fs-extra";
 import path14 from "path";
-import crypto3 from "crypto";
+import crypto4 from "crypto";
 import { spawn } from "child_process";
 init_logger();
 
@@ -25803,7 +26262,7 @@ async function createThumbTargetPath(options2) {
   const stat = await fs11.stat(options2.filePath);
   const parsed = path14.parse(options2.fileName);
   const safeBase = sanitizeName(parsed.name || "file");
-  const hash = crypto3.createHash("sha1").update(`${options2.filePath}:${stat.size}:${stat.mtimeMs}`).digest("hex").slice(0, 10);
+  const hash = crypto4.createHash("sha1").update(`${options2.filePath}:${stat.size}:${stat.mtimeMs}`).digest("hex").slice(0, 10);
   const thumbName = `thumb_${safeBase}_${hash}.jpg`;
   const thumbDir = path14.join(options2.outputDir, thumbDirName);
   await fs11.ensureDir(thumbDir);
@@ -26030,7 +26489,7 @@ async function optimizeVideoForProgressiveStreaming(options2) {
 }
 
 // src/services/storage-file-name.service.ts
-import crypto4 from "crypto";
+import crypto5 from "crypto";
 import path16 from "path";
 var MAX_SAFE_BASENAME_LENGTH = 80;
 function sanitizeStorageFileName(name) {
@@ -26042,7 +26501,7 @@ function sanitizeStorageFileName(name) {
 function buildUniqueStorageFileName(originalName, uniqueSeed) {
   const safeName = sanitizeStorageFileName(originalName);
   const parsed = path16.parse(safeName);
-  const hash = crypto4.createHash("sha1").update(`${uniqueSeed || crypto4.randomUUID()}:${originalName}:${Date.now()}`).digest("hex").slice(0, 10);
+  const hash = crypto5.createHash("sha1").update(`${uniqueSeed || crypto5.randomUUID()}:${originalName}:${Date.now()}`).digest("hex").slice(0, 10);
   return `${parsed.name}_${hash}${parsed.ext}`;
 }
 
@@ -26088,8 +26547,8 @@ function resolveProto2(req) {
 function buildAbsoluteUrl2(req, relativeUrl) {
   const host = req.get("x-forwarded-host") || req.get("host");
   if (!host) return relativeUrl;
-  const proto = resolveProto2(req);
-  return `${proto}://${host}${relativeUrl}`;
+  const proto3 = resolveProto2(req);
+  return `${proto3}://${host}${relativeUrl}`;
 }
 async function listEntries(req, res, next) {
   try {
@@ -26976,207 +27435,6 @@ async function getPdfPagePreviewGrid(req, res, next) {
 // src/api/routes/drive.routes.ts
 init_environment();
 
-// src/middleware/tenant.middleware.ts
-var import_jsonwebtoken = __toESM(require_jsonwebtoken(), 1);
-init_environment();
-init_logger();
-init_models();
-import crypto5 from "crypto";
-var API_KEY_PREFIX = "lk_fe_";
-var normalizeSender = (value) => value.replace(/[^\d]/g, "");
-var extractApiKey = (req) => {
-  const headerKey = req.headers["x-api-key"];
-  if (typeof headerKey === "string" && headerKey.trim()) {
-    return headerKey.trim();
-  }
-  const authHeader = req.headers.authorization;
-  if (typeof authHeader === "string" && authHeader.startsWith("ApiKey ")) {
-    return authHeader.replace("ApiKey ", "").trim();
-  }
-  return null;
-};
-var parseApiKey = (apiKey) => {
-  if (!apiKey.startsWith(API_KEY_PREFIX)) {
-    return null;
-  }
-  const rest = apiKey.slice(API_KEY_PREFIX.length);
-  const separatorIndex = rest.indexOf("_");
-  if (separatorIndex <= 0) {
-    return null;
-  }
-  const companyId = rest.slice(0, separatorIndex).trim();
-  const secret = rest.slice(separatorIndex + 1).trim();
-  if (!companyId || !secret) {
-    return null;
-  }
-  return { companyId, secret };
-};
-var hashApiKey = (apiKey) => crypto5.createHash("sha256").update(apiKey).digest("hex");
-var timingSafeEqual = (a49, b63) => {
-  try {
-    const aBuf = Buffer.from(a49);
-    const bBuf = Buffer.from(b63);
-    if (aBuf.length !== bBuf.length) return false;
-    return crypto5.timingSafeEqual(aBuf, bBuf);
-  } catch {
-    return false;
-  }
-};
-async function requireTenant(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const parts = authHeader.split(" ");
-      const token = parts[1];
-      if (!token) {
-        const error = new Error("No token provided");
-        error.statusCode = 401;
-        throw error;
-      }
-      let decoded;
-      try {
-        decoded = import_jsonwebtoken.default.verify(token, config.security.jwtSecret);
-      } catch (err) {
-        const error = new Error("Invalid or expired token");
-        error.statusCode = 401;
-        throw error;
-      }
-      if (!decoded.companyId) {
-        const error = new Error("Token does not contain companyId");
-        error.statusCode = 401;
-        throw error;
-      }
-      req.companyId = decoded.companyId;
-      req.auth = { type: "jwt", role: decoded.role };
-      logger_default.info(`Tenant validated: ${decoded.companyId}`, {
-        path: req.path,
-        method: req.method,
-        userId: decoded.userId
-      });
-      return next();
-    }
-    const apiKey = extractApiKey(req);
-    if (!apiKey) {
-      const error = new Error("No authorization header provided");
-      error.statusCode = 401;
-      throw error;
-    }
-    const parsed = parseApiKey(apiKey);
-    if (!parsed) {
-      const error = new Error("Invalid API key format");
-      error.statusCode = 401;
-      throw error;
-    }
-    const CompanyModel = await getCompanyModel();
-    const company = await CompanyModel.findOne({ companyId: parsed.companyId, isActive: true }).lean();
-    if (!company) {
-      const error = new Error("Company not found");
-      error.statusCode = 401;
-      throw error;
-    }
-    const keyData = company["api-key-lila-access"] || {};
-    if (!keyData.keyHash || keyData.isActive !== true) {
-      const error = new Error("API key inactive or not configured");
-      error.statusCode = 401;
-      throw error;
-    }
-    const computedHash = hashApiKey(apiKey);
-    if (!timingSafeEqual(computedHash, String(keyData.keyHash))) {
-      const error = new Error("Invalid API key");
-      error.statusCode = 401;
-      throw error;
-    }
-    const origin = req.headers.origin;
-    if (Array.isArray(keyData.allowedOrigins) && keyData.allowedOrigins.length > 0 && typeof origin === "string") {
-      if (!keyData.allowedOrigins.includes(origin)) {
-        const error = new Error("Origin not allowed");
-        error.statusCode = 403;
-        throw error;
-      }
-    }
-    req.companyId = parsed.companyId;
-    req.auth = { type: "apiKey", keyPrefix: keyData.keyPrefix };
-    req.apiKeyAllowedSenders = Array.isArray(keyData.allowedSenders) ? keyData.allowedSenders.map((sender) => normalizeSender(String(sender))) : void 0;
-    const baseUrl = req.baseUrl || "";
-    if (baseUrl.startsWith("/api/drive") && company.features?.modules?.drive === false) {
-      const error = new Error("Drive module not enabled for this company");
-      error.statusCode = 403;
-      throw error;
-    }
-    if (baseUrl.startsWith("/api/message") && !company.whatsappConfig?.sender) {
-      const error = new Error("WhatsApp sender not configured for this company");
-      error.statusCode = 403;
-      throw error;
-    }
-    if (baseUrl.startsWith("/api/message") && req.apiKeyAllowedSenders?.length) {
-      const sessionPhoneRaw = req.params?.sessionPhone;
-      const sessionPhone = sessionPhoneRaw ? normalizeSender(String(sessionPhoneRaw)) : "";
-      if (sessionPhone && !req.apiKeyAllowedSenders.includes(sessionPhone)) {
-        const error = new Error("Sender not allowed for this API key");
-        error.statusCode = 403;
-        throw error;
-      }
-    }
-    await CompanyModel.updateOne(
-      { companyId: parsed.companyId },
-      {
-        $set: {
-          "api-key-lila-access.lastUsedAt": /* @__PURE__ */ new Date(),
-          "api-key-lila-access.lastUsedIp": req.ip
-        }
-      }
-    );
-    logger_default.info(`Tenant validated (apiKey): ${parsed.companyId}`, {
-      path: req.path,
-      method: req.method
-    });
-    return next();
-  } catch (err) {
-    const error = err;
-    const statusCode = error.statusCode || 401;
-    logger_default.warn("Tenant validation failed:", {
-      path: req.path,
-      method: req.method,
-      error: error.message
-    });
-    res.status(statusCode).json({
-      success: false,
-      error: {
-        message: error.message,
-        statusCode
-      }
-    });
-  }
-}
-function optionalTenant(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return next();
-    }
-    const parts = authHeader.split(" ");
-    if (parts.length !== 2 || parts[0] !== "Bearer") {
-      return next();
-    }
-    const token = parts[1];
-    if (!token) {
-      return next();
-    }
-    try {
-      const decoded = import_jsonwebtoken.default.verify(token, config.security.jwtSecret);
-      if (decoded.companyId) {
-        req.companyId = decoded.companyId;
-        logger_default.info(`Optional tenant identified: ${decoded.companyId}`);
-      }
-    } catch (err) {
-      logger_default.debug("Optional tenant validation failed (ignored):", err);
-    }
-    next();
-  } catch (err) {
-    next();
-  }
-}
-
 // src/middleware/company-rate-limiter.middleware.ts
 init_logger();
 var rateLimitStore = /* @__PURE__ */ new Map();
@@ -27344,8 +27602,8 @@ function resolveProto3(req) {
 function buildAbsoluteUrl3(req, relativeUrl) {
   const host = req.get("x-forwarded-host") || req.get("host");
   if (!host) return relativeUrl;
-  const proto = resolveProto3(req);
-  return `${proto}://${host}${relativeUrl}`;
+  const proto3 = resolveProto3(req);
+  return `${proto3}://${host}${relativeUrl}`;
 }
 function parseMetadata(metadataHeader) {
   if (!metadataHeader) return {};
@@ -41709,11 +41967,11 @@ function requireBuffer() {
     function typedArraySupport() {
       try {
         var arr = new Uint8Array(1);
-        var proto = { foo: function() {
+        var proto3 = { foo: function() {
           return 42;
         } };
-        Object.setPrototypeOf(proto, Uint8Array.prototype);
-        Object.setPrototypeOf(arr, proto);
+        Object.setPrototypeOf(proto3, Uint8Array.prototype);
+        Object.setPrototypeOf(arr, proto3);
         return arr.foo() === 42;
       } catch (e29) {
         return false;
@@ -44196,10 +44454,10 @@ function requireWhichTypedArray() {
     forEach(typedArrays, function(typedArray) {
       var arr = new g62[typedArray]();
       if (Symbol.toStringTag in arr) {
-        var proto = getPrototypeOf(arr);
-        var descriptor = gOPD(proto, Symbol.toStringTag);
+        var proto3 = getPrototypeOf(arr);
+        var descriptor = gOPD(proto3, Symbol.toStringTag);
         if (!descriptor) {
-          var superProto = getPrototypeOf(proto);
+          var superProto = getPrototypeOf(proto3);
           descriptor = gOPD(superProto, Symbol.toStringTag);
         }
         cache["$" + typedArray] = callBind2(descriptor.get);
@@ -58591,19 +58849,19 @@ function buildAbsoluteUrl4(req, relativeUrl) {
   if (!relativeUrl) return relativeUrl;
   const host = req.get("x-forwarded-host") || req.get("host");
   if (!host) return relativeUrl;
-  const proto = resolveProto4(req);
-  return `${proto}://${host}${relativeUrl}`;
+  const proto3 = resolveProto4(req);
+  return `${proto3}://${host}${relativeUrl}`;
 }
-function isPlainObject(value) {
+function isPlainObject2(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 function mergeDeep(target, ...sources) {
   const output = { ...target };
   sources.forEach((source) => {
-    if (!isPlainObject(source)) return;
+    if (!isPlainObject2(source)) return;
     Object.keys(source).forEach((key) => {
       const value = source[key];
-      if (isPlainObject(value)) {
+      if (isPlainObject2(value)) {
         output[key] = mergeDeep(output[key] || {}, value);
       } else {
         output[key] = value;
@@ -58632,7 +58890,7 @@ function isEmptyContractValue(value) {
 function hasMeaningfulContractRows(value) {
   if (!Array.isArray(value)) return false;
   return value.some((row) => {
-    if (!isPlainObject(row)) return false;
+    if (!isPlainObject2(row)) return false;
     return Object.values(row).some((field) => !isEmptyContractValue(field));
   });
 }
@@ -58832,7 +59090,7 @@ function applyComputedFields(schema, data) {
   }
 }
 async function applyHeaderDefaults(data, schema, report, companyId) {
-  if (!isPlainObject(data.header)) {
+  if (!isPlainObject2(data.header)) {
     data.header = {};
   }
   const header = data.header;
@@ -58905,7 +59163,7 @@ async function applyContractProviderDefaults(data, companyId) {
     const CompanyModel = await getCompanyModel();
     const company = await CompanyModel.findOne({ companyId }).lean();
     if (!company) return;
-    if (!isPlainObject(data.proveedor)) data.proveedor = {};
+    if (!isPlainObject2(data.proveedor)) data.proveedor = {};
     const prov = data.proveedor;
     if (!String(prov.razonSocial || "").trim()) {
       prov.razonSocial = company.legalInfo?.businessName || company.name || "";
@@ -59435,19 +59693,19 @@ function buildAbsoluteUrl5(req, relativeUrl) {
   if (!relativeUrl) return relativeUrl;
   const host = req.get("x-forwarded-host") || req.get("host");
   if (!host) return relativeUrl;
-  const proto = resolveProto5(req);
-  return `${proto}://${host}${relativeUrl}`;
+  const proto3 = resolveProto5(req);
+  return `${proto3}://${host}${relativeUrl}`;
 }
-function isPlainObject2(value) {
+function isPlainObject3(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 function mergeDeep2(target, ...sources) {
   const output = { ...target };
   sources.forEach((source) => {
-    if (!isPlainObject2(source)) return;
+    if (!isPlainObject3(source)) return;
     Object.keys(source).forEach((key) => {
       const value = source[key];
-      if (isPlainObject2(value)) {
+      if (isPlainObject3(value)) {
         output[key] = mergeDeep2(output[key] || {}, value);
       } else {
         output[key] = value;
@@ -59465,7 +59723,7 @@ function getPayload(req) {
   return {
     schemaCode: body.schemaCode || "COT-ASF",
     quoteNumber: body.quoteNumber,
-    schemaData: isPlainObject2(body.schemaData) ? body.schemaData : {}
+    schemaData: isPlainObject3(body.schemaData) ? body.schemaData : {}
   };
 }
 function escapeHtml(value) {
@@ -60757,16 +61015,16 @@ function buildAbsoluteUrl6(req, relativeUrl) {
   if (!host) return relativeUrl;
   return `${resolveProto6(req)}://${host}${relativeUrl}`;
 }
-function isPlainObject3(value) {
+function isPlainObject4(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 function mergeDeep3(target, ...sources) {
   const output = { ...target };
   sources.forEach((source) => {
-    if (!isPlainObject3(source)) return;
+    if (!isPlainObject4(source)) return;
     Object.keys(source).forEach((key) => {
       const value = source[key];
-      if (isPlainObject3(value)) {
+      if (isPlainObject4(value)) {
         output[key] = mergeDeep3(output[key] || {}, value);
       } else {
         output[key] = value;
@@ -60784,7 +61042,7 @@ function getPayload2(req) {
   return {
     schemaCode: body.schemaCode || "ORD-COM",
     orderNumber: body.orderNumber,
-    schemaData: isPlainObject3(body.schemaData) ? body.schemaData : {}
+    schemaData: isPlainObject4(body.schemaData) ? body.schemaData : {}
   };
 }
 function escapeHtml2(value) {
@@ -61549,16 +61807,16 @@ var DEFAULT_SERVICE_LINES = [
   "Certificado de calidad del MC-30",
   "Lavado de mezcla asfaltica en caliente (MAC)"
 ];
-function isPlainObject4(value) {
+function isPlainObject5(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 function mergeDeep4(target, ...sources) {
   const output = { ...target };
   sources.forEach((source) => {
-    if (!isPlainObject4(source)) return;
+    if (!isPlainObject5(source)) return;
     Object.keys(source).forEach((key) => {
       const value = source[key];
-      if (isPlainObject4(value)) {
+      if (isPlainObject5(value)) {
         output[key] = mergeDeep4(output[key] || {}, value);
       } else {
         output[key] = value;
@@ -61576,7 +61834,7 @@ function getPayload3(payload) {
   return {
     schemaCode: body.schemaCode || "DISPATCH-NOTE",
     orderNumber: body.orderNumber,
-    schemaData: isPlainObject4(body.schemaData) ? body.schemaData : {}
+    schemaData: isPlainObject5(body.schemaData) ? body.schemaData : {}
   };
 }
 function escapeHtml3(value) {
@@ -61950,13 +62208,13 @@ function renderDispatchNoteHtml(data, baseUrl) {
   </html>`;
 }
 async function applyBrandingDefaults(companyId, data) {
-  if (!isPlainObject4(data.header)) {
+  if (!isPlainObject5(data.header)) {
     data.header = {};
   }
-  if (!isPlainObject4(data.dispatch)) {
+  if (!isPlainObject5(data.dispatch)) {
     data.dispatch = {};
   }
-  if (!isPlainObject4(data.footer)) {
+  if (!isPlainObject5(data.footer)) {
     data.footer = {};
   }
   const header = data.header;
@@ -62177,7 +62435,7 @@ import { Router as Router7 } from "express";
 init_logger();
 
 // src/services/dispatch-vale.service.ts
-var import_jsonwebtoken2 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken3 = __toESM(require_jsonwebtoken(), 1);
 init_logger();
 init_environment();
 init_models();
@@ -62422,7 +62680,7 @@ async function withTimeout(promise, timeoutMs, label) {
   }
 }
 function buildPortalCallbackToken(companyId) {
-  return import_jsonwebtoken2.default.sign(
+  return import_jsonwebtoken3.default.sign(
     {
       companyId,
       userId: "lila-dispatch-vale",
@@ -63655,7 +63913,7 @@ import fs26 from "fs-extra";
 import path27 from "path";
 
 // src/api/controllers/public.controller.ts
-var import_jsonwebtoken3 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken4 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 init_models();
 import axios8 from "axios";
@@ -63695,7 +63953,7 @@ var parseNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
-var buildPortalCallbackToken2 = (companyId) => import_jsonwebtoken3.default.sign(
+var buildPortalCallbackToken2 = (companyId) => import_jsonwebtoken4.default.sign(
   {
     companyId,
     userId: "lila-public-reception",
@@ -68308,12 +68566,10 @@ init_sessions_simple();
 
 // src/whatsapp/baileys/restore-sessions.simple.ts
 init_sessions_simple();
-init_environment();
-import fs29 from "fs";
+init_mongo_auth_state();
 var restoreAllSessions = async () => {
-  if (!fs29.existsSync(config.whatsapp.sessionDir)) return;
-  const sessionDirs = fs29.readdirSync(config.whatsapp.sessionDir, { withFileTypes: true }).filter((dirent) => dirent.isDirectory()).filter((dirent) => /^\d{9,15}$/.test(dirent.name)).map((dirent) => dirent.name);
-  for (const phone of sessionDirs) {
+  const sessionIds = (await listMongoAuthSessions()).filter((id) => /^\d{9,15}$/.test(id));
+  for (const phone of sessionIds) {
     try {
       console.log(`\u267B\uFE0F Restoring session for ${phone}`);
       await startSession(phone, () => {
@@ -68327,7 +68583,7 @@ var restoreAllSessions = async () => {
 // src/index.ts
 init_telegram_alert_service();
 import cron2 from "node-cron";
-import fs30 from "fs-extra";
+import fs29 from "fs-extra";
 import path30 from "path";
 var app = express();
 app.set("trust proxy", config.security.trustProxy);
@@ -68444,6 +68700,7 @@ app.use(
 );
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
+app.use(mongoSanitize);
 app.use(requestLogger);
 app.use(apiLimiter);
 app.get("/health", (req, res) => {
@@ -68548,7 +68805,7 @@ async function startServer() {
       logger_default.warn("Quota Validator initialization failed, quota validation will be disabled:", error);
     }
     await generator_service_default.initialize();
-    await fs30.ensureDir(config.pdf.tempDir);
+    await fs29.ensureDir(config.pdf.tempDir);
     logger_default.info("\u{1F9FE} PDF temp directory configured", {
       tempDir: config.pdf.tempDir,
       publicBaseUrl: config.pdf.tempPublicBaseUrl
@@ -68563,15 +68820,15 @@ async function startServer() {
     const shouldRunBackgroundJobs = shouldInitializeBackgroundJobs(config.nodeEnv);
     const cleanupPdfTemp = async () => {
       try {
-        const entries = await fs30.readdir(config.pdf.tempDir);
+        const entries = await fs29.readdir(config.pdf.tempDir);
         const now = Date.now();
         const maxAgeMs = pdfTempMaxAgeHours * 60 * 60 * 1e3;
         const removals = entries.map(async (entry) => {
           const fullPath = path30.join(config.pdf.tempDir, entry);
-          const stat = await fs30.stat(fullPath);
+          const stat = await fs29.stat(fullPath);
           if (!stat.isFile()) return;
           if (now - stat.mtimeMs > maxAgeMs) {
-            await fs30.remove(fullPath);
+            await fs29.remove(fullPath);
           }
         });
         await Promise.all(removals);

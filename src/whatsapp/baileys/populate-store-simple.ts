@@ -12,9 +12,26 @@ export const populateStoreIfEmpty = async (id: string, sock: WASocket) => {
   const store = getStore(id);
 
   try {
-    // 1. Get all groups where bot is member
+    // 1. Get all groups where bot is member (fuente AUTORITATIVA: solo los grupos a
+    //    los que la cuenta conectada pertenece AHORA).
     const groups = await sock.groupFetchAllParticipating();
     const groupIds = Object.keys(groups);
+
+    // 1b. Reconciliar: quitar del store los grupos `@g.us` que YA NO están en la lista
+    //     autoritativa. Sin esto, los grupos quedaban "pegados" (de un emparejamiento
+    //     anterior, history-sync, o tras salir del grupo) y la UI mostraba grupos que no
+    //     pertenecen al número conectado. El store es cache → debe reflejar la cuenta real.
+    const authoritativeIds = new Set(groupIds);
+    let removed = 0;
+    for (const chatId of Array.from(store.chats.keys())) {
+      if (chatId.endsWith('@g.us') && !authoritativeIds.has(chatId)) {
+        store.chats.delete(chatId);
+        removed += 1;
+      }
+    }
+    if (removed > 0) {
+      logger.info(`🧹 Removed ${removed} stale group(s) from store (no longer participating)`);
+    }
 
     // 2. Add/update groups in store.chats
     for (const group of Object.values(groups)) {
@@ -67,6 +84,7 @@ export const populateStoreIfEmpty = async (id: string, sock: WASocket) => {
     }
     */
 
+    store.markDirty();
     logger.info(`✅ Synced ${Object.keys(groups).length} groups to store`);
     return {
       success: true,

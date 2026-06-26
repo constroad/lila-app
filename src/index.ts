@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import logger from './utils/logger.js';
 import { config } from './config/environment.js';
 import { apiLimiter } from './api/middlewares/rateLimiter.js';
+import { mongoSanitize } from './middleware/mongo-sanitize.middleware.js';
 import {
   errorHandler,
   notFoundHandler,
@@ -179,6 +180,9 @@ app.use(
 // Middleware de parseo
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Sanitización anti NoSQL-injection (quita claves `$`/`.` de body/query/params)
+app.use(mongoSanitize);
 
 // Middleware de logging y rate limiting
 app.use(requestLogger);

@@ -4,7 +4,7 @@
 > **Documentos relacionados:**
 > - `docs/tailscale-funnel.spec.md`
 > - `docs/handoff-portal-resiliencia.md`
-> - `../MULTI-SESSION-WHATSAPP.SPEC.md` (parent)
+> - `specs/SCALABILITY-MULTI-SESSION.spec.md` (escalabilidad + RLS + persistencia; reemplaza al viejo `../MULTI-SESSION-WHATSAPP.SPEC.md`)
 > - `../STREAMING-THUMBNAILS-LILA-APP.spec.md`
 > - `../architecture.AS-IS.spec.md` (vision plataforma Portal + lila-app)
 
@@ -44,6 +44,12 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - Servicio directo: `src/services/whatsapp-direct.service.ts`.
 - Listener IA de Anthropic existe (`src/whatsapp/ai-agent/*`) pero esta deshabilitado en produccion (early return en `message.listener.ts`, flag `WHATSAPP_AI_ENABLED`).
 - Una sesion por empresa, credenciales en `data/sessions/{companyPhone}` (volumen montado).
+- **Auth de rutas de sesion (`/api/sessions/*` state-changing):** middleware `requireTenantOrApiKey` (junio 2026) acepta JWT de tenant (Portal), API key `lk_fe_...` o, por compatibilidad, la API key global `x-api-key`. Antes exigian solo `x-api-key === API_SECRET_KEY`, lo que rompia el boton "Desconectar" de Portal (que firma JWT). Plan de deprecar el secreto global en `specs/SCALABILITY-MULTI-SESSION.spec.md` §4.4/§4.5.
+- **Multi-sesion (junio 2026):** `startSession` tiene guard anti-duplicado (mapa `startingPromises` + chequeo `isSessionReady`) que reutiliza la inicializacion en curso / el socket vivo sin bloquear la reconexion automatica; el cuerpo real se movio a `initSession`. Los `setInterval` de persistencia del store se trackean en `storeTimers` y se cancelan con `clearStoreTimer` (en `startSession`, `createPairingSession`, `disconnectSession`, `endSession`, `clearSession`) para no fugar timers en reconexiones.
+- **Conteo de mensajes (fuente unica):** lila-app es el UNICO punto de conteo de mensajes WhatsApp (Portal ya no cuenta envios, solo el patron de storage). `whatsapp-direct.service.ts` cuenta una vez por envio via `quotaValidatorService.incrementWhatsAppUsage`, resolviendo la company por el sender (`getCompanyByWhatsappSender`) cuando el caller no pasa `companyId` (caso de envios disparados por Portal, que llegan a `/message/:sender/*` sin tenant). El cron (`jobs/executor.service.ts`) ya pasa `companyId`.
+- **Store liviano (junio 2026):** el `InMemoryStore` ya NO almacena ni persiste mensajes (solo chats/contactos/grupos). `writeToFile` es async + atomico (tmp+rename) + dirty-flag, sin pretty-print. Antes el store crecia sin limite (medido 84 MB) y se escribia con `writeFileSync` bloqueante cada 10s. Grupos/contactos se sirven desde el store (lectura en memoria). Ver `specs/SCALABILITY-MULTI-SESSION.spec`.
+- **Rate-limit / lecturas:** `apiLimiter` (por IP) ahora exime el trafico autenticado por tenant (JWT/`lk_fe_`), para que las lecturas server-to-server de Portal (grupos/contactos) no agoten el bucket. Portal ademas cachea esas lecturas 60s (`server/whatsapp/whatsappReadCache.ts`) y los selectores exponen `refresh()` que invalida esa cache (`?refresh=1`). `mongoSanitize` global limpia `$`/`.` de body/query/params.
+- **RLS de `/message` (env-gated, backward-compatible):** por defecto `optionalTenant` (no bloquea) + `requireSenderOwnership` en modo aviso; con `WHATSAPP_RLS_ENFORCE=true` exige `requireTenantOrApiKey` y bloquea envios cuyo sender no pertenece a la company. Pensado para vender API keys `lk_fe_` a consumidores externos (sin Portal). Ver `specs/SCALABILITY-MULTI-SESSION.spec` §4.
 
 ### Documentos / Reportes
 - Registry de schemas: `src/schemas/documents/registry.ts` (20+ codigos: VAL-SRV, ACT-CNF, CONT-SRV, LIQ-SRV, control-imprimacion, control-pista, informe-area-adicional, medidas IAA, etc.).

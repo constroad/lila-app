@@ -10,7 +10,6 @@ import {
   Browsers,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  useMultiFileAuthState,
   WASocket,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
@@ -23,6 +22,7 @@ import { config } from '../../config/environment.js';
 import { populateStoreIfEmpty } from './populate-store-simple.js';
 import { flushOutboxForSession } from '../queue/outbox-queue.js';
 import outboxQueue from '../queue/outbox-queue.js';
+import { useMongoAuthState, clearMongoAuthState } from './mongo-auth-state.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -32,6 +32,9 @@ const qrCodes: Record<string, string> = {};
 const readyClients: Map<string, boolean> = new Map();
 const shuttingDown: Set<string> = new Set();
 const storeTimers: Record<string, NodeJS.Timeout> = {};
+// Inicializaciones en curso por sessionId. Evita crear dos sockets para el mismo
+// número cuando startSession se llama de forma concurrente (ej: doble request al crear).
+const startingPromises: Record<string, Promise<WASocket>> = {};
 
 const clearStoreTimer = (sessionId: string) => {
   const timer = storeTimers[sessionId];
@@ -95,15 +98,54 @@ export function getQRCode(sessionId: string): string | undefined {
 }
 
 /**
- * Start session with QR code (EXACT copy from notifications)
+ * Inicia (o reutiliza) una sesión de WhatsApp para el sessionId dado.
+ *
+ * Guard anti-duplicado: si ya hay una inicialización en curso, devuelve esa misma
+ * promesa; si ya hay un socket conectado y listo, lo reutiliza. NO bloquea la
+ * reconexión automática: un socket cerrado (no `ready`) sí se reemplaza por uno
+ * nuevo, porque el cierre no-loggedOut no borra `sessions[sessionId]`.
+ *
+ * @param sessionId - Número emisor sin '+' (ej: "51902049935")
+ * @param qrCb - Callback opcional invocado cuando Baileys genera un QR
+ * @returns El WASocket existente si ya hay sesión viva, o el nuevo socket creado
  */
 export async function startSession(
   sessionId: string,
   qrCb?: (qr: string) => void
 ): Promise<WASocket> {
+  const inFlight = startingPromises[sessionId];
+  if (inFlight) {
+    logger.info(`[${sessionId}] Session init in progress, reusing in-flight start`);
+    return inFlight;
+  }
+
+  const existing = sessions[sessionId];
+  if (existing && isSessionReady(sessionId)) {
+    logger.info(`[${sessionId}] Session already ready, reusing existing socket`);
+    return existing;
+  }
+
+  const promise = initSession(sessionId, qrCb);
+  startingPromises[sessionId] = promise;
+  try {
+    return await promise;
+  } finally {
+    delete startingPromises[sessionId];
+  }
+}
+
+/**
+ * Crea y registra el socket de la sesión (cuerpo real, sin el guard anti-duplicado).
+ */
+async function initSession(
+  sessionId: string,
+  qrCb?: (qr: string) => void
+): Promise<WASocket> {
   shuttingDown.delete(sessionId);
   const authDir = path.join(config.whatsapp.sessionDir, sessionId);
-  const { state, saveCreds } = await useMultiFileAuthState(authDir);
+  // Credenciales SIEMPRE en Mongo (portables entre máquinas/instancias, como la industria).
+  // Solo creds + signal keys (KB); los chats/contactos siguen como cache local liviano.
+  const { state, saveCreds } = await useMongoAuthState(sessionId);
 
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger.info(`Using WA v${version.join('.')}, isLatest: ${isLatest}`);
@@ -118,6 +160,11 @@ export async function startSession(
     browser: Browsers.ubuntu('Chrome'),
     generateHighQualityLinkPreview: true,
     printQRInTerminal: false,
+    // Baileys NO tiene API para "traer todos los contactos": llegan por history-sync y
+    // eventos (contacts.upsert es poco fiable en WhatsApp personal — issue #522). Pedir el
+    // history completo maximiza chats+contactos al conectar. Sin costo de memoria porque ya
+    // no almacenamos mensajes (store.manager). Ver SCALABILITY-MULTI-SESSION.spec §2.3.
+    syncFullHistory: true,
   });
 
   // Initialize store
@@ -132,17 +179,13 @@ export async function startSession(
   store.bind(sock.ev);
   sock.ev.on('creds.update', saveCreds);
 
-  // Sync history: bind once at session creation (not inside 'open' which fires on every reconnect)
-  sock.ev.on('messaging-history.set', ({ chats, contacts, messages }) => {
+  // Sync history: bind once at session creation (not inside 'open' which fires on every reconnect).
+  // Solo chats/contactos; los mensajes NO se almacenan (ver store.manager / SCALABILITY spec §3).
+  sock.ev.on('messaging-history.set', ({ chats, contacts }) => {
     logger.info(`📥 Received ${chats.length} chats and ${contacts.length} contacts`);
     chats.forEach((chat) => store.chats.set(chat.id, chat));
     contacts.forEach((contact) => store.contacts.set(contact.id, contact));
-    messages.forEach((msg) => {
-      const jid = msg.key.remoteJid!;
-      const list = store.messages.get(jid) || [];
-      list.push(msg);
-      store.messages.set(jid, list);
-    });
+    store.markDirty();
   });
 
   // Connection event handler
@@ -217,7 +260,9 @@ export async function createPairingSession(
 ): Promise<void> {
   const sessionId = phone.replace('+', '');
   const authDir = path.join(config.whatsapp.sessionDir, sessionId);
-  const { state, saveCreds } = await useMultiFileAuthState(authDir);
+  // Credenciales SIEMPRE en Mongo (portables entre máquinas/instancias, como la industria).
+  // Solo creds + signal keys (KB); los chats/contactos siguen como cache local liviano.
+  const { state, saveCreds } = await useMongoAuthState(sessionId);
   const { version } = await fetchLatestBaileysVersion();
 
   // Create Pino logger for Baileys
@@ -228,6 +273,7 @@ export async function createPairingSession(
     auth: state,
     logger: pinoLogger, // Baileys expects pino logger
     browser: Browsers.macOS('Lila'),
+    syncFullHistory: true, // maximiza contactos al conectar (ver startSession)
   });
 
   // Initialize store
@@ -235,7 +281,8 @@ export async function createPairingSession(
   const store = makeInMemoryStore(storeFilePath);
   stores[sessionId] = store;
   store.readFromFile();
-  setInterval(() => store.writeToFile(), 10_000);
+  clearStoreTimer(sessionId);
+  storeTimers[sessionId] = setInterval(() => store.writeToFile(), 10_000);
 
   store.bind(sock.ev);
   sock.ev.on('creds.update', saveCreds);
@@ -380,6 +427,10 @@ export async function clearSession(sessionId: string): Promise<void> {
       logger.error(`❌ Failed to delete session directory ${sessionDir}:`, error);
       // Don't throw - continue with cleanup
     }
+
+    // 3b. Delete credentials in Mongo (fuente de verdad de las creds)
+    await clearMongoAuthState(sessionId);
+    logger.info(`✅ Cleared Mongo auth for ${sessionId}`);
 
     // 4. Delete backup files (if they exist)
     const backupDir = path.join(config.whatsapp.sessionDir, 'backups', sessionId);

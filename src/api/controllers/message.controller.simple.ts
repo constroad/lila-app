@@ -14,6 +14,28 @@ import { CustomError } from '../middlewares/errorHandler.js';
 import { replaceLegacyBotLabelForCompanyId } from '../../utils/company-bot.js';
 
 /**
+ * Valida que un destino de GRUPO (`...@g.us`) pertenezca a la sesión activa. Tras cambiar de
+ * sender, los JID de grupo viejos quedan inválidos; en vez de fallar genérico devolvemos un
+ * error claro `GROUP_NOT_IN_SESSION` para que el Portal guíe la reasignación. Único punto de
+ * validación (lila-app tiene la sesión/store vivos). No bloquea si el store aún no tiene grupos.
+ */
+function getGroupReachabilityError(sessionPhone: string, to: string): CustomError | null {
+  if (!to || !to.includes('@g.us')) return null; // no es grupo
+  try {
+    const groups = WhatsAppDirectService.listGroups(sessionPhone);
+    if (!groups.length) return null; // store no poblado aún → no bloquear
+    if (groups.some((group) => group.id === to)) return null; // grupo válido
+  } catch {
+    return null; // ante duda, no bloquear
+  }
+  const error: CustomError = new Error(
+    'GROUP_NOT_IN_SESSION: el grupo no pertenece al número conectado. Reasigna el grupo.'
+  );
+  error.statusCode = HTTP_STATUS.CONFLICT;
+  return error;
+}
+
+/**
  * Send text message
  * POST /api/messages/:sessionPhone/text
  * Body: { to: string, message: string }
@@ -35,6 +57,9 @@ export async function sendTextMessage(req: Request, res: Response, next: NextFun
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
+
+    const groupError = getGroupReachabilityError(sessionPhone, to);
+    if (groupError) return next(groupError);
 
     logger.info(`📤 Sending text message from ${sessionPhone} to ${to}`);
 
@@ -122,6 +147,9 @@ export async function sendImage(req: Request, res: Response, next: NextFunction)
       return next(error);
     }
 
+    const groupError = getGroupReachabilityError(sessionPhone, to);
+    if (groupError) return next(groupError);
+
     logger.info(`📤 Sending image from ${sessionPhone} to ${to}`);
 
     // Build send options
@@ -196,6 +224,9 @@ export async function sendVideo(req: Request, res: Response, next: NextFunction)
       return next(error);
     }
 
+    const groupError = getGroupReachabilityError(sessionPhone, to);
+    if (groupError) return next(groupError);
+
     logger.info(`📤 Sending video from ${sessionPhone} to ${to}`);
 
     // Build send options
@@ -269,6 +300,9 @@ export async function sendFile(req: Request, res: Response, next: NextFunction) 
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
+
+    const groupError = getGroupReachabilityError(sessionPhone, to);
+    if (groupError) return next(groupError);
 
     logger.info(`📤 Sending file from ${sessionPhone} to ${to}`);
 

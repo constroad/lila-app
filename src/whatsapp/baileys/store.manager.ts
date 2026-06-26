@@ -13,7 +13,7 @@
 
 import fs from 'fs-extra';
 import path from 'path';
-import { WAMessage, Contact, Chat } from '@whiskeysockets/baileys';
+import { Contact, Chat } from '@whiskeysockets/baileys';
 import type { InMemoryStore, MessageMap } from './store.types';
 import logger from '../../utils/logger.js';
 
@@ -21,7 +21,10 @@ export function makeInMemoryStore(filePath: string): InMemoryStore {
   // 🗄️ MAPS EN MEMORIA - Estado local rápido
   const chats = new Map<string, Chat>();
   const contacts = new Map<string, Contact>();
+  // `messages` se mantiene por compatibilidad de tipo pero NO se llena ni persiste.
   const messages: MessageMap = new Map();
+  // Marca si hubo cambios desde la última persistencia (evita escrituras inútiles).
+  let dirty = false;
 
   // 📖 CARGAR DESDE DISCO - Al iniciar
   const readFromFile = () => {
@@ -45,33 +48,36 @@ export function makeInMemoryStore(filePath: string): InMemoryStore {
         logger.info(`✅ Loaded ${data.contacts.length} contacts from store: ${filePath}`);
       }
 
-      if (data.messages) {
-        Object.entries(data.messages).forEach(([jid, msgs]: [string, any]) => {
-          messages.set(jid, msgs as WAMessage[]);
-        });
-        logger.info(`✅ Loaded messages for ${Object.keys(data.messages).length} chats`);
-      }
+      // NOTA: los mensajes ya NO se cargan ni persisten (ver writeToFile). Solo
+      // necesitamos chats/contactos/grupos para enviar y listar. Esto evita el
+      // crecimiento ilimitado del store (medido en 84 MB). Ver
+      // specs/SCALABILITY-MULTI-SESSION.spec §3 (H2) y §5.
     } catch (error) {
       logger.error(`❌ Error reading store file ${filePath}: ${error}`);
     }
   };
 
-  // 💾 GUARDAR A DISCO - Cada 10 segundos
-  const writeToFile = () => {
+  // 💾 GUARDAR A DISCO - async + atómico (tmp+rename), sin pretty-print, sin mensajes.
+  // No bloquea el event loop (antes era writeFileSync de ~84 MB cada 10 s). Solo
+  // escribe si hubo cambios desde la última persistencia (dirty flag).
+  const writeToFile = async (): Promise<void> => {
+    if (!dirty) return;
+    dirty = false;
     try {
-      // Asegurar que el directorio existe
       const dir = path.dirname(filePath);
-      fs.ensureDirSync(dir);
+      await fs.ensureDir(dir);
 
       const data = {
         chats: Array.from(chats.values()),
         contacts: Array.from(contacts.values()),
-        messages: Object.fromEntries(messages),
       };
 
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+      const tmpPath = `${filePath}.tmp`;
+      await fs.writeFile(tmpPath, JSON.stringify(data));
+      await fs.rename(tmpPath, filePath);
       logger.debug(`💾 Store persisted: ${chats.size} chats, ${contacts.size} contacts → ${filePath}`);
     } catch (error) {
+      dirty = true; // reintentar en el próximo tick
       logger.error(`❌ Error writing store file ${filePath}: ${error}`);
     }
   };
@@ -83,6 +89,7 @@ export function makeInMemoryStore(filePath: string): InMemoryStore {
       newChats.forEach((chat) => {
         chats.set(chat.id, chat);
       });
+      dirty = true;
       logger.debug(`📥 Upserted ${newChats.length} chats to store`);
     });
 
@@ -92,6 +99,7 @@ export function makeInMemoryStore(filePath: string): InMemoryStore {
           const existing = chats.get(update.id);
           if (existing) {
             chats.set(update.id, { ...existing, ...update });
+            dirty = true;
           }
         }
       });
@@ -103,6 +111,7 @@ export function makeInMemoryStore(filePath: string): InMemoryStore {
       newContacts.forEach((contact) => {
         contacts.set(contact.id, contact);
       });
+      dirty = true;
       logger.debug(`📥 Upserted ${newContacts.length} contacts to store`);
     });
 
@@ -112,25 +121,20 @@ export function makeInMemoryStore(filePath: string): InMemoryStore {
           const existing = contacts.get(update.id);
           if (existing) {
             contacts.set(update.id, { ...existing, ...update });
+            dirty = true;
           }
         }
       });
       logger.debug(`🔄 Updated ${updates.length} contacts in store`);
     });
 
-    // Mensajes entrantes
-    ev.on('messages.upsert', ({ messages: msgs }: { messages: WAMessage[] }) => {
-      msgs.forEach((msg) => {
-        const jid = msg.key.remoteJid!;
-        if (!messages.has(jid)) {
-          messages.set(jid, []);
-        }
-        const list = messages.get(jid)!;
-        list.push(msg);
-        messages.set(jid, list);
-      });
-      logger.debug(`📨 Received ${msgs.length} messages`);
-    });
+    // Mensajes entrantes: NO se almacenan (solo enviamos / listamos grupos-contactos).
+    // Evita el crecimiento ilimitado del store. Ver SCALABILITY spec §3 (H2).
+  };
+
+  /** Marca el store como modificado (para escrituras externas a `bind`, ej: history sync). */
+  const markDirty = () => {
+    dirty = true;
   };
 
   return {
@@ -140,5 +144,6 @@ export function makeInMemoryStore(filePath: string): InMemoryStore {
     readFromFile,
     writeToFile,
     bind,
+    markDirty,
   };
 }

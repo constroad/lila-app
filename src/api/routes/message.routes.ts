@@ -2,10 +2,12 @@ import { Router } from 'express';
 import multer from 'multer';
 // 🔄 USING SIMPLE CONTROLLER (notifications approach)
 import * as messageController from '../controllers/message.controller.simple.js';
-import { messageLimiter } from '../middlewares/rateLimiter.js';
-import { requireTenant } from '../../middleware/tenant.middleware.js';
-import { requireWhatsAppQuota } from '../../middleware/quota.middleware.js';
-import { whatsappRateLimiter } from '../../middleware/company-rate-limiter.middleware.js';
+import {
+  requireTenantOrApiKey,
+  optionalTenant,
+  requireSenderOwnership,
+} from '../../middleware/tenant.middleware.js';
+import { config } from '../../config/environment.js';
 
 const router = Router();
 const upload = multer({
@@ -13,49 +15,46 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// POST /api/messages - Enviar mensaje (legacy, sin multi-tenant)
-// DISABLED: Simple controller doesn't have sendMessage (use /:sessionPhone/text instead)
-// router.post('/', messageLimiter, messageController.sendMessage);
+// Auth de envío. Backward-compatible por defecto:
+//  - WHATSAPP_RLS_ENFORCE != 'true' → `optionalTenant`: identifica el tenant si viene
+//    JWT (mejora el conteo y permite avisar de mismatches) pero NUNCA bloquea.
+//  - WHATSAPP_RLS_ENFORCE == 'true' → `requireTenantOrApiKey`: exige JWT de Portal,
+//    API key `lk_fe_` (producto) o el secreto global.
+// `requireSenderOwnership` valida que el sender pertenezca a la company (solo avisa
+// salvo que el flag esté activo). Ver SCALABILITY-MULTI-SESSION.spec §4.
+const messageAuth = config.whatsapp.rlsEnforce ? requireTenantOrApiKey : optionalTenant;
 
-// POST /api/messages/:sessionPhone/text - Enviar mensaje de texto (Multi-tenant + Quotas)
-// 🧪 TESTING MODE: Middlewares deshabilitados
+// POST /api/messages/:sessionPhone/text - Enviar mensaje de texto
 router.post(
   '/:sessionPhone/text',
-  // requireTenant,
-  // whatsappRateLimiter,
-  // requireWhatsAppQuota,
+  messageAuth,
+  requireSenderOwnership,
   messageController.sendTextMessage
 );
 
 // POST /api/messages/:sessionPhone/image - Enviar imagen (Multi-tenant + Quotas)
-// 🧪 TESTING MODE: Middlewares deshabilitados
 router.post(
   '/:sessionPhone/image',
-  // requireTenant,
-  // whatsappRateLimiter,
-  // requireWhatsAppQuota,
+  messageAuth,
+  requireSenderOwnership,
   upload.single('file'),
   messageController.sendImage
 );
 
-// POST /api/messages/:sessionPhone/video - Enviar video (Multi-tenant + Quotas)
-// 🧪 TESTING MODE: Middlewares deshabilitados
+// POST /api/messages/:sessionPhone/video
 router.post(
   '/:sessionPhone/video',
-  // requireTenant,
-  // whatsappRateLimiter,
-  // requireWhatsAppQuota,
+  messageAuth,
+  requireSenderOwnership,
   upload.single('file'),
   messageController.sendVideo
 );
 
-// POST /api/messages/:sessionPhone/file - Enviar archivo (Multi-tenant + Quotas)
-// 🧪 TESTING MODE: Middlewares deshabilitados
+// POST /api/messages/:sessionPhone/file
 router.post(
   '/:sessionPhone/file',
-  // requireTenant,
-  // whatsappRateLimiter,
-  // requireWhatsAppQuota,
+  messageAuth,
+  requireSenderOwnership,
   upload.single('file'),
   messageController.sendFile
 );

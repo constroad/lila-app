@@ -44,6 +44,11 @@ export const config = {
     aiEnabled: process.env.WHATSAPP_AI_ENABLED === 'true',
     aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || '51949376824',
     baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || 'fatal',
+    // RLS de envío: cuando true exige auth de tenant + ownership de sender en /message
+    // y BLOQUEA cross-tenant. Default false = solo identifica/avisa (backward-compatible).
+    // Es un toggle de comportamiento por entorno (off en dev, on en prod tras validar logs),
+    // por eso vive en env y no en constants. Ver SCALABILITY-MULTI-SESSION.spec §4.
+    rlsEnforce: process.env.WHATSAPP_RLS_ENFORCE === 'true',
   },
   
   // Claude API
@@ -112,6 +117,11 @@ export const config = {
     rateLimitWindow: process.env.RATE_LIMIT_WINDOW || '5m',
     rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '200', 10),
     trustProxy: resolvedTrustProxy,
+    // Límites por IP (anti-abuso). Ajustables por env. Para límites por TENANT
+    // (producto/billing) ver SCALABILITY-MULTI-SESSION.spec §4.5 y QUOTAS spec.
+    sessionRateMax: parseInt(process.env.SESSION_RATE_MAX || '5', 10), // sesiones/min
+    jobsRateMax: parseInt(process.env.JOBS_RATE_MAX || '10', 10), // cron ops/min
+    messageRateMax: parseInt(process.env.MESSAGE_RATE_MAX || '100', 10), // mensajes/min
   },
   
   // Features

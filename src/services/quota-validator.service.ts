@@ -365,12 +365,27 @@ export class QuotaValidatorService {
       digits ? `+${digits}` : '',
     ].filter(Boolean)));
 
-    const company = await this.CompanyModel.findOne({
+    // En runtime un sender (numero WhatsApp) mapea a UNA sola company: el mismo
+    // numero no puede correr dos sesiones a la vez. Pero `whatsappConfig.sender`
+    // NO tiene indice unico, asi que una misconfig (o pruebas: test + inframaq con
+    // el mismo numero) podria duplicarlo. Detectamos y avisamos en vez de atribuir
+    // el conteo a la company equivocada en silencio. Orden estable (`companyId`)
+    // para que un sender compartido resuelva SIEMPRE a la misma company, no al azar.
+    const matches = await this.CompanyModel.find({
       isActive: true,
       $or: candidates.map((value) => ({ 'whatsappConfig.sender': value })),
-    });
+    })
+      .sort({ companyId: 1 })
+      .limit(2);
 
-    return company || null;
+    if (matches.length > 1) {
+      logger.warn(
+        `Ambiguous WhatsApp sender ${sender}: maps to ${matches.length}+ companies ` +
+        `(${matches.map((c) => c.companyId).join(', ')}). Using first; fix duplicate sender config.`
+      );
+    }
+
+    return matches[0] || null;
   }
 
   /**

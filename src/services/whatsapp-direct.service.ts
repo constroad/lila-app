@@ -45,19 +45,42 @@ type WhatsAppUsageOptions = {
 const resolveUsageCompanyId = (options: WhatsAppUsageOptions = {}) =>
   options.companyId || options.tenantId || '';
 
+/**
+ * Registra el consumo de UN mensaje WhatsApp en lila-app, que es el ÚNICO punto
+ * de conteo (Portal no cuenta envíos, solo reconcilia — igual que storage).
+ *
+ * La company se identifica por el sender (`sessionId`) cuando el caller no la
+ * provee: los envíos disparados desde Portal llegan a `/message/:sender/...` sin
+ * companyId (requireTenant deshabilitado), así que se resuelve por el número
+ * emisor vía `getCompanyByWhatsappSender`. El cron sí pasa companyId y evita el lookup.
+ *
+ * @param sessionId - Sender de la sesión (número sin '+') usado para resolver la company
+ * @param options - companyId/tenantId explícitos y flag trackUsage
+ * @param context - Etiqueta del tipo de envío (text/image/video/document) para logs
+ */
 const trackWhatsAppUsage = async (
+  sessionId: string,
   options: WhatsAppUsageOptions = {},
   context: string
 ) => {
   if (options.trackUsage === false) return;
 
-  const companyId = resolveUsageCompanyId(options);
-  if (!companyId) return;
-
   try {
+    let companyId = resolveUsageCompanyId(options);
+
+    if (!companyId) {
+      const company = await quotaValidatorService.getCompanyByWhatsappSender(sessionId);
+      companyId = company?.companyId || '';
+    }
+
+    if (!companyId) {
+      logger.warn(`Skipping WhatsApp usage: no company for sender ${sessionId} (${context})`);
+      return;
+    }
+
     await quotaValidatorService.incrementWhatsAppUsage(companyId, 1);
   } catch (error) {
-    logger.warn(`Failed to track WhatsApp usage for ${companyId} (${context}): ${String(error)}`);
+    logger.warn(`Failed to track WhatsApp usage for sender ${sessionId} (${context}): ${String(error)}`);
   }
 };
 
@@ -129,7 +152,7 @@ export const WhatsAppDirectService = {
       const validTo = assertWhatsAppRecipient(routedTo);
       const sendOptions = getSendOptions(validTo);
       const result = await sock.sendMessage(validTo, { text: message }, sendOptions);
-      await trackWhatsAppUsage(options, 'text');
+      await trackWhatsAppUsage(id, options, 'text');
       return result;
     } catch (error) {
       logger.warn(`Failed to send message via ${id}: ${String(error)}`);
@@ -261,7 +284,7 @@ export const WhatsAppDirectService = {
         },
         sendOptions
       );
-      await trackWhatsAppUsage(options, 'video');
+      await trackWhatsAppUsage(id, options, 'video');
 
       // Cleanup temp files
       if (shouldCleanup && cleanupPath) {
@@ -396,7 +419,7 @@ export const WhatsAppDirectService = {
         },
         sendOptions
       );
-      await trackWhatsAppUsage(options, 'image');
+      await trackWhatsAppUsage(id, options, 'image');
 
       // Cleanup temp files
       if (shouldCleanup && cleanupPath) {
@@ -537,7 +560,7 @@ export const WhatsAppDirectService = {
         },
         sendOptions
       );
-      await trackWhatsAppUsage(options, 'document');
+      await trackWhatsAppUsage(id, options, 'document');
 
       // Cleanup temp files
       if (shouldCleanup && cleanupPath) {

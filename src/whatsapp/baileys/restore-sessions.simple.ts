@@ -2,20 +2,15 @@
  * 📦 Restore All Sessions on Startup (EXACT copy from notifications)
  */
 
-import fs from 'fs';
 import { startSession } from './sessions.simple.js';
-import { config } from '../../config/environment.js';
+import { listMongoAuthSessions } from './mongo-auth-state.js';
 
 export const restoreAllSessions = async () => {
-  if (!fs.existsSync(config.whatsapp.sessionDir)) return;
+  // Las sesiones a restaurar salen de Mongo (donde viven las creds), no de archivos
+  // locales: así prod/otra instancia restaura las mismas sesiones que tienen credenciales.
+  const sessionIds = (await listMongoAuthSessions()).filter((id) => /^\d{9,15}$/.test(id));
 
-  const sessionDirs = fs
-    .readdirSync(config.whatsapp.sessionDir, { withFileTypes: true })
-    .filter((dirent) => dirent.isDirectory())
-    .filter((dirent) => /^\d{9,15}$/.test(dirent.name)) // Detect phone number folders (e.g., 51902049935)
-    .map((dirent) => dirent.name);
-
-  for (const phone of sessionDirs) {
+  for (const phone of sessionIds) {
     try {
       console.log(`♻️ Restoring session for ${phone}`);
       await startSession(phone, () => {}); // Empty QR callback

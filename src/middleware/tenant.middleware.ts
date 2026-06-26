@@ -18,6 +18,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config/environment.js';
 import logger from '../utils/logger.js';
 import { getCompanyModel } from '../database/models.js';
+import { quotaValidatorService } from '../services/quota-validator.service.js';
 
 // ============================================================================
 // TYPES
@@ -208,7 +209,15 @@ export async function requireTenant(
     if (baseUrl.startsWith('/api/message') && req.apiKeyAllowedSenders?.length) {
       const sessionPhoneRaw = req.params?.sessionPhone;
       const sessionPhone = sessionPhoneRaw ? normalizeSender(String(sessionPhoneRaw)) : '';
-      if (sessionPhone && !req.apiKeyAllowedSenders.includes(sessionPhone)) {
+      // El sender configurado de la company SIEMPRE está permitido: lo posee por
+      // definición. `allowedSenders` explícito agrega senders EXTRA (producto API
+      // multi-número). Sin esto, cambiar de sender o reconectar con otro número
+      // rompía el envío hasta resincronizar la lista (bug "Sender not allowed").
+      const ownSender = normalizeSender(String(company.whatsappConfig?.sender || ''));
+      const isAllowed =
+        req.apiKeyAllowedSenders.includes(sessionPhone) ||
+        (Boolean(ownSender) && sessionPhone === ownSender);
+      if (sessionPhone && !isAllowed) {
         const error: CustomError = new Error('Sender not allowed for this API key');
         error.statusCode = 403;
         throw error;
@@ -295,6 +304,76 @@ export function optionalTenant(
   } catch (err) {
     // En caso de cualquier error, simplemente continuar sin tenant
     next();
+  }
+}
+
+/**
+ * Acepta autenticación de tenant (JWT de Portal o API key `lk_fe_...`) y, como
+ * compatibilidad hacia atrás, la API key global `x-api-key === API_SECRET_KEY`.
+ *
+ * Pensado para endpoints de administración de sesión que hoy llama Portal con
+ * JWT (qr, clear, logout, disconnect, syncGroups) sin romper consumidores legacy
+ * que aún usan el secreto global. Cuando se complete el hardening RLS se puede
+ * retirar el fallback global (ver SCALABILITY-MULTI-SESSION.spec §4/§5).
+ */
+export async function requireTenantOrApiKey(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const legacyKey = req.headers['x-api-key'];
+  const expected = process.env.API_SECRET_KEY;
+  if (typeof legacyKey === 'string' && expected && legacyKey === expected) {
+    return next();
+  }
+  return requireTenant(req, res, next);
+}
+
+/**
+ * Verifica que el `:sessionPhone` (sender) pertenezca a la company autenticada.
+ * Cierra el GAP cross-tenant de envío (una company no debe enviar por el sender de
+ * otra). Ver SCALABILITY-MULTI-SESSION.spec §4.2/§4.3.
+ *
+ * Backward-compatible por defecto: si no hay `companyId` en el request (path legacy
+ * con secreto global), no bloquea. Si hay mismatch solo **avisa** salvo que
+ * `WHATSAPP_RLS_ENFORCE=true`, en cuyo caso responde 403. Esto permite hacer push a
+ * producción y observar logs antes de activar el bloqueo.
+ */
+export async function requireSenderOwnership(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const companyId = req.companyId;
+  const sessionPhone = req.params?.sessionPhone;
+  // Sin tenant (secreto global) o sin sender → no podemos/!debemos bloquear.
+  if (!companyId || !sessionPhone) {
+    return next();
+  }
+
+  const enforce = config.whatsapp.rlsEnforce;
+  try {
+    const owner = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
+    if (owner && owner.companyId === companyId) {
+      return next(); // ownership correcto
+    }
+    logger.warn(
+      `Sender ownership mismatch: company ${companyId} intentó usar sender ${sessionPhone} ` +
+      `(owner=${owner?.companyId ?? 'desconocido'})${enforce ? ' [BLOQUEADO]' : ' [solo aviso]'}`
+    );
+    if (enforce) {
+      const error: CustomError = new Error('El sender no pertenece a la empresa autenticada');
+      error.statusCode = 403;
+      throw error;
+    }
+    return next();
+  } catch (err) {
+    if (enforce && (err as CustomError)?.statusCode === 403) {
+      return next(err);
+    }
+    // Fallo de lookup → no bloquear (backward-compatible)
+    logger.debug('requireSenderOwnership lookup falló (ignorado):', err);
+    return next();
   }
 }
 
