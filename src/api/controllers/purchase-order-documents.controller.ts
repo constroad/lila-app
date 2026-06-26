@@ -216,7 +216,11 @@ function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
   const igv = Number(totals.igv || 0);
   const total = Number(totals.total || 0);
   const amountInWords = String(totals.amountInWords || '').trim();
-  const intro = 'Sírvase atender la siguiente orden de compra según lo detallado a continuación.';
+  const documentTitle = String(header.documentTitle || 'ORDEN DE COMPRA').trim() || 'ORDEN DE COMPRA';
+  const isServiceOrder = String(header.orderType || meta.orderType || '').toLowerCase() === 'service';
+  const intro = isServiceOrder
+    ? 'Sírvase atender la siguiente orden de servicio según lo detallado a continuación.'
+    : 'Sírvase atender la siguiente orden de compra según lo detallado a continuación.';
   const termsLines = String(data.termsText || '')
     .split(/\.\s+/)
     .map((line) => line.trim().replace(/\.$/, ''))
@@ -568,7 +572,7 @@ function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
       <div class="issuer-panel ${hasLetterhead ? 'issuer-panel-letterhead' : ''}">
         ${renderIssuerDetails(hasLetterhead, header)}
         <div class="doc-head">
-          <div class="doc-head-title">ORDEN DE COMPRA</div>
+          <div class="doc-head-title">${escapeHtml(documentTitle)}</div>
           <div class="doc-head-series">${escapeHtml(header.orderNumber || '')}</div>
         </div>
       </div>
@@ -802,16 +806,23 @@ async function generatePurchaseOrder(req: Request, res: Response, next: NextFunc
       'sin-numero'
     );
     const safeOrderNumber = sanitizePathSegment(orderNumberRaw);
-    const relativeDir = path.posix.join('ordenes-compra', `nro-${safeOrderNumber}`);
+    const isServiceOrder = String(
+      payload.schemaData?.header?.orderType ||
+      payload.schemaData?.meta?.orderType ||
+      ''
+    ).toLowerCase() === 'service';
+    const moduleDir = isServiceOrder ? 'ordenes-servicio' : 'ordenes-compra';
+    const filenamePrefix = isServiceOrder ? 'orden-servicio' : 'orden-compra';
+    const relativeDir = path.posix.join(moduleDir, `nro-${safeOrderNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
-      'ordenes-compra',
+      moduleDir,
       `nro-${safeOrderNumber}`
     );
     await fs.ensureDir(outputDir);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `orden-compra-${safeOrderNumber}-${timestamp}.pdf`;
+    const filename = `${filenamePrefix}-${safeOrderNumber}-${timestamp}.pdf`;
     const outputPath = path.join(outputDir, filename);
 
     await pdfGenerator.generateFromHtml(html, {

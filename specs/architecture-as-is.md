@@ -52,6 +52,7 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   - `documents.controller.ts` - generador generico de informes con membrete (REPORT_LETTERHEAD_CODES) y schema customization por empresa.
   - `service-management-report.controller.ts` - CRUD/lock de informes de servicio.
   - `dispatch-note-documents.controller.ts`, `purchase-order-documents.controller.ts`, `quote-documents.controller.ts`.
+  - `purchase-order-documents.controller.ts` conserva el schema `ORD-COM`, pero acepta `schemaData.header.orderType` / `meta.orderType` para renderizar `ORDEN DE COMPRA` (`oc-...`) u `ORDEN DE SERVICIO` (`oser-...`). Los PDFs de servicio se guardan bajo `ordenes-servicio`; los de compra mantienen `ordenes-compra`.
 - Services:
   - `report-data-aggregator.service.ts` (agrega data desde Portal Mongo).
   - `report-html-renderer.service.ts` (Handlebars + branding empresa).
