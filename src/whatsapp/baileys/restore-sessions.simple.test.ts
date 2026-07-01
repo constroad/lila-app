@@ -1,19 +1,18 @@
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
+// Las sesiones a restaurar salen de Mongo (whatsapp_auth), NO del filesystem: en prod
+// las creds viven en la DB compartida. Por eso mockeamos `listMongoAuthSessions`.
 const startSessionMock = jest.fn(async (..._args: unknown[]) => undefined);
-const config: any = { whatsapp: { sessionDir: '' } };
+const listMongoAuthSessions = jest.fn(async () => [] as string[]);
 
 jest.unstable_mockModule('./sessions.simple.js', () => ({
   __esModule: true,
   startSession: startSessionMock,
 }));
 
-jest.unstable_mockModule('../../config/environment.js', () => ({
+jest.unstable_mockModule('./mongo-auth-state.js', () => ({
   __esModule: true,
-  config,
+  listMongoAuthSessions,
 }));
 
 const loadSubject = async () => {
@@ -22,33 +21,30 @@ const loadSubject = async () => {
 };
 
 describe('restoreAllSessions', () => {
-  let tmpRoot: string;
-
   beforeEach(() => {
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lila-restore-'));
-    config.whatsapp.sessionDir = tmpRoot;
+    jest.resetModules();
     startSessionMock.mockClear();
     startSessionMock.mockImplementation(async () => undefined);
+    listMongoAuthSessions.mockReset();
+    listMongoAuthSessions.mockResolvedValue([]);
   });
 
-  afterEach(() => {
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
-  });
-
-  it('does nothing when sessionDir is missing', async () => {
-    config.whatsapp.sessionDir = path.join(tmpRoot, 'nope');
+  it('does nothing when Mongo has no sessions', async () => {
+    listMongoAuthSessions.mockResolvedValue([]);
     const restoreAllSessions = await loadSubject();
     await restoreAllSessions();
     expect(startSessionMock).not.toHaveBeenCalled();
   });
 
-  it('calls startSession only for phone-shaped directories', async () => {
-    fs.mkdirSync(path.join(tmpRoot, '51949376824'));
-    fs.mkdirSync(path.join(tmpRoot, '51902049935'));
-    fs.mkdirSync(path.join(tmpRoot, 'backups'));
-    fs.mkdirSync(path.join(tmpRoot, 'README'));
-    fs.writeFileSync(path.join(tmpRoot, '12345678'), 'short-name file, ignored');
-    fs.mkdirSync(path.join(tmpRoot, '12345678901234567'));
+  it('calls startSession only for phone-shaped session ids', async () => {
+    listMongoAuthSessions.mockResolvedValue([
+      '51949376824',
+      '51902049935',
+      'backups',
+      'README',
+      '12345678', // muy corto (<9) → ignorado
+      '12345678901234567', // muy largo (>15) → ignorado
+    ]);
 
     const restoreAllSessions = await loadSubject();
     await restoreAllSessions();
@@ -58,9 +54,7 @@ describe('restoreAllSessions', () => {
   });
 
   it('continues restoring siblings even if one throws', async () => {
-    fs.mkdirSync(path.join(tmpRoot, '51111111111'));
-    fs.mkdirSync(path.join(tmpRoot, '52222222222'));
-
+    listMongoAuthSessions.mockResolvedValue(['51111111111', '52222222222']);
     startSessionMock.mockImplementationOnce(async () => {
       throw new Error('boom');
     });

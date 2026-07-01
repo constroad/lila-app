@@ -284,12 +284,22 @@ async function initSession(
         // transitorios (red caída, Mongo/Atlas inalcanzable durante el corte).
         scheduleReconnect(sessionId, qrCb);
       } else {
-        // Logout real → no reconectar. Limpiar todo.
+        // Logout real (401): el dispositivo fue desvinculado, las creds están MUERTAS.
+        // No reconectar y, sobre todo, BORRAR las creds de Mongo: si se dejan, cada
+        // arranque `restoreAllSessions` las vuelve a levantar → 401 → muere, en un loop
+        // infinito (era el caso observado). Sin creds, la sesión sale de la lista de
+        // restauración y solo vuelve tras re-emparejar (QR/pairing) — que es lo correcto.
         clearStoreTimer(sessionId);
         clearReconnectTimer(sessionId);
         reconnectAttempts[sessionId] = 0;
         delete sessions[sessionId];
         delete stores[sessionId];
+        try {
+          await clearMongoAuthState(sessionId);
+          logger.info(`🧹 Cleared dead Mongo creds for ${sessionId} (loggedOut)`);
+        } catch (err) {
+          logger.warn(`Failed to clear dead creds for ${sessionId}:`, err);
+        }
       }
     }
   });
@@ -366,8 +376,15 @@ export async function createPairingSession(
       if (statusCode !== DisconnectReason.loggedOut && statusCode !== 401) {
         setTimeout(() => createPairingSession(phone, sendCode), 3000);
       } else {
+        // Logout/401 → creds muertas: borrarlas de Mongo para no reintentarlas en el
+        // próximo restore (mismo criterio que initSession).
         delete sessions[sessionId];
         delete stores[sessionId];
+        try {
+          await clearMongoAuthState(sessionId);
+        } catch (err) {
+          logger.warn(`Failed to clear dead creds for ${sessionId}:`, err);
+        }
       }
     }
 
@@ -429,6 +446,25 @@ export async function endSession(sessionId: string): Promise<void> {
     readyClients.delete(sessionId);
     logger.info(`Session ${sessionId} closed (creds preserved)`);
   }
+}
+
+/**
+ * Reinicio SUAVE de la sesión: cierra el socket actual SIN logout (conserva credenciales y
+ * store en Mongo) y vuelve a levantarla. A diferencia de `clearSession`, NO borra nada —
+ * por eso es seguro para números compartidos entre companies (reconecta sin obligar a
+ * re-emparejar ni afectar a los demás tenants). Es la operación que debería usar el botón
+ * "reconectar / reiniciar" del Portal.
+ */
+export async function restartSession(
+  sessionId: string,
+  qrCb?: (qr: string) => void
+): Promise<WASocket> {
+  logger.info(`🔄 Restarting session ${sessionId} (soft, creds preserved)`);
+  // `endSession` cierra el socket con `sock.end()` (sin logout → creds intactas) y marca
+  // shuttingDown para que el cierre no dispare la reconexión automática. `startSession`
+  // (vía initSession) limpia shuttingDown y crea un socket nuevo con las mismas creds.
+  await endSession(sessionId);
+  return startSession(sessionId, qrCb);
 }
 
 /**

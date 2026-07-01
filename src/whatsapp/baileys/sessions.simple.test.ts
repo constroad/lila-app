@@ -69,6 +69,7 @@ const fakeStore = {
   readFromFile: jest.fn(),
   writeToFile: jest.fn(),
   bind: jest.fn(),
+  markDirty: jest.fn(),
   chats: new Map(),
   contacts: new Map(),
   messages: new Map(),
@@ -96,6 +97,22 @@ jest.unstable_mockModule('../../config/environment.js', () => ({
   config: { whatsapp: { sessionDir: '/tmp/lila-test-sessions' } },
 }));
 
+// Creds viven en Mongo (mongo-auth-state). Se mockea para no tocar la DB compartida ni
+// resolver `BufferJSON`/`getSharedConnection`. `clearMongoAuthState` es observable: el fix
+// del loop 401 debe llamarlo cuando el logout es definitivo (creds muertas).
+const saveCredsMongo = jest.fn(async () => undefined);
+const clearMongoAuthState = jest.fn(async () => undefined);
+jest.unstable_mockModule('./mongo-auth-state.js', () => ({
+  __esModule: true,
+  useMongoAuthState: jest.fn(async () => ({
+    state: { creds: { registered: false }, keys: { get: jest.fn(), set: jest.fn() } },
+    saveCreds: saveCredsMongo,
+    clearAuth: jest.fn(async () => undefined),
+  })),
+  clearMongoAuthState,
+  listMongoAuthSessions: jest.fn(async () => []),
+}));
+
 jest.unstable_mockModule('../../utils/logger.js', () => ({
   __esModule: true,
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -114,6 +131,8 @@ beforeEach(async () => {
   fsExtraMock.remove.mockClear();
   flushOutboxForSession.mockClear();
   outboxClear.mockClear();
+  saveCredsMongo.mockClear();
+  clearMongoAuthState.mockClear();
   subject = await import('./sessions.simple.js');
 });
 
@@ -224,6 +243,18 @@ describe('reconnect / close handler', () => {
     expect(setTimeoutSpy).not.toHaveBeenCalled();
   });
 
+  it('wipes dead Mongo creds on loggedOut close (breaks the 401 restore loop)', async () => {
+    await subject.startSession('51111111111');
+    await fireClose(401);
+    expect(clearMongoAuthState).toHaveBeenCalledWith('51111111111');
+  });
+
+  it('does NOT wipe creds on transient (non-loggedOut) close', async () => {
+    await subject.startSession('51111111111');
+    await fireClose(500);
+    expect(clearMongoAuthState).not.toHaveBeenCalled();
+  });
+
   it('skips reconnect when shuttingDown is set (graceful shutdown path)', async () => {
     await subject.startSession('51111111111');
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
@@ -298,6 +329,35 @@ describe('clearSession', () => {
     fsExtraMock.remove.mockRejectedValueOnce(new Error('fs blew up') as never);
     await expect(subject.clearSession('51111111111')).resolves.toBeUndefined();
     expect(outboxClear).toHaveBeenCalled();
+  });
+});
+
+describe('restartSession (soft restart — creds preserved)', () => {
+  it('ends the old socket without logout and starts a fresh one', async () => {
+    await subject.startSession('51111111111');
+    const oldSocket = currentSocket;
+    await subject.restartSession('51111111111');
+
+    expect(oldSocket.end).toHaveBeenCalled();
+    expect(oldSocket.logout).not.toHaveBeenCalled();
+    // A new socket replaced the old one and the session stays registered.
+    expect(subject.getSession('51111111111')).toBe(currentSocket);
+    expect(currentSocket).not.toBe(oldSocket);
+    expect(subject.listSessions()).toEqual(['51111111111']);
+  });
+
+  it('never wipes credentials (safe for shared senders)', async () => {
+    await subject.startSession('51111111111');
+    await subject.restartSession('51111111111');
+    expect(clearMongoAuthState).not.toHaveBeenCalled();
+  });
+
+  it('allows auto-reconnect again after restart (shuttingDown cleared)', async () => {
+    await subject.startSession('51111111111');
+    await subject.restartSession('51111111111');
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    await fireClose(500);
+    expect(setTimeoutSpy).toHaveBeenCalled();
   });
 });
 
@@ -389,7 +449,7 @@ describe('createPairingSession', () => {
 });
 
 describe('messaging-history.set handler (sync history into store)', () => {
-  it('writes chats / contacts / messages into the store', async () => {
+  it('writes chats / contacts into the store and marks it dirty — but NOT messages', async () => {
     await subject.startSession('51111111111');
     currentSocket.ev.emit('messaging-history.set', {
       chats: [{ id: 'chat-a' }, { id: 'chat-b' }],
@@ -401,7 +461,10 @@ describe('messaging-history.set handler (sync history into store)', () => {
     });
     expect(fakeStore.chats.get('chat-a')).toEqual({ id: 'chat-a' });
     expect(fakeStore.contacts.get('contact-a')).toEqual({ id: 'contact-a' });
-    expect(fakeStore.messages.get('jid-1')).toHaveLength(2);
+    // Los mensajes NO se almacenan (evita el crecimiento ilimitado del store, ver
+    // SCALABILITY-MULTI-SESSION.spec §3). Solo chats/contactos + markDirty.
+    expect(fakeStore.messages.size).toBe(0);
+    expect(fakeStore.markDirty).toHaveBeenCalled();
   });
 });
 

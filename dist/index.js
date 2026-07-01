@@ -5767,6 +5767,33 @@ var init_quota_validator_service = __esm({
         return matches[0] || null;
       }
       /**
+       * Lista TODAS las companies activas que usan un mismo sender (número WhatsApp).
+       *
+       * A diferencia de `getCompanyByWhatsappSender` (que resuelve a UNA para atribuir
+       * conteo), esto devuelve el conjunto completo de dueños. Lo usa el guard de
+       * operaciones destructivas de sesión: un número compartido por varias companies
+       * no debe borrarse/cerrarse por decisión de un solo tenant (ver caso 51949376824).
+       */
+      async listCompaniesByWhatsappSender(sender) {
+        if (!sender) return [];
+        if (!this.isReady()) {
+          await this.connect();
+        }
+        if (!this.CompanyModel) {
+          throw new Error("QuotaValidator not initialized");
+        }
+        const digits = sender.replace(/[^\d]/g, "");
+        const candidates = Array.from(new Set([
+          sender,
+          digits,
+          digits ? `+${digits}` : ""
+        ].filter(Boolean)));
+        return this.CompanyModel.find({
+          isActive: true,
+          $or: candidates.map((value) => ({ "whatsappConfig.sender": value }))
+        }).sort({ companyId: 1 });
+      }
+      /**
        * Obtiene el periodo actual (YYYY-MM)
        */
       getCurrentPeriod() {
@@ -6953,6 +6980,12 @@ async function initSession(sessionId, qrCb) {
         reconnectAttempts[sessionId] = 0;
         delete sessions[sessionId];
         delete stores[sessionId];
+        try {
+          await clearMongoAuthState(sessionId);
+          logger_default.info(`\u{1F9F9} Cleared dead Mongo creds for ${sessionId} (loggedOut)`);
+        } catch (err) {
+          logger_default.warn(`Failed to clear dead creds for ${sessionId}:`, err);
+        }
       }
     }
   });
@@ -7008,6 +7041,11 @@ async function createPairingSession(phone, sendCode) {
       } else {
         delete sessions[sessionId];
         delete stores[sessionId];
+        try {
+          await clearMongoAuthState(sessionId);
+        } catch (err) {
+          logger_default.warn(`Failed to clear dead creds for ${sessionId}:`, err);
+        }
       }
     }
     if (!pairingDone && !sock.authState.creds.registered && connection === "connecting") {
@@ -7055,6 +7093,11 @@ async function endSession(sessionId) {
     readyClients.delete(sessionId);
     logger_default.info(`Session ${sessionId} closed (creds preserved)`);
   }
+}
+async function restartSession(sessionId, qrCb) {
+  logger_default.info(`\u{1F504} Restarting session ${sessionId} (soft, creds preserved)`);
+  await endSession(sessionId);
+  return startSession(sessionId, qrCb);
 }
 async function clearSession(sessionId) {
   try {
@@ -23583,6 +23626,28 @@ async function clearSessionHandler(req, res, next) {
     next(error);
   }
 }
+async function restartSessionHandler(req, res, next) {
+  try {
+    const { phoneNumber } = req.params;
+    if (!phoneNumber) {
+      const error = new Error("phoneNumber is required");
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    logger_default.info(`Restarting session ${phoneNumber} (soft, creds preserved)...`);
+    await restartSession(phoneNumber);
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: `Session ${phoneNumber} restarted`,
+      data: {
+        phoneNumber,
+        status: isSessionReady(phoneNumber) ? "connected" : "connecting"
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
 async function getAllSessionsHandler(req, res, next) {
   try {
     const sessionIds = listSessions();
@@ -23717,6 +23782,7 @@ var createSession = createSessionHandler;
 var getSessionStatus = getSessionStatusHandler;
 var disconnectSession2 = disconnectSessionHandler;
 var clearSession2 = clearSessionHandler;
+var restartSession2 = restartSessionHandler;
 var getAllSessions = getAllSessionsHandler;
 var getQRCodeImage = getQRCodeImageHandler;
 var getGroupList = getGroupListHandler;
@@ -23962,6 +24028,46 @@ async function requireSenderOwnership(req, res, next) {
     return next();
   }
 }
+async function guardSharedSenderDestructive(req, res, next) {
+  const companyId = req.companyId;
+  const phone = req.params?.phoneNumber;
+  if (!phone || !companyId) {
+    return next();
+  }
+  const force = (req.body && req.body.force) === true;
+  try {
+    const owners = await quotaValidatorService.listCompaniesByWhatsappSender(phone);
+    const ownerIds = owners.map((c66) => c66.companyId);
+    if (ownerIds.length > 1) {
+      if (force) {
+        logger_default.warn(
+          `Destructive op on SHARED sender ${phone} by ${companyId} FORZADA (owners: ${ownerIds.join(", ")})`
+        );
+        return next();
+      }
+      const error = new Error(
+        `El n\xFAmero ${phone} lo usan ${ownerIds.length} empresas (${ownerIds.join(", ")}). Us\xE1 el reinicio suave (POST /sessions/${phone}/restart) o reenvi\xE1 con force:true para el reset destructivo (borra credenciales para TODAS).`
+      );
+      error.statusCode = 409;
+      logger_default.warn(
+        `Blocked destructive op on shared sender ${phone} by ${companyId} (owners: ${ownerIds.join(", ")})`
+      );
+      return next(error);
+    }
+    if (ownerIds.length === 1 && ownerIds[0] !== companyId) {
+      logger_default.warn(
+        `Blocked destructive op on sender ${phone}: ${companyId} no es due\xF1o (owner=${ownerIds[0]})`
+      );
+      const error = new Error("El n\xFAmero no pertenece a la empresa autenticada");
+      error.statusCode = 403;
+      return next(error);
+    }
+    return next();
+  } catch (err) {
+    logger_default.warn(`guardSharedSenderDestructive lookup fall\xF3 para ${phone} (ignorado): ${String(err)}`);
+    return next();
+  }
+}
 
 // src/api/routes/session.routes.ts
 var router = Router();
@@ -23970,12 +24076,28 @@ router.post("/", requireTenantOrApiKey, createSession);
 router.get("/:phoneNumber/qr", requireTenantOrApiKey, getQRCodeImage);
 router.post("/:phoneNumber/request-pairing-code", requireTenantOrApiKey, createPairingSessionHandler);
 router.get("/:phoneNumber/status", getSessionStatus);
-router.post("/:phoneNumber/logout", requireTenantOrApiKey, logoutSession);
-router.post("/:phoneNumber/clear", requireTenantOrApiKey, clearSession2);
+router.post("/:phoneNumber/restart", requireTenantOrApiKey, restartSession2);
+router.post(
+  "/:phoneNumber/logout",
+  requireTenantOrApiKey,
+  guardSharedSenderDestructive,
+  logoutSession
+);
+router.post(
+  "/:phoneNumber/clear",
+  requireTenantOrApiKey,
+  guardSharedSenderDestructive,
+  clearSession2
+);
 router.get("/:phoneNumber/groups", getGroupList);
 router.get("/:phoneNumber/syncGroups", requireTenantOrApiKey, syncGroups);
 router.get("/:phoneNumber/contacts", getContactsHandler);
-router.delete("/:phoneNumber", requireTenantOrApiKey, disconnectSession2);
+router.delete(
+  "/:phoneNumber",
+  requireTenantOrApiKey,
+  guardSharedSenderDestructive,
+  disconnectSession2
+);
 router.get("/", getAllSessions);
 var session_routes_default = router;
 

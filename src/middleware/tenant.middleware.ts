@@ -377,6 +377,76 @@ export async function requireSenderOwnership(
   }
 }
 
+/**
+ * Guard para operaciones DESTRUCTIVAS de sesión (`/clear`, `/logout`, `DELETE`): impide
+ * que un tenant borre o cierre las credenciales de un número compartido por varias
+ * companies. Este es exactamente el caso que dejó muerta a 51949376824: un `/clear` desde
+ * un tenant borró creds que usaban 3 empresas y nadie pudo reconectar sin re-emparejar.
+ *
+ * Reglas (usa `:phoneNumber` de la ruta y `req.companyId` del tenant autenticado):
+ * - Número compartido (>1 company lo usa como sender): BLOQUEA (409) salvo `body.force===true`.
+ *   La alternativa segura es `POST /:phoneNumber/restart` (reinicio suave, conserva creds).
+ * - Número de una sola company: exige que el tenant autenticado sea esa company (si no, 403).
+ * - Sin `companyId` (secreto global / admin): no bloquea (compat).
+ *
+ * Fail-open ante fallo de lookup (consistente con `requireSenderOwnership`): no bloquear por
+ * un hipo de Mongo, pero se loggea con nivel warn.
+ */
+export async function guardSharedSenderDestructive(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const companyId = req.companyId;
+  const phone = req.params?.phoneNumber;
+  // Sin sender en la ruta, o secreto global (sin tenant) → no podemos/!debemos bloquear.
+  if (!phone || !companyId) {
+    return next();
+  }
+
+  const force = (req.body && (req.body as { force?: unknown }).force) === true;
+
+  try {
+    const owners = await quotaValidatorService.listCompaniesByWhatsappSender(phone);
+    const ownerIds = owners.map((c) => c.companyId);
+
+    if (ownerIds.length > 1) {
+      if (force) {
+        logger.warn(
+          `Destructive op on SHARED sender ${phone} by ${companyId} FORZADA ` +
+          `(owners: ${ownerIds.join(', ')})`
+        );
+        return next();
+      }
+      const error: CustomError = new Error(
+        `El número ${phone} lo usan ${ownerIds.length} empresas (${ownerIds.join(', ')}). ` +
+        `Usá el reinicio suave (POST /sessions/${phone}/restart) o reenviá con force:true ` +
+        `para el reset destructivo (borra credenciales para TODAS).`
+      );
+      error.statusCode = 409;
+      logger.warn(
+        `Blocked destructive op on shared sender ${phone} by ${companyId} ` +
+        `(owners: ${ownerIds.join(', ')})`
+      );
+      return next(error);
+    }
+
+    if (ownerIds.length === 1 && ownerIds[0] !== companyId) {
+      logger.warn(
+        `Blocked destructive op on sender ${phone}: ${companyId} no es dueño (owner=${ownerIds[0]})`
+      );
+      const error: CustomError = new Error('El número no pertenece a la empresa autenticada');
+      error.statusCode = 403;
+      return next(error);
+    }
+
+    return next();
+  } catch (err) {
+    logger.warn(`guardSharedSenderDestructive lookup falló para ${phone} (ignorado): ${String(err)}`);
+    return next();
+  }
+}
+
 // ============================================================================
 // HELPERS
 // ============================================================================

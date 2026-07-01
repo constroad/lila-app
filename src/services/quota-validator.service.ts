@@ -389,6 +389,38 @@ export class QuotaValidatorService {
   }
 
   /**
+   * Lista TODAS las companies activas que usan un mismo sender (número WhatsApp).
+   *
+   * A diferencia de `getCompanyByWhatsappSender` (que resuelve a UNA para atribuir
+   * conteo), esto devuelve el conjunto completo de dueños. Lo usa el guard de
+   * operaciones destructivas de sesión: un número compartido por varias companies
+   * no debe borrarse/cerrarse por decisión de un solo tenant (ver caso 51949376824).
+   */
+  public async listCompaniesByWhatsappSender(sender: string): Promise<ICompany[]> {
+    if (!sender) return [];
+
+    if (!this.isReady()) {
+      await this.connect();
+    }
+
+    if (!this.CompanyModel) {
+      throw new Error('QuotaValidator not initialized');
+    }
+
+    const digits = sender.replace(/[^\d]/g, '');
+    const candidates = Array.from(new Set([
+      sender,
+      digits,
+      digits ? `+${digits}` : '',
+    ].filter(Boolean)));
+
+    return this.CompanyModel.find({
+      isActive: true,
+      $or: candidates.map((value) => ({ 'whatsappConfig.sender': value })),
+    }).sort({ companyId: 1 });
+  }
+
+  /**
    * Obtiene el periodo actual (YYYY-MM)
    */
   private getCurrentPeriod(): string {

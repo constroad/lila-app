@@ -16,6 +16,7 @@ import {
   listSessions,
   disconnectSession as disconnectSimpleSession,
   clearSession as clearSimpleSession,
+  restartSession as restartSimpleSession,
   getSession,
 } from '../../whatsapp/baileys/sessions.simple.js';
 import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js';
@@ -226,6 +227,40 @@ export async function clearSessionHandler(req: Request, res: Response, next: Nex
 }
 
 /**
+ * Restart session (soft) — reconnect WITHOUT logout, keeping credentials.
+ * POST /api/sessions/:phoneNumber/restart
+ *
+ * Safe for senders shared across companies: no credentials are deleted, so it
+ * does not affect other tenants. This is the endpoint to use for "reconnect /
+ * restart" instead of the destructive /clear.
+ */
+export async function restartSessionHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { phoneNumber } = req.params;
+
+    if (!phoneNumber) {
+      const error: CustomError = new Error('phoneNumber is required');
+      error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    logger.info(`Restarting session ${phoneNumber} (soft, creds preserved)...`);
+    await restartSimpleSession(phoneNumber);
+
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: `Session ${phoneNumber} restarted`,
+      data: {
+        phoneNumber,
+        status: isSessionReady(phoneNumber) ? 'connected' : 'connecting',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
  * Get all sessions
  * GET /api/sessions/list
  */
@@ -407,6 +442,7 @@ export const createSession = createSessionHandler;
 export const getSessionStatus = getSessionStatusHandler;
 export const disconnectSession = disconnectSessionHandler;
 export const clearSession = clearSessionHandler;
+export const restartSession = restartSessionHandler;
 export const getAllSessions = getAllSessionsHandler;
 export const getQRCodeImage = getQRCodeImageHandler;
 export const getGroupList = getGroupListHandler;

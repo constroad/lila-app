@@ -1,7 +1,10 @@
 import { Router } from 'express';
 // 🔄 USING SIMPLE CONTROLLER (notifications approach)
 import * as sessionController from '../controllers/session.controller.simple.js';
-import { requireTenantOrApiKey } from '../../middleware/tenant.middleware.js';
+import {
+  requireTenantOrApiKey,
+  guardSharedSenderDestructive,
+} from '../../middleware/tenant.middleware.js';
 
 const router = Router();
 
@@ -25,11 +28,25 @@ router.post('/:phoneNumber/request-pairing-code', requireTenantOrApiKey, session
 // GET /api/sessions/:phoneNumber/status - Obtener estado de sesión
 router.get('/:phoneNumber/status', sessionController.getSessionStatus);
 
-// POST /api/sessions/:phoneNumber/logout - Cerrar sesión activa (logout en servidor WA)
-router.post('/:phoneNumber/logout', requireTenantOrApiKey, sessionController.logoutSession);
+// POST /api/sessions/:phoneNumber/restart - Reinicio SUAVE (reconecta sin logout, conserva creds).
+// Seguro para números compartidos entre companies → alternativa no-destructiva a /clear y /logout.
+router.post('/:phoneNumber/restart', requireTenantOrApiKey, sessionController.restartSession);
 
-// POST /api/sessions/:phoneNumber/clear - Reset completo de sesión (logout + delete files + clear queue)
-router.post('/:phoneNumber/clear', requireTenantOrApiKey, sessionController.clearSession);
+// POST /api/sessions/:phoneNumber/logout - Cerrar sesión activa (logout en servidor WA → DESTRUCTIVO)
+router.post(
+  '/:phoneNumber/logout',
+  requireTenantOrApiKey,
+  guardSharedSenderDestructive,
+  sessionController.logoutSession
+);
+
+// POST /api/sessions/:phoneNumber/clear - Reset completo (logout + borra creds/store + clear queue → DESTRUCTIVO)
+router.post(
+  '/:phoneNumber/clear',
+  requireTenantOrApiKey,
+  guardSharedSenderDestructive,
+  sessionController.clearSession
+);
 
 // GET /api/sessions/:phoneNumber/groups - Listar grupos de WhatsApp
 router.get('/:phoneNumber/groups', sessionController.getGroupList);
@@ -40,8 +57,13 @@ router.get('/:phoneNumber/syncGroups', requireTenantOrApiKey, sessionController.
 // GET /api/sessions/:phoneNumber/contacts - Listar contactos de WhatsApp
 router.get('/:phoneNumber/contacts', sessionController.getContactsHandler);
 
-// DELETE /api/sessions/:phoneNumber - Desconectar sesión (logout en servidor WA)
-router.delete('/:phoneNumber', requireTenantOrApiKey, sessionController.disconnectSession);
+// DELETE /api/sessions/:phoneNumber - Desconectar sesión (logout en servidor WA → DESTRUCTIVO)
+router.delete(
+  '/:phoneNumber',
+  requireTenantOrApiKey,
+  guardSharedSenderDestructive,
+  sessionController.disconnectSession
+);
 
 // DISABLED: Simple controller doesn't have backup features
 // router.post('/:phoneNumber/restore', sessionController.restoreSessionFromBackup);
