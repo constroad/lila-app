@@ -43,6 +43,9 @@ export async function validateSender(
   }
 
   const jobType = req.body?.type;
+  if (req.body?.isActive === false) {
+    return next();
+  }
   const hasMessage =
     Boolean(req.body?.message?.chatId) || Boolean(req.body?.message?.body);
   const shouldRequireSender = jobType === 'message' || hasMessage;

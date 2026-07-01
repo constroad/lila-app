@@ -15258,27 +15258,27 @@ var require_process = __commonJS({
 var require_filesystem = __commonJS({
   "node_modules/detect-libc/lib/filesystem.js"(exports, module) {
     "use strict";
-    var fs30 = __require("fs");
+    var fs32 = __require("fs");
     var LDD_PATH = "/usr/bin/ldd";
     var SELF_PATH = "/proc/self/exe";
     var MAX_LENGTH = 2048;
-    var readFileSync = (path31) => {
-      const fd = fs30.openSync(path31, "r");
+    var readFileSync = (path32) => {
+      const fd = fs32.openSync(path32, "r");
       const buffer2 = Buffer.alloc(MAX_LENGTH);
-      const bytesRead = fs30.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
-      fs30.close(fd, () => {
+      const bytesRead = fs32.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
+      fs32.close(fd, () => {
       });
       return buffer2.subarray(0, bytesRead);
     };
-    var readFile = (path31) => new Promise((resolve2, reject) => {
-      fs30.open(path31, "r", (err, fd) => {
+    var readFile = (path32) => new Promise((resolve2, reject) => {
+      fs32.open(path32, "r", (err, fd) => {
         if (err) {
           reject(err);
         } else {
           const buffer2 = Buffer.alloc(MAX_LENGTH);
-          fs30.read(fd, buffer2, 0, MAX_LENGTH, 0, (_57, bytesRead) => {
+          fs32.read(fd, buffer2, 0, MAX_LENGTH, 0, (_57, bytesRead) => {
             resolve2(buffer2.subarray(0, bytesRead));
-            fs30.close(fd, () => {
+            fs32.close(fd, () => {
             });
           });
         }
@@ -15390,11 +15390,11 @@ var require_detect_libc = __commonJS({
       }
       return null;
     };
-    var familyFromInterpreterPath = (path31) => {
-      if (path31) {
-        if (path31.includes("/ld-musl-")) {
+    var familyFromInterpreterPath = (path32) => {
+      if (path32) {
+        if (path32.includes("/ld-musl-")) {
           return MUSL;
-        } else if (path31.includes("/ld-linux-")) {
+        } else if (path32.includes("/ld-linux-")) {
           return GLIBC;
         }
       }
@@ -15441,8 +15441,8 @@ var require_detect_libc = __commonJS({
       cachedFamilyInterpreter = null;
       try {
         const selfContent = await readFile(SELF_PATH);
-        const path31 = interpreterPath(selfContent);
-        cachedFamilyInterpreter = familyFromInterpreterPath(path31);
+        const path32 = interpreterPath(selfContent);
+        cachedFamilyInterpreter = familyFromInterpreterPath(path32);
       } catch (e29) {
       }
       return cachedFamilyInterpreter;
@@ -15454,8 +15454,8 @@ var require_detect_libc = __commonJS({
       cachedFamilyInterpreter = null;
       try {
         const selfContent = readFileSync(SELF_PATH);
-        const path31 = interpreterPath(selfContent);
-        cachedFamilyInterpreter = familyFromInterpreterPath(path31);
+        const path32 = interpreterPath(selfContent);
+        cachedFamilyInterpreter = familyFromInterpreterPath(path32);
       } catch (e29) {
       }
       return cachedFamilyInterpreter;
@@ -16007,9 +16007,9 @@ var require_sharp = __commonJS({
     ];
     var sharp5;
     var errors = [];
-    for (const path31 of paths) {
+    for (const path32 of paths) {
       try {
-        sharp5 = __require(path31);
+        sharp5 = __require(path32);
         break;
       } catch (err) {
         errors.push(err);
@@ -17414,15 +17414,15 @@ var require_route = __commonJS({
       };
     }
     function wrapConversion(toModel, graph) {
-      const path31 = [graph[toModel].parent, toModel];
+      const path32 = [graph[toModel].parent, toModel];
       let fn = conversions[graph[toModel].parent][toModel];
       let cur = graph[toModel].parent;
       while (graph[cur].parent) {
-        path31.unshift(graph[cur].parent);
+        path32.unshift(graph[cur].parent);
         fn = link(conversions[graph[cur].parent][cur], fn);
         cur = graph[cur].parent;
       }
-      fn.conversion = path31;
+      fn.conversion = path32;
       return fn;
     }
     module.exports = function(fromModel) {
@@ -19317,7 +19317,7 @@ var require_channel = __commonJS({
 var require_output = __commonJS({
   "node_modules/sharp/lib/output.js"(exports, module) {
     "use strict";
-    var path31 = __require("node:path");
+    var path32 = __require("node:path");
     var is = require_is();
     var sharp5 = require_sharp();
     var formats = /* @__PURE__ */ new Map([
@@ -19348,9 +19348,9 @@ var require_output = __commonJS({
       let err;
       if (!is.string(fileOut)) {
         err = new Error("Missing output file path");
-      } else if (is.string(this.options.input.file) && path31.resolve(this.options.input.file) === path31.resolve(fileOut)) {
+      } else if (is.string(this.options.input.file) && path32.resolve(this.options.input.file) === path32.resolve(fileOut)) {
         err = new Error("Cannot use same file for input and output");
-      } else if (jp2Regex.test(path31.extname(fileOut)) && !this.constructor.format.jp2k.output.file) {
+      } else if (jp2Regex.test(path32.extname(fileOut)) && !this.constructor.format.jp2k.output.file) {
         err = errJp2Save();
       }
       if (err) {
@@ -21459,8 +21459,8 @@ var require_FileKvStore = __commonJS({
     var promises_1 = __importDefault(__require("node:fs/promises"));
     var node_path_1 = __importDefault(__require("node:path"));
     var FileKvStore = class {
-      constructor(path31) {
-        this.directory = path31;
+      constructor(path32) {
+        this.directory = path32;
       }
       async get(key) {
         try {
@@ -21843,21 +21843,21 @@ var require_BaseHandler = __commonJS({
         return res.end();
       }
       generateUrl(req, id) {
-        const path31 = this.options.path === "/" ? "" : this.options.path;
+        const path32 = this.options.path === "/" ? "" : this.options.path;
         if (this.options.generateUrl) {
           const { proto: proto4, host: host2 } = this.extractHostAndProto(req);
           return this.options.generateUrl(req, {
             proto: proto4,
             host: host2,
-            path: path31,
+            path: path32,
             id
           });
         }
         if (this.options.relativeLocation) {
-          return `${path31}/${id}`;
+          return `${path32}/${id}`;
         }
         const { proto: proto3, host } = this.extractHostAndProto(req);
-        return `${proto3}://${host}${path31}/${id}`;
+        return `${proto3}://${host}${path32}/${id}`;
       }
       getFileIdFromRequest(req) {
         const match = reExtractFileID.exec(req.url);
@@ -22013,8 +22013,8 @@ var require_GetHandler = __commonJS({
           "application/ogg"
         ]);
       }
-      registerPath(path31, handler) {
-        this.paths.set(path31, handler);
+      registerPath(path32, handler) {
+        this.paths.set(path32, handler);
       }
       /**
        * Read data from the DataStore and send the stream.
@@ -22761,8 +22761,8 @@ var require_server = __commonJS({
           }
         });
       }
-      get(path31, handler) {
-        this.handlers.GET.registerPath(path31, handler);
+      get(path32, handler) {
+        this.handlers.GET.registerPath(path32, handler);
       }
       /**
        * Main server requestListener, invoked on every 'request' event.
@@ -25090,6 +25090,9 @@ async function validateSender(req, res, next) {
     });
   }
   const jobType = req.body?.type;
+  if (req.body?.isActive === false) {
+    return next();
+  }
   const hasMessage = Boolean(req.body?.message?.chatId) || Boolean(req.body?.message?.body);
   const shouldRequireSender = jobType === "message" || hasMessage;
   if (shouldRequireSender && !company.whatsappConfig?.sender) {
@@ -26084,10 +26087,143 @@ async function previewValeTemplateGrid(req, res, next) {
   }
 }
 
+// src/api/controllers/plant-dispatch-settlement-document.controller.ts
+import fs12 from "fs-extra";
+
+// src/services/plant-dispatch-settlement-document.service.ts
+init_environment();
+init_models();
+import fs11 from "fs-extra";
+import path14 from "path";
+var escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+var formatDate = (value) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "-";
+};
+var formatM3 = (value) => Number.isFinite(value) ? value.toFixed(2) : "0.00";
+var absoluteLogoUrl = (source) => {
+  const value = String(source || "").trim();
+  if (!value || /^https?:\/\//i.test(value) || value.startsWith("data:")) return value;
+  return `${config.portal.baseUrl.replace(/\/$/, "")}/${value.replace(/^\//, "")}`;
+};
+var buildReportCode = (companyId, payload) => {
+  const period = payload.period.endDate.replaceAll("-", "");
+  const plant = payload.plant.plantId.replace(/[^a-z0-9]/gi, "").slice(-6).toUpperCase();
+  return `RPP-${period}-${companyId.slice(0, 8).toUpperCase()}-${plant || "PLANTA"}`;
+};
+var renderPlantSettlementHtml = (params) => {
+  const { payload } = params;
+  const confirmedTotal = payload.groups.reduce((sum, group) => sum + group.confirmedM3, 0);
+  const pendingTotal = payload.groups.reduce((sum, group) => sum + group.pendingM3, 0);
+  const dispatchTotal = payload.groups.reduce((sum, group) => sum + group.dispatchCount, 0);
+  const unfinishedTotal = payload.groups.reduce(
+    (sum, group) => sum + group.unfinishedDispatchCount,
+    0
+  );
+  const rows = payload.groups.map((group) => `
+    <tr>
+      <td>${escapeHtml(group.projectName || "Sin obra")}</td>
+      <td>${escapeHtml(group.clientName)}</td>
+      <td>${formatDate(group.orderDate)}</td>
+      <td>${formatDate(group.dueDate)}</td>
+      <td>${group.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</td>
+      <td class="number">${group.dispatchCount}</td>
+      <td class="number">${group.unfinishedDispatchCount}</td>
+      <td class="number">${formatM3(group.confirmedM3)}</td>
+      <td class="number">${formatM3(group.pendingM3)}</td>
+    </tr>`).join("");
+  return `<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><style>
+  @page { size: A4 landscape; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; color: #111827; margin: 0; font-size: 9px; }
+  header { display: grid; grid-template-columns: 42mm 1fr 58mm; border: 1px solid #111827; }
+  header > div { padding: 7px; border-right: 1px solid #111827; }
+  header > div:last-child { border-right: 0; }
+  .logo { max-width: 36mm; max-height: 18mm; object-fit: contain; }
+  h1 { font-size: 16px; margin: 2px 0 5px; text-align: center; }
+  .center { text-align: center; } .meta { line-height: 1.55; }
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; }
+  .metric { border: 1px solid #cbd5e1; border-radius: 5px; padding: 7px; }
+  .metric strong { display: block; font-size: 15px; margin-top: 3px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #94a3b8; padding: 5px; }
+  th { background: #e2e8f0; font-size: 8px; text-transform: uppercase; }
+  .number { text-align: right; }
+  tfoot td { background: #f1f5f9; font-weight: bold; }
+</style></head><body>
+  <header>
+    <div class="center">${params.logoUrl ? `<img class="logo" src="${escapeHtml(absoluteLogoUrl(params.logoUrl))}" alt="Logo">` : `<strong>${escapeHtml(params.companyName)}</strong>`}</div>
+    <div><h1>REPORTE DE PRODUCCI\xD3N POR PLANTA</h1>
+      <div class="center"><strong>${escapeHtml(payload.plant.name)}</strong></div></div>
+    <div class="meta"><strong>C\xF3digo:</strong> ${buildReportCode(params.companyId, payload)}<br>
+      <strong>Desde:</strong> ${formatDate(payload.period.startDate)}<br>
+      <strong>Hasta:</strong> ${formatDate(payload.period.endDate)}</div>
+  </header>
+  <section class="summary">
+    <div class="metric">M3 confirmados<strong>${formatM3(confirmedTotal)} m3</strong></div>
+    <div class="metric">M3 por revisar<strong>${formatM3(pendingTotal)} m3</strong></div>
+    <div class="metric">Despachos<strong>${dispatchTotal}</strong></div>
+    <div class="metric">No finalizados<strong>${unfinishedTotal}</strong></div>
+  </section>
+  <table><thead><tr><th>Obra</th><th>Cliente</th><th>Fecha</th><th>Vence</th>
+    <th>Pago</th><th>Despachos</th><th>No finalizados</th><th>M3 confirmado</th>
+    <th>M3 revisar</th></tr></thead><tbody>${rows}</tbody>
+    <tfoot><tr><td colspan="5">TOTAL GENERAL</td><td class="number">${dispatchTotal}</td>
+      <td class="number">${unfinishedTotal}</td><td class="number">${formatM3(confirmedTotal)}</td>
+      <td class="number">${formatM3(pendingTotal)}</td></tr></tfoot>
+  </table>
+</body></html>`;
+};
+async function generatePlantSettlementPdf(params) {
+  if (!params.payload?.plant?.plantId || !params.payload?.period?.startDate || !params.payload?.period?.endDate || !Array.isArray(params.payload.groups)) {
+    throw new Error("El informe de producci\xF3n es inv\xE1lido.");
+  }
+  if (!params.payload.groups.length) throw new Error("El informe no contiene pedidos.");
+  const Company = await getCompanyModel();
+  const company = await Company.findOne({ companyId: params.companyId }).select("companyId name branding").lean();
+  if (!company) throw new Error("Empresa no encontrada.");
+  const html = renderPlantSettlementHtml({
+    companyId: params.companyId,
+    companyName: String(company.name || params.companyId),
+    logoUrl: company.branding?.logoLight || company.branding?.logoDark,
+    payload: params.payload
+  });
+  await fs11.ensureDir(config.pdf.tempDir);
+  const fileName = `reporte-produccion-${Date.now()}.pdf`;
+  const filePath = path14.join(config.pdf.tempDir, fileName);
+  await generator_service_default.generateFromHtml(html, {
+    outputPath: filePath,
+    format: "A4",
+    landscape: true,
+    margin: { top: "10mm", right: "10mm", bottom: "10mm", left: "10mm" }
+  });
+  return { filePath, fileName };
+}
+
+// src/api/controllers/plant-dispatch-settlement-document.controller.ts
+async function downloadPlantSettlementPdf(req, res, next) {
+  try {
+    if (!req.companyId) throw new Error("Company ID is required.");
+    const payload = req.body;
+    const generated = await generatePlantSettlementPdf({
+      companyId: req.companyId,
+      payload
+    });
+    res.download(generated.filePath, generated.fileName, (error) => {
+      void fs12.remove(generated.filePath);
+      if (error && !res.headersSent) next(error);
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 // src/api/routes/pdf.routes.ts
 var router4 = Router4();
 router4.post("/generate", generatePDF);
 router4.post("/generate-vale", generateVale);
+router4.post("/plant-dispatch-settlement", requireTenant, downloadPlantSettlementPdf);
 router4.get("/templates/preview-grid", previewValeTemplateGrid);
 router4.post("/templates", createTemplate);
 router4.get("/templates", listTemplates);
@@ -26097,12 +26233,12 @@ var pdf_routes_default = router4;
 // src/api/routes/drive.routes.ts
 import { Router as Router5 } from "express";
 import multer2 from "multer";
-import fs16 from "fs-extra";
-import path20 from "path";
+import fs18 from "fs-extra";
+import path21 from "path";
 
 // src/api/controllers/drive.controller.ts
-import fs13 from "fs-extra";
-import path17 from "path";
+import fs15 from "fs-extra";
+import path18 from "path";
 init_storage_path_service();
 
 // src/middleware/quota.middleware.ts
@@ -26205,8 +26341,8 @@ init_logger();
 
 // src/services/thumbnail.service.ts
 var import_sharp = __toESM(require_lib(), 1);
-import fs11 from "fs-extra";
-import path14 from "path";
+import fs13 from "fs-extra";
+import path15 from "path";
 import crypto4 from "crypto";
 import { spawn } from "child_process";
 init_logger();
@@ -26273,7 +26409,7 @@ var VIDEO_EXTENSIONS = /* @__PURE__ */ new Set([
 var thumbDirName = ".thumbs";
 function resolveKind(mimeType, fileName) {
   const mime = (mimeType || "").toLowerCase();
-  const ext = path14.extname(fileName).toLowerCase();
+  const ext = path15.extname(fileName).toLowerCase();
   if (mime.startsWith("image/") && !mime.includes("svg") || [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)) {
     return "image";
   }
@@ -26289,25 +26425,25 @@ function sanitizeName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "file";
 }
 async function removePreviousThumbnails(outputDir, safeBase) {
-  const thumbDir = path14.join(outputDir, thumbDirName);
-  await fs11.ensureDir(thumbDir);
-  const entries = await fs11.readdir(thumbDir).catch(() => []);
+  const thumbDir = path15.join(outputDir, thumbDirName);
+  await fs13.ensureDir(thumbDir);
+  const entries = await fs13.readdir(thumbDir).catch(() => []);
   const prefix = `thumb_${safeBase}_`;
   await Promise.all(
-    entries.filter((entry) => entry.startsWith(prefix)).map((entry) => fs11.remove(path14.join(thumbDir, entry)).catch(() => {
+    entries.filter((entry) => entry.startsWith(prefix)).map((entry) => fs13.remove(path15.join(thumbDir, entry)).catch(() => {
     }))
   );
 }
 async function createThumbTargetPath(options2) {
-  const stat = await fs11.stat(options2.filePath);
-  const parsed = path14.parse(options2.fileName);
+  const stat = await fs13.stat(options2.filePath);
+  const parsed = path15.parse(options2.fileName);
   const safeBase = sanitizeName(parsed.name || "file");
   const hash = crypto4.createHash("sha1").update(`${options2.filePath}:${stat.size}:${stat.mtimeMs}`).digest("hex").slice(0, 10);
   const thumbName = `thumb_${safeBase}_${hash}.jpg`;
-  const thumbDir = path14.join(options2.outputDir, thumbDirName);
-  await fs11.ensureDir(thumbDir);
+  const thumbDir = path15.join(options2.outputDir, thumbDirName);
+  await fs13.ensureDir(thumbDir);
   await removePreviousThumbnails(options2.outputDir, safeBase);
-  const thumbPath = path14.join(thumbDir, thumbName);
+  const thumbPath = path15.join(thumbDir, thumbName);
   return { thumbName, thumbPath };
 }
 async function runFfmpeg(args) {
@@ -26335,7 +26471,7 @@ async function generateImageThumbnail(options2, thumbPath) {
     fit: "inside",
     withoutEnlargement: true
   }).jpeg({ quality: 72, progressive: true, mozjpeg: true }).toBuffer();
-  await fs11.writeFile(thumbPath, buffer2);
+  await fs13.writeFile(thumbPath, buffer2);
 }
 async function generatePdfThumbnail(options2, thumbPath) {
   const { cacheFile } = await renderPdfPageToPng(options2.filePath, { page: 1, scale: 1.3 });
@@ -26343,7 +26479,7 @@ async function generatePdfThumbnail(options2, thumbPath) {
     fit: "inside",
     withoutEnlargement: true
   }).jpeg({ quality: 78, progressive: true, mozjpeg: true }).toBuffer();
-  await fs11.writeFile(thumbPath, buffer2);
+  await fs13.writeFile(thumbPath, buffer2);
 }
 async function generateVideoThumbnail(options2, thumbPath) {
   const args = [
@@ -26385,7 +26521,7 @@ async function generateThumbnailForFile(options2) {
     } else if (kind === "video") {
       await generateVideoThumbnail(options2, thumbPath);
     }
-    const stat = await fs11.stat(thumbPath);
+    const stat = await fs13.stat(thumbPath);
     return {
       status: "ready",
       thumbnailName: thumbName,
@@ -26408,18 +26544,18 @@ async function generateThumbnailForFile(options2) {
 
 // src/services/video-stream.service.ts
 init_logger();
-import fs12 from "fs-extra";
-import path15 from "path";
+import fs14 from "fs-extra";
+import path16 from "path";
 import { spawn as spawn2 } from "child_process";
 var FASTSTART_EXTENSIONS = /* @__PURE__ */ new Set([".mp4", ".m4v", ".mov"]);
 var isVideoByMimeOrExt = (mimeType, fileName) => {
   const mime = (mimeType || "").toLowerCase();
-  const ext = path15.extname(fileName).toLowerCase();
+  const ext = path16.extname(fileName).toLowerCase();
   if (mime.startsWith("video/")) return true;
   return [".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi", ".mpeg", ".mpg", ".3gp"].includes(ext);
 };
 var supportsFaststart = (fileName) => {
-  const ext = path15.extname(fileName).toLowerCase();
+  const ext = path16.extname(fileName).toLowerCase();
   return FASTSTART_EXTENSIONS.has(ext);
 };
 var runFfmpegWithTimeout = async (args, timeoutMs) => {
@@ -26486,18 +26622,18 @@ async function optimizeVideoForProgressiveStreaming(options2) {
   }
   const timeoutMs = Number.isFinite(options2.timeoutMs) ? options2.timeoutMs : 18e4;
   try {
-    const sourceStat = await fs12.stat(options2.filePath);
-    const ext = path15.extname(options2.fileName).toLowerCase() || ".mp4";
-    const tempPath = path15.join(
-      path15.dirname(options2.filePath),
+    const sourceStat = await fs14.stat(options2.filePath);
+    const ext = path16.extname(options2.fileName).toLowerCase() || ".mp4";
+    const tempPath = path16.join(
+      path16.dirname(options2.filePath),
       `.tmp_faststart_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`
     );
     await runFfmpegWithTimeout(
       ["-y", "-i", options2.filePath, "-c", "copy", "-movflags", "+faststart", tempPath],
       timeoutMs
     );
-    const optimizedStat = await fs12.stat(tempPath);
-    await fs12.move(tempPath, options2.filePath, { overwrite: true });
+    const optimizedStat = await fs14.stat(tempPath);
+    await fs14.move(tempPath, options2.filePath, { overwrite: true });
     return {
       attempted: true,
       optimized: true,
@@ -26505,11 +26641,11 @@ async function optimizeVideoForProgressiveStreaming(options2) {
     };
   } catch (error) {
     if (typeof options2.filePath === "string") {
-      const ext = path15.extname(options2.fileName).toLowerCase() || ".mp4";
+      const ext = path16.extname(options2.fileName).toLowerCase() || ".mp4";
       const tempPrefix = `.tmp_faststart_`;
-      const dir = path15.dirname(options2.filePath);
-      const entries = await fs12.readdir(dir).catch(() => []);
-      const cleanupTasks = entries.filter((entry) => entry.startsWith(tempPrefix) && entry.endsWith(ext)).map((entry) => fs12.remove(path15.join(dir, entry)).catch(() => {
+      const dir = path16.dirname(options2.filePath);
+      const entries = await fs14.readdir(dir).catch(() => []);
+      const cleanupTasks = entries.filter((entry) => entry.startsWith(tempPrefix) && entry.endsWith(ext)).map((entry) => fs14.remove(path16.join(dir, entry)).catch(() => {
       }));
       await Promise.all(cleanupTasks);
     }
@@ -26530,17 +26666,17 @@ async function optimizeVideoForProgressiveStreaming(options2) {
 
 // src/services/storage-file-name.service.ts
 import crypto5 from "crypto";
-import path16 from "path";
+import path17 from "path";
 var MAX_SAFE_BASENAME_LENGTH = 80;
 function sanitizeStorageFileName(name) {
-  const parsed = path16.parse(name || "file");
+  const parsed = path17.parse(name || "file");
   const safeBase = parsed.name.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "").slice(0, MAX_SAFE_BASENAME_LENGTH) || "file";
   const safeExt = parsed.ext.replace(/[^a-zA-Z0-9.]/g, "").slice(0, 16).toLowerCase();
   return `${safeBase}${safeExt}`;
 }
 function buildUniqueStorageFileName(originalName, uniqueSeed) {
   const safeName = sanitizeStorageFileName(originalName);
-  const parsed = path16.parse(safeName);
+  const parsed = path17.parse(safeName);
   const hash = crypto5.createHash("sha1").update(`${uniqueSeed || crypto5.randomUUID()}:${originalName}:${Date.now()}`).digest("hex").slice(0, 10);
   return `${parsed.name}_${hash}${parsed.ext}`;
 }
@@ -26551,7 +26687,7 @@ init_json_store();
 init_environment();
 var MAX_MIGRATION_COPY_ENTRIES = 500;
 var migrationJobStore = new json_store_default({
-  baseDir: path17.join(config.storage.root, "migration-jobs"),
+  baseDir: path18.join(config.storage.root, "migration-jobs"),
   autoBackup: false
 });
 var activeMigrationCopyJobs = /* @__PURE__ */ new Set();
@@ -26606,22 +26742,22 @@ async function listEntries(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs13.pathExists(resolved);
+    const exists = await fs15.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stat = await fs13.stat(resolved);
+    const stat = await fs15.stat(resolved);
     if (!stat.isDirectory()) {
       const error = new Error("Path is not a folder");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const entries = (await fs13.readdir(resolved)).filter((name) => !name.startsWith("."));
+    const entries = (await fs15.readdir(resolved)).filter((name) => !name.startsWith("."));
     const results = await Promise.all(
       entries.map(async (name) => {
-        const entryStat = await fs13.stat(path17.join(resolved, name));
+        const entryStat = await fs15.stat(path18.join(resolved, name));
         const entry = toEntry(relativePath, name, entryStat, companyId);
         const result = { ...entry };
         if (entry.url) {
@@ -26666,19 +26802,19 @@ async function createFolder(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const parentExists = await fs13.pathExists(resolved);
+    const parentExists = await fs15.pathExists(resolved);
     if (!parentExists) {
       const error = new Error("Parent path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const target = path17.join(resolved, name);
+    const target = path18.join(resolved, name);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs13.ensureDir(target);
+    await fs15.ensureDir(target);
     const newPath = relativePath ? `${relativePath}/${name}` : name;
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
@@ -26719,26 +26855,26 @@ async function uploadFile(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs13.ensureDir(resolved);
+    await fs15.ensureDir(resolved);
     const MAX_ORDERS_BYTES2 = 100 * 1024 * 1024;
     const MAX_DRIVE_BYTES3 = 2 * 1024 * 1024 * 1024;
     const isDriveRoot = relativePath.startsWith("drive");
     const maxAllowedBytes = isDriveRoot ? MAX_DRIVE_BYTES3 : MAX_ORDERS_BYTES2;
     if (file.size > maxAllowedBytes) {
-      await fs13.remove(file.path).catch(() => {
+      await fs15.remove(file.path).catch(() => {
       });
       const error = new Error("File too large");
       error.statusCode = HTTP_STATUS.REQUEST_TOO_LONG;
       return next(error);
     }
     const storageFileName = buildUniqueStorageFileName(file.originalname, file.path);
-    const target = path17.join(resolved, storageFileName);
+    const target = path18.join(resolved, storageFileName);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs13.move(file.path, target, { overwrite: false });
+    await fs15.move(file.path, target, { overwrite: false });
     await incrementStorageUsage(companyId, file.size);
     const videoLike = isVideoFile(file.mimetype, storageFileName);
     let streamStatus = videoLike ? "ready" : "unsupported";
@@ -26825,16 +26961,16 @@ async function deleteEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs13.pathExists(resolved);
+    const exists = await fs15.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stats = await fs13.stat(resolved);
+    const stats = await fs15.stat(resolved);
     const isFile = stats.isFile();
     const fileSize = isFile ? stats.size : 0;
-    await fs13.remove(resolved);
+    await fs15.remove(resolved);
     if (isFile && fileSize > 0) {
       await decrementStorageUsage(companyId, fileSize);
     }
@@ -26875,14 +27011,14 @@ async function moveEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs13.pathExists(fromResolved);
+    const exists = await fs15.pathExists(fromResolved);
     if (!exists) {
       const error = new Error("Source not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    await fs13.ensureDir(path17.dirname(toResolved));
-    await fs13.move(fromResolved, toResolved, { overwrite: false });
+    await fs15.ensureDir(path18.dirname(toResolved));
+    await fs15.move(fromResolved, toResolved, { overwrite: false });
     const publicUrl = `/files/companies/${companyId}/${to3}`;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -26950,31 +27086,31 @@ var copyCompanyFileEntry = async (params) => {
     error.statusCode = HTTP_STATUS.FORBIDDEN;
     throw error;
   }
-  const sourceExists = await fs13.pathExists(sourceResolved);
+  const sourceExists = await fs15.pathExists(sourceResolved);
   if (!sourceExists) {
     const error = new Error("Source not found");
     error.statusCode = HTTP_STATUS.NOT_FOUND;
     throw error;
   }
-  const sourceStats = await fs13.stat(sourceResolved);
+  const sourceStats = await fs15.stat(sourceResolved);
   if (!sourceStats.isFile()) {
     const error = new Error("Source must be a file");
     error.statusCode = HTTP_STATUS.BAD_REQUEST;
     throw error;
   }
   await storagePathService.ensureCompanyStructure(params.targetCompanyId);
-  await fs13.ensureDir(path17.dirname(targetResolved));
-  const targetExists = await fs13.pathExists(targetResolved);
+  await fs15.ensureDir(path18.dirname(targetResolved));
+  const targetExists = await fs15.pathExists(targetResolved);
   let createdTarget = false;
   if (targetExists) {
-    const targetStats = await fs13.stat(targetResolved);
+    const targetStats = await fs15.stat(targetResolved);
     if (targetStats.size !== sourceStats.size) {
       const error = new Error("Target already exists with different size");
       error.statusCode = HTTP_STATUS.CONFLICT;
       throw error;
     }
   } else {
-    await fs13.copy(sourceResolved, targetResolved, { overwrite: false });
+    await fs15.copy(sourceResolved, targetResolved, { overwrite: false });
     await incrementStorageUsage(params.targetCompanyId, sourceStats.size);
     createdTarget = true;
   }
@@ -26987,13 +27123,13 @@ var deleteCompanyFileEntry = async (params) => {
     error.statusCode = HTTP_STATUS.FORBIDDEN;
     throw error;
   }
-  const exists = await fs13.pathExists(resolved);
+  const exists = await fs15.pathExists(resolved);
   if (!exists) {
     return { deleted: false, size: 0 };
   }
-  const stats = await fs13.stat(resolved);
+  const stats = await fs15.stat(resolved);
   const fileSize = stats.isFile() ? stats.size : 0;
-  await fs13.remove(resolved);
+  await fs15.remove(resolved);
   if (fileSize > 0) {
     await decrementStorageUsage(params.companyId, fileSize);
   }
@@ -27283,9 +27419,9 @@ async function getInfo(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const stat = await fs13.stat(resolved);
-    const name = path17.basename(resolved);
-    const parent = path17.dirname(targetPath).replace(/\\/g, "/");
+    const stat = await fs15.stat(resolved);
+    const name = path18.basename(resolved);
+    const parent = path18.dirname(targetPath).replace(/\\/g, "/");
     const base = parent === "." ? "" : parent;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -27307,8 +27443,8 @@ async function getInfo(req, res, next) {
 }
 
 // src/api/controllers/drive-pdf.controller.ts
-import fs14 from "fs-extra";
-import path18 from "path";
+import fs16 from "fs-extra";
+import path19 from "path";
 init_storage_path_service();
 function getPdfPathFromRequest(req) {
   const companyId = req.companyId;
@@ -27326,10 +27462,10 @@ function getPdfPathFromRequest(req) {
   return { resolved, normalized: pathParam };
 }
 function ensurePdfExtension(filePath) {
-  return path18.extname(filePath).toLowerCase() === ".pdf";
+  return path19.extname(filePath).toLowerCase() === ".pdf";
 }
 async function resolveExistingPdfPath(resolved, normalized, companyId) {
-  if (await fs14.pathExists(resolved)) {
+  if (await fs16.pathExists(resolved)) {
     return { resolved, normalized };
   }
   const candidates = [normalized.normalize("NFC"), normalized.normalize("NFD")].filter(
@@ -27337,7 +27473,7 @@ async function resolveExistingPdfPath(resolved, normalized, companyId) {
   );
   for (const candidate of candidates) {
     const altResolved = storagePathService.resolvePath(companyId, candidate);
-    if (await fs14.pathExists(altResolved)) {
+    if (await fs16.pathExists(altResolved)) {
       return { resolved: altResolved, normalized: candidate };
     }
   }
@@ -27362,7 +27498,7 @@ async function getPdfMetadata(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs14.pathExists(resolved);
+    const exists = await fs16.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -27405,7 +27541,7 @@ async function getPdfPageImage(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs14.pathExists(resolved);
+    const exists = await fs16.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -27416,7 +27552,7 @@ async function getPdfPageImage(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path18.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path19.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -27447,7 +27583,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs14.pathExists(resolved);
+    const exists = await fs16.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -27462,7 +27598,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path18.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path19.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -27602,28 +27738,28 @@ var uploadRateLimiter = companyRateLimiter({
 var import_server = __toESM(require_dist2(), 1);
 var import_file_store = __toESM(require_dist3(), 1);
 init_environment();
-import fs15 from "fs-extra";
-import path19 from "path";
+import fs17 from "fs-extra";
+import path20 from "path";
 init_logger();
 init_storage_path_service();
 init_quota_validator_service();
 var MAX_ORDERS_BYTES = 100 * 1024 * 1024;
 var MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024;
-var TUS_STORAGE_DIR = path19.join(config.storage.root, "temp", "tus-uploads");
+var TUS_STORAGE_DIR = path20.join(config.storage.root, "temp", "tus-uploads");
 try {
-  fs15.ensureDirSync(TUS_STORAGE_DIR);
+  fs17.ensureDirSync(TUS_STORAGE_DIR);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path19.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
-    fs15.ensureDirSync(fallback);
+    const fallback = path20.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
+    fs17.ensureDirSync(fallback);
     logger_default.warn(`[tus] Failed to init storage dir at ${TUS_STORAGE_DIR}. Using fallback: ${fallback}`);
     TUS_STORAGE_DIR = fallback;
   } else {
     throw error;
   }
 }
-var TUS_META_DIR = path19.join(TUS_STORAGE_DIR, "metadata");
-fs15.ensureDirSync(TUS_META_DIR);
+var TUS_META_DIR = path20.join(TUS_STORAGE_DIR, "metadata");
+fs17.ensureDirSync(TUS_META_DIR);
 function isValidEntryName2(name) {
   if (!name) return false;
   if (name === "." || name === "..") return false;
@@ -27668,8 +27804,8 @@ function getUploadId(upload4) {
   return String(upload4?.id || "");
 }
 async function storeUploadInfo(info) {
-  const infoPath = path19.join(TUS_META_DIR, `${info.id}.json`);
-  await fs15.writeJson(infoPath, info, { spaces: 2 });
+  const infoPath = path20.join(TUS_META_DIR, `${info.id}.json`);
+  await fs17.writeJson(infoPath, info, { spaces: 2 });
 }
 async function finalizeUpload(upload4, req) {
   const headerMetadata = parseMetadata(req.headers["upload-metadata"]);
@@ -27698,13 +27834,13 @@ async function finalizeUpload(upload4, req) {
   if (!storagePathService.validateAccess(resolved, companyId)) {
     throw new Error("Access denied: invalid path");
   }
-  await fs15.ensureDir(resolved);
-  const target = path19.join(resolved, storageFileName);
+  await fs17.ensureDir(resolved);
+  const target = path20.join(resolved, storageFileName);
   if (!storagePathService.validateAccess(target, companyId)) {
     throw new Error("Access denied: invalid target path");
   }
-  const tempPath = path19.join(TUS_STORAGE_DIR, getUploadId(upload4));
-  await fs15.move(tempPath, target, { overwrite: false });
+  const tempPath = path20.join(TUS_STORAGE_DIR, getUploadId(upload4));
+  await fs17.move(tempPath, target, { overwrite: false });
   await incrementStorageUsage(companyId, uploadSize);
   const filePath = relativePath ? `${relativePath}/${storageFileName}` : storageFileName;
   const publicUrl = `/files/companies/${companyId}/${filePath}`;
@@ -27862,15 +27998,15 @@ async function getTusUploadInfo(req, res, next) {
         error: { message: "Upload ID is required" }
       });
     }
-    const infoPath = path19.join(TUS_META_DIR, `${uploadId}.json`);
-    const exists = await fs15.pathExists(infoPath);
+    const infoPath = path20.join(TUS_META_DIR, `${uploadId}.json`);
+    const exists = await fs17.pathExists(infoPath);
     if (!exists) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         error: { message: "Upload info not found" }
       });
     }
-    const info = await fs15.readJson(infoPath);
+    const info = await fs17.readJson(infoPath);
     if (companyId && info.companyId && info.companyId !== companyId) {
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
@@ -27889,13 +28025,13 @@ async function getTusUploadInfo(req, res, next) {
 // src/api/routes/drive.routes.ts
 var router5 = Router5();
 var MAX_DRIVE_BYTES2 = 2 * 1024 * 1024 * 1024;
-var tempDir = path20.join(config.storage.root, "temp", "uploads");
+var tempDir = path21.join(config.storage.root, "temp", "uploads");
 try {
-  fs16.ensureDirSync(tempDir);
+  fs18.ensureDirSync(tempDir);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path20.join(process.cwd(), "data", "storage", "temp", "uploads");
-    fs16.ensureDirSync(fallback);
+    const fallback = path21.join(process.cwd(), "data", "storage", "temp", "uploads");
+    fs18.ensureDirSync(fallback);
     console.warn(
       `[drive] Failed to init temp dir at ${tempDir}. Using fallback: ${fallback}`
     );
@@ -27945,8 +28081,8 @@ import { Router as Router6 } from "express";
 
 // src/api/controllers/documents.controller.ts
 init_logger();
-import fs21 from "fs-extra";
-import path22 from "path";
+import fs23 from "fs-extra";
+import path23 from "path";
 
 // src/schemas/documents/control-imprimacion.schema.ts
 var emptyMeasurementValues = () => ({
@@ -37666,8 +37802,8 @@ var r38 = {};
 Xr(r38, { af_ZA: () => B58, ar: () => Y35, az: () => U39, base: () => Mi, cs_CZ: () => x61, da: () => le10, de: () => pr, de_AT: () => I40, de_CH: () => J42, dv: () => Q32, el: () => le9, en: () => ul, en_AU: () => be7, en_AU_ocker: () => P54, en_BORK: () => u60, en_CA: () => S41, en_GB: () => B46, en_GH: () => J39, en_HK: () => w42, en_IE: () => D49, en_IN: () => w43, en_NG: () => O41, en_US: () => A49, en_ZA: () => L39, eo: () => ro, es: () => ao3, es_MX: () => ia7, fa: () => wo, fi: () => A43, fr: () => Wi, fr_BE: () => I36, fr_CA: () => b32, fr_CH: () => _32, fr_LU: () => _33, fr_SN: () => _34, he: () => Z27, hr: () => C33, hu: () => U29, hy: () => j34, id_ID: () => F18, it: () => w21, ja: () => M24, ka_GE: () => H23, ko: () => G23, lv: () => $13, mk: () => S26, nb_NO: () => Z24, ne: () => j13, nl: () => an, nl_BE: () => j15, pl: () => ea3, pt_BR: () => W15, pt_PT: () => k17, ro: () => Mi2, ro_MD: () => j20, ru: () => ae4, sk: () => O8, sr_RS_latin: () => T7, sv: () => $5, th: () => E8, tr: () => V10, uk: () => S11, ur: () => yt, vi: () => U3, yo_NG: () => r3, zh_CN: () => Ke3, zh_TW: () => B5, zu_ZA: () => x5 });
 
 // src/services/random-data-generator.service.ts
-function setNestedValue(target, path31, value) {
-  const parts = path31.split(".");
+function setNestedValue(target, path32, value) {
+  const parts = path32.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -38253,8 +38389,8 @@ init_storage_path_service();
 // src/services/report-html-renderer.service.ts
 var import_sharp3 = __toESM(require_lib(), 1);
 init_storage_path_service();
-import fs17 from "fs-extra";
-import path21 from "path";
+import fs19 from "fs-extra";
+import path22 from "path";
 import axios3 from "axios";
 
 // src/services/image-compression.service.ts
@@ -40531,10 +40667,10 @@ ${signaturesHtml}`;
   }
   async resolveFileBuffer(filePath) {
     try {
-      if (path21.isAbsolute(filePath)) {
-        if (await fs17.pathExists(filePath)) {
-          const raw = await fs17.readFile(filePath);
-          return ImageCompressionService.processImage(raw, path21.basename(filePath));
+      if (path22.isAbsolute(filePath)) {
+        if (await fs19.pathExists(filePath)) {
+          const raw = await fs19.readFile(filePath);
+          return ImageCompressionService.processImage(raw, path22.basename(filePath));
         }
         return null;
       }
@@ -40542,9 +40678,9 @@ ${signaturesHtml}`;
         return null;
       }
       const resolved = this.resolveCompanyStoragePath(filePath);
-      if (resolved && await fs17.pathExists(resolved)) {
-        const raw = await fs17.readFile(resolved);
-        return ImageCompressionService.processImage(raw, path21.basename(resolved));
+      if (resolved && await fs19.pathExists(resolved)) {
+        const raw = await fs19.readFile(resolved);
+        return ImageCompressionService.processImage(raw, path22.basename(resolved));
       }
     } catch (error) {
       logger_default.warn("Failed to read photo file for PDF", { error: String(error), filePath });
@@ -40585,9 +40721,9 @@ ${signaturesHtml}`;
     try {
       const storagePath = this.resolveStoragePathFromUrl(urlCandidate);
       if (storagePath) {
-        if (await fs17.pathExists(storagePath)) {
-          const raw = await fs17.readFile(storagePath);
-          return ImageCompressionService.processImage(raw, path21.basename(storagePath));
+        if (await fs19.pathExists(storagePath)) {
+          const raw = await fs19.readFile(storagePath);
+          return ImageCompressionService.processImage(raw, path22.basename(storagePath));
         }
       }
     } catch (error) {
@@ -40602,7 +40738,7 @@ ${signaturesHtml}`;
         timeout: 1e4
       });
       const buffer2 = Buffer.from(response.data);
-      return ImageCompressionService.processImage(buffer2, path21.basename(urlCandidate));
+      return ImageCompressionService.processImage(buffer2, path22.basename(urlCandidate));
     } catch (error) {
       logger_default.warn("Failed to download image for PDF compression", {
         error: String(error),
@@ -40860,7 +40996,7 @@ function buildEffectiveSchema(baseSchema, overrides, customSections) {
 // src/services/pdf-merger.service.ts
 init_storage_path_service();
 init_logger();
-import fs18 from "fs-extra";
+import fs20 from "fs-extra";
 import axios4 from "axios";
 import { PDFDocument as PDFDocument2 } from "pdf-lib";
 function resolveStoragePathFromUrl(url, companyId) {
@@ -40893,8 +41029,8 @@ async function resolveLetterheadBytes(letterhead, companyId) {
     return base64 ? Buffer.from(base64, "base64") : null;
   }
   const storagePath = resolveStoragePathFromUrl(url, companyId);
-  if (storagePath && await fs18.pathExists(storagePath)) {
-    return fs18.readFile(storagePath);
+  if (storagePath && await fs20.pathExists(storagePath)) {
+    return fs20.readFile(storagePath);
   }
   if (url.startsWith("http")) {
     const response = await axios4.get(url, {
@@ -40913,30 +41049,30 @@ function isPngBuffer(buffer2) {
 }
 var PDFMergerService = class {
   static async getPageCount(pdfPath) {
-    const bytes = await fs18.readFile(pdfPath);
+    const bytes = await fs20.readFile(pdfPath);
     const pdf = await PDFDocument2.load(bytes);
     return pdf.getPageCount();
   }
   static async mergePDFWithAnnexes(mainPdfPath, annexes, outputPath, companyId) {
-    const mainPdfBytes = await fs18.readFile(mainPdfPath);
+    const mainPdfBytes = await fs20.readFile(mainPdfPath);
     const mergedPdf = await PDFDocument2.load(mainPdfBytes);
     const mainPageCount = mergedPdf.getPageCount();
     let totalAnnexPages = 0;
     const sorted = [...annexes].sort((a49, b63) => (a49.order ?? 0) - (b63.order ?? 0));
     for (const annex of sorted) {
       const annexPath = resolveStoragePathFromUrl(annex.pdfUrl, companyId);
-      if (!annexPath || !await fs18.pathExists(annexPath)) {
+      if (!annexPath || !await fs20.pathExists(annexPath)) {
         logger_default.warn("Annex PDF not found, skipping", { annexId: annex.id, pdfUrl: annex.pdfUrl });
         continue;
       }
-      const annexPdfBytes = await fs18.readFile(annexPath);
+      const annexPdfBytes = await fs20.readFile(annexPath);
       const annexPdf = await PDFDocument2.load(annexPdfBytes);
       const copiedPages = await mergedPdf.copyPages(annexPdf, annexPdf.getPageIndices());
       copiedPages.forEach((page) => mergedPdf.addPage(page));
       totalAnnexPages += annexPdf.getPageCount();
     }
     const mergedPdfBytes = await mergedPdf.save();
-    await fs18.writeFile(outputPath, mergedPdfBytes);
+    await fs20.writeFile(outputPath, mergedPdfBytes);
     return {
       totalPages: mergedPdf.getPageCount(),
       mainPages: mainPageCount,
@@ -40945,16 +41081,16 @@ var PDFMergerService = class {
   }
   static async applyLetterheadBackground(pdfPath, letterhead, outputPath, companyId) {
     if (!letterhead) {
-      if (pdfPath !== outputPath) await fs18.copyFile(pdfPath, outputPath);
+      if (pdfPath !== outputPath) await fs20.copyFile(pdfPath, outputPath);
       return;
     }
     try {
       const letterheadBytes = await resolveLetterheadBytes(letterhead, companyId);
       if (!letterheadBytes) {
-        if (pdfPath !== outputPath) await fs18.copyFile(pdfPath, outputPath);
+        if (pdfPath !== outputPath) await fs20.copyFile(pdfPath, outputPath);
         return;
       }
-      const sourcePdf = await PDFDocument2.load(await fs18.readFile(pdfPath));
+      const sourcePdf = await PDFDocument2.load(await fs20.readFile(pdfPath));
       const outputPdf = await PDFDocument2.create();
       const embeddedBackground = await this.embedBackground(outputPdf, letterheadBytes);
       for (const sourcePage of sourcePdf.getPages()) {
@@ -40964,13 +41100,13 @@ var PDFMergerService = class {
         this.drawBackground(outputPage, embeddedBackground, width, height);
         outputPage.drawPage(embeddedPage, { x: 0, y: 0, width, height });
       }
-      await fs18.writeFile(outputPath, await outputPdf.save());
+      await fs20.writeFile(outputPath, await outputPdf.save());
     } catch (error) {
       logger_default.warn("Letterhead background failed, copying original PDF", {
         error: String(error),
         letterheadId: letterhead.id
       });
-      if (pdfPath !== outputPath) await fs18.copyFile(pdfPath, outputPath);
+      if (pdfPath !== outputPath) await fs20.copyFile(pdfPath, outputPath);
     }
   }
   static async embedBackground(outputPdf, bytes) {
@@ -40992,17 +41128,17 @@ var PDFMergerService = class {
 };
 
 // src/services/folio-generator.service.ts
-import fs19 from "fs-extra";
+import fs21 from "fs-extra";
 import { PDFDocument as PDFDocument3, rgb as rgb2, StandardFonts as StandardFonts2 } from "pdf-lib";
 var FolioGeneratorService = class {
   static async addFolios(pdfPath, config2, outputPath, options2 = {}) {
     if (!config2.enabled) {
       if (pdfPath !== outputPath) {
-        await fs19.copyFile(pdfPath, outputPath);
+        await fs21.copyFile(pdfPath, outputPath);
       }
       return;
     }
-    const pdfBytes = await fs19.readFile(pdfPath);
+    const pdfBytes = await fs21.readFile(pdfPath);
     const pdfDoc = await PDFDocument3.load(pdfBytes);
     const font = await pdfDoc.embedFont(StandardFonts2.Helvetica);
     const fontSize = config2.fontSize || 10;
@@ -41034,7 +41170,7 @@ var FolioGeneratorService = class {
       });
     }
     const modifiedPdfBytes = await pdfDoc.save();
-    await fs19.writeFile(outputPath, modifiedPdfBytes);
+    await fs21.writeFile(outputPath, modifiedPdfBytes);
   }
   static formatFolio(template, current, total) {
     return template.replace("{current}", String(current)).replace("{total}", String(total));
@@ -41077,7 +41213,7 @@ init_environment();
 init_models();
 
 // src/services/pdf-to-docx.service.ts
-import fs20 from "fs-extra";
+import fs22 from "fs-extra";
 
 // node_modules/docx/build/index.mjs
 var __defProp2 = Object.defineProperty;
@@ -55362,8 +55498,8 @@ var File = class {
     return this.fontWrapper;
   }
 };
-function commonjsRequire(path31) {
-  throw new Error('Could not dynamically require "' + path31 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
+function commonjsRequire(path32) {
+  throw new Error('Could not dynamically require "' + path32 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
 }
 var jszip_min = { exports: {} };
 (function(module, exports) {
@@ -58808,7 +58944,7 @@ import { createRequire } from "module";
 import { createCanvas as createCanvas2 } from "@napi-rs/canvas";
 async function convertPdfToDocx(pdfPath, outputPath, options2 = {}) {
   const scale = options2.scale ?? 1.8;
-  const pdfBuffer = await fs20.readFile(pdfPath);
+  const pdfBuffer = await fs22.readFile(pdfPath);
   const pdfData = Buffer.isBuffer(pdfBuffer) ? new Uint8Array(pdfBuffer.buffer, pdfBuffer.byteOffset, pdfBuffer.byteLength) : new Uint8Array(pdfBuffer);
   const require2 = createRequire(import.meta.url);
   const candidates = [
@@ -58870,7 +59006,7 @@ async function convertPdfToDocx(pdfPath, outputPath, options2 = {}) {
     ]
   });
   const docxBuffer = await Packer.toBuffer(doc);
-  await fs20.writeFile(outputPath, docxBuffer);
+  await fs22.writeFile(outputPath, docxBuffer);
 }
 
 // src/api/controllers/documents.controller.ts
@@ -58936,11 +59072,11 @@ function hasMeaningfulContractRows(value) {
 }
 function mergeContractAutofillData(currentData, serviceData) {
   const next = mergeDeep({}, currentData);
-  CONTRACT_AUTOFILL_PATHS.forEach((path31) => {
-    const currentValue = getNestedValue(next, path31);
-    const serviceValue = getNestedValue(serviceData, path31);
+  CONTRACT_AUTOFILL_PATHS.forEach((path32) => {
+    const currentValue = getNestedValue(next, path32);
+    const serviceValue = getNestedValue(serviceData, path32);
     if (isEmptyContractValue(currentValue) && !isEmptyContractValue(serviceValue)) {
-      setNestedValue2(next, path31, serviceValue);
+      setNestedValue2(next, path32, serviceValue);
     }
   });
   CONTRACT_TABLE_KEYS.forEach((key) => {
@@ -59034,8 +59170,8 @@ function roundValue(value, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round(num * factor) / factor;
 }
-function setNestedValue2(target, path31, value) {
-  const parts = path31.split(".");
+function setNestedValue2(target, path32, value) {
+  const parts = path32.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -59046,8 +59182,8 @@ function setNestedValue2(target, path31, value) {
   }
   current[parts[parts.length - 1]] = value;
 }
-function getNestedValue(target, path31) {
-  const parts = path31.split(".");
+function getNestedValue(target, path32) {
+  const parts = path32.split(".");
   let current = target;
   for (const key of parts) {
     if (!current || typeof current !== "object") return void 0;
@@ -59411,9 +59547,9 @@ async function generateDocument(req, res, next) {
     const reportsDir = storagePathService.getModulePath(
       companyId,
       "service",
-      path22.join("reports", report.serviceManagementId || "generic")
+      path23.join("reports", report.serviceManagementId || "generic")
     );
-    await fs21.ensureDir(reportsDir);
+    await fs23.ensureDir(reportsDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const baseFilename = `${report.type}-${timestamp}`;
     let docxUrl;
@@ -59427,7 +59563,7 @@ async function generateDocument(req, res, next) {
     let docxSizeBytes;
     if (generatePdf) {
       const pdfFilename = `${baseFilename}.pdf`;
-      const pdfPath = path22.join(reportsDir, pdfFilename);
+      const pdfPath = path23.join(reportsDir, pdfFilename);
       const pdfStarted = Date.now();
       const baseUrl = buildAbsoluteUrl4(req, "");
       const htmlRenderer = new ReportHtmlRenderer(effectiveSchema, data, { companyId, baseUrl });
@@ -59440,15 +59576,15 @@ async function generateDocument(req, res, next) {
       });
       const letterhead = getDocumentLetterhead(data);
       if (letterhead) {
-        const letterheadPath = path22.join(reportsDir, `${baseFilename}-letterhead.pdf`);
+        const letterheadPath = path23.join(reportsDir, `${baseFilename}-letterhead.pdf`);
         await PDFMergerService.applyLetterheadBackground(
           pdfPath,
           letterhead,
           letterheadPath,
           companyId
         );
-        await fs21.copyFile(letterheadPath, pdfPath);
-        await fs21.remove(letterheadPath);
+        await fs23.copyFile(letterheadPath, pdfPath);
+        await fs23.remove(letterheadPath);
       }
       pdfDuration = Date.now() - pdfStarted;
       let currentPdfPath = pdfPath;
@@ -59456,7 +59592,7 @@ async function generateDocument(req, res, next) {
       annexPages = 0;
       totalPages = mainPages;
       if (annexes.length > 0) {
-        const mergedPath = path22.join(reportsDir, `${baseFilename}-merged.pdf`);
+        const mergedPath = path23.join(reportsDir, `${baseFilename}-merged.pdf`);
         const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
           pdfPath,
           annexes,
@@ -59469,7 +59605,7 @@ async function generateDocument(req, res, next) {
         totalPages = mergeResult.totalPages;
       }
       if (folioConfig?.enabled) {
-        const folioPath = path22.join(reportsDir, `${baseFilename}-folio.pdf`);
+        const folioPath = path23.join(reportsDir, `${baseFilename}-folio.pdf`);
         const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
         await FolioGeneratorService.addFolios(
           currentPdfPath,
@@ -59480,35 +59616,35 @@ async function generateDocument(req, res, next) {
         currentPdfPath = folioPath;
       }
       if (currentPdfPath !== pdfPath) {
-        await fs21.copyFile(currentPdfPath, pdfPath);
-        await fs21.remove(currentPdfPath);
+        await fs23.copyFile(currentPdfPath, pdfPath);
+        await fs23.remove(currentPdfPath);
       }
-      pdfUrl = `/files/companies/${companyId}/${path22.posix.join(
+      pdfUrl = `/files/companies/${companyId}/${path23.posix.join(
         "service",
         "reports",
         report.serviceManagementId || "generic",
         pdfFilename
       )}`;
       try {
-        const stats = await fs21.stat(pdfPath);
+        const stats = await fs23.stat(pdfPath);
         pdfSizeBytes = stats.size;
       } catch (error) {
         logger_default.warn("Failed to read generated PDF size", { error: String(error), pdfPath });
       }
       if (generateDocx) {
         const docxFilename = `${baseFilename}.docx`;
-        const docxPath = path22.join(reportsDir, docxFilename);
+        const docxPath = path23.join(reportsDir, docxFilename);
         const docxStarted = Date.now();
         await convertPdfToDocx(pdfPath, docxPath);
         docxDuration = Date.now() - docxStarted;
-        docxUrl = `/files/companies/${companyId}/${path22.posix.join(
+        docxUrl = `/files/companies/${companyId}/${path23.posix.join(
           "service",
           "reports",
           report.serviceManagementId || "generic",
           docxFilename
         )}`;
         try {
-          const stats = await fs21.stat(docxPath);
+          const stats = await fs23.stat(docxPath);
           docxSizeBytes = stats.size;
         } catch (error) {
           logger_default.warn("Failed to read generated DOCX size", { error: String(error), docxPath });
@@ -59579,13 +59715,13 @@ async function previewDocument(req, res, next) {
     } = await resolveDocumentContext(req);
     const effectiveSchema = buildEffectiveSchema(schema, schemaOverrides, customSections);
     disableUnsupportedReportLetterhead(effectiveSchema, data);
-    await fs21.ensureDir(config.pdf.tempDir);
+    await fs23.ensureDir(config.pdf.tempDir);
     const baseUrl = buildAbsoluteUrl4(req, "");
     const htmlRenderer = new ReportHtmlRenderer(effectiveSchema, data, { companyId, baseUrl });
     const html = await htmlRenderer.render();
     const previewId = `${report.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path22.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path23.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: effectiveSchema.pageSize || "A4",
@@ -59594,22 +59730,22 @@ async function previewDocument(req, res, next) {
     });
     const letterhead = getDocumentLetterhead(data);
     if (letterhead) {
-      const letterheadPath = path22.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
+      const letterheadPath = path23.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
       await PDFMergerService.applyLetterheadBackground(
         previewPath,
         letterhead,
         letterheadPath,
         companyId
       );
-      await fs21.copyFile(letterheadPath, previewPath);
-      await fs21.remove(letterheadPath);
+      await fs23.copyFile(letterheadPath, previewPath);
+      await fs23.remove(letterheadPath);
     }
     let currentPdfPath = previewPath;
     let mainPages = await PDFMergerService.getPageCount(previewPath);
     let annexPages = 0;
     let totalPages = mainPages;
     if (annexes.length > 0) {
-      const mergedPath = path22.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
+      const mergedPath = path23.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
       const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
         previewPath,
         annexes,
@@ -59622,7 +59758,7 @@ async function previewDocument(req, res, next) {
       totalPages = mergeResult.totalPages;
     }
     if (folioConfig?.enabled) {
-      const folioPath = path22.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
+      const folioPath = path23.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
       const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
       await FolioGeneratorService.addFolios(
         currentPdfPath,
@@ -59633,11 +59769,11 @@ async function previewDocument(req, res, next) {
       currentPdfPath = folioPath;
     }
     if (currentPdfPath !== previewPath) {
-      await fs21.copyFile(currentPdfPath, previewPath);
-      await fs21.remove(currentPdfPath);
+      await fs23.copyFile(currentPdfPath, previewPath);
+      await fs23.remove(currentPdfPath);
     }
-    const previewUrl = path22.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
-    const stat = await fs21.stat(previewPath);
+    const previewUrl = path23.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs23.stat(previewPath);
     logger_default.info("documents.preview.completed", {
       reportId: report?._id,
       type: report.type,
@@ -59715,8 +59851,8 @@ async function downloadDocument(req, res, next) {
 
 // src/api/controllers/quote-documents.controller.ts
 init_logger();
-import fs22 from "fs-extra";
-import path23 from "path";
+import fs24 from "fs-extra";
+import path24 from "path";
 init_environment();
 init_storage_path_service();
 function resolveProto5(req) {
@@ -59766,7 +59902,7 @@ function getPayload(req) {
     schemaData: isPlainObject3(body.schemaData) ? body.schemaData : {}
   };
 }
-function escapeHtml(value) {
+function escapeHtml2(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 function formatMoney(value) {
@@ -59830,7 +59966,7 @@ function buildLetterheadRender(data, baseUrl) {
   const margins = getDocumentLetterheadMargins(letterhead);
   const backgroundUrl = resolveImageUrl(baseUrl, letterhead.url || "");
   return {
-    backgroundHtml: backgroundUrl ? `<div class="letterhead-bg"><img src="${escapeHtml(backgroundUrl)}" alt="" /></div>` : "",
+    backgroundHtml: backgroundUrl ? `<div class="letterhead-bg"><img src="${escapeHtml2(backgroundUrl)}" alt="" /></div>` : "",
     pageMargin: "0",
     sheetPadding: `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`,
     hideLogo: shouldHideDocumentLogo(data)
@@ -59858,12 +59994,12 @@ function renderBankItems(bankAccounts) {
   return bankAccounts.map((acc) => `
       <div class="bank-item">
         <div class="bank-line bank-line-top">
-          <span class="bank-name">${escapeHtml(acc.bank || "")}</span>
-          ${acc.type ? `<span class="bank-type">${escapeHtml(acc.type || "")}</span>` : ""}
+          <span class="bank-name">${escapeHtml2(acc.bank || "")}</span>
+          ${acc.type ? `<span class="bank-type">${escapeHtml2(acc.type || "")}</span>` : ""}
         </div>
         <div class="bank-line">
-          <span><span class="bank-label">CUENTA:</span> ${escapeHtml(acc.account || "")}</span>
-          <span><span class="bank-label">CCI:</span> ${escapeHtml(acc.cci || "")}</span>
+          <span><span class="bank-label">CUENTA:</span> ${escapeHtml2(acc.account || "")}</span>
+          <span><span class="bank-label">CCI:</span> ${escapeHtml2(acc.cci || "")}</span>
         </div>
       </div>
     `).join("");
@@ -59947,13 +60083,13 @@ function renderAsphaltQuoteHtml(data, baseUrl) {
           </tr>
         `;
     }
-    const itemCode = escapeHtml(item.itemCode || "");
-    const description = escapeHtml(item.description || "");
-    const unit = escapeHtml(item.unit || "");
+    const itemCode = escapeHtml2(item.itemCode || "");
+    const description = escapeHtml2(item.description || "");
+    const unit = escapeHtml2(item.unit || "");
     const quantity = formatQuantity(item.quantity);
     const unitPrice = formatMoney(item.unitPrice);
     const lineTotal = formatMoney(item.lineTotal);
-    const lineNotes = toLines(item.lineNotes).map((line) => `<div class="line-notes">${escapeHtml(line)}</div>`).join("");
+    const lineNotes = toLines(item.lineNotes).map((line) => `<div class="line-notes">${escapeHtml2(line)}</div>`).join("");
     return `
         <tr>
           <td class="col-item">${itemCode}</td>
@@ -59966,7 +60102,7 @@ function renderAsphaltQuoteHtml(data, baseUrl) {
       `;
   }).join("");
   const bankRows = renderBankItems(bankAccounts);
-  const obsLines = toLines(observations).map((line) => `<div>${escapeHtml(line)}</div>`).join("");
+  const obsLines = toLines(observations).map((line) => `<div>${escapeHtml2(line)}</div>`).join("");
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -60244,41 +60380,41 @@ function renderAsphaltQuoteHtml(data, baseUrl) {
   <div class="sheet">
     <div class="top">
       ${letterheadRender.hideLogo ? "" : `<div class="logo-block">
-        ${logoUrl ? `<img class="issuer-logo" src="${escapeHtml(logoUrl)}" />` : ""}
+        ${logoUrl ? `<img class="issuer-logo" src="${escapeHtml2(logoUrl)}" />` : ""}
       </div>`}
       <div class="issuer-panel ${hasLetterhead ? "issuer-panel-letterhead" : ""}">
         ${renderLetterheadIssuerDetails(hasLetterhead, [
-    `<div class="issuer-name">${escapeHtml(header.issuerName || "")}</div>`,
-    `<div class="issuer-meta">RUC: ${escapeHtml(header.issuerRuc || "")}</div>`,
-    `<div class="issuer-meta">${escapeHtml(issuerEmail)}</div>`,
-    `<div class="issuer-meta">${escapeHtml(header.issuerPhone || "")}</div>`,
-    `<div class="issuer-meta">${escapeHtml(header.issuerAddress || "")}</div>`
+    `<div class="issuer-name">${escapeHtml2(header.issuerName || "")}</div>`,
+    `<div class="issuer-meta">RUC: ${escapeHtml2(header.issuerRuc || "")}</div>`,
+    `<div class="issuer-meta">${escapeHtml2(issuerEmail)}</div>`,
+    `<div class="issuer-meta">${escapeHtml2(header.issuerPhone || "")}</div>`,
+    `<div class="issuer-meta">${escapeHtml2(header.issuerAddress || "")}</div>`
   ])}
         <div class="quote-head">
           <div class="quote-head-title">COTIZACION</div>
-          <div class="quote-head-series">${escapeHtml(formattedQuoteFolio)}</div>
+          <div class="quote-head-series">${escapeHtml2(formattedQuoteFolio)}</div>
         </div>
       </div>
     </div>
 
-    <div class="quote-date">${escapeHtml(header.quoteDate || "")}</div>
+    <div class="quote-date">${escapeHtml2(header.quoteDate || "")}</div>
 
     <div class="meta">
       <div class="meta-row">
         <div class="meta-label">Se\xF1or(es):</div>
-        <div class="meta-value">${escapeHtml(customer.name || "")}</div>
+        <div class="meta-value">${escapeHtml2(customer.name || "")}</div>
       </div>
       <div class="meta-row">
         <div class="meta-label">ATT.:</div>
-        <div class="meta-value">${escapeHtml(customer.attention || "")}</div>
+        <div class="meta-value">${escapeHtml2(customer.attention || "")}</div>
       </div>
       <div class="meta-row">
         <div class="meta-label">REF.:</div>
-        <div class="meta-value">${escapeHtml(customer.reference || "")}</div>
+        <div class="meta-value">${escapeHtml2(customer.reference || "")}</div>
       </div>
     </div>
 
-    <div class="intro">${escapeHtml(intro)}</div>
+    <div class="intro">${escapeHtml2(intro)}</div>
 
     <table class="items">
       <thead>
@@ -60297,7 +60433,7 @@ function renderAsphaltQuoteHtml(data, baseUrl) {
     </table>
 
     <div class="totals">
-      <div class="amount-words">${escapeHtml(amountInWords)}</div>
+      <div class="amount-words">${escapeHtml2(amountInWords)}</div>
       <table class="totals-table">
         <tbody>
           <tr><td class="label">V. VENTA</td><td class="value">${formatMoney(subtotal)}</td></tr>
@@ -60312,10 +60448,10 @@ function renderAsphaltQuoteHtml(data, baseUrl) {
 
     <div class="section-title">Condiciones comerciales</div>
     <div class="terms">
-      <div class="term-row"><div class="term-label">FORMA DE PAGO:</div><div>${escapeHtml(terms.paymentTerms || "")}</div></div>
-      <div class="term-row"><div class="term-label">LUGAR DE ENTREGA:</div><div>${escapeHtml(terms.deliveryPlace || "")}</div></div>
-      <div class="term-row"><div class="term-label">OFERTA VALIDA HASTA:</div><div>${escapeHtml(terms.offerValidUntil || "")}</div></div>
-      <div class="term-row"><div class="term-label">PLAZO DE ENTREGA:</div><div>${escapeHtml(terms.deliveryLeadTime || "")}</div></div>
+      <div class="term-row"><div class="term-label">FORMA DE PAGO:</div><div>${escapeHtml2(terms.paymentTerms || "")}</div></div>
+      <div class="term-row"><div class="term-label">LUGAR DE ENTREGA:</div><div>${escapeHtml2(terms.deliveryPlace || "")}</div></div>
+      <div class="term-row"><div class="term-label">OFERTA VALIDA HASTA:</div><div>${escapeHtml2(terms.offerValidUntil || "")}</div></div>
+      <div class="term-row"><div class="term-label">PLAZO DE ENTREGA:</div><div>${escapeHtml2(terms.deliveryLeadTime || "")}</div></div>
     </div>
 
     <div class="closing-grid">
@@ -60323,12 +60459,12 @@ function renderAsphaltQuoteHtml(data, baseUrl) {
         <div class="farewell">Sin otro particular, quedamos de ustedes.</div>
         <div class="seller">ATENTAMENTE,</div>
         <div class="seller-image-wrap">
-          ${signatureImageUrl ? `<img class="seller-image" src="${escapeHtml(signatureImageUrl)}" alt="Firma" />` : ""}
+          ${signatureImageUrl ? `<img class="seller-image" src="${escapeHtml2(signatureImageUrl)}" alt="Firma" />` : ""}
         </div>
         <div class="signature-line"></div>
-        <div class="seller">${escapeHtml(seller.name || "")}</div>
-        ${sellerRole ? `<div class="seller-role">${escapeHtml(sellerRole)}</div>` : ""}
-        ${seller.phone ? `<div class="seller-contact">${escapeHtml(seller.phone)}</div>` : ""}
+        <div class="seller">${escapeHtml2(seller.name || "")}</div>
+        ${sellerRole ? `<div class="seller-role">${escapeHtml2(sellerRole)}</div>` : ""}
+        ${seller.phone ? `<div class="seller-contact">${escapeHtml2(seller.phone)}</div>` : ""}
       </div>
       <div class="banks-panel">
         <div class="banks-title">Cuentas bancarias</div>
@@ -60337,9 +60473,9 @@ function renderAsphaltQuoteHtml(data, baseUrl) {
     </div>
 
     <div class="footer">
-      <div>${escapeHtml(footer.address || "")}</div>
-      <div>${escapeHtml(footer.phone || "")}</div>
-      <div>${escapeHtml(footer.website || "")}</div>
+      <div>${escapeHtml2(footer.address || "")}</div>
+      <div>${escapeHtml2(footer.phone || "")}</div>
+      <div>${escapeHtml2(footer.website || "")}</div>
     </div>
   </div>
 </body>
@@ -60374,20 +60510,20 @@ function renderServiceQuoteHtml(data, baseUrl) {
   const renderSectionsColumn = (columnSections) => columnSections.map(
     (section) => `
           <section class="note-section">
-            <div class="note-title">${escapeHtml(section.title)}</div>
+            <div class="note-title">${escapeHtml2(section.title)}</div>
             <div class="note-list">
-              ${section.lines.map((line) => `<div class="note-line">- ${escapeHtml(line)}</div>`).join("")}
+              ${section.lines.map((line) => `<div class="note-line">- ${escapeHtml2(line)}</div>`).join("")}
             </div>
           </section>
         `
   ).join("");
   const renderedItemRows = serviceGroups.length > 0 ? serviceGroups.map((group) => {
-    const phaseTitle = escapeHtml(group.title);
+    const phaseTitle = escapeHtml2(group.title);
     const itemsHtml = group.items.map((item, itemIndex) => `
             <tr class="service-item-row">
-              <td class="col-item">${escapeHtml(`${group.index}.${itemIndex + 1}`)}</td>
-              <td class="col-desc service-desc-cell">${escapeHtml(item.description || "")}</td>
-              <td class="col-unit">${escapeHtml(item.unit || "")}</td>
+              <td class="col-item">${escapeHtml2(`${group.index}.${itemIndex + 1}`)}</td>
+              <td class="col-desc service-desc-cell">${escapeHtml2(item.description || "")}</td>
+              <td class="col-unit">${escapeHtml2(item.unit || "")}</td>
               <td class="col-qty">${formatCompactQuantity(item.quantity)}</td>
               <td class="col-money">${formatMoney(item.unitPrice)}</td>
               <td class="col-money">${formatMoney(item.lineTotal)}</td>
@@ -60433,9 +60569,9 @@ function renderServiceQuoteHtml(data, baseUrl) {
   const groupRowsHtml = `${renderedItemRows}${fillerRowsHtml}`;
   const paymentSectionHtml = paymentSection ? `
       <section class="payment-section">
-        <div class="payment-title">${escapeHtml(paymentSection.title)}</div>
+        <div class="payment-title">${escapeHtml2(paymentSection.title)}</div>
         <div class="payment-list">
-          ${paymentSection.lines.map((line) => `<div class="payment-line">- ${escapeHtml(line)}</div>`).join("")}
+          ${paymentSection.lines.map((line) => `<div class="payment-line">- ${escapeHtml2(line)}</div>`).join("")}
         </div>
       </section>
     ` : "";
@@ -60771,45 +60907,45 @@ function renderServiceQuoteHtml(data, baseUrl) {
   <div class="sheet">
     <div class="top">
       ${letterheadRender.hideLogo ? "" : `<div class="logo-block">
-        ${logoUrl ? `<img class="issuer-logo" src="${escapeHtml(logoUrl)}" />` : ""}
+        ${logoUrl ? `<img class="issuer-logo" src="${escapeHtml2(logoUrl)}" />` : ""}
       </div>`}
       <div class="issuer-panel ${hasLetterhead ? "issuer-panel-letterhead" : ""}">
         ${renderLetterheadIssuerDetails(hasLetterhead, [
-    `<div class="issuer-name">${escapeHtml(header.issuerName || "")}</div>`,
-    `<div class="issuer-meta">RUC: ${escapeHtml(header.issuerRuc || "")}</div>`,
-    `<div class="issuer-meta">${escapeHtml(header.issuerEmail || "")}</div>`,
-    `<div class="issuer-meta">${escapeHtml(header.issuerPhone || "")}</div>`,
-    `<div class="issuer-meta">${escapeHtml(header.issuerAddress || "")}</div>`
+    `<div class="issuer-name">${escapeHtml2(header.issuerName || "")}</div>`,
+    `<div class="issuer-meta">RUC: ${escapeHtml2(header.issuerRuc || "")}</div>`,
+    `<div class="issuer-meta">${escapeHtml2(header.issuerEmail || "")}</div>`,
+    `<div class="issuer-meta">${escapeHtml2(header.issuerPhone || "")}</div>`,
+    `<div class="issuer-meta">${escapeHtml2(header.issuerAddress || "")}</div>`
   ])}
         <div class="quote-head">
           <div class="quote-head-title">COTIZACION</div>
-          <div class="quote-head-series">${escapeHtml(formattedQuoteFolio)}</div>
+          <div class="quote-head-series">${escapeHtml2(formattedQuoteFolio)}</div>
         </div>
       </div>
     </div>
 
-    <div class="quote-date">${escapeHtml(header.quoteDate || "")}</div>
+    <div class="quote-date">${escapeHtml2(header.quoteDate || "")}</div>
 
     <div class="customer-block">
       <div class="customer-line">
         <div class="customer-label">Cliente:</div>
-        <div>${escapeHtml(customer.name || "")}</div>
+        <div>${escapeHtml2(customer.name || "")}</div>
       </div>
       ${customer.ruc ? `
         <div class="customer-line">
           <div class="customer-label">RUC:</div>
-          <div>${escapeHtml(customer.ruc || "")}</div>
+          <div>${escapeHtml2(customer.ruc || "")}</div>
         </div>
       ` : ""}
       ${customer.attention ? `
         <div class="customer-line">
           <div class="customer-label">ATT.:</div>
-          <div>${escapeHtml(customer.attention || "")}</div>
+          <div>${escapeHtml2(customer.attention || "")}</div>
         </div>
       ` : ""}
     </div>
 
-    <div class="intro">${escapeHtml(intro)}</div>
+    <div class="intro">${escapeHtml2(intro)}</div>
 
     <table class="items">
       <thead>
@@ -60828,7 +60964,7 @@ function renderServiceQuoteHtml(data, baseUrl) {
     </table>
 
     <div class="totals-wrap">
-      <div class="amount-words">${amountInWords ? escapeHtml(amountInWords) : "&nbsp;"}</div>
+      <div class="amount-words">${amountInWords ? escapeHtml2(amountInWords) : "&nbsp;"}</div>
       <table class="totals-table">
         <tbody>
           <tr><td class="label">SUBTOTAL</td><td class="value">${formatMoney(subtotal)}</td></tr>
@@ -60852,11 +60988,11 @@ function renderServiceQuoteHtml(data, baseUrl) {
         <div class="farewell">Sin otro particular, quedamos de ustedes.</div>
         <div class="seller">ATENTAMENTE,</div>
         <div class="seller-image-wrap">
-          ${signatureImageUrl ? `<img class="seller-image" src="${escapeHtml(signatureImageUrl)}" alt="Firma" />` : ""}
+          ${signatureImageUrl ? `<img class="seller-image" src="${escapeHtml2(signatureImageUrl)}" alt="Firma" />` : ""}
         </div>
         <div class="signature-line"></div>
-        <div class="seller">${escapeHtml(seller.name || "")}</div>
-        ${sellerRole ? `<div class="seller-role">${escapeHtml(sellerRole)}</div>` : ""}
+        <div class="seller">${escapeHtml2(seller.name || "")}</div>
+        ${sellerRole ? `<div class="seller-role">${escapeHtml2(sellerRole)}</div>` : ""}
       </div>
       <div>
         <div class="banks-title">Cuentas bancarias</div>
@@ -60865,9 +61001,9 @@ function renderServiceQuoteHtml(data, baseUrl) {
     </div>
 
     <div class="footer">
-      <div>${escapeHtml(footer.address || "")}</div>
-      <div>${escapeHtml(footer.phone || "")}</div>
-      <div>${escapeHtml(footer.email || "")}</div>
+      <div>${escapeHtml2(footer.address || "")}</div>
+      <div>${escapeHtml2(footer.phone || "")}</div>
+      <div>${escapeHtml2(footer.email || "")}</div>
     </div>
   </div>
 </body>
@@ -60907,10 +61043,10 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
   const startedAt = Date.now();
   try {
     const { payload, html } = await buildRenderContext(req);
-    await fs22.ensureDir(config.pdf.tempDir);
+    await fs24.ensureDir(config.pdf.tempDir);
     const previewId = `${previewPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path23.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path24.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -60930,8 +61066,8 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
       buildFolioOptions2(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
-    const stat = await fs22.stat(previewPath);
-    const previewUrl = path23.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs24.stat(previewPath);
+    const previewUrl = path24.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("quote_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -60960,16 +61096,16 @@ async function generateQuoteDocument(req, res, next, options2) {
       payload.quoteNumber || payload.schemaData?.header?.quoteNumber || payload.schemaData?.quoteNumber || "sin-numero"
     );
     const safeQuoteNumber = sanitizePathSegment(quoteNumberRaw);
-    const relativeDir = path23.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
+    const relativeDir = path24.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       "cotizaciones",
-      path23.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
+      path24.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
     );
-    await fs22.ensureDir(outputDir);
+    await fs24.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${options2.filenamePrefix}-${safeQuoteNumber}-${timestamp}.pdf`;
-    const outputPath = path23.join(outputDir, filename);
+    const outputPath = path24.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -60989,7 +61125,7 @@ async function generateQuoteDocument(req, res, next, options2) {
       buildFolioOptions2(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(outputPath);
-    const stat = await fs22.stat(outputPath);
+    const stat = await fs24.stat(outputPath);
     const pdfUrl = `/files/companies/${companyId}/${relativeDir}/${filename}`;
     logger_default.info("quote_documents.generate.completed", {
       companyId,
@@ -61035,8 +61171,8 @@ async function generateServiceQuoteDocument(req, res, next) {
 
 // src/api/controllers/purchase-order-documents.controller.ts
 init_logger();
-import fs23 from "fs-extra";
-import path24 from "path";
+import fs25 from "fs-extra";
+import path25 from "path";
 init_environment();
 init_storage_path_service();
 function resolveProto6(req) {
@@ -61085,7 +61221,7 @@ function getPayload2(req) {
     schemaData: isPlainObject4(body.schemaData) ? body.schemaData : {}
   };
 }
-function escapeHtml2(value) {
+function escapeHtml3(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 function formatMoney2(value) {
@@ -61132,7 +61268,7 @@ function buildLetterheadRender2(data, baseUrl) {
   const margins = getDocumentLetterheadMargins(letterhead);
   const backgroundUrl = resolveImageUrl2(baseUrl, letterhead.url || "");
   return {
-    backgroundHtml: backgroundUrl ? `<div class="letterhead-bg"><img src="${escapeHtml2(backgroundUrl)}" alt="" /></div>` : "",
+    backgroundHtml: backgroundUrl ? `<div class="letterhead-bg"><img src="${escapeHtml3(backgroundUrl)}" alt="" /></div>` : "",
     pageMargin: "0",
     sheetPadding: `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`,
     hideLogo: shouldHideDocumentLogo(data)
@@ -61142,9 +61278,9 @@ function renderIssuerDetails(hasLetterhead, header) {
   if (hasLetterhead) return "";
   return `
         <div class="issuer">
-          <div class="issuer-name">${escapeHtml2(header.issuerName || "")}</div>
-          <div class="issuer-meta">RUC: ${escapeHtml2(header.issuerRuc || "")}</div>
-          <div class="issuer-meta">${escapeHtml2(header.issuerAddress || "")}</div>
+          <div class="issuer-name">${escapeHtml3(header.issuerName || "")}</div>
+          <div class="issuer-meta">RUC: ${escapeHtml3(header.issuerRuc || "")}</div>
+          <div class="issuer-meta">${escapeHtml3(header.issuerAddress || "")}</div>
         </div>
   `;
 }
@@ -61163,14 +61299,14 @@ function renderBankRows(accounts) {
     (account) => `
         <div class="bank-item">
           <div class="bank-line bank-line-top">
-            <span class="bank-name">${escapeHtml2(account.bank || "")}</span>
-            <span class="bank-type">${escapeHtml2(account.type || "")}</span>
+            <span class="bank-name">${escapeHtml3(account.bank || "")}</span>
+            <span class="bank-type">${escapeHtml3(account.type || "")}</span>
           </div>
           <div class="bank-line">
-            <span><span class="bank-label">Cuenta:</span> ${escapeHtml2(account.account || "")}</span>
+            <span><span class="bank-label">Cuenta:</span> ${escapeHtml3(account.account || "")}</span>
           </div>
           <div class="bank-line">
-            <span><span class="bank-label">CCI:</span> ${escapeHtml2(account.cci || "")}</span>
+            <span><span class="bank-label">CCI:</span> ${escapeHtml3(account.cci || "")}</span>
           </div>
         </div>
       `
@@ -61220,9 +61356,9 @@ function renderPurchaseOrderHtml(data, baseUrl) {
     }
     return `
         <tr class="item-row">
-          <td class="col-item">${escapeHtml2(item.itemCode || String(index + 1))}</td>
-          <td class="col-desc">${escapeHtml2(item.description || "")}</td>
-          <td class="col-unit">${escapeHtml2(item.unit || "")}</td>
+          <td class="col-item">${escapeHtml3(item.itemCode || String(index + 1))}</td>
+          <td class="col-desc">${escapeHtml3(item.description || "")}</td>
+          <td class="col-unit">${escapeHtml3(item.unit || "")}</td>
           <td class="col-qty">${formatQuantity2(item.quantity)}</td>
           <td class="col-money">${formatMoney2(item.unitPrice)}</td>
           <td class="col-money">${formatMoney2(item.lineTotal)}</td>
@@ -61541,52 +61677,52 @@ function renderPurchaseOrderHtml(data, baseUrl) {
   <div class="sheet">
     <div class="top">
       ${letterheadRender.hideLogo ? "" : `<div class="logo-block">
-        ${logoUrl ? `<img class="issuer-logo" src="${escapeHtml2(logoUrl)}" alt="Logo" />` : ""}
+        ${logoUrl ? `<img class="issuer-logo" src="${escapeHtml3(logoUrl)}" alt="Logo" />` : ""}
       </div>`}
       <div class="issuer-panel ${hasLetterhead ? "issuer-panel-letterhead" : ""}">
         ${renderIssuerDetails(hasLetterhead, header)}
         <div class="doc-head">
-          <div class="doc-head-title">${escapeHtml2(documentTitle)}</div>
-          <div class="doc-head-series">${escapeHtml2(header.orderNumber || "")}</div>
+          <div class="doc-head-title">${escapeHtml3(documentTitle)}</div>
+          <div class="doc-head-series">${escapeHtml3(header.orderNumber || "")}</div>
         </div>
       </div>
     </div>
 
-    <div class="doc-date">${escapeHtml2(header.orderDate || "")}</div>
+    <div class="doc-date">${escapeHtml3(header.orderDate || "")}</div>
 
     <div class="supplier-block">
       <div class="supplier-line">
         <div class="supplier-label">Proveedor:</div>
-        <div>${escapeHtml2(supplier.name || "")}</div>
+        <div>${escapeHtml3(supplier.name || "")}</div>
       </div>
       ${supplier.ruc ? `
         <div class="supplier-line">
           <div class="supplier-label">RUC:</div>
-          <div>${escapeHtml2(supplier.ruc || "")}</div>
+          <div>${escapeHtml3(supplier.ruc || "")}</div>
         </div>
       ` : ""}
       ${supplier.address ? `
         <div class="supplier-line">
           <div class="supplier-label">Direcci\xF3n:</div>
-          <div>${escapeHtml2(supplier.address || "")}</div>
+          <div>${escapeHtml3(supplier.address || "")}</div>
         </div>
       ` : ""}
     </div>
 
-    <div class="intro">${escapeHtml2(intro)}</div>
+    <div class="intro">${escapeHtml3(intro)}</div>
 
     <div class="meta-grid">
       <div class="meta-item">
         <div class="meta-label">Forma de pago:</div>
-        <div class="meta-value">${escapeHtml2(meta.paymentMethod || "-")}</div>
+        <div class="meta-value">${escapeHtml3(meta.paymentMethod || "-")}</div>
       </div>
       <div class="meta-item">
         <div class="meta-label">Moneda:</div>
-        <div class="meta-value">${escapeHtml2(meta.currencyLabel || "-")}</div>
+        <div class="meta-value">${escapeHtml3(meta.currencyLabel || "-")}</div>
       </div>
       <div class="meta-item">
         <div class="meta-label">Proyecto:</div>
-        <div class="meta-value">${escapeHtml2(meta.project || "-")}</div>
+        <div class="meta-value">${escapeHtml3(meta.project || "-")}</div>
       </div>
       ${hasFxData ? `
         <div class="meta-item">
@@ -61617,7 +61753,7 @@ function renderPurchaseOrderHtml(data, baseUrl) {
     </table>
 
     <div class="totals-wrap">
-      <div class="amount-words">${amountInWords ? escapeHtml2(amountInWords) : "&nbsp;"}</div>
+      <div class="amount-words">${amountInWords ? escapeHtml3(amountInWords) : "&nbsp;"}</div>
       <table class="totals-table">
         <tbody>
           <tr>
@@ -61640,14 +61776,14 @@ function renderPurchaseOrderHtml(data, baseUrl) {
       <div class="detail-panel">
         <div class="detail-title">Condiciones y cumplimiento</div>
         <div class="detail-list">
-          ${termsLines.length > 0 ? termsLines.map((line) => `<div class="detail-line">- ${escapeHtml2(line)}</div>`).join("") : '<div class="empty-row">Sin condiciones registradas.</div>'}
+          ${termsLines.length > 0 ? termsLines.map((line) => `<div class="detail-line">- ${escapeHtml3(line)}</div>`).join("") : '<div class="empty-row">Sin condiciones registradas.</div>'}
         </div>
       </div>
 
       <div class="detail-panel">
         <div class="detail-title">Observaciones</div>
         <div class="detail-text">
-          ${observationsText ? escapeHtml2(observationsText) : '<div class="empty-row">Sin observaciones</div>'}
+          ${observationsText ? escapeHtml3(observationsText) : '<div class="empty-row">Sin observaciones</div>'}
         </div>
       </div>
     </div>
@@ -61661,17 +61797,17 @@ function renderPurchaseOrderHtml(data, baseUrl) {
       <div class="approval-block">
         <div class="approval-title">Aprobaci\xF3n</div>
         <div class="signature-image-wrap">
-          ${signatureImageUrl ? `<img class="signature-image" src="${escapeHtml2(signatureImageUrl)}" alt="Firma" />` : ""}
+          ${signatureImageUrl ? `<img class="signature-image" src="${escapeHtml3(signatureImageUrl)}" alt="Firma" />` : ""}
         </div>
         <div class="signature-line"></div>
-        <div class="signature-name">${escapeHtml2(seller.name || footer.issuerName || "")}</div>
-        <div class="signature-role">${escapeHtml2(seller.role || "")}</div>
+        <div class="signature-name">${escapeHtml3(seller.name || footer.issuerName || "")}</div>
+        <div class="signature-role">${escapeHtml3(seller.role || "")}</div>
       </div>
     </div>
 
     <div class="footer">
-      <div>${escapeHtml2(footer.issuerName || "")}</div>
-      <div>RUC ${escapeHtml2(footer.issuerRuc || "")}</div>
+      <div>${escapeHtml3(footer.issuerName || "")}</div>
+      <div>RUC ${escapeHtml3(footer.issuerRuc || "")}</div>
     </div>
   </div>
 </body>
@@ -61704,10 +61840,10 @@ async function previewPurchaseOrder(req, res, next) {
   const startedAt = Date.now();
   try {
     const { payload, html } = await buildRenderContext2(req);
-    await fs23.ensureDir(config.pdf.tempDir);
+    await fs25.ensureDir(config.pdf.tempDir);
     const previewId = `ord-com-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path24.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path25.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -61727,8 +61863,8 @@ async function previewPurchaseOrder(req, res, next) {
       buildFolioOptions3(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
-    const stat = await fs23.stat(previewPath);
-    const previewUrl = path24.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs25.stat(previewPath);
+    const previewUrl = path25.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("purchase_order_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -61765,16 +61901,16 @@ async function generatePurchaseOrder(req, res, next) {
     ).toLowerCase() === "service";
     const moduleDir2 = isServiceOrder ? "ordenes-servicio" : "ordenes-compra";
     const filenamePrefix = isServiceOrder ? "orden-servicio" : "orden-compra";
-    const relativeDir = path24.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
+    const relativeDir = path25.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       moduleDir2,
       `nro-${safeOrderNumber}`
     );
-    await fs23.ensureDir(outputDir);
+    await fs25.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${filenamePrefix}-${safeOrderNumber}-${timestamp}.pdf`;
-    const outputPath = path24.join(outputDir, filename);
+    const outputPath = path25.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -61794,7 +61930,7 @@ async function generatePurchaseOrder(req, res, next) {
       buildFolioOptions3(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(outputPath);
-    const stat = await fs23.stat(outputPath);
+    const stat = await fs25.stat(outputPath);
     const pdfUrl = `/files/companies/${companyId}/${relativeDir}/${filename}`;
     logger_default.info("purchase_order_documents.generate.completed", {
       companyId,
@@ -61834,8 +61970,8 @@ init_logger();
 
 // src/services/dispatch-note-document.service.ts
 init_logger();
-import fs24 from "fs-extra";
-import path25 from "path";
+import fs26 from "fs-extra";
+import path26 from "path";
 init_environment();
 init_storage_path_service();
 init_models();
@@ -61877,7 +62013,7 @@ function getPayload3(payload) {
     schemaData: isPlainObject5(body.schemaData) ? body.schemaData : {}
   };
 }
-function escapeHtml3(value) {
+function escapeHtml4(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 function resolveImageUrl3(baseUrl, source) {
@@ -61912,7 +62048,7 @@ function buildNoteLines(note) {
   if (!normalized) {
     return '<div class="note-line"></div><div class="note-line"></div>';
   }
-  const lines = normalized.split(/\r?\n/).filter(Boolean).map((line) => `<div class="note-line">${escapeHtml3(line)}</div>`);
+  const lines = normalized.split(/\r?\n/).filter(Boolean).map((line) => `<div class="note-line">${escapeHtml4(line)}</div>`);
   while (lines.length < 2) {
     lines.push('<div class="note-line"></div>');
   }
@@ -61920,7 +62056,7 @@ function buildNoteLines(note) {
 }
 function renderServiceLines(lines) {
   return lines.map(
-    (line) => `<div class="service-line"><span class="service-bullet">\u2022</span><span>${escapeHtml3(line)}</span></div>`
+    (line) => `<div class="service-line"><span class="service-bullet">\u2022</span><span>${escapeHtml4(line)}</span></div>`
   ).join("");
 }
 function renderDispatchNoteHtml(data, baseUrl) {
@@ -62172,21 +62308,21 @@ function renderDispatchNoteHtml(data, baseUrl) {
       <main class="sheet">
         <section class="header">
           <div class="brand">
-            ${hasLogo ? `<img class="brand-logo" src="${escapeHtml3(logoUrl)}" alt="Logo" />` : `<div class="brand-fallback">${escapeHtml3(companyName || "Company")}</div>`}
+            ${hasLogo ? `<img class="brand-logo" src="${escapeHtml4(logoUrl)}" alt="Logo" />` : `<div class="brand-fallback">${escapeHtml4(companyName || "Company")}</div>`}
           </div>
 
           <div class="services">
-            <div class="services-title">${escapeHtml3(servicesTitle)}</div>
+            <div class="services-title">${escapeHtml4(servicesTitle)}</div>
             <div class="services-list">${renderServiceLines(serviceLines)}</div>
           </div>
 
           <div>
             <div class="vale-card">
               <div class="vale-title">Vale</div>
-              <div class="vale-number">No.&nbsp;${escapeHtml3(dispatch.valeNumber || "")}</div>
+              <div class="vale-number">No.&nbsp;${escapeHtml4(dispatch.valeNumber || "")}</div>
             </div>
             <div class="date-line">
-              Fecha:<span class="line-value">${escapeHtml3(dispatch.dispatchDate || "")}</span>
+              Fecha:<span class="line-value">${escapeHtml4(dispatch.dispatchDate || "")}</span>
             </div>
           </div>
         </section>
@@ -62194,21 +62330,21 @@ function renderDispatchNoteHtml(data, baseUrl) {
         <section class="content">
           <div class="field-row">
             <div>Se\xF1ores</div>
-            <div class="field-value">${escapeHtml3(dispatch.customerName || "")}</div>
+            <div class="field-value">${escapeHtml4(dispatch.customerName || "")}</div>
           </div>
           <div class="field-row">
             <div>Obra</div>
-            <div class="field-value">${escapeHtml3(dispatch.projectName || "")}</div>
+            <div class="field-value">${escapeHtml4(dispatch.projectName || "")}</div>
           </div>
           <div class="field-row">
             <div>Tipo de Material</div>
-            <div class="field-value">${escapeHtml3(dispatch.materialName || "")}</div>
+            <div class="field-value">${escapeHtml4(dispatch.materialName || "")}</div>
           </div>
 
           <div class="detail-grid">
             <div class="amount-stack">
               <div class="amount-line">
-                <span class="value">${escapeHtml3(dispatch.quantityLabel || "")}</span>
+                <span class="value">${escapeHtml4(dispatch.quantityLabel || "")}</span>
                 <span class="unit">M3</span>
               </div>
               ${noteMarkup}
@@ -62217,15 +62353,15 @@ function renderDispatchNoteHtml(data, baseUrl) {
             <div class="meta-stack">
               <div class="meta-row">
                 <div>Placa</div>
-                <div class="value">${escapeHtml3(dispatch.plate || "")}</div>
+                <div class="value">${escapeHtml4(dispatch.plate || "")}</div>
               </div>
               <div class="meta-row">
                 <div>Chofer</div>
-                <div class="value">${escapeHtml3(dispatch.driverName || "")}</div>
+                <div class="value">${escapeHtml4(dispatch.driverName || "")}</div>
               </div>
               <div class="meta-row">
                 <div>Hora</div>
-                <div class="value">${escapeHtml3(dispatch.dispatchHour || "")}</div>
+                <div class="value">${escapeHtml4(dispatch.dispatchHour || "")}</div>
               </div>
             </div>
           </div>
@@ -62234,7 +62370,7 @@ function renderDispatchNoteHtml(data, baseUrl) {
         <section class="signatures">
           <div class="signature">
             <div class="signature-line"></div>
-            <div class="signature-label">${escapeHtml3(companyName)}</div>
+            <div class="signature-label">${escapeHtml4(companyName)}</div>
           </div>
           <div class="signature">
             <div class="signature-line"></div>
@@ -62242,7 +62378,7 @@ function renderDispatchNoteHtml(data, baseUrl) {
           </div>
         </section>
 
-        <footer class="footer">${escapeHtml3(generatedBy)}</footer>
+        <footer class="footer">${escapeHtml4(generatedBy)}</footer>
       </main>
     </body>
   </html>`;
@@ -62313,10 +62449,10 @@ async function buildRenderContext3(params) {
 async function previewDispatchNoteDocument(params) {
   const startedAt = Date.now();
   const { html, companyId } = await buildRenderContext3(params);
-  await fs24.ensureDir(config.pdf.tempDir);
+  await fs26.ensureDir(config.pdf.tempDir);
   const previewId = `dispatch-note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const previewFilename = `${previewId}.pdf`;
-  const previewPath = path25.join(config.pdf.tempDir, previewFilename);
+  const previewPath = path26.join(config.pdf.tempDir, previewFilename);
   await generator_service_default.generateFromHtml(html, {
     outputPath: previewPath,
     format: "A4",
@@ -62328,8 +62464,8 @@ async function previewDispatchNoteDocument(params) {
       left: "0mm"
     }
   });
-  const stat = await fs24.stat(previewPath);
-  const previewUrl = path25.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+  const stat = await fs26.stat(previewPath);
+  const previewUrl = path26.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
   logger_default.info("dispatch_note_documents.preview.completed", {
     companyId,
     durationMs: Date.now() - startedAt,
@@ -62348,12 +62484,12 @@ async function generateDispatchNoteDocumentFile(params) {
   await storagePathService.ensureCompanyStructure(companyId);
   const dispatchNumberRaw = String(payload.orderNumber || data?.dispatch?.valeNumber || "sin-numero");
   const safeDispatchNumber = sanitizePathSegment3(dispatchNumberRaw);
-  const relativeDir = path25.posix.join("vales", `nro-${safeDispatchNumber}`);
+  const relativeDir = path26.posix.join("vales", `nro-${safeDispatchNumber}`);
   const outputDir = storagePathService.getModulePath(companyId, "dispatches", relativeDir);
-  await fs24.ensureDir(outputDir);
+  await fs26.ensureDir(outputDir);
   const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
   const fileName = `vale-despacho-${safeDispatchNumber}-${timestamp}.pdf`;
-  const outputPath = path25.join(outputDir, fileName);
+  const outputPath = path26.join(outputDir, fileName);
   await generator_service_default.generateFromHtml(html, {
     outputPath,
     format: "A4",
@@ -62365,9 +62501,9 @@ async function generateDispatchNoteDocumentFile(params) {
       left: "0mm"
     }
   });
-  const stat = await fs24.stat(outputPath);
+  const stat = await fs26.stat(outputPath);
   const pdfUrl = `/files/companies/${companyId}/dispatches/${relativeDir}/${fileName}`;
-  const filePath = path25.posix.join("dispatches", relativeDir, fileName);
+  const filePath = path26.posix.join("dispatches", relativeDir, fileName);
   logger_default.info("dispatch_note_documents.generate.completed", {
     companyId,
     dispatchNumber: safeDispatchNumber,
@@ -63420,7 +63556,7 @@ function toSafeText(value, fallback = "") {
 function escapeXml(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
-function formatDate(value) {
+function formatDate2(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value || "-";
   return date.toLocaleDateString("es-PE", {
@@ -63507,7 +63643,7 @@ function buildOrderCompletionSummarySvg(params) {
     const y65 = tableTop + rowHeight * (index + 1);
     return `
         <rect x="32" y="${y65}" width="1136" height="${rowHeight}" fill="${index % 2 === 0 ? "#ffffff" : "#f8fafc"}" />
-        <text x="72" y="${y65 + 34}" class="cell">${escapeXml(formatDate(row.date || params.date))}</text>
+        <text x="72" y="${y65 + 34}" class="cell">${escapeXml(formatDate2(row.date || params.date))}</text>
         <text x="240" y="${y65 + 34}" class="cell accent">${escapeXml(truncateText(row.plate, 12))}</text>
         <text x="420" y="${y65 + 34}" class="cell">${escapeXml(truncateText(row.driverName, 28))}</text>
         <text x="700" y="${y65 + 34}" class="cell">${escapeXml(row.hour || "-")}</text>
@@ -63532,7 +63668,7 @@ function buildOrderCompletionSummarySvg(params) {
       <text x="32" y="94" class="subtitle">Resumen de tu pedido, ${escapeXml(params.obra || "Obra")}</text>
       <g>
         <rect x="32" y="135" width="260" height="142" rx="28" fill="#f7f8fc" stroke="#ffffff" stroke-width="2" />
-        <text x="162" y="198" class="metric" text-anchor="middle">${escapeXml(formatDate(params.date))}</text>
+        <text x="162" y="198" class="metric" text-anchor="middle">${escapeXml(formatDate2(params.date))}</text>
         <text x="162" y="246" class="metric-label" text-anchor="middle">Fecha</text>
         <rect x="320" y="135" width="260" height="142" rx="28" fill="#f7f8fc" stroke="#ffffff" stroke-width="2" />
         <text x="450" y="198" class="metric" text-anchor="middle">${escapeXml(formatQuantity3(params.totalM3))}</text>
@@ -64069,8 +64205,8 @@ var dispatch_routes_default = router7;
 // src/api/routes/public.routes.ts
 import { Router as Router8 } from "express";
 import multer3 from "multer";
-import fs26 from "fs-extra";
-import path27 from "path";
+import fs28 from "fs-extra";
+import path28 from "path";
 
 // src/api/controllers/public.controller.ts
 var import_jsonwebtoken4 = __toESM(require_jsonwebtoken(), 1);
@@ -64078,8 +64214,8 @@ init_environment();
 init_models();
 import axios8 from "axios";
 import { randomUUID as randomUUID5 } from "crypto";
-import fs25 from "fs-extra";
-import path26 from "path";
+import fs27 from "fs-extra";
+import path27 from "path";
 init_storage_path_service();
 init_telegram_alert_service();
 var CACHE_TTL_MS = 5 * 60 * 1e3;
@@ -64127,7 +64263,7 @@ var buildPortalHeaders = (companyId) => ({
   "Content-Type": "application/json",
   "x-company-id": companyId
 });
-var buildPortalUrl = (path31) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path31}`;
+var buildPortalUrl = (path32) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path32}`;
 var buildRequestPublicBaseUrl = (req) => {
   const forwardedProto = trimValue(req.headers["x-forwarded-proto"]).split(",")[0];
   const forwardedHost = trimValue(req.headers["x-forwarded-host"]).split(",")[0];
@@ -64238,7 +64374,7 @@ var parseReceptionInput = (req) => {
   throw new Error("kind is invalid");
 };
 var cleanupUploadedFiles = async (files) => {
-  await Promise.allSettled(files.map((file) => fs25.remove(file.path)));
+  await Promise.allSettled(files.map((file) => fs27.remove(file.path)));
 };
 var fetchPortalInputList = async (companyId, level) => {
   const response = await axios8.get(buildPortalUrl("/api/input"), {
@@ -64379,11 +64515,11 @@ var storeFileInLilaDrive = async (companyId, lilaPublicBaseUrl, resourceId, file
   const targetDir = storagePathService.resolvePath(companyId, relativeDir);
   await storagePathService.ensureDir(targetDir, companyId);
   const storageFileName = buildUniqueStorageFileName(file.originalName, file.path);
-  const targetPath = path26.join(targetDir, storageFileName);
+  const targetPath = path27.join(targetDir, storageFileName);
   if (!storagePathService.validateAccess(targetPath, companyId)) {
     throw new Error("Ruta de almacenamiento invalida");
   }
-  await fs25.copy(file.path, targetPath, { overwrite: false });
+  await fs27.copy(file.path, targetPath, { overwrite: false });
   await incrementStorageUsage(companyId, file.size);
   const publicUrl = `/files/companies/${companyId}/${relativeDir}/${storageFileName}`;
   let thumbnailUrl;
@@ -64936,8 +65072,8 @@ async function submitPublicFinancialMovement(req, res) {
 // src/api/routes/public.routes.ts
 init_environment();
 var router8 = Router8();
-var receptionUploadsDir = path27.join(config.storage.root, "temp", "public-receptions");
-fs26.ensureDirSync(receptionUploadsDir);
+var receptionUploadsDir = path28.join(config.storage.root, "temp", "public-receptions");
+fs28.ensureDirSync(receptionUploadsDir);
 var sanitizeFileName = (value) => value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "upload";
 var upload3 = multer3({
   storage: multer3.diskStorage({
@@ -65053,7 +65189,7 @@ function getConstroadDecision(level) {
   if (level === "moderate_risk") return "RIESGO MODERADO DE LLUVIA";
   return "APTO PARA PRODUCIR";
 }
-function formatDate2(date) {
+function formatDate3(date) {
   const opts = { timeZone: WEATHER_ASPHALT_FORECAST.timezone };
   const dayName = date.toLocaleDateString("es-PE", { ...opts, weekday: "long" });
   const dayNumber = date.toLocaleDateString("es-PE", { ...opts, day: "numeric" });
@@ -65097,7 +65233,7 @@ function buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate) 
   if (constroadRiskyDays.length > 0) {
     message += "Constroad (Planta de asfalto):\n\n";
     for (const day of constroadRiskyDays) {
-      message += `  ${formatDate2(day.date)}:
+      message += `  ${formatDate3(day.date)}:
 `;
       message += `    Prob. lluvia: ${day.prob}% - (${day.mm} mm)
 `;
@@ -65107,7 +65243,7 @@ function buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate) 
     }
   }
   if (forecastsWithRisk.length > 0) {
-    message += `Distritos con riesgo de lluvia (${formatDate2(reportDate)}):
+    message += `Distritos con riesgo de lluvia (${formatDate3(reportDate)}):
 
 `;
     const highRisk = forecastsWithRisk.filter((forecast) => forecast.level === "high_risk");
@@ -65489,8 +65625,8 @@ init_logger();
 
 // src/services/service-migration.helpers.ts
 init_storage_path_service();
-import fs27 from "fs-extra";
-import path28 from "node:path";
+import fs29 from "fs-extra";
+import path29 from "node:path";
 import {
   Schema as Schema10,
   Types as Types2
@@ -65790,12 +65926,12 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!storagePathService.validateAccess(targetAbsolute, targetCompanyId)) {
         throw new Error("Ruta f\xEDsica destino inv\xE1lida.");
       }
-      if (!await fs27.pathExists(sourceAbsolute)) {
+      if (!await fs29.pathExists(sourceAbsolute)) {
         throw new Error(`Archivo origen no existe: ${sourceRelative}`);
       }
-      const sourceStats = await fs27.stat(sourceAbsolute);
-      if (await fs27.pathExists(targetAbsolute)) {
-        const targetStats = await fs27.stat(targetAbsolute);
+      const sourceStats = await fs29.stat(sourceAbsolute);
+      if (await fs29.pathExists(targetAbsolute)) {
+        const targetStats = await fs29.stat(targetAbsolute);
         if (targetStats.size !== sourceStats.size) {
           throw new Error(`Archivo destino ya existe con otro tama\xF1o: ${targetRelative}`);
         }
@@ -65804,12 +65940,12 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!sourceStats.isFile()) {
         throw new Error(`Origen no es un archivo regular: ${sourceRelative}`);
       }
-      const targetDirectory = path28.dirname(targetAbsolute);
+      const targetDirectory = path29.dirname(targetAbsolute);
       if (!targetDirectory || targetDirectory === ".") {
         throw new Error(`Directorio destino inv\xE1lido: ${targetRelative}`);
       }
-      await fs27.ensureDir(targetDirectory);
-      await fs27.copy(sourceAbsolute, targetAbsolute);
+      await fs29.ensureDir(targetDirectory);
+      await fs29.copy(sourceAbsolute, targetAbsolute);
       createdPaths.push(targetAbsolute);
       if (sourceStats.isFile()) {
         await incrementStorageUsage(targetCompanyId, sourceStats.size);
@@ -65828,9 +65964,9 @@ var deleteSourceFiles = async (files, sourceCompanyId) => {
       const sourceRelative = cleanCompanyPath(sourceCompanyId, file.sourcePath);
       const sourceAbsolute = storagePathService.resolvePath(sourceCompanyId, sourceRelative);
       if (!storagePathService.validateAccess(sourceAbsolute, sourceCompanyId)) continue;
-      if (!await fs27.pathExists(sourceAbsolute)) continue;
-      const stats = await fs27.stat(sourceAbsolute);
-      await fs27.remove(sourceAbsolute);
+      if (!await fs29.pathExists(sourceAbsolute)) continue;
+      const stats = await fs29.stat(sourceAbsolute);
+      await fs29.remove(sourceAbsolute);
       if (stats.isFile()) {
         await decrementStorageUsage(sourceCompanyId, stats.size);
       }
@@ -65845,9 +65981,9 @@ var deleteSourceFiles = async (files, sourceCompanyId) => {
 var rollbackCopiedFiles = async (targetCompanyId, createdPaths) => {
   for (const targetAbsolute of createdPaths) {
     try {
-      if (!await fs27.pathExists(targetAbsolute)) continue;
-      const stats = await fs27.stat(targetAbsolute);
-      await fs27.remove(targetAbsolute);
+      if (!await fs29.pathExists(targetAbsolute)) continue;
+      const stats = await fs29.stat(targetAbsolute);
+      await fs29.remove(targetAbsolute);
       if (stats.isFile()) {
         await decrementStorageUsage(targetCompanyId, stats.size);
       }
@@ -66794,8 +66930,8 @@ router11.post("/", requireTenant, createServiceMigration);
 var service_migration_routes_default = router11;
 
 // src/services/thumbnail-request.service.ts
-import fs28 from "fs-extra";
-import path29 from "path";
+import fs30 from "fs-extra";
+import path30 from "path";
 var THUMB_DIR_NAME = ".thumbs";
 var THUMBNAIL_NAME_PATTERN = /^thumb_(.+)_[a-f0-9]{10}\.jpg$/i;
 var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
@@ -66806,7 +66942,7 @@ function normalizeRequestPath(requestPath) {
   if (!requestPath) return null;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path29.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
+    const normalized = path30.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
     if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
       return null;
     }
@@ -66816,7 +66952,7 @@ function normalizeRequestPath(requestPath) {
   }
 }
 function toAbsolutePath(root, relativePath) {
-  return path29.join(root, ...relativePath.split("/"));
+  return path30.join(root, ...relativePath.split("/"));
 }
 async function findOriginalForThumbnail(root, relativeThumbPath) {
   const segments = relativeThumbPath.split("/");
@@ -66829,12 +66965,12 @@ async function findOriginalForThumbnail(root, relativeThumbPath) {
   const parentSegments = segments.slice(0, thumbDirIndex);
   const parentDir = toAbsolutePath(root, parentSegments.join("/"));
   const safeBase = match[1];
-  const entries = await fs28.readdir(parentDir).catch(() => []);
+  const entries = await fs30.readdir(parentDir).catch(() => []);
   const candidates = await Promise.all(
-    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName2(path29.parse(entry).name || "file") === safeBase).map(async (entry) => {
-      const absolutePath = path29.join(parentDir, entry);
-      const stat = await fs28.stat(absolutePath).catch(() => null);
-      const ext = path29.extname(entry).toLowerCase();
+    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName2(path30.parse(entry).name || "file") === safeBase).map(async (entry) => {
+      const absolutePath = path30.join(parentDir, entry);
+      const stat = await fs30.stat(absolutePath).catch(() => null);
+      const ext = path30.extname(entry).toLowerCase();
       if (!stat?.isFile() || !IMAGE_EXTENSIONS.has(ext)) {
         return null;
       }
@@ -66853,7 +66989,7 @@ async function resolveThumbnailRequestTarget(root, requestPath) {
     return null;
   }
   const thumbPath = toAbsolutePath(root, relativePath);
-  if (await fs28.pathExists(thumbPath)) {
+  if (await fs30.pathExists(thumbPath)) {
     return {
       absolutePath: thumbPath,
       source: "thumbnail"
@@ -68743,8 +68879,8 @@ var restoreAllSessions = async () => {
 // src/index.ts
 init_telegram_alert_service();
 import cron2 from "node-cron";
-import fs29 from "fs-extra";
-import path30 from "path";
+import fs31 from "fs-extra";
+import path31 from "path";
 var app = express();
 app.set("trust proxy", config.security.trustProxy);
 var corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || "").split(",").map((origin) => origin.trim()).filter(Boolean);
@@ -68799,7 +68935,7 @@ var shouldDisableStaticCaching = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path30.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
+    const normalized = path31.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
     return normalized.includes("/vale/");
   } catch {
     return false;
@@ -68818,7 +68954,7 @@ var isSafeThumbRequestPath = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path30.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
+    const normalized = path31.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
     return normalized.includes("/.thumbs/");
   } catch {
     return false;
@@ -68965,7 +69101,7 @@ async function startServer() {
       logger_default.warn("Quota Validator initialization failed, quota validation will be disabled:", error);
     }
     await generator_service_default.initialize();
-    await fs29.ensureDir(config.pdf.tempDir);
+    await fs31.ensureDir(config.pdf.tempDir);
     logger_default.info("\u{1F9FE} PDF temp directory configured", {
       tempDir: config.pdf.tempDir,
       publicBaseUrl: config.pdf.tempPublicBaseUrl
@@ -68980,15 +69116,15 @@ async function startServer() {
     const shouldRunBackgroundJobs = shouldInitializeBackgroundJobs(config.nodeEnv);
     const cleanupPdfTemp = async () => {
       try {
-        const entries = await fs29.readdir(config.pdf.tempDir);
+        const entries = await fs31.readdir(config.pdf.tempDir);
         const now = Date.now();
         const maxAgeMs = pdfTempMaxAgeHours * 60 * 60 * 1e3;
         const removals = entries.map(async (entry) => {
-          const fullPath = path30.join(config.pdf.tempDir, entry);
-          const stat = await fs29.stat(fullPath);
+          const fullPath = path31.join(config.pdf.tempDir, entry);
+          const stat = await fs31.stat(fullPath);
           if (!stat.isFile()) return;
           if (now - stat.mtimeMs > maxAgeMs) {
-            await fs29.remove(fullPath);
+            await fs31.remove(fullPath);
           }
         });
         await Promise.all(removals);

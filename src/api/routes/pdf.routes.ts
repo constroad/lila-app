@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import * as pdfController from '../controllers/pdf.controller.js';
 import { generateVale, previewValeTemplateGrid } from '../controllers/pdf-vale.controller.js';
+import { downloadPlantSettlementPdf } from '../controllers/plant-dispatch-settlement-document.controller.js';
+import { requireTenant } from '../../middleware/tenant.middleware.js';
 
 const router = Router();
 
@@ -9,6 +11,7 @@ router.post('/generate', pdfController.generatePDF);
 
 // POST /api/pdf/generate-vale - Generar vale desde template PDF
 router.post('/generate-vale', generateVale);
+router.post('/plant-dispatch-settlement', requireTenant, downloadPlantSettlementPdf);
 
 // GET /api/pdf/templates/preview-grid - Preview template con grilla
 router.get('/templates/preview-grid', previewValeTemplateGrid);

@@ -52,6 +52,10 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - **RLS de `/message` (env-gated, backward-compatible):** por defecto `optionalTenant` (no bloquea) + `requireSenderOwnership` en modo aviso; con `WHATSAPP_RLS_ENFORCE=true` exige `requireTenantOrApiKey` y bloquea envios cuyo sender no pertenece a la company. Pensado para vender API keys `lk_fe_` a consumidores externos (sin Portal). Ver `specs/SCALABILITY-MULTI-SESSION.spec` §4.
 
 ### Documentos / Reportes
+
+- `POST /api/pdf/plant-dispatch-settlement` genera el reporte de producción por planta.
+  Requiere JWT tenant, carga branding empresarial y entrega PDF con código, periodo,
+  obras y totales acumulados.
 - Registry de schemas: `src/schemas/documents/registry.ts` (20+ codigos: VAL-SRV, ACT-CNF, CONT-SRV, LIQ-SRV, control-imprimacion, control-pista, informe-area-adicional, medidas IAA, etc.).
 - El schema `INF-ACT` (Informe de Actividades Realizadas) usa `actividades` como tabla editable y `registroFotografico.fotos[]` como panel fotografico. Portal puede enviar cada foto/PDF con metadata `activityId`, `activityLabel`, `activityIndex` y `activitySourceId`; `report-html-renderer.service.ts` agrupa esa seccion por actividad y omite actividades sin fotos. Los PDFs/documentos del panel se renderizan como tiles enlazados dentro de la tabla fotografica. Las fechas `date` recibidas como `YYYY-MM-DD` se formatean preservando el dia de calendario, sin parsearlas como UTC para evitar desfases por timezone.
 - Controllers:
@@ -106,6 +110,8 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 ### MongoDB Portal (Fase 10 - Quotas)
 - Conexion compartida con pool y circuit breaker: `src/database/sharedConnection.ts`.
 - Modelos del Portal: `src/database/models.ts` (Company, CronJob, Config) y `src/models/usage-metric.model.ts`.
+- `scripts/migrate-managed-cronjobs.ts` adopta jobs legacy al registro self-service.
+  Es dry-run por defecto; `--apply --prune` aplica y desactiva duplicados.
 - `quota-validator.service.ts` (singleton) - valida quotas WhatsApp/storage/usuarios antes de operaciones costosas y registra consumo WhatsApp mensual en `usage_metrics`.
 - Middleware `requireTenant` valida JWT y carga `req.companyId`.
 
