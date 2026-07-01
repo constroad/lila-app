@@ -24,10 +24,17 @@ async function fetchDispatchContext(
 ): Promise<DispatchPostProcessContext> {
   const CompanyModel = await getCompanyModel();
   const company = await CompanyModel.findOne({ companyId: input.companyId }).lean();
+  // whatsappConfig lo escribe Portal (plantGroupId/adminGroupId/alerts); con lean() llega crudo.
+  const wa = (company as any)?.whatsappConfig ?? {};
+  const alerts = wa.alerts instanceof Map ? Object.fromEntries(wa.alerts) : wa.alerts ?? {};
   return {
     companyBotLabel: getCompanyBotLabel(
       company?.slug || company?.name || input.companyId
     ),
+    plantGroupId: String(wa.plantGroupId ?? '').trim(),
+    adminGroupId: String(wa.adminGroupId ?? '').trim(),
+    plantProgressTemplate: alerts?.['plant-progress']?.customMessage || undefined,
+    plantEndTemplate: alerts?.['plant-end']?.customMessage || undefined,
   };
 }
 

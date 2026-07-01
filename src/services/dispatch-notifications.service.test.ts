@@ -122,7 +122,7 @@ describe('dispatch-notifications.service', () => {
         pendingCount: 9,
         clientPendingCount: 2,
       }),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenNthCalledWith(
@@ -130,6 +130,43 @@ describe('dispatch-notifications.service', () => {
       '51902049935',
       'client@g.us',
       expect.stringContaining('Unidades Pendientes: 2'),
+      expect.anything()
+    );
+  });
+
+  it('renders the custom plant-progress template to the plant group', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput(),
+      context: {
+        companyBotLabel: 'Bot',
+        plantGroupId: 'plant@g.us',
+        adminGroupId: 'admin@g.us',
+        plantProgressTemplate: '⚡ {{unidad}}/{{pendientes}}',
+      },
+    });
+
+    // dispatchOrdinal = max(dispatchedCount=4,1)=4 ; pendingCount=3 → '⚡ 4/3' al grupo de planta.
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenNthCalledWith(
+      1,
+      '51902049935',
+      'plant@g.us',
+      '⚡ 4/3',
+      expect.anything()
+    );
+  });
+
+  it('skips the plant WhatsApp send when no plant group is configured', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput(),
+      context: { companyBotLabel: 'Bot', plantGroupId: '', adminGroupId: 'admin@g.us' },
+    });
+
+    // Sin grupo de planta → el primer envío WhatsApp es al cliente, no a planta.
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenNthCalledWith(
+      1,
+      '51902049935',
+      'client@g.us',
+      expect.anything(),
       expect.anything()
     );
   });
@@ -198,7 +235,7 @@ describe('dispatch-notifications.service', () => {
       input: buildTestInput({
         dispatchFinished: true,
       }),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(3);
@@ -226,7 +263,7 @@ describe('dispatch-notifications.service', () => {
         dispatchFinished: true,
         ippReportPayload: { orderId: 'order-1' },
       }),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
 
     await jest.runOnlyPendingTimersAsync();
@@ -259,7 +296,7 @@ describe('dispatch-notifications.service', () => {
         dispatchFinished: true,
         ippReportPayload: { orderId: 'order-1' },
       }),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
 
     await jest.runOnlyPendingTimersAsync();
@@ -297,7 +334,7 @@ describe('dispatch-notifications.service', () => {
           totalUnits: 1,
         },
       }),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
 
     expect(WhatsAppDirectService.sendImageFile).toHaveBeenCalledWith(
@@ -318,7 +355,7 @@ describe('dispatch-notifications.service', () => {
         dispatchFinished: true,
         ippReportUnavailableReason: 'no-linked-service',
       }),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
 
     await jest.runOnlyPendingTimersAsync();
@@ -339,7 +376,7 @@ describe('dispatch-notifications.service', () => {
         sendDispatchMessage: false,
         clientTargets: ['client@g.us'],
       }),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
 
     await jest.runOnlyPendingTimersAsync();
@@ -353,7 +390,7 @@ describe('dispatch-notifications.service', () => {
         dispatchFinished: true,
         allDispatched: false,
       }),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(3);
@@ -376,11 +413,11 @@ describe('dispatch-notifications.service', () => {
 
     await notifications.sendDispatchNotifications({
       input: buildTestInput(),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
     await notifications.sendDispatchNotifications({
       input: buildTestInput(),
-      context: { companyBotLabel: 'Bot' },
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
     });
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(2);
@@ -421,6 +458,8 @@ describe('dispatch-notifications.service', () => {
     );
 
     expect(updateOneMock).toHaveBeenCalledTimes(2);
+    // El aviso de fin de producción se envía 30 min después (setTimeout) → avanzar timers.
+    await jest.runOnlyPendingTimersAsync();
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(1);
   });
 
@@ -434,6 +473,7 @@ describe('dispatch-notifications.service', () => {
       'plant@g.us'
     );
 
+    await jest.runOnlyPendingTimersAsync();
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(1);
   });
 });

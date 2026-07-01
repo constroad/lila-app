@@ -8,6 +8,8 @@ export const CONVERSATION_TIMEOUT = 30 * 60 * 1000; // 30 minutos
 export const QR_EXPIRY_TIME = 60 * 1000; // 60 segundos
 export const DOMAIN_EVENT_MAX_ATTEMPTS = 8;
 export const DISPATCH_IPP_READY_NOTIFICATION_DELAY_MS = 60 * 60 * 1000;
+/** El aviso de "Fin de producción" a planta se envía 30 min DESPUÉS de terminar la producción. */
+export const PLANT_END_NOTIFICATION_DELAY_MS = 30 * 60 * 1000;
 
 export const SERVICE_TYPES = {
   VENTA: 'venta',

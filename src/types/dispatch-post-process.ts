@@ -55,4 +55,11 @@ export interface DispatchPostProcessInput {
 
 export interface DispatchPostProcessContext {
   companyBotLabel: string;
+  /** Grupo de PLANTA configurado por la company (vacío = no enviar a WhatsApp). */
+  plantGroupId: string;
+  /** Grupo admin configurado (fallback del mensaje al cliente; de-hardcodea CONSTROAD). */
+  adminGroupId: string;
+  /** Plantillas editables (customMessage del registry) de los avisos de planta. */
+  plantProgressTemplate?: string;
+  plantEndTemplate?: string;
 }

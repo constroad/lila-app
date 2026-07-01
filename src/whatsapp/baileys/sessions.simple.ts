@@ -36,6 +36,12 @@ const storeTimers: Record<string, NodeJS.Timeout> = {};
 // número cuando startSession se llama de forma concurrente (ej: doble request al crear).
 const startingPromises: Record<string, Promise<WASocket>> = {};
 
+// Reconexión resiliente: timers e intentos por sessionId. La reconexión NO puede ser un solo
+// `setTimeout` (si ese intento falla —ej. Mongo inalcanzable durante un corte de red— la sesión
+// quedaba muerta). Reintentamos con backoff hasta recuperar. Ver auto-recuperación (history).
+const reconnectTimers: Record<string, NodeJS.Timeout> = {};
+const reconnectAttempts: Record<string, number> = {};
+
 const clearStoreTimer = (sessionId: string) => {
   const timer = storeTimers[sessionId];
   if (timer) {
@@ -43,6 +49,41 @@ const clearStoreTimer = (sessionId: string) => {
     delete storeTimers[sessionId];
   }
 };
+
+const clearReconnectTimer = (sessionId: string) => {
+  const timer = reconnectTimers[sessionId];
+  if (timer) {
+    clearTimeout(timer);
+    delete reconnectTimers[sessionId];
+  }
+};
+
+/**
+ * Programa una reconexión resiliente con backoff (lineal capado a 60s). Reintenta hasta que la
+ * sesión vuelva a abrir; si `startSession` falla (ej. Mongo caído por corte de red), captura el
+ * error y reprograma — así la auto-recuperación sobrevive a fallos transitorios de red/Atlas.
+ * `connection.open` resetea los intentos. No corre si la sesión se está apagando a propósito.
+ */
+function scheduleReconnect(sessionId: string, qrCb?: (qr: string) => void) {
+  if (shuttingDown.has(sessionId)) return;
+  if (reconnectTimers[sessionId]) return; // ya hay un intento en cola
+
+  const attempt = (reconnectAttempts[sessionId] = (reconnectAttempts[sessionId] ?? 0) + 1);
+  const delay = Math.min(3000 * attempt, 60_000);
+  logger.info(`🔁 Reconnect ${sessionId}: intento ${attempt} en ${delay}ms`);
+
+  reconnectTimers[sessionId] = setTimeout(async () => {
+    delete reconnectTimers[sessionId];
+    if (shuttingDown.has(sessionId)) return;
+    try {
+      await startSession(sessionId, qrCb);
+      // Éxito de la inicialización; `connection.open` confirmará y reseteará intentos.
+    } catch (error) {
+      logger.error(`Reconnect ${sessionId} falló (intento ${attempt}): ${String(error)}`);
+      scheduleReconnect(sessionId, qrCb); // reintentar con mayor backoff
+    }
+  }, delay);
+}
 
 /**
  * Get store for session
@@ -199,6 +240,9 @@ async function initSession(
     if (connection === 'open') {
       logger.info(`✅ Session connected successfully for ${sessionId}`);
       readyClients.set(sessionId, true);
+      // Reconexión exitosa → resetear backoff y cancelar cualquier reintento pendiente.
+      reconnectAttempts[sessionId] = 0;
+      clearReconnectTimer(sessionId);
 
       // Populate store with groups (wrap in try/catch)
       try {
@@ -236,11 +280,14 @@ async function initSession(
       }
 
       if (code !== DisconnectReason.loggedOut) {
-        logger.info(`🔁 Reconnecting session ${sessionId}...`);
-        setTimeout(() => startSession(sessionId, qrCb), 3000);
+        // Reconexión RESILIENTE con reintentos (no un solo setTimeout): sobrevive a fallos
+        // transitorios (red caída, Mongo/Atlas inalcanzable durante el corte).
+        scheduleReconnect(sessionId, qrCb);
       } else {
-        // Clean up
+        // Logout real → no reconectar. Limpiar todo.
         clearStoreTimer(sessionId);
+        clearReconnectTimer(sessionId);
+        reconnectAttempts[sessionId] = 0;
         delete sessions[sessionId];
         delete stores[sessionId];
       }
@@ -347,6 +394,9 @@ export async function createPairingSession(
 export async function disconnectSession(sessionId: string): Promise<void> {
   const sock = sessions[sessionId];
   if (sock) {
+    shuttingDown.add(sessionId); // evita reconexión automática por el cierre que provoca logout
+    clearReconnectTimer(sessionId);
+    reconnectAttempts[sessionId] = 0;
     await sock.logout();
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
@@ -366,6 +416,7 @@ export async function endSession(sessionId: string): Promise<void> {
   const sock = sessions[sessionId];
   if (sock) {
     shuttingDown.add(sessionId);
+    clearReconnectTimer(sessionId);
     try {
       sock.end(undefined);
     } catch (err) {
@@ -394,6 +445,11 @@ export async function endSession(sessionId: string): Promise<void> {
 export async function clearSession(sessionId: string): Promise<void> {
   try {
     logger.info(`🧹 Clearing session ${sessionId} completely...`);
+
+    // 0. Impedir auto-recuperación: marca shutdown y cancela cualquier reconexión en cola.
+    shuttingDown.add(sessionId);
+    clearReconnectTimer(sessionId);
+    reconnectAttempts[sessionId] = 0;
 
     // 1. Logout if session is active
     const sock = sessions[sessionId];

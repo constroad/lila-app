@@ -6808,6 +6808,23 @@ import {
 import path10 from "path";
 import fs7 from "fs-extra";
 import pino from "pino";
+function scheduleReconnect(sessionId, qrCb) {
+  if (shuttingDown.has(sessionId)) return;
+  if (reconnectTimers[sessionId]) return;
+  const attempt = reconnectAttempts[sessionId] = (reconnectAttempts[sessionId] ?? 0) + 1;
+  const delay = Math.min(3e3 * attempt, 6e4);
+  logger_default.info(`\u{1F501} Reconnect ${sessionId}: intento ${attempt} en ${delay}ms`);
+  reconnectTimers[sessionId] = setTimeout(async () => {
+    delete reconnectTimers[sessionId];
+    if (shuttingDown.has(sessionId)) return;
+    try {
+      await startSession(sessionId, qrCb);
+    } catch (error) {
+      logger_default.error(`Reconnect ${sessionId} fall\xF3 (intento ${attempt}): ${String(error)}`);
+      scheduleReconnect(sessionId, qrCb);
+    }
+  }, delay);
+}
 function getStore(sessionId) {
   const store = stores[sessionId];
   if (!store) throw new Error(`No store found for session: ${sessionId}`);
@@ -6900,6 +6917,8 @@ async function initSession(sessionId, qrCb) {
     if (connection === "open") {
       logger_default.info(`\u2705 Session connected successfully for ${sessionId}`);
       readyClients.set(sessionId, true);
+      reconnectAttempts[sessionId] = 0;
+      clearReconnectTimer(sessionId);
       try {
         await populateStoreIfEmpty(sessionId, sock);
       } catch (err) {
@@ -6927,10 +6946,11 @@ async function initSession(sessionId, qrCb) {
         return;
       }
       if (code !== DisconnectReason.loggedOut) {
-        logger_default.info(`\u{1F501} Reconnecting session ${sessionId}...`);
-        setTimeout(() => startSession(sessionId, qrCb), 3e3);
+        scheduleReconnect(sessionId, qrCb);
       } else {
         clearStoreTimer(sessionId);
+        clearReconnectTimer(sessionId);
+        reconnectAttempts[sessionId] = 0;
         delete sessions[sessionId];
         delete stores[sessionId];
       }
@@ -7006,6 +7026,9 @@ async function createPairingSession(phone, sendCode) {
 async function disconnectSession(sessionId) {
   const sock = sessions[sessionId];
   if (sock) {
+    shuttingDown.add(sessionId);
+    clearReconnectTimer(sessionId);
+    reconnectAttempts[sessionId] = 0;
     await sock.logout();
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
@@ -7019,6 +7042,7 @@ async function endSession(sessionId) {
   const sock = sessions[sessionId];
   if (sock) {
     shuttingDown.add(sessionId);
+    clearReconnectTimer(sessionId);
     try {
       sock.end(void 0);
     } catch (err) {
@@ -7035,6 +7059,9 @@ async function endSession(sessionId) {
 async function clearSession(sessionId) {
   try {
     logger_default.info(`\u{1F9F9} Clearing session ${sessionId} completely...`);
+    shuttingDown.add(sessionId);
+    clearReconnectTimer(sessionId);
+    reconnectAttempts[sessionId] = 0;
     const sock = sessions[sessionId];
     if (sock) {
       try {
@@ -7086,7 +7113,7 @@ async function clearSession(sessionId) {
     throw error;
   }
 }
-var sessions, stores, qrCodes, readyClients, shuttingDown, storeTimers, startingPromises, clearStoreTimer;
+var sessions, stores, qrCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, clearStoreTimer, clearReconnectTimer;
 var init_sessions_simple = __esm({
   "src/whatsapp/baileys/sessions.simple.ts"() {
     init_store_manager();
@@ -7103,11 +7130,20 @@ var init_sessions_simple = __esm({
     shuttingDown = /* @__PURE__ */ new Set();
     storeTimers = {};
     startingPromises = {};
+    reconnectTimers = {};
+    reconnectAttempts = {};
     clearStoreTimer = (sessionId) => {
       const timer = storeTimers[sessionId];
       if (timer) {
         clearInterval(timer);
         delete storeTimers[sessionId];
+      }
+    };
+    clearReconnectTimer = (sessionId) => {
+      const timer = reconnectTimers[sessionId];
+      if (timer) {
+        clearTimeout(timer);
+        delete reconnectTimers[sessionId];
       }
     };
   }
@@ -23322,6 +23358,7 @@ init_logger();
 var CONVERSATION_TIMEOUT = 30 * 60 * 1e3;
 var QR_EXPIRY_TIME = 60 * 1e3;
 var DISPATCH_IPP_READY_NOTIFICATION_DELAY_MS = 60 * 60 * 1e3;
+var PLANT_END_NOTIFICATION_DELAY_MS = 30 * 60 * 1e3;
 var HTTP_STATUS = {
   OK: 200,
   CREATED: 201,
@@ -24557,6 +24594,9 @@ ${normalized}`;
     }
     if (job.message?.chatId && !requestHeaders["x-cronjob-chat-id"]) {
       requestHeaders["x-cronjob-chat-id"] = String(job.message.chatId);
+    }
+    if (job.message?.body && !requestHeaders["x-cronjob-message-template"]) {
+      requestHeaders["x-cronjob-message-template"] = encodeURIComponent(String(job.message.body));
     }
     if (!requestHeaders["x-cronjob-return-message"] && !requestHeaders["x-cronjob-use-response-message"] && job.message?.chatId) {
       requestHeaders["x-cronjob-return-message"] = "1";
@@ -41767,12 +41807,12 @@ function requireBase64Js() {
   base64Js.byteLength = byteLength;
   base64Js.toByteArray = toByteArray;
   base64Js.fromByteArray = fromByteArray;
-  var lookup = [];
+  var lookup2 = [];
   var revLookup = [];
   var Arr = typeof Uint8Array !== "undefined" ? Uint8Array : Array;
   var code = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   for (var i50 = 0, len = code.length; i50 < len; ++i50) {
-    lookup[i50] = code[i50];
+    lookup2[i50] = code[i50];
     revLookup[code.charCodeAt(i50)] = i50;
   }
   revLookup["-".charCodeAt(0)] = 62;
@@ -41824,7 +41864,7 @@ function requireBase64Js() {
     return arr;
   }
   function tripletToBase64(num) {
-    return lookup[num >> 18 & 63] + lookup[num >> 12 & 63] + lookup[num >> 6 & 63] + lookup[num & 63];
+    return lookup2[num >> 18 & 63] + lookup2[num >> 12 & 63] + lookup2[num >> 6 & 63] + lookup2[num & 63];
   }
   function encodeChunk(uint8, start, end) {
     var tmp;
@@ -41847,12 +41887,12 @@ function requireBase64Js() {
     if (extraBytes === 1) {
       tmp = uint8[len2 - 1];
       parts.push(
-        lookup[tmp >> 2] + lookup[tmp << 4 & 63] + "=="
+        lookup2[tmp >> 2] + lookup2[tmp << 4 & 63] + "=="
       );
     } else if (extraBytes === 2) {
       tmp = (uint8[len2 - 2] << 8) + uint8[len2 - 1];
       parts.push(
-        lookup[tmp >> 10] + lookup[tmp >> 4 & 63] + lookup[tmp << 2 & 63] + "="
+        lookup2[tmp >> 10] + lookup2[tmp >> 4 & 63] + lookup2[tmp << 2 & 63] + "="
       );
     }
     return parts.join("");
@@ -63239,9 +63279,113 @@ async function getDispatchNotificationFlagModel() {
   return dispatchNotificationFlagModel;
 }
 
+// src/utils/messageTemplate.ts
+var TOKEN_RE = /\{\{(#|\^|\/)?\s*([\w.]+)\s*\}\}/g;
+function parseTemplate(template) {
+  const root = [];
+  const stack = [];
+  const push = (node) => {
+    const target = stack.length > 0 ? stack[stack.length - 1].children : root;
+    target.push(node);
+  };
+  let lastIndex = 0;
+  let match;
+  TOKEN_RE.lastIndex = 0;
+  while ((match = TOKEN_RE.exec(template)) !== null) {
+    const [raw, sigil, name] = match;
+    if (match.index > lastIndex) {
+      push({ type: "text", value: template.slice(lastIndex, match.index) });
+    }
+    lastIndex = match.index + raw.length;
+    if (sigil === "#" || sigil === "^") {
+      const section = {
+        type: "section",
+        name,
+        inverted: sigil === "^",
+        children: []
+      };
+      push(section);
+      stack.push(section);
+    } else if (sigil === "/") {
+      const open = stack.pop();
+      if (!open || open.name !== name) {
+        throw new Error(
+          `Plantilla malformada: cierre {{/${name}}} sin apertura correspondiente`
+        );
+      }
+    } else {
+      push({ type: "var", name });
+    }
+  }
+  if (lastIndex < template.length) {
+    push({ type: "text", value: template.slice(lastIndex) });
+  }
+  if (stack.length > 0) {
+    throw new Error(`Plantilla malformada: secci\xF3n {{#${stack[stack.length - 1].name}}} sin cerrar`);
+  }
+  return root;
+}
+function lookup(name, stack) {
+  for (let i50 = stack.length - 1; i50 >= 0; i50 -= 1) {
+    const ctx = stack[i50];
+    if (ctx && Object.prototype.hasOwnProperty.call(ctx, name)) {
+      return ctx[name];
+    }
+  }
+  return void 0;
+}
+function scalarToString(value) {
+  if (value === null || value === void 0) return "";
+  if (typeof value === "object") return "";
+  return String(value);
+}
+function renderNodes(nodes, stack) {
+  let out = "";
+  for (const node of nodes) {
+    if (node.type === "text") {
+      out += node.value;
+    } else if (node.type === "var") {
+      out += scalarToString(lookup(node.name, stack));
+    } else {
+      out += renderSection(node, stack);
+    }
+  }
+  return out;
+}
+function renderSection(node, stack) {
+  const value = lookup(node.name, stack);
+  const isArray2 = Array.isArray(value);
+  const isEmpty = isArray2 ? value.length === 0 : !value;
+  if (node.inverted) {
+    return isEmpty ? renderNodes(node.children, stack) : "";
+  }
+  if (isEmpty) return "";
+  if (isArray2) {
+    return value.map((item) => {
+      const itemCtx = item && typeof item === "object" && !Array.isArray(item) ? item : { ".": item };
+      return renderNodes(node.children, [...stack, itemCtx]);
+    }).join("");
+  }
+  const ctx = value && typeof value === "object" ? value : {};
+  return renderNodes(node.children, [...stack, ctx]);
+}
+function renderMessageTemplate(template, context) {
+  if (!template) return "";
+  const ast = parseTemplate(template);
+  return renderNodes(ast, [context]);
+}
+
 // src/services/dispatch-notifications.service.ts
 init_logger();
 init_whatsapp_direct_service();
+async function sendPlantTelegram(message) {
+  try {
+    const { sendTelegramAlert: sendTelegramAlert2 } = await Promise.resolve().then(() => (init_telegram_alert_service(), telegram_alert_service_exports));
+    await sendTelegramAlert2({ message });
+  } catch (error) {
+    logger_default.warn("plant_telegram.failed", { error: String(error) });
+  }
+}
 async function claimNotificationFlag(key, companyId) {
   if (shouldBypassDispatchDedupe()) {
     return true;
@@ -63430,9 +63574,10 @@ async function sendToGroup(sender, target, message, companyId) {
   }
   await sendToTargets(sender, [target], message, companyId);
 }
-function resolveClientTargets(input) {
+function resolveClientTargets(input, adminFallbackGroup) {
   if (!input.sendDispatchMessage) {
-    return input.adminGroupTarget ? [input.adminGroupTarget] : [];
+    const admin = adminFallbackGroup && adminFallbackGroup.trim() || input.adminGroupTarget;
+    return admin ? [admin] : [];
   }
   return input.clientTargets;
 }
@@ -63609,7 +63754,7 @@ async function sendOrderCompletionSummary(params) {
   }
   return true;
 }
-async function sendPlantEndIfNotSent(sender, botLabel, companyId, plantGroupTarget) {
+async function sendPlantEndIfNotSent(sender, botLabel, companyId, plantGroupId, plantEndTemplate) {
   const dayKey = (/* @__PURE__ */ new Date()).toLocaleDateString("en-CA", {
     timeZone: "America/Lima"
   });
@@ -63620,12 +63765,21 @@ async function sendPlantEndIfNotSent(sender, botLabel, companyId, plantGroupTarg
   if (!shouldSend) {
     return;
   }
-  await sendToGroup(
-    sender,
-    plantGroupTarget,
-    buildPlantEndMessage(botLabel),
-    companyId
-  );
+  const message = plantEndTemplate ? renderMessageTemplate(plantEndTemplate, { botLabel }) : buildPlantEndMessage(botLabel);
+  logger_default.info("plant_end.scheduled", {
+    companyId,
+    delayMs: PLANT_END_NOTIFICATION_DELAY_MS
+  });
+  setTimeout(() => {
+    void (async () => {
+      if (plantGroupId) {
+        await sendToGroup(sender, plantGroupId, message, companyId).catch(
+          (error) => logger_default.error("plant_end.whatsapp_failed", { companyId, error: String(error) })
+        );
+      }
+      await sendPlantTelegram(message);
+    })();
+  }, PLANT_END_NOTIFICATION_DELAY_MS);
 }
 async function sendDispatchNotifications(params) {
   const { input, context } = params;
@@ -63645,17 +63799,16 @@ async function sendDispatchNotifications(params) {
   if (!dispatchSent) {
     return;
   }
-  await sendToGroup(
-    input.sender,
-    input.plantGroupTarget,
-    buildPlantProgressMessage(
-      context.companyBotLabel,
-      dispatchOrdinal,
-      input.pendingCount
-    ),
-    input.companyId
-  );
-  const clientTargets = resolveClientTargets(input);
+  const plantProgressMsg = context.plantProgressTemplate ? renderMessageTemplate(context.plantProgressTemplate, {
+    botLabel: context.companyBotLabel,
+    unidad: dispatchOrdinal,
+    pendientes: input.pendingCount
+  }) : buildPlantProgressMessage(context.companyBotLabel, dispatchOrdinal, input.pendingCount);
+  if (context.plantGroupId) {
+    await sendToGroup(input.sender, context.plantGroupId, plantProgressMsg, input.companyId);
+  }
+  await sendPlantTelegram(plantProgressMsg);
+  const clientTargets = resolveClientTargets(input, context.adminGroupId);
   if (clientTargets.length > 0) {
     await sendToTargets(
       input.sender,
@@ -63709,7 +63862,8 @@ async function sendDispatchNotifications(params) {
       input.sender,
       context.companyBotLabel,
       input.companyId,
-      input.plantGroupTarget
+      context.plantGroupId,
+      context.plantEndTemplate
     );
   }
 }
@@ -63722,10 +63876,16 @@ function toNumber2(value) {
 async function fetchDispatchContext(input) {
   const CompanyModel = await getCompanyModel();
   const company = await CompanyModel.findOne({ companyId: input.companyId }).lean();
+  const wa4 = company?.whatsappConfig ?? {};
+  const alerts = wa4.alerts instanceof Map ? Object.fromEntries(wa4.alerts) : wa4.alerts ?? {};
   return {
     companyBotLabel: getCompanyBotLabel(
       company?.slug || company?.name || input.companyId
-    )
+    ),
+    plantGroupId: String(wa4.plantGroupId ?? "").trim(),
+    adminGroupId: String(wa4.adminGroupId ?? "").trim(),
+    plantProgressTemplate: alerts?.["plant-progress"]?.customMessage || void 0,
+    plantEndTemplate: alerts?.["plant-end"]?.customMessage || void 0
   };
 }
 async function updateMaintenanceM3Config(companyId, quantity) {

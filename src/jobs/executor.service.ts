@@ -317,6 +317,11 @@ export class JobExecutor {
     if (job.message?.chatId && !requestHeaders['x-cronjob-chat-id']) {
       requestHeaders['x-cronjob-chat-id'] = String(job.message.chatId);
     }
+    // Plantilla custom del mensaje (self-service de alertas). URL-encoded: los headers no admiten
+    // saltos de línea. El endpoint la decodifica y renderiza. Ver WHATSAPP-GROUP-ALERTS-SELFSERVICE.
+    if (job.message?.body && !requestHeaders['x-cronjob-message-template']) {
+      requestHeaders['x-cronjob-message-template'] = encodeURIComponent(String(job.message.body));
+    }
     if (
       !requestHeaders['x-cronjob-return-message'] &&
       !requestHeaders['x-cronjob-use-response-message'] &&

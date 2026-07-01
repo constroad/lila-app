@@ -1,8 +1,12 @@
 import axios from 'axios';
 import sharp from 'sharp';
-import { DISPATCH_IPP_READY_NOTIFICATION_DELAY_MS } from '../config/constants.js';
+import {
+  DISPATCH_IPP_READY_NOTIFICATION_DELAY_MS,
+  PLANT_END_NOTIFICATION_DELAY_MS,
+} from '../config/constants.js';
 import { config } from '../config/environment.js';
 import { getDispatchNotificationFlagModel } from '../models/dispatch-notification-flag.model.js';
+import { renderMessageTemplate } from '../utils/messageTemplate.js';
 import type {
   DispatchPostProcessContext,
   DispatchPostProcessInput,
@@ -14,6 +18,20 @@ type NotificationParams = {
   input: DispatchPostProcessInput;
   context: DispatchPostProcessContext;
 };
+
+/**
+ * Envía un aviso de planta al Telegram de alertas. Import LAZY: `telegram-alert.service` arrastra
+ * `telegram-queue` que se instancia al cargar el módulo (lee `config.whatsapp.sessionDir`); cargarlo
+ * de forma diferida evita romper entornos donde ese config no está listo. Nunca lanza.
+ */
+async function sendPlantTelegram(message: string): Promise<void> {
+  try {
+    const { sendTelegramAlert } = await import('./telegram-alert.service.js');
+    await sendTelegramAlert({ message }); // sin dedupeKey = siempre envía
+  } catch (error) {
+    logger.warn('plant_telegram.failed', { error: String(error) });
+  }
+}
 
 type CompletionRow = NonNullable<DispatchPostProcessInput['orderCompletion']>['rows'][number];
 
@@ -273,9 +291,15 @@ async function sendToGroup(
   await sendToTargets(sender, [target], message, companyId);
 }
 
-export function resolveClientTargets(input: DispatchPostProcessInput): string[] {
+export function resolveClientTargets(
+  input: DispatchPostProcessInput,
+  adminFallbackGroup?: string
+): string[] {
   if (!input.sendDispatchMessage) {
-    return input.adminGroupTarget ? [input.adminGroupTarget] : [];
+    // Fallback al grupo admin CONFIGURADO de la company (de-hardcodea CONSTROAD); si no hay,
+    // usa el que Portal pasó (back-compat) — nunca vacío si alguno existe.
+    const admin = (adminFallbackGroup && adminFallbackGroup.trim()) || input.adminGroupTarget;
+    return admin ? [admin] : [];
   }
 
   return input.clientTargets;
@@ -507,7 +531,8 @@ export async function sendPlantEndIfNotSent(
   sender: string,
   botLabel: string,
   companyId: string,
-  plantGroupTarget: string
+  plantGroupId: string,
+  plantEndTemplate?: string
 ) {
   const dayKey = new Date().toLocaleDateString('en-CA', {
     timeZone: 'America/Lima',
@@ -520,12 +545,27 @@ export async function sendPlantEndIfNotSent(
     return;
   }
 
-  await sendToGroup(
-    sender,
-    plantGroupTarget,
-    buildPlantEndMessage(botLabel),
-    companyId
-  );
+  const message = plantEndTemplate
+    ? renderMessageTemplate(plantEndTemplate, { botLabel })
+    : buildPlantEndMessage(botLabel);
+
+  // REQUISITO: el aviso de "Fin de producción" se envía 30 min DESPUÉS de terminar la producción.
+  // Al grupo de planta configurado (solo si existe) y SIEMPRE al Telegram de alertas.
+  // (setTimeout como el IPP-ready; no durable ante reinicio — mismo patrón del flujo existente.)
+  logger.info('plant_end.scheduled', {
+    companyId,
+    delayMs: PLANT_END_NOTIFICATION_DELAY_MS,
+  });
+  setTimeout(() => {
+    void (async () => {
+      if (plantGroupId) {
+        await sendToGroup(sender, plantGroupId, message, companyId).catch((error) =>
+          logger.error('plant_end.whatsapp_failed', { companyId, error: String(error) })
+        );
+      }
+      await sendPlantTelegram(message);
+    })();
+  }, PLANT_END_NOTIFICATION_DELAY_MS);
 }
 
 export async function sendDispatchNotifications(params: NotificationParams) {
@@ -548,18 +588,21 @@ export async function sendDispatchNotifications(params: NotificationParams) {
     return;
   }
 
-  await sendToGroup(
-    input.sender,
-    input.plantGroupTarget,
-    buildPlantProgressMessage(
-      context.companyBotLabel,
-      dispatchOrdinal,
-      input.pendingCount
-    ),
-    input.companyId
-  );
+  // Aviso de progreso de PLANTA: al grupo de planta configurado (solo si existe) y SIEMPRE al
+  // Telegram de alertas. Mensaje editable (customMessage) o el default. NO usa el hardcode viejo.
+  const plantProgressMsg = context.plantProgressTemplate
+    ? renderMessageTemplate(context.plantProgressTemplate, {
+        botLabel: context.companyBotLabel,
+        unidad: dispatchOrdinal,
+        pendientes: input.pendingCount,
+      })
+    : buildPlantProgressMessage(context.companyBotLabel, dispatchOrdinal, input.pendingCount);
+  if (context.plantGroupId) {
+    await sendToGroup(input.sender, context.plantGroupId, plantProgressMsg, input.companyId);
+  }
+  await sendPlantTelegram(plantProgressMsg);
 
-  const clientTargets = resolveClientTargets(input);
+  const clientTargets = resolveClientTargets(input, context.adminGroupId);
   if (clientTargets.length > 0) {
     await sendToTargets(
       input.sender,
@@ -616,7 +659,8 @@ export async function sendDispatchNotifications(params: NotificationParams) {
       input.sender,
       context.companyBotLabel,
       input.companyId,
-      input.plantGroupTarget
+      context.plantGroupId,
+      context.plantEndTemplate
     );
   }
 }
