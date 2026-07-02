@@ -30,11 +30,19 @@ class JobSchedulerV2 {
 
       logger.info(`[JobScheduler] Found ${activeJobs.length} active jobs`);
 
+      let scheduled = 0;
+      let skipped = 0;
       for (const job of activeJobs) {
-        await this.scheduleJob(job, { silent: true });
+        try {
+          await this.scheduleJob(job, { silent: true });
+          scheduled++;
+        } catch (err) {
+          skipped++;
+          logger.error(`[JobScheduler] Skipping job "${job.name}" (${job._id}) — failed to schedule:`, err);
+        }
       }
 
-      logger.info(`[JobScheduler] Scheduled ${activeJobs.length} active jobs`);
+      logger.info(`[JobScheduler] Scheduled ${scheduled} active jobs (${skipped} skipped due to errors)`);
       logger.info("[JobScheduler] Initialization complete");
     } catch (error) {
       logger.error("[JobScheduler] Initialization failed:", error);
@@ -112,7 +120,7 @@ class JobSchedulerV2 {
       }
 
       logger.info(
-        `[JobScheduler] Created job ${job._id} for company ${job.companyId}`,
+        `[JobScheduler] Created job "${job.name}" (${job._id}) for company ${job.companyId}`,
       );
 
       return job;
@@ -194,7 +202,7 @@ class JobSchedulerV2 {
         }
       }
 
-      logger.info(`[JobScheduler] Updated job ${jobId}`);
+      logger.info(`[JobScheduler] Updated job "${job.name}" (${jobId})`);
       return job;
     } catch (error) {
       logger.error("[JobScheduler] Failed to update job:", error);
@@ -220,7 +228,7 @@ class JobSchedulerV2 {
       }
 
       await CronJobModel.deleteOne({ _id: jobId });
-      logger.info(`[JobScheduler] Deleted job ${jobId}`);
+      logger.info(`[JobScheduler] Deleted job "${job.name}" (${jobId})`);
     } catch (error) {
       logger.error("[JobScheduler] Failed to delete job:", error);
       throw error;
@@ -235,7 +243,7 @@ class JobSchedulerV2 {
         throw new Error(`Job ${jobId} not found`);
       }
 
-      logger.info(`[JobScheduler] Running job ${jobId} manually`);
+      logger.info(`[JobScheduler] Running job "${job.name}" (${jobId}) manually`);
       await this.executor.execute(job);
     } catch (error) {
       logger.error("[JobScheduler] Failed to run job manually:", error);
@@ -264,6 +272,13 @@ class JobSchedulerV2 {
   ): Promise<void> {
     try {
       const jobId = job._id.toString();
+      const jobLabel = `"${job.name}" (${jobId})`;
+
+      if (!job.schedule || typeof job.schedule !== 'object' || !('cronExpression' in job.schedule)) {
+        logger.error(`[JobScheduler] Job ${jobLabel} has invalid schedule field: ${JSON.stringify(job.schedule)}`);
+        throw new Error(`Job ${jobLabel} has no valid schedule object`);
+      }
+
       const expressions = normalizeCronExpressions(
         job.schedule.cronExpression,
         job.schedule.cronExpressions,
@@ -317,7 +332,7 @@ class JobSchedulerV2 {
         });
       }
     } catch (error) {
-      logger.error(`[JobScheduler] Failed to schedule job ${job._id}:`, error);
+      logger.error(`[JobScheduler] Failed to schedule job "${job.name}" (${job._id}):`, error);
       throw error;
     }
   }

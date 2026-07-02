@@ -91,7 +91,7 @@ export class JobExecutor {
     try {
       this.assertValidJob(job);
       logger.info(
-        `[JobExecutor] Executing job ${job._id} (${job.name}) for company ${job.companyId}`
+        `[JobExecutor] Executing "${job.name}" (${job._id}) for company ${job.companyId}`
       );
 
       await CronJobModel.updateOne(
@@ -143,11 +143,11 @@ export class JobExecutor {
       await this.recordSuccess(job, duration);
 
       logger.info(
-        `[JobExecutor] Job ${job._id} completed successfully in ${duration}ms`
+        `[JobExecutor] Job "${job.name}" (${job._id}) completed in ${duration}ms`
       );
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      logger.error(`[JobExecutor] Job ${job._id} failed:`, error);
+      logger.error(`[JobExecutor] Job "${job.name}" (${job._id}) failed:`, error);
 
       const retryPolicy = this.resolveRetryPolicy(job);
       if (retryPolicy.currentRetries < retryPolicy.maxRetries) {

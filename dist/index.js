@@ -4311,7 +4311,7 @@ var init_telegram_queue = __esm({
        * Drops the oldest item when MAX_QUEUE_SIZE is reached.
        */
       async enqueue(params) {
-        const { message, dedupeKey } = params;
+        const { message, dedupeKey, availableAt } = params;
         const queue2 = await this.list();
         if (dedupeKey && queue2.some((entry) => entry.dedupeKey === dedupeKey)) {
           return null;
@@ -4321,6 +4321,7 @@ var init_telegram_queue = __esm({
           message,
           dedupeKey,
           createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          availableAt,
           attempts: 0
         };
         queue2.push(item);
@@ -4379,6 +4380,7 @@ var telegram_alert_service_exports = {};
 __export(telegram_alert_service_exports, {
   flushTelegramQueue: () => flushTelegramQueue,
   resetTelegramAlertCacheForTests: () => resetTelegramAlertCacheForTests,
+  scheduleTelegramAlert: () => scheduleTelegramAlert,
   sendTelegramAlert: () => sendTelegramAlert,
   startTelegramQueueFlusher: () => startTelegramQueueFlusher
 });
@@ -4446,6 +4448,20 @@ async function sendTelegramAlert(params) {
   }
   return false;
 }
+async function scheduleTelegramAlert(params) {
+  if (!config.telegram.botToken || !config.telegram.errorsChatId) return false;
+  try {
+    const queuedAlert = await telegram_queue_default.enqueue({
+      availableAt: params.availableAt.toISOString(),
+      dedupeKey: params.dedupeKey,
+      message: params.message
+    });
+    return queuedAlert !== null;
+  } catch (error) {
+    logger_default.error("Failed to schedule Telegram alert", error);
+    return false;
+  }
+}
 async function flushTelegramQueue() {
   if (isFlushing) {
     const remaining = (await telegram_queue_default.list()).length;
@@ -4461,6 +4477,9 @@ async function flushTelegramQueue() {
       return { sent: 0, dropped, remaining: 0 };
     }
     for (const item of items) {
+      if (item.availableAt && Date.parse(item.availableAt) > Date.now()) {
+        continue;
+      }
       const result = await sendOnce(item.message);
       if (result.ok) {
         await telegram_queue_default.remove(item.id);
@@ -6083,6 +6102,31 @@ var init_quota_validator_service = __esm({
   }
 });
 
+// src/services/whatsapp-sender-ownership.service.ts
+async function assertCompanyOwnsWhatsAppSender(sender, companyId) {
+  const normalizedCompanyId = String(companyId || "").trim();
+  if (!normalizedCompanyId) return;
+  const owners = await quotaValidatorService.listCompaniesByWhatsappSender(sender);
+  const belongsToCompany = owners.some(
+    (owner) => owner.companyId === normalizedCompanyId
+  );
+  if (!belongsToCompany) {
+    throw new WhatsAppSenderOwnershipError(normalizedCompanyId, sender);
+  }
+}
+var WhatsAppSenderOwnershipError;
+var init_whatsapp_sender_ownership_service = __esm({
+  "src/services/whatsapp-sender-ownership.service.ts"() {
+    init_quota_validator_service();
+    WhatsAppSenderOwnershipError = class extends Error {
+      constructor(companyId, sender) {
+        super(`WhatsApp sender ${sender} is not configured for company ${companyId}`);
+        this.name = "WhatsAppSenderOwnershipError";
+      }
+    };
+  }
+});
+
 // src/services/whatsapp-direct.service.ts
 var whatsapp_direct_service_exports = {};
 __export(whatsapp_direct_service_exports, {
@@ -6103,6 +6147,7 @@ var init_whatsapp_direct_service = __esm({
     init_whatsapp_media_source_util();
     init_whatsapp_phone();
     init_quota_validator_service();
+    init_whatsapp_sender_ownership_service();
     resolveUsageCompanyId = (options2 = {}) => options2.companyId || options2.tenantId || "";
     trackWhatsAppUsage = async (sessionId, options2 = {}, context) => {
       if (options2.trackUsage === false) return;
@@ -6139,6 +6184,7 @@ var init_whatsapp_direct_service = __esm({
        * @param queueOnFail - If true, queue message when send fails (default: true)
        */
       async sendMessage(id, to3, message, options2 = {}) {
+        await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options2));
         const queueOnFail = options2.queueOnFail !== false;
         const routedTo = resolveWhatsAppRecipient(to3, {
           companyId: options2.companyId,
@@ -6201,6 +6247,7 @@ var init_whatsapp_direct_service = __esm({
        * @param options - Send options (same as sendImageFile)
        */
       async sendVideoFile(id, to3, options2) {
+        await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options2));
         const queueOnFail = options2.queueOnFail !== false;
         const routedTo = resolveWhatsAppRecipient(to3, {
           companyId: options2.companyId,
@@ -6309,6 +6356,7 @@ var init_whatsapp_direct_service = __esm({
        *   - companyId: Required for filePath/fileUrl resolution
        */
       async sendImageFile(id, to3, options2) {
+        await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options2));
         const queueOnFail = options2.queueOnFail !== false;
         const routedTo = resolveWhatsAppRecipient(to3, {
           companyId: options2.companyId,
@@ -6413,6 +6461,7 @@ var init_whatsapp_direct_service = __esm({
        * @param options - Send options (same as sendImageFile)
        */
       async sendDocument(id, to3, options2) {
+        await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options2));
         const queueOnFail = options2.queueOnFail !== false;
         const routedTo = resolveWhatsAppRecipient(to3, {
           companyId: options2.companyId,
@@ -6634,6 +6683,13 @@ var init_whatsapp_direct_service = __esm({
               logger_default.info(`\u2705 Sent queued document message ${item.id}`);
             }
           } catch (error) {
+            if (error instanceof WhatsAppSenderOwnershipError) {
+              await outbox_queue_default.remove(id, item.id);
+              logger_default.warn(
+                `Discarded queued message ${item.id}: sender no longer belongs to its company`
+              );
+              continue;
+            }
             const updated = {
               ...item,
               attempts: item.attempts + 1,
@@ -24042,27 +24098,22 @@ async function requireSenderOwnership(req, res, next) {
   if (!companyId || !sessionPhone) {
     return next();
   }
-  const enforce = config.whatsapp.rlsEnforce;
   try {
     const owner = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
     if (owner && owner.companyId === companyId) {
       return next();
     }
     logger_default.warn(
-      `Sender ownership mismatch: company ${companyId} intent\xF3 usar sender ${sessionPhone} (owner=${owner?.companyId ?? "desconocido"})${enforce ? " [BLOQUEADO]" : " [solo aviso]"}`
+      `Sender ownership mismatch: company ${companyId} intent\xF3 usar sender ${sessionPhone} (owner=${owner?.companyId ?? "desconocido"}) [BLOQUEADO]`
     );
-    if (enforce) {
-      const error = new Error("El sender no pertenece a la empresa autenticada");
-      error.statusCode = 403;
-      throw error;
-    }
-    return next();
+    const error = new Error("El sender no pertenece a la empresa autenticada");
+    error.statusCode = 403;
+    return next(error);
   } catch (err) {
-    if (enforce && err?.statusCode === 403) {
-      return next(err);
-    }
-    logger_default.debug("requireSenderOwnership lookup fall\xF3 (ignorado):", err);
-    return next();
+    logger_default.warn("requireSenderOwnership lookup fall\xF3:", err);
+    const error = new Error("No se pudo validar la propiedad del sender");
+    error.statusCode = 503;
+    return next(error);
   }
 }
 async function guardSharedSenderDestructive(req, res, next) {
@@ -24582,13 +24633,16 @@ ${normalized}`;
     try {
       this.assertValidJob(job);
       logger_default.info(
-        `[JobExecutor] Executing job ${job._id} (${job.name}) for company ${job.companyId}`
+        `[JobExecutor] Executing "${job.name}" (${job._id}) for company ${job.companyId}`
       );
       await CronJobModel.updateOne(
         { _id: job._id },
         { status: "running", lastExecution: /* @__PURE__ */ new Date() }
       );
-      const company = await CompanyModel.findOne({ companyId: job.companyId });
+      const company = await CompanyModel.findOne({
+        companyId: job.companyId,
+        isActive: true
+      });
       if (!company) {
         throw new Error(`Company ${job.companyId} not found`);
       }
@@ -24608,6 +24662,9 @@ ${normalized}`;
       } else if (job.type === "api") {
         const apiMessages = await this.executeApi(job);
         if (apiMessages && apiMessages.length > 0) {
+          if (!sender) {
+            throw new Error(`No sender configured for company ${job.companyId}`);
+          }
           await this.executeBatchMessages(
             sender,
             apiMessages,
@@ -24622,11 +24679,11 @@ ${normalized}`;
       const duration = Date.now() - startTime;
       await this.recordSuccess(job, duration);
       logger_default.info(
-        `[JobExecutor] Job ${job._id} completed successfully in ${duration}ms`
+        `[JobExecutor] Job "${job.name}" (${job._id}) completed in ${duration}ms`
       );
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger_default.error(`[JobExecutor] Job ${job._id} failed:`, error);
+      logger_default.error(`[JobExecutor] Job "${job.name}" (${job._id}) failed:`, error);
       const retryPolicy = this.resolveRetryPolicy(job);
       if (retryPolicy.currentRetries < retryPolicy.maxRetries) {
         await this.scheduleRetry(job, error, retryPolicy);
@@ -24929,10 +24986,18 @@ var JobSchedulerV2 = class {
       const { CronJobModel } = await getSharedModels();
       const activeJobs = await CronJobModel.find({ isActive: true });
       logger_default.info(`[JobScheduler] Found ${activeJobs.length} active jobs`);
+      let scheduled = 0;
+      let skipped = 0;
       for (const job of activeJobs) {
-        await this.scheduleJob(job, { silent: true });
+        try {
+          await this.scheduleJob(job, { silent: true });
+          scheduled++;
+        } catch (err) {
+          skipped++;
+          logger_default.error(`[JobScheduler] Skipping job "${job.name}" (${job._id}) \u2014 failed to schedule:`, err);
+        }
       }
-      logger_default.info(`[JobScheduler] Scheduled ${activeJobs.length} active jobs`);
+      logger_default.info(`[JobScheduler] Scheduled ${scheduled} active jobs (${skipped} skipped due to errors)`);
       logger_default.info("[JobScheduler] Initialization complete");
     } catch (error) {
       logger_default.error("[JobScheduler] Initialization failed:", error);
@@ -24998,7 +25063,7 @@ var JobSchedulerV2 = class {
         await this.scheduleJob(job);
       }
       logger_default.info(
-        `[JobScheduler] Created job ${job._id} for company ${job.companyId}`
+        `[JobScheduler] Created job "${job.name}" (${job._id}) for company ${job.companyId}`
       );
       return job;
     } catch (error) {
@@ -25051,7 +25116,7 @@ var JobSchedulerV2 = class {
           await this.scheduleJob(job);
         }
       }
-      logger_default.info(`[JobScheduler] Updated job ${jobId}`);
+      logger_default.info(`[JobScheduler] Updated job "${job.name}" (${jobId})`);
       return job;
     } catch (error) {
       logger_default.error("[JobScheduler] Failed to update job:", error);
@@ -25073,7 +25138,7 @@ var JobSchedulerV2 = class {
         );
       }
       await CronJobModel.deleteOne({ _id: jobId });
-      logger_default.info(`[JobScheduler] Deleted job ${jobId}`);
+      logger_default.info(`[JobScheduler] Deleted job "${job.name}" (${jobId})`);
     } catch (error) {
       logger_default.error("[JobScheduler] Failed to delete job:", error);
       throw error;
@@ -25086,7 +25151,7 @@ var JobSchedulerV2 = class {
       if (!job) {
         throw new Error(`Job ${jobId} not found`);
       }
-      logger_default.info(`[JobScheduler] Running job ${jobId} manually`);
+      logger_default.info(`[JobScheduler] Running job "${job.name}" (${jobId}) manually`);
       await this.executor.execute(job);
     } catch (error) {
       logger_default.error("[JobScheduler] Failed to run job manually:", error);
@@ -25108,6 +25173,11 @@ var JobSchedulerV2 = class {
   async scheduleJob(job, options2 = {}) {
     try {
       const jobId = job._id.toString();
+      const jobLabel = `"${job.name}" (${jobId})`;
+      if (!job.schedule || typeof job.schedule !== "object" || !("cronExpression" in job.schedule)) {
+        logger_default.error(`[JobScheduler] Job ${jobLabel} has invalid schedule field: ${JSON.stringify(job.schedule)}`);
+        throw new Error(`Job ${jobLabel} has no valid schedule object`);
+      }
       const expressions = normalizeCronExpressions(
         job.schedule.cronExpression,
         job.schedule.cronExpressions
@@ -25156,7 +25226,7 @@ var JobSchedulerV2 = class {
         });
       }
     } catch (error) {
-      logger_default.error(`[JobScheduler] Failed to schedule job ${job._id}:`, error);
+      logger_default.error(`[JobScheduler] Failed to schedule job "${job.name}" (${job._id}):`, error);
       throw error;
     }
   }
@@ -25500,13 +25570,12 @@ async function sendFile(req, res, next) {
 }
 
 // src/api/routes/message.routes.ts
-init_environment();
 var router3 = Router3();
 var upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }
 });
-var messageAuth = config.whatsapp.rlsEnforce ? requireTenantOrApiKey : optionalTenant;
+var messageAuth = requireTenantOrApiKey;
 router3.post(
   "/:sessionPhone/text",
   messageAuth,
@@ -25994,14 +26063,10 @@ function adjustFontSizeForValue(key, value, baseSize) {
   if (length > 30) return Math.max(11, baseSize - 1);
   return baseSize;
 }
-function getDefaultWhatsappSession() {
-  const sessions2 = listSessions();
-  return sessions2.find((phone) => isSessionReady(phone)) || null;
-}
 async function sendWhatsappNotification(sessionOverride, target, caption, fileBuffer, filename) {
-  const sessionPhone = sessionOverride || getDefaultWhatsappSession();
+  const sessionPhone = String(sessionOverride || "").replace(/\D/g, "");
   if (!sessionPhone) {
-    throw new Error("No WhatsApp session connected");
+    throw new Error("WhatsApp sender is required");
   }
   const recipient = normalizeWhatsAppRecipient(target, {
     allowGroupShortcut: true,
@@ -62989,14 +63054,12 @@ function cleanUrl2(url) {
 function normalizeSender2(sender) {
   return String(sender || "").replace(/\D/g, "").trim();
 }
-function isLocalDispatchValeScope(companyId) {
-  return config.nodeEnv === "development" || companyId.trim().toLowerCase() === "test";
-}
-function resolveDispatchValeSender(companyId, preferredSender, companySender) {
-  const requestedSender = normalizeSender2(preferredSender) || normalizeSender2(companySender);
-  if (!isLocalDispatchValeScope(companyId)) return requestedSender;
-  if (requestedSender && WhatsAppDirectService.isSessionReady(requestedSender)) return requestedSender;
-  return WhatsAppDirectService.getSessions().find((sessionId) => WhatsAppDirectService.isSessionReady(sessionId)) || requestedSender;
+function resolveDispatchValeSender(preferredSender, companySender) {
+  const configuredSender = normalizeSender2(companySender);
+  const requestedSender = normalizeSender2(preferredSender);
+  if (!configuredSender) return "";
+  if (requestedSender && requestedSender !== configuredSender) return configuredSender;
+  return configuredSender;
 }
 function isQueuedWhatsAppResult(value) {
   return typeof value === "object" && value !== null && "queued" in value && value.queued === true;
@@ -63276,8 +63339,10 @@ async function generateDispatchValeWorkflow(input) {
     const CompanyModel = await getCompanyModel();
     const company = await CompanyModel.findOne({ companyId, isActive: true }).lean();
     const companyName = String(company?.name || "ConstRoad").trim() || "ConstRoad";
+    const companyBotLabel = getCompanyBotLabel(
+      company?.slug || company?.name || companyId
+    );
     const sender = resolveDispatchValeSender(
-      companyId,
       resolvedInput.sender,
       String(company?.whatsappConfig?.sender || "")
     );
@@ -63329,9 +63394,12 @@ async function generateDispatchValeWorkflow(input) {
     } else if (!sender) {
       whatsapp.skippedReason = "company sender not configured";
     } else {
-      const caption = `${companyName}:
-
-Hola ${normalizedDriverName || "chofer"} *${companyName}* te envia tu guia de remision`;
+      const caption = [
+        companyBotLabel,
+        "",
+        `Hola ${normalizedDriverName || "chofer"},`,
+        `${companyName} te env\xEDa tu vale de despacho.`
+      ].join("\n");
       try {
         logger_default.info("dispatch_vale.whatsapp_file_sending", {
           companyId,
@@ -63386,10 +63454,10 @@ Hola ${normalizedDriverName || "chofer"} *${companyName}* te envia tu guia de re
             WhatsAppDirectService.sendMessage(
               sender,
               normalizedPhone,
-              `${companyName}:
+              `${companyBotLabel}
 
-${normalizedDriverName || "Chofer"} te enviamos la Ubicaci\xF3n de la obra:
-- \u{1F4CD} aqui: ${normalizedLocation}`,
+${normalizedDriverName || "Chofer"}, te enviamos la ubicaci\xF3n de la obra:
+- \u{1F4CD} Aqu\xED: ${normalizedLocation}`,
               { companyId, queueOnFail: true }
             ),
             25e3,
@@ -63543,6 +63611,7 @@ import axios7 from "axios";
 var import_sharp4 = __toESM(require_lib(), 1);
 import axios6 from "axios";
 init_environment();
+init_models();
 
 // src/models/dispatch-notification-flag.model.ts
 init_sharedConnection();
@@ -63673,12 +63742,37 @@ function renderMessageTemplate(template, context) {
 // src/services/dispatch-notifications.service.ts
 init_logger();
 init_whatsapp_direct_service();
+async function resolveCurrentWhatsAppDelivery(companyId) {
+  const CompanyModel = await getCompanyModel();
+  const company = await CompanyModel.findOne({
+    companyId,
+    isActive: true
+  }).lean();
+  const whatsappConfig = company?.whatsappConfig ?? {};
+  return {
+    sender: String(whatsappConfig.sender ?? "").trim(),
+    plantGroupId: String(whatsappConfig.plantGroupId ?? "").trim()
+  };
+}
 async function sendPlantTelegram(message) {
   try {
     const { sendTelegramAlert: sendTelegramAlert2 } = await Promise.resolve().then(() => (init_telegram_alert_service(), telegram_alert_service_exports));
     await sendTelegramAlert2({ message });
   } catch (error) {
     logger_default.warn("plant_telegram.failed", { error: String(error) });
+  }
+}
+async function schedulePlantTelegram(message, dedupeKey, delayMs) {
+  try {
+    const { scheduleTelegramAlert: scheduleTelegramAlert2 } = await Promise.resolve().then(() => (init_telegram_alert_service(), telegram_alert_service_exports));
+    return scheduleTelegramAlert2({
+      availableAt: new Date(Date.now() + delayMs),
+      dedupeKey,
+      message
+    });
+  } catch (error) {
+    logger_default.warn("plant_telegram.schedule_failed", { error: String(error) });
+    return false;
   }
 }
 async function claimNotificationFlag(key, companyId) {
@@ -63973,6 +64067,14 @@ function scheduleIppReadyNotification(params) {
         });
         return;
       }
+      const currentDelivery = await resolveCurrentWhatsAppDelivery(params.companyId);
+      if (!currentDelivery.sender) {
+        logger_default.info("dispatch_ipp_ready.skipped_no_current_sender", {
+          companyId: params.companyId,
+          dispatchId: params.dispatchId
+        });
+        return;
+      }
       const pdfUrl = await resolveIppPdfUrl({
         companyId: params.companyId,
         dispatchId: params.dispatchId,
@@ -63985,7 +64087,7 @@ function scheduleIppReadyNotification(params) {
           dispatchId: params.dispatchId,
           message,
           pdfUrl,
-          sender: params.sender,
+          sender: currentDelivery.sender,
           target
         });
       }
@@ -64049,12 +64151,13 @@ async function sendOrderCompletionSummary(params) {
   }
   return true;
 }
-async function sendPlantEndIfNotSent(sender, botLabel, companyId, plantGroupId, plantEndTemplate) {
+async function sendPlantEndIfNotSent(_sender, botLabel, companyId, _plantGroupId, plantEndTemplate) {
   const dayKey = (/* @__PURE__ */ new Date()).toLocaleDateString("en-CA", {
     timeZone: "America/Lima"
   });
+  const notificationKey = `plant-end:${companyId}:${dayKey}`;
   const shouldSend = await claimNotificationFlag(
-    `plant-end:${companyId}:${dayKey}`,
+    notificationKey,
     companyId
   );
   if (!shouldSend) {
@@ -64065,19 +64168,33 @@ async function sendPlantEndIfNotSent(sender, botLabel, companyId, plantGroupId, 
     companyId,
     delayMs: PLANT_END_NOTIFICATION_DELAY_MS
   });
+  const telegramScheduled = await schedulePlantTelegram(
+    message,
+    `telegram:${notificationKey}`,
+    PLANT_END_NOTIFICATION_DELAY_MS
+  );
   setTimeout(() => {
     void (async () => {
-      if (plantGroupId) {
-        await sendToGroup(sender, plantGroupId, message, companyId).catch(
+      if (!telegramScheduled) {
+        await sendPlantTelegram(message);
+      }
+      const currentDelivery = await resolveCurrentWhatsAppDelivery(companyId);
+      if (currentDelivery.sender && currentDelivery.plantGroupId) {
+        await sendToGroup(
+          currentDelivery.sender,
+          currentDelivery.plantGroupId,
+          message,
+          companyId
+        ).catch(
           (error) => logger_default.error("plant_end.whatsapp_failed", { companyId, error: String(error) })
         );
       }
-      await sendPlantTelegram(message);
     })();
   }, PLANT_END_NOTIFICATION_DELAY_MS);
 }
 async function sendDispatchNotifications(params) {
   const { input, context } = params;
+  const hasWhatsAppSender = Boolean(input.sender.trim());
   const note = toSafeText(input.note, "Unidad");
   const quantity = Number.isFinite(Number(input.quantity)) ? Number(input.quantity) : 0;
   const plate = toSafeText(input.plate);
@@ -64091,65 +64208,94 @@ async function sendDispatchNotifications(params) {
     `dispatch-progress:${input.companyId}:${input.dispatchId}`,
     input.companyId
   );
-  if (!dispatchSent) {
-    return;
-  }
-  const plantProgressMsg = context.plantProgressTemplate ? renderMessageTemplate(context.plantProgressTemplate, {
-    botLabel: context.companyBotLabel,
-    unidad: dispatchOrdinal,
-    pendientes: input.pendingCount
-  }) : buildPlantProgressMessage(context.companyBotLabel, dispatchOrdinal, input.pendingCount);
-  if (context.plantGroupId) {
-    await sendToGroup(input.sender, context.plantGroupId, plantProgressMsg, input.companyId);
-  }
-  await sendPlantTelegram(plantProgressMsg);
-  const clientTargets = resolveClientTargets(input, context.adminGroupId);
-  if (clientTargets.length > 0) {
-    await sendToTargets(
-      input.sender,
-      clientTargets,
-      buildClientDispatchMessage({
-        botLabel: context.companyBotLabel,
-        note,
-        quantity,
-        plate,
-        driverName,
-        driverLicense,
-        driverPhoneNumber,
-        obra,
-        pendingCount: clientPendingCount
-      }),
-      input.companyId
-    );
-  }
-  const realClientTargets = input.sendDispatchMessage ? input.clientTargets : [];
-  if (input.dispatchFinished && clientTargets.length > 0) {
-    const completionSent = await sendOrderCompletionSummary({
-      sender: input.sender,
-      targets: clientTargets,
+  if (dispatchSent) {
+    const plantProgressMsg = context.plantProgressTemplate ? renderMessageTemplate(context.plantProgressTemplate, {
       botLabel: context.companyBotLabel,
-      companyId: input.companyId,
-      completion: input.orderCompletion
-    });
-    if (!completionSent) {
+      unidad: dispatchOrdinal,
+      pendientes: input.pendingCount
+    }) : buildPlantProgressMessage(
+      context.companyBotLabel,
+      dispatchOrdinal,
+      input.pendingCount
+    );
+    await sendPlantTelegram(plantProgressMsg);
+    if (hasWhatsAppSender && context.plantGroupId) {
+      await sendToGroup(
+        input.sender,
+        context.plantGroupId,
+        plantProgressMsg,
+        input.companyId
+      ).catch(
+        (error) => logger_default.error("plant_progress.whatsapp_failed", {
+          companyId: input.companyId,
+          error: String(error)
+        })
+      );
+    }
+    const clientTargets = resolveClientTargets(input, context.adminGroupId);
+    if (hasWhatsAppSender && clientTargets.length > 0) {
       await sendToTargets(
         input.sender,
         clientTargets,
-        buildClientCompleteMessage(context.companyBotLabel, obra),
+        buildClientDispatchMessage({
+          botLabel: context.companyBotLabel,
+          note,
+          quantity,
+          plate,
+          driverName,
+          driverLicense,
+          driverPhoneNumber,
+          obra,
+          pendingCount: clientPendingCount
+        }),
         input.companyId
+      ).catch(
+        (error) => logger_default.error("client_dispatch.whatsapp_failed", {
+          companyId: input.companyId,
+          error: String(error)
+        })
       );
     }
-    if (realClientTargets.length > 0) {
-      scheduleIppReadyNotification({
-        dispatchId: input.dispatchId,
+    const realClientTargets = input.sendDispatchMessage ? input.clientTargets : [];
+    if (hasWhatsAppSender && input.dispatchFinished && clientTargets.length > 0) {
+      const completionSent = await sendOrderCompletionSummary({
         sender: input.sender,
-        targets: realClientTargets,
+        targets: clientTargets,
         botLabel: context.companyBotLabel,
-        obra,
         companyId: input.companyId,
-        ippReportUnavailableReason: input.ippReportUnavailableReason,
-        ippReportPayload: input.ippReportPayload
+        completion: input.orderCompletion
+      }).catch((error) => {
+        logger_default.error("client_completion.whatsapp_failed", {
+          companyId: input.companyId,
+          error: String(error)
+        });
+        return false;
       });
+      if (!completionSent) {
+        await sendToTargets(
+          input.sender,
+          clientTargets,
+          buildClientCompleteMessage(context.companyBotLabel, obra),
+          input.companyId
+        ).catch(
+          (error) => logger_default.error("client_completion_fallback.whatsapp_failed", {
+            companyId: input.companyId,
+            error: String(error)
+          })
+        );
+      }
+      if (realClientTargets.length > 0) {
+        scheduleIppReadyNotification({
+          dispatchId: input.dispatchId,
+          sender: input.sender,
+          targets: realClientTargets,
+          botLabel: context.companyBotLabel,
+          obra,
+          companyId: input.companyId,
+          ippReportUnavailableReason: input.ippReportUnavailableReason,
+          ippReportPayload: input.ippReportPayload
+        });
+      }
     }
   }
   if (input.allDispatched) {
@@ -64233,8 +64379,9 @@ async function processPostDispatch(input) {
     });
   }
   if (!input.sender) {
-    console.warn(`[post-process] No sender for ${input.companyId}. Skipping WhatsApp.`);
-    return;
+    console.warn(
+      `[post-process] No sender for ${input.companyId}. Telegram remains enabled.`
+    );
   }
   await sendDispatchNotifications({
     input,
@@ -65311,6 +65458,7 @@ var LOCATIONS = [
   { name: "Villa Maria del Triunfo", lat: -12.118, lon: -76.983 }
 ];
 var WEATHER_API_BASE = "https://api.open-meteo.com/v1/forecast?daily=temperature_2m_mean,precipitation_probability_max,precipitation_sum&timezone=America/Lima";
+var ASPHALT_PLANT_LOCATION = "Distrito de Lurigancho-Chosica";
 var MM_VERY_LOW_MAX = 0.5;
 var MM_LOW_MAX = 1;
 var MM_MODERATE_MAX = 2;
@@ -65344,9 +65492,9 @@ function getCombinedRiskLevel(prob, mm) {
   return "high_risk";
 }
 function getConstroadDecision(level) {
-  if (level === "high_risk") return "NO APTO PARA PRODUCIR";
-  if (level === "moderate_risk") return "RIESGO MODERADO DE LLUVIA";
-  return "APTO PARA PRODUCIR";
+  if (level === "high_risk") return "NO APTO PARA PRODUCIR EN PLANTA";
+  if (level === "moderate_risk") return "RIESGO MODERADO PARA PRODUCIR EN PLANTA";
+  return "APTO PARA PRODUCIR EN PLANTA";
 }
 function formatDate3(date) {
   const opts = { timeZone: WEATHER_ASPHALT_FORECAST.timezone };
@@ -65390,7 +65538,9 @@ function buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate) 
   if (constroadRiskyDays.length === 0 && forecastsWithRisk.length === 0) return null;
   let message = "REPORTE DE CLIMA\n\n";
   if (constroadRiskyDays.length > 0) {
-    message += "Constroad (Planta de asfalto):\n\n";
+    message += `Constroad (Planta de asfalto - ${ASPHALT_PLANT_LOCATION}):
+
+`;
     for (const day of constroadRiskyDays) {
       message += `  ${formatDate3(day.date)}:
 `;
@@ -65402,7 +65552,7 @@ function buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate) 
     }
   }
   if (forecastsWithRisk.length > 0) {
-    message += `Distritos con riesgo de lluvia (${formatDate3(reportDate)}):
+    message += `Distritos no aptos o con precauci\xF3n para asfaltar (${formatDate3(reportDate)}):
 
 `;
     const highRisk = forecastsWithRisk.filter((forecast) => forecast.level === "high_risk");
@@ -65427,6 +65577,10 @@ function buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate) 
 `;
       }
     }
+  } else if (constroadRiskyDays.length > 0) {
+    message += `Distritos no aptos para asfaltar (${formatDate3(reportDate)}):
+`;
+    message += "  Ninguno detectado con los umbrales configurados.\n\n";
   }
   return message;
 }
@@ -69022,8 +69176,37 @@ init_sessions_simple();
 // src/whatsapp/baileys/restore-sessions.simple.ts
 init_sessions_simple();
 init_mongo_auth_state();
+init_models();
+var normalizeSender3 = (value) => String(value || "").replace(/\D/g, "");
+var listConfiguredActiveSenders = async () => {
+  const CompanyModel = await getCompanyModel();
+  const companies = await CompanyModel.find(
+    {
+      isActive: true,
+      "whatsappConfig.sender": { $exists: true, $nin: ["", null] }
+    },
+    { "whatsappConfig.sender": 1 }
+  ).lean();
+  return new Set(
+    companies.map((company) => normalizeSender3(company.whatsappConfig?.sender)).filter(Boolean)
+  );
+};
 var restoreAllSessions = async () => {
-  const sessionIds = (await listMongoAuthSessions()).filter((id) => /^\d{9,15}$/.test(id));
+  const [storedSessionIds, configuredSenders] = await Promise.all([
+    listMongoAuthSessions(),
+    listConfiguredActiveSenders()
+  ]);
+  const sessionIds = storedSessionIds.filter(
+    (sessionId) => /^\d{9,15}$/.test(sessionId) && configuredSenders.has(sessionId)
+  );
+  const ignoredSessionIds = storedSessionIds.filter(
+    (sessionId) => /^\d{9,15}$/.test(sessionId) && !configuredSenders.has(sessionId)
+  );
+  if (ignoredSessionIds.length > 0) {
+    console.warn(
+      `Skipping unassigned WhatsApp sessions: ${ignoredSessionIds.join(", ")}`
+    );
+  }
   for (const phone of sessionIds) {
     try {
       console.log(`\u267B\uFE0F Restoring session for ${phone}`);
