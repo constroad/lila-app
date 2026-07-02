@@ -49,6 +49,7 @@ const LOCATIONS = [
 
 const WEATHER_API_BASE =
   'https://api.open-meteo.com/v1/forecast?daily=temperature_2m_mean,precipitation_probability_max,precipitation_sum&timezone=America/Lima';
+const ASPHALT_PLANT_LOCATION = 'Distrito de Lurigancho-Chosica';
 
 type RiskLevel = 'high_risk' | 'moderate_risk' | 'ok';
 
@@ -128,9 +129,9 @@ export function getCombinedRiskLevel(prob: number, mm: number): RiskLevel {
 }
 
 function getConstroadDecision(level: RiskLevel): string {
-  if (level === 'high_risk') return 'NO APTO PARA PRODUCIR';
-  if (level === 'moderate_risk') return 'RIESGO MODERADO DE LLUVIA';
-  return 'APTO PARA PRODUCIR';
+  if (level === 'high_risk') return 'NO APTO PARA PRODUCIR EN PLANTA';
+  if (level === 'moderate_risk') return 'RIESGO MODERADO PARA PRODUCIR EN PLANTA';
+  return 'APTO PARA PRODUCIR EN PLANTA';
 }
 
 function formatDate(date: Date): string {
@@ -185,7 +186,7 @@ function buildWeatherMessage(
 
   let message = 'REPORTE DE CLIMA\n\n';
   if (constroadRiskyDays.length > 0) {
-    message += 'Constroad (Planta de asfalto):\n\n';
+    message += `Constroad (Planta de asfalto - ${ASPHALT_PLANT_LOCATION}):\n\n`;
     for (const day of constroadRiskyDays) {
       message += `  ${formatDate(day.date)}:\n`;
       message += `    Prob. lluvia: ${day.prob}% - (${day.mm} mm)\n`;
@@ -194,7 +195,7 @@ function buildWeatherMessage(
   }
 
   if (forecastsWithRisk.length > 0) {
-    message += `Distritos con riesgo de lluvia (${formatDate(reportDate)}):\n\n`;
+    message += `Distritos no aptos o con precaución para asfaltar (${formatDate(reportDate)}):\n\n`;
     const highRisk = forecastsWithRisk.filter((forecast) => forecast.level === 'high_risk');
     const moderateRisk = forecastsWithRisk.filter((forecast) => forecast.level === 'moderate_risk');
     if (highRisk.length > 0) {
@@ -211,6 +212,9 @@ function buildWeatherMessage(
         message += `    Prob. lluvia: ${forecast.prob}% - (${forecast.mm} mm)\n\n`;
       }
     }
+  } else if (constroadRiskyDays.length > 0) {
+    message += `Distritos no aptos para asfaltar (${formatDate(reportDate)}):\n`;
+    message += '  Ninguno detectado con los umbrales configurados.\n\n';
   }
 
   return message;

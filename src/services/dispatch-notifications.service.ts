@@ -5,6 +5,7 @@ import {
   PLANT_END_NOTIFICATION_DELAY_MS,
 } from '../config/constants.js';
 import { config } from '../config/environment.js';
+import { getCompanyModel } from '../database/models.js';
 import { getDispatchNotificationFlagModel } from '../models/dispatch-notification-flag.model.js';
 import { renderMessageTemplate } from '../utils/messageTemplate.js';
 import type {
@@ -18,6 +19,19 @@ type NotificationParams = {
   input: DispatchPostProcessInput;
   context: DispatchPostProcessContext;
 };
+
+async function resolveCurrentWhatsAppDelivery(companyId: string) {
+  const CompanyModel = await getCompanyModel();
+  const company = await CompanyModel.findOne({
+    companyId,
+    isActive: true,
+  }).lean();
+  const whatsappConfig = (company as any)?.whatsappConfig ?? {};
+  return {
+    sender: String(whatsappConfig.sender ?? '').trim(),
+    plantGroupId: String(whatsappConfig.plantGroupId ?? '').trim(),
+  };
+}
 
 /**
  * Envía un aviso de planta al Telegram de alertas. Import LAZY: `telegram-alert.service` arrastra
@@ -454,6 +468,15 @@ export function scheduleIppReadyNotification(params: {
         return;
       }
 
+      const currentDelivery = await resolveCurrentWhatsAppDelivery(params.companyId);
+      if (!currentDelivery.sender) {
+        logger.info('dispatch_ipp_ready.skipped_no_current_sender', {
+          companyId: params.companyId,
+          dispatchId: params.dispatchId,
+        });
+        return;
+      }
+
       const pdfUrl = await resolveIppPdfUrl({
         companyId: params.companyId,
         dispatchId: params.dispatchId,
@@ -467,7 +490,7 @@ export function scheduleIppReadyNotification(params: {
           dispatchId: params.dispatchId,
           message,
           pdfUrl,
-          sender: params.sender,
+          sender: currentDelivery.sender,
           target,
         });
       }
@@ -546,10 +569,10 @@ async function sendOrderCompletionSummary(params: {
 }
 
 export async function sendPlantEndIfNotSent(
-  sender: string,
+  _sender: string,
   botLabel: string,
   companyId: string,
-  plantGroupId: string,
+  _plantGroupId: string,
   plantEndTemplate?: string
 ) {
   const dayKey = new Date().toLocaleDateString('en-CA', {
@@ -585,8 +608,14 @@ export async function sendPlantEndIfNotSent(
       if (!telegramScheduled) {
         await sendPlantTelegram(message);
       }
-      if (sender && plantGroupId) {
-        await sendToGroup(sender, plantGroupId, message, companyId).catch((error) =>
+      const currentDelivery = await resolveCurrentWhatsAppDelivery(companyId);
+      if (currentDelivery.sender && currentDelivery.plantGroupId) {
+        await sendToGroup(
+          currentDelivery.sender,
+          currentDelivery.plantGroupId,
+          message,
+          companyId
+        ).catch((error) =>
           logger.error('plant_end.whatsapp_failed', { companyId, error: String(error) })
         );
       }

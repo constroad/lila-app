@@ -24,6 +24,10 @@ jest.mock('../models/dispatch-notification-flag.model.js', () => ({
   getDispatchNotificationFlagModel: jest.fn(),
 }));
 
+jest.mock('../database/models.js', () => ({
+  getCompanyModel: jest.fn(),
+}));
+
 jest.mock('../config/constants.js', () => ({
   DISPATCH_IPP_READY_NOTIFICATION_DELAY_MS: 1000,
 }));
@@ -54,6 +58,7 @@ const {
 const {
   getDispatchNotificationFlagModel,
 } = require('../models/dispatch-notification-flag.model.js');
+const { getCompanyModel } = require('../database/models.js');
 const notifications = require('./dispatch-notifications.service.js');
 const updateOneMock = jest.fn();
 
@@ -83,6 +88,18 @@ describe('dispatch-notifications.service', () => {
     jest.useFakeTimers();
     getDispatchNotificationFlagModel.mockResolvedValue({
       updateOne: updateOneMock,
+    });
+    getCompanyModel.mockResolvedValue({
+      findOne: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          companyId: 'constroad',
+          isActive: true,
+          whatsappConfig: {
+            sender: '51902049935',
+            plantGroupId: 'plant@g.us',
+          },
+        }),
+      }),
     });
     axios.post.mockResolvedValue({
       data: { data: { pdfUrlAbsolute: 'https://files.test/ipp.pdf' } },
@@ -220,6 +237,19 @@ describe('dispatch-notifications.service', () => {
   });
 
   it('schedules Telegram plant-end without a WhatsApp sender', async () => {
+    getCompanyModel.mockResolvedValueOnce({
+      findOne: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          companyId: 'constroad',
+          isActive: true,
+          whatsappConfig: {
+            sender: '',
+            plantGroupId: '',
+          },
+        }),
+      }),
+    });
+
     await notifications.sendDispatchNotifications({
       input: buildTestInput({
         allDispatched: true,
@@ -381,6 +411,62 @@ describe('dispatch-notifications.service', () => {
       'client@g.us',
       expect.stringContaining('informe IPP'),
       expect.anything()
+    );
+  });
+
+  it('uses the company current sender when the delayed IPP notification runs', async () => {
+    getCompanyModel.mockResolvedValueOnce({
+      findOne: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          companyId: 'constroad',
+          isActive: true,
+          whatsappConfig: {
+            sender: '51999999999',
+            plantGroupId: 'new-plant@g.us',
+          },
+        }),
+      }),
+    });
+
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({ dispatchFinished: true }),
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
+    });
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenLastCalledWith(
+      '51999999999',
+      'client@g.us',
+      expect.stringContaining('informe IPP'),
+      expect.anything()
+    );
+  });
+
+  it('skips delayed IPP WhatsApp when the company disconnected its sender', async () => {
+    getCompanyModel.mockResolvedValueOnce({
+      findOne: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          companyId: 'constroad',
+          isActive: true,
+          whatsappConfig: {
+            sender: '',
+            plantGroupId: '',
+          },
+        }),
+      }),
+    });
+
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({ dispatchFinished: true }),
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
+    });
+    const callsBeforeDelay = WhatsAppDirectService.sendMessage.mock.calls.length;
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(callsBeforeDelay);
+    expect(logger.info).toHaveBeenCalledWith(
+      'dispatch_ipp_ready.skipped_no_current_sender',
+      expect.objectContaining({ companyId: 'constroad' })
     );
   });
 
@@ -582,5 +668,35 @@ describe('dispatch-notifications.service', () => {
 
     await jest.runOnlyPendingTimersAsync();
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses current sender and plant group for the delayed plant-end message', async () => {
+    getCompanyModel.mockResolvedValueOnce({
+      findOne: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          companyId: 'constroad',
+          isActive: true,
+          whatsappConfig: {
+            sender: '51999999999',
+            plantGroupId: 'new-plant@g.us',
+          },
+        }),
+      }),
+    });
+
+    await notifications.sendPlantEndIfNotSent(
+      '51902049935',
+      'Bot',
+      'constroad',
+      'plant@g.us'
+    );
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledWith(
+      '51999999999',
+      'new-plant@g.us',
+      expect.stringContaining('Fin de la producción'),
+      expect.anything()
+    );
   });
 });

@@ -51,7 +51,31 @@ describe('weather-asphalt-forecast service', () => {
     expect(result.status).toBe('ok');
     expect(result.hasRainRisk).toBe(true);
     expect(result.message).toContain('REPORTE DE CLIMA');
-    expect(result.message).toContain('NO APTO PARA PRODUCIR');
+    expect(result.message).toContain(
+      'Constroad (Planta de asfalto - Distrito de Lurigancho-Chosica)'
+    );
+    expect(result.message).toContain('NO APTO PARA PRODUCIR EN PLANTA');
+    expect(result.message).toContain('Distritos no aptos para asfaltar');
+    expect(result.message).toContain('Ninguno detectado');
+  });
+
+  it('identifica por nombre los distritos donde no se debe asfaltar', async () => {
+    const payload = buildOpenMeteoPayload(60, 2.5);
+    payload[1] = buildDailyPayload(70, 3);
+    const fetcher = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify(payload),
+    });
+
+    const result = await generateWeatherAsphaltForecast({
+      run: '6am',
+      fetcher: fetcher as any,
+      notifyError: jest.fn(),
+    });
+
+    expect(result.message).toContain('NO ASFALTAR - RIESGO ALTO');
+    expect(result.message).toContain('ANCON');
+    expect(result.message).not.toContain('Ninguno detectado');
   });
 
   it('degrada sin mensaje WhatsApp y alerta Telegram si Open-Meteo falla', async () => {

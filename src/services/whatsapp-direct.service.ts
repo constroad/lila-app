@@ -35,6 +35,10 @@ import {
 } from './whatsapp-media-source.util.js';
 import { assertWhatsAppRecipient } from '../utils/whatsapp-phone.js';
 import { quotaValidatorService } from './quota-validator.service.js';
+import {
+  assertCompanyOwnsWhatsAppSender,
+  WhatsAppSenderOwnershipError,
+} from './whatsapp-sender-ownership.service.js';
 
 type WhatsAppUsageOptions = {
   companyId?: string;
@@ -115,6 +119,7 @@ export const WhatsAppDirectService = {
       trackUsage?: boolean;
     } = {}
   ) {
+    await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options));
     const queueOnFail = options.queueOnFail !== false;
     const routedTo = resolveWhatsAppRecipient(to, {
       companyId: options.companyId,
@@ -196,6 +201,7 @@ export const WhatsAppDirectService = {
       trackUsage?: boolean;
     }
   ) {
+    await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options));
     const queueOnFail = options.queueOnFail !== false;
     const routedTo = resolveWhatsAppRecipient(to, {
       companyId: options.companyId,
@@ -334,6 +340,7 @@ export const WhatsAppDirectService = {
       trackUsage?: boolean;
     }
   ) {
+    await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options));
     const queueOnFail = options.queueOnFail !== false;
     const routedTo = resolveWhatsAppRecipient(to, {
       companyId: options.companyId,
@@ -467,6 +474,7 @@ export const WhatsAppDirectService = {
       trackUsage?: boolean;
     }
   ) {
+    await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options));
     const queueOnFail = options.queueOnFail !== false;
     const routedTo = resolveWhatsAppRecipient(to, {
       companyId: options.companyId,
@@ -722,6 +730,13 @@ export const WhatsAppDirectService = {
           logger.info(`✅ Sent queued document message ${item.id}`);
         }
       } catch (error) {
+        if (error instanceof WhatsAppSenderOwnershipError) {
+          await outboxQueue.remove(id, item.id);
+          logger.warn(
+            `Discarded queued message ${item.id}: sender no longer belongs to its company`
+          );
+          continue;
+        }
         // Update attempt count and error
         const updated = {
           ...item,

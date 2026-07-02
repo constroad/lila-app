@@ -99,7 +99,10 @@ export class JobExecutor {
         { status: 'running', lastExecution: new Date() }
       );
 
-      const company = await CompanyModel.findOne({ companyId: job.companyId });
+      const company = await CompanyModel.findOne({
+        companyId: job.companyId,
+        isActive: true,
+      });
       if (!company) {
         throw new Error(`Company ${job.companyId} not found`);
       }
@@ -121,8 +124,11 @@ export class JobExecutor {
       } else if (job.type === 'api') {
         const apiMessages = await this.executeApi(job);
         if (apiMessages && apiMessages.length > 0) {
+          if (!sender) {
+            throw new Error(`No sender configured for company ${job.companyId}`);
+          }
           await this.executeBatchMessages(
-            sender!,
+            sender,
             apiMessages,
             botPrefix,
             job.message?.chatId,

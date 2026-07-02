@@ -53,6 +53,10 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   `lk_fe_` quedan bloqueados cuando el sender no pertenece a su company.
   El secreto global conserva acceso administrativo legacy. El lookup de propiedad
   falla cerrado para evitar envíos cross-company.
+- **Aislamiento también en envíos internos:** `whatsapp-direct.service.ts`
+  valida la propiedad sender/company antes de enviar o encolar texto y media.
+  Cronjobs, avisos diferidos y reintentos no pueden reutilizar una sesión de otra
+  empresa como fallback.
 
 ### Documentos / Reportes
 
@@ -273,6 +277,10 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   opcional, mantiene deduplicación por despacho y cierre diario, y encola fallos
   transitorios de Telegram. El cierre diferido queda persistido con `availableAt`,
   evitando perderlo durante reinicios de lila-app.
+- **Julio 2026**: IPP y fin de producción consultan nuevamente el sender y grupo
+  activos al cumplirse su demora; un sender desconectado o reasignado deja de ser
+  utilizable. El reporte climático diferencia riesgo de producción en la planta
+  (distrito de Lurigancho-Chosica) de distritos no aptos para asfaltar.
 - **Julio 2026**: el vale de despacho usa exclusivamente el sender configurado
   por su empresa. Ya no reutiliza sesiones ajenas en `test` o desarrollo. La
   restauración automática permite únicamente senders asignados a empresas activas.
