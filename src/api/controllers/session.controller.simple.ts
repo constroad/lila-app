@@ -25,6 +25,13 @@ import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
 
 /**
+ * Espera máxima (ms) por el QR en una sola request. Corta a propósito: el proxy de Portal corre
+ * en Vercel Hobby (~10s de límite de función). Si el QR no está en esta ventana, se responde
+ * "connecting" y el cliente hace polling. Ver getQRCodeImageHandler.
+ */
+const QR_WAIT_MS = 6000;
+
+/**
  * Wait for QR code to be generated
  */
 async function waitForQRCode(
@@ -307,12 +314,25 @@ export async function getQRCodeImageHandler(req: Request, res: Response, next: N
       });
     }
 
-    const qr = (await waitForQRCode(phoneNumber)) ?? getQRCode(phoneNumber);
+    // Si ya está conectada, no hay QR que mostrar.
+    if (isSessionReady(phoneNumber)) {
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: { status: 'connected', isConnected: true, qr: null, qrImage: null },
+      });
+      return;
+    }
+
+    // Espera CORTA para NO bloquear (Vercel Hobby mata la función proxy a ~10s). Si el QR aún no
+    // está listo, se responde 200 "connecting" y el CLIENTE hace polling; NUNCA se bloquea 60s.
+    const qr = (await waitForQRCode(phoneNumber, QR_WAIT_MS)) ?? getQRCode(phoneNumber);
 
     if (!qr) {
-      const error: CustomError = new Error('QR not available');
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: { status: 'connecting', isConnected: false, qr: null, qrImage: null },
+      });
+      return;
     }
 
     const qrText = typeof qr === 'string' ? qr : String(qr);
@@ -322,6 +342,8 @@ export async function getQRCodeImageHandler(req: Request, res: Response, next: N
       res.status(HTTP_STATUS.OK).json({
         success: true,
         data: {
+          status: 'waiting_qr',
+          isConnected: false,
           qr: qrText,
           qrImage: qrDataUrl,
         },
