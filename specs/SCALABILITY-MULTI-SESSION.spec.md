@@ -322,10 +322,62 @@ SHA-256** con `allowedSenders`/`allowedOrigins`/`rateLimit` y compare **timing-s
 - RAM por sesión acotada y estable bajo tráfico.
 - Envío cross-tenant **rechazado** (403) tras Fase 2.
 - Con sharding: caída de un worker no afecta sesiones de otros; rebalanceo automático.
-- `npm run build` + tests verdes en cada fase (nota: suite de `sessions.simple.test`
-  hoy bloqueada por config jest/ESM `import.meta` — pre-existente, arreglar aparte).
+- `npm run build` + tests verdes en cada fase. Correr jest con
+  `NODE_OPTIONS="--experimental-vm-modules --max-old-space-size=4096"`. Suites de
+  `sessions.simple` / `restore-sessions` / `session.routes` + `tenant.middleware` ya verdes
+  (57/57). ⚠️ Otras ~10 suites siguen rotas por usar `jest.mock` (incompatible con ESM) en
+  vez de `jest.unstable_mockModule` — pre-existente, arreglar aparte.
 
 ---
+
+## 10.b Hardening multi-tenant + recuperación (✅ IMPLEMENTADO jul 2026)
+
+Raíz del incidente `51949376824`: `POST /sessions/:phone/clear` desde UN tenant borraba las
+creds Mongo de un número **compartido por varias companies** (globofas-s8k, constroad, test);
+sin re-emparejar QR no había recuperación. Además, un cierre `401 (loggedOut)` dejaba las creds
+muertas en Mongo → `restoreAllSessions` las relevantaba en cada arranque → 401 → loop infinito.
+
+Implementado (commit "fix(whatsapp): guard multi-tenant… + fix loop 401"):
+- **`guardSharedSenderDestructive`** (`tenant.middleware.ts`) en `/clear`, `/logout`, `DELETE`:
+  409 si >1 company usa el sender (salvo `force:true`); 403 si el sender es de otra company;
+  fail-open ante fallo de lookup (backward-compatible). Usa `quotaValidatorService.
+  listCompaniesByWhatsappSender` (todas las dueñas).
+- **`restartSession` + `POST /:phone/restart`**: reinicio SUAVE (`sock.end()` sin logout,
+  conserva creds/store). Es la operación que debe usar el botón "reconectar" del Portal.
+- **Fix loop 401**: el close `loggedOut` ahora hace `clearMongoAuthState` (creds muertas ya no
+  se reintentan en restore). Igual criterio en `createPairingSession`.
+
+## 10.c Pendientes (tras 10.b)
+
+Ordenado por prioridad. Nada de esto está hecho todavía.
+
+1. **Parte 1 — Store chats/contactos → Mongo** (elimina el último archivo local de sesión,
+   `data/sessions/{id}/baileys_store.json`). Sin mensajes el store pesa KB → cabe en Mongo
+   (colección `whatsapp_store`, 1 doc/sessionId) sin chocar con el límite de 16 MB que vetaba
+   §5.3. Nuevo `mongo-store.ts` (load/save/clear); `store.manager` deja de usar `fs`;
+   `clearSession` borra doc Mongo en vez de `fs.remove(sessionDir)`; script de migración
+   opcional (el store se reconstruye al conectar). Habilita workers stateless (Fase 3).
+2. **Parte 2 — `whatsapp_sessions` como fuente de verdad del estado** (status/lifecycle en
+   Mongo por sessionId: `connected|connecting|disconnected|logged_out`, `lastConnectedAt`,
+   `lastDisconnectReason`). Hoy hay divorcio: restore mira `whatsapp_auth` (creds) pero
+   "registrada" = `whatsappConfig.sender` en la company → una sesión puede figurar registrada
+   y no restaurarse. `restoreAllSessions` restauraría donde haya creds Y status != logged_out;
+   `/status` y `/list` leerían de aquí.
+3. **Atribución de cuota para senders compartidos**: `quota-validator.getCompanyByWhatsappSender`
+   asume 1 sender→1 company y resuelve "a la primera por companyId". Con sender compartido
+   (confirmado como legítimo) el conteo/quota/rate-limit debe atribuirse a la company del
+   `companyId` autenticado en el request, no al "dueño" del sender. Decidir e implementar.
+4. **Portal (repo aparte)**: el botón de "reset/reconectar" debe llamar `POST /:phone/restart`
+   (suave); dejar el `/clear` destructivo detrás de confirmación explícita + `force:true`.
+5. **Guard en re-emparejar**: `GET /:phone/qr` y `request-pairing-code` reemplazan creds al
+   escanear → también destruyen la sesión compartida. Hoy NO están tras el guard (fuera del
+   alcance de 10.b). Evaluar aplicar `guardSharedSenderDestructive` (o variante) ahí.
+6. **`data/outbox` y `data/conversations`**: siguen en filesystem (no son "sesión" pero son
+   estado local). Migrar a Mongo para multi-instancia real (Fase 3).
+7. **Recuperación de `51949376824`**: sus creds ya se borraron el 2026-07-01 → requiere
+   re-emparejar (`GET /api/sessions/51949376824/qr`). El guard evita reincidencia, no resucita
+   creds ya borradas.
+8. **Deuda de tests**: arreglar las ~10 suites que usan `jest.mock` (ESM) — ver §9.
 
 ## 10. Nota: pairing-code (deprecado)
 
