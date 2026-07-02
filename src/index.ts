@@ -328,7 +328,10 @@ async function startServer() {
 
     const pdfTempMaxAgeHours = Number(process.env.PDF_TEMP_MAX_AGE_HOURS || 24);
     const pdfTempCleanupCron = process.env.PDF_TEMP_CLEANUP_CRON || '0 * * * *';
-    const shouldRunBackgroundJobs = shouldInitializeBackgroundJobs(config.nodeEnv);
+    const shouldRunBackgroundJobs = shouldInitializeBackgroundJobs(
+      config.nodeEnv,
+      config.jobs.enabled
+    );
 
     const cleanupPdfTemp = async () => {
       try {
@@ -355,7 +358,25 @@ async function startServer() {
       await jobScheduler.initialize();
       cron.schedule(pdfTempCleanupCron, cleanupPdfTemp);
     } else {
-      logger.info('Skipping background jobs in test mode');
+      const isDevelopment = config.nodeEnv.trim().toLowerCase() === 'development';
+      const banner = [
+        '',
+        '╔══════════════════════════════════════════════════════════════════════╗',
+        isDevelopment
+          ? '║                    ⚠️  MODO DESARROLLO  ⚠️                         ║'
+          : '║              ⚠️  CRONJOBS AUTOMÁTICOS DESACTIVADOS  ⚠️             ║',
+        '║                                                                      ║',
+        '║       LOS CRONJOBS AUTOMÁTICOS NO SE EJECUTARÁN EN ESTA INSTANCIA    ║',
+        '║       Se evita así el doble envío junto con producción.              ║',
+        '║                                                                      ║',
+        '║       Override deliberado: CRONJOBS_ENABLED=true                     ║',
+        '╚══════════════════════════════════════════════════════════════════════╝',
+        '',
+      ].join('\n');
+      logger.warn(banner, {
+        nodeEnv: config.nodeEnv,
+        cronJobsEnabled: config.jobs.enabled,
+      });
     }
 
     // Iniciar servidor HTTP

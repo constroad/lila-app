@@ -13,6 +13,15 @@ if (process.env.NODE_ENV === 'development' && fs.existsSync(devEnvPath)) {
   dotenv.config({ path: devEnvPath, override: true });
 }
 
+const nodeEnv = process.env.NODE_ENV || 'development';
+const cronJobsEnabledOverride = process.env.CRONJOBS_ENABLED;
+const cronJobsEnabled =
+  cronJobsEnabledOverride === undefined
+    ? nodeEnv === 'production'
+    : ['1', 'true', 'yes', 'on'].includes(
+        cronJobsEnabledOverride.trim().toLowerCase()
+      );
+
 const trustProxyEnv = process.env.TRUST_PROXY;
 const resolvedTrustProxy = trustProxyEnv === undefined
   ? (process.env.NODE_ENV === 'production' ? 1 : false)
@@ -33,7 +42,7 @@ const defaultDriveCacheDir = storageRootEnv
 
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   
   // WhatsApp
   whatsapp: {
@@ -74,6 +83,9 @@ export const config = {
   jobs: {
     storageFile: process.env.CRONJOBS_STORAGE || './data/cronjobs.json',
     checkInterval: 10000, // Verificar cada 10s
+    // Seguridad anti-duplicados: por defecto solo producción programa cronjobs.
+    // En local puede habilitarse de forma deliberada con CRONJOBS_ENABLED=true.
+    enabled: cronJobsEnabled,
   },
   
   // PDF
@@ -127,7 +139,7 @@ export const config = {
   // Features
   features: {
     enablePDF: true,
-    enableCron: true,
+    enableCron: cronJobsEnabled,
     enableHotReload: true,
   },
 };

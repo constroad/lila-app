@@ -8,6 +8,7 @@ import {
 } from "../utils/cronHelpers.js";
 import { validateCronExpression } from "../utils/validators.js";
 import logger from "../utils/logger.js";
+import config from "../config/environment.js";
 
 interface ScheduledTask {
   jobId: string;
@@ -17,12 +18,18 @@ interface ScheduledTask {
 class JobSchedulerV2 {
   private scheduledTasks: Map<string, ScheduledTask[]> = new Map();
   private executor: JobExecutor;
+  private readonly automaticSchedulingEnabled: boolean;
 
-  constructor() {
+  constructor(automaticSchedulingEnabled = config.jobs.enabled) {
     this.executor = new JobExecutor();
+    this.automaticSchedulingEnabled = automaticSchedulingEnabled;
   }
 
   async initialize(): Promise<void> {
+    if (!this.automaticSchedulingEnabled) {
+      logger.info("[JobScheduler] Automatic scheduling is disabled");
+      return;
+    }
     try {
       logger.info("[JobScheduler] Initializing v2...");
       const { CronJobModel } = await getSharedModels();
@@ -270,6 +277,16 @@ class JobSchedulerV2 {
     job: ICronJob,
     options: { silent?: boolean } = {},
   ): Promise<void> {
+    if (!this.automaticSchedulingEnabled) {
+      if (!options.silent) {
+        logger.info("[JobScheduler] Job persisted but not scheduled automatically", {
+          jobId: String(job._id),
+          name: job.name,
+          companyId: job.companyId,
+        });
+      }
+      return;
+    }
     try {
       const jobId = job._id.toString();
       const jobLabel = `"${job.name}" (${jobId})`;

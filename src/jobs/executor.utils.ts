@@ -1,7 +1,13 @@
 import { ICronJob } from '../models/cronjob.model.js';
 
-export function shouldInitializeBackgroundJobs(nodeEnv?: string): boolean {
-  return String(nodeEnv || '').trim().toLowerCase() !== 'test';
+export function shouldInitializeBackgroundJobs(
+  nodeEnv?: string,
+  enabledOverride?: boolean
+): boolean {
+  if (typeof enabledOverride === 'boolean') {
+    return enabledOverride;
+  }
+  return String(nodeEnv || '').trim().toLowerCase() === 'production';
 }
 
 export function materializeRetryJob(job: ICronJob): ICronJob {

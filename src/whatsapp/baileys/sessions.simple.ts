@@ -30,6 +30,19 @@ import pino from 'pino';
 const sessions: Record<string, WASocket> = {};
 const stores: Record<string, InMemoryStore> = {};
 const qrCodes: Record<string, string> = {};
+// Epoch ms en que se generó el QR vigente. Permite al cliente mostrar cuánto le queda antes
+// de que WhatsApp rote/invalide el código (~20s server-side). Se limpia junto con qrCodes.
+const qrTimestamps: Record<string, number> = {};
+
+/** Limpia el QR y su timestamp de una sesión (mantener ambos mapas en sync). */
+function clearQR(sessionId: string): void {
+  delete qrCodes[sessionId];
+  delete qrTimestamps[sessionId];
+}
+
+// Pairing code vigente por sesión (flujo "vincular con número"). El handler HTTP lo
+// consulta por polling hasta que Baileys lo genera. Se limpia al emparejar/desconectar.
+const pairingCodes: Record<string, string> = {};
 const readyClients: Map<string, boolean> = new Map();
 const shuttingDown: Set<string> = new Set();
 const storeTimers: Record<string, NodeJS.Timeout> = {};
@@ -140,6 +153,20 @@ export function getQRCode(sessionId: string): string | undefined {
 }
 
 /**
+ * Epoch ms en que se generó el QR vigente (o undefined si no hay QR).
+ */
+export function getQRCodeGeneratedAt(sessionId: string): number | undefined {
+  return qrTimestamps[sessionId];
+}
+
+/**
+ * Pairing code vigente de una sesión (o undefined si aún no se generó).
+ */
+export function getPairingCode(sessionId: string): string | undefined {
+  return pairingCodes[sessionId];
+}
+
+/**
  * Inicia (o reutiliza) una sesión de WhatsApp para el sessionId dado.
  *
  * Guard anti-duplicado: si ya hay una inicialización en curso, devuelve esa misma
@@ -233,6 +260,7 @@ async function initSession(
     if (qr) {
       logger.info(`✅ QR generated for ${sessionId}`);
       qrCodes[sessionId] = qr;
+      qrTimestamps[sessionId] = Date.now();
       if (qrCb) qrCb(qr);
     }
 
@@ -267,7 +295,7 @@ async function initSession(
 
     if (connection === 'close') {
       readyClients.set(sessionId, false);
-      delete qrCodes[sessionId];
+      clearQR(sessionId);
       logger.warn(`❌ Session closed for ${sessionId}`);
 
       const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
@@ -326,7 +354,10 @@ export async function createPairingSession(
     version,
     auth: state,
     logger: pinoLogger, // Baileys expects pino logger
-    browser: Browsers.macOS('Lila'),
+    // El browser afecta la entrega del pairing code (Baileys #2306); usamos el mismo
+    // valor probado del flujo QR que sí funciona. 'Lila' (no-browser real) fallaba.
+    browser: Browsers.ubuntu('Chrome'),
+    printQRInTerminal: false, // pairing code es alternativo al QR
     syncFullHistory: true, // maximiza contactos al conectar (ver startSession)
   });
 
@@ -348,6 +379,7 @@ export async function createPairingSession(
     if (connection === 'open') {
       logger.info(`✅ Session with ${phone} connected`);
       readyClients.set(sessionId, true);
+      delete pairingCodes[sessionId]; // ya emparejado: el código dejó de ser válido
 
       // Populate store (wrap in try/catch)
       try {
@@ -369,25 +401,36 @@ export async function createPairingSession(
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       logger.warn(`❌ Session ${phone} closed`, statusCode);
 
-      if (statusCode !== DisconnectReason.loggedOut && statusCode !== 401) {
-        setTimeout(() => createPairingSession(phone, sendCode), 3000);
-      } else {
+      if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
         // Logout/401 → creds muertas: borrarlas de Mongo para no reintentarlas en el
         // próximo restore (mismo criterio que initSession).
         delete sessions[sessionId];
         delete stores[sessionId];
+        delete pairingCodes[sessionId];
         try {
           await clearMongoAuthState(sessionId);
         } catch (err) {
           logger.warn(`Failed to clear dead creds for ${sessionId}:`, err);
         }
+      } else if (sock.authState.creds.registered) {
+        // Ya emparejado: reconectar para establecer la sesión completa (patrón resiliente).
+        setTimeout(() => createPairingSession(phone, sendCode), 3000);
+      } else {
+        // Aún SIN emparejar: NO recrear. Cada socket nuevo pediría un pairing code nuevo
+        // y WhatsApp responde 429 rate-overlimit (Baileys #2008). El usuario re-dispara.
+        logger.warn(`Pairing session ${phone} cerró antes de emparejar; esperando reintento manual`);
       }
     }
 
     if (!pairingDone && !sock.authState.creds.registered && connection === 'connecting') {
       try {
-        const code = await sock.requestPairingCode(phone);
-        logger.info(`📲 Pairing code for ${phone}: ${code}`);
+        // Baileys exige el número en E.164 SIN '+', paréntesis, espacios ni guiones
+        // (solo dígitos con código de país). Un número mal formado genera un código
+        // asociado a un número inválido → nunca llega al dispositivo real.
+        const msisdn = phone.replace(/\D/g, '');
+        const code = await sock.requestPairingCode(msisdn);
+        logger.info(`📲 Pairing code for ${msisdn}: ${code}`);
+        pairingCodes[sessionId] = code;
         sendCode(code);
         pairingDone = true;
       } catch (err) {
@@ -414,7 +457,7 @@ export async function disconnectSession(sessionId: string): Promise<void> {
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
     delete stores[sessionId];
-    delete qrCodes[sessionId];
+    clearQR(sessionId);
     readyClients.delete(sessionId);
     logger.info(`Session ${sessionId} disconnected and removed`);
   }
@@ -438,7 +481,7 @@ export async function endSession(sessionId: string): Promise<void> {
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
     delete stores[sessionId];
-    delete qrCodes[sessionId];
+    clearQR(sessionId);
     readyClients.delete(sessionId);
     logger.info(`Session ${sessionId} closed (creds preserved)`);
   }
@@ -498,7 +541,7 @@ export async function clearSession(sessionId: string): Promise<void> {
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
     delete stores[sessionId];
-    delete qrCodes[sessionId];
+    clearQR(sessionId);
     readyClients.delete(sessionId);
     logger.info(`✅ Memory cleaned for ${sessionId}`);
 

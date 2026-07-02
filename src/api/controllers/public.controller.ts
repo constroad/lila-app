@@ -137,6 +137,10 @@ type PortalInputRecord = {
   purchaseOrderNumber?: string;
   arriveDate: string;
   status?: string;
+  // Provistos por Portal /api/input al crear una recepción pública: enlace de
+  // evidencias (6 meses) y mensaje unificado ya construido (mismo que WhatsApp).
+  evidenceUrl?: string;
+  notificationMessage?: string;
 };
 
 type PortalMeasureRecord = {
@@ -768,6 +772,8 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       locationId: input.locationId,
       locationName: input.locationName,
       material: `${input.materialName} ${input.materialDescription}`.trim(),
+      // Nombre puro (sin descripción) para el mensaje WhatsApp/Telegram.
+      materialName: input.materialName,
       providerId: input.providerId,
       providerName: input.providerName,
       chancadora: input.chancadora,
@@ -797,11 +803,13 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
 
     await sendTelegramTextMessage(
       telegramChatId,
-      buildSuccessStatusMessage(input, {
-        resourceId: createdInput._id,
-        uploadedCount: uploadSummary.uploadedCount,
-        failedCount: uploadSummary.failedCount,
-      })
+      // Mismo mensaje que WhatsApp (construido por Portal). Fallback al técnico si no vino.
+      createdInput.notificationMessage ||
+        buildSuccessStatusMessage(input, {
+          resourceId: createdInput._id,
+          uploadedCount: uploadSummary.uploadedCount,
+          failedCount: uploadSummary.failedCount,
+        })
     );
 
     return;
@@ -822,6 +830,8 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
       locationId: input.locationId,
       locationName: input.locationName,
       material: `${input.materialName} ${input.materialDescription}`.trim(),
+      // Nombre puro (sin descripción) para el mensaje WhatsApp/Telegram.
+      materialName: input.materialName,
       providerId: input.providerId,
       providerName: input.providerName,
       vendorProviderId: input.vendorProviderId,
@@ -872,11 +882,14 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
 
   await sendTelegramTextMessage(
     telegramChatId,
-    buildSuccessStatusMessage(input, {
-      resourceId: activeInput._id,
-      uploadedCount: uploadSummary.uploadedCount,
-      failedCount: uploadSummary.failedCount,
-    })
+    // Mismo mensaje que WhatsApp cuando Portal lo provee (modo cisterna nuevo);
+    // si el ingreso venía de una recepción previa sin mensaje, fallback al técnico.
+    activeInput.notificationMessage ||
+      buildSuccessStatusMessage(input, {
+        resourceId: activeInput._id,
+        uploadedCount: uploadSummary.uploadedCount,
+        failedCount: uploadSummary.failedCount,
+      })
   );
 };
 

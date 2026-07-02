@@ -12,6 +12,7 @@ import {
   startSession,
   createPairingSession,
   getQRCode,
+  getQRCodeGeneratedAt,
   isSessionReady,
   listSessions,
   disconnectSession as disconnectSimpleSession,
@@ -118,15 +119,30 @@ export async function createPairingSessionHandler(
 
     logger.info(`Creating pairing code session for ${phoneNumber}`);
 
-    let pairingCode = '';
-
-    // Create pairing session
-    await createPairingSession(phoneNumber, (code) => {
-      pairingCode = code;
+    // Esperar hasta PAIRING_WAIT_MS a que Baileys genere el código (no un sleep fijo:
+    // el código puede tardar unos segundos y el sleep de 2s a veces respondía vacío).
+    const PAIRING_WAIT_MS = 20000;
+    const pairingCode = await new Promise<string>((resolve) => {
+      let settled = false;
+      const finish = (code: string) => {
+        if (settled) return;
+        settled = true;
+        resolve(code);
+      };
+      createPairingSession(phoneNumber, (code) => finish(code)).catch((error) => {
+        logger.error('Error creating pairing session:', error);
+        finish('');
+      });
+      setTimeout(() => finish(''), PAIRING_WAIT_MS);
     });
 
-    // Wait briefly for code
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (!pairingCode) {
+      const error: CustomError = new Error(
+        'No se pudo generar el código de vinculación. Intenta de nuevo.'
+      );
+      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      return next(error);
+    }
 
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
@@ -134,7 +150,7 @@ export async function createPairingSessionHandler(
         phoneNumber,
         pairingCode,
         instructions:
-          'Open WhatsApp → Settings → Linked Devices → Link with phone number → Enter this code',
+          'WhatsApp → Ajustes → Dispositivos vinculados → Vincular con número de teléfono → ingresa este código',
       },
     });
   } catch (error) {
@@ -346,6 +362,7 @@ export async function getQRCodeImageHandler(req: Request, res: Response, next: N
           isConnected: false,
           qr: qrText,
           qrImage: qrDataUrl,
+          qrGeneratedAt: getQRCodeGeneratedAt(phoneNumber) ?? Date.now(),
         },
       });
       return;

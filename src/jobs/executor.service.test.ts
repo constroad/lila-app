@@ -116,8 +116,8 @@ describe('JobExecutor helpers', () => {
     ).toBe('https://constroad.com/api/cron/weather-asphalt-forecast');
   });
 
-  it('keeps background jobs enabled in development', () => {
-    expect(shouldInitializeBackgroundJobs('development')).toBe(true);
+  it('keeps automatic background jobs disabled in development', () => {
+    expect(shouldInitializeBackgroundJobs('development')).toBe(false);
   });
 
   it('keeps background jobs enabled in production', () => {
@@ -126,6 +126,14 @@ describe('JobExecutor helpers', () => {
 
   it('skips background jobs in tests', () => {
     expect(shouldInitializeBackgroundJobs('test')).toBe(false);
+  });
+
+  it('allows an explicit local override for deliberate cron testing', () => {
+    expect(shouldInitializeBackgroundJobs('development', true)).toBe(true);
+  });
+
+  it('allows production cronjobs to be disabled explicitly', () => {
+    expect(shouldInitializeBackgroundJobs('production', false)).toBe(false);
   });
 
   it('injects company and chat headers from the persisted cron job', async () => {

@@ -410,11 +410,12 @@ describe('createPairingSession', () => {
     expect(subject.listSessions()).toEqual(['51111111111']);
   });
 
-  it('requests pairing code on connecting when creds are not registered', async () => {
+  it('requests pairing code (número saneado a solo dígitos) when creds are not registered', async () => {
     const sendCode = jest.fn();
-    await subject.createPairingSession('+51111111111', sendCode);
+    await subject.createPairingSession('+51 111-111-111', sendCode);
     await fireConnecting(currentSocket);
-    expect(currentSocket.requestPairingCode).toHaveBeenCalledWith('+51111111111');
+    // Baileys exige E.164 sin '+'/espacios/guiones: solo dígitos con código de país.
+    expect(currentSocket.requestPairingCode).toHaveBeenCalledWith('51111111111');
     expect(sendCode).toHaveBeenCalledWith('PAIR1234');
   });
 
@@ -436,8 +437,21 @@ describe('createPairingSession', () => {
     expect(flushOutboxForSession).toHaveBeenCalledWith('51111111111');
   });
 
-  it('schedules reconnection on a non-loggedOut close', async () => {
+  it('does NOT reconnect on non-loggedOut close while not yet paired (evita spam de códigos → 429)', async () => {
     await subject.createPairingSession('+51111111111', jest.fn());
+    currentSocket.authState.creds.registered = false;
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    currentSocket.ev.emit('connection.update', {
+      connection: 'close',
+      lastDisconnect: { error: { output: { statusCode: 500 } } },
+    });
+    await Promise.resolve();
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+  });
+
+  it('reconnects on non-loggedOut close once already paired (registered)', async () => {
+    await subject.createPairingSession('+51111111111', jest.fn());
+    currentSocket.authState.creds.registered = true;
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
     currentSocket.ev.emit('connection.update', {
       connection: 'close',

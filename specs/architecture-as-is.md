@@ -49,6 +49,9 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - **Conteo de mensajes (fuente unica):** lila-app es el UNICO punto de conteo de mensajes WhatsApp (Portal ya no cuenta envios, solo el patron de storage). `whatsapp-direct.service.ts` cuenta una vez por envio via `quotaValidatorService.incrementWhatsAppUsage`, resolviendo la company por el sender (`getCompanyByWhatsappSender`) cuando el caller no pasa `companyId` (caso de envios disparados por Portal, que llegan a `/message/:sender/*` sin tenant). El cron (`jobs/executor.service.ts`) ya pasa `companyId`.
 - **Store liviano (junio 2026):** el `InMemoryStore` ya NO almacena ni persiste mensajes (solo chats/contactos/grupos). `writeToFile` es async + atomico (tmp+rename) + dirty-flag, sin pretty-print. Antes el store crecia sin limite (medido 84 MB) y se escribia con `writeFileSync` bloqueante cada 10s. Grupos/contactos se sirven desde el store (lectura en memoria). Ver `specs/SCALABILITY-MULTI-SESSION.spec`.
 - **Rate-limit / lecturas:** `apiLimiter` (por IP) ahora exime el trafico autenticado por tenant (JWT/`lk_fe_`), para que las lecturas server-to-server de Portal (grupos/contactos) no agoten el bucket. Portal ademas cachea esas lecturas 60s (`server/whatsapp/whatsappReadCache.ts`) y los selectores exponen `refresh()` que invalida esa cache (`?refresh=1`). `mongoSanitize` global limpia `$`/`.` de body/query/params.
+- **Vinculación alternativa por número:** `POST /api/sessions/:phoneNumber/request-pairing-code`
+  genera el código Baileys con espera acotada y autenticación de tenant. Portal lo
+  expone en Empresa → WhatsApp como alternativa al QR.
 - **RLS de `/message`:** exige `requireTenantOrApiKey`. JWT y API keys
   `lk_fe_` quedan bloqueados cuando el sender no pertenece a su company.
   El secreto global conserva acceso administrativo legacy. El lookup de propiedad
@@ -113,6 +116,10 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - `jobs.controller.v2.ts` + `scheduler.service.ts`.
 - Persistencia migrada a MongoDB Portal (ver `scripts/migrate-cronjobs-to-mongo.ts`); fallback a JSON.
 - Tipos: `api` (axios GET) y `message` (WhatsApp).
+- La programación automática está habilitada por defecto únicamente con
+  `NODE_ENV=production`. Development/test persisten y permiten ejecutar jobs
+  manualmente, pero no registran tareas `node-cron`. `CRONJOBS_ENABLED=true`
+  habilita deliberadamente la programación fuera de producción.
 
 ### MongoDB Portal (Fase 10 - Quotas)
 - Conexion compartida con pool y circuit breaker: `src/database/sharedConnection.ts`.
@@ -210,6 +217,7 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 | `PORTAL_MONGO_URI` | mongodb://localhost:27017 | Mongo Portal (mismo cluster) |
 | `PORTAL_SHARED_DB` | constroad_db | DB unificada multi-tenant |
 | `PORTAL_BASE_URL` | http://localhost:3000 | Callbacks HTTP a Portal |
+| `CRONJOBS_ENABLED` | true solo en production | Override explícito de programación automática |
 | `CRONJOBS_STORAGE` | `./data/cronjobs.json` | Fallback storage |
 | `PDF_TEMPLATES_DIR` | `./templates/pdf` | Handlebars + PDF base |
 | `PDF_UPLOADS_DIR` | `./uploads` | |
