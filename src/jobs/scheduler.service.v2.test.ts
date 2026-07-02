@@ -1,41 +1,32 @@
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+
 const mockGetSharedModels = jest.fn();
 const mockCronSchedule = jest.fn();
 
-jest.mock('node-cron', () => ({
+jest.unstable_mockModule('node-cron', () => ({
   __esModule: true,
-  default: {
-    schedule: mockCronSchedule,
-  },
+  default: { schedule: mockCronSchedule },
 }));
 
-jest.mock('../database/models.js', () => ({
+jest.unstable_mockModule('../database/models.js', () => ({
   getSharedModels: mockGetSharedModels,
 }));
 
-jest.mock('../config/environment.js', () => ({
+jest.unstable_mockModule('../config/environment.js', () => ({
   __esModule: true,
-  default: {
-    jobs: { enabled: false },
-  },
+  default: { jobs: { enabled: false } },
 }));
 
-jest.mock('./executor.service.js', () => ({
-  JobExecutor: jest.fn().mockImplementation(() => ({
-    execute: jest.fn(),
-  })),
+jest.unstable_mockModule('./executor.service.js', () => ({
+  JobExecutor: jest.fn().mockImplementation(() => ({ execute: jest.fn() })),
 }));
 
-jest.mock('../utils/logger.js', () => ({
+jest.unstable_mockModule('../utils/logger.js', () => ({
   __esModule: true,
-  default: {
-    debug: jest.fn(),
-    error: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-  },
+  default: { debug: jest.fn(), error: jest.fn(), info: jest.fn(), warn: jest.fn() },
 }));
 
-import JobSchedulerV2 from './scheduler.service.v2.js';
+const { default: JobSchedulerV2 } = await import('./scheduler.service.v2.js');
 
 describe('JobSchedulerV2 automatic scheduling guard', () => {
   beforeEach(() => {

@@ -1,59 +1,46 @@
-import axios from 'axios';
-import { JobExecutor } from './executor.service.js';
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import {
   materializeRetryJob,
   normalizeExecutorApiUrl,
   shouldInitializeBackgroundJobs,
 } from './executor.utils.js';
 
-jest.mock('axios', () => ({
+const axiosRequestMock = jest.fn();
+
+jest.unstable_mockModule('axios', () => ({
   __esModule: true,
-  default: {
-    request: jest.fn(),
-  },
+  default: { request: axiosRequestMock },
 }));
 
-jest.mock('../config/environment.js', () => ({
+jest.unstable_mockModule('../config/environment.js', () => ({
   __esModule: true,
   config: {
-    logging: {
-      dir: './logs',
-    },
-    portal: {
-      baseUrl: 'https://constroad.com',
-    },
+    logging: { dir: './logs' },
+    portal: { baseUrl: 'https://constroad.com' },
   },
   default: {
-    logging: {
-      dir: './logs',
-    },
-    portal: {
-      baseUrl: 'https://constroad.com',
-    },
+    logging: { dir: './logs' },
+    portal: { baseUrl: 'https://constroad.com' },
   },
 }));
 
-jest.mock('../database/models.js', () => ({
+jest.unstable_mockModule('../database/models.js', () => ({
   __esModule: true,
   getSharedModels: jest.fn(),
+  getUsageMetricModel: jest.fn(),
 }));
 
-jest.mock('../services/whatsapp-direct.service.js', () => ({
+jest.unstable_mockModule('../services/whatsapp-direct.service.js', () => ({
   __esModule: true,
-  WhatsAppDirectService: {
-    sendMessage: jest.fn(),
-  },
+  WhatsAppDirectService: { sendMessage: jest.fn() },
 }));
 
-jest.mock('../utils/logger.js', () => ({
+jest.unstable_mockModule('../utils/logger.js', () => ({
   __esModule: true,
-  default: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-  },
+  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
+
+const { JobExecutor } = await import('./executor.service.js');
 
 describe('JobExecutor helpers', () => {
   beforeEach(() => {
@@ -65,22 +52,16 @@ describe('JobExecutor helpers', () => {
       _id: '69a8a1f9f8e7b323ddb54e79',
       name: 'Clima 6am',
       companyId: 'constroad',
-      retryPolicy: {
-        currentRetries: 1,
-      },
+      retryPolicy: { currentRetries: 1 },
     }));
 
-    const job = {
-      toObject,
-    } as any;
+    const job = { toObject } as any;
 
     expect(materializeRetryJob(job)).toEqual({
       _id: '69a8a1f9f8e7b323ddb54e79',
       name: 'Clima 6am',
       companyId: 'constroad',
-      retryPolicy: {
-        currentRetries: 1,
-      },
+      retryPolicy: { currentRetries: 1 },
     });
     expect(toObject).toHaveBeenCalledWith({
       depopulate: true,
@@ -137,13 +118,7 @@ describe('JobExecutor helpers', () => {
   });
 
   it('injects company and chat headers from the persisted cron job', async () => {
-    const requestMock = jest.mocked(axios.request);
-    requestMock.mockResolvedValue({
-      status: 200,
-      data: {
-        ok: true,
-      },
-    } as never);
+    axiosRequestMock.mockResolvedValue({ status: 200, data: { ok: true } } as never);
 
     const executor = new JobExecutor() as any;
 
@@ -154,16 +129,12 @@ describe('JobExecutor helpers', () => {
         url: 'https://constroad.com/api/cron/kardex-check',
         method: 'POST',
         headers: {},
-        body: {
-          custom: true,
-        },
+        body: { custom: true },
       },
-      message: {
-        chatId: '120363402457346500@g.us',
-      },
+      message: { chatId: '120363402457346500@g.us' },
     });
 
-    expect(requestMock).toHaveBeenCalledWith(
+    expect(axiosRequestMock).toHaveBeenCalledWith(
       expect.objectContaining({
         url: 'https://constroad.com/api/cron/kardex-check',
         method: 'POST',
@@ -173,9 +144,7 @@ describe('JobExecutor helpers', () => {
           'x-cronjob-chat-id': '120363402457346500@g.us',
           'x-cronjob-return-message': '1',
         }),
-        data: {
-          custom: true,
-        },
+        data: { custom: true },
       })
     );
   });
