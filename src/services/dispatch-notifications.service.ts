@@ -33,6 +33,24 @@ async function sendPlantTelegram(message: string): Promise<void> {
   }
 }
 
+async function schedulePlantTelegram(
+  message: string,
+  dedupeKey: string,
+  delayMs: number
+): Promise<boolean> {
+  try {
+    const { scheduleTelegramAlert } = await import('./telegram-alert.service.js');
+    return scheduleTelegramAlert({
+      availableAt: new Date(Date.now() + delayMs),
+      dedupeKey,
+      message,
+    });
+  } catch (error) {
+    logger.warn('plant_telegram.schedule_failed', { error: String(error) });
+    return false;
+  }
+}
+
 type CompletionRow = NonNullable<DispatchPostProcessInput['orderCompletion']>['rows'][number];
 
 async function claimNotificationFlag(key: string, companyId: string) {
@@ -537,8 +555,9 @@ export async function sendPlantEndIfNotSent(
   const dayKey = new Date().toLocaleDateString('en-CA', {
     timeZone: 'America/Lima',
   });
+  const notificationKey = `plant-end:${companyId}:${dayKey}`;
   const shouldSend = await claimNotificationFlag(
-    `plant-end:${companyId}:${dayKey}`,
+    notificationKey,
     companyId
   );
   if (!shouldSend) {
@@ -556,20 +575,28 @@ export async function sendPlantEndIfNotSent(
     companyId,
     delayMs: PLANT_END_NOTIFICATION_DELAY_MS,
   });
+  const telegramScheduled = await schedulePlantTelegram(
+    message,
+    `telegram:${notificationKey}`,
+    PLANT_END_NOTIFICATION_DELAY_MS
+  );
   setTimeout(() => {
     void (async () => {
-      if (plantGroupId) {
+      if (!telegramScheduled) {
+        await sendPlantTelegram(message);
+      }
+      if (sender && plantGroupId) {
         await sendToGroup(sender, plantGroupId, message, companyId).catch((error) =>
           logger.error('plant_end.whatsapp_failed', { companyId, error: String(error) })
         );
       }
-      await sendPlantTelegram(message);
     })();
   }, PLANT_END_NOTIFICATION_DELAY_MS);
 }
 
 export async function sendDispatchNotifications(params: NotificationParams) {
   const { input, context } = params;
+  const hasWhatsAppSender = Boolean(input.sender.trim());
   const note = toSafeText(input.note, 'Unidad');
   const quantity = Number.isFinite(Number(input.quantity)) ? Number(input.quantity) : 0;
   const plate = toSafeText(input.plate);
@@ -584,73 +611,100 @@ export async function sendDispatchNotifications(params: NotificationParams) {
     input.companyId
   );
 
-  if (!dispatchSent) {
-    return;
-  }
-
-  // Aviso de progreso de PLANTA: al grupo de planta configurado (solo si existe) y SIEMPRE al
-  // Telegram de alertas. Mensaje editable (customMessage) o el default. NO usa el hardcode viejo.
-  const plantProgressMsg = context.plantProgressTemplate
-    ? renderMessageTemplate(context.plantProgressTemplate, {
-        botLabel: context.companyBotLabel,
-        unidad: dispatchOrdinal,
-        pendientes: input.pendingCount,
-      })
-    : buildPlantProgressMessage(context.companyBotLabel, dispatchOrdinal, input.pendingCount);
-  if (context.plantGroupId) {
-    await sendToGroup(input.sender, context.plantGroupId, plantProgressMsg, input.companyId);
-  }
-  await sendPlantTelegram(plantProgressMsg);
-
-  const clientTargets = resolveClientTargets(input, context.adminGroupId);
-  if (clientTargets.length > 0) {
-    await sendToTargets(
-      input.sender,
-      clientTargets,
-      buildClientDispatchMessage({
-        botLabel: context.companyBotLabel,
-        note,
-        quantity,
-        plate,
-        driverName,
-        driverLicense,
-        driverPhoneNumber,
-        obra,
-        pendingCount: clientPendingCount,
-      }),
-      input.companyId
-    );
-  }
-
-  const realClientTargets = input.sendDispatchMessage ? input.clientTargets : [];
-  if (input.dispatchFinished && clientTargets.length > 0) {
-    const completionSent = await sendOrderCompletionSummary({
-      sender: input.sender,
-      targets: clientTargets,
-      botLabel: context.companyBotLabel,
-      companyId: input.companyId,
-      completion: input.orderCompletion,
-    });
-    if (!completionSent) {
-      await sendToTargets(
+  if (dispatchSent) {
+    // Telegram es independiente de la sesión WhatsApp.
+    const plantProgressMsg = context.plantProgressTemplate
+      ? renderMessageTemplate(context.plantProgressTemplate, {
+          botLabel: context.companyBotLabel,
+          unidad: dispatchOrdinal,
+          pendientes: input.pendingCount,
+        })
+      : buildPlantProgressMessage(
+          context.companyBotLabel,
+          dispatchOrdinal,
+          input.pendingCount
+        );
+    await sendPlantTelegram(plantProgressMsg);
+    if (hasWhatsAppSender && context.plantGroupId) {
+      await sendToGroup(
         input.sender,
-        clientTargets,
-        buildClientCompleteMessage(context.companyBotLabel, obra),
+        context.plantGroupId,
+        plantProgressMsg,
         input.companyId
+      ).catch((error) =>
+        logger.error('plant_progress.whatsapp_failed', {
+          companyId: input.companyId,
+          error: String(error),
+        })
       );
     }
 
-    if (realClientTargets.length > 0) {
-      scheduleIppReadyNotification({
-        dispatchId: input.dispatchId,
+    const clientTargets = resolveClientTargets(input, context.adminGroupId);
+    if (hasWhatsAppSender && clientTargets.length > 0) {
+      await sendToTargets(
+        input.sender,
+        clientTargets,
+        buildClientDispatchMessage({
+          botLabel: context.companyBotLabel,
+          note,
+          quantity,
+          plate,
+          driverName,
+          driverLicense,
+          driverPhoneNumber,
+          obra,
+          pendingCount: clientPendingCount,
+        }),
+        input.companyId
+      ).catch((error) =>
+        logger.error('client_dispatch.whatsapp_failed', {
+          companyId: input.companyId,
+          error: String(error),
+        })
+      );
+    }
+
+    const realClientTargets = input.sendDispatchMessage ? input.clientTargets : [];
+    if (hasWhatsAppSender && input.dispatchFinished && clientTargets.length > 0) {
+      const completionSent = await sendOrderCompletionSummary({
         sender: input.sender,
-        targets: realClientTargets,
+        targets: clientTargets,
         botLabel: context.companyBotLabel,
-        obra,
         companyId: input.companyId,
-        ippReportUnavailableReason: input.ippReportUnavailableReason,
-        ippReportPayload: input.ippReportPayload,
+        completion: input.orderCompletion,
+      }).catch((error) => {
+        logger.error('client_completion.whatsapp_failed', {
+          companyId: input.companyId,
+          error: String(error),
+        });
+        return false;
       });
+      if (!completionSent) {
+        await sendToTargets(
+          input.sender,
+          clientTargets,
+          buildClientCompleteMessage(context.companyBotLabel, obra),
+          input.companyId
+        ).catch((error) =>
+          logger.error('client_completion_fallback.whatsapp_failed', {
+            companyId: input.companyId,
+            error: String(error),
+          })
+        );
+      }
+
+      if (realClientTargets.length > 0) {
+        scheduleIppReadyNotification({
+          dispatchId: input.dispatchId,
+          sender: input.sender,
+          targets: realClientTargets,
+          botLabel: context.companyBotLabel,
+          obra,
+          companyId: input.companyId,
+          ippReportUnavailableReason: input.ippReportUnavailableReason,
+          ippReportPayload: input.ippReportPayload,
+        });
+      }
     }
   }
 

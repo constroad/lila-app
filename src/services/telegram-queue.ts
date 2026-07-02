@@ -9,6 +9,7 @@ export type TelegramQueueItem = {
   message: string;
   dedupeKey?: string;
   createdAt: string;
+  availableAt?: string;
   attempts: number;
   lastError?: string;
 };
@@ -40,8 +41,12 @@ export class TelegramQueue {
    * (so dedupe-blocked alerts don't pile up).
    * Drops the oldest item when MAX_QUEUE_SIZE is reached.
    */
-  async enqueue(params: { message: string; dedupeKey?: string }): Promise<TelegramQueueItem | null> {
-    const { message, dedupeKey } = params;
+  async enqueue(params: {
+    message: string;
+    dedupeKey?: string;
+    availableAt?: string;
+  }): Promise<TelegramQueueItem | null> {
+    const { message, dedupeKey, availableAt } = params;
     const queue = await this.list();
 
     if (dedupeKey && queue.some((entry) => entry.dedupeKey === dedupeKey)) {
@@ -53,6 +58,7 @@ export class TelegramQueue {
       message,
       dedupeKey,
       createdAt: new Date().toISOString(),
+      availableAt,
       attempts: 0,
     };
 

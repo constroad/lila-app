@@ -138,13 +138,18 @@ describe('dispatch-post-process.service', () => {
 
     expect(sendDispatchNotifications).toHaveBeenCalledWith({
       input: expect.objectContaining({ dispatchId: 'dispatch-1' }),
-      context: { companyBotLabel: '🤖 ConstroadBot' },
+      context: expect.objectContaining({
+        companyBotLabel: '🤖 ConstroadBot',
+      }),
     });
   });
 
-  it('skips WhatsApp when sender is empty', async () => {
+  it('keeps Telegram notifications when sender is empty', async () => {
     await service.processPostDispatch(buildInput({ sender: '' }));
 
-    expect(sendDispatchNotifications).not.toHaveBeenCalled();
+    expect(sendDispatchNotifications).toHaveBeenCalledWith({
+      input: expect.objectContaining({ sender: '' }),
+      context: expect.objectContaining({ companyBotLabel: '🤖 ConstroadBot' }),
+    });
   });
 });

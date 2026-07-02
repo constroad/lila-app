@@ -86,6 +86,26 @@ export async function sendTelegramAlert(params: {
   return false;
 }
 
+export async function scheduleTelegramAlert(params: {
+  availableAt: Date;
+  dedupeKey: string;
+  message: string;
+}): Promise<boolean> {
+  if (!config.telegram.botToken || !config.telegram.errorsChatId) return false;
+
+  try {
+    const queuedAlert = await telegramQueue.enqueue({
+      availableAt: params.availableAt.toISOString(),
+      dedupeKey: params.dedupeKey,
+      message: params.message,
+    });
+    return queuedAlert !== null;
+  } catch (error) {
+    logger.error('Failed to schedule Telegram alert', error);
+    return false;
+  }
+}
+
 let isFlushing = false;
 
 export type TelegramFlushResult = {
@@ -115,6 +135,9 @@ export async function flushTelegramQueue(): Promise<TelegramFlushResult> {
     }
 
     for (const item of items) {
+      if (item.availableAt && Date.parse(item.availableAt) > Date.now()) {
+        continue;
+      }
       const result = await sendOnce(item.message);
       if (result.ok) {
         await telegramQueue.remove(item.id);

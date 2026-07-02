@@ -96,8 +96,9 @@ export async function processPostDispatch(input: DispatchPostProcessInput) {
   }
 
   if (!input.sender) {
-    console.warn(`[post-process] No sender for ${input.companyId}. Skipping WhatsApp.`);
-    return;
+    console.warn(
+      `[post-process] No sender for ${input.companyId}. Telegram remains enabled.`
+    );
   }
 
   await sendDispatchNotifications({

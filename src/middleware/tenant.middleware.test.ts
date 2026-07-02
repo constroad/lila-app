@@ -3,10 +3,16 @@ import type { Request, Response, NextFunction } from 'express';
 
 // El guard consulta quota-validator para saber qué companies usan un sender.
 const listCompaniesByWhatsappSender = jest.fn(async (_s: string) => [] as { companyId: string }[]);
+const getCompanyByWhatsappSender = jest.fn(
+  async (_s: string) => null as { companyId: string } | null
+);
 
 jest.unstable_mockModule('../services/quota-validator.service.js', () => ({
   __esModule: true,
-  quotaValidatorService: { listCompaniesByWhatsappSender },
+  quotaValidatorService: {
+    getCompanyByWhatsappSender,
+    listCompaniesByWhatsappSender,
+  },
 }));
 
 jest.unstable_mockModule('../config/environment.js', () => ({
@@ -26,6 +32,8 @@ jest.unstable_mockModule('../database/models.js', () => ({
 
 const loadGuard = async () =>
   (await import('./tenant.middleware.js')).guardSharedSenderDestructive;
+const loadOwnershipGuard = async () =>
+  (await import('./tenant.middleware.js')).requireSenderOwnership;
 
 const run = async (
   guard: (req: Request, res: Response, next: NextFunction) => Promise<void>,
@@ -37,6 +45,48 @@ const run = async (
 };
 
 const owners = (...ids: string[]) => ids.map((companyId) => ({ companyId }));
+
+describe('requireSenderOwnership', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    getCompanyByWhatsappSender.mockReset();
+    getCompanyByWhatsappSender.mockResolvedValue(null);
+  });
+
+  it('allows the sender owned by the tenant', async () => {
+    getCompanyByWhatsappSender.mockResolvedValue({ companyId: 'constroad' });
+    const guard = await loadOwnershipGuard();
+    const next = await run(guard, {
+      companyId: 'constroad',
+      params: { sessionPhone: '51949376824' },
+    });
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('blocks an unassigned or cross-company sender', async () => {
+    const guard = await loadOwnershipGuard();
+    const next = await run(guard, {
+      companyId: 'test',
+      params: { sessionPhone: '51902049935' },
+    });
+
+    const error = next.mock.calls[0][0] as { statusCode?: number };
+    expect(error.statusCode).toBe(403);
+  });
+
+  it('fails closed when ownership cannot be verified', async () => {
+    getCompanyByWhatsappSender.mockRejectedValue(new Error('mongo down'));
+    const guard = await loadOwnershipGuard();
+    const next = await run(guard, {
+      companyId: 'test',
+      params: { sessionPhone: '51902049935' },
+    });
+
+    const error = next.mock.calls[0][0] as { statusCode?: number };
+    expect(error.statusCode).toBe(503);
+  });
+});
 
 describe('guardSharedSenderDestructive', () => {
   beforeEach(() => {

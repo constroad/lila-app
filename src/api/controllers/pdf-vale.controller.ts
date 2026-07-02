@@ -7,7 +7,7 @@ import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
 import { config } from '../../config/environment.js';
 import { renderPdfPageToPngWithGrid } from '../../pdf/render.service.js';
-import { listSessions, isSessionReady, getSession } from '../../whatsapp/baileys/sessions.simple.js';
+import { isSessionReady, getSession } from '../../whatsapp/baileys/sessions.simple.js';
 import { normalizeWhatsAppRecipient } from '../../utils/whatsapp-phone.js';
 
 type ValeFields = {
@@ -74,11 +74,6 @@ function adjustFontSizeForValue(
   return baseSize;
 }
 
-function getDefaultWhatsappSession() {
-  const sessions = listSessions();
-  return sessions.find((phone) => isSessionReady(phone)) || null;
-}
-
 async function sendWhatsappNotification(
   sessionOverride: string | undefined,
   target: string,
@@ -86,9 +81,9 @@ async function sendWhatsappNotification(
   fileBuffer: Buffer,
   filename: string
 ) {
-  const sessionPhone = sessionOverride || getDefaultWhatsappSession();
+  const sessionPhone = String(sessionOverride || '').replace(/\D/g, '');
   if (!sessionPhone) {
-    throw new Error('No WhatsApp session connected');
+    throw new Error('WhatsApp sender is required');
   }
   const recipient = normalizeWhatsAppRecipient(target, {
     allowGroupShortcut: true,

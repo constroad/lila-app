@@ -12,6 +12,7 @@ import { sendTelegramAlert } from './telegram-alert.service.js';
 import { normalizeWhatsAppPhoneNumber } from '../utils/whatsapp-phone.js';
 import { buildDispatchValePayloadFromPortal } from './dispatch-vale-payload.service.js';
 import { getDispatchValeRunModel } from '../models/dispatch-vale-run.model.js';
+import { getCompanyBotLabel } from '../utils/company-bot.js';
 
 const DISPATCH_VALE_LOCK_MS = 2 * 60 * 1000;
 
@@ -44,15 +45,15 @@ function cleanUrl(url: string): string {
 function normalizeSender(sender?: string): string {
   return String(sender || '').replace(/\D/g, '').trim();
 }
-function isLocalDispatchValeScope(companyId: string): boolean {
-  return config.nodeEnv === 'development' || companyId.trim().toLowerCase() === 'test';
-}
-function resolveDispatchValeSender(companyId: string, preferredSender: string, companySender: string) {
-  const requestedSender = normalizeSender(preferredSender) || normalizeSender(companySender);
-  if (!isLocalDispatchValeScope(companyId)) return requestedSender;
-  if (requestedSender && WhatsAppDirectService.isSessionReady(requestedSender)) return requestedSender;
-  return WhatsAppDirectService.getSessions()
-    .find((sessionId) => WhatsAppDirectService.isSessionReady(sessionId)) || requestedSender;
+export function resolveDispatchValeSender(
+  preferredSender: string,
+  companySender: string
+): string {
+  const configuredSender = normalizeSender(companySender);
+  const requestedSender = normalizeSender(preferredSender);
+  if (!configuredSender) return '';
+  if (requestedSender && requestedSender !== configuredSender) return configuredSender;
+  return configuredSender;
 }
 function isQueuedWhatsAppResult(value: unknown): value is { queued: true } {
   return (
@@ -401,8 +402,10 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     const CompanyModel = await getCompanyModel();
     const company = await CompanyModel.findOne({ companyId, isActive: true }).lean();
     const companyName = String(company?.name || 'ConstRoad').trim() || 'ConstRoad';
+    const companyBotLabel = getCompanyBotLabel(
+      company?.slug || company?.name || companyId
+    );
     const sender = resolveDispatchValeSender(
-      companyId,
       resolvedInput.sender,
       String(company?.whatsappConfig?.sender || '')
     );
@@ -458,7 +461,12 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
     } else if (!sender) {
       whatsapp.skippedReason = 'company sender not configured';
     } else {
-      const caption = `${companyName}:\n\nHola ${normalizedDriverName || 'chofer'} *${companyName}* te envia tu guia de remision`;
+      const caption = [
+        companyBotLabel,
+        '',
+        `Hola ${normalizedDriverName || 'chofer'},`,
+        `${companyName} te envía tu vale de despacho.`,
+      ].join('\n');
 
       try {
         logger.info('dispatch_vale.whatsapp_file_sending', {
@@ -515,7 +523,7 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
             WhatsAppDirectService.sendMessage(
               sender,
               normalizedPhone,
-              `${companyName}:\n\n${normalizedDriverName || 'Chofer'} te enviamos la Ubicación de la obra:\n- 📍 aqui: ${normalizedLocation}`,
+              `${companyBotLabel}\n\n${normalizedDriverName || 'Chofer'}, te enviamos la ubicación de la obra:\n- 📍 Aquí: ${normalizedLocation}`,
               { companyId, queueOnFail: true }
             ),
             25000,

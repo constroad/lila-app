@@ -4,10 +4,8 @@ import multer from 'multer';
 import * as messageController from '../controllers/message.controller.simple.js';
 import {
   requireTenantOrApiKey,
-  optionalTenant,
   requireSenderOwnership,
 } from '../../middleware/tenant.middleware.js';
-import { config } from '../../config/environment.js';
 
 const router = Router();
 const upload = multer({
@@ -15,14 +13,9 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// Auth de envío. Backward-compatible por defecto:
-//  - WHATSAPP_RLS_ENFORCE != 'true' → `optionalTenant`: identifica el tenant si viene
-//    JWT (mejora el conteo y permite avisar de mismatches) pero NUNCA bloquea.
-//  - WHATSAPP_RLS_ENFORCE == 'true' → `requireTenantOrApiKey`: exige JWT de Portal,
-//    API key `lk_fe_` (producto) o el secreto global.
-// `requireSenderOwnership` valida que el sender pertenezca a la company (solo avisa
-// salvo que el flag esté activo). Ver SCALABILITY-MULTI-SESSION.spec §4.
-const messageAuth = config.whatsapp.rlsEnforce ? requireTenantOrApiKey : optionalTenant;
+// Todo envío requiere identidad. JWT y API keys tenant quedan limitados al sender
+// configurado de su empresa. El secreto global permanece para administración legacy.
+const messageAuth = requireTenantOrApiKey;
 
 // POST /api/messages/:sessionPhone/text - Enviar mensaje de texto
 router.post(

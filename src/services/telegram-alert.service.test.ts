@@ -6,13 +6,14 @@ const queueState: {
     message: string;
     dedupeKey?: string;
     createdAt: string;
+    availableAt?: string;
     attempts: number;
     lastError?: string;
   }>;
 } = { items: [] };
 
 const enqueueMock = jest.fn<
-  (params: { message: string; dedupeKey?: string }) => Promise<unknown>
+  (params: { message: string; dedupeKey?: string; availableAt?: string }) => Promise<unknown>
 >();
 const listMock = jest.fn(async () => queueState.items.slice());
 const updateMock = jest.fn(async (item: { id: string } & Record<string, unknown>) => {
@@ -69,6 +70,7 @@ const fetchMock = jest.fn<typeof fetch>();
 (globalThis as { fetch: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
 
 let sendTelegramAlert: typeof import('./telegram-alert.service.js').sendTelegramAlert;
+let scheduleTelegramAlert: typeof import('./telegram-alert.service.js').scheduleTelegramAlert;
 let flushTelegramQueue: typeof import('./telegram-alert.service.js').flushTelegramQueue;
 let startTelegramQueueFlusher: typeof import('./telegram-alert.service.js').startTelegramQueueFlusher;
 let resetTelegramAlertCacheForTests: typeof import('./telegram-alert.service.js').resetTelegramAlertCacheForTests;
@@ -76,6 +78,7 @@ let resetTelegramAlertCacheForTests: typeof import('./telegram-alert.service.js'
 beforeAll(async () => {
   const mod = await import('./telegram-alert.service.js');
   sendTelegramAlert = mod.sendTelegramAlert;
+  scheduleTelegramAlert = mod.scheduleTelegramAlert;
   flushTelegramQueue = mod.flushTelegramQueue;
   startTelegramQueueFlusher = mod.startTelegramQueueFlusher;
   resetTelegramAlertCacheForTests = mod.resetTelegramAlertCacheForTests;
@@ -84,12 +87,13 @@ beforeAll(async () => {
 beforeEach(() => {
   jest.clearAllMocks();
   queueState.items = [];
-  enqueueMock.mockImplementation(async ({ message, dedupeKey }) => {
+  enqueueMock.mockImplementation(async ({ message, dedupeKey, availableAt }) => {
     const item = {
       id: `id-${queueState.items.length + 1}`,
       message,
       dedupeKey,
       createdAt: new Date().toISOString(),
+      availableAt,
       attempts: 0,
     };
     queueState.items.push(item);
@@ -161,6 +165,25 @@ describe('sendTelegramAlert', () => {
     expect(second).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(enqueueMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('scheduleTelegramAlert', () => {
+  it('persists the alert until its delivery time', async () => {
+    const availableAt = new Date('2026-07-01T12:30:00.000Z');
+
+    const scheduled = await scheduleTelegramAlert({
+      availableAt,
+      dedupeKey: 'plant-end:test:2026-07-01',
+      message: 'Fin de producción',
+    });
+
+    expect(scheduled).toBe(true);
+    expect(enqueueMock).toHaveBeenCalledWith({
+      availableAt: availableAt.toISOString(),
+      dedupeKey: 'plant-end:test:2026-07-01',
+      message: 'Fin de producción',
+    });
   });
 });
 
@@ -239,6 +262,23 @@ describe('flushTelegramQueue', () => {
     const result = await flushTelegramQueue();
     expect(result).toEqual({ sent: 0, dropped: 0, remaining: 0 });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('skips alerts whose delivery time has not arrived', async () => {
+    queueState.items = [
+      {
+        id: 'future',
+        message: 'later',
+        createdAt: new Date().toISOString(),
+        availableAt: new Date(Date.now() + 60_000).toISOString(),
+        attempts: 0,
+      },
+    ];
+
+    const result = await flushTelegramQueue();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ sent: 0, dropped: 0, remaining: 1 });
   });
 });
 

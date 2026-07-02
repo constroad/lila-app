@@ -74,6 +74,7 @@ const { generateDispatchNoteDocumentFile } = require('./dispatch-note-document.s
 const {
   enqueueDispatchValeWorkflow,
   generateDispatchValeWorkflow,
+  resolveDispatchValeSender,
   validateDispatchValeWorkflowInput,
 } = require('./dispatch-vale.service.js');
 const { runPublicReceptionWorkflow } = require('../api/controllers/public.controller.js');
@@ -104,6 +105,7 @@ describe('generateDispatchValeWorkflow', () => {
     const findOne = jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue({
         name: 'ConstRoad',
+        slug: 'constroad',
         whatsappConfig: { sender: '51911111111' },
       }),
     });
@@ -157,9 +159,10 @@ describe('generateDispatchValeWorkflow', () => {
     });
     expect(axios.post).toHaveBeenCalledTimes(1);
     expect(WhatsAppDirectService.sendDocument).toHaveBeenCalledWith(
-      '51902049935',
+      '51911111111',
       '51999888777',
       expect.objectContaining({
+        caption: expect.stringContaining('vale de despacho'),
         companyId: 'constroad',
         filePath: 'dispatches/vales/nro-2026/file.pdf',
         fileName: 'vale unidad 1.pdf',
@@ -167,11 +170,15 @@ describe('generateDispatchValeWorkflow', () => {
       })
     );
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledWith(
-      '51902049935',
+      '51911111111',
       '51999888777',
-      expect.stringContaining('https://maps.app.goo.gl/demo'),
+      expect.stringContaining('🤖 ConstroadBot'),
       { companyId: 'constroad', queueOnFail: true }
     );
+    const documentOptions =
+      WhatsAppDirectService.sendDocument.mock.calls[0][2];
+    expect(documentOptions.caption).toContain('🤖 ConstroadBot');
+    expect(documentOptions.caption).not.toContain('guia de remision');
     expect(result.whatsapp.fileSent).toBe(true);
     expect(result.whatsapp.locationSent).toBe(true);
     expect(result.media).toEqual({ _id: 'media-1', url: 'https://lila.constroad.com/file.pdf' });
@@ -269,11 +276,12 @@ describe('generateDispatchValeWorkflow', () => {
     expect(result.whatsapp.locationError).toBe('queued');
   });
 
-  it('uses a ready local sender for test vale notifications', async () => {
+  it('never borrows another company sender for test notifications', async () => {
     const findOne = jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue({
-        name: 'ConstRoad',
-        whatsappConfig: { sender: '51949376824' },
+        name: 'TEST COMPANY',
+        slug: 'test',
+        whatsappConfig: {},
       }),
     });
     getCompanyModel.mockResolvedValue({ findOne });
@@ -312,11 +320,14 @@ describe('generateDispatchValeWorkflow', () => {
       },
     });
 
-    expect(WhatsAppDirectService.sendDocument).toHaveBeenCalledWith(
-      '51911111111',
-      '51999888777',
-      expect.objectContaining({ companyId: 'test' })
-    );
+    expect(WhatsAppDirectService.sendDocument).not.toHaveBeenCalled();
+  });
+
+  it('uses only the sender configured by the company', () => {
+    expect(
+      resolveDispatchValeSender('51902049935', '51949376824')
+    ).toBe('51949376824');
+    expect(resolveDispatchValeSender('51902049935', '')).toBe('');
   });
 
   it('normalizes sender provided by portal during validation', () => {

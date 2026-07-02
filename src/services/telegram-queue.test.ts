@@ -71,6 +71,13 @@ describe('TelegramQueue', () => {
       expect(item!.dedupeKey).toBe('k1');
     });
 
+    it('stores delayed availability when provided', async () => {
+      const availableAt = new Date(Date.now() + 60_000).toISOString();
+      const item = await queue.enqueue({ message: 'x', availableAt });
+
+      expect(item!.availableAt).toBe(availableAt);
+    });
+
     it('does not enqueue a duplicate when dedupeKey already pending', async () => {
       await queue.enqueue({ message: 'a', dedupeKey: 'same' });
       const second = await queue.enqueue({ message: 'b', dedupeKey: 'same' });

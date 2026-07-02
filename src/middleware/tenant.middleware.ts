@@ -334,10 +334,8 @@ export async function requireTenantOrApiKey(
  * Cierra el GAP cross-tenant de envío (una company no debe enviar por el sender de
  * otra). Ver SCALABILITY-MULTI-SESSION.spec §4.2/§4.3.
  *
- * Backward-compatible por defecto: si no hay `companyId` en el request (path legacy
- * con secreto global), no bloquea. Si hay mismatch solo **avisa** salvo que
- * `WHATSAPP_RLS_ENFORCE=true`, en cuyo caso responde 403. Esto permite hacer push a
- * producción y observar logs antes de activar el bloqueo.
+ * Sin `companyId` (secreto global administrativo) conserva compatibilidad.
+ * Con tenant identificado, cualquier mismatch se bloquea siempre.
  */
 export async function requireSenderOwnership(
   req: Request,
@@ -351,7 +349,6 @@ export async function requireSenderOwnership(
     return next();
   }
 
-  const enforce = config.whatsapp.rlsEnforce;
   try {
     const owner = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
     if (owner && owner.companyId === companyId) {
@@ -359,21 +356,16 @@ export async function requireSenderOwnership(
     }
     logger.warn(
       `Sender ownership mismatch: company ${companyId} intentó usar sender ${sessionPhone} ` +
-      `(owner=${owner?.companyId ?? 'desconocido'})${enforce ? ' [BLOQUEADO]' : ' [solo aviso]'}`
+      `(owner=${owner?.companyId ?? 'desconocido'}) [BLOQUEADO]`
     );
-    if (enforce) {
-      const error: CustomError = new Error('El sender no pertenece a la empresa autenticada');
-      error.statusCode = 403;
-      throw error;
-    }
-    return next();
+    const error: CustomError = new Error('El sender no pertenece a la empresa autenticada');
+    error.statusCode = 403;
+    return next(error);
   } catch (err) {
-    if (enforce && (err as CustomError)?.statusCode === 403) {
-      return next(err);
-    }
-    // Fallo de lookup → no bloquear (backward-compatible)
-    logger.debug('requireSenderOwnership lookup falló (ignorado):', err);
-    return next();
+    logger.warn('requireSenderOwnership lookup falló:', err);
+    const error: CustomError = new Error('No se pudo validar la propiedad del sender');
+    error.statusCode = 503;
+    return next(error);
   }
 }
 

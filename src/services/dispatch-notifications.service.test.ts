@@ -15,6 +15,11 @@ jest.mock('./whatsapp-direct.service.js', () => ({
   },
 }));
 
+jest.mock('./telegram-alert.service.js', () => ({
+  scheduleTelegramAlert: jest.fn().mockResolvedValue(true),
+  sendTelegramAlert: jest.fn().mockResolvedValue(true),
+}));
+
 jest.mock('../models/dispatch-notification-flag.model.js', () => ({
   getDispatchNotificationFlagModel: jest.fn(),
 }));
@@ -42,6 +47,10 @@ jest.mock('../utils/logger.js', () => ({
 const axios = require('axios').default;
 const logger = require('../utils/logger.js').default;
 const { WhatsAppDirectService } = require('./whatsapp-direct.service.js');
+const {
+  scheduleTelegramAlert,
+  sendTelegramAlert,
+} = require('./telegram-alert.service.js');
 const {
   getDispatchNotificationFlagModel,
 } = require('../models/dispatch-notification-flag.model.js');
@@ -169,6 +178,71 @@ describe('dispatch-notifications.service', () => {
       expect.anything(),
       expect.anything()
     );
+  });
+
+  it('sends Telegram progress without a WhatsApp sender', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({ sender: '' }),
+      context: {
+        companyBotLabel: 'Bot',
+        plantGroupId: 'plant@g.us',
+        adminGroupId: 'admin@g.us',
+      },
+    });
+
+    expect(WhatsAppDirectService.sendMessage).not.toHaveBeenCalled();
+    expect(sendTelegramAlert).toHaveBeenCalledWith({
+      message: expect.stringContaining('Unidades Pendientes: 3'),
+    });
+  });
+
+  it('keeps Telegram active when WhatsApp fails', async () => {
+    WhatsAppDirectService.sendMessage.mockRejectedValueOnce(
+      new Error('session unavailable')
+    );
+
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput(),
+      context: {
+        companyBotLabel: 'Bot',
+        plantGroupId: 'plant@g.us',
+        adminGroupId: 'admin@g.us',
+      },
+    });
+
+    expect(sendTelegramAlert).toHaveBeenCalledWith({
+      message: expect.stringContaining('Unidad 4'),
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      'plant_progress.whatsapp_failed',
+      expect.objectContaining({ companyId: 'constroad' })
+    );
+  });
+
+  it('schedules Telegram plant-end without a WhatsApp sender', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({
+        allDispatched: true,
+        dispatchFinished: true,
+        pendingCount: 0,
+        sender: '',
+      }),
+      context: {
+        companyBotLabel: 'Bot',
+        plantGroupId: 'plant@g.us',
+        adminGroupId: 'admin@g.us',
+      },
+    });
+
+    expect(sendTelegramAlert).toHaveBeenCalledTimes(1);
+    expect(scheduleTelegramAlert).toHaveBeenCalledWith({
+      availableAt: expect.any(Date),
+      dedupeKey: expect.stringContaining('telegram:plant-end:constroad:'),
+      message: expect.stringContaining('Fin de la producción'),
+    });
+    await jest.runOnlyPendingTimersAsync();
+    expect(sendTelegramAlert).toHaveBeenCalledTimes(1);
+    expect(WhatsAppDirectService.sendMessage).not.toHaveBeenCalled();
   });
 
   it('builds the client completion and plant end messages', () => {
@@ -421,6 +495,39 @@ describe('dispatch-notifications.service', () => {
     });
 
     expect(WhatsAppDirectService.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('still evaluates plant-end after duplicated progress', async () => {
+    updateOneMock
+      .mockResolvedValueOnce({
+        acknowledged: true,
+        matchedCount: 1,
+        modifiedCount: 0,
+        upsertedCount: 0,
+      })
+      .mockResolvedValueOnce({
+        acknowledged: true,
+        matchedCount: 0,
+        modifiedCount: 0,
+        upsertedCount: 1,
+      });
+
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({ allDispatched: true }),
+      context: {
+        companyBotLabel: 'Bot',
+        plantGroupId: '',
+        adminGroupId: '',
+      },
+    });
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(sendTelegramAlert).not.toHaveBeenCalled();
+    expect(scheduleTelegramAlert).toHaveBeenCalledWith({
+      availableAt: expect.any(Date),
+      dedupeKey: expect.stringContaining('telegram:plant-end:constroad:'),
+      message: expect.stringContaining('Fin de la producción'),
+    });
   });
 
   it('bypasses dispatch notification dedupe only in development', () => {

@@ -49,7 +49,10 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - **Conteo de mensajes (fuente unica):** lila-app es el UNICO punto de conteo de mensajes WhatsApp (Portal ya no cuenta envios, solo el patron de storage). `whatsapp-direct.service.ts` cuenta una vez por envio via `quotaValidatorService.incrementWhatsAppUsage`, resolviendo la company por el sender (`getCompanyByWhatsappSender`) cuando el caller no pasa `companyId` (caso de envios disparados por Portal, que llegan a `/message/:sender/*` sin tenant). El cron (`jobs/executor.service.ts`) ya pasa `companyId`.
 - **Store liviano (junio 2026):** el `InMemoryStore` ya NO almacena ni persiste mensajes (solo chats/contactos/grupos). `writeToFile` es async + atomico (tmp+rename) + dirty-flag, sin pretty-print. Antes el store crecia sin limite (medido 84 MB) y se escribia con `writeFileSync` bloqueante cada 10s. Grupos/contactos se sirven desde el store (lectura en memoria). Ver `specs/SCALABILITY-MULTI-SESSION.spec`.
 - **Rate-limit / lecturas:** `apiLimiter` (por IP) ahora exime el trafico autenticado por tenant (JWT/`lk_fe_`), para que las lecturas server-to-server de Portal (grupos/contactos) no agoten el bucket. Portal ademas cachea esas lecturas 60s (`server/whatsapp/whatsappReadCache.ts`) y los selectores exponen `refresh()` que invalida esa cache (`?refresh=1`). `mongoSanitize` global limpia `$`/`.` de body/query/params.
-- **RLS de `/message` (env-gated, backward-compatible):** por defecto `optionalTenant` (no bloquea) + `requireSenderOwnership` en modo aviso; con `WHATSAPP_RLS_ENFORCE=true` exige `requireTenantOrApiKey` y bloquea envios cuyo sender no pertenece a la company. Pensado para vender API keys `lk_fe_` a consumidores externos (sin Portal). Ver `specs/SCALABILITY-MULTI-SESSION.spec` §4.
+- **RLS de `/message`:** exige `requireTenantOrApiKey`. JWT y API keys
+  `lk_fe_` quedan bloqueados cuando el sender no pertenece a su company.
+  El secreto global conserva acceso administrativo legacy. El lookup de propiedad
+  falla cerrado para evitar envíos cross-company.
 
 ### Documentos / Reportes
 
@@ -265,6 +268,15 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - Algunos tests dependen de fixtures locales sin mocking del Mongo Portal.
 
 ## Cambios recientes (Mayo - Junio 2026)
+- **Julio 2026**: las alertas Telegram de progreso y fin de producción ya no
+  dependen de un sender WhatsApp. El postproceso conserva WhatsApp como canal
+  opcional, mantiene deduplicación por despacho y cierre diario, y encola fallos
+  transitorios de Telegram. El cierre diferido queda persistido con `availableAt`,
+  evitando perderlo durante reinicios de lila-app.
+- **Julio 2026**: el vale de despacho usa exclusivamente el sender configurado
+  por su empresa. Ya no reutiliza sesiones ajenas en `test` o desarrollo. La
+  restauración automática permite únicamente senders asignados a empresas activas.
+  Los mensajes identifican el documento como vale y usan el bot empresarial.
 - **Julio 2026**: recepciones públicas usan `arriveDate` ISO. Portal muestra
   documentos lila-app mediante su proxy PDF autenticado.
 - **Junio 2026**: enhancements de red (`network enhancements`), control tanks integrados con Portal, alertas Telegram cuando Tailscale cae.
