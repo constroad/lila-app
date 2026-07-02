@@ -66,8 +66,8 @@ jest.unstable_mockModule('fs-extra', () => ({
 }));
 
 const fakeStore = {
-  readFromFile: jest.fn(),
-  writeToFile: jest.fn(),
+  load: jest.fn(async () => undefined),
+  save: jest.fn(async () => undefined),
   bind: jest.fn(),
   markDirty: jest.fn(),
   chats: new Map(),
@@ -77,6 +77,14 @@ const fakeStore = {
 jest.unstable_mockModule('./store.manager.js', () => ({
   __esModule: true,
   makeInMemoryStore: jest.fn(() => fakeStore),
+}));
+
+const clearStoreSnapshot = jest.fn(async () => undefined);
+jest.unstable_mockModule('./mongo-store.js', () => ({
+  __esModule: true,
+  clearStoreSnapshot,
+  loadStoreSnapshot: jest.fn(async () => null),
+  saveStoreSnapshot: jest.fn(async () => undefined),
 }));
 
 jest.unstable_mockModule('./populate-store-simple.js', () => ({
@@ -133,6 +141,7 @@ beforeEach(async () => {
   outboxClear.mockClear();
   saveCredsMongo.mockClear();
   clearMongoAuthState.mockClear();
+  clearStoreSnapshot.mockClear();
   subject = await import('./sessions.simple.js');
 });
 
@@ -317,6 +326,8 @@ describe('clearSession', () => {
       expect.stringContaining('backups')
     );
     expect(outboxClear).toHaveBeenCalledWith('51111111111');
+    expect(clearMongoAuthState).toHaveBeenCalledWith('51111111111');
+    expect(clearStoreSnapshot).toHaveBeenCalledWith('51111111111');
     expect(subject.getSession('51111111111')).toBeUndefined();
   });
 

@@ -11,13 +11,12 @@
  * Basado en: /Users/josezamora/projects/notifications/src/utils/makeInMemoryStore.ts
  */
 
-import fs from 'fs-extra';
-import path from 'path';
 import { Contact, Chat } from '@whiskeysockets/baileys';
 import type { InMemoryStore, MessageMap } from './store.types';
 import logger from '../../utils/logger.js';
+import { loadStoreSnapshot, saveStoreSnapshot } from './mongo-store.js';
 
-export function makeInMemoryStore(filePath: string): InMemoryStore {
+export function makeInMemoryStore(sessionId: string): InMemoryStore {
   // 🗄️ MAPS EN MEMORIA - Estado local rápido
   const chats = new Map<string, Chat>();
   const contacts = new Map<string, Contact>();
@@ -26,59 +25,40 @@ export function makeInMemoryStore(filePath: string): InMemoryStore {
   // Marca si hubo cambios desde la última persistencia (evita escrituras inútiles).
   let dirty = false;
 
-  // 📖 CARGAR DESDE DISCO - Al iniciar
-  const readFromFile = () => {
-    if (!fs.existsSync(filePath)) {
-      logger.debug(`⚠️ Store file not found: ${filePath}, will create on first write`);
-      return;
-    }
-
+  // 📖 CARGAR - desde Mongo. Si no hay doc (sesión nueva / recién escaneada) o Mongo está caído,
+  // arranca con store VACÍO y se repuebla al conectar (populateStoreIfEmpty + history-sync).
+  // No hay lectura de archivos: el store es 100% Mongo (los archivos legacy quedaron obsoletos
+  // al desconectar todas las empresas y re-escanear).
+  const load = async (): Promise<void> => {
     try {
-      const json = fs.readFileSync(filePath, 'utf-8');
-      const data = JSON.parse(json);
-
-      // Hidratar Maps desde JSON
-      if (data.chats) {
-        data.chats.forEach((c: Chat) => chats.set(c.id, c));
-        logger.info(`✅ Loaded ${data.chats.length} chats from store: ${filePath}`);
+      const snap = await loadStoreSnapshot(sessionId);
+      if (snap) {
+        snap.chats.forEach((c) => c && chats.set(c.id, c));
+        snap.contacts.forEach((c) => c && contacts.set(c.id, c));
+        logger.info(
+          `✅ Store cargado de Mongo: ${snap.chats.length} chats, ${snap.contacts.length} contactos (${sessionId})`
+        );
       }
-
-      if (data.contacts) {
-        data.contacts.forEach((c: Contact) => contacts.set(c.id, c));
-        logger.info(`✅ Loaded ${data.contacts.length} contacts from store: ${filePath}`);
-      }
-
-      // NOTA: los mensajes ya NO se cargan ni persisten (ver writeToFile). Solo
-      // necesitamos chats/contactos/grupos para enviar y listar. Esto evita el
-      // crecimiento ilimitado del store (medido en 84 MB). Ver
-      // specs/SCALABILITY-MULTI-SESSION.spec §3 (H2) y §5.
     } catch (error) {
-      logger.error(`❌ Error reading store file ${filePath}: ${error}`);
+      logger.warn(`⚠️ No se pudo cargar store de Mongo para ${sessionId} (arranca vacío): ${error}`);
     }
   };
 
-  // 💾 GUARDAR A DISCO - async + atómico (tmp+rename), sin pretty-print, sin mensajes.
-  // No bloquea el event loop (antes era writeFileSync de ~84 MB cada 10 s). Solo
-  // escribe si hubo cambios desde la última persistencia (dirty flag).
-  const writeToFile = async (): Promise<void> => {
+  // 💾 GUARDAR - a Mongo (async, solo si hubo cambios). Reintenta en el próximo tick si falla.
+  const save = async (): Promise<void> => {
     if (!dirty) return;
     dirty = false;
     try {
-      const dir = path.dirname(filePath);
-      await fs.ensureDir(dir);
-
-      const data = {
+      await saveStoreSnapshot(sessionId, {
         chats: Array.from(chats.values()),
         contacts: Array.from(contacts.values()),
-      };
-
-      const tmpPath = `${filePath}.tmp`;
-      await fs.writeFile(tmpPath, JSON.stringify(data));
-      await fs.rename(tmpPath, filePath);
-      logger.debug(`💾 Store persisted: ${chats.size} chats, ${contacts.size} contacts → ${filePath}`);
+      });
+      logger.debug(
+        `💾 Store persistido en Mongo: ${chats.size} chats, ${contacts.size} contactos (${sessionId})`
+      );
     } catch (error) {
       dirty = true; // reintentar en el próximo tick
-      logger.error(`❌ Error writing store file ${filePath}: ${error}`);
+      logger.error(`❌ Error guardando store en Mongo para ${sessionId}: ${error}`);
     }
   };
 
@@ -141,8 +121,8 @@ export function makeInMemoryStore(filePath: string): InMemoryStore {
     chats,
     contacts,
     messages,
-    readFromFile,
-    writeToFile,
+    load,
+    save,
     bind,
     markDirty,
   };

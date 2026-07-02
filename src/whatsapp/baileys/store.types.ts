@@ -12,9 +12,11 @@ export interface InMemoryStore {
   chats: Map<string, Chat>;
   contacts: Map<string, Contact>;
   messages: MessageMap;
-  readFromFile: () => void;
-  writeToFile: () => void | Promise<void>;
+  /** Carga el store desde Mongo (migra del archivo legacy la primera vez). */
+  load: () => Promise<void>;
+  /** Persiste el store en Mongo si hubo cambios (dirty flag). */
+  save: () => Promise<void>;
   bind: (ev: any) => void;
-  /** Marca el store como modificado para que el próximo writeToFile persista. */
+  /** Marca el store como modificado para que el próximo save persista. */
   markDirty: () => void;
 }

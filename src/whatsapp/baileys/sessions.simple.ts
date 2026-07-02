@@ -23,6 +23,7 @@ import { populateStoreIfEmpty } from './populate-store-simple.js';
 import { flushOutboxForSession } from '../queue/outbox-queue.js';
 import outboxQueue from '../queue/outbox-queue.js';
 import { useMongoAuthState, clearMongoAuthState } from './mongo-auth-state.js';
+import { clearStoreSnapshot } from './mongo-store.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -183,9 +184,8 @@ async function initSession(
   qrCb?: (qr: string) => void
 ): Promise<WASocket> {
   shuttingDown.delete(sessionId);
-  const authDir = path.join(config.whatsapp.sessionDir, sessionId);
-  // Credenciales SIEMPRE en Mongo (portables entre máquinas/instancias, como la industria).
-  // Solo creds + signal keys (KB); los chats/contactos siguen como cache local liviano.
+  // Credenciales Y store (chats/contactos) SIEMPRE en Mongo (portables entre máquinas/instancias).
+  // Ya NO se usan archivos locales de sesión.
   const { state, saveCreds } = await useMongoAuthState(sessionId);
 
   const { version, isLatest } = await fetchLatestBaileysVersion();
@@ -208,14 +208,13 @@ async function initSession(
     syncFullHistory: true,
   });
 
-  // Initialize store
-  const storeFilePath = path.join(authDir, 'baileys_store.json');
-  const store = makeInMemoryStore(storeFilePath);
+  // Initialize store (Mongo-backed). Cargar ANTES de arrancar el timer para no pisar el doc.
+  const store = makeInMemoryStore(sessionId);
   stores[sessionId] = store;
-  store.readFromFile();
+  await store.load();
 
   clearStoreTimer(sessionId);
-  storeTimers[sessionId] = setInterval(() => store.writeToFile(), 10_000);
+  storeTimers[sessionId] = setInterval(() => store.save(), 10_000);
 
   store.bind(sock.ev);
   sock.ev.on('creds.update', saveCreds);
@@ -316,9 +315,7 @@ export async function createPairingSession(
   sendCode: (code: string) => void
 ): Promise<void> {
   const sessionId = phone.replace('+', '');
-  const authDir = path.join(config.whatsapp.sessionDir, sessionId);
-  // Credenciales SIEMPRE en Mongo (portables entre máquinas/instancias, como la industria).
-  // Solo creds + signal keys (KB); los chats/contactos siguen como cache local liviano.
+  // Credenciales Y store (chats/contactos) SIEMPRE en Mongo. Ya NO se usan archivos locales.
   const { state, saveCreds } = await useMongoAuthState(sessionId);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -333,13 +330,12 @@ export async function createPairingSession(
     syncFullHistory: true, // maximiza contactos al conectar (ver startSession)
   });
 
-  // Initialize store
-  const storeFilePath = path.join(authDir, 'baileys_store.json');
-  const store = makeInMemoryStore(storeFilePath);
+  // Initialize store (Mongo-backed). Cargar ANTES de arrancar el timer para no pisar el doc.
+  const store = makeInMemoryStore(sessionId);
   stores[sessionId] = store;
-  store.readFromFile();
+  await store.load();
   clearStoreTimer(sessionId);
-  storeTimers[sessionId] = setInterval(() => store.writeToFile(), 10_000);
+  storeTimers[sessionId] = setInterval(() => store.save(), 10_000);
 
   store.bind(sock.ev);
   sock.ev.on('creds.update', saveCreds);
@@ -506,7 +502,7 @@ export async function clearSession(sessionId: string): Promise<void> {
     readyClients.delete(sessionId);
     logger.info(`✅ Memory cleaned for ${sessionId}`);
 
-    // 3. Delete physical session files (credentials)
+    // 3. Delete legacy physical session dir (si quedó de antes de migrar a Mongo).
     const sessionDir = path.join(config.whatsapp.sessionDir, sessionId);
     try {
       if (await fs.pathExists(sessionDir)) {
@@ -523,6 +519,14 @@ export async function clearSession(sessionId: string): Promise<void> {
     // 3b. Delete credentials in Mongo (fuente de verdad de las creds)
     await clearMongoAuthState(sessionId);
     logger.info(`✅ Cleared Mongo auth for ${sessionId}`);
+
+    // 3c. Delete store snapshot in Mongo (chats/contactos)
+    try {
+      await clearStoreSnapshot(sessionId);
+      logger.info(`✅ Cleared Mongo store for ${sessionId}`);
+    } catch (error) {
+      logger.warn(`Failed to clear Mongo store for ${sessionId}:`, error);
+    }
 
     // 4. Delete backup files (if they exist)
     const backupDir = path.join(config.whatsapp.sessionDir, 'backups', sessionId);

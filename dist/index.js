@@ -4517,51 +4517,113 @@ var init_telegram_alert_service = __esm({
   }
 });
 
+// src/database/sharedConnection.ts
+import mongoose from "mongoose";
+async function getSharedConnection() {
+  if (sharedConnection && sharedConnection.readyState === 1) {
+    return sharedConnection;
+  }
+  if (connecting) {
+    return connecting;
+  }
+  logger_default.info("[SharedDB] Connecting to constroad_db...");
+  connecting = mongoose.createConnection(config.mongodb.portalUri, {
+    dbName: config.mongodb.sharedDb,
+    serverSelectionTimeoutMS: 1e4,
+    socketTimeoutMS: 45e3,
+    maxPoolSize: 5,
+    minPoolSize: 1,
+    family: 4,
+    retryWrites: true,
+    heartbeatFrequencyMS: 1e4
+  }).asPromise().then((conn) => {
+    sharedConnection = conn;
+    connecting = null;
+    logger_default.info("[SharedDB] Connected");
+    return conn;
+  }).catch((error) => {
+    connecting = null;
+    logger_default.error("[SharedDB] Connection failed:", error);
+    throw error;
+  });
+  return connecting;
+}
+var sharedConnection, connecting;
+var init_sharedConnection = __esm({
+  "src/database/sharedConnection.ts"() {
+    init_logger();
+    init_environment();
+    sharedConnection = null;
+    connecting = null;
+  }
+});
+
+// src/whatsapp/baileys/mongo-store.ts
+async function loadStoreSnapshot(sessionId) {
+  const conn = await getSharedConnection();
+  const doc = await conn.collection(COLLECTION).findOne({ _id: sessionId });
+  if (!doc || typeof doc.data !== "string") return null;
+  const parsed = JSON.parse(doc.data);
+  return {
+    chats: Array.isArray(parsed.chats) ? parsed.chats : [],
+    contacts: Array.isArray(parsed.contacts) ? parsed.contacts : []
+  };
+}
+async function saveStoreSnapshot(sessionId, snapshot) {
+  const conn = await getSharedConnection();
+  const data = JSON.stringify({ chats: snapshot.chats, contacts: snapshot.contacts });
+  await conn.collection(COLLECTION).updateOne(
+    { _id: sessionId },
+    { $set: { data, updatedAt: /* @__PURE__ */ new Date() } },
+    { upsert: true }
+  );
+}
+async function clearStoreSnapshot(sessionId) {
+  const conn = await getSharedConnection();
+  await conn.collection(COLLECTION).deleteOne({ _id: sessionId });
+}
+var COLLECTION;
+var init_mongo_store = __esm({
+  "src/whatsapp/baileys/mongo-store.ts"() {
+    init_sharedConnection();
+    COLLECTION = "whatsapp_store";
+  }
+});
+
 // src/whatsapp/baileys/store.manager.ts
-import fs3 from "fs-extra";
-import path5 from "path";
-function makeInMemoryStore(filePath) {
+function makeInMemoryStore(sessionId) {
   const chats = /* @__PURE__ */ new Map();
   const contacts = /* @__PURE__ */ new Map();
   const messages = /* @__PURE__ */ new Map();
   let dirty = false;
-  const readFromFile = () => {
-    if (!fs3.existsSync(filePath)) {
-      logger_default.debug(`\u26A0\uFE0F Store file not found: ${filePath}, will create on first write`);
-      return;
-    }
+  const load = async () => {
     try {
-      const json = fs3.readFileSync(filePath, "utf-8");
-      const data = JSON.parse(json);
-      if (data.chats) {
-        data.chats.forEach((c66) => chats.set(c66.id, c66));
-        logger_default.info(`\u2705 Loaded ${data.chats.length} chats from store: ${filePath}`);
-      }
-      if (data.contacts) {
-        data.contacts.forEach((c66) => contacts.set(c66.id, c66));
-        logger_default.info(`\u2705 Loaded ${data.contacts.length} contacts from store: ${filePath}`);
+      const snap = await loadStoreSnapshot(sessionId);
+      if (snap) {
+        snap.chats.forEach((c66) => c66 && chats.set(c66.id, c66));
+        snap.contacts.forEach((c66) => c66 && contacts.set(c66.id, c66));
+        logger_default.info(
+          `\u2705 Store cargado de Mongo: ${snap.chats.length} chats, ${snap.contacts.length} contactos (${sessionId})`
+        );
       }
     } catch (error) {
-      logger_default.error(`\u274C Error reading store file ${filePath}: ${error}`);
+      logger_default.warn(`\u26A0\uFE0F No se pudo cargar store de Mongo para ${sessionId} (arranca vac\xEDo): ${error}`);
     }
   };
-  const writeToFile = async () => {
+  const save = async () => {
     if (!dirty) return;
     dirty = false;
     try {
-      const dir = path5.dirname(filePath);
-      await fs3.ensureDir(dir);
-      const data = {
+      await saveStoreSnapshot(sessionId, {
         chats: Array.from(chats.values()),
         contacts: Array.from(contacts.values())
-      };
-      const tmpPath = `${filePath}.tmp`;
-      await fs3.writeFile(tmpPath, JSON.stringify(data));
-      await fs3.rename(tmpPath, filePath);
-      logger_default.debug(`\u{1F4BE} Store persisted: ${chats.size} chats, ${contacts.size} contacts \u2192 ${filePath}`);
+      });
+      logger_default.debug(
+        `\u{1F4BE} Store persistido en Mongo: ${chats.size} chats, ${contacts.size} contactos (${sessionId})`
+      );
     } catch (error) {
       dirty = true;
-      logger_default.error(`\u274C Error writing store file ${filePath}: ${error}`);
+      logger_default.error(`\u274C Error guardando store en Mongo para ${sessionId}: ${error}`);
     }
   };
   const bind = (ev) => {
@@ -4611,8 +4673,8 @@ function makeInMemoryStore(filePath) {
     chats,
     contacts,
     messages,
-    readFromFile,
-    writeToFile,
+    load,
+    save,
     bind,
     markDirty
   };
@@ -4620,6 +4682,7 @@ function makeInMemoryStore(filePath) {
 var init_store_manager = __esm({
   "src/whatsapp/baileys/store.manager.ts"() {
     init_logger();
+    init_mongo_store();
   }
 });
 
@@ -4775,8 +4838,8 @@ var init_esm_node = __esm({
 });
 
 // src/services/storage-path.service.ts
-import path6 from "path";
-import fs4 from "fs-extra";
+import path5 from "path";
+import fs3 from "fs-extra";
 var StoragePathService, storagePathService;
 var init_storage_path_service = __esm({
   "src/services/storage-path.service.ts"() {
@@ -4805,13 +4868,13 @@ var init_storage_path_service = __esm({
       }
       resolveWritableRoot(candidate) {
         try {
-          fs4.ensureDirSync(candidate);
+          fs3.ensureDirSync(candidate);
           return candidate;
         } catch (error) {
           if (config.nodeEnv !== "production") {
-            const fallback = path6.resolve(process.cwd(), "data", "storage");
+            const fallback = path5.resolve(process.cwd(), "data", "storage");
             try {
-              fs4.ensureDirSync(fallback);
+              fs3.ensureDirSync(fallback);
               logger_default.warn("Storage root not accessible. Falling back to local storage.", {
                 requested: candidate,
                 fallback,
@@ -4846,7 +4909,7 @@ var init_storage_path_service = __esm({
         if (!companyId || companyId.trim() === "") {
           throw new Error("companyId is required");
         }
-        return path6.join(this.root, "companies", companyId);
+        return path5.join(this.root, "companies", companyId);
       }
       /**
        * Obtiene la ruta de un módulo específico para una empresa
@@ -4857,9 +4920,9 @@ var init_storage_path_service = __esm({
        */
       getModulePath(companyId, module, subpath) {
         const root = this.getCompanyRoot(companyId);
-        const modulePath = path6.join(root, module);
+        const modulePath = path5.join(root, module);
         if (subpath) {
-          return path6.join(modulePath, subpath);
+          return path5.join(modulePath, subpath);
         }
         return modulePath;
       }
@@ -4874,16 +4937,16 @@ var init_storage_path_service = __esm({
           companyId,
           root,
           modules: {
-            orders: path6.join(root, "orders"),
-            dispatches: path6.join(root, "dispatches"),
-            clients: path6.join(root, "clients"),
-            certificates: path6.join(root, "certificates"),
-            reports: path6.join(root, "reports"),
-            media: path6.join(root, "media"),
-            projects: path6.join(root, "projects"),
-            expenses: path6.join(root, "expenses"),
-            services: path6.join(root, "services"),
-            temp: path6.join(root, "temp")
+            orders: path5.join(root, "orders"),
+            dispatches: path5.join(root, "dispatches"),
+            clients: path5.join(root, "clients"),
+            certificates: path5.join(root, "certificates"),
+            reports: path5.join(root, "reports"),
+            media: path5.join(root, "media"),
+            projects: path5.join(root, "projects"),
+            expenses: path5.join(root, "expenses"),
+            services: path5.join(root, "services"),
+            temp: path5.join(root, "temp")
           }
         };
       }
@@ -4895,8 +4958,8 @@ var init_storage_path_service = __esm({
        */
       resolvePath(companyId, relativePath) {
         const companyRoot = this.getCompanyRoot(companyId);
-        const normalized = path6.normalize(relativePath);
-        const resolved = path6.join(companyRoot, normalized);
+        const normalized = path5.normalize(relativePath);
+        const resolved = path5.join(companyRoot, normalized);
         return resolved;
       }
       // ==========================================================================
@@ -4912,8 +4975,8 @@ var init_storage_path_service = __esm({
       validateAccess(requestedPath, companyId) {
         try {
           const companyRoot = this.getCompanyRoot(companyId);
-          const normalizedRequested = path6.normalize(requestedPath);
-          const normalizedRoot = path6.normalize(companyRoot);
+          const normalizedRequested = path5.normalize(requestedPath);
+          const normalizedRoot = path5.normalize(companyRoot);
           const isWithinCompanyRoot = normalizedRequested.startsWith(normalizedRoot);
           if (!isWithinCompanyRoot) {
             logger_default.warn("Path validation failed: outside company root", {
@@ -4923,8 +4986,8 @@ var init_storage_path_service = __esm({
             });
             return false;
           }
-          const relative = path6.relative(normalizedRoot, normalizedRequested);
-          const hasTraversal = relative.startsWith("..") || path6.isAbsolute(relative);
+          const relative = path5.relative(normalizedRoot, normalizedRequested);
+          const hasTraversal = relative.startsWith("..") || path5.isAbsolute(relative);
           if (hasTraversal) {
             logger_default.warn("Path validation failed: traversal attempt detected", {
               companyId,
@@ -4959,10 +5022,10 @@ var init_storage_path_service = __esm({
         const structure = this.getCompanyStructure(companyId);
         logger_default.info(`Creating company storage structure for: ${companyId}`);
         try {
-          await fs4.ensureDir(structure.root);
+          await fs3.ensureDir(structure.root);
           const moduleCreations = this.standardModules.filter((m59) => m59.autoCreate).map(async (module) => {
-            const modulePath = path6.join(structure.root, module.name);
-            await fs4.ensureDir(modulePath);
+            const modulePath = path5.join(structure.root, module.name);
+            await fs3.ensureDir(modulePath);
             logger_default.debug(`Created module folder: ${module.name}`, { companyId });
           });
           await Promise.all(moduleCreations);
@@ -4980,7 +5043,7 @@ var init_storage_path_service = __esm({
        */
       async companyStructureExists(companyId) {
         const root = this.getCompanyRoot(companyId);
-        return fs4.pathExists(root);
+        return fs3.pathExists(root);
       }
       /**
        * Asegura que un directorio exista, creándolo si es necesario
@@ -4992,7 +5055,7 @@ var init_storage_path_service = __esm({
         if (!this.validateAccess(dirPath, companyId)) {
           throw new Error("Invalid path: outside company storage space");
         }
-        await fs4.ensureDir(dirPath);
+        await fs3.ensureDir(dirPath);
       }
       // ==========================================================================
       // UTILITIES
@@ -5004,19 +5067,19 @@ var init_storage_path_service = __esm({
        */
       async getStorageUsage(companyId) {
         const root = this.getCompanyRoot(companyId);
-        if (!await fs4.pathExists(root)) {
+        if (!await fs3.pathExists(root)) {
           return 0;
         }
         try {
           const calculateSize = async (dir) => {
-            const entries = await fs4.readdir(dir, { withFileTypes: true });
+            const entries = await fs3.readdir(dir, { withFileTypes: true });
             let totalSize = 0;
             for (const entry of entries) {
-              const fullPath = path6.join(dir, entry.name);
+              const fullPath = path5.join(dir, entry.name);
               if (entry.isDirectory()) {
                 totalSize += await calculateSize(fullPath);
               } else {
-                const stats = await fs4.stat(fullPath);
+                const stats = await fs3.stat(fullPath);
                 totalSize += stats.size;
               }
             }
@@ -5046,8 +5109,8 @@ var init_storage_path_service = __esm({
        */
       async cleanTempFiles(companyId) {
         const tempPath = this.getModulePath(companyId, "temp");
-        if (await fs4.pathExists(tempPath)) {
-          await fs4.emptyDir(tempPath);
+        if (await fs3.pathExists(tempPath)) {
+          await fs3.emptyDir(tempPath);
           logger_default.info(`Cleaned temp files for company: ${companyId}`);
         }
       }
@@ -5057,8 +5120,8 @@ var init_storage_path_service = __esm({
 });
 
 // src/services/whatsapp-media.utils.ts
-import fs5 from "fs-extra";
-import path7 from "path";
+import fs4 from "fs-extra";
+import path6 from "path";
 import axios from "axios";
 function detectMimeType(filename, fallback) {
   if (fallback) return fallback;
@@ -5123,12 +5186,12 @@ function normalizeRelativePath(input, companyId) {
   }
   raw = raw.replace(/\\/g, "/");
   const isUrlPath = raw.startsWith("/files/companies/") || raw.startsWith("/companies/");
-  if (path7.isAbsolute(raw) && !isUrlPath) {
+  if (path6.isAbsolute(raw) && !isUrlPath) {
     const companyRoot = storagePathService.getCompanyRoot(companyId);
-    const normalizedRoot = path7.normalize(companyRoot);
-    const normalizedRaw = path7.normalize(raw);
+    const normalizedRoot = path6.normalize(companyRoot);
+    const normalizedRaw = path6.normalize(raw);
     if (normalizedRaw.startsWith(normalizedRoot)) {
-      raw = path7.relative(normalizedRoot, normalizedRaw);
+      raw = path6.relative(normalizedRoot, normalizedRaw);
     } else {
       return null;
     }
@@ -5160,24 +5223,24 @@ async function resolveFileBuffer(params) {
     relativePath = normalizeRelativePath(fileUrl, companyId) || extractRelativePathFromUrl(fileUrl, companyId);
   }
   if (!relativePath) return null;
-  if (path7.isAbsolute(relativePath)) {
+  if (path6.isAbsolute(relativePath)) {
     throw new Error("filePath must be relative");
   }
   const resolved = storagePathService.resolvePath(companyId, relativePath);
   if (!storagePathService.validateAccess(resolved, companyId)) {
     throw new Error("Invalid filePath");
   }
-  const exists = await fs5.pathExists(resolved);
+  const exists = await fs4.pathExists(resolved);
   if (!exists) {
     throw new Error("File not found");
   }
-  const stat = await fs5.stat(resolved);
+  const stat = await fs4.stat(resolved);
   const MAX_WTSP_BYTES = 100 * 1024 * 1024;
   if (stat.size > MAX_WTSP_BYTES) {
     throw new Error("File too large for WhatsApp (max 100MB)");
   }
-  const buffer2 = await fs5.readFile(resolved);
-  const resolvedFileName = fileName || path7.basename(resolved);
+  const buffer2 = await fs4.readFile(resolved);
+  const resolvedFileName = fileName || path6.basename(resolved);
   const resolvedMimeType = detectMimeType(resolvedFileName, mimeType);
   return {
     buffer: buffer2,
@@ -5192,15 +5255,15 @@ async function downloadFileFromUrl(fileUrl, mimeType) {
   let extension = "bin";
   try {
     const urlPath = new URL(fileUrl).pathname;
-    const urlExt = path7.extname(urlPath).slice(1);
+    const urlExt = path6.extname(urlPath).slice(1);
     if (urlExt) extension = urlExt;
   } catch {
     if (detectedMimeType.startsWith("image/")) extension = detectedMimeType.split("/")[1];
     else if (detectedMimeType.startsWith("video/")) extension = detectedMimeType.split("/")[1];
   }
   const tempFileName = `${v4_default()}.${extension}`;
-  const tempFilePath = path7.join(config.uploads.directory, tempFileName);
-  const writer = fs5.createWriteStream(tempFilePath);
+  const tempFilePath = path6.join(config.uploads.directory, tempFileName);
+  const writer = fs4.createWriteStream(tempFilePath);
   response.data.pipe(writer);
   await new Promise((resolve2, reject) => {
     writer.on("finish", resolve2);
@@ -5516,7 +5579,7 @@ __export(quota_validator_service_exports, {
   default: () => quota_validator_service_default,
   quotaValidatorService: () => quotaValidatorService
 });
-import mongoose3 from "mongoose";
+import mongoose4 from "mongoose";
 var getPeriod, getDayKey, QuotaValidatorService, quotaValidatorService, quota_validator_service_default;
 var init_quota_validator_service = __esm({
   "src/services/quota-validator.service.ts"() {
@@ -5580,7 +5643,7 @@ var init_quota_validator_service = __esm({
           if (!this.portalMongoConn || !this.IS_PROD) {
             logger_default.info("\u{1F4E1} Connecting to Portal MongoDB (constroad_db)...");
           }
-          const connection = mongoose3.createConnection(config.mongodb.portalUri, {
+          const connection = mongoose4.createConnection(config.mongodb.portalUri, {
             dbName: config.mongodb.sharedDb,
             serverSelectionTimeoutMS: this.CONNECTION_TIMEOUT,
             socketTimeoutMS: 45e3,
@@ -6025,8 +6088,8 @@ var whatsapp_direct_service_exports = {};
 __export(whatsapp_direct_service_exports, {
   WhatsAppDirectService: () => WhatsAppDirectService
 });
-import path8 from "path";
-import fs6 from "fs/promises";
+import path7 from "path";
+import fs5 from "fs/promises";
 var resolveUsageCompanyId, trackWhatsAppUsage, WhatsAppDirectService;
 var init_whatsapp_direct_service = __esm({
   "src/services/whatsapp-direct.service.ts"() {
@@ -6188,14 +6251,14 @@ var init_whatsapp_direct_service = __esm({
           videoBuffer = resolved.buffer;
           resolvedMimeType = resolved.mimeType;
         } else if (sourceKind === "temp") {
-          const tempPath = path8.join(config.uploads.directory, options2.fileName);
-          videoBuffer = await fs6.readFile(tempPath);
+          const tempPath = path7.join(config.uploads.directory, options2.fileName);
+          videoBuffer = await fs5.readFile(tempPath);
           resolvedMimeType = detectMimeType(options2.fileName, options2.mimeType);
           shouldCleanup = true;
           cleanupPath = tempPath;
         } else if (sourceKind === "external") {
           const downloaded = await downloadFileFromUrl(options2.fileUrl, options2.mimeType);
-          videoBuffer = await fs6.readFile(downloaded.filePath);
+          videoBuffer = await fs5.readFile(downloaded.filePath);
           resolvedMimeType = downloaded.mimeType;
           shouldCleanup = true;
           cleanupPath = downloaded.filePath;
@@ -6216,7 +6279,7 @@ var init_whatsapp_direct_service = __esm({
           );
           await trackWhatsAppUsage(id, options2, "video");
           if (shouldCleanup && cleanupPath) {
-            await fs6.unlink(cleanupPath).catch(
+            await fs5.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
             );
           }
@@ -6296,14 +6359,14 @@ var init_whatsapp_direct_service = __esm({
           imageBuffer = resolved.buffer;
           resolvedMimeType = resolved.mimeType;
         } else if (sourceKind === "temp") {
-          const tempPath = path8.join(config.uploads.directory, options2.fileName);
-          imageBuffer = await fs6.readFile(tempPath);
+          const tempPath = path7.join(config.uploads.directory, options2.fileName);
+          imageBuffer = await fs5.readFile(tempPath);
           resolvedMimeType = detectMimeType(options2.fileName, options2.mimeType);
           shouldCleanup = true;
           cleanupPath = tempPath;
         } else if (sourceKind === "external") {
           const downloaded = await downloadFileFromUrl(options2.fileUrl, options2.mimeType);
-          imageBuffer = await fs6.readFile(downloaded.filePath);
+          imageBuffer = await fs5.readFile(downloaded.filePath);
           resolvedMimeType = downloaded.mimeType;
           shouldCleanup = true;
           cleanupPath = downloaded.filePath;
@@ -6322,7 +6385,7 @@ var init_whatsapp_direct_service = __esm({
           );
           await trackWhatsAppUsage(id, options2, "image");
           if (shouldCleanup && cleanupPath) {
-            await fs6.unlink(cleanupPath).catch(
+            await fs5.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
             );
           }
@@ -6403,15 +6466,15 @@ var init_whatsapp_direct_service = __esm({
           resolvedMimeType = resolved.mimeType;
           resolvedFileName = resolved.fileName;
         } else if (sourceKind === "temp") {
-          const tempPath = path8.join(config.uploads.directory, options2.fileName);
-          documentBuffer = await fs6.readFile(tempPath);
+          const tempPath = path7.join(config.uploads.directory, options2.fileName);
+          documentBuffer = await fs5.readFile(tempPath);
           resolvedMimeType = detectMimeType(options2.fileName, options2.mimeType);
           resolvedFileName = options2.fileName;
           shouldCleanup = true;
           cleanupPath = tempPath;
         } else if (sourceKind === "external") {
           const downloaded = await downloadFileFromUrl(options2.fileUrl, options2.mimeType);
-          documentBuffer = await fs6.readFile(downloaded.filePath);
+          documentBuffer = await fs5.readFile(downloaded.filePath);
           resolvedMimeType = downloaded.mimeType;
           resolvedFileName = downloaded.fileName;
           shouldCleanup = true;
@@ -6433,7 +6496,7 @@ var init_whatsapp_direct_service = __esm({
           );
           await trackWhatsAppUsage(id, options2, "document");
           if (shouldCleanup && cleanupPath) {
-            await fs6.unlink(cleanupPath).catch(
+            await fs5.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
             );
           }
@@ -6587,7 +6650,7 @@ var init_whatsapp_direct_service = __esm({
 });
 
 // src/whatsapp/queue/outbox-queue.ts
-import path9 from "path";
+import path8 from "path";
 import { randomUUID as randomUUID2 } from "crypto";
 async function flushOutboxForSession(sessionPhone) {
   const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
@@ -6605,7 +6668,7 @@ var init_outbox_queue = __esm({
     init_environment();
     OutboxQueue = class {
       constructor() {
-        const baseDir = path9.join(config.whatsapp.sessionDir, "../outbox");
+        const baseDir = path8.join(config.whatsapp.sessionDir, "../outbox");
         this.store = new json_store_default({ baseDir, autoBackup: true });
       }
       async list(sessionPhone) {
@@ -6682,47 +6745,6 @@ var init_outbox_queue = __esm({
   }
 });
 
-// src/database/sharedConnection.ts
-import mongoose4 from "mongoose";
-async function getSharedConnection() {
-  if (sharedConnection && sharedConnection.readyState === 1) {
-    return sharedConnection;
-  }
-  if (connecting) {
-    return connecting;
-  }
-  logger_default.info("[SharedDB] Connecting to constroad_db...");
-  connecting = mongoose4.createConnection(config.mongodb.portalUri, {
-    dbName: config.mongodb.sharedDb,
-    serverSelectionTimeoutMS: 1e4,
-    socketTimeoutMS: 45e3,
-    maxPoolSize: 5,
-    minPoolSize: 1,
-    family: 4,
-    retryWrites: true,
-    heartbeatFrequencyMS: 1e4
-  }).asPromise().then((conn) => {
-    sharedConnection = conn;
-    connecting = null;
-    logger_default.info("[SharedDB] Connected");
-    return conn;
-  }).catch((error) => {
-    connecting = null;
-    logger_default.error("[SharedDB] Connection failed:", error);
-    throw error;
-  });
-  return connecting;
-}
-var sharedConnection, connecting;
-var init_sharedConnection = __esm({
-  "src/database/sharedConnection.ts"() {
-    init_logger();
-    init_environment();
-    sharedConnection = null;
-    connecting = null;
-  }
-});
-
 // src/whatsapp/baileys/mongo-auth-state.ts
 import { initAuthCreds, BufferJSON } from "@whiskeysockets/baileys";
 import * as baileysNs from "@whiskeysockets/baileys";
@@ -6737,7 +6759,7 @@ async function ensureSessionIndex(col) {
 }
 async function useMongoAuthState(sessionId) {
   const conn = await getSharedConnection();
-  const col = conn.collection(COLLECTION);
+  const col = conn.collection(COLLECTION2);
   await ensureSessionIndex(col);
   const writeData = async (key, value) => {
     const serialized = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
@@ -6801,25 +6823,25 @@ async function useMongoAuthState(sessionId) {
 }
 async function listMongoAuthSessions() {
   const conn = await getSharedConnection();
-  const col = conn.collection(COLLECTION);
+  const col = conn.collection(COLLECTION2);
   const ids = await col.distinct("sessionId", { _id: { $regex: /:creds$/ } });
   return ids.filter(Boolean);
 }
 async function clearMongoAuthState(sessionId) {
   try {
     const conn = await getSharedConnection();
-    await conn.collection(COLLECTION).deleteMany({ sessionId });
+    await conn.collection(COLLECTION2).deleteMany({ sessionId });
   } catch (error) {
     logger_default.warn(`Failed to clear Mongo auth for ${sessionId}: ${String(error)}`);
   }
 }
-var proto2, COLLECTION, indexEnsured, docId;
+var proto2, COLLECTION2, indexEnsured, docId;
 var init_mongo_auth_state = __esm({
   "src/whatsapp/baileys/mongo-auth-state.ts"() {
     init_sharedConnection();
     init_logger();
     proto2 = baileysNs.proto;
-    COLLECTION = "whatsapp_auth";
+    COLLECTION2 = "whatsapp_auth";
     indexEnsured = false;
     docId = (sessionId, key) => `${sessionId}:${key}`;
   }
@@ -6832,8 +6854,8 @@ import {
   DisconnectReason,
   fetchLatestBaileysVersion
 } from "@whiskeysockets/baileys";
-import path10 from "path";
-import fs7 from "fs-extra";
+import path9 from "path";
+import fs6 from "fs-extra";
 import pino from "pino";
 function scheduleReconnect(sessionId, qrCb) {
   if (shuttingDown.has(sessionId)) return;
@@ -6902,7 +6924,6 @@ async function startSession(sessionId, qrCb) {
 }
 async function initSession(sessionId, qrCb) {
   shuttingDown.delete(sessionId);
-  const authDir = path10.join(config.whatsapp.sessionDir, sessionId);
   const { state: state2, saveCreds } = await useMongoAuthState(sessionId);
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger_default.info(`Using WA v${version.join(".")}, isLatest: ${isLatest}`);
@@ -6921,12 +6942,11 @@ async function initSession(sessionId, qrCb) {
     // no almacenamos mensajes (store.manager). Ver SCALABILITY-MULTI-SESSION.spec §2.3.
     syncFullHistory: true
   });
-  const storeFilePath = path10.join(authDir, "baileys_store.json");
-  const store = makeInMemoryStore(storeFilePath);
+  const store = makeInMemoryStore(sessionId);
   stores[sessionId] = store;
-  store.readFromFile();
+  await store.load();
   clearStoreTimer(sessionId);
-  storeTimers[sessionId] = setInterval(() => store.writeToFile(), 1e4);
+  storeTimers[sessionId] = setInterval(() => store.save(), 1e4);
   store.bind(sock.ev);
   sock.ev.on("creds.update", saveCreds);
   sock.ev.on("messaging-history.set", ({ chats, contacts }) => {
@@ -6994,7 +7014,6 @@ async function initSession(sessionId, qrCb) {
 }
 async function createPairingSession(phone, sendCode) {
   const sessionId = phone.replace("+", "");
-  const authDir = path10.join(config.whatsapp.sessionDir, sessionId);
   const { state: state2, saveCreds } = await useMongoAuthState(sessionId);
   const { version } = await fetchLatestBaileysVersion();
   const pinoLogger = pino({ level: "silent" });
@@ -7007,12 +7026,11 @@ async function createPairingSession(phone, sendCode) {
     syncFullHistory: true
     // maximiza contactos al conectar (ver startSession)
   });
-  const storeFilePath = path10.join(authDir, "baileys_store.json");
-  const store = makeInMemoryStore(storeFilePath);
+  const store = makeInMemoryStore(sessionId);
   stores[sessionId] = store;
-  store.readFromFile();
+  await store.load();
   clearStoreTimer(sessionId);
-  storeTimers[sessionId] = setInterval(() => store.writeToFile(), 1e4);
+  storeTimers[sessionId] = setInterval(() => store.save(), 1e4);
   store.bind(sock.ev);
   sock.ev.on("creds.update", saveCreds);
   let pairingDone = false;
@@ -7120,10 +7138,10 @@ async function clearSession(sessionId) {
     delete qrCodes[sessionId];
     readyClients.delete(sessionId);
     logger_default.info(`\u2705 Memory cleaned for ${sessionId}`);
-    const sessionDir = path10.join(config.whatsapp.sessionDir, sessionId);
+    const sessionDir = path9.join(config.whatsapp.sessionDir, sessionId);
     try {
-      if (await fs7.pathExists(sessionDir)) {
-        await fs7.remove(sessionDir);
+      if (await fs6.pathExists(sessionDir)) {
+        await fs6.remove(sessionDir);
         logger_default.info(`\u2705 Deleted session directory: ${sessionDir}`);
       } else {
         logger_default.info(`Session directory already deleted: ${sessionDir}`);
@@ -7133,10 +7151,16 @@ async function clearSession(sessionId) {
     }
     await clearMongoAuthState(sessionId);
     logger_default.info(`\u2705 Cleared Mongo auth for ${sessionId}`);
-    const backupDir = path10.join(config.whatsapp.sessionDir, "backups", sessionId);
     try {
-      if (await fs7.pathExists(backupDir)) {
-        await fs7.remove(backupDir);
+      await clearStoreSnapshot(sessionId);
+      logger_default.info(`\u2705 Cleared Mongo store for ${sessionId}`);
+    } catch (error) {
+      logger_default.warn(`Failed to clear Mongo store for ${sessionId}:`, error);
+    }
+    const backupDir = path9.join(config.whatsapp.sessionDir, "backups", sessionId);
+    try {
+      if (await fs6.pathExists(backupDir)) {
+        await fs6.remove(backupDir);
         logger_default.info(`\u2705 Deleted backup directory: ${backupDir}`);
       } else {
         logger_default.info(`Backup directory already deleted: ${backupDir}`);
@@ -7166,6 +7190,7 @@ var init_sessions_simple = __esm({
     init_outbox_queue();
     init_outbox_queue();
     init_mongo_auth_state();
+    init_mongo_store();
     sessions = {};
     stores = {};
     qrCodes = {};
@@ -15301,27 +15326,27 @@ var require_process = __commonJS({
 var require_filesystem = __commonJS({
   "node_modules/detect-libc/lib/filesystem.js"(exports, module) {
     "use strict";
-    var fs32 = __require("fs");
+    var fs31 = __require("fs");
     var LDD_PATH = "/usr/bin/ldd";
     var SELF_PATH = "/proc/self/exe";
     var MAX_LENGTH = 2048;
-    var readFileSync = (path32) => {
-      const fd = fs32.openSync(path32, "r");
+    var readFileSync = (path31) => {
+      const fd = fs31.openSync(path31, "r");
       const buffer2 = Buffer.alloc(MAX_LENGTH);
-      const bytesRead = fs32.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
-      fs32.close(fd, () => {
+      const bytesRead = fs31.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
+      fs31.close(fd, () => {
       });
       return buffer2.subarray(0, bytesRead);
     };
-    var readFile = (path32) => new Promise((resolve2, reject) => {
-      fs32.open(path32, "r", (err, fd) => {
+    var readFile = (path31) => new Promise((resolve2, reject) => {
+      fs31.open(path31, "r", (err, fd) => {
         if (err) {
           reject(err);
         } else {
           const buffer2 = Buffer.alloc(MAX_LENGTH);
-          fs32.read(fd, buffer2, 0, MAX_LENGTH, 0, (_57, bytesRead) => {
+          fs31.read(fd, buffer2, 0, MAX_LENGTH, 0, (_57, bytesRead) => {
             resolve2(buffer2.subarray(0, bytesRead));
-            fs32.close(fd, () => {
+            fs31.close(fd, () => {
             });
           });
         }
@@ -15433,11 +15458,11 @@ var require_detect_libc = __commonJS({
       }
       return null;
     };
-    var familyFromInterpreterPath = (path32) => {
-      if (path32) {
-        if (path32.includes("/ld-musl-")) {
+    var familyFromInterpreterPath = (path31) => {
+      if (path31) {
+        if (path31.includes("/ld-musl-")) {
           return MUSL;
-        } else if (path32.includes("/ld-linux-")) {
+        } else if (path31.includes("/ld-linux-")) {
           return GLIBC;
         }
       }
@@ -15484,8 +15509,8 @@ var require_detect_libc = __commonJS({
       cachedFamilyInterpreter = null;
       try {
         const selfContent = await readFile(SELF_PATH);
-        const path32 = interpreterPath(selfContent);
-        cachedFamilyInterpreter = familyFromInterpreterPath(path32);
+        const path31 = interpreterPath(selfContent);
+        cachedFamilyInterpreter = familyFromInterpreterPath(path31);
       } catch (e29) {
       }
       return cachedFamilyInterpreter;
@@ -15497,8 +15522,8 @@ var require_detect_libc = __commonJS({
       cachedFamilyInterpreter = null;
       try {
         const selfContent = readFileSync(SELF_PATH);
-        const path32 = interpreterPath(selfContent);
-        cachedFamilyInterpreter = familyFromInterpreterPath(path32);
+        const path31 = interpreterPath(selfContent);
+        cachedFamilyInterpreter = familyFromInterpreterPath(path31);
       } catch (e29) {
       }
       return cachedFamilyInterpreter;
@@ -16050,9 +16075,9 @@ var require_sharp = __commonJS({
     ];
     var sharp5;
     var errors = [];
-    for (const path32 of paths) {
+    for (const path31 of paths) {
       try {
-        sharp5 = __require(path32);
+        sharp5 = __require(path31);
         break;
       } catch (err) {
         errors.push(err);
@@ -17457,15 +17482,15 @@ var require_route = __commonJS({
       };
     }
     function wrapConversion(toModel, graph) {
-      const path32 = [graph[toModel].parent, toModel];
+      const path31 = [graph[toModel].parent, toModel];
       let fn = conversions[graph[toModel].parent][toModel];
       let cur = graph[toModel].parent;
       while (graph[cur].parent) {
-        path32.unshift(graph[cur].parent);
+        path31.unshift(graph[cur].parent);
         fn = link(conversions[graph[cur].parent][cur], fn);
         cur = graph[cur].parent;
       }
-      fn.conversion = path32;
+      fn.conversion = path31;
       return fn;
     }
     module.exports = function(fromModel) {
@@ -19360,7 +19385,7 @@ var require_channel = __commonJS({
 var require_output = __commonJS({
   "node_modules/sharp/lib/output.js"(exports, module) {
     "use strict";
-    var path32 = __require("node:path");
+    var path31 = __require("node:path");
     var is = require_is();
     var sharp5 = require_sharp();
     var formats = /* @__PURE__ */ new Map([
@@ -19391,9 +19416,9 @@ var require_output = __commonJS({
       let err;
       if (!is.string(fileOut)) {
         err = new Error("Missing output file path");
-      } else if (is.string(this.options.input.file) && path32.resolve(this.options.input.file) === path32.resolve(fileOut)) {
+      } else if (is.string(this.options.input.file) && path31.resolve(this.options.input.file) === path31.resolve(fileOut)) {
         err = new Error("Cannot use same file for input and output");
-      } else if (jp2Regex.test(path32.extname(fileOut)) && !this.constructor.format.jp2k.output.file) {
+      } else if (jp2Regex.test(path31.extname(fileOut)) && !this.constructor.format.jp2k.output.file) {
         err = errJp2Save();
       }
       if (err) {
@@ -21502,8 +21527,8 @@ var require_FileKvStore = __commonJS({
     var promises_1 = __importDefault(__require("node:fs/promises"));
     var node_path_1 = __importDefault(__require("node:path"));
     var FileKvStore = class {
-      constructor(path32) {
-        this.directory = path32;
+      constructor(path31) {
+        this.directory = path31;
       }
       async get(key) {
         try {
@@ -21886,21 +21911,21 @@ var require_BaseHandler = __commonJS({
         return res.end();
       }
       generateUrl(req, id) {
-        const path32 = this.options.path === "/" ? "" : this.options.path;
+        const path31 = this.options.path === "/" ? "" : this.options.path;
         if (this.options.generateUrl) {
           const { proto: proto4, host: host2 } = this.extractHostAndProto(req);
           return this.options.generateUrl(req, {
             proto: proto4,
             host: host2,
-            path: path32,
+            path: path31,
             id
           });
         }
         if (this.options.relativeLocation) {
-          return `${path32}/${id}`;
+          return `${path31}/${id}`;
         }
         const { proto: proto3, host } = this.extractHostAndProto(req);
-        return `${proto3}://${host}${path32}/${id}`;
+        return `${proto3}://${host}${path31}/${id}`;
       }
       getFileIdFromRequest(req) {
         const match = reExtractFileID.exec(req.url);
@@ -22056,8 +22081,8 @@ var require_GetHandler = __commonJS({
           "application/ogg"
         ]);
       }
-      registerPath(path32, handler) {
-        this.paths.set(path32, handler);
+      registerPath(path31, handler) {
+        this.paths.set(path31, handler);
       }
       /**
        * Read data from the DataStore and send the stream.
@@ -22804,8 +22829,8 @@ var require_server = __commonJS({
           }
         });
       }
-      get(path32, handler) {
-        this.handlers.GET.registerPath(path32, handler);
+      get(path31, handler) {
+        this.handlers.GET.registerPath(path31, handler);
       }
       /**
        * Main server requestListener, invoked on every 'request' event.
@@ -25519,8 +25544,8 @@ init_logger();
 init_environment();
 import puppeteer from "puppeteer";
 import Handlebars from "handlebars";
-import fs8 from "fs-extra";
-import path11 from "path";
+import fs7 from "fs-extra";
+import path10 from "path";
 import os from "os";
 import { randomUUID as randomUUID3 } from "crypto";
 function resolveChromeExecutable() {
@@ -25530,14 +25555,14 @@ function resolveChromeExecutable() {
   }
   candidates.push("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
   try {
-    const cacheRoot = path11.join(os.homedir(), ".cache", "puppeteer", "chrome");
-    const builds = fs8.readdirSync(cacheRoot).map((name) => {
+    const cacheRoot = path10.join(os.homedir(), ".cache", "puppeteer", "chrome");
+    const builds = fs7.readdirSync(cacheRoot).map((name) => {
       const major = Number((name.match(/mac_arm-(\d+)\./) || [])[1] || 0);
       return { name, major };
     }).filter((b63) => b63.major >= 130).sort((a49, b63) => b63.major - a49.major);
     for (const b63 of builds) {
       candidates.push(
-        path11.join(
+        path10.join(
           cacheRoot,
           b63.name,
           "chrome-mac-arm64",
@@ -25552,7 +25577,7 @@ function resolveChromeExecutable() {
   }
   for (const candidate of candidates) {
     try {
-      if (candidate && fs8.existsSync(candidate)) {
+      if (candidate && fs7.existsSync(candidate)) {
         return candidate;
       }
     } catch {
@@ -25576,8 +25601,8 @@ var PDFGenerator = class {
       }
       this.isInitializing = true;
       logger_default.info("Initializing PDF Generator...");
-      await fs8.ensureDir(this.templatesDir);
-      await fs8.ensureDir(this.uploadsDir);
+      await fs7.ensureDir(this.templatesDir);
+      await fs7.ensureDir(this.uploadsDir);
       const headlessEnv = process.env.PUPPETEER_HEADLESS;
       const headlessMode = headlessEnv === "true" ? true : headlessEnv === "false" ? false : "new";
       const executablePath = resolveChromeExecutable();
@@ -25665,7 +25690,7 @@ var PDFGenerator = class {
       const compiled = Handlebars.compile(template);
       const html = compiled(request.data);
       const filename = request.filename || `pdf-${randomUUID3()}.pdf`;
-      const filepath = path11.join(this.uploadsDir, filename);
+      const filepath = path10.join(this.uploadsDir, filename);
       const page = await this.createPageWithRetry();
       page.setDefaultNavigationTimeout(this.protocolTimeout);
       page.setDefaultTimeout(this.protocolTimeout);
@@ -25687,8 +25712,8 @@ var PDFGenerator = class {
   async generateFromHtml(html, options2 = {}) {
     try {
       await this.ensureBrowser();
-      const filepath = options2.outputPath ? options2.outputPath : path11.join(this.uploadsDir, options2.filename || `pdf-${randomUUID3()}.pdf`);
-      await fs8.ensureDir(path11.dirname(filepath));
+      const filepath = options2.outputPath ? options2.outputPath : path10.join(this.uploadsDir, options2.filename || `pdf-${randomUUID3()}.pdf`);
+      await fs7.ensureDir(path10.dirname(filepath));
       const page = await this.createPageWithRetry();
       page.setDefaultNavigationTimeout(this.protocolTimeout);
       page.setDefaultTimeout(this.protocolTimeout);
@@ -25711,9 +25736,9 @@ var PDFGenerator = class {
   }
   async createTemplate(id, name, htmlContent) {
     try {
-      const filepath = path11.join(this.templatesDir, `${id}.hbs`);
-      await fs8.ensureDir(path11.dirname(filepath));
-      await fs8.writeFile(filepath, htmlContent, "utf-8");
+      const filepath = path10.join(this.templatesDir, `${id}.hbs`);
+      await fs7.ensureDir(path10.dirname(filepath));
+      await fs7.writeFile(filepath, htmlContent, "utf-8");
       logger_default.info(`Created PDF template: ${id}`);
     } catch (error) {
       logger_default.error("Error creating PDF template:", error);
@@ -25722,11 +25747,11 @@ var PDFGenerator = class {
   }
   async loadTemplate(templateId) {
     try {
-      const filepath = path11.join(this.templatesDir, `${templateId}.hbs`);
-      if (!await fs8.pathExists(filepath)) {
+      const filepath = path10.join(this.templatesDir, `${templateId}.hbs`);
+      if (!await fs7.pathExists(filepath)) {
         throw new Error(`Template not found: ${templateId}`);
       }
-      return await fs8.readFile(filepath, "utf-8");
+      return await fs7.readFile(filepath, "utf-8");
     } catch (error) {
       logger_default.error("Error loading template:", error);
       throw error;
@@ -25734,7 +25759,7 @@ var PDFGenerator = class {
   }
   async listTemplates() {
     try {
-      const files = await fs8.readdir(this.templatesDir);
+      const files = await fs7.readdir(this.templatesDir);
       return files.filter((f64) => f64.endsWith(".hbs")).map((f64) => f64.replace(".hbs", ""));
     } catch (error) {
       logger_default.error("Error listing templates:", error);
@@ -25743,9 +25768,9 @@ var PDFGenerator = class {
   }
   async deleteTemplate(templateId) {
     try {
-      const filepath = path11.join(this.templatesDir, `${templateId}.hbs`);
-      if (await fs8.pathExists(filepath)) {
-        await fs8.remove(filepath);
+      const filepath = path10.join(this.templatesDir, `${templateId}.hbs`);
+      if (await fs7.pathExists(filepath)) {
+        await fs7.remove(filepath);
         logger_default.info(`Deleted template: ${templateId}`);
       }
     } catch (error) {
@@ -25837,16 +25862,16 @@ async function deleteTemplate(req, res, next) {
 }
 
 // src/api/controllers/pdf-vale.controller.ts
-import fs10 from "fs-extra";
-import path13 from "path";
+import fs9 from "fs-extra";
+import path12 from "path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { randomUUID as randomUUID4 } from "crypto";
 init_environment();
 
 // src/pdf/render.service.ts
 init_environment();
-import fs9 from "fs-extra";
-import path12 from "path";
+import fs8 from "fs-extra";
+import path11 from "path";
 import crypto3 from "crypto";
 import { createCanvas } from "@napi-rs/canvas";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -25862,7 +25887,7 @@ function resolveDriveCacheDir() {
   return config.drive?.cacheDir || "./data/drive-cache";
 }
 async function getPdfInfo(filePath) {
-  const buffer2 = await fs9.readFile(filePath);
+  const buffer2 = await fs8.readFile(filePath);
   const data = new Uint8Array(buffer2);
   const task = pdfjsLib.getDocument({ data, disableWorker: true });
   const pdf = await task.promise;
@@ -25871,16 +25896,16 @@ async function getPdfInfo(filePath) {
   };
 }
 async function renderPdfPageToPng(filePath, options2) {
-  const stat = await fs9.stat(filePath);
+  const stat = await fs8.stat(filePath);
   const scale = clampScale(options2.scale);
   const cacheKey = getCacheKey(filePath, stat, options2.page, scale);
-  const cacheDir = path12.resolve(resolveDriveCacheDir(), cacheKey);
-  const cacheFile = path12.join(cacheDir, `page-${options2.page}.png`);
-  if (await fs9.pathExists(cacheFile)) {
+  const cacheDir = path11.resolve(resolveDriveCacheDir(), cacheKey);
+  const cacheFile = path11.join(cacheDir, `page-${options2.page}.png`);
+  if (await fs8.pathExists(cacheFile)) {
     return { cacheFile, fromCache: true };
   }
-  await fs9.ensureDir(cacheDir);
-  const buffer2 = await fs9.readFile(filePath);
+  await fs8.ensureDir(cacheDir);
+  const buffer2 = await fs8.readFile(filePath);
   const data = new Uint8Array(buffer2);
   const task = pdfjsLib.getDocument({ data, disableWorker: true });
   const pdf = await task.promise;
@@ -25893,21 +25918,21 @@ async function renderPdfPageToPng(filePath, options2) {
   const ctx = canvas.getContext("2d");
   await page.render({ canvasContext: ctx, viewport }).promise;
   const pngBuffer = canvas.toBuffer("image/png");
-  await fs9.writeFile(cacheFile, pngBuffer);
+  await fs8.writeFile(cacheFile, pngBuffer);
   return { cacheFile, fromCache: false };
 }
 async function renderPdfPageToPngWithGrid(filePath, options2) {
-  const stat = await fs9.stat(filePath);
+  const stat = await fs8.stat(filePath);
   const scale = clampScale(options2.scale);
   const gridSize = options2.gridSize && options2.gridSize > 0 ? options2.gridSize : 50;
   const cacheKey = getCacheKey(filePath, stat, options2.page, scale) + `-g${gridSize}`;
-  const cacheDir = path12.resolve(resolveDriveCacheDir(), cacheKey);
-  const cacheFile = path12.join(cacheDir, `page-${options2.page}-grid.png`);
-  if (await fs9.pathExists(cacheFile)) {
+  const cacheDir = path11.resolve(resolveDriveCacheDir(), cacheKey);
+  const cacheFile = path11.join(cacheDir, `page-${options2.page}-grid.png`);
+  if (await fs8.pathExists(cacheFile)) {
     return { cacheFile, fromCache: true };
   }
-  await fs9.ensureDir(cacheDir);
-  const buffer2 = await fs9.readFile(filePath);
+  await fs8.ensureDir(cacheDir);
+  const buffer2 = await fs8.readFile(filePath);
   const data = new Uint8Array(buffer2);
   const task = pdfjsLib.getDocument({ data, disableWorker: true });
   const pdf = await task.promise;
@@ -25940,7 +25965,7 @@ async function renderPdfPageToPngWithGrid(filePath, options2) {
     ctx.fillText(String(coord), 2, y65 - 2);
   }
   const pngBuffer = canvas.toBuffer("image/png");
-  await fs9.writeFile(cacheFile, pngBuffer);
+  await fs8.writeFile(cacheFile, pngBuffer);
   return { cacheFile, fromCache: false };
 }
 
@@ -26066,13 +26091,13 @@ async function generateVale(req, res, next) {
         return next(error);
       }
     }
-    const templatePath = path13.join(config.pdf.templatesDir, template);
-    if (!await fs10.pathExists(templatePath)) {
+    const templatePath = path12.join(config.pdf.templatesDir, template);
+    if (!await fs9.pathExists(templatePath)) {
       const error = new Error("Template not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const bytes = await fs10.readFile(templatePath);
+    const bytes = await fs9.readFile(templatePath);
     const pdfDoc = await PDFDocument.load(bytes);
     const page = pdfDoc.getPages()[0];
     const { width, height } = page.getSize();
@@ -26083,13 +26108,13 @@ async function generateVale(req, res, next) {
     }
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const signaturePath = path13.join(
-      path13.dirname(config.pdf.templatesDir),
+    const signaturePath = path12.join(
+      path12.dirname(config.pdf.templatesDir),
       "signatures",
       "signature-dispatch-note.png"
     );
-    if (await fs10.pathExists(signaturePath)) {
-      const signatureBytes = await fs10.readFile(signaturePath);
+    if (await fs9.pathExists(signaturePath)) {
+      const signatureBytes = await fs9.readFile(signaturePath);
       const signatureImage = await pdfDoc.embedPng(signatureBytes);
       page.drawImage(signatureImage, {
         x: 120,
@@ -26129,13 +26154,13 @@ async function generateVale(req, res, next) {
         color: isVale ? rgb(0.8, 0, 0) : rgb(0, 0, 0)
       });
     });
-    await fs10.ensureDir(config.pdf.tempDir);
+    await fs9.ensureDir(config.pdf.tempDir);
     const valeNumber = fields.nroVale || randomUUID4().slice(0, 8);
     const safeVale = String(valeNumber).replace(/[^a-zA-Z0-9_-]+/g, "-");
     const filename = `vale-despacho-${safeVale}.pdf`;
-    const outputPath = path13.join(config.pdf.tempDir, filename);
+    const outputPath = path12.join(config.pdf.tempDir, filename);
     const pdfBytes = await pdfDoc.save();
-    await fs10.writeFile(outputPath, pdfBytes);
+    await fs9.writeFile(outputPath, pdfBytes);
     const publicUrl = `${config.pdf.tempPublicBaseUrl.replace(/\/+$/, "")}/${encodeURI(
       filename
     )}`;
@@ -26198,8 +26223,8 @@ async function previewValeTemplateGrid(req, res, next) {
     const page = parseInt(String(req.query.page || "1"), 10);
     const scale = parseFloat(String(req.query.scale || "1.5"));
     const gridSize = parseInt(String(req.query.grid || "50"), 10);
-    const templatePath = path13.join(config.pdf.templatesDir, template);
-    if (!await fs10.pathExists(templatePath)) {
+    const templatePath = path12.join(config.pdf.templatesDir, template);
+    if (!await fs9.pathExists(templatePath)) {
       const error = new Error("Template not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
@@ -26211,7 +26236,7 @@ async function previewValeTemplateGrid(req, res, next) {
     });
     res.setHeader("Cache-Control", "public, max-age=3600, immutable");
     res.setHeader("Content-Type", "image/png");
-    res.status(HTTP_STATUS.OK).sendFile(path13.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path12.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -26222,13 +26247,13 @@ async function previewValeTemplateGrid(req, res, next) {
 }
 
 // src/api/controllers/plant-dispatch-settlement-document.controller.ts
-import fs12 from "fs-extra";
+import fs11 from "fs-extra";
 
 // src/services/plant-dispatch-settlement-document.service.ts
 init_environment();
 init_models();
-import fs11 from "fs-extra";
-import path14 from "path";
+import fs10 from "fs-extra";
+import path13 from "path";
 var escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 var formatDate = (value) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
@@ -26323,9 +26348,9 @@ async function generatePlantSettlementPdf(params) {
     logoUrl: company.branding?.logoLight || company.branding?.logoDark,
     payload: params.payload
   });
-  await fs11.ensureDir(config.pdf.tempDir);
+  await fs10.ensureDir(config.pdf.tempDir);
   const fileName = `reporte-produccion-${Date.now()}.pdf`;
-  const filePath = path14.join(config.pdf.tempDir, fileName);
+  const filePath = path13.join(config.pdf.tempDir, fileName);
   await generator_service_default.generateFromHtml(html, {
     outputPath: filePath,
     format: "A4",
@@ -26345,7 +26370,7 @@ async function downloadPlantSettlementPdf(req, res, next) {
       payload
     });
     res.download(generated.filePath, generated.fileName, (error) => {
-      void fs12.remove(generated.filePath);
+      void fs11.remove(generated.filePath);
       if (error && !res.headersSent) next(error);
     });
   } catch (error) {
@@ -26367,12 +26392,12 @@ var pdf_routes_default = router4;
 // src/api/routes/drive.routes.ts
 import { Router as Router5 } from "express";
 import multer2 from "multer";
-import fs18 from "fs-extra";
-import path21 from "path";
+import fs17 from "fs-extra";
+import path20 from "path";
 
 // src/api/controllers/drive.controller.ts
-import fs15 from "fs-extra";
-import path18 from "path";
+import fs14 from "fs-extra";
+import path17 from "path";
 init_storage_path_service();
 
 // src/middleware/quota.middleware.ts
@@ -26475,8 +26500,8 @@ init_logger();
 
 // src/services/thumbnail.service.ts
 var import_sharp = __toESM(require_lib(), 1);
-import fs13 from "fs-extra";
-import path15 from "path";
+import fs12 from "fs-extra";
+import path14 from "path";
 import crypto4 from "crypto";
 import { spawn } from "child_process";
 init_logger();
@@ -26543,7 +26568,7 @@ var VIDEO_EXTENSIONS = /* @__PURE__ */ new Set([
 var thumbDirName = ".thumbs";
 function resolveKind(mimeType, fileName) {
   const mime = (mimeType || "").toLowerCase();
-  const ext = path15.extname(fileName).toLowerCase();
+  const ext = path14.extname(fileName).toLowerCase();
   if (mime.startsWith("image/") && !mime.includes("svg") || [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)) {
     return "image";
   }
@@ -26559,25 +26584,25 @@ function sanitizeName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "file";
 }
 async function removePreviousThumbnails(outputDir, safeBase) {
-  const thumbDir = path15.join(outputDir, thumbDirName);
-  await fs13.ensureDir(thumbDir);
-  const entries = await fs13.readdir(thumbDir).catch(() => []);
+  const thumbDir = path14.join(outputDir, thumbDirName);
+  await fs12.ensureDir(thumbDir);
+  const entries = await fs12.readdir(thumbDir).catch(() => []);
   const prefix = `thumb_${safeBase}_`;
   await Promise.all(
-    entries.filter((entry) => entry.startsWith(prefix)).map((entry) => fs13.remove(path15.join(thumbDir, entry)).catch(() => {
+    entries.filter((entry) => entry.startsWith(prefix)).map((entry) => fs12.remove(path14.join(thumbDir, entry)).catch(() => {
     }))
   );
 }
 async function createThumbTargetPath(options2) {
-  const stat = await fs13.stat(options2.filePath);
-  const parsed = path15.parse(options2.fileName);
+  const stat = await fs12.stat(options2.filePath);
+  const parsed = path14.parse(options2.fileName);
   const safeBase = sanitizeName(parsed.name || "file");
   const hash = crypto4.createHash("sha1").update(`${options2.filePath}:${stat.size}:${stat.mtimeMs}`).digest("hex").slice(0, 10);
   const thumbName = `thumb_${safeBase}_${hash}.jpg`;
-  const thumbDir = path15.join(options2.outputDir, thumbDirName);
-  await fs13.ensureDir(thumbDir);
+  const thumbDir = path14.join(options2.outputDir, thumbDirName);
+  await fs12.ensureDir(thumbDir);
   await removePreviousThumbnails(options2.outputDir, safeBase);
-  const thumbPath = path15.join(thumbDir, thumbName);
+  const thumbPath = path14.join(thumbDir, thumbName);
   return { thumbName, thumbPath };
 }
 async function runFfmpeg(args) {
@@ -26605,7 +26630,7 @@ async function generateImageThumbnail(options2, thumbPath) {
     fit: "inside",
     withoutEnlargement: true
   }).jpeg({ quality: 72, progressive: true, mozjpeg: true }).toBuffer();
-  await fs13.writeFile(thumbPath, buffer2);
+  await fs12.writeFile(thumbPath, buffer2);
 }
 async function generatePdfThumbnail(options2, thumbPath) {
   const { cacheFile } = await renderPdfPageToPng(options2.filePath, { page: 1, scale: 1.3 });
@@ -26613,7 +26638,7 @@ async function generatePdfThumbnail(options2, thumbPath) {
     fit: "inside",
     withoutEnlargement: true
   }).jpeg({ quality: 78, progressive: true, mozjpeg: true }).toBuffer();
-  await fs13.writeFile(thumbPath, buffer2);
+  await fs12.writeFile(thumbPath, buffer2);
 }
 async function generateVideoThumbnail(options2, thumbPath) {
   const args = [
@@ -26655,7 +26680,7 @@ async function generateThumbnailForFile(options2) {
     } else if (kind === "video") {
       await generateVideoThumbnail(options2, thumbPath);
     }
-    const stat = await fs13.stat(thumbPath);
+    const stat = await fs12.stat(thumbPath);
     return {
       status: "ready",
       thumbnailName: thumbName,
@@ -26678,18 +26703,18 @@ async function generateThumbnailForFile(options2) {
 
 // src/services/video-stream.service.ts
 init_logger();
-import fs14 from "fs-extra";
-import path16 from "path";
+import fs13 from "fs-extra";
+import path15 from "path";
 import { spawn as spawn2 } from "child_process";
 var FASTSTART_EXTENSIONS = /* @__PURE__ */ new Set([".mp4", ".m4v", ".mov"]);
 var isVideoByMimeOrExt = (mimeType, fileName) => {
   const mime = (mimeType || "").toLowerCase();
-  const ext = path16.extname(fileName).toLowerCase();
+  const ext = path15.extname(fileName).toLowerCase();
   if (mime.startsWith("video/")) return true;
   return [".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi", ".mpeg", ".mpg", ".3gp"].includes(ext);
 };
 var supportsFaststart = (fileName) => {
-  const ext = path16.extname(fileName).toLowerCase();
+  const ext = path15.extname(fileName).toLowerCase();
   return FASTSTART_EXTENSIONS.has(ext);
 };
 var runFfmpegWithTimeout = async (args, timeoutMs) => {
@@ -26756,18 +26781,18 @@ async function optimizeVideoForProgressiveStreaming(options2) {
   }
   const timeoutMs = Number.isFinite(options2.timeoutMs) ? options2.timeoutMs : 18e4;
   try {
-    const sourceStat = await fs14.stat(options2.filePath);
-    const ext = path16.extname(options2.fileName).toLowerCase() || ".mp4";
-    const tempPath = path16.join(
-      path16.dirname(options2.filePath),
+    const sourceStat = await fs13.stat(options2.filePath);
+    const ext = path15.extname(options2.fileName).toLowerCase() || ".mp4";
+    const tempPath = path15.join(
+      path15.dirname(options2.filePath),
       `.tmp_faststart_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`
     );
     await runFfmpegWithTimeout(
       ["-y", "-i", options2.filePath, "-c", "copy", "-movflags", "+faststart", tempPath],
       timeoutMs
     );
-    const optimizedStat = await fs14.stat(tempPath);
-    await fs14.move(tempPath, options2.filePath, { overwrite: true });
+    const optimizedStat = await fs13.stat(tempPath);
+    await fs13.move(tempPath, options2.filePath, { overwrite: true });
     return {
       attempted: true,
       optimized: true,
@@ -26775,11 +26800,11 @@ async function optimizeVideoForProgressiveStreaming(options2) {
     };
   } catch (error) {
     if (typeof options2.filePath === "string") {
-      const ext = path16.extname(options2.fileName).toLowerCase() || ".mp4";
+      const ext = path15.extname(options2.fileName).toLowerCase() || ".mp4";
       const tempPrefix = `.tmp_faststart_`;
-      const dir = path16.dirname(options2.filePath);
-      const entries = await fs14.readdir(dir).catch(() => []);
-      const cleanupTasks = entries.filter((entry) => entry.startsWith(tempPrefix) && entry.endsWith(ext)).map((entry) => fs14.remove(path16.join(dir, entry)).catch(() => {
+      const dir = path15.dirname(options2.filePath);
+      const entries = await fs13.readdir(dir).catch(() => []);
+      const cleanupTasks = entries.filter((entry) => entry.startsWith(tempPrefix) && entry.endsWith(ext)).map((entry) => fs13.remove(path15.join(dir, entry)).catch(() => {
       }));
       await Promise.all(cleanupTasks);
     }
@@ -26800,17 +26825,17 @@ async function optimizeVideoForProgressiveStreaming(options2) {
 
 // src/services/storage-file-name.service.ts
 import crypto5 from "crypto";
-import path17 from "path";
+import path16 from "path";
 var MAX_SAFE_BASENAME_LENGTH = 80;
 function sanitizeStorageFileName(name) {
-  const parsed = path17.parse(name || "file");
+  const parsed = path16.parse(name || "file");
   const safeBase = parsed.name.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "").slice(0, MAX_SAFE_BASENAME_LENGTH) || "file";
   const safeExt = parsed.ext.replace(/[^a-zA-Z0-9.]/g, "").slice(0, 16).toLowerCase();
   return `${safeBase}${safeExt}`;
 }
 function buildUniqueStorageFileName(originalName, uniqueSeed) {
   const safeName = sanitizeStorageFileName(originalName);
-  const parsed = path17.parse(safeName);
+  const parsed = path16.parse(safeName);
   const hash = crypto5.createHash("sha1").update(`${uniqueSeed || crypto5.randomUUID()}:${originalName}:${Date.now()}`).digest("hex").slice(0, 10);
   return `${parsed.name}_${hash}${parsed.ext}`;
 }
@@ -26821,7 +26846,7 @@ init_json_store();
 init_environment();
 var MAX_MIGRATION_COPY_ENTRIES = 500;
 var migrationJobStore = new json_store_default({
-  baseDir: path18.join(config.storage.root, "migration-jobs"),
+  baseDir: path17.join(config.storage.root, "migration-jobs"),
   autoBackup: false
 });
 var activeMigrationCopyJobs = /* @__PURE__ */ new Set();
@@ -26876,22 +26901,22 @@ async function listEntries(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs15.pathExists(resolved);
+    const exists = await fs14.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stat = await fs15.stat(resolved);
+    const stat = await fs14.stat(resolved);
     if (!stat.isDirectory()) {
       const error = new Error("Path is not a folder");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const entries = (await fs15.readdir(resolved)).filter((name) => !name.startsWith("."));
+    const entries = (await fs14.readdir(resolved)).filter((name) => !name.startsWith("."));
     const results = await Promise.all(
       entries.map(async (name) => {
-        const entryStat = await fs15.stat(path18.join(resolved, name));
+        const entryStat = await fs14.stat(path17.join(resolved, name));
         const entry = toEntry(relativePath, name, entryStat, companyId);
         const result = { ...entry };
         if (entry.url) {
@@ -26936,19 +26961,19 @@ async function createFolder(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const parentExists = await fs15.pathExists(resolved);
+    const parentExists = await fs14.pathExists(resolved);
     if (!parentExists) {
       const error = new Error("Parent path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const target = path18.join(resolved, name);
+    const target = path17.join(resolved, name);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs15.ensureDir(target);
+    await fs14.ensureDir(target);
     const newPath = relativePath ? `${relativePath}/${name}` : name;
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
@@ -26989,26 +27014,26 @@ async function uploadFile(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs15.ensureDir(resolved);
+    await fs14.ensureDir(resolved);
     const MAX_ORDERS_BYTES2 = 100 * 1024 * 1024;
     const MAX_DRIVE_BYTES3 = 2 * 1024 * 1024 * 1024;
     const isDriveRoot = relativePath.startsWith("drive");
     const maxAllowedBytes = isDriveRoot ? MAX_DRIVE_BYTES3 : MAX_ORDERS_BYTES2;
     if (file.size > maxAllowedBytes) {
-      await fs15.remove(file.path).catch(() => {
+      await fs14.remove(file.path).catch(() => {
       });
       const error = new Error("File too large");
       error.statusCode = HTTP_STATUS.REQUEST_TOO_LONG;
       return next(error);
     }
     const storageFileName = buildUniqueStorageFileName(file.originalname, file.path);
-    const target = path18.join(resolved, storageFileName);
+    const target = path17.join(resolved, storageFileName);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs15.move(file.path, target, { overwrite: false });
+    await fs14.move(file.path, target, { overwrite: false });
     await incrementStorageUsage(companyId, file.size);
     const videoLike = isVideoFile(file.mimetype, storageFileName);
     let streamStatus = videoLike ? "ready" : "unsupported";
@@ -27095,16 +27120,16 @@ async function deleteEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs15.pathExists(resolved);
+    const exists = await fs14.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stats = await fs15.stat(resolved);
+    const stats = await fs14.stat(resolved);
     const isFile = stats.isFile();
     const fileSize = isFile ? stats.size : 0;
-    await fs15.remove(resolved);
+    await fs14.remove(resolved);
     if (isFile && fileSize > 0) {
       await decrementStorageUsage(companyId, fileSize);
     }
@@ -27145,14 +27170,14 @@ async function moveEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs15.pathExists(fromResolved);
+    const exists = await fs14.pathExists(fromResolved);
     if (!exists) {
       const error = new Error("Source not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    await fs15.ensureDir(path18.dirname(toResolved));
-    await fs15.move(fromResolved, toResolved, { overwrite: false });
+    await fs14.ensureDir(path17.dirname(toResolved));
+    await fs14.move(fromResolved, toResolved, { overwrite: false });
     const publicUrl = `/files/companies/${companyId}/${to3}`;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -27220,31 +27245,31 @@ var copyCompanyFileEntry = async (params) => {
     error.statusCode = HTTP_STATUS.FORBIDDEN;
     throw error;
   }
-  const sourceExists = await fs15.pathExists(sourceResolved);
+  const sourceExists = await fs14.pathExists(sourceResolved);
   if (!sourceExists) {
     const error = new Error("Source not found");
     error.statusCode = HTTP_STATUS.NOT_FOUND;
     throw error;
   }
-  const sourceStats = await fs15.stat(sourceResolved);
+  const sourceStats = await fs14.stat(sourceResolved);
   if (!sourceStats.isFile()) {
     const error = new Error("Source must be a file");
     error.statusCode = HTTP_STATUS.BAD_REQUEST;
     throw error;
   }
   await storagePathService.ensureCompanyStructure(params.targetCompanyId);
-  await fs15.ensureDir(path18.dirname(targetResolved));
-  const targetExists = await fs15.pathExists(targetResolved);
+  await fs14.ensureDir(path17.dirname(targetResolved));
+  const targetExists = await fs14.pathExists(targetResolved);
   let createdTarget = false;
   if (targetExists) {
-    const targetStats = await fs15.stat(targetResolved);
+    const targetStats = await fs14.stat(targetResolved);
     if (targetStats.size !== sourceStats.size) {
       const error = new Error("Target already exists with different size");
       error.statusCode = HTTP_STATUS.CONFLICT;
       throw error;
     }
   } else {
-    await fs15.copy(sourceResolved, targetResolved, { overwrite: false });
+    await fs14.copy(sourceResolved, targetResolved, { overwrite: false });
     await incrementStorageUsage(params.targetCompanyId, sourceStats.size);
     createdTarget = true;
   }
@@ -27257,13 +27282,13 @@ var deleteCompanyFileEntry = async (params) => {
     error.statusCode = HTTP_STATUS.FORBIDDEN;
     throw error;
   }
-  const exists = await fs15.pathExists(resolved);
+  const exists = await fs14.pathExists(resolved);
   if (!exists) {
     return { deleted: false, size: 0 };
   }
-  const stats = await fs15.stat(resolved);
+  const stats = await fs14.stat(resolved);
   const fileSize = stats.isFile() ? stats.size : 0;
-  await fs15.remove(resolved);
+  await fs14.remove(resolved);
   if (fileSize > 0) {
     await decrementStorageUsage(params.companyId, fileSize);
   }
@@ -27553,9 +27578,9 @@ async function getInfo(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const stat = await fs15.stat(resolved);
-    const name = path18.basename(resolved);
-    const parent = path18.dirname(targetPath).replace(/\\/g, "/");
+    const stat = await fs14.stat(resolved);
+    const name = path17.basename(resolved);
+    const parent = path17.dirname(targetPath).replace(/\\/g, "/");
     const base = parent === "." ? "" : parent;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -27577,8 +27602,8 @@ async function getInfo(req, res, next) {
 }
 
 // src/api/controllers/drive-pdf.controller.ts
-import fs16 from "fs-extra";
-import path19 from "path";
+import fs15 from "fs-extra";
+import path18 from "path";
 init_storage_path_service();
 function getPdfPathFromRequest(req) {
   const companyId = req.companyId;
@@ -27596,10 +27621,10 @@ function getPdfPathFromRequest(req) {
   return { resolved, normalized: pathParam };
 }
 function ensurePdfExtension(filePath) {
-  return path19.extname(filePath).toLowerCase() === ".pdf";
+  return path18.extname(filePath).toLowerCase() === ".pdf";
 }
 async function resolveExistingPdfPath(resolved, normalized, companyId) {
-  if (await fs16.pathExists(resolved)) {
+  if (await fs15.pathExists(resolved)) {
     return { resolved, normalized };
   }
   const candidates = [normalized.normalize("NFC"), normalized.normalize("NFD")].filter(
@@ -27607,7 +27632,7 @@ async function resolveExistingPdfPath(resolved, normalized, companyId) {
   );
   for (const candidate of candidates) {
     const altResolved = storagePathService.resolvePath(companyId, candidate);
-    if (await fs16.pathExists(altResolved)) {
+    if (await fs15.pathExists(altResolved)) {
       return { resolved: altResolved, normalized: candidate };
     }
   }
@@ -27632,7 +27657,7 @@ async function getPdfMetadata(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs16.pathExists(resolved);
+    const exists = await fs15.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -27675,7 +27700,7 @@ async function getPdfPageImage(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs16.pathExists(resolved);
+    const exists = await fs15.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -27686,7 +27711,7 @@ async function getPdfPageImage(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path19.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path18.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -27717,7 +27742,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs16.pathExists(resolved);
+    const exists = await fs15.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -27732,7 +27757,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path19.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path18.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -27872,28 +27897,28 @@ var uploadRateLimiter = companyRateLimiter({
 var import_server = __toESM(require_dist2(), 1);
 var import_file_store = __toESM(require_dist3(), 1);
 init_environment();
-import fs17 from "fs-extra";
-import path20 from "path";
+import fs16 from "fs-extra";
+import path19 from "path";
 init_logger();
 init_storage_path_service();
 init_quota_validator_service();
 var MAX_ORDERS_BYTES = 100 * 1024 * 1024;
 var MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024;
-var TUS_STORAGE_DIR = path20.join(config.storage.root, "temp", "tus-uploads");
+var TUS_STORAGE_DIR = path19.join(config.storage.root, "temp", "tus-uploads");
 try {
-  fs17.ensureDirSync(TUS_STORAGE_DIR);
+  fs16.ensureDirSync(TUS_STORAGE_DIR);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path20.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
-    fs17.ensureDirSync(fallback);
+    const fallback = path19.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
+    fs16.ensureDirSync(fallback);
     logger_default.warn(`[tus] Failed to init storage dir at ${TUS_STORAGE_DIR}. Using fallback: ${fallback}`);
     TUS_STORAGE_DIR = fallback;
   } else {
     throw error;
   }
 }
-var TUS_META_DIR = path20.join(TUS_STORAGE_DIR, "metadata");
-fs17.ensureDirSync(TUS_META_DIR);
+var TUS_META_DIR = path19.join(TUS_STORAGE_DIR, "metadata");
+fs16.ensureDirSync(TUS_META_DIR);
 function isValidEntryName2(name) {
   if (!name) return false;
   if (name === "." || name === "..") return false;
@@ -27938,8 +27963,8 @@ function getUploadId(upload4) {
   return String(upload4?.id || "");
 }
 async function storeUploadInfo(info) {
-  const infoPath = path20.join(TUS_META_DIR, `${info.id}.json`);
-  await fs17.writeJson(infoPath, info, { spaces: 2 });
+  const infoPath = path19.join(TUS_META_DIR, `${info.id}.json`);
+  await fs16.writeJson(infoPath, info, { spaces: 2 });
 }
 async function finalizeUpload(upload4, req) {
   const headerMetadata = parseMetadata(req.headers["upload-metadata"]);
@@ -27968,13 +27993,13 @@ async function finalizeUpload(upload4, req) {
   if (!storagePathService.validateAccess(resolved, companyId)) {
     throw new Error("Access denied: invalid path");
   }
-  await fs17.ensureDir(resolved);
-  const target = path20.join(resolved, storageFileName);
+  await fs16.ensureDir(resolved);
+  const target = path19.join(resolved, storageFileName);
   if (!storagePathService.validateAccess(target, companyId)) {
     throw new Error("Access denied: invalid target path");
   }
-  const tempPath = path20.join(TUS_STORAGE_DIR, getUploadId(upload4));
-  await fs17.move(tempPath, target, { overwrite: false });
+  const tempPath = path19.join(TUS_STORAGE_DIR, getUploadId(upload4));
+  await fs16.move(tempPath, target, { overwrite: false });
   await incrementStorageUsage(companyId, uploadSize);
   const filePath = relativePath ? `${relativePath}/${storageFileName}` : storageFileName;
   const publicUrl = `/files/companies/${companyId}/${filePath}`;
@@ -28132,15 +28157,15 @@ async function getTusUploadInfo(req, res, next) {
         error: { message: "Upload ID is required" }
       });
     }
-    const infoPath = path20.join(TUS_META_DIR, `${uploadId}.json`);
-    const exists = await fs17.pathExists(infoPath);
+    const infoPath = path19.join(TUS_META_DIR, `${uploadId}.json`);
+    const exists = await fs16.pathExists(infoPath);
     if (!exists) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         error: { message: "Upload info not found" }
       });
     }
-    const info = await fs17.readJson(infoPath);
+    const info = await fs16.readJson(infoPath);
     if (companyId && info.companyId && info.companyId !== companyId) {
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
@@ -28159,13 +28184,13 @@ async function getTusUploadInfo(req, res, next) {
 // src/api/routes/drive.routes.ts
 var router5 = Router5();
 var MAX_DRIVE_BYTES2 = 2 * 1024 * 1024 * 1024;
-var tempDir = path21.join(config.storage.root, "temp", "uploads");
+var tempDir = path20.join(config.storage.root, "temp", "uploads");
 try {
-  fs18.ensureDirSync(tempDir);
+  fs17.ensureDirSync(tempDir);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path21.join(process.cwd(), "data", "storage", "temp", "uploads");
-    fs18.ensureDirSync(fallback);
+    const fallback = path20.join(process.cwd(), "data", "storage", "temp", "uploads");
+    fs17.ensureDirSync(fallback);
     console.warn(
       `[drive] Failed to init temp dir at ${tempDir}. Using fallback: ${fallback}`
     );
@@ -28215,8 +28240,8 @@ import { Router as Router6 } from "express";
 
 // src/api/controllers/documents.controller.ts
 init_logger();
-import fs23 from "fs-extra";
-import path23 from "path";
+import fs22 from "fs-extra";
+import path22 from "path";
 
 // src/schemas/documents/control-imprimacion.schema.ts
 var emptyMeasurementValues = () => ({
@@ -37936,8 +37961,8 @@ var r38 = {};
 Xr(r38, { af_ZA: () => B58, ar: () => Y35, az: () => U39, base: () => Mi, cs_CZ: () => x61, da: () => le10, de: () => pr, de_AT: () => I40, de_CH: () => J42, dv: () => Q32, el: () => le9, en: () => ul, en_AU: () => be7, en_AU_ocker: () => P54, en_BORK: () => u60, en_CA: () => S41, en_GB: () => B46, en_GH: () => J39, en_HK: () => w42, en_IE: () => D49, en_IN: () => w43, en_NG: () => O41, en_US: () => A49, en_ZA: () => L39, eo: () => ro, es: () => ao3, es_MX: () => ia7, fa: () => wo, fi: () => A43, fr: () => Wi, fr_BE: () => I36, fr_CA: () => b32, fr_CH: () => _32, fr_LU: () => _33, fr_SN: () => _34, he: () => Z27, hr: () => C33, hu: () => U29, hy: () => j34, id_ID: () => F18, it: () => w21, ja: () => M24, ka_GE: () => H23, ko: () => G23, lv: () => $13, mk: () => S26, nb_NO: () => Z24, ne: () => j13, nl: () => an, nl_BE: () => j15, pl: () => ea3, pt_BR: () => W15, pt_PT: () => k17, ro: () => Mi2, ro_MD: () => j20, ru: () => ae4, sk: () => O8, sr_RS_latin: () => T7, sv: () => $5, th: () => E8, tr: () => V10, uk: () => S11, ur: () => yt, vi: () => U3, yo_NG: () => r3, zh_CN: () => Ke3, zh_TW: () => B5, zu_ZA: () => x5 });
 
 // src/services/random-data-generator.service.ts
-function setNestedValue(target, path32, value) {
-  const parts = path32.split(".");
+function setNestedValue(target, path31, value) {
+  const parts = path31.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -38523,8 +38548,8 @@ init_storage_path_service();
 // src/services/report-html-renderer.service.ts
 var import_sharp3 = __toESM(require_lib(), 1);
 init_storage_path_service();
-import fs19 from "fs-extra";
-import path22 from "path";
+import fs18 from "fs-extra";
+import path21 from "path";
 import axios3 from "axios";
 
 // src/services/image-compression.service.ts
@@ -40801,10 +40826,10 @@ ${signaturesHtml}`;
   }
   async resolveFileBuffer(filePath) {
     try {
-      if (path22.isAbsolute(filePath)) {
-        if (await fs19.pathExists(filePath)) {
-          const raw = await fs19.readFile(filePath);
-          return ImageCompressionService.processImage(raw, path22.basename(filePath));
+      if (path21.isAbsolute(filePath)) {
+        if (await fs18.pathExists(filePath)) {
+          const raw = await fs18.readFile(filePath);
+          return ImageCompressionService.processImage(raw, path21.basename(filePath));
         }
         return null;
       }
@@ -40812,9 +40837,9 @@ ${signaturesHtml}`;
         return null;
       }
       const resolved = this.resolveCompanyStoragePath(filePath);
-      if (resolved && await fs19.pathExists(resolved)) {
-        const raw = await fs19.readFile(resolved);
-        return ImageCompressionService.processImage(raw, path22.basename(resolved));
+      if (resolved && await fs18.pathExists(resolved)) {
+        const raw = await fs18.readFile(resolved);
+        return ImageCompressionService.processImage(raw, path21.basename(resolved));
       }
     } catch (error) {
       logger_default.warn("Failed to read photo file for PDF", { error: String(error), filePath });
@@ -40855,9 +40880,9 @@ ${signaturesHtml}`;
     try {
       const storagePath = this.resolveStoragePathFromUrl(urlCandidate);
       if (storagePath) {
-        if (await fs19.pathExists(storagePath)) {
-          const raw = await fs19.readFile(storagePath);
-          return ImageCompressionService.processImage(raw, path22.basename(storagePath));
+        if (await fs18.pathExists(storagePath)) {
+          const raw = await fs18.readFile(storagePath);
+          return ImageCompressionService.processImage(raw, path21.basename(storagePath));
         }
       }
     } catch (error) {
@@ -40872,7 +40897,7 @@ ${signaturesHtml}`;
         timeout: 1e4
       });
       const buffer2 = Buffer.from(response.data);
-      return ImageCompressionService.processImage(buffer2, path22.basename(urlCandidate));
+      return ImageCompressionService.processImage(buffer2, path21.basename(urlCandidate));
     } catch (error) {
       logger_default.warn("Failed to download image for PDF compression", {
         error: String(error),
@@ -41130,7 +41155,7 @@ function buildEffectiveSchema(baseSchema, overrides, customSections) {
 // src/services/pdf-merger.service.ts
 init_storage_path_service();
 init_logger();
-import fs20 from "fs-extra";
+import fs19 from "fs-extra";
 import axios4 from "axios";
 import { PDFDocument as PDFDocument2 } from "pdf-lib";
 function resolveStoragePathFromUrl(url, companyId) {
@@ -41163,8 +41188,8 @@ async function resolveLetterheadBytes(letterhead, companyId) {
     return base64 ? Buffer.from(base64, "base64") : null;
   }
   const storagePath = resolveStoragePathFromUrl(url, companyId);
-  if (storagePath && await fs20.pathExists(storagePath)) {
-    return fs20.readFile(storagePath);
+  if (storagePath && await fs19.pathExists(storagePath)) {
+    return fs19.readFile(storagePath);
   }
   if (url.startsWith("http")) {
     const response = await axios4.get(url, {
@@ -41183,30 +41208,30 @@ function isPngBuffer(buffer2) {
 }
 var PDFMergerService = class {
   static async getPageCount(pdfPath) {
-    const bytes = await fs20.readFile(pdfPath);
+    const bytes = await fs19.readFile(pdfPath);
     const pdf = await PDFDocument2.load(bytes);
     return pdf.getPageCount();
   }
   static async mergePDFWithAnnexes(mainPdfPath, annexes, outputPath, companyId) {
-    const mainPdfBytes = await fs20.readFile(mainPdfPath);
+    const mainPdfBytes = await fs19.readFile(mainPdfPath);
     const mergedPdf = await PDFDocument2.load(mainPdfBytes);
     const mainPageCount = mergedPdf.getPageCount();
     let totalAnnexPages = 0;
     const sorted = [...annexes].sort((a49, b63) => (a49.order ?? 0) - (b63.order ?? 0));
     for (const annex of sorted) {
       const annexPath = resolveStoragePathFromUrl(annex.pdfUrl, companyId);
-      if (!annexPath || !await fs20.pathExists(annexPath)) {
+      if (!annexPath || !await fs19.pathExists(annexPath)) {
         logger_default.warn("Annex PDF not found, skipping", { annexId: annex.id, pdfUrl: annex.pdfUrl });
         continue;
       }
-      const annexPdfBytes = await fs20.readFile(annexPath);
+      const annexPdfBytes = await fs19.readFile(annexPath);
       const annexPdf = await PDFDocument2.load(annexPdfBytes);
       const copiedPages = await mergedPdf.copyPages(annexPdf, annexPdf.getPageIndices());
       copiedPages.forEach((page) => mergedPdf.addPage(page));
       totalAnnexPages += annexPdf.getPageCount();
     }
     const mergedPdfBytes = await mergedPdf.save();
-    await fs20.writeFile(outputPath, mergedPdfBytes);
+    await fs19.writeFile(outputPath, mergedPdfBytes);
     return {
       totalPages: mergedPdf.getPageCount(),
       mainPages: mainPageCount,
@@ -41215,16 +41240,16 @@ var PDFMergerService = class {
   }
   static async applyLetterheadBackground(pdfPath, letterhead, outputPath, companyId) {
     if (!letterhead) {
-      if (pdfPath !== outputPath) await fs20.copyFile(pdfPath, outputPath);
+      if (pdfPath !== outputPath) await fs19.copyFile(pdfPath, outputPath);
       return;
     }
     try {
       const letterheadBytes = await resolveLetterheadBytes(letterhead, companyId);
       if (!letterheadBytes) {
-        if (pdfPath !== outputPath) await fs20.copyFile(pdfPath, outputPath);
+        if (pdfPath !== outputPath) await fs19.copyFile(pdfPath, outputPath);
         return;
       }
-      const sourcePdf = await PDFDocument2.load(await fs20.readFile(pdfPath));
+      const sourcePdf = await PDFDocument2.load(await fs19.readFile(pdfPath));
       const outputPdf = await PDFDocument2.create();
       const embeddedBackground = await this.embedBackground(outputPdf, letterheadBytes);
       for (const sourcePage of sourcePdf.getPages()) {
@@ -41234,13 +41259,13 @@ var PDFMergerService = class {
         this.drawBackground(outputPage, embeddedBackground, width, height);
         outputPage.drawPage(embeddedPage, { x: 0, y: 0, width, height });
       }
-      await fs20.writeFile(outputPath, await outputPdf.save());
+      await fs19.writeFile(outputPath, await outputPdf.save());
     } catch (error) {
       logger_default.warn("Letterhead background failed, copying original PDF", {
         error: String(error),
         letterheadId: letterhead.id
       });
-      if (pdfPath !== outputPath) await fs20.copyFile(pdfPath, outputPath);
+      if (pdfPath !== outputPath) await fs19.copyFile(pdfPath, outputPath);
     }
   }
   static async embedBackground(outputPdf, bytes) {
@@ -41262,17 +41287,17 @@ var PDFMergerService = class {
 };
 
 // src/services/folio-generator.service.ts
-import fs21 from "fs-extra";
+import fs20 from "fs-extra";
 import { PDFDocument as PDFDocument3, rgb as rgb2, StandardFonts as StandardFonts2 } from "pdf-lib";
 var FolioGeneratorService = class {
   static async addFolios(pdfPath, config2, outputPath, options2 = {}) {
     if (!config2.enabled) {
       if (pdfPath !== outputPath) {
-        await fs21.copyFile(pdfPath, outputPath);
+        await fs20.copyFile(pdfPath, outputPath);
       }
       return;
     }
-    const pdfBytes = await fs21.readFile(pdfPath);
+    const pdfBytes = await fs20.readFile(pdfPath);
     const pdfDoc = await PDFDocument3.load(pdfBytes);
     const font = await pdfDoc.embedFont(StandardFonts2.Helvetica);
     const fontSize = config2.fontSize || 10;
@@ -41304,7 +41329,7 @@ var FolioGeneratorService = class {
       });
     }
     const modifiedPdfBytes = await pdfDoc.save();
-    await fs21.writeFile(outputPath, modifiedPdfBytes);
+    await fs20.writeFile(outputPath, modifiedPdfBytes);
   }
   static formatFolio(template, current, total) {
     return template.replace("{current}", String(current)).replace("{total}", String(total));
@@ -41347,7 +41372,7 @@ init_environment();
 init_models();
 
 // src/services/pdf-to-docx.service.ts
-import fs22 from "fs-extra";
+import fs21 from "fs-extra";
 
 // node_modules/docx/build/index.mjs
 var __defProp2 = Object.defineProperty;
@@ -55632,8 +55657,8 @@ var File = class {
     return this.fontWrapper;
   }
 };
-function commonjsRequire(path32) {
-  throw new Error('Could not dynamically require "' + path32 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
+function commonjsRequire(path31) {
+  throw new Error('Could not dynamically require "' + path31 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
 }
 var jszip_min = { exports: {} };
 (function(module, exports) {
@@ -59078,7 +59103,7 @@ import { createRequire } from "module";
 import { createCanvas as createCanvas2 } from "@napi-rs/canvas";
 async function convertPdfToDocx(pdfPath, outputPath, options2 = {}) {
   const scale = options2.scale ?? 1.8;
-  const pdfBuffer = await fs22.readFile(pdfPath);
+  const pdfBuffer = await fs21.readFile(pdfPath);
   const pdfData = Buffer.isBuffer(pdfBuffer) ? new Uint8Array(pdfBuffer.buffer, pdfBuffer.byteOffset, pdfBuffer.byteLength) : new Uint8Array(pdfBuffer);
   const require2 = createRequire(import.meta.url);
   const candidates = [
@@ -59140,7 +59165,7 @@ async function convertPdfToDocx(pdfPath, outputPath, options2 = {}) {
     ]
   });
   const docxBuffer = await Packer.toBuffer(doc);
-  await fs22.writeFile(outputPath, docxBuffer);
+  await fs21.writeFile(outputPath, docxBuffer);
 }
 
 // src/api/controllers/documents.controller.ts
@@ -59206,11 +59231,11 @@ function hasMeaningfulContractRows(value) {
 }
 function mergeContractAutofillData(currentData, serviceData) {
   const next = mergeDeep({}, currentData);
-  CONTRACT_AUTOFILL_PATHS.forEach((path32) => {
-    const currentValue = getNestedValue(next, path32);
-    const serviceValue = getNestedValue(serviceData, path32);
+  CONTRACT_AUTOFILL_PATHS.forEach((path31) => {
+    const currentValue = getNestedValue(next, path31);
+    const serviceValue = getNestedValue(serviceData, path31);
     if (isEmptyContractValue(currentValue) && !isEmptyContractValue(serviceValue)) {
-      setNestedValue2(next, path32, serviceValue);
+      setNestedValue2(next, path31, serviceValue);
     }
   });
   CONTRACT_TABLE_KEYS.forEach((key) => {
@@ -59304,8 +59329,8 @@ function roundValue(value, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round(num * factor) / factor;
 }
-function setNestedValue2(target, path32, value) {
-  const parts = path32.split(".");
+function setNestedValue2(target, path31, value) {
+  const parts = path31.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -59316,8 +59341,8 @@ function setNestedValue2(target, path32, value) {
   }
   current[parts[parts.length - 1]] = value;
 }
-function getNestedValue(target, path32) {
-  const parts = path32.split(".");
+function getNestedValue(target, path31) {
+  const parts = path31.split(".");
   let current = target;
   for (const key of parts) {
     if (!current || typeof current !== "object") return void 0;
@@ -59681,9 +59706,9 @@ async function generateDocument(req, res, next) {
     const reportsDir = storagePathService.getModulePath(
       companyId,
       "service",
-      path23.join("reports", report.serviceManagementId || "generic")
+      path22.join("reports", report.serviceManagementId || "generic")
     );
-    await fs23.ensureDir(reportsDir);
+    await fs22.ensureDir(reportsDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const baseFilename = `${report.type}-${timestamp}`;
     let docxUrl;
@@ -59697,7 +59722,7 @@ async function generateDocument(req, res, next) {
     let docxSizeBytes;
     if (generatePdf) {
       const pdfFilename = `${baseFilename}.pdf`;
-      const pdfPath = path23.join(reportsDir, pdfFilename);
+      const pdfPath = path22.join(reportsDir, pdfFilename);
       const pdfStarted = Date.now();
       const baseUrl = buildAbsoluteUrl4(req, "");
       const htmlRenderer = new ReportHtmlRenderer(effectiveSchema, data, { companyId, baseUrl });
@@ -59710,15 +59735,15 @@ async function generateDocument(req, res, next) {
       });
       const letterhead = getDocumentLetterhead(data);
       if (letterhead) {
-        const letterheadPath = path23.join(reportsDir, `${baseFilename}-letterhead.pdf`);
+        const letterheadPath = path22.join(reportsDir, `${baseFilename}-letterhead.pdf`);
         await PDFMergerService.applyLetterheadBackground(
           pdfPath,
           letterhead,
           letterheadPath,
           companyId
         );
-        await fs23.copyFile(letterheadPath, pdfPath);
-        await fs23.remove(letterheadPath);
+        await fs22.copyFile(letterheadPath, pdfPath);
+        await fs22.remove(letterheadPath);
       }
       pdfDuration = Date.now() - pdfStarted;
       let currentPdfPath = pdfPath;
@@ -59726,7 +59751,7 @@ async function generateDocument(req, res, next) {
       annexPages = 0;
       totalPages = mainPages;
       if (annexes.length > 0) {
-        const mergedPath = path23.join(reportsDir, `${baseFilename}-merged.pdf`);
+        const mergedPath = path22.join(reportsDir, `${baseFilename}-merged.pdf`);
         const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
           pdfPath,
           annexes,
@@ -59739,7 +59764,7 @@ async function generateDocument(req, res, next) {
         totalPages = mergeResult.totalPages;
       }
       if (folioConfig?.enabled) {
-        const folioPath = path23.join(reportsDir, `${baseFilename}-folio.pdf`);
+        const folioPath = path22.join(reportsDir, `${baseFilename}-folio.pdf`);
         const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
         await FolioGeneratorService.addFolios(
           currentPdfPath,
@@ -59750,35 +59775,35 @@ async function generateDocument(req, res, next) {
         currentPdfPath = folioPath;
       }
       if (currentPdfPath !== pdfPath) {
-        await fs23.copyFile(currentPdfPath, pdfPath);
-        await fs23.remove(currentPdfPath);
+        await fs22.copyFile(currentPdfPath, pdfPath);
+        await fs22.remove(currentPdfPath);
       }
-      pdfUrl = `/files/companies/${companyId}/${path23.posix.join(
+      pdfUrl = `/files/companies/${companyId}/${path22.posix.join(
         "service",
         "reports",
         report.serviceManagementId || "generic",
         pdfFilename
       )}`;
       try {
-        const stats = await fs23.stat(pdfPath);
+        const stats = await fs22.stat(pdfPath);
         pdfSizeBytes = stats.size;
       } catch (error) {
         logger_default.warn("Failed to read generated PDF size", { error: String(error), pdfPath });
       }
       if (generateDocx) {
         const docxFilename = `${baseFilename}.docx`;
-        const docxPath = path23.join(reportsDir, docxFilename);
+        const docxPath = path22.join(reportsDir, docxFilename);
         const docxStarted = Date.now();
         await convertPdfToDocx(pdfPath, docxPath);
         docxDuration = Date.now() - docxStarted;
-        docxUrl = `/files/companies/${companyId}/${path23.posix.join(
+        docxUrl = `/files/companies/${companyId}/${path22.posix.join(
           "service",
           "reports",
           report.serviceManagementId || "generic",
           docxFilename
         )}`;
         try {
-          const stats = await fs23.stat(docxPath);
+          const stats = await fs22.stat(docxPath);
           docxSizeBytes = stats.size;
         } catch (error) {
           logger_default.warn("Failed to read generated DOCX size", { error: String(error), docxPath });
@@ -59849,13 +59874,13 @@ async function previewDocument(req, res, next) {
     } = await resolveDocumentContext(req);
     const effectiveSchema = buildEffectiveSchema(schema, schemaOverrides, customSections);
     disableUnsupportedReportLetterhead(effectiveSchema, data);
-    await fs23.ensureDir(config.pdf.tempDir);
+    await fs22.ensureDir(config.pdf.tempDir);
     const baseUrl = buildAbsoluteUrl4(req, "");
     const htmlRenderer = new ReportHtmlRenderer(effectiveSchema, data, { companyId, baseUrl });
     const html = await htmlRenderer.render();
     const previewId = `${report.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path23.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path22.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: effectiveSchema.pageSize || "A4",
@@ -59864,22 +59889,22 @@ async function previewDocument(req, res, next) {
     });
     const letterhead = getDocumentLetterhead(data);
     if (letterhead) {
-      const letterheadPath = path23.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
+      const letterheadPath = path22.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
       await PDFMergerService.applyLetterheadBackground(
         previewPath,
         letterhead,
         letterheadPath,
         companyId
       );
-      await fs23.copyFile(letterheadPath, previewPath);
-      await fs23.remove(letterheadPath);
+      await fs22.copyFile(letterheadPath, previewPath);
+      await fs22.remove(letterheadPath);
     }
     let currentPdfPath = previewPath;
     let mainPages = await PDFMergerService.getPageCount(previewPath);
     let annexPages = 0;
     let totalPages = mainPages;
     if (annexes.length > 0) {
-      const mergedPath = path23.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
+      const mergedPath = path22.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
       const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
         previewPath,
         annexes,
@@ -59892,7 +59917,7 @@ async function previewDocument(req, res, next) {
       totalPages = mergeResult.totalPages;
     }
     if (folioConfig?.enabled) {
-      const folioPath = path23.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
+      const folioPath = path22.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
       const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
       await FolioGeneratorService.addFolios(
         currentPdfPath,
@@ -59903,11 +59928,11 @@ async function previewDocument(req, res, next) {
       currentPdfPath = folioPath;
     }
     if (currentPdfPath !== previewPath) {
-      await fs23.copyFile(currentPdfPath, previewPath);
-      await fs23.remove(currentPdfPath);
+      await fs22.copyFile(currentPdfPath, previewPath);
+      await fs22.remove(currentPdfPath);
     }
-    const previewUrl = path23.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
-    const stat = await fs23.stat(previewPath);
+    const previewUrl = path22.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs22.stat(previewPath);
     logger_default.info("documents.preview.completed", {
       reportId: report?._id,
       type: report.type,
@@ -59985,8 +60010,8 @@ async function downloadDocument(req, res, next) {
 
 // src/api/controllers/quote-documents.controller.ts
 init_logger();
-import fs24 from "fs-extra";
-import path24 from "path";
+import fs23 from "fs-extra";
+import path23 from "path";
 init_environment();
 init_storage_path_service();
 function resolveProto5(req) {
@@ -61177,10 +61202,10 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
   const startedAt = Date.now();
   try {
     const { payload, html } = await buildRenderContext(req);
-    await fs24.ensureDir(config.pdf.tempDir);
+    await fs23.ensureDir(config.pdf.tempDir);
     const previewId = `${previewPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path24.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path23.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -61200,8 +61225,8 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
       buildFolioOptions2(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
-    const stat = await fs24.stat(previewPath);
-    const previewUrl = path24.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs23.stat(previewPath);
+    const previewUrl = path23.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("quote_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -61230,16 +61255,16 @@ async function generateQuoteDocument(req, res, next, options2) {
       payload.quoteNumber || payload.schemaData?.header?.quoteNumber || payload.schemaData?.quoteNumber || "sin-numero"
     );
     const safeQuoteNumber = sanitizePathSegment(quoteNumberRaw);
-    const relativeDir = path24.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
+    const relativeDir = path23.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       "cotizaciones",
-      path24.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
+      path23.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
     );
-    await fs24.ensureDir(outputDir);
+    await fs23.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${options2.filenamePrefix}-${safeQuoteNumber}-${timestamp}.pdf`;
-    const outputPath = path24.join(outputDir, filename);
+    const outputPath = path23.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -61259,7 +61284,7 @@ async function generateQuoteDocument(req, res, next, options2) {
       buildFolioOptions2(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(outputPath);
-    const stat = await fs24.stat(outputPath);
+    const stat = await fs23.stat(outputPath);
     const pdfUrl = `/files/companies/${companyId}/${relativeDir}/${filename}`;
     logger_default.info("quote_documents.generate.completed", {
       companyId,
@@ -61305,8 +61330,8 @@ async function generateServiceQuoteDocument(req, res, next) {
 
 // src/api/controllers/purchase-order-documents.controller.ts
 init_logger();
-import fs25 from "fs-extra";
-import path25 from "path";
+import fs24 from "fs-extra";
+import path24 from "path";
 init_environment();
 init_storage_path_service();
 function resolveProto6(req) {
@@ -61974,10 +61999,10 @@ async function previewPurchaseOrder(req, res, next) {
   const startedAt = Date.now();
   try {
     const { payload, html } = await buildRenderContext2(req);
-    await fs25.ensureDir(config.pdf.tempDir);
+    await fs24.ensureDir(config.pdf.tempDir);
     const previewId = `ord-com-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path25.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path24.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -61997,8 +62022,8 @@ async function previewPurchaseOrder(req, res, next) {
       buildFolioOptions3(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
-    const stat = await fs25.stat(previewPath);
-    const previewUrl = path25.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs24.stat(previewPath);
+    const previewUrl = path24.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("purchase_order_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -62035,16 +62060,16 @@ async function generatePurchaseOrder(req, res, next) {
     ).toLowerCase() === "service";
     const moduleDir2 = isServiceOrder ? "ordenes-servicio" : "ordenes-compra";
     const filenamePrefix = isServiceOrder ? "orden-servicio" : "orden-compra";
-    const relativeDir = path25.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
+    const relativeDir = path24.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       moduleDir2,
       `nro-${safeOrderNumber}`
     );
-    await fs25.ensureDir(outputDir);
+    await fs24.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${filenamePrefix}-${safeOrderNumber}-${timestamp}.pdf`;
-    const outputPath = path25.join(outputDir, filename);
+    const outputPath = path24.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -62064,7 +62089,7 @@ async function generatePurchaseOrder(req, res, next) {
       buildFolioOptions3(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(outputPath);
-    const stat = await fs25.stat(outputPath);
+    const stat = await fs24.stat(outputPath);
     const pdfUrl = `/files/companies/${companyId}/${relativeDir}/${filename}`;
     logger_default.info("purchase_order_documents.generate.completed", {
       companyId,
@@ -62104,8 +62129,8 @@ init_logger();
 
 // src/services/dispatch-note-document.service.ts
 init_logger();
-import fs26 from "fs-extra";
-import path26 from "path";
+import fs25 from "fs-extra";
+import path25 from "path";
 init_environment();
 init_storage_path_service();
 init_models();
@@ -62583,10 +62608,10 @@ async function buildRenderContext3(params) {
 async function previewDispatchNoteDocument(params) {
   const startedAt = Date.now();
   const { html, companyId } = await buildRenderContext3(params);
-  await fs26.ensureDir(config.pdf.tempDir);
+  await fs25.ensureDir(config.pdf.tempDir);
   const previewId = `dispatch-note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const previewFilename = `${previewId}.pdf`;
-  const previewPath = path26.join(config.pdf.tempDir, previewFilename);
+  const previewPath = path25.join(config.pdf.tempDir, previewFilename);
   await generator_service_default.generateFromHtml(html, {
     outputPath: previewPath,
     format: "A4",
@@ -62598,8 +62623,8 @@ async function previewDispatchNoteDocument(params) {
       left: "0mm"
     }
   });
-  const stat = await fs26.stat(previewPath);
-  const previewUrl = path26.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+  const stat = await fs25.stat(previewPath);
+  const previewUrl = path25.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
   logger_default.info("dispatch_note_documents.preview.completed", {
     companyId,
     durationMs: Date.now() - startedAt,
@@ -62618,12 +62643,12 @@ async function generateDispatchNoteDocumentFile(params) {
   await storagePathService.ensureCompanyStructure(companyId);
   const dispatchNumberRaw = String(payload.orderNumber || data?.dispatch?.valeNumber || "sin-numero");
   const safeDispatchNumber = sanitizePathSegment3(dispatchNumberRaw);
-  const relativeDir = path26.posix.join("vales", `nro-${safeDispatchNumber}`);
+  const relativeDir = path25.posix.join("vales", `nro-${safeDispatchNumber}`);
   const outputDir = storagePathService.getModulePath(companyId, "dispatches", relativeDir);
-  await fs26.ensureDir(outputDir);
+  await fs25.ensureDir(outputDir);
   const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
   const fileName = `vale-despacho-${safeDispatchNumber}-${timestamp}.pdf`;
-  const outputPath = path26.join(outputDir, fileName);
+  const outputPath = path25.join(outputDir, fileName);
   await generator_service_default.generateFromHtml(html, {
     outputPath,
     format: "A4",
@@ -62635,9 +62660,9 @@ async function generateDispatchNoteDocumentFile(params) {
       left: "0mm"
     }
   });
-  const stat = await fs26.stat(outputPath);
+  const stat = await fs25.stat(outputPath);
   const pdfUrl = `/files/companies/${companyId}/dispatches/${relativeDir}/${fileName}`;
-  const filePath = path26.posix.join("dispatches", relativeDir, fileName);
+  const filePath = path25.posix.join("dispatches", relativeDir, fileName);
   logger_default.info("dispatch_note_documents.generate.completed", {
     companyId,
     dispatchNumber: safeDispatchNumber,
@@ -64339,8 +64364,8 @@ var dispatch_routes_default = router7;
 // src/api/routes/public.routes.ts
 import { Router as Router8 } from "express";
 import multer3 from "multer";
-import fs28 from "fs-extra";
-import path28 from "path";
+import fs27 from "fs-extra";
+import path27 from "path";
 
 // src/api/controllers/public.controller.ts
 var import_jsonwebtoken4 = __toESM(require_jsonwebtoken(), 1);
@@ -64348,8 +64373,8 @@ init_environment();
 init_models();
 import axios8 from "axios";
 import { randomUUID as randomUUID5 } from "crypto";
-import fs27 from "fs-extra";
-import path27 from "path";
+import fs26 from "fs-extra";
+import path26 from "path";
 init_storage_path_service();
 init_telegram_alert_service();
 var CACHE_TTL_MS = 5 * 60 * 1e3;
@@ -64397,7 +64422,7 @@ var buildPortalHeaders = (companyId) => ({
   "Content-Type": "application/json",
   "x-company-id": companyId
 });
-var buildPortalUrl = (path32) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path32}`;
+var buildPortalUrl = (path31) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path31}`;
 var buildRequestPublicBaseUrl = (req) => {
   const forwardedProto = trimValue(req.headers["x-forwarded-proto"]).split(",")[0];
   const forwardedHost = trimValue(req.headers["x-forwarded-host"]).split(",")[0];
@@ -64508,7 +64533,7 @@ var parseReceptionInput = (req) => {
   throw new Error("kind is invalid");
 };
 var cleanupUploadedFiles = async (files) => {
-  await Promise.allSettled(files.map((file) => fs27.remove(file.path)));
+  await Promise.allSettled(files.map((file) => fs26.remove(file.path)));
 };
 var fetchPortalInputList = async (companyId, level) => {
   const response = await axios8.get(buildPortalUrl("/api/input"), {
@@ -64649,11 +64674,11 @@ var storeFileInLilaDrive = async (companyId, lilaPublicBaseUrl, resourceId, file
   const targetDir = storagePathService.resolvePath(companyId, relativeDir);
   await storagePathService.ensureDir(targetDir, companyId);
   const storageFileName = buildUniqueStorageFileName(file.originalName, file.path);
-  const targetPath = path27.join(targetDir, storageFileName);
+  const targetPath = path26.join(targetDir, storageFileName);
   if (!storagePathService.validateAccess(targetPath, companyId)) {
     throw new Error("Ruta de almacenamiento invalida");
   }
-  await fs27.copy(file.path, targetPath, { overwrite: false });
+  await fs26.copy(file.path, targetPath, { overwrite: false });
   await incrementStorageUsage(companyId, file.size);
   const publicUrl = `/files/companies/${companyId}/${relativeDir}/${storageFileName}`;
   let thumbnailUrl;
@@ -65206,8 +65231,8 @@ async function submitPublicFinancialMovement(req, res) {
 // src/api/routes/public.routes.ts
 init_environment();
 var router8 = Router8();
-var receptionUploadsDir = path28.join(config.storage.root, "temp", "public-receptions");
-fs28.ensureDirSync(receptionUploadsDir);
+var receptionUploadsDir = path27.join(config.storage.root, "temp", "public-receptions");
+fs27.ensureDirSync(receptionUploadsDir);
 var sanitizeFileName = (value) => value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "upload";
 var upload3 = multer3({
   storage: multer3.diskStorage({
@@ -65759,8 +65784,8 @@ init_logger();
 
 // src/services/service-migration.helpers.ts
 init_storage_path_service();
-import fs29 from "fs-extra";
-import path29 from "node:path";
+import fs28 from "fs-extra";
+import path28 from "node:path";
 import {
   Schema as Schema10,
   Types as Types2
@@ -66060,12 +66085,12 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!storagePathService.validateAccess(targetAbsolute, targetCompanyId)) {
         throw new Error("Ruta f\xEDsica destino inv\xE1lida.");
       }
-      if (!await fs29.pathExists(sourceAbsolute)) {
+      if (!await fs28.pathExists(sourceAbsolute)) {
         throw new Error(`Archivo origen no existe: ${sourceRelative}`);
       }
-      const sourceStats = await fs29.stat(sourceAbsolute);
-      if (await fs29.pathExists(targetAbsolute)) {
-        const targetStats = await fs29.stat(targetAbsolute);
+      const sourceStats = await fs28.stat(sourceAbsolute);
+      if (await fs28.pathExists(targetAbsolute)) {
+        const targetStats = await fs28.stat(targetAbsolute);
         if (targetStats.size !== sourceStats.size) {
           throw new Error(`Archivo destino ya existe con otro tama\xF1o: ${targetRelative}`);
         }
@@ -66074,12 +66099,12 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!sourceStats.isFile()) {
         throw new Error(`Origen no es un archivo regular: ${sourceRelative}`);
       }
-      const targetDirectory = path29.dirname(targetAbsolute);
+      const targetDirectory = path28.dirname(targetAbsolute);
       if (!targetDirectory || targetDirectory === ".") {
         throw new Error(`Directorio destino inv\xE1lido: ${targetRelative}`);
       }
-      await fs29.ensureDir(targetDirectory);
-      await fs29.copy(sourceAbsolute, targetAbsolute);
+      await fs28.ensureDir(targetDirectory);
+      await fs28.copy(sourceAbsolute, targetAbsolute);
       createdPaths.push(targetAbsolute);
       if (sourceStats.isFile()) {
         await incrementStorageUsage(targetCompanyId, sourceStats.size);
@@ -66098,9 +66123,9 @@ var deleteSourceFiles = async (files, sourceCompanyId) => {
       const sourceRelative = cleanCompanyPath(sourceCompanyId, file.sourcePath);
       const sourceAbsolute = storagePathService.resolvePath(sourceCompanyId, sourceRelative);
       if (!storagePathService.validateAccess(sourceAbsolute, sourceCompanyId)) continue;
-      if (!await fs29.pathExists(sourceAbsolute)) continue;
-      const stats = await fs29.stat(sourceAbsolute);
-      await fs29.remove(sourceAbsolute);
+      if (!await fs28.pathExists(sourceAbsolute)) continue;
+      const stats = await fs28.stat(sourceAbsolute);
+      await fs28.remove(sourceAbsolute);
       if (stats.isFile()) {
         await decrementStorageUsage(sourceCompanyId, stats.size);
       }
@@ -66115,9 +66140,9 @@ var deleteSourceFiles = async (files, sourceCompanyId) => {
 var rollbackCopiedFiles = async (targetCompanyId, createdPaths) => {
   for (const targetAbsolute of createdPaths) {
     try {
-      if (!await fs29.pathExists(targetAbsolute)) continue;
-      const stats = await fs29.stat(targetAbsolute);
-      await fs29.remove(targetAbsolute);
+      if (!await fs28.pathExists(targetAbsolute)) continue;
+      const stats = await fs28.stat(targetAbsolute);
+      await fs28.remove(targetAbsolute);
       if (stats.isFile()) {
         await decrementStorageUsage(targetCompanyId, stats.size);
       }
@@ -67064,8 +67089,8 @@ router11.post("/", requireTenant, createServiceMigration);
 var service_migration_routes_default = router11;
 
 // src/services/thumbnail-request.service.ts
-import fs30 from "fs-extra";
-import path30 from "path";
+import fs29 from "fs-extra";
+import path29 from "path";
 var THUMB_DIR_NAME = ".thumbs";
 var THUMBNAIL_NAME_PATTERN = /^thumb_(.+)_[a-f0-9]{10}\.jpg$/i;
 var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
@@ -67076,7 +67101,7 @@ function normalizeRequestPath(requestPath) {
   if (!requestPath) return null;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path30.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
+    const normalized = path29.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
     if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
       return null;
     }
@@ -67086,7 +67111,7 @@ function normalizeRequestPath(requestPath) {
   }
 }
 function toAbsolutePath(root, relativePath) {
-  return path30.join(root, ...relativePath.split("/"));
+  return path29.join(root, ...relativePath.split("/"));
 }
 async function findOriginalForThumbnail(root, relativeThumbPath) {
   const segments = relativeThumbPath.split("/");
@@ -67099,12 +67124,12 @@ async function findOriginalForThumbnail(root, relativeThumbPath) {
   const parentSegments = segments.slice(0, thumbDirIndex);
   const parentDir = toAbsolutePath(root, parentSegments.join("/"));
   const safeBase = match[1];
-  const entries = await fs30.readdir(parentDir).catch(() => []);
+  const entries = await fs29.readdir(parentDir).catch(() => []);
   const candidates = await Promise.all(
-    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName2(path30.parse(entry).name || "file") === safeBase).map(async (entry) => {
-      const absolutePath = path30.join(parentDir, entry);
-      const stat = await fs30.stat(absolutePath).catch(() => null);
-      const ext = path30.extname(entry).toLowerCase();
+    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName2(path29.parse(entry).name || "file") === safeBase).map(async (entry) => {
+      const absolutePath = path29.join(parentDir, entry);
+      const stat = await fs29.stat(absolutePath).catch(() => null);
+      const ext = path29.extname(entry).toLowerCase();
       if (!stat?.isFile() || !IMAGE_EXTENSIONS.has(ext)) {
         return null;
       }
@@ -67123,7 +67148,7 @@ async function resolveThumbnailRequestTarget(root, requestPath) {
     return null;
   }
   const thumbPath = toAbsolutePath(root, relativePath);
-  if (await fs30.pathExists(thumbPath)) {
+  if (await fs29.pathExists(thumbPath)) {
     return {
       absolutePath: thumbPath,
       source: "thumbnail"
@@ -69013,8 +69038,8 @@ var restoreAllSessions = async () => {
 // src/index.ts
 init_telegram_alert_service();
 import cron2 from "node-cron";
-import fs31 from "fs-extra";
-import path31 from "path";
+import fs30 from "fs-extra";
+import path30 from "path";
 var app = express();
 app.set("trust proxy", config.security.trustProxy);
 var corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || "").split(",").map((origin) => origin.trim()).filter(Boolean);
@@ -69069,7 +69094,7 @@ var shouldDisableStaticCaching = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path31.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
+    const normalized = path30.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
     return normalized.includes("/vale/");
   } catch {
     return false;
@@ -69088,7 +69113,7 @@ var isSafeThumbRequestPath = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path31.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
+    const normalized = path30.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
     return normalized.includes("/.thumbs/");
   } catch {
     return false;
@@ -69235,7 +69260,7 @@ async function startServer() {
       logger_default.warn("Quota Validator initialization failed, quota validation will be disabled:", error);
     }
     await generator_service_default.initialize();
-    await fs31.ensureDir(config.pdf.tempDir);
+    await fs30.ensureDir(config.pdf.tempDir);
     logger_default.info("\u{1F9FE} PDF temp directory configured", {
       tempDir: config.pdf.tempDir,
       publicBaseUrl: config.pdf.tempPublicBaseUrl
@@ -69250,15 +69275,15 @@ async function startServer() {
     const shouldRunBackgroundJobs = shouldInitializeBackgroundJobs(config.nodeEnv);
     const cleanupPdfTemp = async () => {
       try {
-        const entries = await fs31.readdir(config.pdf.tempDir);
+        const entries = await fs30.readdir(config.pdf.tempDir);
         const now = Date.now();
         const maxAgeMs = pdfTempMaxAgeHours * 60 * 60 * 1e3;
         const removals = entries.map(async (entry) => {
-          const fullPath = path31.join(config.pdf.tempDir, entry);
-          const stat = await fs31.stat(fullPath);
+          const fullPath = path30.join(config.pdf.tempDir, entry);
+          const stat = await fs30.stat(fullPath);
           if (!stat.isFile()) return;
           if (now - stat.mtimeMs > maxAgeMs) {
-            await fs31.remove(fullPath);
+            await fs30.remove(fullPath);
           }
         });
         await Promise.all(removals);
