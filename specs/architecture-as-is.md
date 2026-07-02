@@ -207,6 +207,7 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 | `NODE_ENV` | development | |
 | `WHATSAPP_SESSION_DIR` | `./data/sessions` | Baileys creds |
 | `WHATSAPP_AUTO_RECONNECT` | true | |
+| `WHATSAPP_RESTORE_SESSIONS` | true solo en production | Restaura sesiones Mongo al arrancar |
 | `WHATSAPP_MAX_RECONNECT_ATTEMPTS` | 0 | 0 = unlimited |
 | `WHATSAPP_AI_ENABLED` | false | Listener Claude (deshabilitado) |
 | `WHATSAPP_AI_TEST_NUMBER` | 51949376824 | Solo whitelist en test |
