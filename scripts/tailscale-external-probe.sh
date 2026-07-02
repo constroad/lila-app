@@ -5,11 +5,17 @@
 # via MagicDNS). It resolves the hostname through a public resolver (8.8.8.8)
 # and forces curl to connect to those DERP IPs, simulating an external client.
 #
-# Auto-recovery escalation when probes keep failing:
-#   level 1 -> `tailscale funnel reset` + restart        (cheapest)
-#   level 2 -> `tailscale down && tailscale up`          (re-register node)
-#   level 3 -> kill + relaunch Tailscale.app             (restart GUI/IPN)
-#   level 4 -> send Telegram alert, stay in "alerting" until recovered
+# Escalation branches on FAILURE MODE (checked at each threshold):
+#
+#   local_app=FAIL  (lila-app is down/crash-looping):
+#     level 1/2 -> launchctl stop+start com.lila.app   (restart app)
+#     level 3+  -> Telegram alert — app crash/loop, manual required
+#
+#   local_app=ok  (Tailscale/DERP/WAN issue):
+#     level 1 -> `tailscale funnel reset` + restart
+#     level 2 -> `tailscale down && tailscale up`
+#     level 3 -> kill + relaunch Tailscale.app
+#     level 4 -> Telegram alert — Tailscale recovery exhausted
 #
 # Each level fires after another FAIL_THRESHOLD consecutive failures. On any
 # successful probe the level resets to 0. The current level survives script
@@ -67,7 +73,9 @@ send_telegram_alert() {
   last=0
   [ -r "$LAST_ALERT_FILE" ] && last=$(cat "$LAST_ALERT_FILE" 2>/dev/null || echo 0)
   if [ $((now - last)) -lt "$ALERT_REPEAT_SECONDS" ]; then
-    return 0  # within dedupe window, silently skip
+    local remaining=$(( ALERT_REPEAT_SECONDS - (now - last) ))
+    log "Telegram alert deduped (próximo en ${remaining}s)"
+    return 0
   fi
   local http_code
   http_code=$(/usr/bin/curl -sS -o /dev/null -w '%{http_code}' \
@@ -181,17 +189,17 @@ probe_external() {
   return 1
 }
 
-# ---- recovery actions ------------------------------------------------------
+# ---- recovery actions — Tailscale/DERP path --------------------------------
 
 action_funnel_reset() {
-  log "ESCALATION 1: 'tailscale funnel reset' + restart"
+  log "ESCALATION 1 (Tailscale): 'tailscale funnel reset' + restart"
   "$TAILSCALE" funnel reset >> "$LOG_FILE" 2>&1 || true
   sleep 2
   "$TAILSCALE" funnel --bg "$PORT" >> "$LOG_FILE" 2>&1 || true
 }
 
 action_tailscale_down_up() {
-  log "ESCALATION 2: 'tailscale down && tailscale up'"
+  log "ESCALATION 2 (Tailscale): 'tailscale down && tailscale up'"
   "$TAILSCALE" down >> "$LOG_FILE" 2>&1 || true
   sleep 3
   "$TAILSCALE" up >> "$LOG_FILE" 2>&1 || true
@@ -202,8 +210,8 @@ action_tailscale_down_up() {
   "$TAILSCALE" funnel --bg "$PORT" >> "$LOG_FILE" 2>&1 || true
 }
 
-action_relaunch_app() {
-  log "ESCALATION 3: kill + relaunch Tailscale.app"
+action_relaunch_tailscale() {
+  log "ESCALATION 3 (Tailscale): kill + relaunch Tailscale.app"
   /usr/bin/pkill -x Tailscale 2>/dev/null || true
   sleep 3
   /usr/bin/open -a Tailscale 2>/dev/null || true
@@ -211,17 +219,17 @@ action_relaunch_app() {
   "$TAILSCALE" funnel --bg "$PORT" >> "$LOG_FILE" 2>&1 || true
 }
 
-action_alert() {
-  log "ESCALATION 4: sending Telegram alert"
-  send_telegram_alert "🚨 lila-app funnel DOWN
+action_alert_tailscale() {
+  local diag="$1"
+  log "ESCALATION 4 (Tailscale): sending Telegram alert"
+  send_telegram_alert "🚨 lila-app funnel DOWN (problema Tailscale/DERP)
 
 Host: ${HOST}
-Path: ${PROBE_PATH}
-Auto-recovery exhausted (funnel reset, down/up, app relaunch).
+Auto-recovery exhausted (funnel reset → down/up → relaunch).
 Manual intervention required.
 
-Diagnóstico: $(diagnose)
-(local_app=ok + internet=ok => problema en ruta WAN/DERP, no local)
+Diagnóstico: ${diag}
+(local_app=ok + internet=ok ⟹ ruta WAN/DERP caída, no es la app)
 
 Check:
 - tailscale funnel status
@@ -229,14 +237,54 @@ Check:
 - ${LOG_FILE}"
 }
 
+# ---- recovery actions — lila-app down path ---------------------------------
+
+action_restart_lila_app() {
+  local attempt="$1"
+  log "ESCALATION ${attempt} (app down): launchctl stop+start com.lila.app"
+  /bin/launchctl stop com.lila.app 2>/dev/null || true
+  sleep 4
+  /bin/launchctl start com.lila.app 2>/dev/null || true
+}
+
+action_alert_app_down() {
+  local diag="$1"
+  log "ESCALATION (app down): sending Telegram alert"
+  send_telegram_alert "🚨 lila-app DOWN (app caída / crash-loop)
+
+Host: ${HOST}
+Auto-restart vía launchctl fallido (2 intentos).
+Intervención manual requerida.
+
+Diagnóstico: ${diag}
+(local_app=FAIL ⟹ la app no responde en 127.0.0.1:${PORT})
+
+Check:
+- launchctl list | grep lila
+- launchctl stop com.lila.app && launchctl start com.lila.app
+- tail -50 ${LOG_FILE%/*}/lila-app.log"
+}
+
+# ---- escalation router — branches by failure mode --------------------------
+
 run_escalation_step() {
-  local level="$1"
-  case "$level" in
-    1) action_funnel_reset ;;
-    2) action_tailscale_down_up ;;
-    3) action_relaunch_app ;;
-    4|*) action_alert ;;
-  esac
+  local level="$1" diag="$2"
+
+  if [[ "$diag" =~ "local_app=FAIL" ]]; then
+    # lila-app is down — Tailscale escalations are useless here
+    case "$level" in
+      1|2) action_restart_lila_app "$level" ;;
+      3|*) action_alert_app_down "$diag" ;;
+    esac
+  else
+    # Tailscale/DERP/WAN issue
+    case "$level" in
+      1) action_funnel_reset ;;
+      2) action_tailscale_down_up ;;
+      3) action_relaunch_tailscale ;;
+      4|*) action_alert_tailscale "$diag" ;;
+    esac
+  fi
 }
 
 # ---- main loop -------------------------------------------------------------
@@ -245,19 +293,21 @@ initial_level=$(get_level)
 log "=== External probe starting (host=$HOST resolver=$PUBLIC_RESOLVER interval=${CHECK_INTERVAL}s threshold=$FAIL_THRESHOLD level=$initial_level) ==="
 
 fail_count=0
+last_diag=""
 while true; do
   if probe_external; then
     level=$(get_level)
     if [ "$fail_count" -gt 0 ] || [ "$level" -gt 0 ]; then
       dur=$(down_duration_human)
       log "Recovered after $fail_count failed probe(s) (was at escalation level $level, down ~$dur)"
-      # Only notify recovery if we had actually alerted (reached level 4).
-      if [ "$level" -ge 4 ]; then
+      # Only notify recovery if we had actually alerted (reached level 3+ for app, 4 for Tailscale).
+      if [ "$level" -ge 3 ]; then
         send_telegram_recovery "$dur" "$level"
       fi
       set_level 0
       rm -f "$LAST_ALERT_FILE" 2>/dev/null || true
       clear_down
+      last_diag=""
     fi
     fail_count=0
   else
@@ -265,14 +315,18 @@ while true; do
     mark_down
     log "External probe FAILED ($fail_count/$FAIL_THRESHOLD) [${PROBE_DETAIL:-}]"
     if [ "$fail_count" -eq 1 ]; then
-      log "Diagnosis: $(diagnose)"
+      last_diag=$(diagnose)
+      log "Diagnosis: $last_diag"
     fi
     if [ "$fail_count" -ge "$FAIL_THRESHOLD" ]; then
+      # Re-diagnose at escalation time (state may have changed since first failure)
+      last_diag=$(diagnose)
+      log "Re-diagnosis at escalation: $last_diag"
       level=$(get_level)
       next_level=$((level + 1))
       [ "$next_level" -gt 4 ] && next_level=4
       set_level "$next_level"
-      run_escalation_step "$next_level"
+      run_escalation_step "$next_level" "$last_diag"
       fail_count=0
       sleep "$POST_ACTION_COOLDOWN"
     fi

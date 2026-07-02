@@ -65,6 +65,11 @@ var init_environment = __esm({
       whatsapp: {
         sessionDir: process.env.WHATSAPP_SESSION_DIR || "./data/sessions",
         autoReconnect: process.env.WHATSAPP_AUTO_RECONNECT !== "false",
+        // Si WHATSAPP_RESTORE_SESSIONS=false, no restaura sesiones al arrancar.
+        // En producción (NODE_ENV=production) por defecto true.
+        // En development por defecto false: evita que un dev con el mismo Mongo de prod
+        // kickee las sesiones productivas con código 440 al arrancar su instancia local.
+        restoreSessions: process.env.WHATSAPP_RESTORE_SESSIONS === "true" || process.env.NODE_ENV === "production" && process.env.WHATSAPP_RESTORE_SESSIONS !== "false",
         maxReconnectAttempts: parseInt(process.env.WHATSAPP_MAX_RECONNECT_ATTEMPTS || "0", 10),
         qrTimeout: 6e4,
         // 60 segundos
@@ -4706,13 +4711,24 @@ var init_store_manager = __esm({
 });
 
 // src/whatsapp/baileys/populate-store-simple.ts
-var populateStoreIfEmpty;
+var POPULATE_COOLDOWN_MS, lastPopulatedAt, clearPopulateCooldown, populateStoreIfEmpty;
 var init_populate_store_simple = __esm({
   "src/whatsapp/baileys/populate-store-simple.ts"() {
     init_sessions_simple();
     init_logger();
+    POPULATE_COOLDOWN_MS = 5 * 60 * 1e3;
+    lastPopulatedAt = /* @__PURE__ */ new Map();
+    clearPopulateCooldown = (id) => {
+      lastPopulatedAt.delete(id);
+    };
     populateStoreIfEmpty = async (id, sock) => {
       const store = getStore(id);
+      const last = lastPopulatedAt.get(id);
+      if (last !== void 0 && Date.now() - last < POPULATE_COOLDOWN_MS) {
+        const remaining = Math.round((POPULATE_COOLDOWN_MS - (Date.now() - last)) / 1e3);
+        logger_default.info(`\u23ED populateStore ${id}: cooldown activo, saltando API call (${remaining}s restantes)`);
+        return { success: true, groupCount: store.chats.size, skipped: true };
+      }
       try {
         const groups = await sock.groupFetchAllParticipating();
         const groupIds = Object.keys(groups);
@@ -4751,6 +4767,7 @@ var init_populate_store_simple = __esm({
           store.contacts.set(sock.user.id, sock.user);
         }
         store.markDirty();
+        lastPopulatedAt.set(id, Date.now());
         logger_default.info(`\u2705 Synced ${Object.keys(groups).length} groups to store`);
         return {
           success: true,
@@ -7021,6 +7038,7 @@ async function initSession(sessionId, qrCb) {
       logger_default.info(`\u2705 Session connected successfully for ${sessionId}`);
       readyClients.set(sessionId, true);
       reconnectAttempts[sessionId] = 0;
+      consecutive440s[sessionId] = 0;
       clearReconnectTimer(sessionId);
       try {
         await populateStoreIfEmpty(sessionId, sock);
@@ -7048,12 +7066,31 @@ async function initSession(sessionId, qrCb) {
         logger_default.info(`Skipping reconnect for ${sessionId} (shutdown in progress)`);
         return;
       }
-      if (code !== DisconnectReason.loggedOut) {
+      if (code === DisconnectReason.connectionReplaced) {
+        const count = consecutive440s[sessionId] = (consecutive440s[sessionId] ?? 0) + 1;
+        logger_default.warn(
+          `\u26A0\uFE0F Session ${sessionId} desplazada por otra instancia (440) \u2014 ${count}x consecutiva. Backoff largo.`
+        );
+        if (count >= 3) {
+          sendTelegramAlert({
+            message: `\u26A0\uFE0F WhatsApp sesi\xF3n ${sessionId} en guerra 440 (${count}x).
+
+Otra instancia de lila-app (\xBFdev con creds de prod?) est\xE1 compitiendo por la misma sesi\xF3n.
+
+Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado para dev.`,
+            dedupeKey: `440-war-${sessionId}`
+          }).catch(() => {
+          });
+        }
+        reconnectAttempts[sessionId] = Math.max(reconnectAttempts[sessionId] ?? 0, 20);
+        scheduleReconnect(sessionId, qrCb);
+      } else if (code !== DisconnectReason.loggedOut) {
         scheduleReconnect(sessionId, qrCb);
       } else {
         clearStoreTimer(sessionId);
         clearReconnectTimer(sessionId);
         reconnectAttempts[sessionId] = 0;
+        consecutive440s[sessionId] = 0;
         delete sessions[sessionId];
         delete stores[sessionId];
         try {
@@ -7209,6 +7246,7 @@ async function clearSession(sessionId) {
     logger_default.info(`\u2705 Cleared Mongo auth for ${sessionId}`);
     try {
       await clearStoreSnapshot(sessionId);
+      clearPopulateCooldown(sessionId);
       logger_default.info(`\u2705 Cleared Mongo store for ${sessionId}`);
     } catch (error) {
       logger_default.warn(`Failed to clear Mongo store for ${sessionId}:`, error);
@@ -7236,7 +7274,7 @@ async function clearSession(sessionId) {
     throw error;
   }
 }
-var sessions, stores, qrCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, clearStoreTimer, clearReconnectTimer;
+var sessions, stores, qrCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, consecutive440s, clearStoreTimer, clearReconnectTimer;
 var init_sessions_simple = __esm({
   "src/whatsapp/baileys/sessions.simple.ts"() {
     init_store_manager();
@@ -7247,6 +7285,8 @@ var init_sessions_simple = __esm({
     init_outbox_queue();
     init_mongo_auth_state();
     init_mongo_store();
+    init_populate_store_simple();
+    init_telegram_alert_service();
     sessions = {};
     stores = {};
     qrCodes = {};
@@ -7256,6 +7296,7 @@ var init_sessions_simple = __esm({
     startingPromises = {};
     reconnectTimers = {};
     reconnectAttempts = {};
+    consecutive440s = {};
     clearStoreTimer = (sessionId) => {
       const timer = storeTimers[sessionId];
       if (timer) {
@@ -69448,10 +69489,14 @@ async function startServer() {
       tempDir: config.pdf.tempDir,
       publicBaseUrl: config.pdf.tempPublicBaseUrl
     });
-    try {
-      await restoreAllSessions();
-    } catch (err) {
-      logger_default.error("restoreAllSessions failed:", err);
+    if (config.whatsapp.restoreSessions) {
+      try {
+        await restoreAllSessions();
+      } catch (err) {
+        logger_default.error("restoreAllSessions failed:", err);
+      }
+    } else {
+      logger_default.warn("\u26A0\uFE0F WhatsApp session auto-restore DISABLED (nodeEnv=%s). Set WHATSAPP_RESTORE_SESSIONS=true to enable.", config.nodeEnv);
     }
     const pdfTempMaxAgeHours = Number(process.env.PDF_TEMP_MAX_AGE_HOURS || 24);
     const pdfTempCleanupCron = process.env.PDF_TEMP_CLEANUP_CRON || "0 * * * *";

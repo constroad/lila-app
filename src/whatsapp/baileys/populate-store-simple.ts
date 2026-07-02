@@ -8,8 +8,28 @@ import { WASocket } from '@whiskeysockets/baileys';
 import { getStore } from './sessions.simple.js';
 import logger from '../../utils/logger.js';
 
+// Cooldown entre llamadas a groupFetchAllParticipating por sesión.
+// Previene rate-limit de WhatsApp en loops de reconexión (ej. guerra 440).
+const POPULATE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutos
+const lastPopulatedAt = new Map<string, number>();
+
+/** Limpia el cooldown de una sesión (llamar en clearSession). */
+export const clearPopulateCooldown = (id: string): void => {
+  lastPopulatedAt.delete(id);
+};
+
 export const populateStoreIfEmpty = async (id: string, sock: WASocket) => {
   const store = getStore(id);
+
+  // Cooldown: si se llamó hace menos de 5 min, saltar la llamada a WhatsApp.
+  // Esto evita el rate-limit durante loops de reconexión (ej. guerra 440 donde
+  // connect→kick ocurre cada 3s y `groupFetchAllParticipating` se disparaba en cada intento).
+  const last = lastPopulatedAt.get(id);
+  if (last !== undefined && Date.now() - last < POPULATE_COOLDOWN_MS) {
+    const remaining = Math.round((POPULATE_COOLDOWN_MS - (Date.now() - last)) / 1000);
+    logger.info(`⏭ populateStore ${id}: cooldown activo, saltando API call (${remaining}s restantes)`);
+    return { success: true, groupCount: store.chats.size, skipped: true };
+  }
 
   try {
     // 1. Get all groups where bot is member (fuente AUTORITATIVA: solo los grupos a
@@ -85,6 +105,7 @@ export const populateStoreIfEmpty = async (id: string, sock: WASocket) => {
     */
 
     store.markDirty();
+    lastPopulatedAt.set(id, Date.now());
     logger.info(`✅ Synced ${Object.keys(groups).length} groups to store`);
     return {
       success: true,
