@@ -64836,7 +64836,7 @@ var runInputReceptionWorkflow = async (input) => {
       vendorProviderName: input.vendorProviderName,
       purchaseOrderId: input.purchaseOrderId,
       purchaseOrderNumber: input.purchaseOrderNumber,
-      arriveDate: input.arriveDate || (/* @__PURE__ */ new Date()).toLocaleString(),
+      arriveDate: input.arriveDate || (/* @__PURE__ */ new Date()).toISOString(),
       source: "public-reception",
       inputMode: input.inputMode,
       deviceName: input.deviceName
@@ -64881,7 +64881,7 @@ var runInputReceptionWorkflow = async (input) => {
     vendorProviderName: input.vendorProviderName,
     purchaseOrderId: input.purchaseOrderId,
     purchaseOrderNumber: input.purchaseOrderNumber,
-    arriveDate: input.arriveDate || (/* @__PURE__ */ new Date()).toLocaleString(),
+    arriveDate: input.arriveDate || (/* @__PURE__ */ new Date()).toISOString(),
     source: "public-reception",
     inputMode: input.inputMode,
     deviceName: input.deviceName

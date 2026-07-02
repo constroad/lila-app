@@ -265,6 +265,8 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - Algunos tests dependen de fixtures locales sin mocking del Mongo Portal.
 
 ## Cambios recientes (Mayo - Junio 2026)
+- **Julio 2026**: recepciones públicas usan `arriveDate` ISO. Portal muestra
+  documentos lila-app mediante su proxy PDF autenticado.
 - **Junio 2026**: enhancements de red (`network enhancements`), control tanks integrados con Portal, alertas Telegram cuando Tailscale cae.
 - **Mayo 2026**: cola Telegram persistente, multiples mejoras de informe IAA y dispatch, refactor dispatch IPP, migracion de inputs Telegram -> Drive lila-app (paths `companies/{id}/inputs/`), migracion de ordenes y servicios cross-company, informe liquidacion (LIQ-SRV), control de pista, imprimacion reportes.
 - **Abril 2026**: dispatch post-process workflow, expense public + duplicate WhatsApp message fix, service migration v2.
