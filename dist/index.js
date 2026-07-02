@@ -23498,6 +23498,7 @@ init_sessions_simple();
 init_whatsapp_direct_service();
 init_logger();
 import qrcode from "qrcode";
+var QR_WAIT_MS = 6e3;
 async function waitForQRCode(phoneNumber, timeoutMs = 6e4, intervalMs = 300) {
   const start = Date.now();
   return new Promise((resolve2) => {
@@ -23681,11 +23682,20 @@ async function getQRCodeImageHandler(req, res, next) {
         logger_default.info(`QR generated for ${phoneNumber}`);
       });
     }
-    const qr = await waitForQRCode(phoneNumber) ?? getQRCode(phoneNumber);
+    if (isSessionReady(phoneNumber)) {
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: { status: "connected", isConnected: true, qr: null, qrImage: null }
+      });
+      return;
+    }
+    const qr = await waitForQRCode(phoneNumber, QR_WAIT_MS) ?? getQRCode(phoneNumber);
     if (!qr) {
-      const error = new Error("QR not available");
-      error.statusCode = HTTP_STATUS.NOT_FOUND;
-      return next(error);
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: { status: "connecting", isConnected: false, qr: null, qrImage: null }
+      });
+      return;
     }
     const qrText = typeof qr === "string" ? qr : String(qr);
     const qrDataUrl = await qrcode.toDataURL(qrText);
@@ -23693,6 +23703,8 @@ async function getQRCodeImageHandler(req, res, next) {
       res.status(HTTP_STATUS.OK).json({
         success: true,
         data: {
+          status: "waiting_qr",
+          isConnected: false,
           qr: qrText,
           qrImage: qrDataUrl
         }
