@@ -90,6 +90,7 @@ jest.unstable_mockModule('./mongo-store.js', () => ({
 jest.unstable_mockModule('./populate-store-simple.js', () => ({
   __esModule: true,
   populateStoreIfEmpty: jest.fn(async () => undefined),
+  clearPopulateCooldown: jest.fn(),
 }));
 
 const flushOutboxForSession = jest.fn(async () => undefined);

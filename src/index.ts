@@ -320,10 +320,16 @@ async function startServer() {
     });
 
     // 🔄 WhatsApp sessions (notifications approach)
-    try {
-      await restoreAllSessions();
-    } catch (err) {
-      logger.error('restoreAllSessions failed:', err);
+    // Skipped in non-production unless WHATSAPP_RESTORE_SESSIONS=true to prevent
+    // a dev machine with the same Mongo URI from kicking prod sessions (code 440 war).
+    if (config.whatsapp.restoreSessions) {
+      try {
+        await restoreAllSessions();
+      } catch (err) {
+        logger.error('restoreAllSessions failed:', err);
+      }
+    } else {
+      logger.warn('⚠️ WhatsApp session auto-restore DISABLED (nodeEnv=%s). Set WHATSAPP_RESTORE_SESSIONS=true to enable.', config.nodeEnv);
     }
 
     const pdfTempMaxAgeHours = Number(process.env.PDF_TEMP_MAX_AGE_HOURS || 24);

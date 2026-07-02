@@ -39,6 +39,12 @@ export const config = {
   whatsapp: {
     sessionDir: process.env.WHATSAPP_SESSION_DIR || './data/sessions',
     autoReconnect: process.env.WHATSAPP_AUTO_RECONNECT !== 'false',
+    // Si WHATSAPP_RESTORE_SESSIONS=false, no restaura sesiones al arrancar.
+    // En producción (NODE_ENV=production) por defecto true.
+    // En development por defecto false: evita que un dev con el mismo Mongo de prod
+    // kickee las sesiones productivas con código 440 al arrancar su instancia local.
+    restoreSessions: process.env.WHATSAPP_RESTORE_SESSIONS === 'true' ||
+      (process.env.NODE_ENV === 'production' && process.env.WHATSAPP_RESTORE_SESSIONS !== 'false'),
     maxReconnectAttempts: parseInt(process.env.WHATSAPP_MAX_RECONNECT_ATTEMPTS || '0', 10),
     qrTimeout: 60000, // 60 segundos
     aiEnabled: process.env.WHATSAPP_AI_ENABLED === 'true',

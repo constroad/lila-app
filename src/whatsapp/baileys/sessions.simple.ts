@@ -24,6 +24,8 @@ import { flushOutboxForSession } from '../queue/outbox-queue.js';
 import outboxQueue from '../queue/outbox-queue.js';
 import { useMongoAuthState, clearMongoAuthState } from './mongo-auth-state.js';
 import { clearStoreSnapshot } from './mongo-store.js';
+import { clearPopulateCooldown } from './populate-store-simple.js';
+import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -42,6 +44,10 @@ const startingPromises: Record<string, Promise<WASocket>> = {};
 // quedaba muerta). Reintentamos con backoff hasta recuperar. Ver auto-recuperación (history).
 const reconnectTimers: Record<string, NodeJS.Timeout> = {};
 const reconnectAttempts: Record<string, number> = {};
+
+// Contador de desconexiones consecutivas tipo 440 (connectionReplaced).
+// Si sube a >= 3 alerta por Telegram: probable otra instancia con las mismas creds.
+const consecutive440s: Record<string, number> = {};
 
 const clearStoreTimer = (sessionId: string) => {
   const timer = storeTimers[sessionId];
@@ -239,8 +245,9 @@ async function initSession(
     if (connection === 'open') {
       logger.info(`✅ Session connected successfully for ${sessionId}`);
       readyClients.set(sessionId, true);
-      // Reconexión exitosa → resetear backoff y cancelar cualquier reintento pendiente.
+      // Reconexión exitosa → resetear backoff y contador de 440s.
       reconnectAttempts[sessionId] = 0;
+      consecutive440s[sessionId] = 0;
       clearReconnectTimer(sessionId);
 
       // Populate store with groups (wrap in try/catch)
@@ -278,7 +285,27 @@ async function initSession(
         return;
       }
 
-      if (code !== DisconnectReason.loggedOut) {
+      if (code === DisconnectReason.connectionReplaced) {
+        // 440: otra instancia (¿dev con creds de prod?) se conectó con las mismas creds.
+        // Reconectar inmediatamente crea un "440 war" — ambas instancias se patean entre
+        // sí a 3s, bombardeando WhatsApp con groupFetchAllParticipating → rate-overlimit.
+        // Solución: backoff largo (forzar intento >= 20 → delay = 60s cap) + alerta si persiste.
+        const count = (consecutive440s[sessionId] = (consecutive440s[sessionId] ?? 0) + 1);
+        logger.warn(
+          `⚠️ Session ${sessionId} desplazada por otra instancia (440) — ${count}x consecutiva. Backoff largo.`
+        );
+
+        if (count >= 3) {
+          sendTelegramAlert({
+            message: `⚠️ WhatsApp sesión ${sessionId} en guerra 440 (${count}x).\n\nOtra instancia de lila-app (¿dev con creds de prod?) está compitiendo por la misma sesión.\n\nAcción: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado para dev.`,
+            dedupeKey: `440-war-${sessionId}`,
+          }).catch(() => {});
+        }
+
+        // Forzar backoff largo: si reconnectAttempts < 20 lo subimos al equivalente de 60s.
+        reconnectAttempts[sessionId] = Math.max(reconnectAttempts[sessionId] ?? 0, 20);
+        scheduleReconnect(sessionId, qrCb);
+      } else if (code !== DisconnectReason.loggedOut) {
         // Reconexión RESILIENTE con reintentos (no un solo setTimeout): sobrevive a fallos
         // transitorios (red caída, Mongo/Atlas inalcanzable durante el corte).
         scheduleReconnect(sessionId, qrCb);
@@ -291,6 +318,7 @@ async function initSession(
         clearStoreTimer(sessionId);
         clearReconnectTimer(sessionId);
         reconnectAttempts[sessionId] = 0;
+        consecutive440s[sessionId] = 0;
         delete sessions[sessionId];
         delete stores[sessionId];
         try {
@@ -520,9 +548,10 @@ export async function clearSession(sessionId: string): Promise<void> {
     await clearMongoAuthState(sessionId);
     logger.info(`✅ Cleared Mongo auth for ${sessionId}`);
 
-    // 3c. Delete store snapshot in Mongo (chats/contactos)
+    // 3c. Delete store snapshot in Mongo (chats/contactos) y limpiar cooldown de populate
     try {
       await clearStoreSnapshot(sessionId);
+      clearPopulateCooldown(sessionId);
       logger.info(`✅ Cleared Mongo store for ${sessionId}`);
     } catch (error) {
       logger.warn(`Failed to clear Mongo store for ${sessionId}:`, error);
