@@ -640,6 +640,16 @@ export async function sendDispatchNotifications(params: NotificationParams) {
     input.companyId
   );
 
+  logger.info('dispatch_notifications.claim', {
+    companyId: input.companyId,
+    dispatchId: input.dispatchId,
+    dispatchSent,
+    hasWhatsAppSender,
+    plantGroupId: context.plantGroupId || '(empty)',
+    dispatchOrdinal,
+    pendingCount: input.pendingCount,
+  });
+
   if (dispatchSent) {
     // Telegram es independiente de la sesión WhatsApp.
     const plantProgressMsg = context.plantProgressTemplate
@@ -653,7 +663,9 @@ export async function sendDispatchNotifications(params: NotificationParams) {
           dispatchOrdinal,
           input.pendingCount
         );
+    logger.info('dispatch_notifications.telegram_sending', { companyId: input.companyId, dispatchId: input.dispatchId });
     await sendPlantTelegram(plantProgressMsg);
+    logger.info('dispatch_notifications.telegram_sent', { companyId: input.companyId, dispatchId: input.dispatchId });
     if (hasWhatsAppSender && context.plantGroupId) {
       await sendToGroup(
         input.sender,
