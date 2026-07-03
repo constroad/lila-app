@@ -12,6 +12,19 @@ import logger from '../../utils/logger.js';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
 import { replaceLegacyBotLabelForCompanyId } from '../../utils/company-bot.js';
+import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
+
+/** Alerta Telegram cuando un mensaje se encola por sesión caída (dedup 15 min por sesión). */
+function alertSessionDown(sessionPhone: string, companyId: string | undefined): void {
+  sendTelegramAlert({
+    dedupeKey: `session-not-connected-queue-${sessionPhone}`,
+    message: [
+      `⚠️ Sesión WhatsApp ${sessionPhone} no conectada`,
+      `companyId: ${companyId || 'N/A'}`,
+      `Mensaje encolado → se entregará automáticamente al reconectar.`,
+    ].join('\n'),
+  }).catch(() => {});
+}
 
 /**
  * Valida que un destino de GRUPO (`...@g.us`) pertenezca a la sesión activa. Tras cambiar de
@@ -51,25 +64,29 @@ export async function sendTextMessage(req: Request, res: Response, next: NextFun
       return next(error);
     }
 
-    // Check if session is active
-    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
-      const error: CustomError = new Error('Session not connected');
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
-      return next(error);
-    }
-
     const groupError = getGroupReachabilityError(sessionPhone, to);
     if (groupError) return next(groupError);
 
     logger.info(`📤 Sending text message from ${sessionPhone} to ${to}`);
 
-    // ✅ DIRECT SEND (like notifications - no assertSessions, no complex logic)
+    // ✅ DIRECT SEND — queueOnFail=true (default): si la sesión no está lista el mensaje
+    // se encola en outbox y se entrega en cuanto reconecte. No retornamos 503: el caller
+    // no necesita reintentar porque la entrega está garantizada por la cola.
     try {
       const normalizedMessage = await replaceLegacyBotLabelForCompanyId(req.companyId, message);
       const result = await WhatsAppDirectService.sendMessage(sessionPhone, to, normalizedMessage, {
         companyId: req.companyId,
         tenantId: req.tenantId,
       });
+
+      if ('queued' in result && result.queued) {
+        alertSessionDown(sessionPhone, req.companyId);
+        return res.status(202).json({
+          success: true,
+          queued: true,
+          message: 'Sesión no conectada — mensaje encolado, se enviará al reconectar',
+        });
+      }
 
       res.status(HTTP_STATUS.OK).json({
         success: true,
@@ -92,17 +109,6 @@ export async function sendTextMessage(req: Request, res: Response, next: NextFun
           `Cannot send to group. The bot may not be a member/admin of this group. Try refreshing groups with GET /api/sessions/${sessionPhone}/syncGroups`
         );
         error.statusCode = HTTP_STATUS.FORBIDDEN;
-        return next(error);
-      }
-
-      // Session error
-      if (
-        errorMsg.includes('session') ||
-        errorMsg.includes('connection') ||
-        errorMsg.includes('not connected')
-      ) {
-        const error: CustomError = new Error('Session disconnected. Please reconnect.');
-        error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
         return next(error);
       }
 
@@ -141,12 +147,6 @@ export async function sendImage(req: Request, res: Response, next: NextFunction)
       return next(error);
     }
 
-    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
-      const error: CustomError = new Error('Session not connected');
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
-      return next(error);
-    }
-
     const groupError = getGroupReachabilityError(sessionPhone, to);
     if (groupError) return next(groupError);
 
@@ -178,7 +178,12 @@ export async function sendImage(req: Request, res: Response, next: NextFunction)
       return next(error);
     }
 
-    await WhatsAppDirectService.sendImageFile(sessionPhone, to, sendOptions);
+    const imageResult = await WhatsAppDirectService.sendImageFile(sessionPhone, to, sendOptions);
+
+    if (imageResult && 'queued' in imageResult && imageResult.queued) {
+      alertSessionDown(sessionPhone, resolvedCompanyId);
+      return res.status(202).json({ success: true, queued: true, message: 'Sesión no conectada — imagen encolada, se enviará al reconectar' });
+    }
 
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -218,12 +223,6 @@ export async function sendVideo(req: Request, res: Response, next: NextFunction)
       return next(error);
     }
 
-    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
-      const error: CustomError = new Error('Session not connected');
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
-      return next(error);
-    }
-
     const groupError = getGroupReachabilityError(sessionPhone, to);
     if (groupError) return next(groupError);
 
@@ -255,7 +254,12 @@ export async function sendVideo(req: Request, res: Response, next: NextFunction)
       return next(error);
     }
 
-    await WhatsAppDirectService.sendVideoFile(sessionPhone, to, sendOptions);
+    const videoResult = await WhatsAppDirectService.sendVideoFile(sessionPhone, to, sendOptions);
+
+    if (videoResult && 'queued' in videoResult && videoResult.queued) {
+      alertSessionDown(sessionPhone, resolvedCompanyId);
+      return res.status(202).json({ success: true, queued: true, message: 'Sesión no conectada — video encolado, se enviará al reconectar' });
+    }
 
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -295,12 +299,6 @@ export async function sendFile(req: Request, res: Response, next: NextFunction) 
       return next(error);
     }
 
-    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
-      const error: CustomError = new Error('Session not connected');
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
-      return next(error);
-    }
-
     const groupError = getGroupReachabilityError(sessionPhone, to);
     if (groupError) return next(groupError);
 
@@ -332,7 +330,12 @@ export async function sendFile(req: Request, res: Response, next: NextFunction) 
       return next(error);
     }
 
-    await WhatsAppDirectService.sendDocument(sessionPhone, to, sendOptions);
+    const fileResult = await WhatsAppDirectService.sendDocument(sessionPhone, to, sendOptions);
+
+    if (fileResult && 'queued' in fileResult && fileResult.queued) {
+      alertSessionDown(sessionPhone, resolvedCompanyId);
+      return res.status(202).json({ success: true, queued: true, message: 'Sesión no conectada — archivo encolado, se enviará al reconectar' });
+    }
 
     res.status(HTTP_STATUS.OK).json({
       success: true,

@@ -42,7 +42,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-var moduleDir, envPath, devEnvPath, trustProxyEnv, resolvedTrustProxy, storageRootEnv, storageRoot, defaultPdfTempDir, defaultDriveCacheDir, config, environment_default;
+var moduleDir, envPath, devEnvPath, nodeEnv, cronJobsEnabledOverride, cronJobsEnabled, trustProxyEnv, resolvedTrustProxy, storageRootEnv, storageRoot, defaultPdfTempDir, defaultDriveCacheDir, config, environment_default;
 var init_environment = __esm({
   "src/config/environment.ts"() {
     moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +52,11 @@ var init_environment = __esm({
     if (process.env.NODE_ENV === "development" && fs.existsSync(devEnvPath)) {
       dotenv.config({ path: devEnvPath, override: true });
     }
+    nodeEnv = process.env.NODE_ENV || "development";
+    cronJobsEnabledOverride = process.env.CRONJOBS_ENABLED;
+    cronJobsEnabled = cronJobsEnabledOverride === void 0 ? nodeEnv === "production" : ["1", "true", "yes", "on"].includes(
+      cronJobsEnabledOverride.trim().toLowerCase()
+    );
     trustProxyEnv = process.env.TRUST_PROXY;
     resolvedTrustProxy = trustProxyEnv === void 0 ? process.env.NODE_ENV === "production" ? 1 : false : trustProxyEnv === "true" ? true : trustProxyEnv === "false" ? false : Number.isNaN(Number(trustProxyEnv)) ? true : Number(trustProxyEnv);
     storageRootEnv = process.env.FILE_STORAGE_ROOT;
@@ -60,7 +65,7 @@ var init_environment = __esm({
     defaultDriveCacheDir = storageRootEnv ? path.join(storageRoot, "temp", "drive-cache") : "./data/drive-cache";
     config = {
       port: parseInt(process.env.PORT || "3001", 10),
-      nodeEnv: process.env.NODE_ENV || "development",
+      nodeEnv,
       // WhatsApp
       whatsapp: {
         sessionDir: process.env.WHATSAPP_SESSION_DIR || "./data/sessions",
@@ -98,8 +103,11 @@ var init_environment = __esm({
       // Cron Jobs
       jobs: {
         storageFile: process.env.CRONJOBS_STORAGE || "./data/cronjobs.json",
-        checkInterval: 1e4
+        checkInterval: 1e4,
         // Verificar cada 10s
+        // Seguridad anti-duplicados: por defecto solo producción programa cronjobs.
+        // En local puede habilitarse de forma deliberada con CRONJOBS_ENABLED=true.
+        enabled: cronJobsEnabled
       },
       // PDF
       pdf: {
@@ -148,7 +156,7 @@ var init_environment = __esm({
       // Features
       features: {
         enablePDF: true,
-        enableCron: true,
+        enableCron: cronJobsEnabled,
         enableHotReload: true
       }
     };
@@ -6930,12 +6938,25 @@ import {
 import path9 from "path";
 import fs6 from "fs-extra";
 import pino from "pino";
+function clearQR(sessionId) {
+  delete qrCodes[sessionId];
+  delete qrTimestamps[sessionId];
+}
 function scheduleReconnect(sessionId, qrCb) {
   if (shuttingDown.has(sessionId)) return;
   if (reconnectTimers[sessionId]) return;
   const attempt = reconnectAttempts[sessionId] = (reconnectAttempts[sessionId] ?? 0) + 1;
   const delay = Math.min(3e3 * attempt, 6e4);
   logger_default.info(`\u{1F501} Reconnect ${sessionId}: intento ${attempt} en ${delay}ms`);
+  if (attempt === 5) {
+    sendTelegramAlert({
+      dedupeKey: `session-persistent-down-${sessionId}`,
+      message: `\u26A0\uFE0F WhatsApp sesi\xF3n ${sessionId} ca\xEDda y no reconecta.
+Intentos: ${attempt} (~45s sin conexi\xF3n).
+Revisa logs o re-empareja si persiste.`
+    }).catch(() => {
+    });
+  }
   reconnectTimers[sessionId] = setTimeout(async () => {
     delete reconnectTimers[sessionId];
     if (shuttingDown.has(sessionId)) return;
@@ -6975,6 +6996,9 @@ function listSessions() {
 }
 function getQRCode(sessionId) {
   return qrCodes[sessionId];
+}
+function getQRCodeGeneratedAt(sessionId) {
+  return qrTimestamps[sessionId];
 }
 async function startSession(sessionId, qrCb) {
   const inFlight = startingPromises[sessionId];
@@ -7028,10 +7052,27 @@ async function initSession(sessionId, qrCb) {
     contacts.forEach((contact) => store.contacts.set(contact.id, contact));
     store.markDirty();
   });
+  let connectionSettled = false;
+  const connectionWatchdog = setTimeout(() => {
+    if (!connectionSettled && !shuttingDown.has(sessionId)) {
+      logger_default.warn(`\u23F1 [${sessionId}] Connection watchdog: socket sin respuesta por ${CONNECTION_TIMEOUT_MS / 1e3}s \u2014 forzando cierre`);
+      try {
+        sock.end(new Error("connection-watchdog-timeout"));
+      } catch (err) {
+        logger_default.warn(`Watchdog: sock.end fall\xF3 para ${sessionId}: ${String(err)}`);
+        scheduleReconnect(sessionId, qrCb);
+      }
+    }
+  }, CONNECTION_TIMEOUT_MS);
   sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
+    if (connection === "open" || connection === "close") {
+      connectionSettled = true;
+      clearTimeout(connectionWatchdog);
+    }
     if (qr) {
       logger_default.info(`\u2705 QR generated for ${sessionId}`);
       qrCodes[sessionId] = qr;
+      qrTimestamps[sessionId] = Date.now();
       if (qrCb) qrCb(qr);
     }
     if (connection === "open") {
@@ -7058,7 +7099,7 @@ async function initSession(sessionId, qrCb) {
     }
     if (connection === "close") {
       readyClients.set(sessionId, false);
-      delete qrCodes[sessionId];
+      clearQR(sessionId);
       logger_default.warn(`\u274C Session closed for ${sessionId}`);
       const code = lastDisconnect?.error?.output?.statusCode;
       logger_default.info(`Disconnect reason: ${code}`);
@@ -7115,7 +7156,11 @@ async function createPairingSession(phone, sendCode) {
     auth: state2,
     logger: pinoLogger,
     // Baileys expects pino logger
-    browser: Browsers.macOS("Lila"),
+    // El browser afecta la entrega del pairing code (Baileys #2306); usamos el mismo
+    // valor probado del flujo QR que sí funciona. 'Lila' (no-browser real) fallaba.
+    browser: Browsers.ubuntu("Chrome"),
+    printQRInTerminal: false,
+    // pairing code es alternativo al QR
     syncFullHistory: true
     // maximiza contactos al conectar (ver startSession)
   });
@@ -7132,6 +7177,7 @@ async function createPairingSession(phone, sendCode) {
     if (connection === "open") {
       logger_default.info(`\u2705 Session with ${phone} connected`);
       readyClients.set(sessionId, true);
+      delete pairingCodes[sessionId];
       try {
         await populateStoreIfEmpty(sessionId, sock);
       } catch (err) {
@@ -7147,22 +7193,27 @@ async function createPairingSession(phone, sendCode) {
       readyClients.set(sessionId, false);
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       logger_default.warn(`\u274C Session ${phone} closed`, statusCode);
-      if (statusCode !== DisconnectReason.loggedOut && statusCode !== 401) {
-        setTimeout(() => createPairingSession(phone, sendCode), 3e3);
-      } else {
+      if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
         delete sessions[sessionId];
         delete stores[sessionId];
+        delete pairingCodes[sessionId];
         try {
           await clearMongoAuthState(sessionId);
         } catch (err) {
           logger_default.warn(`Failed to clear dead creds for ${sessionId}:`, err);
         }
+      } else if (sock.authState.creds.registered) {
+        setTimeout(() => createPairingSession(phone, sendCode), 3e3);
+      } else {
+        logger_default.warn(`Pairing session ${phone} cerr\xF3 antes de emparejar; esperando reintento manual`);
       }
     }
     if (!pairingDone && !sock.authState.creds.registered && connection === "connecting") {
       try {
-        const code = await sock.requestPairingCode(phone);
-        logger_default.info(`\u{1F4F2} Pairing code for ${phone}: ${code}`);
+        const msisdn = phone.replace(/\D/g, "");
+        const code = await sock.requestPairingCode(msisdn);
+        logger_default.info(`\u{1F4F2} Pairing code for ${msisdn}: ${code}`);
+        pairingCodes[sessionId] = code;
         sendCode(code);
         pairingDone = true;
       } catch (err) {
@@ -7182,7 +7233,7 @@ async function disconnectSession(sessionId) {
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
     delete stores[sessionId];
-    delete qrCodes[sessionId];
+    clearQR(sessionId);
     readyClients.delete(sessionId);
     logger_default.info(`Session ${sessionId} disconnected and removed`);
   }
@@ -7200,7 +7251,7 @@ async function endSession(sessionId) {
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
     delete stores[sessionId];
-    delete qrCodes[sessionId];
+    clearQR(sessionId);
     readyClients.delete(sessionId);
     logger_default.info(`Session ${sessionId} closed (creds preserved)`);
   }
@@ -7228,7 +7279,7 @@ async function clearSession(sessionId) {
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
     delete stores[sessionId];
-    delete qrCodes[sessionId];
+    clearQR(sessionId);
     readyClients.delete(sessionId);
     logger_default.info(`\u2705 Memory cleaned for ${sessionId}`);
     const sessionDir = path9.join(config.whatsapp.sessionDir, sessionId);
@@ -7274,7 +7325,7 @@ async function clearSession(sessionId) {
     throw error;
   }
 }
-var sessions, stores, qrCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, consecutive440s, clearStoreTimer, clearReconnectTimer;
+var sessions, stores, qrCodes, qrTimestamps, pairingCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, CONNECTION_TIMEOUT_MS, consecutive440s, clearStoreTimer, clearReconnectTimer;
 var init_sessions_simple = __esm({
   "src/whatsapp/baileys/sessions.simple.ts"() {
     init_store_manager();
@@ -7290,12 +7341,15 @@ var init_sessions_simple = __esm({
     sessions = {};
     stores = {};
     qrCodes = {};
+    qrTimestamps = {};
+    pairingCodes = {};
     readyClients = /* @__PURE__ */ new Map();
     shuttingDown = /* @__PURE__ */ new Set();
     storeTimers = {};
     startingPromises = {};
     reconnectTimers = {};
     reconnectAttempts = {};
+    CONNECTION_TIMEOUT_MS = 9e4;
     consecutive440s = {};
     clearStoreTimer = (sessionId) => {
       const timer = storeTimers[sessionId];
@@ -23674,17 +23728,33 @@ async function createPairingSessionHandler(req, res, next) {
       return next(error);
     }
     logger_default.info(`Creating pairing code session for ${phoneNumber}`);
-    let pairingCode = "";
-    await createPairingSession(phoneNumber, (code) => {
-      pairingCode = code;
+    const PAIRING_WAIT_MS = 2e4;
+    const pairingCode = await new Promise((resolve2) => {
+      let settled = false;
+      const finish = (code) => {
+        if (settled) return;
+        settled = true;
+        resolve2(code);
+      };
+      createPairingSession(phoneNumber, (code) => finish(code)).catch((error) => {
+        logger_default.error("Error creating pairing session:", error);
+        finish("");
+      });
+      setTimeout(() => finish(""), PAIRING_WAIT_MS);
     });
-    await new Promise((resolve2) => setTimeout(resolve2, 2e3));
+    if (!pairingCode) {
+      const error = new Error(
+        "No se pudo generar el c\xF3digo de vinculaci\xF3n. Intenta de nuevo."
+      );
+      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      return next(error);
+    }
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
       data: {
         phoneNumber,
         pairingCode,
-        instructions: "Open WhatsApp \u2192 Settings \u2192 Linked Devices \u2192 Link with phone number \u2192 Enter this code"
+        instructions: "WhatsApp \u2192 Ajustes \u2192 Dispositivos vinculados \u2192 Vincular con n\xFAmero de tel\xE9fono \u2192 ingresa este c\xF3digo"
       }
     });
   } catch (error) {
@@ -23828,7 +23898,8 @@ async function getQRCodeImageHandler(req, res, next) {
           status: "waiting_qr",
           isConnected: false,
           qr: qrText,
-          qrImage: qrDataUrl
+          qrImage: qrDataUrl,
+          qrGeneratedAt: getQRCodeGeneratedAt(phoneNumber) ?? Date.now()
         }
       });
       return;
@@ -24566,8 +24637,11 @@ var replaceLegacyBotLabelForCompanyId = async (companyId, message) => {
 init_whatsapp_phone();
 
 // src/jobs/executor.utils.ts
-function shouldInitializeBackgroundJobs(nodeEnv) {
-  return String(nodeEnv || "").trim().toLowerCase() !== "test";
+function shouldInitializeBackgroundJobs(nodeEnv2, enabledOverride) {
+  if (typeof enabledOverride === "boolean") {
+    return enabledOverride;
+  }
+  return String(nodeEnv2 || "").trim().toLowerCase() === "production";
 }
 function materializeRetryJob(job) {
   const candidate = job;
@@ -24843,9 +24917,8 @@ ${normalized}`;
     }
     const { url, method, headers, body } = job.apiConfig;
     const resolvedUrl = normalizeExecutorApiUrl(url, environment_default.portal?.baseUrl);
-    const requestHeaders = {
-      ...headers || {}
-    };
+    const rawHeaderEntries = headers && typeof headers === "object" ? Object.entries(headers).filter(([k60, v55]) => typeof k60 === "string" && !k60.startsWith("$") && typeof v55 === "string") : [];
+    const requestHeaders = Object.fromEntries(rawHeaderEntries);
     if (job.companyId && !requestHeaders["x-company-id"]) {
       requestHeaders["x-company-id"] = String(job.companyId);
     }
@@ -25016,12 +25089,18 @@ function calculateEarliestNextRun(cronExpressions, timezone = "America/Lima") {
 
 // src/jobs/scheduler.service.v2.ts
 init_logger();
+init_environment();
 var JobSchedulerV2 = class {
-  constructor() {
+  constructor(automaticSchedulingEnabled = environment_default.jobs.enabled) {
     this.scheduledTasks = /* @__PURE__ */ new Map();
     this.executor = new JobExecutor();
+    this.automaticSchedulingEnabled = automaticSchedulingEnabled;
   }
   async initialize() {
+    if (!this.automaticSchedulingEnabled) {
+      logger_default.info("[JobScheduler] Automatic scheduling is disabled");
+      return;
+    }
     try {
       logger_default.info("[JobScheduler] Initializing v2...");
       const { CronJobModel } = await getSharedModels();
@@ -25212,6 +25291,16 @@ var JobSchedulerV2 = class {
     return CronJobModel.findById(jobId);
   }
   async scheduleJob(job, options2 = {}) {
+    if (!this.automaticSchedulingEnabled) {
+      if (!options2.silent) {
+        logger_default.info("[JobScheduler] Job persisted but not scheduled automatically", {
+          jobId: String(job._id),
+          name: job.name,
+          companyId: job.companyId
+        });
+      }
+      return;
+    }
     try {
       const jobId = job._id.toString();
       const jobLabel = `"${job.name}" (${jobId})`;
@@ -25393,6 +25482,18 @@ import multer from "multer";
 // src/api/controllers/message.controller.simple.ts
 init_whatsapp_direct_service();
 init_logger();
+init_telegram_alert_service();
+function alertSessionDown(sessionPhone, companyId) {
+  sendTelegramAlert({
+    dedupeKey: `session-not-connected-queue-${sessionPhone}`,
+    message: [
+      `\u26A0\uFE0F Sesi\xF3n WhatsApp ${sessionPhone} no conectada`,
+      `companyId: ${companyId || "N/A"}`,
+      `Mensaje encolado \u2192 se entregar\xE1 autom\xE1ticamente al reconectar.`
+    ].join("\n")
+  }).catch(() => {
+  });
+}
 function getGroupReachabilityError(sessionPhone, to3) {
   if (!to3 || !to3.includes("@g.us")) return null;
   try {
@@ -25417,11 +25518,6 @@ async function sendTextMessage(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
-      const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
-      return next(error);
-    }
     const groupError = getGroupReachabilityError(sessionPhone, to3);
     if (groupError) return next(groupError);
     logger_default.info(`\u{1F4E4} Sending text message from ${sessionPhone} to ${to3}`);
@@ -25431,6 +25527,14 @@ async function sendTextMessage(req, res, next) {
         companyId: req.companyId,
         tenantId: req.tenantId
       });
+      if ("queued" in result && result.queued) {
+        alertSessionDown(sessionPhone, req.companyId);
+        return res.status(202).json({
+          success: true,
+          queued: true,
+          message: "Sesi\xF3n no conectada \u2014 mensaje encolado, se enviar\xE1 al reconectar"
+        });
+      }
       res.status(HTTP_STATUS.OK).json({
         success: true,
         message: "Message sent successfully",
@@ -25445,11 +25549,6 @@ async function sendTextMessage(req, res, next) {
           `Cannot send to group. The bot may not be a member/admin of this group. Try refreshing groups with GET /api/sessions/${sessionPhone}/syncGroups`
         );
         error.statusCode = HTTP_STATUS.FORBIDDEN;
-        return next(error);
-      }
-      if (errorMsg.includes("session") || errorMsg.includes("connection") || errorMsg.includes("not connected")) {
-        const error = new Error("Session disconnected. Please reconnect.");
-        error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
         return next(error);
       }
       throw sendError;
@@ -25467,11 +25566,6 @@ async function sendImage(req, res, next) {
     if (!to3) {
       const error = new Error("to is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
-      const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
     const groupError = getGroupReachabilityError(sessionPhone, to3);
@@ -25500,7 +25594,11 @@ async function sendImage(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    await WhatsAppDirectService.sendImageFile(sessionPhone, to3, sendOptions);
+    const imageResult = await WhatsAppDirectService.sendImageFile(sessionPhone, to3, sendOptions);
+    if (imageResult && "queued" in imageResult && imageResult.queued) {
+      alertSessionDown(sessionPhone, resolvedCompanyId);
+      return res.status(202).json({ success: true, queued: true, message: "Sesi\xF3n no conectada \u2014 imagen encolada, se enviar\xE1 al reconectar" });
+    }
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: "Image sent successfully"
@@ -25518,11 +25616,6 @@ async function sendVideo(req, res, next) {
     if (!to3) {
       const error = new Error("to is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
-      const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
     const groupError = getGroupReachabilityError(sessionPhone, to3);
@@ -25550,7 +25643,11 @@ async function sendVideo(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    await WhatsAppDirectService.sendVideoFile(sessionPhone, to3, sendOptions);
+    const videoResult = await WhatsAppDirectService.sendVideoFile(sessionPhone, to3, sendOptions);
+    if (videoResult && "queued" in videoResult && videoResult.queued) {
+      alertSessionDown(sessionPhone, resolvedCompanyId);
+      return res.status(202).json({ success: true, queued: true, message: "Sesi\xF3n no conectada \u2014 video encolado, se enviar\xE1 al reconectar" });
+    }
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: "Video sent successfully"
@@ -25568,11 +25665,6 @@ async function sendFile(req, res, next) {
     if (!to3) {
       const error = new Error("to is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      return next(error);
-    }
-    if (!WhatsAppDirectService.isSessionActive(sessionPhone)) {
-      const error = new Error("Session not connected");
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
     const groupError = getGroupReachabilityError(sessionPhone, to3);
@@ -25600,7 +25692,11 @@ async function sendFile(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    await WhatsAppDirectService.sendDocument(sessionPhone, to3, sendOptions);
+    const fileResult = await WhatsAppDirectService.sendDocument(sessionPhone, to3, sendOptions);
+    if (fileResult && "queued" in fileResult && fileResult.queued) {
+      alertSessionDown(sessionPhone, resolvedCompanyId);
+      return res.status(202).json({ success: true, queued: true, message: "Sesi\xF3n no conectada \u2014 archivo encolado, se enviar\xE1 al reconectar" });
+    }
     res.status(HTTP_STATUS.OK).json({
       success: true,
       message: "File sent successfully"
@@ -63840,8 +63936,8 @@ async function claimNotificationFlag(key, companyId) {
     return true;
   }
 }
-function shouldBypassDispatchDedupe(nodeEnv = config.nodeEnv) {
-  return nodeEnv === "development";
+function shouldBypassDispatchDedupe(nodeEnv2 = config.nodeEnv) {
+  return nodeEnv2 === "development";
 }
 function toSafeText(value, fallback = "") {
   const text = String(value || "").trim();
@@ -65017,6 +65113,8 @@ var runInputReceptionWorkflow = async (input) => {
       locationId: input.locationId,
       locationName: input.locationName,
       material: `${input.materialName} ${input.materialDescription}`.trim(),
+      // Nombre puro (sin descripción) para el mensaje WhatsApp/Telegram.
+      materialName: input.materialName,
       providerId: input.providerId,
       providerName: input.providerName,
       chancadora: input.chancadora,
@@ -65043,7 +65141,8 @@ var runInputReceptionWorkflow = async (input) => {
     }
     await sendTelegramTextMessage(
       telegramChatId,
-      buildSuccessStatusMessage(input, {
+      // Mismo mensaje que WhatsApp (construido por Portal). Fallback al técnico si no vino.
+      createdInput.notificationMessage || buildSuccessStatusMessage(input, {
         resourceId: createdInput._id,
         uploadedCount: uploadSummary2.uploadedCount,
         failedCount: uploadSummary2.failedCount
@@ -65063,6 +65162,8 @@ var runInputReceptionWorkflow = async (input) => {
     locationId: input.locationId,
     locationName: input.locationName,
     material: `${input.materialName} ${input.materialDescription}`.trim(),
+    // Nombre puro (sin descripción) para el mensaje WhatsApp/Telegram.
+    materialName: input.materialName,
     providerId: input.providerId,
     providerName: input.providerName,
     vendorProviderId: input.vendorProviderId,
@@ -65109,7 +65210,9 @@ var runInputReceptionWorkflow = async (input) => {
   });
   await sendTelegramTextMessage(
     telegramChatId,
-    buildSuccessStatusMessage(input, {
+    // Mismo mensaje que WhatsApp cuando Portal lo provee (modo cisterna nuevo);
+    // si el ingreso venía de una recepción previa sin mensaje, fallback al técnico.
+    activeInput.notificationMessage || buildSuccessStatusMessage(input, {
       resourceId: activeInput._id,
       uploadedCount: uploadSummary.uploadedCount,
       failedCount: uploadSummary.failedCount
@@ -69500,7 +69603,10 @@ async function startServer() {
     }
     const pdfTempMaxAgeHours = Number(process.env.PDF_TEMP_MAX_AGE_HOURS || 24);
     const pdfTempCleanupCron = process.env.PDF_TEMP_CLEANUP_CRON || "0 * * * *";
-    const shouldRunBackgroundJobs = shouldInitializeBackgroundJobs(config.nodeEnv);
+    const shouldRunBackgroundJobs = shouldInitializeBackgroundJobs(
+      config.nodeEnv,
+      config.jobs.enabled
+    );
     const cleanupPdfTemp = async () => {
       try {
         const entries = await fs30.readdir(config.pdf.tempDir);
@@ -69525,7 +69631,23 @@ async function startServer() {
       await scheduler_v2_instance_default.initialize();
       cron2.schedule(pdfTempCleanupCron, cleanupPdfTemp);
     } else {
-      logger_default.info("Skipping background jobs in test mode");
+      const isDevelopment = config.nodeEnv.trim().toLowerCase() === "development";
+      const banner = [
+        "",
+        "\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557",
+        isDevelopment ? "\u2551                    \u26A0\uFE0F  MODO DESARROLLO  \u26A0\uFE0F                         \u2551" : "\u2551              \u26A0\uFE0F  CRONJOBS AUTOM\xC1TICOS DESACTIVADOS  \u26A0\uFE0F             \u2551",
+        "\u2551                                                                      \u2551",
+        "\u2551       LOS CRONJOBS AUTOM\xC1TICOS NO SE EJECUTAR\xC1N EN ESTA INSTANCIA    \u2551",
+        "\u2551       Se evita as\xED el doble env\xEDo junto con producci\xF3n.              \u2551",
+        "\u2551                                                                      \u2551",
+        "\u2551       Override deliberado: CRONJOBS_ENABLED=true                     \u2551",
+        "\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D",
+        ""
+      ].join("\n");
+      logger_default.warn(banner, {
+        nodeEnv: config.nodeEnv,
+        cronJobsEnabled: config.jobs.enabled
+      });
     }
     const server = app.listen(config.port, () => {
       logger_default.info(`\u2705 Server running on port ${config.port}`);

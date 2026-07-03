@@ -58,6 +58,10 @@ const startingPromises: Record<string, Promise<WASocket>> = {};
 const reconnectTimers: Record<string, NodeJS.Timeout> = {};
 const reconnectAttempts: Record<string, number> = {};
 
+// Si el socket se crea pero `connection.open/close` no llega en este tiempo,
+// lo forzamos a cerrar para que el loop de reconexión lo reintente.
+const CONNECTION_TIMEOUT_MS = 90_000;
+
 // Contador de desconexiones consecutivas tipo 440 (connectionReplaced).
 // Si sube a >= 3 alerta por Telegram: probable otra instancia con las mismas creds.
 const consecutive440s: Record<string, number> = {};
@@ -91,6 +95,16 @@ function scheduleReconnect(sessionId: string, qrCb?: (qr: string) => void) {
   const attempt = (reconnectAttempts[sessionId] = (reconnectAttempts[sessionId] ?? 0) + 1);
   const delay = Math.min(3000 * attempt, 60_000);
   logger.info(`🔁 Reconnect ${sessionId}: intento ${attempt} en ${delay}ms`);
+
+  // Alerta proactiva cuando la sesión lleva varios intentos fallidos (≈ 45s caída).
+  // No alertamos en intento 1 (desconexiones breves son normales). Dedupe de 15 min
+  // para no inundar si la sesión sigue rebotando.
+  if (attempt === 5) {
+    sendTelegramAlert({
+      dedupeKey: `session-persistent-down-${sessionId}`,
+      message: `⚠️ WhatsApp sesión ${sessionId} caída y no reconecta.\nIntentos: ${attempt} (~45s sin conexión).\nRevisa logs o re-empareja si persiste.`,
+    }).catch(() => {});
+  }
 
   reconnectTimers[sessionId] = setTimeout(async () => {
     delete reconnectTimers[sessionId];
@@ -261,8 +275,29 @@ async function initSession(
     store.markDirty();
   });
 
+  // Watchdog: si el socket no llega a 'open' ni 'close' en CONNECTION_TIMEOUT_MS,
+  // lo forzamos a cerrar. Evita el bug observado donde la sesión quedaba en estado
+  // "connecting" infinito (readyClients=false) durante horas sin reconectar.
+  let connectionSettled = false;
+  const connectionWatchdog = setTimeout(() => {
+    if (!connectionSettled && !shuttingDown.has(sessionId)) {
+      logger.warn(`⏱ [${sessionId}] Connection watchdog: socket sin respuesta por ${CONNECTION_TIMEOUT_MS / 1000}s — forzando cierre`);
+      try {
+        sock.end(new Error('connection-watchdog-timeout'));
+      } catch (err) {
+        logger.warn(`Watchdog: sock.end falló para ${sessionId}: ${String(err)}`);
+        scheduleReconnect(sessionId, qrCb);
+      }
+    }
+  }, CONNECTION_TIMEOUT_MS);
+
   // Connection event handler
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+    if (connection === 'open' || connection === 'close') {
+      connectionSettled = true;
+      clearTimeout(connectionWatchdog);
+    }
+
     if (qr) {
       logger.info(`✅ QR generated for ${sessionId}`);
       qrCodes[sessionId] = qr;

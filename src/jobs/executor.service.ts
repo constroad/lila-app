@@ -314,9 +314,13 @@ export class JobExecutor {
 
     const { url, method, headers, body } = job.apiConfig;
     const resolvedUrl = normalizeExecutorApiUrl(url, config.portal?.baseUrl);
-    const requestHeaders: Record<string, string> = {
-      ...(headers || {}),
-    };
+    // Mongoose Map/Mixed objects incluyen propiedades internas ($__parent, $__path, etc.)
+    // al ser spread directamente. Extraemos solo pares string→string propios para evitar
+    // "Invalid character in header content" en axios.
+    const rawHeaderEntries = headers && typeof headers === 'object'
+      ? Object.entries(headers).filter(([k, v]) => typeof k === 'string' && !k.startsWith('$') && typeof v === 'string')
+      : [];
+    const requestHeaders: Record<string, string> = Object.fromEntries(rawHeaderEntries);
     if (job.companyId && !requestHeaders['x-company-id']) {
       requestHeaders['x-company-id'] = String(job.companyId);
     }
