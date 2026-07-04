@@ -6,6 +6,7 @@ import type {
   DispatchPostProcessInput,
 } from '../types/dispatch-post-process.js';
 import { getCompanyBotLabel } from '../utils/company-bot.js';
+import logger from '../utils/logger.js';
 import { sendDispatchNotifications } from './dispatch-notifications.service.js';
 
 type ConfigRecord = {
@@ -31,7 +32,9 @@ async function fetchDispatchContext(
     companyBotLabel: getCompanyBotLabel(
       company?.slug || company?.name || input.companyId
     ),
-    plantGroupId: String(wa.plantGroupId ?? '').trim(),
+    // plantGroupId puede estar en wa.plantGroupId (campo directo) o en alerts['plant-progress'].groupId
+    // (sistema nuevo de alerts). El campo directo toma precedencia si existe.
+    plantGroupId: String(wa.plantGroupId ?? alerts?.['plant-progress']?.groupId ?? '').trim(),
     adminGroupId: String(wa.adminGroupId ?? '').trim(),
     plantProgressTemplate: alerts?.['plant-progress']?.customMessage || undefined,
     plantEndTemplate: alerts?.['plant-end']?.customMessage || undefined,
@@ -79,10 +82,29 @@ async function callPortalIppSync(dispatchId: string, companyId: string) {
 
 export async function processPostDispatch(input: DispatchPostProcessInput) {
   if (input.state !== 'despachado') {
+    logger.info('dispatch_post_process.skipped', {
+      companyId: input.companyId,
+      dispatchId: input.dispatchId,
+      state: input.state,
+    });
     return;
   }
 
+  logger.info('dispatch_post_process.started', {
+    companyId: input.companyId,
+    dispatchId: input.dispatchId,
+    sender: input.sender || '(none)',
+    pendingCount: input.pendingCount,
+    dispatchedCount: input.dispatchedCount,
+  });
+
   const context = await fetchDispatchContext(input);
+  logger.info('dispatch_post_process.context', {
+    companyId: input.companyId,
+    plantGroupId: context.plantGroupId || '(empty)',
+    adminGroupId: context.adminGroupId || '(empty)',
+    hasProgressTemplate: Boolean(context.plantProgressTemplate),
+  });
 
   if (input.truckDispatched && input.quantity) {
     await updateMaintenanceM3Config(input.companyId, input.quantity);

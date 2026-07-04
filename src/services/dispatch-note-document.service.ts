@@ -606,7 +606,11 @@ export async function generateDispatchNoteDocumentFile(
   params: BuildRenderContextInput
 ): Promise<GenerateDispatchNoteDocumentResult> {
   const startedAt = Date.now();
-  const { companyId, payload, data, html } = await buildRenderContext(params);
+  // Puppeteer carga imágenes del HTML usando http://127.0.0.1 para evitar pasar por
+  // la URL pública (Tailscale / dominio externo), que puede ocasionar timeout de red.
+  // El baseUrl externo solo se usa para construir la URL absoluta del PDF resultante.
+  const localBaseUrl = `http://127.0.0.1:${config.port}`;
+  const { companyId, payload, data, html } = await buildRenderContext({ ...params, baseUrl: localBaseUrl });
 
   await storagePathService.ensureCompanyStructure(companyId);
 
