@@ -405,10 +405,15 @@ async function applyHeaderDefaults(
       toCandidateDate((data as any)?.areaAdicional?.fecha),
       toCandidateDate((data as any)?.tasa?.fecha),
       toCandidateDate((data as any)?.fecha),
+      // Ultimo recurso: si el informe no trae ninguna fecha propia (ej. se creo
+      // antes de que el formulario pidiera fecha, o el tipo de informe no tiene
+      // un campo de fecha de negocio), usamos la fecha de creacion del registro
+      // para que el header nunca quede en blanco.
+      toCandidateDate(report?.createdAt),
     ].filter(Boolean);
-    if (candidateDates.length > 0) {
-      header.fecha = candidateDates[0];
-    }
+    header.fecha = candidateDates.length > 0
+      ? candidateDates[0]
+      : new Date().toISOString().slice(0, 10);
   }
 
   // For contracts: inject company legalInfo as proveedor defaults and letterhead.

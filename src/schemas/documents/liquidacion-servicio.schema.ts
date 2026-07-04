@@ -52,7 +52,7 @@ export const liquidacionServicioSchema: DocumentSchema = {
         { key: 'item', label: 'ITEM', type: 'text', width: 70, align: 'center', editable: true },
         { key: 'descripcion', label: 'DESCRIPCION', type: 'text', width: 280, align: 'left', editable: true },
         { key: 'unidad', label: 'UNID', type: 'text', width: 60, align: 'center', editable: true },
-        { key: 'metrado', label: 'METRADO', type: 'number', width: 90, align: 'right', editable: true },
+        { key: 'metrado', label: 'CANTIDAD', type: 'number', width: 90, align: 'right', editable: true },
         { key: 'precioUnitario', label: 'PRECIO UNIT.', type: 'currency', width: 100, align: 'right', editable: true },
         { key: 'parcial', label: 'P. PARCIAL', type: 'currency', width: 110, align: 'right', editable: true },
       ],
