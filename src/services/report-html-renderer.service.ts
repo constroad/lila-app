@@ -494,7 +494,7 @@ ${signaturesHtml}`;
       object-fit: cover;
     }
     @page { size: A4 portrait; margin: ${pageMargin}; }
-    p { margin: 6pt 0; }
+    p { margin: 6pt 0; white-space: pre-wrap; }
     table { border-collapse: collapse; }
   </style>
 </head>

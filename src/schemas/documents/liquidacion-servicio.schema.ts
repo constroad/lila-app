@@ -54,7 +54,15 @@ export const liquidacionServicioSchema: DocumentSchema = {
         { key: 'unidad', label: 'UNID', type: 'text', width: 60, align: 'center', editable: true },
         { key: 'metrado', label: 'CANTIDAD', type: 'number', width: 90, align: 'right', editable: true },
         { key: 'precioUnitario', label: 'PRECIO UNIT.', type: 'currency', width: 100, align: 'right', editable: true },
-        { key: 'parcial', label: 'P. PARCIAL', type: 'currency', width: 110, align: 'right', editable: true },
+        {
+          key: 'parcial',
+          label: 'P. PARCIAL',
+          type: 'currency',
+          width: 110,
+          align: 'right',
+          computed: true,
+          formula: 'row.metrado * row.precioUnitario',
+        },
       ],
     },
     {
@@ -84,7 +92,15 @@ export const liquidacionServicioSchema: DocumentSchema = {
         { key: 'unidad', label: 'UNID', type: 'text', width: 60, align: 'center', editable: true },
         { key: 'metrado', label: 'CANTIDAD', type: 'number', width: 90, align: 'right', editable: true },
         { key: 'precioUnitario', label: 'PRECIO UNIT.', type: 'currency', width: 100, align: 'right', editable: true },
-        { key: 'parcial', label: 'P. PARCIAL', type: 'currency', width: 110, align: 'right', editable: true },
+        {
+          key: 'parcial',
+          label: 'P. PARCIAL',
+          type: 'currency',
+          width: 110,
+          align: 'right',
+          computed: true,
+          formula: 'row.metrado * row.precioUnitario',
+        },
       ],
     },
     {
