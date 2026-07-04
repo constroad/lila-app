@@ -2736,6 +2736,7 @@ ${signaturesHtml}`;
 
   private async bufferToDataUrl(buffer: Buffer): Promise<string> {
     let format = 'jpeg';
+    let outputBuffer = buffer;
     try {
       const metadata = await sharp(buffer).metadata();
       if (metadata.format) {
@@ -2745,7 +2746,22 @@ ${signaturesHtml}`;
       logger.warn('Failed to detect image format', { error: String(error) });
     }
 
-    const base64 = buffer.toString('base64');
+    if (format === 'svg') {
+      // Chromium/Puppeteer no soporta de forma confiable `data:image/svg+xml`
+      // dentro del PDF (fuentes externas, `currentColor`, refs relativas), así
+      // que rasterizamos a PNG en alta densidad antes de embeberlo.
+      try {
+        outputBuffer = await sharp(buffer, { density: 300 }).png().toBuffer();
+        format = 'png';
+      } catch (error) {
+        logger.warn('Failed to rasterize SVG image, falling back to raw SVG data URL', {
+          error: String(error),
+        });
+        format = 'svg+xml';
+      }
+    }
+
+    const base64 = outputBuffer.toString('base64');
     return `data:image/${format};base64,${base64}`;
   }
 

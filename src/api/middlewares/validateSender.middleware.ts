@@ -46,9 +46,9 @@ export async function validateSender(
   if (req.body?.isActive === false) {
     return next();
   }
-  const hasMessage =
-    Boolean(req.body?.message?.chatId) || Boolean(req.body?.message?.body);
-  const shouldRequireSender = jobType === 'message' || hasMessage;
+  // Solo los jobs `message` requieren sender (los `api` llaman a Portal, que tiene su
+  // propio sender). El campo `message` en jobs `api` es metadata para el handler de Portal.
+  const shouldRequireSender = jobType === 'message';
 
   if (shouldRequireSender && !company.whatsappConfig?.sender) {
     return res.status(400).json({
