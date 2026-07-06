@@ -165,7 +165,13 @@ export interface SectionSchema {
   maxRows?: number;
   showTotals?: boolean;
   totalColumns?: string[];
+  /** Columna (key) sumada para el pie de totales (SUB TOTAL/IGV/TOTAL). */
+  totalsColumn?: string;
+  /** Tasa de IGV del pie de totales (0 = solo TOTAL). Default 0.18. */
+  igvRate?: number;
   reorderable?: boolean;
+  /** `summary`: render como caja con bordes. */
+  boxed?: boolean;
 
   // SimpleFields specific
   fields?: FieldSchema[];

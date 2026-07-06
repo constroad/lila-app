@@ -47,7 +47,8 @@ export const liquidacionServicioSchema: DocumentSchema = {
       title: 'Monto Cotizacion Inicial',
       dynamicRows: true,
       minRows: 0,
-      showTotals: false,
+      showTotals: true,
+      totalsColumn: 'parcial',
       columns: [
         { key: 'item', label: 'ITEM', type: 'text', width: 70, align: 'center', editable: true },
         { key: 'descripcion', label: 'DESCRIPCION', type: 'text', width: 280, align: 'left', editable: true },
@@ -85,7 +86,8 @@ export const liquidacionServicioSchema: DocumentSchema = {
       title: 'Monto Ejecutado',
       dynamicRows: true,
       minRows: 0,
-      showTotals: false,
+      showTotals: true,
+      totalsColumn: 'parcial',
       columns: [
         { key: 'item', label: 'ITEM', type: 'text', width: 70, align: 'center', editable: true },
         { key: 'descripcion', label: 'DESCRIPCION', type: 'text', width: 280, align: 'left', editable: true },
@@ -105,7 +107,7 @@ export const liquidacionServicioSchema: DocumentSchema = {
     },
     {
       id: 'saldo',
-      type: 'simpleFields',
+      type: 'summary',
       title: 'Monto o Saldo por Pagar',
       gridColumns: 4,
       fields: [

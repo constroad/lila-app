@@ -13,6 +13,7 @@ import { aggregateReportData, structureDataForReportType } from '../../services/
 import { getServiceReportModel } from '../../models/service-report.model.js';
 import { storagePathService } from '../../services/storage-path.service.js';
 import { ReportHtmlRenderer } from '../../services/report-html-renderer.service.js';
+import { inlineCanvasHtmlImages } from '../../services/canvas-html-image-inliner.service.js';
 import pdfGenerator from '../../pdf/generator.service.js';
 import { buildEffectiveSchema } from '../../services/schema-customization.service.js';
 import { PDFMergerService } from '../../services/pdf-merger.service.js';
@@ -38,12 +39,24 @@ function resolveProto(req: Request): string {
   return req.protocol;
 }
 
+// Base pública configurable de lila (p. ej. https://joses-mac-mini.tail46a1b0.ts.net).
+// TIENE PRIORIDAD sobre el Host del request: detrás del túnel de la Mac mini, lila
+// recibe `Host: localhost:3001`, por lo que sin esto las URLs absolutas de archivos
+// (pdfUrlAbsolute, previewUrlAbsolute) salían como http://localhost:3001/files/... y
+// el Portal las mostraba rotas en producción. Si `LILA_PUBLIC_BASE_URL` no está
+// definido, se conserva el comportamiento anterior (x-forwarded-host || host).
+const PUBLIC_BASE_URL = (process.env.LILA_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+
 function buildAbsoluteUrl(req: Request, relativeUrl: string) {
   if (!relativeUrl) return relativeUrl;
+  const path = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+  if (PUBLIC_BASE_URL) {
+    return `${PUBLIC_BASE_URL}${path}`;
+  }
   const host = req.get('x-forwarded-host') || req.get('host');
   if (!host) return relativeUrl;
   const proto = resolveProto(req);
-  return `${proto}://${host}${relativeUrl}`;
+  return `${proto}://${host}${path}`;
 }
 
 function isPlainObject(value: any): value is Record<string, any> {
@@ -146,6 +159,10 @@ function buildHeaderCodigo(prefix: string, reportCode: string, correlativo?: str
   return `${base}-${correlativo}`;
 }
 
+// Márgenes del PDF cuando la fuente es el canvas (Fase 2 paso 2): el serializer
+// del canvas usa `@page margin:0`, así que el margen real lo aporta Puppeteer aquí.
+const CANVAS_PDF_MARGIN = { top: '14mm', right: '14mm', bottom: '14mm', left: '14mm' };
+
 function buildPdfMargin(schema: any, data?: Record<string, any>) {
   if (data && getDocumentLetterhead(data)) {
     return { top: '0', right: '0', bottom: '0', left: '0' };
@@ -158,6 +175,30 @@ function buildPdfMargin(schema: any, data?: Record<string, any>) {
     bottom: `${bottom}mm`,
     left: `${left}mm`,
   };
+}
+
+/**
+ * Fuente del HTML del PDF. Si Portal manda el HTML del canvas (Fase 2, paso 2),
+ * se usa ese HTML —con imágenes resueltas a data URL en el server— y se salta el
+ * renderer Handlebars. Sin `canvasHtml` el comportamiento actual queda intacto.
+ */
+async function resolveReportHtml(input: {
+  canvasHtml?: unknown;
+  effectiveSchema: any;
+  data: Record<string, any>;
+  companyId: string;
+  baseUrl: string;
+}): Promise<{ html: string; source: 'canvas' | 'renderer' }> {
+  const canvasHtml = typeof input.canvasHtml === 'string' ? input.canvasHtml.trim() : '';
+  if (canvasHtml) {
+    const html = await inlineCanvasHtmlImages(canvasHtml, input.companyId);
+    return { html, source: 'canvas' };
+  }
+  const renderer = new ReportHtmlRenderer(input.effectiveSchema, input.data, {
+    companyId: input.companyId,
+    baseUrl: input.baseUrl,
+  });
+  return { html: await renderer.render(), source: 'renderer' };
 }
 
 function buildFolioOptions(data: Record<string, any>, limitPages?: number) {
@@ -749,13 +790,20 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
       const pdfPath = path.join(reportsDir, pdfFilename);
       const pdfStarted = Date.now();
       const baseUrl = buildAbsoluteUrl(req, '');
-      const htmlRenderer = new ReportHtmlRenderer(effectiveSchema, data, { companyId, baseUrl });
-      const html = await htmlRenderer.render();
+      const { html, source } = await resolveReportHtml({
+        canvasHtml: req.body?.html,
+        effectiveSchema,
+        data,
+        companyId,
+        baseUrl,
+      });
       await pdfGenerator.generateFromHtml(html, {
         outputPath: pdfPath,
         format: effectiveSchema.pageSize || 'A4',
         landscape: effectiveSchema.orientation === 'landscape',
-        margin: buildPdfMargin(effectiveSchema, data),
+        // El canvas es autocontenido (dibuja su propio encabezado): usa márgenes
+        // normales aunque el informe tenga membrete (buildPdfMargin daría 0).
+        margin: source === 'canvas' ? CANVAS_PDF_MARGIN : buildPdfMargin(effectiveSchema, data),
       });
 
       const letterhead = getDocumentLetterhead(data);
@@ -912,8 +960,13 @@ export async function previewDocument(req: Request, res: Response, next: NextFun
     await fs.ensureDir(config.pdf.tempDir);
 
     const baseUrl = buildAbsoluteUrl(req, '');
-    const htmlRenderer = new ReportHtmlRenderer(effectiveSchema, data, { companyId, baseUrl });
-    const html = await htmlRenderer.render();
+    const { html, source } = await resolveReportHtml({
+      canvasHtml: req.body?.html,
+      effectiveSchema,
+      data,
+      companyId,
+      baseUrl,
+    });
 
     const previewId = `${report.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
