@@ -278,30 +278,43 @@ async function initSession(
   // Watchdog: si el socket no llega a 'open' ni 'close' en CONNECTION_TIMEOUT_MS,
   // lo forzamos a cerrar. Evita el bug observado donde la sesión quedaba en estado
   // "connecting" infinito (readyClients=false) durante horas sin reconectar.
+  // Se resetea cada vez que llega un QR para darle al usuario el tiempo completo
+  // desde el último QR visible (no desde la creación del socket).
   let connectionSettled = false;
-  const connectionWatchdog = setTimeout(() => {
-    if (!connectionSettled && !shuttingDown.has(sessionId)) {
-      logger.warn(`⏱ [${sessionId}] Connection watchdog: socket sin respuesta por ${CONNECTION_TIMEOUT_MS / 1000}s — forzando cierre`);
-      try {
-        sock.end(new Error('connection-watchdog-timeout'));
-      } catch (err) {
-        logger.warn(`Watchdog: sock.end falló para ${sessionId}: ${String(err)}`);
+  let watchdogTimer: NodeJS.Timeout | null = null;
+  const startWatchdog = () => {
+    if (watchdogTimer) clearTimeout(watchdogTimer);
+    watchdogTimer = setTimeout(() => {
+      if (!connectionSettled && !shuttingDown.has(sessionId)) {
+        logger.warn(`⏱ [${sessionId}] Connection watchdog: socket sin respuesta por ${CONNECTION_TIMEOUT_MS / 1000}s — forzando cierre`);
+        try {
+          sock.end(new Error('connection-watchdog-timeout'));
+        } catch (err) {
+          logger.warn(`Watchdog: sock.end falló para ${sessionId}: ${String(err)}`);
+        }
+        // sock.end() no emite connection.close si el socket nunca llegó a 'open'
+        // (Baileys stuck-connecting). Llamamos scheduleReconnect directamente; el guard
+        // interno (if reconnectTimers[sessionId]) evita duplicados si connection.close
+        // llega igual.
         scheduleReconnect(sessionId, qrCb);
       }
-    }
-  }, CONNECTION_TIMEOUT_MS);
+    }, CONNECTION_TIMEOUT_MS);
+  };
+  startWatchdog();
 
   // Connection event handler
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (connection === 'open' || connection === 'close') {
       connectionSettled = true;
-      clearTimeout(connectionWatchdog);
+      if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
     }
 
     if (qr) {
       logger.info(`✅ QR generated for ${sessionId}`);
       qrCodes[sessionId] = qr;
       qrTimestamps[sessionId] = Date.now();
+      // Resetear watchdog: el usuario tiene CONNECTION_TIMEOUT_MS desde el último QR para escanear.
+      startWatchdog();
       if (qrCb) qrCb(qr);
     }
 
