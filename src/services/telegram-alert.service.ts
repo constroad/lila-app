@@ -28,10 +28,15 @@ function isPermanentHttpStatus(status: number) {
   return status >= 400 && status < 500;
 }
 
+// Prefijo para distinguir alertas de instancias dev en el canal compartido con prod
+// (una laptop local usa el mismo bot/chat). Se aplica en sendOnce (único punto de
+// salida real): cubre envíos directos Y los flusheados desde la cola.
+const alertEnvPrefix = () => (config.nodeEnv === 'production' ? '' : '[DEV] ');
+
 async function sendOnce(message: string): Promise<{ ok: true } | { ok: false; permanent: boolean; reason: string }> {
   const body = new URLSearchParams();
   body.append('chat_id', config.telegram.errorsChatId);
-  body.append('text', message);
+  body.append('text', alertEnvPrefix() + message);
 
   try {
     const res = await fetch(

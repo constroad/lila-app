@@ -16,11 +16,19 @@ import {
   getDocumentLetterheadMargins,
   shouldHideDocumentLogo,
 } from '../../services/document-letterhead.service.js';
+import { inlineCanvasHtmlImages } from '../../services/canvas-html-image-inliner.service.js';
+import {
+  CANVAS_QUOTE_LETTERHEAD_PDF_MARGIN,
+  CANVAS_QUOTE_PDF_MARGIN,
+  getCanvasQuoteHtml,
+} from './quote-documents.helpers.js';
 
 interface QuoteDocumentPayload {
   schemaCode?: string;
   quoteNumber?: string | number;
   schemaData?: Record<string, any>;
+  /** HTML serializado del canvas de Portal (opcional): salta el renderer Handlebars. */
+  html?: string;
 }
 
 function resolveProto(req: Request): string {
@@ -78,6 +86,7 @@ function getPayload(req: Request): QuoteDocumentPayload {
     schemaCode: body.schemaCode || 'COT-ASF',
     quoteNumber: body.quoteNumber,
     schemaData: isPlainObject(body.schemaData) ? body.schemaData : {},
+    html: getCanvasQuoteHtml(body),
   };
 }
 
@@ -239,7 +248,10 @@ function normalizeServiceSections(rawSections: any[]): Array<{ title: string; li
     .filter((section) => section.title || section.lines.length > 0);
 }
 
-function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): string {
+// Exportado como RENDERER DE REFERENCIA: `scripts/design-refs/` lo usa para
+// generar los HTML/screenshots que el canvas de Portal debe emular (criterio
+// visual de la migración "canvas = única fuente de diseño").
+export function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): string {
   const MIN_VISIBLE_ITEM_ROWS = 12;
   const header = data.header || {};
   const customer = data.customer || {};
@@ -706,7 +718,8 @@ function renderAsphaltQuoteHtml(data: Record<string, any>, baseUrl: string): str
 </html>`;
 }
 
-function renderServiceQuoteHtml(data: Record<string, any>, baseUrl: string): string {
+// Exportado como RENDERER DE REFERENCIA (ver nota en renderAsphaltQuoteHtml).
+export function renderServiceQuoteHtml(data: Record<string, any>, baseUrl: string): string {
   const MIN_VISIBLE_ITEM_ROWS = 20;
   const header = data.header || {};
   const customer = data.customer || {};
@@ -1276,8 +1289,14 @@ async function buildRenderContext(req: Request) {
   const data = mergeDeep({}, schema.defaultData || {}, payload.schemaData || {});
   const baseUrl = buildAbsoluteUrl(req, '');
   let html = '';
+  let source: 'canvas' | 'renderer' = 'renderer';
 
-  if (payload.schemaCode === 'COT-ASF') {
+  if (payload.html) {
+    // Passthrough "canvas = PDF": el HTML llega listo desde Portal; solo se
+    // resuelven las imágenes a data URL. Sin payload.html todo sigue igual.
+    html = await inlineCanvasHtmlImages(payload.html, companyId);
+    source = 'canvas';
+  } else if (payload.schemaCode === 'COT-ASF') {
     html = renderAsphaltQuoteHtml(data, baseUrl);
   } else if (payload.schemaCode === 'COT-SER') {
     html = renderServiceQuoteHtml(data, baseUrl);
@@ -1289,13 +1308,14 @@ async function buildRenderContext(req: Request) {
     companyId,
     payload,
     html,
+    source,
   };
 }
 
 async function previewQuoteDocument(req: Request, res: Response, next: NextFunction, previewPrefix: string) {
   const startedAt = Date.now();
   try {
-    const { payload, html } = await buildRenderContext(req);
+    const { payload, html, source } = await buildRenderContext(req);
 
     await fs.ensureDir(config.pdf.tempDir);
 
@@ -1307,6 +1327,13 @@ async function previewQuoteDocument(req: Request, res: Response, next: NextFunct
       outputPath: previewPath,
       format: 'A4',
       landscape: false,
+      ...(source === 'canvas'
+        ? {
+            margin: getDocumentLetterhead(payload.schemaData || {})
+              ? CANVAS_QUOTE_LETTERHEAD_PDF_MARGIN
+              : CANVAS_QUOTE_PDF_MARGIN,
+          }
+        : {}),
     });
 
     await FolioGeneratorService.addFolios(
@@ -1332,6 +1359,7 @@ async function previewQuoteDocument(req: Request, res: Response, next: NextFunct
       durationMs: Date.now() - startedAt,
       totalPages,
       sizeBytes: stat.size,
+      source,
     });
 
     res.status(HTTP_STATUS.OK).json({
@@ -1362,7 +1390,7 @@ async function generateQuoteDocument(
 ) {
   const startedAt = Date.now();
   try {
-    const { companyId, payload, html } = await buildRenderContext(req);
+    const { companyId, payload, html, source } = await buildRenderContext(req);
 
     const quoteNumberRaw = String(
       payload.quoteNumber ||
@@ -1388,6 +1416,13 @@ async function generateQuoteDocument(
       outputPath,
       format: 'A4',
       landscape: false,
+      ...(source === 'canvas'
+        ? {
+            margin: getDocumentLetterhead(payload.schemaData || {})
+              ? CANVAS_QUOTE_LETTERHEAD_PDF_MARGIN
+              : CANVAS_QUOTE_PDF_MARGIN,
+          }
+        : {}),
     });
 
     await FolioGeneratorService.addFolios(
@@ -1415,6 +1450,7 @@ async function generateQuoteDocument(
       durationMs: Date.now() - startedAt,
       totalPages,
       sizeBytes: stat.size,
+      source,
     });
 
     res.status(HTTP_STATUS.OK).json({

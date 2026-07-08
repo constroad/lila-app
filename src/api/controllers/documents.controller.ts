@@ -162,6 +162,13 @@ function buildHeaderCodigo(prefix: string, reportCode: string, correlativo?: str
 // Márgenes del PDF cuando la fuente es el canvas (Fase 2 paso 2): el serializer
 // del canvas usa `@page margin:0`, así que el margen real lo aporta Puppeteer aquí.
 const CANVAS_PDF_MARGIN = { top: '14mm', right: '14mm', bottom: '14mm', left: '14mm' };
+// F5 · membrete en canvas: el fondo va a sangre completa; los márgenes los pone
+// el padding del propio HTML (`.canvas-print-content`), no Puppeteer.
+const CANVAS_LETTERHEAD_PDF_MARGIN = { top: '0', right: '0', bottom: '0', left: '0' };
+
+function buildCanvasPdfMargin(data?: Record<string, any>) {
+  return data && getDocumentLetterhead(data) ? CANVAS_LETTERHEAD_PDF_MARGIN : CANVAS_PDF_MARGIN;
+}
 
 function buildPdfMargin(schema: any, data?: Record<string, any>) {
   if (data && getDocumentLetterhead(data)) {
@@ -803,7 +810,7 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
         landscape: effectiveSchema.orientation === 'landscape',
         // El canvas es autocontenido (dibuja su propio encabezado): usa márgenes
         // normales aunque el informe tenga membrete (buildPdfMargin daría 0).
-        margin: source === 'canvas' ? CANVAS_PDF_MARGIN : buildPdfMargin(effectiveSchema, data),
+        margin: source === 'canvas' ? buildCanvasPdfMargin(data) : buildPdfMargin(effectiveSchema, data),
       });
 
       const letterhead = getDocumentLetterhead(data);

@@ -42,6 +42,7 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - Controller: `src/api/controllers/session.controller.simple.ts`.
 - Envio de mensajes: `src/api/controllers/message.controller.simple.ts`.
 - Servicio directo: `src/services/whatsapp-direct.service.ts`.
+- **Send-proxy dev (julio 2026):** con `WHATSAPP_PROXY_TARGET_URL` seteada (base URL de prod con `/api`, ej. Tailscale) y `nodeEnv !== 'production'`, los 4 métodos de envío de `whatsapp-direct.service.ts` hacen early-return a `src/services/whatsapp-proxy.service.ts`, que reenvía a `/message/:sender/{text|image|video|file}` de PROD con un JWT de tenant corto (5 min) firmado con el `JWT_SECRET` compartido — el payload lleva el CAMPO `companyId` del schema Company (NO el `_id`), que es lo que compara `requireSenderOwnership`. Así lila local prueba flujos e2e con mensajes reales sin abrir sockets (evita guerra 440); prod aplica su pipeline completo (ownership, routing, outbox 202→`{queued:true}`, conteo de quota — sin doble conteo porque el early-return salta el conteo local). Buffers locales viajan como multipart (límite multer prod: 10 MB); `filePath`/`fileUrl` se reenvían tal cual. `createSession` lanza error con proxy activo (no abrir sockets locales). Las LECTURAS de sesión (`/groups`, `/contacts`, `/syncGroups`) también se proxean (pass-through de `proxySessionRead`, espejando el status de prod): el store local solo se puebla con socket, así que sin proxy devolvían 503. Las alertas Telegram llevan prefijo `[DEV] ` cuando `nodeEnv !== 'production'` (mismo bot/canal que prod; el prefijo se aplica en `sendOnce`, cubre directas y cola). En producción la env se ignora con warning. Alternativa full-fidelity (socket local, entrantes): `specs/SESSION-LEASE.spec.md` (propuesto, no implementado).
 - Listener IA de Anthropic existe (`src/whatsapp/ai-agent/*`) pero esta deshabilitado en produccion (early return en `message.listener.ts`, flag `WHATSAPP_AI_ENABLED`).
 - Una sesion por empresa, credenciales en `data/sessions/{companyPhone}` (volumen montado).
 - **Auth de rutas de sesion (`/api/sessions/*` state-changing):** middleware `requireTenantOrApiKey` (junio 2026) acepta JWT de tenant (Portal), API key `lk_fe_...` o, por compatibilidad, la API key global `x-api-key`. Antes exigian solo `x-api-key === API_SECRET_KEY`, lo que rompia el boton "Desconectar" de Portal (que firma JWT). Plan de deprecar el secreto global en `specs/SCALABILITY-MULTI-SESSION.spec.md` §4.4/§4.5.
@@ -72,6 +73,12 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   - `documents.controller.ts` - generador generico de informes con membrete (REPORT_LETTERHEAD_CODES) y schema customization por empresa.
   - `service-management-report.controller.ts` - CRUD/lock de informes de servicio.
   - `dispatch-note-documents.controller.ts`, `purchase-order-documents.controller.ts`, `quote-documents.controller.ts`.
+  - `quote-documents.controller.ts` acepta `payload.html` (canvas serializado de Portal): `inlineCanvasHtmlImages` + salto del renderer Handlebars, margen Puppeteer 14mm (`quote-documents.helpers.ts`). Sin `html`, comportamiento intacto. Base del editor canvas de cotizaciones (`Portal/specs/QUOTES-CANVAS-EDITOR.spec.md`).
+  - Schemas `COT-ASF` y `COT-SER` llevan `computedFields` (totals.subtotal/igv/total con `totals.igvRate` como palanca IGV) y columnas computed (`itemCode` autonumerado, `lineTotal = quantity*unitPrice`). Es metadata para el MOTOR del editor canvas de Portal; los renderers Handlebars la ignoran (leen valores ya calculados).
+  - Schemas COT-ASF/COT-SER v1.1.0 rearmados FIELES al PDF Handlebars legacy (que sigue siendo el criterio visual del canvas): tipos de seccion nuevos `totalsPanel` (monto en letras + caja de totales a la derecha), `signatureClosing` (ATENTAMENTE + firma + panel de cuentas bancarias; reemplaza a la seccion "Asesor Comercial" y a la tabla de cuentas — la seccion `issuerBankAccounts` desaparece, la DATA key se mantiene), `footerNote` (pie compacto sin labels) y `noteSections` (alcance COT-SER por bloques {title, lines[]}), mas `fieldsVariant: 'inlineRows'`, `showTitle`, `headerConfig.variant: 'quoteIssuer'` (emisor izq + caja de folio), `dataTable.tableStyle: 'columns'` + `column.decimals` + `minVisibleRows` (relleno) + `groupBy` (fase 1/1.1/1.2) y `compactPrint` en `types.ts`. Solo el canvas de Portal los renderiza; los renderers Handlebars no los usan (el PDF canvas llega por passthrough `payload.html`). Cambios de schema requieren REINICIO de lila local.
+  - `renderAsphaltQuoteHtml`/`renderServiceQuoteHtml` ahora EXPORTADOS: los usa `scripts/design-refs/render-legacy-quotes.ts` como renderer de REFERENCIA (genera HTML+schema con fixtures compartidas de `Portal/specs/design-references/`); `screenshot-refs.mjs` (Puppeteer, Chrome del sistema) saca PNG/PDF de legacy y canvas para compararlos. Herramienta de la migracion "canvas = unica fuente de diseño" sin tocar la intranet. El script es generico por target: INFORMES renderizan con `new ReportHtmlRenderer(schema, data, {companyId, baseUrl}).render()` y escriben a `Portal/specs/design-references/reports/` (INF-ACT ya emulado en el canvas de Portal, 2026-07-07).
+  - Canvas = UNICA fuente de diseño de cotizaciones E informes (F10): Portal persiste el HTML del canvas (`printHtml` en el draft de quote/service-quote y de service-management-report) y lo manda como `payload.html`. En cotizaciones hub/WhatsApp lo usan; en informes el PDF ya se genera desde el editor con `canvasHtml`. Los renderers Handlebars (`renderAsphaltQuoteHtml`/`renderServiceQuoteHtml` de cotizaciones; `report-html-renderer` de informes) quedan SOLO como fallback y se retiraran por tipo cuando el canvas emule fiel su diseño. lila = motor tonto (Puppeteer + storage + WhatsApp). Los docs headless de lila (vale de despacho del bot) conservan su template propio.
+  - Membrete en el path canvas (F5): cuando el HTML del canvas trae membrete (`getDocumentLetterhead(schemaData)`), el margen Puppeteer baja a 0 en `documents.controller` y `quote-documents.controller` — el fondo va a sangre completa y los margenes los aporta el padding del propio HTML serializado por Portal.
   - `purchase-order-documents.controller.ts` conserva el schema `ORD-COM`, pero acepta `schemaData.header.orderType` / `meta.orderType` para renderizar `ORDEN DE COMPRA` (`oc-...`) u `ORDEN DE SERVICIO` (`oser-...`). Los PDFs de servicio se guardan bajo `ordenes-servicio`; los de compra mantienen `ordenes-compra`.
 - Services:
   - `report-data-aggregator.service.ts` (agrega data desde Portal Mongo).
@@ -306,3 +313,47 @@ Para el modelo de suscripciones de Portal (`/projects/SUBSCRIPTION-BILLING-MULTI
 - **storage**: suma real del tenant en `/mnt/constroad-storage/companies/{companyId}` (absoluto, no mensual).
 - **whatsappMessages / apiCalls**: contadores mensuales (reset por período en Portal).
 Portal lo ingiere vía cron (`UsageTracker.updateStorage` + `usage_metrics`) para que `/admin/suscripcion/uso` muestre números reales independientes del plan.
+
+## F8-C — Link del chofer automático + recordatorio ETA+10% (2026-07-07)
+
+- **Envío automático (sin humano)**: al despachar, el flujo del vale
+  (`dispatch-vale.service`) además del PDF + ubicación ahora manda al chofer su
+  **link personal** (`{PORTAL_BASE_URL}/public/driver/{jwt}`) para compartir GPS
+  en ruta y **marcar su llegada** (F8-A en Portal). El token lo firma lila con
+  `config.security.jwtSecret` (= `LILA_APP_JWT_SECRET` de Portal), scope
+  `driver-location`, TTL 12 h (`src/utils/driver-link.ts`). Best-effort con
+  `queueOnFail`: nunca rompe el vale. El botón manual del admin en Portal sigue
+  existiendo como respaldo.
+- **Recordatorio "¿ya llegaste?"**: `driver-arrival-reminder.service.ts` —
+  cola persistida en JsonStore (patrón telegram-queue, sobrevive reinicios) +
+  flusher cada 60 s (arrancado/detenido en `index.ts`). Delay = **ETA + 10%**
+  (clamp 15 min–6 h; sin ETA → 90 min). El ETA se consulta a Portal
+  `GET /api/dispatch-tracking?dispatchId=` con header `x-company-id` (Portal lo
+  abrió a `withCompanyOrInternal`, mismo gate `internalPublicAccess` del IPP
+  sync). Al vencer: si el tracking dice `stage: delivered` (chofer u operador
+  ya marcaron) se descarta sin enviar; si no, WhatsApp al chofer. Dedupe por
+  dispatch, 3 intentos máx, expira a las 12 h.
+
+## Exports de pedidos — `/api/exports/orders/:orderId` (2026-07-07)
+
+- **Por qué en lila**: el "Panel de exportación" del reporte público del Portal
+  (`ScOrderExportPanel`) siempre llamó a `{LILA}/api/exports/orders/:id/…`,
+  rutas que venían del backend viejo y NO existían en este repo (404). Los
+  archivos viven en el disco de lila → zipping local (sin límite de 8 s de
+  Vercel ni re-descargas HTTP).
+- **Rutas** (`api/routes/exports.routes.ts`): `POST …/request` (genera el ZIP
+  síncrono, 201; 404/409 busy/422 sin archivos), `GET …/download`
+  (`res.download`, navegación del browser), `DELETE …/:orderId` (borra zip +
+  limpia job). **Públicas por orderId** (paridad con el contrato viejo — la
+  descarga no puede mandar headers); rate limit global.
+- **Servicio** (`services/order-export.service.ts`): order/media/folder como
+  **loose models** de la DB compartida (`database/models.ts` — OJO: la
+  colección de medias es **`media`**, mongoose la trata como incontable; existe
+  una `medias` legacy vacía). Medias `{companyId, resourceId: orderId,
+  status: ACTIVE}` → URL → path local validado (`storagePathService.resolvePath`
+  + `validateAccess`, sin traversal ni cross-company) → **archiver** (dep nueva,
+  v7 — la v8 cambió a API de clases ESM) streaming a
+  `<companyRoot>/temp/order-exports/pedido-<orderId>.zip`. Carpetas del zip =
+  cadena de folders del Portal o `media.type`. Estado en **`order.exportJob`**
+  (`running|done|error`, fileName/sizeBytes/expiresAt 24 h) — el Portal lo lee
+  por su propio `GET /api/order/:id` (el panel hace polling cada 3 s).

@@ -39,6 +39,11 @@ import {
   assertCompanyOwnsWhatsAppSender,
   WhatsAppSenderOwnershipError,
 } from './whatsapp-sender-ownership.service.js';
+import {
+  isWhatsAppProxyMode,
+  proxyTextMessage,
+  proxyMediaMessage,
+} from './whatsapp-proxy.service.js';
 
 type WhatsAppUsageOptions = {
   companyId?: string;
@@ -93,6 +98,13 @@ export const WhatsAppDirectService = {
    * Create session with QR code
    */
   async createSession(id: string, qrCb: (qr: string) => void) {
+    // Con send-proxy activo NO se abren sockets locales: competirían con el socket
+    // de prod por la misma sesión (guerra 440) y arriesgan las signal keys.
+    if (isWhatsAppProxyMode()) {
+      throw new Error(
+        'WhatsApp send-proxy activo: sesiones locales deshabilitadas. Quita WHATSAPP_PROXY_TARGET_URL para conectar aquí.'
+      );
+    }
     return await startSession(id, qrCb);
   },
 
@@ -119,6 +131,12 @@ export const WhatsAppDirectService = {
       trackUsage?: boolean;
     } = {}
   ) {
+    // Send-proxy (dev): el envío real sale por el socket de PROD. Early return ANTES
+    // de ownership/routing/outbox/conteo: prod aplica su propio pipeline completo
+    // (ownership, recipient routing, outbox 202 y quota — así no se cuenta doble).
+    if (isWhatsAppProxyMode()) {
+      return proxyTextMessage(id, to, message, { mentions: options.mentions });
+    }
     await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options));
     const queueOnFail = options.queueOnFail !== false;
     const routedTo = resolveWhatsAppRecipient(to, {
@@ -201,6 +219,10 @@ export const WhatsAppDirectService = {
       trackUsage?: boolean;
     }
   ) {
+    // Send-proxy (dev): ver sendMessage — prod aplica su pipeline completo.
+    if (isWhatsAppProxyMode()) {
+      return proxyMediaMessage('video', id, to, options);
+    }
     await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options));
     const queueOnFail = options.queueOnFail !== false;
     const routedTo = resolveWhatsAppRecipient(to, {
@@ -340,6 +362,10 @@ export const WhatsAppDirectService = {
       trackUsage?: boolean;
     }
   ) {
+    // Send-proxy (dev): ver sendMessage — prod aplica su pipeline completo.
+    if (isWhatsAppProxyMode()) {
+      return proxyMediaMessage('image', id, to, options);
+    }
     await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options));
     const queueOnFail = options.queueOnFail !== false;
     const routedTo = resolveWhatsAppRecipient(to, {
@@ -474,6 +500,10 @@ export const WhatsAppDirectService = {
       trackUsage?: boolean;
     }
   ) {
+    // Send-proxy (dev): ver sendMessage. El endpoint de documentos en prod es /file.
+    if (isWhatsAppProxyMode()) {
+      return proxyMediaMessage('file', id, to, options);
+    }
     await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options));
     const queueOnFail = options.queueOnFail !== false;
     const routedTo = resolveWhatsAppRecipient(to, {

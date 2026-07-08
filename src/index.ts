@@ -24,6 +24,7 @@ import publicRoutes from './api/routes/public.routes.js';
 import cronRoutes from './api/routes/cron.routes.js';
 import serviceManagementReportRoutes from './api/routes/service-management-report.routes.js';
 import serviceMigrationRoutes from './api/routes/service-migration.routes.js';
+import exportsRoutes from './api/routes/exports.routes.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './api/docs/openapi.js';
@@ -34,6 +35,7 @@ import pdfGenerator from './pdf/generator.service.js';
 import { listSessions, endSession } from './whatsapp/baileys/sessions.simple.js';
 import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.js';
 import { startTelegramQueueFlusher } from './services/telegram-alert.service.js';
+import { startDriverReminderFlusher } from './services/driver-arrival-reminder.service.js';
 import cron from 'node-cron';
 import fs from 'fs-extra';
 import path from 'path';
@@ -211,6 +213,7 @@ app.use('/api/public', publicRoutes);
 app.use('/api/cron', cronRoutes);
 app.use('/api/service-management-report', serviceManagementReportRoutes);
 app.use('/api/service-migrations', serviceMigrationRoutes);
+app.use('/api/exports', exportsRoutes);
 
 const companiesRoot = `${config.storage.root}/companies`;
 const companiesStaticHeaders = (res: express.Response) => {
@@ -393,6 +396,8 @@ async function startServer() {
     });
 
     const stopTelegramQueueFlusher = startTelegramQueueFlusher();
+    // F8-C: recordatorios "marca tu llegada" al chofer (ETA + 10%).
+    const stopDriverReminderFlusher = startDriverReminderFlusher();
 
     // Phase 1: Extend HTTP server timeouts for large uploads (no breaking changes)
     const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
@@ -412,6 +417,7 @@ async function startServer() {
 
       // Stop background flushers early so they don't fire during shutdown
       stopTelegramQueueFlusher();
+      stopDriverReminderFlusher();
 
       // Cerrar servidor HTTP
       server.close(async () => {

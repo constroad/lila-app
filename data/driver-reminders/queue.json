@@ -1,0 +1,13 @@
+[
+  {
+    "id": "0a6a0b4b-1148-4bf6-81c6-cf65cd05833f",
+    "companyId": "test",
+    "dispatchId": "bbb235990a8ad79f0be79820",
+    "sender": "51902049935",
+    "phone": "51902049935",
+    "message": "🤖 TestBot\n\njavier rabanal, ¿ya llegaste a la obra? Marca tu llegada aquí:\n- 🏁 http://localhost:3000/public/driver/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkaXNwYXRjaElkIjoiYmJiMjM1OTkwYThhZDc5ZjBiZTc5ODIwIiwiY29tcGFueUlkIjoidGVzdCIsInNjb3BlIjoiZHJpdmVyLWxvY2F0aW9uIiwiaWF0IjoxNzgzNDgwNTU4LCJleHAiOjE3ODM1MjM3NTh9.9_FS_K6wKO_14UU1ZCEmaAofHTx3NuhefTbgV42gyeM\n\nSi aún estás en ruta, ignora este mensaje.",
+    "availableAt": "2026-07-08T04:11:45.717Z",
+    "createdAt": "2026-07-08T03:16:05.239Z",
+    "attempts": 0
+  }
+]

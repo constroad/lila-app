@@ -37,7 +37,13 @@ export type SectionType =
   | 'signatures'
   | 'summary'
   | 'verification'
-  | 'resultsTable';
+  | 'resultsTable'
+  // Cotizaciones canvas (Portal): layout fiel al PDF comercial legacy. El
+  // renderer Handlebars no las usa (el PDF canvas llega por passthrough).
+  | 'totalsPanel'
+  | 'signatureClosing'
+  | 'footerNote'
+  | 'noteSections';
 
 /**
  * Document categories.
@@ -143,7 +149,9 @@ export interface SectionSchema {
     centerSubtitleKey?: string;
     centerLines?: string[];
     centerLinesKeys?: string[];
-    rightFields?: { label: string; key: string }[];
+    /** `folioPrefix`: el canvas muestra el valor como folio con serie
+     * ("ASF - 0000106", formato `formatQuoteFolio`) y no editable inline. */
+    rightFields?: { label: string; key: string; folioPrefix?: string }[];
     secondaryRow?: {
       leftText?: string;
       leftTextKey?: string;
@@ -176,6 +184,42 @@ export interface SectionSchema {
   // SimpleFields specific
   fields?: FieldSchema[];
   gridColumns?: number;
+  /** Oculta el título visual (el rótulo sigue en controles/inspector del canvas). */
+  showTitle?: boolean;
+  /** simpleFields: 'inlineRows' = filas "LABEL: valor" fiel al PDF comercial. */
+  fieldsVariant?: 'grid' | 'inlineRows';
+  /** Ancho en px de la columna de labels en `fieldsVariant: 'inlineRows'`. */
+  inlineLabelWidth?: number;
+
+  // Cotizaciones canvas (Portal renderiza; el Handlebars legacy las ignora)
+  /** totalsPanel: monto en letras (izq) + caja de totales con bordes (der). */
+  totalsConfig?: {
+    amountInWordsKey?: string;
+    rows: { label: string; key: string }[];
+  };
+  /** signatureClosing: despedida + firma (izq) y cuentas bancarias (der). */
+  closingConfig?: {
+    farewell?: string;
+    signature?: {
+      imageKey?: string;
+      /** Imagen del sello de la empresa (opcional, junto a la firma). */
+      stampKey?: string;
+      nameKey?: string;
+      roleKey?: string;
+      contactKey?: string;
+    };
+    bankAccountsKey?: string;
+    bankTitle?: string;
+  };
+  /** footerNote: líneas pequeñas sobre una regla superior (pie del documento). */
+  footerConfig?: {
+    lines: { key: string; placeholder?: string }[];
+  };
+  /** noteSections: bloques {title, lines[]} en `data[section.id]` (alcance COT-SER). */
+  noteSectionsConfig?: {
+    scopeTitle?: string;
+    leadTitleContains?: string;
+  };
 
   // Checklist specific
   items?: {

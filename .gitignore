@@ -24,3 +24,5 @@ logs/
 *.backup
 *.bak
 *~
+# Design references pipeline (bundles temporales)
+scripts/design-refs/.out/

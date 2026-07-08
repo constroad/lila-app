@@ -46,6 +46,51 @@ export async function getConfigModel(): Promise<Model<Record<string, unknown>>> 
   return configModel;
 }
 
+let orderModel: Model<Record<string, unknown>> | null = null;
+let mediaModel: Model<Record<string, unknown>> | null = null;
+let folderModel: Model<Record<string, unknown>> | null = null;
+
+/** Pedidos del Portal (loose): lectura + escritura del subdoc exportJob. */
+export async function getOrderModel(): Promise<Model<Record<string, unknown>>> {
+  if (orderModel) {
+    return orderModel;
+  }
+
+  const conn = await getSharedConnection();
+  orderModel =
+    (conn.models.Order as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Order', looseSchema, 'orders');
+  return orderModel;
+}
+
+/** Medias del Portal (loose, solo lectura): archivos de un pedido. */
+export async function getMediaModel(): Promise<Model<Record<string, unknown>>> {
+  if (mediaModel) {
+    return mediaModel;
+  }
+
+  const conn = await getSharedConnection();
+  mediaModel =
+    (conn.models.Media as Model<Record<string, unknown>>) ||
+    // OJO: mongoose trata "media" como incontable → la colección real es
+    // `media` (existe una `medias` legacy vacía; no usarla).
+    conn.model<Record<string, unknown>>('Media', looseSchema, 'media');
+  return mediaModel;
+}
+
+/** Folders del Portal (loose, solo lectura): estructura de carpetas del zip. */
+export async function getFolderModel(): Promise<Model<Record<string, unknown>>> {
+  if (folderModel) {
+    return folderModel;
+  }
+
+  const conn = await getSharedConnection();
+  folderModel =
+    (conn.models.Folder as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Folder', looseSchema, 'folders');
+  return folderModel;
+}
+
 export async function getUsageMetricModel(): Promise<Model<IUsageMetric>> {
   if (usageMetricModel) {
     return usageMetricModel;

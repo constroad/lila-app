@@ -21,6 +21,10 @@ import {
   getSession,
 } from '../../whatsapp/baileys/sessions.simple.js';
 import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js';
+import {
+  isWhatsAppProxyMode,
+  proxySessionRead,
+} from '../../services/whatsapp-proxy.service.js';
 import logger from '../../utils/logger.js';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
@@ -391,6 +395,13 @@ export async function getGroupListHandler(req: Request, res: Response, next: Nex
       return next(error);
     }
 
+    // Send-proxy (dev): la sesión y su store viven en PROD — servir la lectura
+    // desde allá (mismo contrato de respuesta, pass-through).
+    if (isWhatsAppProxyMode()) {
+      const prodGroups = await proxySessionRead(phoneNumber, 'groups');
+      return res.status(HTTP_STATUS.OK).json(prodGroups);
+    }
+
     if (!WhatsAppDirectService.isSessionActive(phoneNumber)) {
       const error: CustomError = new Error('Session not connected');
       error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
@@ -417,6 +428,12 @@ export async function syncGroupsHandler(req: Request, res: Response, next: NextF
       const error: CustomError = new Error('phoneNumber is required');
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
+    }
+
+    // Send-proxy (dev): el sync real ocurre en PROD (dueño del socket y el store).
+    if (isWhatsAppProxyMode()) {
+      const prodSyncResult = await proxySessionRead(phoneNumber, 'syncGroups');
+      return res.status(HTTP_STATUS.OK).json(prodSyncResult);
     }
 
     if (!WhatsAppDirectService.isSessionActive(phoneNumber)) {
@@ -458,6 +475,13 @@ export async function getContactsHandler(req: Request, res: Response, next: Next
       const error: CustomError = new Error('phoneNumber is required');
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
+    }
+
+    // Send-proxy (dev): la sesión y su store viven en PROD — servir la lectura
+    // desde allá (mismo contrato de respuesta, pass-through).
+    if (isWhatsAppProxyMode()) {
+      const prodContacts = await proxySessionRead(phoneNumber, 'contacts');
+      return res.status(HTTP_STATUS.OK).json(prodContacts);
     }
 
     if (!WhatsAppDirectService.isSessionActive(phoneNumber)) {

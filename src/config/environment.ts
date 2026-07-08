@@ -64,6 +64,11 @@ export const config = {
     // Es un toggle de comportamiento por entorno (off en dev, on en prod tras validar logs),
     // por eso vive en env y no en constants. Ver SCALABILITY-MULTI-SESSION.spec §4.
     rlsEnforce: process.env.WHATSAPP_RLS_ENFORCE === 'true',
+    // Send-proxy (SOLO dev): base URL del lila de PROD (incluye /api, ej.
+    // https://host.ts.net/api). Con esto seteado, los envíos WhatsApp locales se
+    // reenvían a prod en vez de abrir un socket propio (un número = un socket vivo).
+    // whatsapp-proxy.service la ignora con warning si nodeEnv === 'production'.
+    proxyTargetUrl: (process.env.WHATSAPP_PROXY_TARGET_URL || '').replace(/\/+$/, ''),
   },
   
   // Claude API

@@ -8,6 +8,8 @@ import {
   generateDispatchNoteDocumentFile,
 } from './dispatch-note-document.service.js';
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
+import { buildDriverLink } from '../utils/driver-link.js';
+import { scheduleDriverArrivalReminder } from './driver-arrival-reminder.service.js';
 import { sendTelegramAlert } from './telegram-alert.service.js';
 import { normalizeWhatsAppPhoneNumber } from '../utils/whatsapp-phone.js';
 import { buildDispatchValePayloadFromPortal } from './dispatch-vale-payload.service.js';
@@ -553,6 +555,50 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
             error: whatsapp.locationError,
           });
         }
+      }
+
+      // F8-C: link del chofer (GPS en ruta + marcar llegada) — AUTOMÁTICO al
+      // despachar, sin intervención de oficina. Best-effort: si falla no rompe
+      // el flujo del vale. Luego se programa el recordatorio a ETA + 10%.
+      try {
+        const driverLink = buildDriverLink(dispatchId, companyId);
+        const linkMessage = [
+          companyBotLabel,
+          '',
+          `${normalizedDriverName || 'Chofer'}, comparte tu ubicación en ruta y marca tu llegada a obra aquí:`,
+          `- 🛰️ ${driverLink}`,
+        ].join('\n');
+        await withTimeout(
+          WhatsAppDirectService.sendMessage(sender, normalizedPhone, linkMessage, {
+            companyId,
+            queueOnFail: true,
+          }),
+          25000,
+          'dispatch driver link WhatsApp send'
+        );
+        logger.info('dispatch_vale.driver_link_sent', { companyId, dispatchId });
+
+        const reminderMessage = [
+          companyBotLabel,
+          '',
+          `${normalizedDriverName || 'Chofer'}, ¿ya llegaste a la obra? Marca tu llegada aquí:`,
+          `- 🏁 ${driverLink}`,
+          '',
+          'Si aún estás en ruta, ignora este mensaje.',
+        ].join('\n');
+        await scheduleDriverArrivalReminder({
+          companyId,
+          dispatchId,
+          sender,
+          phone: normalizedPhone,
+          message: reminderMessage,
+        });
+      } catch (error) {
+        logger.error('dispatch_vale.driver_link_failed', {
+          companyId,
+          dispatchId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
