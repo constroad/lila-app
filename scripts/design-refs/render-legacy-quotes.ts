@@ -53,6 +53,22 @@ async function main() {
     { code: 'COT-ASF', fixture: 'cot-asf.sample.json', render: (d, b) => renderAsphaltQuoteHtml(d, b), outDir: QUOTES_OUT_DIR },
     { code: 'COT-SER', fixture: 'cot-ser.sample.json', render: (d, b) => renderServiceQuoteHtml(d, b), outDir: QUOTES_OUT_DIR },
     { code: 'INF-ACT', fixture: 'inf-act.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'VAL-SRV', fixture: 'val-srv.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'ACT-CNF', fixture: 'act-cnf.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'CONT-SRV', fixture: 'cont-srv.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'LIQ-SRV', fixture: 'liq-srv.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'MET-RES', fixture: 'met-res.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'CAL-PROT', fixture: 'cal-prot.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'LEV-OBS', fixture: 'lev-obs.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'REC-EXC', fixture: 'rec-exc.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'PNL-FOT', fixture: 'pnl-fot.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'TOP-PROT', fixture: 'top-prot.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'TOP-CMP', fixture: 'top-cmp.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'DOS-OBR', fixture: 'dos-obr.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'CTL-IMP', fixture: 'ctl-imp.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'CTL-PIS', fixture: 'ctl-pis.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'IAA', fixture: 'iaa.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
+    { code: 'IPP', fixture: 'ipp.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
   ];
 
   for (const target of targets) {

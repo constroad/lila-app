@@ -202,6 +202,19 @@ export async function startSession(
   sessionId: string,
   qrCb?: (qr: string) => void
 ): Promise<WASocket> {
+  // 🛰 Send-proxy (dev): NUNCA abrir un socket local. En proxy mode el socket vive en
+  // PROD; abrir uno aquí con las mismas creds provoca una guerra 440 que puede matar la
+  // sesión productiva (y corromper signal keys → forzar re-emparejar). Puerta única:
+  // cubre TODOS los caminos (creación manual, endpoint de QR, restartSession, reconnect,
+  // restore). Misma condición que whatsapp-proxy.isWhatsAppProxyMode (inline para no
+  // acoplar el core Baileys a jwt/quota/media). Ver whatsapp-proxy.service.
+  if (config.whatsapp.proxyTargetUrl && config.nodeEnv !== 'production') {
+    throw new Error(
+      'WhatsApp send-proxy activo: no se abren sesiones locales (el socket vive en prod). ' +
+        'Quita WHATSAPP_PROXY_TARGET_URL para conectar un socket en esta máquina.'
+    );
+  }
+
   const inFlight = startingPromises[sessionId];
   if (inFlight) {
     logger.info(`[${sessionId}] Session init in progress, reusing in-flight start`);
@@ -418,6 +431,15 @@ export async function createPairingSession(
   phone: string,
   sendCode: (code: string) => void
 ): Promise<void> {
+  // Send-proxy (dev): igual que startSession, el pairing abre un socket local con las
+  // creds de prod → guerra 440. Re-emparejar debe hacerse contra prod. Ver startSession.
+  if (config.whatsapp.proxyTargetUrl && config.nodeEnv !== 'production') {
+    throw new Error(
+      'WhatsApp send-proxy activo: no se vinculan sesiones locales (el socket vive en prod). ' +
+        'Quita WHATSAPP_PROXY_TARGET_URL para vincular en esta máquina.'
+    );
+  }
+
   const sessionId = phone.replace('+', '');
   // Credenciales Y store (chats/contactos) SIEMPRE en Mongo. Ya NO se usan archivos locales.
   const { state, saveCreds } = await useMongoAuthState(sessionId);

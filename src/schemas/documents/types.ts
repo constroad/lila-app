@@ -219,6 +219,12 @@ export interface SectionSchema {
   noteSectionsConfig?: {
     scopeTitle?: string;
     leadTitleContains?: string;
+    leadTitle?: string;
+    /** Clave del array de bloques (default: section.id); dos secciones pueden
+     * compartir el mismo array (`sections`). */
+    sourceKey?: string;
+    /** Partición a renderizar en el canvas: 'lead' (Condiciones) o 'scope' (Alcance). */
+    partition?: 'lead' | 'scope';
   };
 
   // Checklist specific

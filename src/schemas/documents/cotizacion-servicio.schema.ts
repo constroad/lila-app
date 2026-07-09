@@ -106,12 +106,26 @@ export const cotizacionServicioSchema: DocumentSchema = {
       },
     },
     {
-      // Bloques {title, lines[]} del legacy: "Condiciones de pago" a ancho
-      // completo y el alcance del servicio a 2 columnas.
-      id: 'sections',
+      // Dos secciones INDEPENDIENTES que comparten el array `data.sections`
+      // (sourceKey) por partición: "Condiciones de pago" a ancho completo…
+      id: 'paymentTerms',
       type: 'noteSections',
-      title: 'Secciones del servicio',
+      title: 'Condiciones de pago',
       noteSectionsConfig: {
+        sourceKey: 'sections',
+        partition: 'lead',
+        leadTitle: 'Condiciones de pago',
+        leadTitleContains: 'condiciones de pago',
+      },
+    },
+    {
+      // …y "Alcance del servicio" a 2 columnas (misma fuente, otra partición).
+      id: 'scope',
+      type: 'noteSections',
+      title: 'Alcance del servicio',
+      noteSectionsConfig: {
+        sourceKey: 'sections',
+        partition: 'scope',
         scopeTitle: 'Alcance del servicio',
         leadTitleContains: 'condiciones de pago',
       },

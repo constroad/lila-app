@@ -78,6 +78,16 @@ export async function createSessionHandler(req: Request, res: Response, next: Ne
       return next(error);
     }
 
+    // Send-proxy (dev): re-emparejar debe hacerse contra PROD (dueño del socket).
+    // Sin este corte, startSession abriría un socket local → guerra 440 con prod.
+    if (isWhatsAppProxyMode()) {
+      const error: CustomError = new Error(
+        'Send-proxy activo: crea/vincula la sesión desde el entorno de producción, no en local.'
+      );
+      error.statusCode = HTTP_STATUS.CONFLICT;
+      return next(error);
+    }
+
     logger.info(`Creating session for ${phoneNumber}`);
 
     // Start session with QR
@@ -323,6 +333,16 @@ export async function getQRCodeImageHandler(req: Request, res: Response, next: N
     if (!phoneNumber) {
       const error: CustomError = new Error('phoneNumber is required');
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    // Send-proxy (dev): el QR es un stream atado al socket, que debe vivir en PROD.
+    // Sin este corte, startSession abriría un socket local → guerra 440 con prod.
+    if (isWhatsAppProxyMode()) {
+      const error: CustomError = new Error(
+        'Send-proxy activo: genera el QR desde el entorno de producción, no en local.'
+      );
+      error.statusCode = HTTP_STATUS.CONFLICT;
       return next(error);
     }
 

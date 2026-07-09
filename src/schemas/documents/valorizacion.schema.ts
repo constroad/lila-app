@@ -115,8 +115,9 @@ export const valorizacionSchema: DocumentSchema = {
       dynamicRows: true,
       minRows: 1,
       maxRows: 200,
-      showTotals: true,
-      totalColumns: ['importe'],
+      // Los totales viven en la sección "Resumen" (SUBTOTAL/IGV/TOTAL), igual que
+      // el PDF legacy: el `renderDataTable` genérico NO pinta fila de totales. Sin
+      // `showTotals`/`totalColumns` el canvas no duplica la caja/fila de totales.
       columns: [
         {
           key: 'item',

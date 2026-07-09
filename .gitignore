@@ -3,10 +3,13 @@ data/sessions
 data/conversations
 data/drive-cache
 data/outbox
+data/telegram-alerts
+data/driver-reminders
 data/pdf-temp
 data/cronjobs.json
 data/cronjobs.json.backup
 data/whatsapp_backup_*
+.DS_Store
 uploads/
 coverage/
 dist/
