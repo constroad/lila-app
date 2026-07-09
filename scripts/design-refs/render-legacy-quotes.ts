@@ -16,6 +16,7 @@ import {
   renderAsphaltQuoteHtml,
   renderServiceQuoteHtml,
 } from '../../src/api/controllers/quote-documents.controller.js';
+import { renderPurchaseOrderHtml } from '../../src/api/controllers/purchase-order-documents.controller.js';
 import { ReportHtmlRenderer } from '../../src/services/report-html-renderer.service.js';
 import { getSchemaByCode } from '../../src/schemas/documents/registry.js';
 
@@ -23,6 +24,7 @@ const PORTAL_REFS_DIR = path.resolve(process.cwd(), '../Portal/specs/design-refe
 const FIXTURES_DIR = path.join(PORTAL_REFS_DIR, 'fixtures');
 const QUOTES_OUT_DIR = path.join(PORTAL_REFS_DIR, 'quotes');
 const REPORTS_OUT_DIR = path.join(PORTAL_REFS_DIR, 'reports');
+const PURCHASE_OUT_DIR = path.join(PORTAL_REFS_DIR, 'purchase-orders');
 const BASE_URL = 'http://localhost:4000';
 
 /** Renderer genérico de informes (no cotización): el mismo Handlebars por sección
@@ -49,7 +51,11 @@ type RenderFn = (
 ) => string | Promise<string>;
 
 async function main() {
-  const targets: Array<{ code: string; fixture: string; render: RenderFn; outDir: string }> = [
+  const targets: Array<{ code: string; slug?: string; fixture: string; render: RenderFn; outDir: string }> = [
+    // Orden de compra/servicio comparten schema (ORD-COM) y renderer; la fixture
+    // define el `orderType` (título/intro) → dos slugs distintos.
+    { code: 'ORD-COM', slug: 'ord-com', fixture: 'ord-com.sample.json', render: (d, b) => renderPurchaseOrderHtml(d, b), outDir: PURCHASE_OUT_DIR },
+    { code: 'ORD-COM', slug: 'ord-ser', fixture: 'ord-ser.sample.json', render: (d, b) => renderPurchaseOrderHtml(d, b), outDir: PURCHASE_OUT_DIR },
     { code: 'COT-ASF', fixture: 'cot-asf.sample.json', render: (d, b) => renderAsphaltQuoteHtml(d, b), outDir: QUOTES_OUT_DIR },
     { code: 'COT-SER', fixture: 'cot-ser.sample.json', render: (d, b) => renderServiceQuoteHtml(d, b), outDir: QUOTES_OUT_DIR },
     { code: 'INF-ACT', fixture: 'inf-act.sample.json', render: renderReportHtml, outDir: REPORTS_OUT_DIR },
@@ -80,7 +86,7 @@ async function main() {
     const data = mergeDeepPlain(schema.defaultData || {}, fixture);
     const html = await target.render(data, BASE_URL, schema);
 
-    const slug = target.code.toLowerCase();
+    const slug = target.slug || target.code.toLowerCase();
     await fs.writeFile(path.join(target.outDir, `${slug}.legacy.html`), html, 'utf8');
     // El schema vigente viaja junto a la referencia: el exportador del canvas
     // (Portal, jest) lo consume sin poder importar TS de lila.

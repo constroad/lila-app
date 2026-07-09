@@ -15,11 +15,18 @@ import {
   getDocumentLetterheadMargins,
   shouldHideDocumentLogo,
 } from '../../services/document-letterhead.service.js';
+import { inlineCanvasHtmlImages } from '../../services/canvas-html-image-inliner.service.js';
+import {
+  CANVAS_QUOTE_LETTERHEAD_PDF_MARGIN,
+  CANVAS_QUOTE_PDF_MARGIN,
+} from './quote-documents.helpers.js';
 
 interface PurchaseOrderDocumentPayload {
   schemaCode?: string;
   orderNumber?: string | number;
   schemaData?: Record<string, any>;
+  /** Passthrough "canvas = PDF": HTML serializado del canvas de Portal. */
+  html?: string;
 }
 
 function resolveProto(req: Request): string {
@@ -76,6 +83,7 @@ function getPayload(req: Request): PurchaseOrderDocumentPayload {
     schemaCode: body.schemaCode || 'ORD-COM',
     orderNumber: body.orderNumber,
     schemaData: isPlainObject(body.schemaData) ? body.schemaData : {},
+    html: typeof body.html === 'string' && body.html.trim() ? body.html : undefined,
   };
 }
 
@@ -188,7 +196,7 @@ function renderBankRows(accounts: any[]) {
     .join('');
 }
 
-function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
+export function renderPurchaseOrderHtml(data: Record<string, any>, baseUrl: string) {
   const MIN_VISIBLE_ROWS = 16;
   const header = data.header || {};
   const supplier = data.supplier || {};
@@ -725,12 +733,33 @@ async function buildRenderContext(req: Request) {
 
   const data = mergeDeep({}, schema.defaultData || {}, payload.schemaData || {});
   const baseUrl = buildAbsoluteUrl(req, '');
-  const html = renderPurchaseOrderHtml(data, baseUrl);
+  // Passthrough "canvas = única fuente de diseño": si Portal manda el HTML del
+  // canvas, ese es el PDF (solo se inlinean imágenes a data URL). Sin html, se
+  // usa el renderer legacy (compatibilidad con órdenes previas al editor canvas).
+  const html = payload.html
+    ? await inlineCanvasHtmlImages(payload.html, companyId)
+    : renderPurchaseOrderHtml(data, baseUrl);
 
   return {
     companyId,
     payload,
     html,
+  };
+}
+
+/**
+ * Márgenes Puppeteer para la fuente CANVAS (mismo criterio que quote-documents):
+ * con membrete el HTML del serializer trae `@page margin:0` + sus propios
+ * márgenes como padding (el fondo va a sangre completa) → Puppeteer debe ir en
+ * 0 o recorta el membrete con un marco blanco; sin membrete, los 14mm estándar.
+ * Con fuente legacy (sin `payload.html`) no se toca el default del generator.
+ */
+function canvasPdfMargin(payload: PurchaseOrderDocumentPayload) {
+  if (!payload.html) return {};
+  return {
+    margin: getDocumentLetterhead(payload.schemaData || {})
+      ? CANVAS_QUOTE_LETTERHEAD_PDF_MARGIN
+      : CANVAS_QUOTE_PDF_MARGIN,
   };
 }
 
@@ -749,6 +778,7 @@ async function previewPurchaseOrder(req: Request, res: Response, next: NextFunct
       outputPath: previewPath,
       format: 'A4',
       landscape: false,
+      ...canvasPdfMargin(payload),
     });
 
     await FolioGeneratorService.addFolios(
@@ -829,6 +859,7 @@ async function generatePurchaseOrder(req: Request, res: Response, next: NextFunc
       outputPath,
       format: 'A4',
       landscape: false,
+      ...canvasPdfMargin(payload),
     });
 
     await FolioGeneratorService.addFolios(
