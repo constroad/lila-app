@@ -273,6 +273,44 @@ export class PDFGenerator {
     }
   }
 
+  /**
+   * Visita una vista de impresión de Portal (`/print/service-report/[id]`,
+   * firmada) y extrae el HTML serializado del canvas. La página marca
+   * `window.__PRINT_READY__` cuando `__CANVAS_PRINT_HTML__` está listo, o
+   * `__PRINT_ERROR__` si el render falló. El HTML resultante entra al MISMO
+   * pipeline que el canvas horneado (inline de imágenes + generateFromHtml).
+   */
+  async fetchPrintedHtml(url: string, options: { timeoutMs?: number } = {}): Promise<string> {
+    await this.ensureBrowser();
+    const timeout = options.timeoutMs ?? Math.min(this.protocolTimeout, 60000);
+    const page = await this.createPageWithRetry();
+    try {
+      page.setDefaultNavigationTimeout(timeout);
+      page.setDefaultTimeout(timeout);
+      const response = await page.goto(url, { waitUntil: 'networkidle0', timeout });
+      if (response && !response.ok()) {
+        throw new Error(`print page respondió ${response.status()}`);
+      }
+      await page.waitForFunction(
+        '(window.__PRINT_READY__ === true) || Boolean(window.__PRINT_ERROR__)',
+        { timeout }
+      );
+      const result = await page.evaluate(() => ({
+        html: (window as any).__CANVAS_PRINT_HTML__ || '',
+        error: (window as any).__PRINT_ERROR__ || '',
+      }));
+      if (result.error) {
+        throw new Error(`print page error: ${result.error}`);
+      }
+      if (!result.html) {
+        throw new Error('print page devolvió HTML vacío');
+      }
+      return result.html;
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+
   async createTemplate(id: string, name: string, htmlContent: string): Promise<void> {
     try {
       const filepath = path.join(this.templatesDir, `${id}.hbs`);

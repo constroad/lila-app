@@ -179,11 +179,31 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 
 ### 3) Generacion de informe de servicio (VAL-SRV, etc.)
 1. Portal solicita `POST /api/documents/generate?code=VAL-SRV`.
-2. `report-data-aggregator` lee data desde Portal Mongo (read-only).
-3. `report-html-renderer` aplica template Handlebars + branding empresa.
-4. `document-letterhead.service` inyecta membrete configurado (por tipo de reporte).
-5. Folio sequencial via `folio-generator`.
-6. PDF generado en `uploads/` (o `storage-path` multi-tenant).
+2. `resolveReportHtml` decide el motor por prioridad: (a) `html` en el body (canvas
+   serializado EN VIVO por el editor de Portal) → `inlineCanvasHtmlImages` y se rinde
+   tal cual (`source:'canvas'`); (b) `printUrl` en el body (PDF opción 2, 2026-07-09):
+   `PDFGenerator.fetchPrintedHtml` navega con Puppeteer a la vista de impresión
+   firmada de Portal (`/print/service-report/[id]?token=`), espera
+   `window.__PRINT_READY__` y extrae `__CANVAS_PRINT_HTML__` — el mismo canvas con
+   diseño persistido y datos frescos de DB; guard SSRF opcional `PORTAL_PRINT_HOSTS`
+   (hosts por coma); si falla, cae a (c) sin romper; (c) pasos 3-4
+   (`source:'renderer'`, comportamiento histórico). El margen Puppeteer para fuente
+   canvas es `buildCanvasPdfMargin` (14mm, o 0 con membrete) también en preview.
+3. `report-data-aggregator` lee data desde Portal Mongo (read-only).
+4. `report-html-renderer` aplica template Handlebars + branding empresa.
+5. `document-letterhead.service` inyecta membrete configurado (por tipo de reporte).
+   En el path canvas el margen Puppeteer baja a 0 si el HTML trae membrete propio.
+6. Folio sequencial via `folio-generator`.
+7. PDF generado en `uploads/` (o `storage-path` multi-tenant).
+
+Nota (2026-07-09, redesign del módulo público de servicios en Portal): el contrato de
+`schemaData` NO cambió — los schemas del registry y los renderers leen las mismas
+claves. Portal ahora persiste ADEMÁS `schemaData.__clocks` (side-map de relojes HLC
+del merge colaborativo por campo del PATCH público); es aditivo y los renderers lo
+ignoran (iteran por secciones del schema). El PDF público de field-reports sigue
+llegando SIN `html` → siempre `source:'renderer'` con datos frescos; el `printHtml`
+del canvas admin puede quedar stale respecto a ediciones públicas (divergencia
+documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 
 ### 4) Migracion cross-company
 1. Portal solicita `POST /api/service-migrations` (source + target companyId).
@@ -307,12 +327,29 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - **Mayo 2026**: cola Telegram persistente, multiples mejoras de informe IAA y dispatch, refactor dispatch IPP, migracion de inputs Telegram -> Drive lila-app (paths `companies/{id}/inputs/`), migracion de ordenes y servicios cross-company, informe liquidacion (LIQ-SRV), control de pista, imprimacion reportes.
 - **Abril 2026**: dispatch post-process workflow, expense public + duplicate WhatsApp message fix, service migration v2.
 
-## Pendiente — consolidación de uso para billing (ver Portal spec)
-Para el modelo de suscripciones de Portal (`/projects/SUBSCRIPTION-BILLING-MULTITENANT.spec.md`), lila-app debe exponer un endpoint **tenant-scoped** de uso que Portal consolide periódicamente:
-- `GET /api/tenant/usage` (JWT/api-key) → `{ storageBytes, whatsappMessagesThisMonth, apiCallsThisMonth }`.
-- **storage**: suma real del tenant en `/mnt/constroad-storage/companies/{companyId}` (absoluto, no mensual).
-- **whatsappMessages / apiCalls**: contadores mensuales (reset por período en Portal).
-Portal lo ingiere vía cron (`UsageTracker.updateStorage` + `usage_metrics`) para que `/admin/suscripcion/uso` muestre números reales independientes del plan.
+## Rol de lila-app en suscripciones/catálogo de Portal (jul-2026)
+
+> Fuente de verdad del modelo completo (módulos, rubros, planes, billing, motores
+> de navegación/dashboards): **`/projects/PLATFORM-CATALOG-BILLING.spec.md`**
+> (unificó SUBSCRIPTION-BILLING-MULTITENANT y otras 3 specs; originales en
+> `/projects/specs-archive/`).
+
+Qué le toca a lila-app (y qué NO):
+- **NO participa** en los motores de navegación/dashboards/planes de Portal
+  (colecciones `navigation_catalog`, `dashboard_catalog`, `plan_catalog`,
+  `plan_templates`, `module_catalog` son solo-Portal).
+- **SÍ es la única fuente** de conteo de mensajes WhatsApp y del storage real por
+  tenant; los límites de plan (`whatsappMessages`, `whatsappSessions`, storage) se
+  miden aquí y se hacen visibles en Portal.
+- **SÍ ejecuta** la colección `cronjobs` (scheduler v2). ⚠️ Portal registra ahí sus
+  crons de billing (`expire-trials`, `trial-reminders`) con el shape de lila
+  (`schedule` OBJETO `{cronExpression, timezone}` + `apiConfig`): un `schedule`
+  string tumba el scheduler completo (incidente prod jul-2026).
+- **Pendiente (cross-repo)**: endpoint tenant-scoped de uso que Portal consolide:
+  `GET /api/tenant/usage` (JWT/api-key) → `{ storageBytes,
+  whatsappMessagesThisMonth, apiCallsThisMonth }`. storage = suma real en
+  `/mnt/constroad-storage/companies/{companyId}` (absoluto); whatsapp/apiCalls =
+  mensuales. Portal lo ingiere por cron (`UsageTracker` + `usage_metrics`).
 
 ## F8-C — Link del chofer automático + recordatorio ETA+10% (2026-07-07)
 

@@ -9,7 +9,7 @@ import {
 } from './dispatch-note-document.service.js';
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 import { buildDriverLink } from '../utils/driver-link.js';
-import { scheduleDriverArrivalReminder } from './driver-arrival-reminder.service.js';
+import { scheduleDriverFollowups } from './driver-arrival-reminder.service.js';
 import { sendTelegramAlert } from './telegram-alert.service.js';
 import { normalizeWhatsAppPhoneNumber } from '../utils/whatsapp-phone.js';
 import { buildDispatchValePayloadFromPortal } from './dispatch-vale-payload.service.js';
@@ -557,9 +557,11 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
         }
       }
 
-      // F8-C: link del chofer (GPS en ruta + marcar llegada) — AUTOMÁTICO al
-      // despachar, sin intervención de oficina. Best-effort: si falla no rompe
-      // el flujo del vale. Luego se programa el recordatorio a ETA + 10%.
+      // F8-C: link del chofer (GPS en ruta + marcar llegada). NO se manda al
+      // instante de despachar (el volquete aún carga/maniobra en planta): se
+      // PROGRAMA a 1/4 del ETA (ya en ruta) y el recordatorio de llegada a
+      // ETA+10%. Cola durable con dedupe por tipo. Best-effort: nunca rompe el
+      // vale. El reenvío inmediato lo hace el admin desde el modal del despacho.
       try {
         const driverLink = buildDriverLink(dispatchId, companyId);
         const linkMessage = [
@@ -568,16 +570,6 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
           `${normalizedDriverName || 'Chofer'}, comparte tu ubicación en ruta y marca tu llegada a obra aquí:`,
           `- 🛰️ ${driverLink}`,
         ].join('\n');
-        await withTimeout(
-          WhatsAppDirectService.sendMessage(sender, normalizedPhone, linkMessage, {
-            companyId,
-            queueOnFail: true,
-          }),
-          25000,
-          'dispatch driver link WhatsApp send'
-        );
-        logger.info('dispatch_vale.driver_link_sent', { companyId, dispatchId });
-
         const reminderMessage = [
           companyBotLabel,
           '',
@@ -586,13 +578,15 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
           '',
           'Si aún estás en ruta, ignora este mensaje.',
         ].join('\n');
-        await scheduleDriverArrivalReminder({
+        await scheduleDriverFollowups({
           companyId,
           dispatchId,
           sender,
           phone: normalizedPhone,
-          message: reminderMessage,
+          linkMessage,
+          arrivalMessage: reminderMessage,
         });
+        logger.info('dispatch_vale.driver_followups_scheduled', { companyId, dispatchId });
       } catch (error) {
         logger.error('dispatch_vale.driver_link_failed', {
           companyId,

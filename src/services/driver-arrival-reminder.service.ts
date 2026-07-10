@@ -4,16 +4,20 @@ import axios from 'axios';
 import JsonStore from '../storage/json.store.js';
 import logger from '../utils/logger.js';
 import { config } from '../config/environment.js';
-import { computeArrivalReminderDelayMs } from '../utils/driver-link.js';
+import { computeArrivalReminderDelayMs, computeLocationShareDelayMs } from '../utils/driver-link.js';
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 
 /**
- * Recordatorio "marca tu llegada" al chofer (F8-C): se programa al despachar
- * con delay = ETA + 10% (Portal calcula el ETA con su cadena de tracking).
- * Persistido en JsonStore (sobrevive reinicios de lila, igual que la cola de
- * Telegram). Al vencer: si el despacho YA tiene llegada marcada, se descarta;
- * si no, se envía el WhatsApp. Sin intervención humana.
+ * Mensajes programados al chofer (F8-C), persistidos en JsonStore (sobreviven
+ * reinicios de lila, igual que la cola de Telegram). Dos tipos:
+ * - `location-share`: link para compartir ubicación — sale a **1/4 del ETA**
+ *   (ya en ruta, no al despachar cuando aún carga en planta).
+ * - `arrival-reminder`: "marca tu llegada" — sale a **ETA + 10%**.
+ * Portal calcula el ETA (ajustado a volquete). Al vencer: si el despacho YA
+ * tiene llegada marcada, se descarta; si no, se envía. Sin intervención humana.
  */
+
+export type DriverReminderKind = 'location-share' | 'arrival-reminder';
 
 export type DriverReminderItem = {
   id: string;
@@ -22,11 +26,16 @@ export type DriverReminderItem = {
   sender: string;
   phone: string;
   message: string;
+  /** Tipo de mensaje. Ausente en items previos = 'arrival-reminder' (back-compat). */
+  kind?: DriverReminderKind;
   availableAt: string;
   createdAt: string;
   attempts: number;
   lastError?: string;
 };
+
+const itemKind = (item: DriverReminderItem): DriverReminderKind =>
+  item.kind ?? 'arrival-reminder';
 
 const STORE_KEY = 'queue';
 const MAX_ATTEMPTS = 3;
@@ -77,8 +86,90 @@ async function fetchDispatchTracking(
 }
 
 /**
- * Programa el recordatorio para un despacho recién salido. Dedupe por
- * dispatch: reprogramar no duplica. Best-effort (nunca lanza).
+ * Encola UN mensaje al chofer. Dedupe por (dispatch, kind): reprogramar el mismo
+ * tipo no duplica, pero link y recordatorio conviven. Best-effort.
+ */
+async function enqueueDriverMessage(params: {
+  companyId: string;
+  dispatchId: string;
+  sender: string;
+  phone: string;
+  message: string;
+  kind: DriverReminderKind;
+  delayMs: number;
+}): Promise<boolean> {
+  const availableAt = new Date(Date.now() + Math.max(0, params.delayMs)).toISOString();
+  const queue = await listQueue();
+  if (queue.some((item) => item.dispatchId === params.dispatchId && itemKind(item) === params.kind)) {
+    return false; // ya programado ese tipo
+  }
+  queue.push({
+    id: randomUUID(),
+    companyId: params.companyId,
+    dispatchId: params.dispatchId,
+    sender: params.sender,
+    phone: params.phone,
+    message: params.message,
+    kind: params.kind,
+    availableAt,
+    createdAt: new Date().toISOString(),
+    attempts: 0,
+  });
+  await saveQueue(queue);
+  logger.info('driver_reminder.scheduled', {
+    companyId: params.companyId,
+    dispatchId: params.dispatchId,
+    kind: params.kind,
+    availableAt,
+  });
+  return true;
+}
+
+/**
+ * Programa AMBOS mensajes al despachar con UN solo fetch de ETA: el link de
+ * ubicación a 1/4 del recorrido y el recordatorio de llegada a ETA+10%.
+ * Best-effort (nunca lanza). Dedupe por (dispatch, kind).
+ */
+export async function scheduleDriverFollowups(params: {
+  companyId: string;
+  dispatchId: string;
+  sender: string;
+  phone: string;
+  linkMessage: string;
+  arrivalMessage: string;
+}): Promise<void> {
+  try {
+    const tracking = await fetchDispatchTracking(params.companyId, params.dispatchId);
+    const eta = tracking?.durationSeconds ?? null;
+    const base = {
+      companyId: params.companyId,
+      dispatchId: params.dispatchId,
+      sender: params.sender,
+      phone: params.phone,
+    };
+    await enqueueDriverMessage({
+      ...base,
+      message: params.linkMessage,
+      kind: 'location-share',
+      delayMs: computeLocationShareDelayMs(eta),
+    });
+    await enqueueDriverMessage({
+      ...base,
+      message: params.arrivalMessage,
+      kind: 'arrival-reminder',
+      delayMs: computeArrivalReminderDelayMs(eta),
+    });
+  } catch (error) {
+    logger.error('driver_followups.schedule_failed', {
+      dispatchId: params.dispatchId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * Programa SOLO el recordatorio de llegada (ETA+10%). Se conserva por
+ * compatibilidad; el flujo del vale usa `scheduleDriverFollowups`.
  */
 export async function scheduleDriverArrivalReminder(params: {
   companyId: string;
@@ -89,32 +180,15 @@ export async function scheduleDriverArrivalReminder(params: {
 }): Promise<boolean> {
   try {
     const tracking = await fetchDispatchTracking(params.companyId, params.dispatchId);
-    const delayMs = computeArrivalReminderDelayMs(tracking?.durationSeconds);
-    const availableAt = new Date(Date.now() + delayMs).toISOString();
-
-    const queue = await listQueue();
-    if (queue.some((item) => item.dispatchId === params.dispatchId)) {
-      return false; // ya programado
-    }
-    queue.push({
-      id: randomUUID(),
+    return await enqueueDriverMessage({
       companyId: params.companyId,
       dispatchId: params.dispatchId,
       sender: params.sender,
       phone: params.phone,
       message: params.message,
-      availableAt,
-      createdAt: new Date().toISOString(),
-      attempts: 0,
+      kind: 'arrival-reminder',
+      delayMs: computeArrivalReminderDelayMs(tracking?.durationSeconds),
     });
-    await saveQueue(queue);
-    logger.info('driver_reminder.scheduled', {
-      companyId: params.companyId,
-      dispatchId: params.dispatchId,
-      availableAt,
-      etaSeconds: tracking?.durationSeconds ?? null,
-    });
-    return true;
   } catch (error) {
     logger.error('driver_reminder.schedule_failed', {
       dispatchId: params.dispatchId,

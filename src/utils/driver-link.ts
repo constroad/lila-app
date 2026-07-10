@@ -40,3 +40,24 @@ export function computeArrivalReminderDelayMs(
   const withMargin = eta * 1.1 * 1000;
   return Math.min(MAX_MS, Math.max(MIN_MS, Math.round(withMargin)));
 }
+
+/**
+ * Delay para ENVIAR el link de compartir-ubicación al chofer (F8-C): 1/4 del
+ * tiempo de recorrido. Así el mensaje llega cuando el volquete ya está EN RUTA
+ * (no al despachar, cuando aún carga/maniobra en planta y compartir GPS no
+ * aporta). El ETA que llega ya viene ajustado a volquete (Portal). Sin ETA
+ * usable cae a 10 min; clamp [3 min, 30 min] para no salir ni tan pronto ni
+ * tan tarde. `0` = envío inmediato (reenvío manual desde el admin).
+ */
+export function computeLocationShareDelayMs(
+  etaDurationSeconds: number | null | undefined
+): number {
+  const MIN_MS = 3 * 60 * 1000;
+  const MAX_MS = 30 * 60 * 1000;
+  const FALLBACK_MS = 10 * 60 * 1000;
+
+  const eta = Number(etaDurationSeconds);
+  if (!Number.isFinite(eta) || eta <= 0) return FALLBACK_MS;
+  const quarter = eta * 0.25 * 1000;
+  return Math.min(MAX_MS, Math.max(MIN_MS, Math.round(quarter)));
+}

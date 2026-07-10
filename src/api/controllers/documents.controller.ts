@@ -185,12 +185,39 @@ function buildPdfMargin(schema: any, data?: Record<string, any>) {
 }
 
 /**
- * Fuente del HTML del PDF. Si Portal manda el HTML del canvas (Fase 2, paso 2),
- * se usa ese HTML —con imágenes resueltas a data URL en el server— y se salta el
- * renderer Handlebars. Sin `canvasHtml` el comportamiento actual queda intacto.
+ * Guard SSRF del printUrl: solo http(s) y, si `PORTAL_PRINT_HOSTS` está
+ * definido (hosts separados por coma), solo esos hosts. El printUrl llega de
+ * Portal (request ya autenticado), esto es defensa en profundidad.
+ */
+function isAllowedPrintUrl(rawUrl: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  const allowlist = (process.env.PORTAL_PRINT_HOSTS || '')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowlist.length === 0) return true;
+  return allowlist.includes(parsed.host.toLowerCase());
+}
+
+/**
+ * Fuente del HTML del PDF, por prioridad:
+ * 1. `html` (canvas serializado en vivo por el editor de Portal — más fresco
+ *    que DB mientras se edita).
+ * 2. `printUrl` (PDF opción 2, "canvas = única fuente de diseño"): Puppeteer
+ *    visita la vista de impresión firmada de Portal, que re-renderiza el MISMO
+ *    canvas con el diseño persistido y `schemaData` fresco de DB. Si falla,
+ *    cae al renderer (el PDF sale igual, con el diseño legacy).
+ * 3. Renderer Handlebars por schema (comportamiento histórico intacto).
  */
 async function resolveReportHtml(input: {
   canvasHtml?: unknown;
+  printUrl?: unknown;
   effectiveSchema: any;
   data: Record<string, any>;
   companyId: string;
@@ -200,6 +227,19 @@ async function resolveReportHtml(input: {
   if (canvasHtml) {
     const html = await inlineCanvasHtmlImages(canvasHtml, input.companyId);
     return { html, source: 'canvas' };
+  }
+  const printUrl = typeof input.printUrl === 'string' ? input.printUrl.trim() : '';
+  if (printUrl && isAllowedPrintUrl(printUrl)) {
+    try {
+      const fetched = await pdfGenerator.fetchPrintedHtml(printUrl);
+      const html = await inlineCanvasHtmlImages(fetched, input.companyId);
+      return { html, source: 'canvas' };
+    } catch (error) {
+      logger.warn('documents.print_url.fallback_renderer', {
+        error: String(error),
+        companyId: input.companyId,
+      });
+    }
   }
   const renderer = new ReportHtmlRenderer(input.effectiveSchema, input.data, {
     companyId: input.companyId,
@@ -799,6 +839,7 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
       const baseUrl = buildAbsoluteUrl(req, '');
       const { html, source } = await resolveReportHtml({
         canvasHtml: req.body?.html,
+        printUrl: req.body?.printUrl,
         effectiveSchema,
         data,
         companyId,
@@ -969,6 +1010,7 @@ export async function previewDocument(req: Request, res: Response, next: NextFun
     const baseUrl = buildAbsoluteUrl(req, '');
     const { html, source } = await resolveReportHtml({
       canvasHtml: req.body?.html,
+      printUrl: req.body?.printUrl,
       effectiveSchema,
       data,
       companyId,
@@ -983,7 +1025,9 @@ export async function previewDocument(req: Request, res: Response, next: NextFun
       outputPath: previewPath,
       format: effectiveSchema.pageSize || 'A4',
       landscape: effectiveSchema.orientation === 'landscape',
-      margin: buildPdfMargin(effectiveSchema, data),
+      // Mismo criterio que generate: el canvas trae su @page 14mm (o membrete a
+      // sangre con margen 0) — el margen Puppeteer debe coincidir, no el del schema.
+      margin: source === 'canvas' ? buildCanvasPdfMargin(data) : buildPdfMargin(effectiveSchema, data),
     });
 
     const letterhead = getDocumentLetterhead(data);

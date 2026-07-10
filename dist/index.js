@@ -7221,6 +7221,11 @@ function getQRCodeGeneratedAt(sessionId) {
   return qrTimestamps[sessionId];
 }
 async function startSession(sessionId, qrCb) {
+  if (config.whatsapp.proxyTargetUrl && config.nodeEnv !== "production") {
+    throw new Error(
+      "WhatsApp send-proxy activo: no se abren sesiones locales (el socket vive en prod). Quita WHATSAPP_PROXY_TARGET_URL para conectar un socket en esta m\xE1quina."
+    );
+  }
   const inFlight = startingPromises[sessionId];
   if (inFlight) {
     logger_default.info(`[${sessionId}] Session init in progress, reusing in-flight start`);
@@ -7273,26 +7278,35 @@ async function initSession(sessionId, qrCb) {
     store2.markDirty();
   });
   let connectionSettled = false;
-  const connectionWatchdog = setTimeout(() => {
-    if (!connectionSettled && !shuttingDown.has(sessionId)) {
-      logger_default.warn(`\u23F1 [${sessionId}] Connection watchdog: socket sin respuesta por ${CONNECTION_TIMEOUT_MS / 1e3}s \u2014 forzando cierre`);
-      try {
-        sock.end(new Error("connection-watchdog-timeout"));
-      } catch (err) {
-        logger_default.warn(`Watchdog: sock.end fall\xF3 para ${sessionId}: ${String(err)}`);
+  let watchdogTimer = null;
+  const startWatchdog = () => {
+    if (watchdogTimer) clearTimeout(watchdogTimer);
+    watchdogTimer = setTimeout(() => {
+      if (!connectionSettled && !shuttingDown.has(sessionId)) {
+        logger_default.warn(`\u23F1 [${sessionId}] Connection watchdog: socket sin respuesta por ${CONNECTION_TIMEOUT_MS / 1e3}s \u2014 forzando cierre`);
+        try {
+          sock.end(new Error("connection-watchdog-timeout"));
+        } catch (err) {
+          logger_default.warn(`Watchdog: sock.end fall\xF3 para ${sessionId}: ${String(err)}`);
+        }
         scheduleReconnect(sessionId, qrCb);
       }
-    }
-  }, CONNECTION_TIMEOUT_MS);
+    }, CONNECTION_TIMEOUT_MS);
+  };
+  startWatchdog();
   sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
     if (connection === "open" || connection === "close") {
       connectionSettled = true;
-      clearTimeout(connectionWatchdog);
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
     }
     if (qr) {
       logger_default.info(`\u2705 QR generated for ${sessionId}`);
       qrCodes[sessionId] = qr;
       qrTimestamps[sessionId] = Date.now();
+      startWatchdog();
       if (qrCb) qrCb(qr);
     }
     if (connection === "open") {
@@ -7367,6 +7381,11 @@ Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado pa
   return sock;
 }
 async function createPairingSession(phone, sendCode) {
+  if (config.whatsapp.proxyTargetUrl && config.nodeEnv !== "production") {
+    throw new Error(
+      "WhatsApp send-proxy activo: no se vinculan sesiones locales (el socket vive en prod). Quita WHATSAPP_PROXY_TARGET_URL para vincular en esta m\xE1quina."
+    );
+  }
   const sessionId = phone.replace("+", "");
   const { state: state2, saveCreds } = await useMongoAuthState(sessionId);
   const { version } = await fetchLatestBaileysVersion();
@@ -65764,6 +65783,13 @@ async function createSessionHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
+    if (isWhatsAppProxyMode()) {
+      const error = new Error(
+        "Send-proxy activo: crea/vincula la sesi\xF3n desde el entorno de producci\xF3n, no en local."
+      );
+      error.statusCode = HTTP_STATUS.CONFLICT;
+      return next(error);
+    }
     logger_default.info(`Creating session for ${phoneNumber}`);
     startSession(phoneNumber, (qr2) => {
       logger_default.info(`QR generated for ${phoneNumber}`);
@@ -65930,6 +65956,13 @@ async function getQRCodeImageHandler(req, res, next) {
     if (!phoneNumber) {
       const error = new Error("phoneNumber is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    if (isWhatsAppProxyMode()) {
+      const error = new Error(
+        "Send-proxy activo: genera el QR desde el entorno de producci\xF3n, no en local."
+      );
+      error.statusCode = HTTP_STATUS.CONFLICT;
       return next(error);
     }
     const existingSession = getSession(phoneNumber);
@@ -68013,6 +68046,43 @@ var PDFGenerator = class {
     } catch (error) {
       logger_default.error("Error generating PDF from HTML:", error);
       throw error;
+    }
+  }
+  /**
+   * Visita una vista de impresión de Portal (`/print/service-report/[id]`,
+   * firmada) y extrae el HTML serializado del canvas. La página marca
+   * `window.__PRINT_READY__` cuando `__CANVAS_PRINT_HTML__` está listo, o
+   * `__PRINT_ERROR__` si el render falló. El HTML resultante entra al MISMO
+   * pipeline que el canvas horneado (inline de imágenes + generateFromHtml).
+   */
+  async fetchPrintedHtml(url, options2 = {}) {
+    await this.ensureBrowser();
+    const timeout = options2.timeoutMs ?? Math.min(this.protocolTimeout, 6e4);
+    const page = await this.createPageWithRetry();
+    try {
+      page.setDefaultNavigationTimeout(timeout);
+      page.setDefaultTimeout(timeout);
+      const response = await page.goto(url, { waitUntil: "networkidle0", timeout });
+      if (response && !response.ok()) {
+        throw new Error(`print page respondi\xF3 ${response.status()}`);
+      }
+      await page.waitForFunction(
+        "(window.__PRINT_READY__ === true) || Boolean(window.__PRINT_ERROR__)",
+        { timeout }
+      );
+      const result = await page.evaluate(() => ({
+        html: window.__CANVAS_PRINT_HTML__ || "",
+        error: window.__PRINT_ERROR__ || ""
+      }));
+      if (result.error) {
+        throw new Error(`print page error: ${result.error}`);
+      }
+      if (!result.html) {
+        throw new Error("print page devolvi\xF3 HTML vac\xEDo");
+      }
+      return result.html;
+    } finally {
+      await page.close().catch(() => void 0);
     }
   }
   async createTemplate(id, name, htmlContent) {
@@ -72872,8 +72942,9 @@ var valorizacionSchema = {
       dynamicRows: true,
       minRows: 1,
       maxRows: 200,
-      showTotals: true,
-      totalColumns: ["importe"],
+      // Los totales viven en la sección "Resumen" (SUBTOTAL/IGV/TOTAL), igual que
+      // el PDF legacy: el `renderDataTable` genérico NO pinta fila de totales. Sin
+      // `showTotals`/`totalColumns` el canvas no duplica la caja/fila de totales.
       columns: [
         {
           key: "item",
@@ -73876,12 +73947,26 @@ var cotizacionServicioSchema = {
       }
     },
     {
-      // Bloques {title, lines[]} del legacy: "Condiciones de pago" a ancho
-      // completo y el alcance del servicio a 2 columnas.
-      id: "sections",
+      // Dos secciones INDEPENDIENTES que comparten el array `data.sections`
+      // (sourceKey) por partición: "Condiciones de pago" a ancho completo…
+      id: "paymentTerms",
       type: "noteSections",
-      title: "Secciones del servicio",
+      title: "Condiciones de pago",
       noteSectionsConfig: {
+        sourceKey: "sections",
+        partition: "lead",
+        leadTitle: "Condiciones de pago",
+        leadTitleContains: "condiciones de pago"
+      }
+    },
+    {
+      // …y "Alcance del servicio" a 2 columnas (misma fuente, otra partición).
+      id: "scope",
+      type: "noteSections",
+      title: "Alcance del servicio",
+      noteSectionsConfig: {
+        sourceKey: "sections",
+        partition: "scope",
         scopeTitle: "Alcance del servicio",
         leadTitleContains: "condiciones de pago"
       }
@@ -101819,11 +101904,36 @@ function buildPdfMargin(schema, data) {
     left: `${left}mm`
   };
 }
+function isAllowedPrintUrl(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  const allowlist = (process.env.PORTAL_PRINT_HOSTS || "").split(",").map((host) => host.trim().toLowerCase()).filter(Boolean);
+  if (allowlist.length === 0) return true;
+  return allowlist.includes(parsed.host.toLowerCase());
+}
 async function resolveReportHtml(input) {
   const canvasHtml = typeof input.canvasHtml === "string" ? input.canvasHtml.trim() : "";
   if (canvasHtml) {
     const html = await inlineCanvasHtmlImages(canvasHtml, input.companyId);
     return { html, source: "canvas" };
+  }
+  const printUrl = typeof input.printUrl === "string" ? input.printUrl.trim() : "";
+  if (printUrl && isAllowedPrintUrl(printUrl)) {
+    try {
+      const fetched = await generator_service_default.fetchPrintedHtml(printUrl);
+      const html = await inlineCanvasHtmlImages(fetched, input.companyId);
+      return { html, source: "canvas" };
+    } catch (error) {
+      logger_default.warn("documents.print_url.fallback_renderer", {
+        error: String(error),
+        companyId: input.companyId
+      });
+    }
   }
   const renderer = new ReportHtmlRenderer(input.effectiveSchema, input.data, {
     companyId: input.companyId,
@@ -102280,6 +102390,7 @@ async function generateDocument(req, res, next) {
       const baseUrl = buildAbsoluteUrl4(req, "");
       const { html, source } = await resolveReportHtml({
         canvasHtml: req.body?.html,
+        printUrl: req.body?.printUrl,
         effectiveSchema,
         data,
         companyId,
@@ -102438,6 +102549,7 @@ async function previewDocument(req, res, next) {
     const baseUrl = buildAbsoluteUrl4(req, "");
     const { html, source } = await resolveReportHtml({
       canvasHtml: req.body?.html,
+      printUrl: req.body?.printUrl,
       effectiveSchema,
       data,
       companyId,
@@ -102450,7 +102562,9 @@ async function previewDocument(req, res, next) {
       outputPath: previewPath,
       format: effectiveSchema.pageSize || "A4",
       landscape: effectiveSchema.orientation === "landscape",
-      margin: buildPdfMargin(effectiveSchema, data)
+      // Mismo criterio que generate: el canvas trae su @page 14mm (o membrete a
+      // sangre con margen 0) — el margen Puppeteer debe coincidir, no el del schema.
+      margin: source === "canvas" ? buildCanvasPdfMargin(data) : buildPdfMargin(effectiveSchema, data)
     });
     const letterhead = getDocumentLetterhead(data);
     if (letterhead) {
@@ -103977,7 +104091,8 @@ function getPayload2(req) {
   return {
     schemaCode: body.schemaCode || "ORD-COM",
     orderNumber: body.orderNumber,
-    schemaData: isPlainObject4(body.schemaData) ? body.schemaData : {}
+    schemaData: isPlainObject4(body.schemaData) ? body.schemaData : {},
+    html: typeof body.html === "string" && body.html.trim() ? body.html : void 0
   };
 }
 function escapeHtml3(value) {
@@ -104588,11 +104703,17 @@ async function buildRenderContext2(req) {
   }
   const data = mergeDeep3({}, schema.defaultData || {}, payload.schemaData || {});
   const baseUrl = buildAbsoluteUrl6(req, "");
-  const html = renderPurchaseOrderHtml(data, baseUrl);
+  const html = payload.html ? await inlineCanvasHtmlImages(payload.html, companyId) : renderPurchaseOrderHtml(data, baseUrl);
   return {
     companyId,
     payload,
     html
+  };
+}
+function canvasPdfMargin(payload) {
+  if (!payload.html) return {};
+  return {
+    margin: getDocumentLetterhead(payload.schemaData || {}) ? CANVAS_QUOTE_LETTERHEAD_PDF_MARGIN : CANVAS_QUOTE_PDF_MARGIN
   };
 }
 async function previewPurchaseOrder(req, res, next) {
@@ -104606,7 +104727,8 @@ async function previewPurchaseOrder(req, res, next) {
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
-      landscape: false
+      landscape: false,
+      ...canvasPdfMargin(payload)
     });
     await FolioGeneratorService.addFolios(
       previewPath,
@@ -104673,7 +104795,8 @@ async function generatePurchaseOrder(req, res, next) {
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
-      landscape: false
+      landscape: false,
+      ...canvasPdfMargin(payload)
     });
     await FolioGeneratorService.addFolios(
       outputPath,

@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import {
   buildDriverLink,
   computeArrivalReminderDelayMs,
+  computeLocationShareDelayMs,
   signDriverToken,
 } from './driver-link.js';
 import { config } from '../config/environment.js';
@@ -43,5 +44,28 @@ describe('computeArrivalReminderDelayMs', () => {
     expect(computeArrivalReminderDelayMs(null)).toBe(90 * 60 * 1000);
     expect(computeArrivalReminderDelayMs(0)).toBe(90 * 60 * 1000);
     expect(computeArrivalReminderDelayMs(Number.NaN)).toBe(90 * 60 * 1000);
+  });
+});
+
+describe('computeLocationShareDelayMs', () => {
+  it('1/4 del ETA (unidad ya en ruta)', () => {
+    // 60 min de ruta → 15 min (justo en el clamp inferior).
+    expect(computeLocationShareDelayMs(3600)).toBe(15 * 60 * 1000);
+    // 80 min → 20 min (1/4 real, dentro del rango).
+    expect(computeLocationShareDelayMs(4800)).toBe(20 * 60 * 1000);
+  });
+
+  it('clamp inferior 3 min (rutas muy cortas)', () => {
+    expect(computeLocationShareDelayMs(60)).toBe(3 * 60 * 1000);
+  });
+
+  it('clamp superior 30 min (rutas muy largas)', () => {
+    expect(computeLocationShareDelayMs(4 * 60 * 60)).toBe(30 * 60 * 1000);
+  });
+
+  it('sin ETA usable → fallback 10 min', () => {
+    expect(computeLocationShareDelayMs(null)).toBe(10 * 60 * 1000);
+    expect(computeLocationShareDelayMs(0)).toBe(10 * 60 * 1000);
+    expect(computeLocationShareDelayMs(Number.NaN)).toBe(10 * 60 * 1000);
   });
 });
