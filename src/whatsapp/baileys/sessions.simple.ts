@@ -332,7 +332,12 @@ async function initSession(
     }
 
     if (connection === 'open') {
-      logger.info(`✅ Session connected successfully for ${sessionId}`);
+      const wasReconnect = (reconnectAttempts[sessionId] ?? 0) > 0;
+      if (wasReconnect) {
+        logger.info(`🔄 Session RECONECTADA para ${sessionId} tras ${reconnectAttempts[sessionId]} intento(s)`);
+      } else {
+        logger.info(`✅ Session connected successfully for ${sessionId}`);
+      }
       readyClients.set(sessionId, true);
       // Reconexión exitosa → resetear backoff y contador de 440s.
       reconnectAttempts[sessionId] = 0;
