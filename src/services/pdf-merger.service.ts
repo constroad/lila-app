@@ -79,6 +79,64 @@ function isPngBuffer(buffer: Buffer): boolean {
   return buffer.subarray(1, 4).toString('utf8') === 'PNG';
 }
 
+function isJpegBuffer(buffer: Buffer): boolean {
+  return buffer[0] === 0xff && buffer[1] === 0xd8;
+}
+
+/** A4 en puntos PDF (pdf-lib) para la página que envuelve un anexo tipo imagen. */
+const A4_PT = { width: 595.28, height: 841.89 };
+const ANNEX_IMAGE_MARGIN_PT = 28; // ~10mm
+
+/**
+ * Bytes del anexo: primero storage local de la company, luego descarga HTTP,
+ * luego data URL. Igual criterio que el membrete — antes solo se intentaba el
+ * storage local y un anexo servido por Drive/HTTP se SALTABA en silencio.
+ */
+async function resolveAnnexBytes(url: string, companyId?: string): Promise<Buffer | null> {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('data:')) {
+    const base64 = trimmed.split(',')[1];
+    return base64 ? Buffer.from(base64, 'base64') : null;
+  }
+  const storagePath = resolveStoragePathFromUrl(trimmed, companyId);
+  if (storagePath && (await fs.pathExists(storagePath))) {
+    return fs.readFile(storagePath);
+  }
+  if (trimmed.startsWith('http')) {
+    try {
+      const response = await axios.get<ArrayBuffer>(trimmed, {
+        responseType: 'arraybuffer',
+        timeout: 15000,
+      });
+      return Buffer.from(response.data);
+    } catch (error) {
+      logger.warn('Annex download failed', { url: trimmed, error: String(error) });
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Añade una imagen (PNG/JPG) como página A4 completa, ajustada con margen. */
+async function addImageAnnexPage(mergedPdf: PDFDocument, bytes: Buffer): Promise<void> {
+  const image = isPngBuffer(bytes)
+    ? await mergedPdf.embedPng(bytes)
+    : await mergedPdf.embedJpg(bytes);
+  const page = mergedPdf.addPage([A4_PT.width, A4_PT.height]);
+  const maxW = A4_PT.width - ANNEX_IMAGE_MARGIN_PT * 2;
+  const maxH = A4_PT.height - ANNEX_IMAGE_MARGIN_PT * 2;
+  const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+  const drawW = image.width * scale;
+  const drawH = image.height * scale;
+  page.drawImage(image, {
+    x: (A4_PT.width - drawW) / 2,
+    y: (A4_PT.height - drawH) / 2,
+    width: drawW,
+    height: drawH,
+  });
+}
+
 export class PDFMergerService {
   static async getPageCount(pdfPath: string): Promise<number> {
     const bytes = await fs.readFile(pdfPath);
@@ -100,17 +158,34 @@ export class PDFMergerService {
     const sorted = [ ...annexes ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     for (const annex of sorted) {
-      const annexPath = resolveStoragePathFromUrl(annex.pdfUrl, companyId);
-      if (!annexPath || !(await fs.pathExists(annexPath))) {
-        logger.warn('Annex PDF not found, skipping', { annexId: annex.id, pdfUrl: annex.pdfUrl });
+      const bytes = await resolveAnnexBytes(annex.pdfUrl, companyId);
+      if (!bytes) {
+        logger.warn('Annex not resolvable, skipping', { annexId: annex.id, pdfUrl: annex.pdfUrl });
         continue;
       }
 
-      const annexPdfBytes = await fs.readFile(annexPath);
-      const annexPdf = await PDFDocument.load(annexPdfBytes);
-      const copiedPages = await mergedPdf.copyPages(annexPdf, annexPdf.getPageIndices());
-      copiedPages.forEach((page) => mergedPdf.addPage(page));
-      totalAnnexPages += annexPdf.getPageCount();
+      try {
+        if (isPdfBuffer(bytes)) {
+          const annexPdf = await PDFDocument.load(bytes);
+          const copiedPages = await mergedPdf.copyPages(annexPdf, annexPdf.getPageIndices());
+          copiedPages.forEach((page) => mergedPdf.addPage(page));
+          totalAnnexPages += annexPdf.getPageCount();
+        } else if (isPngBuffer(bytes) || isJpegBuffer(bytes)) {
+          // Anexo tipo imagen (JPG/PNG): se envuelve en una página A4.
+          await addImageAnnexPage(mergedPdf, bytes);
+          totalAnnexPages += 1;
+        } else {
+          logger.warn('Annex format unsupported, skipping', {
+            annexId: annex.id,
+            pdfUrl: annex.pdfUrl,
+          });
+        }
+      } catch (error) {
+        logger.warn('Annex embed failed, skipping', {
+          annexId: annex.id,
+          error: String(error),
+        });
+      }
     }
 
     const mergedPdfBytes = await mergedPdf.save();
