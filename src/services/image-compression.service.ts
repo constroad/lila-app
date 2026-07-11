@@ -10,13 +10,19 @@ export class ImageCompressionService {
     const sizeMB = buffer.length / (1024 * 1024);
     const maxSizeMB = Number(process.env.PDF_IMAGE_MAX_MB || 1);
 
+    // Canal alfa: firmas/sellos/logos son PNG transparentes. JPEG NO tiene alfa
+    // y sharp aplana la transparencia sobre NEGRO → "caja negra" en el PDF. Con
+    // alfa se recomprime a PNG (preserva transparencia); JPEG solo para opacas.
+    let hasAlpha = false;
     try {
       const metadata = await sharp(buffer).metadata();
+      hasAlpha = Boolean(metadata.hasAlpha);
       logger.info('Processing image', {
         filename,
         originalSize: `${sizeMB.toFixed(2)}MB`,
         resolution: metadata.width && metadata.height ? `${metadata.width}x${metadata.height}` : 'unknown',
         format: metadata.format,
+        hasAlpha,
       });
     } catch (error) {
       logger.warn('Failed to read image metadata', { filename, error: String(error) });
@@ -27,21 +33,19 @@ export class ImageCompressionService {
     }
 
     try {
-      const compressed = await sharp(buffer)
-        .resize(1600, 1600, {
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .jpeg({
-          quality: 75,
-          progressive: true,
-          mozjpeg: true,
-        })
-        .toBuffer();
+      const pipeline = sharp(buffer).resize(1600, 1600, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+      const compressed = await (hasAlpha
+        ? pipeline.png({ compressionLevel: 9, quality: 80, palette: true })
+        : pipeline.jpeg({ quality: 75, progressive: true, mozjpeg: true })
+      ).toBuffer();
 
       const compressedSizeMB = compressed.length / (1024 * 1024);
       logger.info('Image compressed', {
         filename,
+        format: hasAlpha ? 'png (alpha preservado)' : 'jpeg',
         originalSize: `${sizeMB.toFixed(2)}MB`,
         compressedSize: `${compressedSizeMB.toFixed(2)}MB`,
         reduction: `${((1 - compressedSizeMB / sizeMB) * 100).toFixed(1)}%`,
