@@ -243,6 +243,55 @@ describe('proxyMediaMessage', () => {
     expect(form.get('filePath')).toBeNull();
   });
 
+  it('fileUrl del storage LOCAL se resuelve a buffer y viaja multipart (fix fotos de informe)', async () => {
+    resolveFileBufferMock.mockResolvedValue({
+      buffer: Buffer.from('img-bytes'),
+      mimeType: 'image/jpeg',
+      fileName: 'image_1783964110426.jpg',
+    });
+    fetchMock.mockResolvedValue(fakeResponse(200, { success: true }));
+    const { proxyMediaMessage } = await loadSubject();
+
+    await proxyMediaMessage('image', '51902049935', '120363376500470254@g.us', {
+      companyId: 'test',
+      // URL absoluta al storage LOCAL de dev (lo que manda Portal).
+      fileUrl: 'http://localhost:3001/files/companies/test/services/x/panelFotografico/image_1783964110426.jpg',
+      caption: 'Unidad ABC-123',
+    });
+
+    expect(resolveFileBufferMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: 'test',
+        fileUrl:
+          'http://localhost:3001/files/companies/test/services/x/panelFotografico/image_1783964110426.jpg',
+      })
+    );
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const form = init.body as FormData;
+    const filePart = form.get('file') as File;
+    expect(filePart.type).toBe('image/jpeg');
+    // El fileUrl local NUNCA debe llegar a prod como JSON.
+    expect(form.get('fileUrl')).toBeNull();
+  });
+
+  it('fileUrl EXTERNO (resolveFileBuffer→null) se reenvía como JSON para que prod lo descargue', async () => {
+    resolveFileBufferMock.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(fakeResponse(200, { success: true }));
+    const { proxyMediaMessage } = await loadSubject();
+
+    await proxyMediaMessage('image', '51902049935', '51999888777', {
+      companyId: 'test',
+      fileUrl: 'https://cdn.externo.com/foto.jpg',
+      caption: 'Evidencia',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      fileUrl: 'https://cdn.externo.com/foto.jpg',
+    });
+  });
+
   it('filePath que NO resuelve localmente cae al contrato JSON con warning', async () => {
     resolveFileBufferMock.mockRejectedValue(new Error('File not found'));
     fetchMock.mockResolvedValue(fakeResponse(200, { success: true }));

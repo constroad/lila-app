@@ -227,26 +227,31 @@ export async function proxyTextMessage(
 }
 
 /**
- * Resuelve un `filePath` del storage LOCAL a buffer para reenviarlo multipart:
- * prod NO ve el disco de dev, así que reenviar el path tal cual termina en
- * "File not found" (ej. el vale PDF recién generado en dev). Devuelve null si
- * el path no es del storage local (se cae al contrato JSON de siempre).
+ * Resuelve una referencia del storage LOCAL (`filePath` O `fileUrl` apuntando al
+ * disco de dev, ej. `http://localhost:3001/files/companies/:id/...`) a buffer
+ * para reenviarla multipart: prod NO ve el disco de dev, así que reenviar la
+ * referencia tal cual termina en "File not found" (el vale PDF y las fotos de
+ * informe recién subidas a dev). `resolveFileBuffer` devuelve null si la
+ * referencia NO es del storage local (URL externa) → se cae al contrato JSON de
+ * siempre y prod la descarga.
  */
 async function resolveLocalStorageBuffer(
   options: ProxyMediaOptions
 ): Promise<{ buffer: Buffer; mimeType: string; fileName: string } | null> {
-  if (!options.filePath || options.buffer || !options.companyId) return null;
+  const reference = options.filePath || options.fileUrl;
+  if (!reference || options.buffer || !options.companyId) return null;
   try {
     return await resolveFileBuffer({
       companyId: options.companyId,
       filePath: options.filePath,
+      fileUrl: options.fileUrl,
       mimeType: options.mimeType,
       fileName: options.fileName,
     });
   } catch (error) {
     logger.warn(
-      `WhatsApp proxy: filePath "${options.filePath}" no resolvió en el storage local ` +
-        `(${error instanceof Error ? error.message : String(error)}) — se reenvía como path a prod`
+      `WhatsApp proxy: la referencia local "${reference}" no resolvió en el storage local ` +
+        `(${error instanceof Error ? error.message : String(error)}) — se reenvía a prod`
     );
     return null;
   }
@@ -275,6 +280,7 @@ export async function proxyMediaMessage(
       mimeType: localFile.mimeType,
       fileName: options.fileName || localFile.fileName,
       filePath: undefined,
+      fileUrl: undefined,
     };
   }
 
