@@ -34,6 +34,7 @@ import pdfGenerator from './pdf/generator.service.js';
 // 🔄 USING SIMPLE SESSIONS (notifications approach)
 import { listSessions, endSession } from './whatsapp/baileys/sessions.simple.js';
 import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.js';
+import { startSocketLeaseLoop, releaseSocketLease } from './whatsapp/baileys/instance-lease.js';
 import { startTelegramQueueFlusher } from './services/telegram-alert.service.js';
 import { startDriverReminderFlusher } from './services/driver-arrival-reminder.service.js';
 import cron from 'node-cron';
@@ -315,7 +316,13 @@ async function startServer() {
     }
 
     // Inicializar servicios
-    await pdfGenerator.initialize();
+    // PERF (2026-07-13): el navegador Puppeteer se lanza PEREZOSAMENTE en la 1ª
+    // generación de PDF — `ensureBrowser()` ya cubre TODAS las rutas de render
+    // (generatePDF / generateFromHtml / fetchPrintedHtml / createPage). Lanzarlo
+    // aquí bloqueaba el arranque 20-40s (launch de Chromium + su reintento), y
+    // como `app.listen()` está más abajo, el 1er request tras un restart/idle
+    // (p.ej. un GET /documents/schemas trivial) se comía TODO el warm-up → 40s.
+    // Ref: PERFORMANCE-SCALABILITY.SPEC.md (cold-start del proceso, no del endpoint).
     await fs.ensureDir(config.pdf.tempDir);
     logger.info('🧾 PDF temp directory configured', {
       tempDir: config.pdf.tempDir,
@@ -327,7 +334,14 @@ async function startServer() {
     // a dev machine with the same Mongo URI from kicking prod sessions (code 440 war).
     if (config.whatsapp.restoreSessions) {
       try {
-        await restoreAllSessions();
+        // Lease anti doble-instancia: si otro proceso vivo lo posee, este arranca
+        // PASIVO (sin sockets) y toma el lease automáticamente si aquel muere.
+        const isSocketHolder = await startSocketLeaseLoop();
+        if (isSocketHolder) {
+          await restoreAllSessions();
+        } else {
+          logger.warn('⏭ Restore de sesiones OMITIDO: otra instancia posee el socket lease.');
+        }
       } catch (err) {
         logger.error('restoreAllSessions failed:', err);
       }
@@ -434,6 +448,10 @@ async function startServer() {
             }
           }
           logger.info('All WhatsApp sessions closed (creds preserved)');
+
+          // Soltar el lease para que el próximo arranque abra sockets al instante
+          // (sin esperar el TTL de expiración).
+          await releaseSocketLease();
 
           if (shouldRunBackgroundJobs) {
             await jobScheduler.shutdown();

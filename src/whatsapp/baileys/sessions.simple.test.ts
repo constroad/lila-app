@@ -46,6 +46,8 @@ jest.unstable_mockModule('@whiskeysockets/baileys', () => ({
   makeWASocket,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  // Passthrough: el cache de signal keys es transparente para estos tests.
+  makeCacheableSignalKeyStore: (keys: unknown) => keys,
   Browsers: { ubuntu: () => 'ubuntu', macOS: () => 'mac' },
   DisconnectReason: { loggedOut: 401 },
 }));
@@ -125,6 +127,12 @@ jest.unstable_mockModule('./mongo-auth-state.js', () => ({
 jest.unstable_mockModule('../../utils/logger.js', () => ({
   __esModule: true,
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+
+// Lease process-level: estos tests asumen que el proceso es el holder.
+jest.unstable_mockModule('./instance-lease.js', () => ({
+  __esModule: true,
+  hasSocketLease: () => true,
 }));
 
 type Subject = typeof import('./sessions.simple.js');
@@ -270,6 +278,34 @@ describe('reconnect / close handler', () => {
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
     await subject.endSession('51111111111');
     expect(setTimeoutSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('reconnectDelayMs (backoff exponencial anti-throttle)', () => {
+  // Jitter ±20% → cada intento se valida contra su rango [0.8x, 1.2x].
+  const expectInRange = (actual: number, base: number) => {
+    expect(actual).toBeGreaterThanOrEqual(base * 0.8);
+    expect(actual).toBeLessThanOrEqual(base * 1.2);
+  };
+
+  it('primer intento es rápido (~3s) para cubrir cortes breves', () => {
+    expectInRange(subject.reconnectDelayMs(1), 3_000);
+  });
+
+  it('duplica por intento (curva exponencial, no lineal)', () => {
+    expectInRange(subject.reconnectDelayMs(2), 6_000);
+    expectInRange(subject.reconnectDelayMs(5), 48_000);
+    expectInRange(subject.reconnectDelayMs(8), 384_000);
+  });
+
+  it('capa en 10 min para intentos altos (no martillar el login)', () => {
+    expectInRange(subject.reconnectDelayMs(10), 600_000);
+    expectInRange(subject.reconnectDelayMs(50), 600_000);
+  });
+
+  it('tolera intentos <= 0 sin romperse (trata como intento 1)', () => {
+    expectInRange(subject.reconnectDelayMs(0), 3_000);
+    expectInRange(subject.reconnectDelayMs(-3), 3_000);
   });
 });
 

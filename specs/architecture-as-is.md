@@ -43,6 +43,30 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - Envio de mensajes: `src/api/controllers/message.controller.simple.ts`.
 - Servicio directo: `src/services/whatsapp-direct.service.ts`.
 - **Send-proxy dev (julio 2026):** con `WHATSAPP_PROXY_TARGET_URL` seteada (base URL de prod con `/api`, ej. Tailscale) y `nodeEnv !== 'production'`, los 4 métodos de envío de `whatsapp-direct.service.ts` hacen early-return a `src/services/whatsapp-proxy.service.ts`, que reenvía a `/message/:sender/{text|image|video|file}` de PROD con un JWT de tenant corto (5 min) firmado con el `JWT_SECRET` compartido — el payload lleva el CAMPO `companyId` del schema Company (NO el `_id`), que es lo que compara `requireSenderOwnership`. Así lila local prueba flujos e2e con mensajes reales sin abrir sockets (evita guerra 440); prod aplica su pipeline completo (ownership, routing, outbox 202→`{queued:true}`, conteo de quota — sin doble conteo porque el early-return salta el conteo local). Buffers locales viajan como multipart (límite multer prod: 10 MB); `filePath`/`fileUrl` se reenvían tal cual. **Guard anti-440 (puerta única):** `startSession` Y `createPairingSession` lanzan error si el proxy está activo — así NINGÚN camino abre un socket local (creación manual, endpoint de QR, `restartSession`, reconnect, restore, pairing). Sin esto, los endpoints `/qr` y crear-sesión llamaban a `startSession` directo (saltándose el guard del wrapper `WhatsAppDirectService.createSession`) y abrían un socket local con las creds de prod → guerra 440 que mató la sesión productiva (jul 2026). Los handlers de QR/create/pairing responden 409 legible en modo proxy. Re-emparejar SIEMPRE contra prod. Las LECTURAS de sesión (`/groups`, `/contacts`, `/syncGroups`) también se proxean (pass-through de `proxySessionRead`, espejando el status de prod): el store local solo se puebla con socket, así que sin proxy devolvían 503. Las alertas Telegram llevan prefijo `[DEV] ` cuando `nodeEnv !== 'production'` (mismo bot/canal que prod; el prefijo se aplica en `sendOnce`, cubre directas y cola). En producción la env se ignora con warning. Alternativa full-fidelity (socket local, entrantes): `specs/SESSION-LEASE.spec.md` (propuesto, no implementado).
+- **Hardening sesiones (2026-07-13, post-incidente reconexión):**
+  (a) TODAS las rutas `/api/sessions/*` exigen auth (`requireTenantOrApiKey`); las que
+  operan un número concreto exigen además `requireSessionOwnership` (dueño o co-dueño;
+  números sin dueño pasan para 1er emparejamiento; fail-closed 503). Antes `/groups`,
+  `/contacts`, `/status` y `/list` estaban SIN auth (fuga de PII vía HTTPS público) y
+  `/qr`/`/restart`/pairing no validaban dueño (QR ajeno = account takeover). Portal
+  `api/super/whatsapp-sessions` firma JWT `portal-super` para `/list`.
+  (b) `/clear` y `/disconnect` tienen guard de modo proxy (un `/clear` local borraba
+  creds de PROD en el Mongo compartido).
+  (c) Reconexión con **backoff exponencial** (`reconnectDelayMs`: base 3s, cap 10 min,
+  jitter ±20%) — el lineal 60s martillaba el login y sostenía el throttle de WhatsApp.
+  (d) `makeCacheableSignalKeyStore` sobre el auth-state Mongo + `msgRetryCounterCache`
+  + versión WA cacheada (`baileys-version.ts`, TTL 6h, stale-on-error) + logger Baileys
+  configurable (`WHATSAPP_BAILEYS_LOG_LEVEL`, ya no hardcode silent).
+  (e) **Lease process-level de sockets** (`instance-lease.ts`, colección
+  `whatsapp_instance_lease`, TTL 90s + heartbeat 30s): solo el holder abre sockets;
+  segundo proceso queda pasivo con alerta y failover automático. Guard en
+  `startSession`/pairing/restore; release en shutdown. `WHATSAPP_SOCKET_LEASE=false`
+  lo desactiva. (El handoff prod↔dev por sesión de `SESSION-LEASE.spec.md` sigue propuesto.)
+  (f) Outbox: `OUTBOX_MAX_ATTEMPTS=5` + TTL 24h + skip de items envenenados (ya no
+  break-on-first-error), cap `OUTBOX_MAX_ITEMS=50` con drop-oldest + alerta, lock
+  anti-flush concurrente, y media del flush con `queueOnFail:false` (sin duplicados).
+  (g) Timeout defensivo 120s en los 4 `sock.sendMessage` (cae al queueOnFail) y
+  rate limiter sin bypass accidental cuando falta `API_SECRET_KEY`.
 - Listener IA de Anthropic existe (`src/whatsapp/ai-agent/*`) pero esta deshabilitado en produccion (early return en `message.listener.ts`, flag `WHATSAPP_AI_ENABLED`).
 - Una sesion por empresa, credenciales en `data/sessions/{companyPhone}` (volumen montado).
 - **Auth de rutas de sesion (`/api/sessions/*` state-changing):** middleware `requireTenantOrApiKey` (junio 2026) acepta JWT de tenant (Portal), API key `lk_fe_...` o, por compatibilidad, la API key global `x-api-key`. Antes exigian solo `x-api-key === API_SECRET_KEY`, lo que rompia el boton "Desconectar" de Portal (que firma JWT). Plan de deprecar el secreto global en `specs/SCALABILITY-MULTI-SESSION.spec.md` §4.4/§4.5.

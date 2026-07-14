@@ -59,6 +59,10 @@ export const config = {
     aiEnabled: process.env.WHATSAPP_AI_ENABLED === 'true',
     aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || '51949376824',
     baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || 'fatal',
+    // Lease process-level de sockets (candado anti doble-instancia / guerra 440).
+    // Default habilitado; WHATSAPP_SOCKET_LEASE=false lo apaga (ej. entorno aislado
+    // con Mongo propio). Ver whatsapp/baileys/instance-lease.ts.
+    socketLease: process.env.WHATSAPP_SOCKET_LEASE !== 'false',
     // RLS de envío: cuando true exige auth de tenant + ownership de sender en /message
     // y BLOQUEA cross-tenant. Default false = solo identifica/avisa (backward-compatible).
     // Es un toggle de comportamiento por entorno (off en dev, on en prod tras validar logs),

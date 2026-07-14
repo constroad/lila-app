@@ -31,8 +31,15 @@ export const apiLimiter = rateLimit({
   standardHeaders: true, // Retornar información del rate limit en los `RateLimit-*` headers
   legacyHeaders: false, // Deshabilitar los headers `X-RateLimit-*`
   skip: (req) => {
-    // No limitar si tiene API key global válida
-    if (req.headers['x-api-key'] === process.env.API_SECRET_KEY) {
+    // No limitar si tiene API key global válida. El chequeo de string no-vacío es
+    // deliberado: sin él, con API_SECRET_KEY ausente en el env, un request SIN el
+    // header pasaba (undefined === undefined) y el rate limit quedaba desactivado.
+    const globalKey = req.headers['x-api-key'];
+    if (
+      typeof globalKey === 'string' &&
+      globalKey.length > 0 &&
+      globalKey === process.env.API_SECRET_KEY
+    ) {
       return true;
     }
 

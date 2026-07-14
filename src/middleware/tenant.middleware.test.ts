@@ -161,3 +161,93 @@ describe('guardSharedSenderDestructive', () => {
     expect(next).toHaveBeenCalledWith();
   });
 });
+
+describe('requireSessionOwnership (admin de sesión: QR/reads/restart)', () => {
+  const loadSessionGuard = async () =>
+    (await import('./tenant.middleware.js')).requireSessionOwnership;
+
+  beforeEach(() => {
+    jest.resetModules();
+    listCompaniesByWhatsappSender.mockReset();
+    listCompaniesByWhatsappSender.mockResolvedValue([]);
+  });
+
+  it('passes through without companyId (secreto global admin)', async () => {
+    const guard = await loadSessionGuard();
+    const next = await run(guard, { params: { phoneNumber: '51902049935' } });
+
+    expect(next).toHaveBeenCalledWith();
+    expect(listCompaniesByWhatsappSender).not.toHaveBeenCalled();
+  });
+
+  it('allows the owner of the sender', async () => {
+    listCompaniesByWhatsappSender.mockResolvedValue(owners('test'));
+    const guard = await loadSessionGuard();
+    const next = await run(guard, {
+      companyId: 'test',
+      params: { phoneNumber: '51902049935' },
+    });
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('allows any co-owner of a SHARED sender', async () => {
+    listCompaniesByWhatsappSender.mockResolvedValue(owners('constroad', 'globofas-s8k'));
+    const guard = await loadSessionGuard();
+    const next = await run(guard, {
+      companyId: 'globofas-s8k',
+      params: { phoneNumber: '51949376824' },
+    });
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('BLOCKS (403) a tenant that does not own the sender (QR hijack / DoS cross-tenant)', async () => {
+    listCompaniesByWhatsappSender.mockResolvedValue(owners('constroad'));
+    const guard = await loadSessionGuard();
+    const next = await run(guard, {
+      companyId: 'atacante',
+      params: { phoneNumber: '51949376824' },
+    });
+
+    const error = next.mock.calls[0][0] as { statusCode?: number };
+    expect(error).toBeInstanceOf(Error);
+    expect(error.statusCode).toBe(403);
+  });
+
+  it('allows an UNCLAIMED sender (primer emparejamiento, sin víctima)', async () => {
+    listCompaniesByWhatsappSender.mockResolvedValue([]);
+    const guard = await loadSessionGuard();
+    const next = await run(guard, {
+      companyId: 'test',
+      params: { phoneNumber: '51999999999' },
+    });
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('reads phoneNumber from the body when the route has no param (POST /sessions)', async () => {
+    listCompaniesByWhatsappSender.mockResolvedValue(owners('constroad'));
+    const guard = await loadSessionGuard();
+    const next = await run(guard, {
+      companyId: 'atacante',
+      params: {},
+      body: { phoneNumber: '51949376824' },
+    } as never);
+
+    const error = next.mock.calls[0][0] as { statusCode?: number };
+    expect(error.statusCode).toBe(403);
+  });
+
+  it('fails CLOSED (503) when the lookup throws — un QR no se regala por un hipo de Mongo', async () => {
+    listCompaniesByWhatsappSender.mockRejectedValue(new Error('mongo down'));
+    const guard = await loadSessionGuard();
+    const next = await run(guard, {
+      companyId: 'test',
+      params: { phoneNumber: '51902049935' },
+    });
+
+    const error = next.mock.calls[0][0] as { statusCode?: number };
+    expect(error.statusCode).toBe(503);
+  });
+});

@@ -3,6 +3,18 @@ import { randomUUID } from 'crypto';
 import JsonStore from '../../storage/json.store.js';
 import logger from '../../utils/logger.js';
 import { config } from '../../config/environment.js';
+import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
+
+// Política de retención (patrón telegram-queue): un item que ya falló OUTBOX_MAX_ATTEMPTS
+// veces o lleva más de OUTBOX_TTL_MS encolado se descarta en el flush. Sin esto, un item
+// envenenado (ej. media irrecuperable) se reintentaba para siempre y, con el viejo
+// break-on-first-error, bloqueaba TODA la cola detrás de él.
+export const OUTBOX_MAX_ATTEMPTS = 5;
+export const OUTBOX_TTL_MS = 24 * 60 * 60 * 1000;
+// Cap por sesión: los media viajan como base64 DENTRO del JSON de la cola (se
+// reescribe entero por operación). Sin cap, una caída larga con ráfaga de videos
+// infla el archivo y la memoria sin límite. Al exceder: drop del más viejo + alerta.
+export const OUTBOX_MAX_ITEMS = 50;
 
 export type OutboxMessage = {
   id: string;
@@ -32,6 +44,17 @@ export type OutboxMessage = {
   };
 };
 
+/**
+ * Un item se descarta si agotó sus intentos o expiró su TTL. `createdAt` ilegible
+ * cuenta como expirado (item corrupto: nunca podría razonarse su antigüedad).
+ */
+export function isOutboxItemDroppable(item: OutboxMessage, nowMs: number): boolean {
+  if (item.attempts >= OUTBOX_MAX_ATTEMPTS) return true;
+  const createdAtMs = Date.parse(item.createdAt);
+  if (!Number.isFinite(createdAtMs)) return true;
+  return nowMs - createdAtMs > OUTBOX_TTL_MS;
+}
+
 export class OutboxQueue {
   private store: JsonStore;
 
@@ -46,6 +69,30 @@ export class OutboxQueue {
   }
 
   /**
+   * Aplica el cap OUTBOX_MAX_ITEMS con drop-oldest (FIFO: lo más viejo ya es lo más
+   * probable de expirar por TTL) y alerta por Telegram con dedupe por sesión.
+   */
+  private enforceCap(sessionPhone: string, queue: OutboxMessage[]): OutboxMessage[] {
+    if (queue.length < OUTBOX_MAX_ITEMS) {
+      return queue;
+    }
+    const overflow = queue.length - OUTBOX_MAX_ITEMS + 1;
+    const dropped = queue.slice(0, overflow);
+    dropped.forEach((item) => {
+      logger.warn(
+        `🗑 Outbox ${sessionPhone} lleno (${OUTBOX_MAX_ITEMS}): dropped oldest ${item.messageType} ${item.id} (createdAt=${item.createdAt})`
+      );
+    });
+    sendTelegramAlert({
+      dedupeKey: `outbox-overflow-${sessionPhone}`,
+      message:
+        `⚠️ Outbox WhatsApp de ${sessionPhone} alcanzó el límite de ${OUTBOX_MAX_ITEMS} mensajes.\n\n` +
+        `Se descartaron los más viejos para encolar los nuevos. La sesión lleva demasiado tiempo caída: revisa su estado.`,
+    }).catch(() => {});
+    return queue.slice(overflow);
+  }
+
+  /**
    * Enqueue a text message
    */
   async enqueue(
@@ -55,7 +102,7 @@ export class OutboxQueue {
     mentions?: string[],
     metadata: { companyId?: string; tenantId?: string; trackUsage?: boolean } = {}
   ): Promise<OutboxMessage> {
-    const queue = await this.list(sessionPhone);
+    const queue = this.enforceCap(sessionPhone, await this.list(sessionPhone));
     const item: OutboxMessage = {
       id: randomUUID(),
       sessionPhone,
@@ -94,7 +141,7 @@ export class OutboxQueue {
       trackUsage?: boolean;
     }
   ): Promise<OutboxMessage> {
-    const queue = await this.list(sessionPhone);
+    const queue = this.enforceCap(sessionPhone, await this.list(sessionPhone));
 
     // Convert buffer to base64 for JSON storage
     const mediaOptions = {

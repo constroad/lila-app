@@ -217,6 +217,16 @@ export async function disconnectSessionHandler(req: Request, res: Response, next
       return next(error);
     }
 
+    // Send-proxy (dev): la sesión vive en PROD. El logout local no tendría socket, pero
+    // cortar aquí evita cualquier efecto sobre el estado compartido. Operar desde prod.
+    if (isWhatsAppProxyMode()) {
+      const error: CustomError = new Error(
+        'Send-proxy activo: desconecta la sesión desde el entorno de producción, no en local.'
+      );
+      error.statusCode = HTTP_STATUS.CONFLICT;
+      return next(error);
+    }
+
     await disconnectSimpleSession(phoneNumber);
 
     res.status(HTTP_STATUS.OK).json({
@@ -248,6 +258,18 @@ export async function clearSessionHandler(req: Request, res: Response, next: Nex
     if (!phoneNumber) {
       const error: CustomError = new Error('phoneNumber is required');
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+
+    // Send-proxy (dev): las creds Baileys viven en el Mongo COMPARTIDO (whatsapp_auth).
+    // Un /clear local ejecutaría clearMongoAuthState/clearStoreSnapshot y borraría las
+    // credenciales de la sesión PRODUCTIVA → re-emparejar obligado. Igual que el guard
+    // de create/QR/pairing: administrar sesiones solo desde prod.
+    if (isWhatsAppProxyMode()) {
+      const error: CustomError = new Error(
+        'Send-proxy activo: restablece la sesión desde el entorno de producción, no en local (las credenciales viven en el Mongo compartido).'
+      );
+      error.statusCode = HTTP_STATUS.CONFLICT;
       return next(error);
     }
 

@@ -9,9 +9,10 @@ import {
   makeWASocket,
   Browsers,
   DisconnectReason,
-  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
   WASocket,
 } from '@whiskeysockets/baileys';
+import { getBaileysVersion } from './baileys-version.js';
 import { Boom } from '@hapi/boom';
 import path from 'path';
 import fs from 'fs-extra';
@@ -26,6 +27,7 @@ import { useMongoAuthState, clearMongoAuthState } from './mongo-auth-state.js';
 import { clearStoreSnapshot } from './mongo-store.js';
 import { clearPopulateCooldown } from './populate-store-simple.js';
 import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
+import { hasSocketLease } from './instance-lease.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -62,9 +64,52 @@ const reconnectAttempts: Record<string, number> = {};
 // lo forzamos a cerrar para que el loop de reconexión lo reintente.
 const CONNECTION_TIMEOUT_MS = 90_000;
 
+// Backoff exponencial de reconexión. Los primeros intentos son rápidos (cortes breves
+// de red); a partir de ahí duplica hasta el techo. Martillar el login tras una caída
+// alarga el throttle del servidor de WhatsApp: incidente 2026-07-13 — caída de red
+// (428 + EPIPE a Atlas) y luego 14 handshakes seguidos colgados (sin open/close en 90s)
+// durante ~35 min con el viejo backoff lineal capado a 60s; el servidor recién aceptó
+// el login cuando bajó la frecuencia. El jitter evita sincronizar reintentos de varias
+// sesiones tras un corte común.
+const RECONNECT_BASE_DELAY_MS = 3_000;
+const RECONNECT_MAX_DELAY_MS = 10 * 60_000;
+
+/** Delay del intento N (1-based): exponencial capado, con jitter ±20%. */
+export function reconnectDelayMs(attempt: number): number {
+  const exponential = RECONNECT_BASE_DELAY_MS * 2 ** (Math.max(attempt, 1) - 1);
+  const capped = Math.min(exponential, RECONNECT_MAX_DELAY_MS);
+  const jitter = 0.8 + Math.random() * 0.4;
+  return Math.round(capped * jitter);
+}
+
 // Contador de desconexiones consecutivas tipo 440 (connectionReplaced).
 // Si sube a >= 3 alerta por Telegram: probable otra instancia con las mismas creds.
 const consecutive440s: Record<string, number> = {};
+
+/**
+ * CacheStore mínimo (Map, sin dependencia nueva) para `msgRetryCounterCache`.
+ * Sin él, Baileys no dedupea los retry-receipts de mensajes que un peer no pudo
+ * descifrar y puede reintentar el mismo mensaje en bucle. Cap defensivo para no
+ * crecer sin límite en sesiones longevas.
+ */
+const MSG_RETRY_CACHE_MAX = 5_000;
+const makeMsgRetryCache = () => {
+  const entries = new Map<string, unknown>();
+  return {
+    get: <T>(key: string) => entries.get(key) as T | undefined,
+    set: <T>(key: string, value: T) => {
+      if (entries.size >= MSG_RETRY_CACHE_MAX) {
+        const oldest = entries.keys().next().value;
+        if (oldest !== undefined) entries.delete(oldest);
+      }
+      entries.set(key, value);
+    },
+    del: (key: string) => {
+      entries.delete(key);
+    },
+    flushAll: () => entries.clear(),
+  };
+};
 
 const clearStoreTimer = (sessionId: string) => {
   const timer = storeTimers[sessionId];
@@ -83,8 +128,8 @@ const clearReconnectTimer = (sessionId: string) => {
 };
 
 /**
- * Programa una reconexión resiliente con backoff (lineal capado a 60s). Reintenta hasta que la
- * sesión vuelva a abrir; si `startSession` falla (ej. Mongo caído por corte de red), captura el
+ * Programa una reconexión resiliente con backoff exponencial (ver reconnectDelayMs). Reintenta
+ * hasta que la sesión vuelva a abrir; si `startSession` falla (ej. Mongo caído por corte de red), captura el
  * error y reprograma — así la auto-recuperación sobrevive a fallos transitorios de red/Atlas.
  * `connection.open` resetea los intentos. No corre si la sesión se está apagando a propósito.
  */
@@ -93,16 +138,16 @@ function scheduleReconnect(sessionId: string, qrCb?: (qr: string) => void) {
   if (reconnectTimers[sessionId]) return; // ya hay un intento en cola
 
   const attempt = (reconnectAttempts[sessionId] = (reconnectAttempts[sessionId] ?? 0) + 1);
-  const delay = Math.min(3000 * attempt, 60_000);
+  const delay = reconnectDelayMs(attempt);
   logger.info(`🔁 Reconnect ${sessionId}: intento ${attempt} en ${delay}ms`);
 
-  // Alerta proactiva cuando la sesión lleva varios intentos fallidos (≈ 45s caída).
+  // Alerta proactiva cuando la sesión lleva varios intentos fallidos (minutos caída).
   // No alertamos en intento 1 (desconexiones breves son normales). Dedupe de 15 min
   // para no inundar si la sesión sigue rebotando.
   if (attempt === 5) {
     sendTelegramAlert({
       dedupeKey: `session-persistent-down-${sessionId}`,
-      message: `⚠️ WhatsApp sesión ${sessionId} caída y no reconecta.\nIntentos: ${attempt} (~45s sin conexión).\nRevisa logs o re-empareja si persiste.`,
+      message: `⚠️ WhatsApp sesión ${sessionId} caída y no reconecta.\nIntentos fallidos: ${attempt}. El backoff sigue reintentando (máx cada ${RECONNECT_MAX_DELAY_MS / 60_000} min).\nNO re-emparejes aún: suele recuperarse sola cuando WhatsApp deja de throttlear el login.`,
     }).catch(() => {});
   }
 
@@ -215,6 +260,15 @@ export async function startSession(
     );
   }
 
+  // Lease anti doble-instancia: solo el holder abre sockets. Cubre TODOS los caminos
+  // (restore, reconnect, QR/create) igual que el guard del proxy. Ver instance-lease.ts.
+  if (!hasSocketLease()) {
+    throw new Error(
+      'Esta instancia no posee el lease de sockets WhatsApp (otra instancia viva lo tiene). ' +
+        'Mata el proceso duplicado o espera el failover automático.'
+    );
+  }
+
   const inFlight = startingPromises[sessionId];
   if (inFlight) {
     logger.info(`[${sessionId}] Session init in progress, reusing in-flight start`);
@@ -248,19 +302,31 @@ async function initSession(
   // Ya NO se usan archivos locales de sesión.
   const { state, saveCreds } = await useMongoAuthState(sessionId);
 
-  const { version, isLatest } = await fetchLatestBaileysVersion();
+  // Versión cacheada por proceso (TTL 6h + stale-on-error): la reconexión no debe
+  // depender de un fetch a internet en cada intento. Ver baileys-version.ts.
+  const { version, isLatest } = await getBaileysVersion();
   logger.info(`Using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
-  // Create Pino logger for Baileys (NOT Winston!)
-  const pinoLogger = pino({ level: 'silent' }); // Silent to avoid log pollution
+  // Create Pino logger for Baileys (NOT Winston!). Nivel configurable con
+  // WHATSAPP_BAILEYS_LOG_LEVEL: en 'silent' los handshakes fallidos no dejan rastro
+  // (incidente 2026-07-13: 14 intentos "Disconnect reason: undefined" sin poder ver
+  // qué respondía WhatsApp). 'fatal' por defecto; subir a 'debug' para diagnosticar.
+  const pinoLogger = pino({ level: config.whatsapp.baileysLogLevel ?? 'fatal' });
 
   const sock = makeWASocket({
     version,
-    auth: state,
+    // Cache de signal keys sobre el store Mongo: sin él, CADA cifrado/descifrado
+    // (por device en grupos) hace findOne a Atlas (~100ms RTT) — envíos lentos y
+    // acoplados a hipos de Atlas. Práctica estándar recomendada por Baileys.
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, pinoLogger),
+    },
     logger: pinoLogger, // Baileys expects pino logger
     browser: Browsers.ubuntu('Chrome'),
     generateHighQualityLinkPreview: true,
     printQRInTerminal: false,
+    msgRetryCounterCache: makeMsgRetryCache(),
     // Baileys NO tiene API para "traer todos los contactos": llegan por history-sync y
     // eventos (contacts.upsert es poco fiable en WhatsApp personal — issue #522). Pedir el
     // history completo maximiza chats+contactos al conectar. Sin costo de memoria porque ya
@@ -371,8 +437,14 @@ async function initSession(
       clearQR(sessionId);
       logger.warn(`❌ Session closed for ${sessionId}`);
 
-      const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      logger.info(`Disconnect reason: ${code}`);
+      // Loggear también el mensaje del error: con solo el statusCode, los cierres
+      // forzados por el watchdog o errores de red salen como "undefined" y no se
+      // puede distinguir la causa (incidente 2026-07-13).
+      const boom = lastDisconnect?.error as Boom | undefined;
+      const code = boom?.output?.statusCode;
+      logger.info(
+        `Disconnect reason: ${code ?? 'sin código'}${boom?.message ? ` — ${boom.message}` : ''}`
+      );
 
       if (shuttingDown.has(sessionId)) {
         logger.info(`Skipping reconnect for ${sessionId} (shutdown in progress)`);
@@ -396,8 +468,9 @@ async function initSession(
           }).catch(() => {});
         }
 
-        // Forzar backoff largo: si reconnectAttempts < 20 lo subimos al equivalente de 60s.
-        reconnectAttempts[sessionId] = Math.max(reconnectAttempts[sessionId] ?? 0, 20);
+        // Forzar backoff largo: subir al intento cuyo delay exponencial ya es >= 60s
+        // (attempt 6 → 96s con base 3s), para no pelear con la otra instancia.
+        reconnectAttempts[sessionId] = Math.max(reconnectAttempts[sessionId] ?? 0, 6);
         scheduleReconnect(sessionId, qrCb);
       } else if (code !== DisconnectReason.loggedOut) {
         // Reconexión RESILIENTE con reintentos (no un solo setTimeout): sobrevive a fallos
@@ -445,23 +518,36 @@ export async function createPairingSession(
     );
   }
 
+  // Lease anti doble-instancia (mismo guard que startSession).
+  if (!hasSocketLease()) {
+    throw new Error(
+      'Esta instancia no posee el lease de sockets WhatsApp (otra instancia viva lo tiene). ' +
+        'Mata el proceso duplicado o espera el failover automático.'
+    );
+  }
+
   const sessionId = phone.replace('+', '');
   // Credenciales Y store (chats/contactos) SIEMPRE en Mongo. Ya NO se usan archivos locales.
   const { state, saveCreds } = await useMongoAuthState(sessionId);
-  const { version } = await fetchLatestBaileysVersion();
+  const { version } = await getBaileysVersion();
 
-  // Create Pino logger for Baileys
-  const pinoLogger = pino({ level: 'silent' });
+  // Create Pino logger for Baileys (nivel configurable, ver initSession)
+  const pinoLogger = pino({ level: config.whatsapp.baileysLogLevel ?? 'fatal' });
 
   const sock = makeWASocket({
     version,
-    auth: state,
+    // Mismo cache de signal keys que initSession (menos roundtrips a Atlas).
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, pinoLogger),
+    },
     logger: pinoLogger, // Baileys expects pino logger
     // El browser afecta la entrega del pairing code (Baileys #2306); usamos el mismo
     // valor probado del flujo QR que sí funciona. 'Lila' (no-browser real) fallaba.
     browser: Browsers.ubuntu('Chrome'),
     printQRInTerminal: false, // pairing code es alternativo al QR
     syncFullHistory: true, // maximiza contactos al conectar (ver startSession)
+    msgRetryCounterCache: makeMsgRetryCache(),
   });
 
   // Initialize store (Mongo-backed). Cargar ANTES de arrancar el timer para no pisar el doc.

@@ -23,7 +23,7 @@ import {
   resolveFileBuffer,
   downloadFileFromUrl,
 } from './whatsapp-media.utils.js';
-import outboxQueue from '../whatsapp/queue/outbox-queue.js';
+import outboxQueue, { isOutboxItemDroppable } from '../whatsapp/queue/outbox-queue.js';
 import logger from '../utils/logger.js';
 import path from 'path';
 import fs from 'fs/promises';
@@ -53,6 +53,34 @@ type WhatsAppUsageOptions = {
 
 const resolveUsageCompanyId = (options: WhatsAppUsageOptions = {}) =>
   options.companyId || options.tenantId || '';
+
+// Flushes de outbox en curso por sesión. Dos 'open' cercanos (reconexiones rápidas)
+// disparaban flushes CONCURRENTES sobre la misma cola → el mismo mensaje podía
+// enviarse dos veces antes de que el primero lo removiera.
+const flushingOutbox = new Set<string>();
+
+// Timeout defensivo de envíos: un socket medio muerto (corte sin FIN) puede dejar
+// `sock.sendMessage` colgado para siempre y con él el request HTTP del caller.
+// 120s es holgado para el peor caso legítimo (video de 10MB por uplink lento);
+// al vencer, el error cae en el `queueOnFail` existente → el mensaje se encola.
+// Trade-off aceptado: si WhatsApp entregara DESPUÉS del timeout, el retry del
+// outbox duplicaría el mensaje — con socket sano nunca se llega a 120s.
+const SEND_TIMEOUT_MS = 120_000;
+
+const sendWithTimeout = async <T>(label: string, sendPromise: Promise<T>): Promise<T> => {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`WhatsApp send timeout (${SEND_TIMEOUT_MS / 1000}s): ${label}`)),
+      SEND_TIMEOUT_MS
+    );
+  });
+  try {
+    return await Promise.race([sendPromise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
 
 /**
  * Registra el consumo de UN mensaje WhatsApp en lila-app, que es el ÚNICO punto
@@ -174,7 +202,10 @@ export const WhatsAppDirectService = {
     try {
       const validTo = assertWhatsAppRecipient(routedTo);
       const sendOptions = getSendOptions(validTo);
-      const result = await sock.sendMessage(validTo, { text: message }, sendOptions);
+      const result = await sendWithTimeout(
+        `text ${id}→${validTo}`,
+        sock.sendMessage(validTo, { text: message }, sendOptions)
+      );
       await trackWhatsAppUsage(id, options, 'text');
       return result;
     } catch (error) {
@@ -302,15 +333,18 @@ export const WhatsAppDirectService = {
 
     try {
       // Send video
-      const result = await sock.sendMessage(
-        validTo,
-        {
-          video: videoBuffer,
-          caption: options.caption,
-          mimetype: resolvedMimeType,
-          ptv: false, // Not a video note
-        },
-        sendOptions
+      const result = await sendWithTimeout(
+        `video ${id}→${validTo}`,
+        sock.sendMessage(
+          validTo,
+          {
+            video: videoBuffer,
+            caption: options.caption,
+            mimetype: resolvedMimeType,
+            ptv: false, // Not a video note
+          },
+          sendOptions
+        )
       );
       await trackWhatsAppUsage(id, options, 'video');
 
@@ -443,14 +477,17 @@ export const WhatsAppDirectService = {
 
     try {
       // Send image
-      const result = await sock.sendMessage(
-        validTo,
-        {
-          image: imageBuffer,
-          caption: options.caption,
-          mimetype: resolvedMimeType,
-        },
-        sendOptions
+      const result = await sendWithTimeout(
+        `image ${id}→${validTo}`,
+        sock.sendMessage(
+          validTo,
+          {
+            image: imageBuffer,
+            caption: options.caption,
+            mimetype: resolvedMimeType,
+          },
+          sendOptions
+        )
       );
       await trackWhatsAppUsage(id, options, 'image');
 
@@ -588,15 +625,18 @@ export const WhatsAppDirectService = {
 
     try {
       // Send document
-      const result = await sock.sendMessage(
-        validTo,
-        {
-          document: documentBuffer,
-          fileName: resolvedFileName, // REQUIRED for WhatsApp
-          mimetype: resolvedMimeType,
-          caption: options.caption,
-        },
-        sendOptions
+      const result = await sendWithTimeout(
+        `document ${id}→${validTo}`,
+        sock.sendMessage(
+          validTo,
+          {
+            document: documentBuffer,
+            fileName: resolvedFileName, // REQUIRED for WhatsApp
+            mimetype: resolvedMimeType,
+            caption: options.caption,
+          },
+          sendOptions
+        )
       );
       await trackWhatsAppUsage(id, options, 'document');
 
@@ -711,6 +751,20 @@ export const WhatsAppDirectService = {
       return;
     }
 
+    if (flushingOutbox.has(id)) {
+      logger.info(`Flush already in progress for ${id}, skipping duplicate`);
+      return;
+    }
+    flushingOutbox.add(id);
+    try {
+      await this.flushOutboxLocked(id);
+    } finally {
+      flushingOutbox.delete(id);
+    }
+  },
+
+  /** Cuerpo real del flush; solo se entra con el lock de `flushingOutbox` tomado. */
+  async flushOutboxLocked(id: string): Promise<void> {
     const queue = await outboxQueue.list(id);
     if (queue.length === 0) {
       return;
@@ -719,9 +773,18 @@ export const WhatsAppDirectService = {
     logger.info(`📤 Flushing ${queue.length} queued messages for ${id}`);
 
     for (const item of queue) {
+      // Items envenenados (agotaron intentos) o expirados (TTL) se descartan: antes
+      // el flush hacía break al primer error y un item así bloqueaba TODA la cola.
+      if (isOutboxItemDroppable(item, Date.now())) {
+        await outboxQueue.remove(id, item.id);
+        logger.warn(
+          `🗑 Dropped queued ${item.messageType} ${item.id} (attempts=${item.attempts}, createdAt=${item.createdAt}, lastError=${item.lastError ?? 'none'})`
+        );
+        continue;
+      }
+
       try {
         if (item.messageType === 'text') {
-          // Send text message
           await this.sendMessage(id, item.recipient, item.text!, {
             mentions: item.mentions,
             companyId: item.companyId,
@@ -729,36 +792,25 @@ export const WhatsAppDirectService = {
             trackUsage: item.trackUsage,
             queueOnFail: false,
           });
-          await outboxQueue.remove(id, item.id);
-          logger.info(`✅ Sent queued text message ${item.id}`);
-        } else if (item.messageType === 'image' && item.mediaOptions) {
-          // Send image
-          const options = { ...item.mediaOptions };
+        } else if (item.mediaOptions) {
+          // queueOnFail:false: sin él, un fallo re-encolaba un DUPLICADO al final y el
+          // flush daba por enviado el original (el catch interno devolvía {queued:true}).
+          const options = { ...item.mediaOptions, queueOnFail: false } as any;
           if (options.buffer) {
             options.buffer = Buffer.from(options.buffer, 'base64');
           }
-          await this.sendImageFile(id, item.recipient, options as any);
-          await outboxQueue.remove(id, item.id);
-          logger.info(`✅ Sent queued image message ${item.id}`);
-        } else if (item.messageType === 'video' && item.mediaOptions) {
-          // Send video
-          const options = { ...item.mediaOptions };
-          if (options.buffer) {
-            options.buffer = Buffer.from(options.buffer, 'base64');
+          if (item.messageType === 'image') {
+            await this.sendImageFile(id, item.recipient, options);
+          } else if (item.messageType === 'video') {
+            await this.sendVideoFile(id, item.recipient, options);
+          } else {
+            await this.sendDocument(id, item.recipient, options);
           }
-          await this.sendVideoFile(id, item.recipient, options as any);
-          await outboxQueue.remove(id, item.id);
-          logger.info(`✅ Sent queued video message ${item.id}`);
-        } else if (item.messageType === 'document' && item.mediaOptions) {
-          // Send document
-          const options = { ...item.mediaOptions };
-          if (options.buffer) {
-            options.buffer = Buffer.from(options.buffer, 'base64');
-          }
-          await this.sendDocument(id, item.recipient, options as any);
-          await outboxQueue.remove(id, item.id);
-          logger.info(`✅ Sent queued document message ${item.id}`);
+        } else {
+          throw new Error(`Queued ${item.messageType} message without mediaOptions`);
         }
+        await outboxQueue.remove(id, item.id);
+        logger.info(`✅ Sent queued ${item.messageType} message ${item.id}`);
       } catch (error) {
         if (error instanceof WhatsAppSenderOwnershipError) {
           await outboxQueue.remove(id, item.id);
@@ -775,8 +827,12 @@ export const WhatsAppDirectService = {
         };
         await outboxQueue.update(id, updated);
         logger.warn(`⚠️ Failed to flush queued message ${item.id}: ${String(error)}`);
-        // Stop on first error to avoid flooding
-        break;
+        // Un item que falla NO bloquea a los demás (skip). Solo cortamos si la sesión
+        // se cayó a mitad del flush: el resto fallaría igual y sería puro ruido.
+        if (!isSessionReady(id)) {
+          logger.warn(`Flush interrupted for ${id}: session dropped mid-flush`);
+          break;
+        }
       }
     }
   },

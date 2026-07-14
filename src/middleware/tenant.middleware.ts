@@ -370,6 +370,66 @@ export async function requireSenderOwnership(
 }
 
 /**
+ * Verifica que el `:phoneNumber` de la ruta (o `body.phoneNumber` al crear sesión)
+ * pertenezca a la company autenticada. Cierra el gap cross-tenant de ADMINISTRACIÓN
+ * de sesión: sin esto, cualquier tenant autenticado (JWT o `lk_fe_` de OTRA empresa)
+ * podía pedir el QR de un sender ajeno (= emparejar su propio teléfono en el slot de
+ * otra empresa: account takeover), reiniciarle la sesión (DoS + throttle de login de
+ * WhatsApp) o leer sus grupos y contactos completos.
+ *
+ * Reglas:
+ * - Sin tenant (secreto global admin) o sin número → pasa (compat, igual que los
+ *   demás guards).
+ * - Número con dueños: el tenant debe ser uno de ellos (soporta senders compartidos).
+ * - Número SIN dueños (no asignado a ninguna company): pasa con warn — necesario para
+ *   el primer emparejamiento y no hay víctima que proteger.
+ * - Fallo de lookup → 503 fail-closed (igual que requireSenderOwnership): ante un hipo
+ *   de Mongo preferimos negar un QR a regalarlo.
+ */
+export async function requireSessionOwnership(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const companyId = req.companyId;
+  const phone =
+    req.params?.phoneNumber ||
+    (req.body as { phoneNumber?: string } | undefined)?.phoneNumber;
+  if (!companyId || !phone) {
+    return next();
+  }
+
+  try {
+    const owners = await quotaValidatorService.listCompaniesByWhatsappSender(String(phone));
+    const ownerIds = owners.map((company) => company.companyId);
+
+    if (ownerIds.length === 0) {
+      logger.warn(
+        `Session ownership: sender ${phone} sin dueño; permitido a ${companyId} (primer emparejamiento)`
+      );
+      return next();
+    }
+
+    if (ownerIds.includes(companyId)) {
+      return next();
+    }
+
+    logger.warn(
+      `Session ownership mismatch: ${companyId} intentó operar la sesión ${phone} ` +
+        `(owners=${ownerIds.join(', ')}) [BLOQUEADO]`
+    );
+    const error: CustomError = new Error('La sesión no pertenece a la empresa autenticada');
+    error.statusCode = 403;
+    return next(error);
+  } catch (err) {
+    logger.warn(`requireSessionOwnership lookup falló para ${phone}: ${String(err)}`);
+    const error: CustomError = new Error('No se pudo validar la propiedad de la sesión');
+    error.statusCode = 503;
+    return next(error);
+  }
+}
+
+/**
  * Guard para operaciones DESTRUCTIVAS de sesión (`/clear`, `/logout`, `DELETE`): impide
  * que un tenant borre o cierre las credenciales de un número compartido por varias
  * companies. Este es exactamente el caso que dejó muerta a 51949376824: un `/clear` desde
