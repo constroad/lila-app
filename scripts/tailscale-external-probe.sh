@@ -28,7 +28,7 @@
 set -u
 
 TAILSCALE="/usr/local/bin/tailscale"
-HOST="joses-mac-mini.tail46a1b0.ts.net"
+HOST="cloud-constroad-s3.tail46a1b0.ts.net"
 PORT=3001
 PROBE_PATH="/health"
 PUBLIC_RESOLVER="8.8.8.8"
