@@ -304,7 +304,8 @@ ${safeStringify(meta, 2)}` : ` ${safeStringify(meta)}` : "";
             const shouldPrettyPrint = cleanLevel === "warn" || cleanLevel === "error";
             const metaStr = metaKeys.length && !(cleanLevel === "info" && hasOnlyService) ? shouldPrettyPrint ? `
 ${safeStringify(meta, 2)}` : ` ${safeStringify(meta)}` : "";
-            return `${timestamp} [${level}]: ${message}${metaStr}`;
+            const marker = cleanLevel === "error" ? "\u{1F534} " : cleanLevel === "warn" ? "\u{1F7E1} " : "";
+            return `${marker}${timestamp} [${level}]: ${message}${metaStr}`;
           })
         )
       })
@@ -7556,6 +7557,7 @@ async function initSession(sessionId, qrCb) {
   let connectionSettled = false;
   let watchdogTimer = null;
   let everOpened = false;
+  let sawQR = false;
   let stallCounted = false;
   const registerConnectingStall = () => {
     if (stallCounted) return connectingStalls[sessionId] ?? 0;
@@ -7571,6 +7573,13 @@ async function initSession(sessionId, qrCb) {
           sock.end(new Error("connection-watchdog-timeout"));
         } catch (err) {
           logger_default.warn(`Watchdog: sock.end fall\xF3 para ${sessionId}: ${String(err)}`);
+        }
+        if (sawQR) {
+          logger_default.info(`\u{1F517} [${sessionId}] Watchdog en modo QR/pairing \u2014 reconectando r\xE1pido para refrescar el QR`);
+          reconnectAttempts[sessionId] = 0;
+          resetConnectingStalls(sessionId);
+          scheduleReconnect(sessionId, qrCb);
+          return;
         }
         const stalls = registerConnectingStall();
         if (stalls >= MAX_CONNECTING_STALLS) {
@@ -7596,6 +7605,7 @@ async function initSession(sessionId, qrCb) {
     }
     if (qr) {
       logger_default.info(`\u2705 QR generated for ${sessionId}`);
+      sawQR = true;
       qrCodes[sessionId] = qr;
       qrTimestamps[sessionId] = Date.now();
       startWatchdog();
@@ -7662,6 +7672,13 @@ Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado pa
         reconnectAttempts[sessionId] = Math.max(reconnectAttempts[sessionId] ?? 0, 6);
         scheduleReconnect(sessionId, qrCb);
       } else if (code !== DisconnectReason.loggedOut) {
+        if (!everOpened && sawQR) {
+          logger_default.info(`\u{1F517} [${sessionId}] Cierre en modo QR/pairing \u2014 reconectando r\xE1pido para refrescar el QR`);
+          reconnectAttempts[sessionId] = 0;
+          resetConnectingStalls(sessionId);
+          scheduleReconnect(sessionId, qrCb);
+          return;
+        }
         if (!everOpened) {
           const stalls = registerConnectingStall();
           if (stalls >= MAX_CONNECTING_STALLS) {

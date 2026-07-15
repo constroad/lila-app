@@ -438,6 +438,11 @@ async function initSession(
   // `stallCounted` evita contar dos veces el mismo socket (el watchdog fuerza el cierre
   // y `connection.close` puede llegar igual). El contador acumulado es module-level.
   let everOpened = false;
+  // `sawQR` marca que este socket emitió al menos un QR: estamos en modo EMPAREJAMIENTO
+  // (sin creds). Un cierre en este estado NO es un stall de handshake, es la rotación
+  // normal del QR de Baileys → hay que reconectar rápido para refrescar el QR, no aplicar
+  // el backoff largo ni aparcar (si no, el QR muere en Portal y es imposible escanear).
+  let sawQR = false;
   let stallCounted = false;
   const registerConnectingStall = (): number => {
     if (stallCounted) return connectingStalls[sessionId] ?? 0;
@@ -453,6 +458,16 @@ async function initSession(
           sock.end(new Error('connection-watchdog-timeout'));
         } catch (err) {
           logger.warn(`Watchdog: sock.end falló para ${sessionId}: ${String(err)}`);
+        }
+        // En modo EMPAREJAMIENTO (QR mostrado, sin creds) un timeout no es un stall de
+        // login: el QR simplemente no fue escaneado a tiempo. Reconectar YA con backoff
+        // reseteado para presentar un QR fresco, sin contar stalls ni aparcar.
+        if (sawQR) {
+          logger.info(`🔗 [${sessionId}] Watchdog en modo QR/pairing — reconectando rápido para refrescar el QR`);
+          reconnectAttempts[sessionId] = 0;
+          resetConnectingStalls(sessionId);
+          scheduleReconnect(sessionId, qrCb);
+          return;
         }
         // sock.end() no emite connection.close si el socket nunca llegó a 'open'
         // (Baileys stuck-connecting). Contamos el stall y decidimos aquí: si ya son
@@ -483,6 +498,7 @@ async function initSession(
 
     if (qr) {
       logger.info(`✅ QR generated for ${sessionId}`);
+      sawQR = true;
       qrCodes[sessionId] = qr;
       qrTimestamps[sessionId] = Date.now();
       // Resetear watchdog: el usuario tiene CONNECTION_TIMEOUT_MS desde el último QR para escanear.
@@ -572,6 +588,18 @@ async function initSession(
         // corte de una sesión que estaba viva). WhatsApp NO manda 401 en este caso: el
         // login simplemente se cuelga. Si se repite hasta el tope, aparcamos en vez de
         // reintentar en bucle infinito (el backoff ya está en el techo y no abre).
+        if (!everOpened && sawQR) {
+          // Cierre en modo EMPAREJAMIENTO (QR mostrado, sin creds): NO es un stall de
+          // handshake — es la rotación normal del QR de Baileys (cierra con 515/timeout y
+          // espera que reabras para dar un QR fresco). Tratarlo como stall aplicaba el
+          // backoff largo (~2-3min, STALL_BACKOFF_FLOOR) y dejaba el QR muerto en Portal →
+          // imposible escanear a tiempo. Reconectar YA con backoff reseteado.
+          logger.info(`🔗 [${sessionId}] Cierre en modo QR/pairing — reconectando rápido para refrescar el QR`);
+          reconnectAttempts[sessionId] = 0;
+          resetConnectingStalls(sessionId);
+          scheduleReconnect(sessionId, qrCb);
+          return;
+        }
         if (!everOpened) {
           const stalls = registerConnectingStall();
           if (stalls >= MAX_CONNECTING_STALLS) {

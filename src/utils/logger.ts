@@ -131,7 +131,11 @@ logger.add(
               ? `\n${safeStringify(meta, 2)}`
               : ` ${safeStringify(meta)}`
             : '';
-        return `${timestamp} [${level}]: ${message}${metaStr}`;
+        // Marcador visual por nivel: se ve SIEMPRE en la terminal, no depende de
+        // colorize() (que solo se activa en development). 🔴 error, 🟡 warn.
+        const marker =
+          cleanLevel === 'error' ? '🔴 ' : cleanLevel === 'warn' ? '🟡 ' : '';
+        return `${marker}${timestamp} [${level}]: ${message}${metaStr}`;
       })
     ),
   })
