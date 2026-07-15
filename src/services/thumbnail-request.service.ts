@@ -71,6 +71,29 @@ async function findOriginalForThumbnail(root: string, relativeThumbPath: string)
   return validCandidates[0]?.absolutePath || null;
 }
 
+/**
+ * Un thumb pedido con hash VIEJO (el nombre incluye sha1(path:size:mtime), así
+ * que un move/re-subida lo invalida) puede tener un hermano vigente para la
+ * misma base. Servirlo evita caer al ORIGINAL completo (multi-MB en móviles).
+ */
+async function findSiblingThumbForBase(
+  root: string,
+  relativeThumbPath: string
+): Promise<string | null> {
+  const segments = relativeThumbPath.split('/');
+  const thumbName = segments[segments.length - 1] || '';
+  const match = thumbName.match(THUMBNAIL_NAME_PATTERN);
+  if (!match?.[1]) return null;
+
+  const thumbDir = toAbsolutePath(root, segments.slice(0, -1).join('/'));
+  const prefix = `thumb_${match[1]}_`;
+  const entries = await fs.readdir(thumbDir).catch(() => []);
+  const sibling = entries.find(
+    (entry) => entry.startsWith(prefix) && THUMBNAIL_NAME_PATTERN.test(entry)
+  );
+  return sibling ? path.join(thumbDir, sibling) : null;
+}
+
 export async function resolveThumbnailRequestTarget(
   root: string,
   requestPath: string
@@ -84,6 +107,14 @@ export async function resolveThumbnailRequestTarget(
   if (await fs.pathExists(thumbPath)) {
     return {
       absolutePath: thumbPath,
+      source: 'thumbnail',
+    };
+  }
+
+  const siblingThumb = await findSiblingThumbForBase(root, relativePath);
+  if (siblingThumb) {
+    return {
+      absolutePath: siblingThumb,
       source: 'thumbnail',
     };
   }

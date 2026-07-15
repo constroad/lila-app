@@ -93,11 +93,13 @@ describe('session.routes — middleware wiring', () => {
     expect(hasMiddlewareNamed(route!, 'guardSharedSenderDestructive')).toBe(false);
   });
 
-  it('keeps read-only endpoints open (status quo, no breaking change)', async () => {
+  // Hardening 2026-07-13: las lecturas dejaron de estar abiertas — con lila en
+  // HTTPS público, /list + /groups + /contacts eran un volcado de PII a internet.
+  it('requires tenant auth on read-only endpoints (hardening 2026-07-13)', async () => {
     const mod = await import('./session.routes.js');
     const stack = (mod.default as unknown as { stack: Layer[] }).stack;
 
-    const OPEN = [
+    const READS = [
       { method: 'get', path: '/list' },
       { method: 'get', path: '/:phoneNumber/status' },
       { method: 'get', path: '/:phoneNumber/groups' },
@@ -105,11 +107,33 @@ describe('session.routes — middleware wiring', () => {
       { method: 'get', path: '/' },
     ];
 
-    for (const { method, path } of OPEN) {
+    for (const { method, path } of READS) {
       const route = findRoute(stack, method, path);
       expect(route).toBeDefined();
-      expect(hasMiddlewareNamed(route!, 'requireTenantOrApiKey')).toBe(false);
+      expect(hasMiddlewareNamed(route!, 'requireTenantOrApiKey')).toBe(true);
+      // El guard de senders compartidos sigue siendo SOLO para destructivos.
       expect(hasMiddlewareNamed(route!, 'guardSharedSenderDestructive')).toBe(false);
+    }
+  });
+
+  it('requires session OWNERSHIP on per-number endpoints (QR hijack / DoS cross-tenant)', async () => {
+    const mod = await import('./session.routes.js');
+    const stack = (mod.default as unknown as { stack: Layer[] }).stack;
+
+    const OWNED = [
+      { method: 'get', path: '/:phoneNumber/qr' },
+      { method: 'post', path: '/:phoneNumber/request-pairing-code' },
+      { method: 'post', path: '/:phoneNumber/restart' },
+      { method: 'get', path: '/:phoneNumber/status' },
+      { method: 'get', path: '/:phoneNumber/groups' },
+      { method: 'get', path: '/:phoneNumber/syncGroups' },
+      { method: 'get', path: '/:phoneNumber/contacts' },
+    ];
+
+    for (const { method, path } of OWNED) {
+      const route = findRoute(stack, method, path);
+      expect(route).toBeDefined();
+      expect(hasMiddlewareNamed(route!, 'requireSessionOwnership')).toBe(true);
     }
   });
 });

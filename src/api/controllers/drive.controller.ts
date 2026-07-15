@@ -15,6 +15,7 @@ import {
   optimizeVideoForProgressiveStreaming,
 } from '../../services/video-stream.service.js';
 import { buildUniqueStorageFileName } from '../../services/storage-file-name.service.js';
+import { normalizeImageInPlace } from '../../services/media-ingest.service.js';
 import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
 import JsonStore from '../../storage/json.store.js';
 import { config } from '../../config/environment.js';
@@ -297,6 +298,24 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     const videoLike = isVideoFile(file.mimetype, storageFileName);
     let streamStatus: 'ready' | 'unsupported' | 'error' = videoLike ? 'ready' : 'unsupported';
     const streamType = videoLike ? 'progressive-range' : undefined;
+
+    if (!videoLike) {
+      // Red de seguridad server-side: acota imágenes que superen el techo de
+      // ingest (cliente optimiza, pero el server no confía). No-op para las ya
+      // optimizadas. Mismo patrón de delta de storage que el path de video.
+      const normalization = await normalizeImageInPlace({
+        filePath: target,
+        fileName: storageFileName,
+        mimeType: file.mimetype,
+      });
+      if (normalization.normalized && normalization.sizeDeltaBytes !== 0) {
+        if (normalization.sizeDeltaBytes > 0) {
+          await incrementStorageUsage(companyId, normalization.sizeDeltaBytes);
+        } else {
+          await decrementStorageUsage(companyId, Math.abs(normalization.sizeDeltaBytes));
+        }
+      }
+    }
 
     if (videoLike) {
       const optimization = await optimizeVideoForProgressiveStreaming({

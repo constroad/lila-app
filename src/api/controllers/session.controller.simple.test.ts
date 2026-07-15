@@ -17,6 +17,7 @@ jest.unstable_mockModule('../../whatsapp/baileys/sessions.simple.js', () => ({
   getQRCode: jest.fn(),
   getQRCodeGeneratedAt: jest.fn(),
   isSessionReady: jest.fn(() => false),
+  isSessionParked: jest.fn(() => false),
   listSessions: jest.fn(() => []),
   disconnectSession,
   clearSession,

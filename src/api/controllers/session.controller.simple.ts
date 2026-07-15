@@ -14,6 +14,7 @@ import {
   getQRCode,
   getQRCodeGeneratedAt,
   isSessionReady,
+  isSessionParked,
   listSessions,
   disconnectSession as disconnectSimpleSession,
   clearSession as clearSimpleSession,
@@ -188,13 +189,17 @@ export async function getSessionStatusHandler(req: Request, res: Response, next:
 
     const isConnected = isSessionReady(phoneNumber);
     const qr = getQRCode(phoneNumber);
+    // Aparcada: dejó de reintentar tras N handshakes fallidos → requiere re-emparejar.
+    // Se expone aparte para que Portal muestre "re-emparejar" en vez de "conectando…".
+    const needsRepair = isSessionParked(phoneNumber);
 
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         phoneNumber,
-        status: isConnected ? 'connected' : 'disconnected',
+        status: isConnected ? 'connected' : needsRepair ? 'needs_repair' : 'disconnected',
         isConnected,
+        needsRepair,
         ...(qr && { qr }),
       },
     });

@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import { renderPdfPageToPng } from '../pdf/render.service.js';
 import logger from '../utils/logger.js';
 import { getFfmpegCommand, isFfmpegAvailable } from './ffmpeg.service.js';
+import { createLimiter } from '../utils/concurrency.js';
 
 type ThumbnailKind = 'image' | 'video' | 'pdf' | 'unsupported';
 
@@ -39,6 +40,13 @@ const VIDEO_EXTENSIONS = new Set([
 ]);
 
 const thumbDirName = '.thumbs';
+
+// Lado mayor del thumbnail de imagen/video. Un thumb es para GRIDS (~150-300px
+// CSS, 2-3x DPR): 640px sobra y pesa ~40-80KB. El valor histórico (1200px) era
+// tamaño display, no thumbnail — grids de 150-330KB por tile en gama media.
+// Los PDFs conservan 1200px (legibilidad de la primera página).
+const THUMBNAIL_MAX_PX = Number(process.env.THUMBNAIL_MAX_PX) || 640;
+const PDF_THUMBNAIL_MAX_PX = 1200;
 
 function resolveKind(mimeType: string | undefined, fileName: string): ThumbnailKind {
   const mime = (mimeType || '').toLowerCase();
@@ -122,7 +130,7 @@ async function runFfmpeg(args: string[]): Promise<void> {
 async function generateImageThumbnail(options: GenerateThumbnailOptions, thumbPath: string) {
   const buffer = await sharp(options.filePath)
     .rotate()
-    .resize(1200, 1200, {
+    .resize(THUMBNAIL_MAX_PX, THUMBNAIL_MAX_PX, {
       fit: 'inside',
       withoutEnlargement: true,
     })
@@ -135,7 +143,7 @@ async function generateImageThumbnail(options: GenerateThumbnailOptions, thumbPa
 async function generatePdfThumbnail(options: GenerateThumbnailOptions, thumbPath: string) {
   const { cacheFile } = await renderPdfPageToPng(options.filePath, { page: 1, scale: 1.3 });
   const buffer = await sharp(cacheFile)
-    .resize(1200, 1200, {
+    .resize(PDF_THUMBNAIL_MAX_PX, PDF_THUMBNAIL_MAX_PX, {
       fit: 'inside',
       withoutEnlargement: true,
     })
@@ -155,13 +163,52 @@ async function generateVideoThumbnail(options: GenerateThumbnailOptions, thumbPa
     '-frames:v',
     '1',
     '-vf',
-    'scale=1200:-2:force_original_aspect_ratio=decrease',
+    `scale=${THUMBNAIL_MAX_PX}:-2:force_original_aspect_ratio=decrease`,
     '-q:v',
     '5',
     thumbPath,
   ];
 
   await runFfmpeg(args);
+}
+
+// Materialización lazy: cuando la ruta estática cae al ORIGINAL (thumb nunca
+// generado — media legacy — o invalidado por move/re-subida), regeneramos el
+// thumb en background para que los SIGUIENTES requests sirvan el liviano.
+// Dedup por original en curso + pool acotado (una galería dispara ~14 a la vez).
+const materializing = new Set<string>();
+const materializeLimiter = createLimiter(2);
+
+export function materializeThumbnailInBackground(originalAbsolutePath: string): void {
+  if (materializing.has(originalAbsolutePath)) return;
+  materializing.add(originalAbsolutePath);
+
+  void materializeLimiter
+    .run(() =>
+      generateThumbnailForFile({
+        filePath: originalAbsolutePath,
+        fileName: path.basename(originalAbsolutePath),
+        outputDir: path.dirname(originalAbsolutePath),
+      })
+    )
+    .then((result) => {
+      if (result.status === 'ready') {
+        logger.info('[thumbnail] Materialized missing thumbnail', {
+          original: originalAbsolutePath,
+          thumbnailName: result.thumbnailName,
+          sizeBytes: result.sizeBytes,
+        });
+      }
+    })
+    .catch((error) => {
+      logger.warn('[thumbnail] Background materialization failed', {
+        original: originalAbsolutePath,
+        error: String(error),
+      });
+    })
+    .finally(() => {
+      materializing.delete(originalAbsolutePath);
+    });
 }
 
 export function buildThumbnailRelativePath(relativePath: string, thumbnailName: string): string {

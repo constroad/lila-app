@@ -241,11 +241,16 @@ async function resolveReportHtml(input: {
       });
     }
   }
+  // El HTML del renderer también se inlinea (mismas garantías que el canvas):
+  // sus <img> apuntan a fotos/membretes/logos por URL http de lila y Puppeteer
+  // NO debe tocar la red durante setContent. Cubre los informes públicos
+  // (field-reports, source:'renderer') que quedaban fuera del inliner.
   const renderer = new ReportHtmlRenderer(input.effectiveSchema, input.data, {
     companyId: input.companyId,
     baseUrl: input.baseUrl,
   });
-  return { html: await renderer.render(), source: 'renderer' };
+  const renderedHtml = await renderer.render();
+  return { html: await inlineCanvasHtmlImages(renderedHtml, input.companyId), source: 'renderer' };
 }
 
 function buildFolioOptions(data: Record<string, any>, limitPages?: number) {

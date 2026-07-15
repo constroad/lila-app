@@ -74,6 +74,16 @@ const CONNECTION_TIMEOUT_MS = 90_000;
 const RECONNECT_BASE_DELAY_MS = 3_000;
 const RECONNECT_MAX_DELAY_MS = 10 * 60_000;
 
+// Piso de backoff para STALLS de handshake (socket que conecta pero NO llega a 'open').
+// Un stall = WhatsApp está throttleando el login; los reintentos rápidos SOSTIENEN el
+// throttle. Incidente 2026-07-14 (51902049935): 8 intentos entre 3s y 81s no lograron
+// nada — la sesión recién abrió al intento 10, cuando el espaciado llegó a ~10min. El
+// primer reintento rápido (3s) ya cubre el corte transitorio; si ESE se cuelga, ya es
+// throttle → saltamos directo a intervalos largos (menos "session closed", recupera
+// antes). Forzar intento >= 6 ⇒ el siguiente delay arranca en ~192s. Mismo criterio que
+// el piso del 440. NO aplica a sesiones que reconectan sin stall (cuentas livianas).
+const STALL_BACKOFF_FLOOR_ATTEMPT = 6;
+
 /** Delay del intento N (1-based): exponencial capado, con jitter ±20%. */
 export function reconnectDelayMs(attempt: number): number {
   const exponential = RECONNECT_BASE_DELAY_MS * 2 ** (Math.max(attempt, 1) - 1);
@@ -85,6 +95,27 @@ export function reconnectDelayMs(attempt: number): number {
 // Contador de desconexiones consecutivas tipo 440 (connectionReplaced).
 // Si sube a >= 3 alerta por Telegram: probable otra instancia con las mismas creds.
 const consecutive440s: Record<string, number> = {};
+
+// Contador de "stalls de conexión": cierres/timeouts del socket que NUNCA llegaron a
+// 'open' desde el último open exitoso. Un open resetea el contador. Si sube hasta
+// MAX_CONNECTING_STALLS el login lleva mucho fallando pese al backoff máximo: ya no es
+// throttle transitorio (que se recupera al bajar la frecuencia) sino, casi siempre,
+// credenciales desincronizadas → requiere RE-EMPAREJAR. Distinto del 401 (loggedOut),
+// que WhatsApp SÍ señala; aquí el handshake solo se cuelga sin código. Ver parkSession.
+const connectingStalls: Record<string, number> = {};
+
+// Sesiones "aparcadas": tras demasiados stalls seguidos dejamos de reintentar en bucle
+// (el backoff ya está en el techo y sigue sin abrir). Quedan no-ready hasta un
+// restart/re-emparejar manual — la acción correcta para creds muertas. Corta el loop
+// infinito observado (número de pruebas 51902049935, jul-2026: 9+ reintentos, backoff a
+// 10min, watchdog matando cada handshake, sin recuperar nunca).
+const parkedSessions = new Set<string>();
+
+// Nº de stalls consecutivos antes de aparcar. El backoff llega al techo (~10min) cerca
+// del intento 9; a partir de ahí cada intento tarda ~10min. Aparcar en 12 le da a un
+// throttle real (~35min observados en el incidente 2026-07-13) tiempo de sobra para
+// recuperarse solo, y corta el loop cuando ya no lo hará. Tunable por si acaso.
+const MAX_CONNECTING_STALLS = Number(process.env.WHATSAPP_MAX_CONNECTING_STALLS) || 12;
 
 /**
  * CacheStore mínimo (Map, sin dependencia nueva) para `msgRetryCounterCache`.
@@ -162,6 +193,45 @@ function scheduleReconnect(sessionId: string, qrCb?: (qr: string) => void) {
       scheduleReconnect(sessionId, qrCb); // reintentar con mayor backoff
     }
   }, delay);
+}
+
+/**
+ * Aparca una sesión que no completa el handshake tras MAX_CONNECTING_STALLS intentos:
+ * corta el loop de reconexión, la marca no-ready y alerta pidiendo re-emparejar. Los
+ * mensajes entrantes siguen encolándose en el outbox y salen al reconectar. Se
+ * "desaparca" con un restart/creación manual (restartSession, createPairingSession,
+ * disconnect/clear) — nunca desde la reconexión automática, para que el contador suba.
+ */
+function parkSession(sessionId: string) {
+  parkedSessions.add(sessionId);
+  readyClients.set(sessionId, false);
+  clearReconnectTimer(sessionId);
+  const stalls = connectingStalls[sessionId] ?? 0;
+  logger.error(
+    `🅿️ [${sessionId}] Sesión APARCADA tras ${stalls} stalls de conexión ` +
+      `(el handshake nunca abrió con el backoff en el techo). Se detiene la reconexión ` +
+      `automática: requiere re-emparejar (QR) o un restart manual.`
+  );
+  sendTelegramAlert({
+    dedupeKey: `session-parked-${sessionId}`,
+    message:
+      `🅿️ WhatsApp sesión ${sessionId} APARCADA.\n` +
+      `El socket no completa el login tras ${stalls} intentos con backoff máximo — ya no ` +
+      `es throttle transitorio: lo más probable es que las credenciales estén ` +
+      `desincronizadas.\n\nAcción: re-emparejar la sesión (escanear QR) desde el Portal. ` +
+      `Los mensajes pendientes están a salvo en el outbox y saldrán al reconectar.`,
+  }).catch(() => {});
+}
+
+/** True si la sesión fue aparcada por stalls repetidos (requiere re-emparejar/restart). */
+export function isSessionParked(sessionId: string): boolean {
+  return parkedSessions.has(sessionId);
+}
+
+/** Limpia el estado de stall/aparcado. Solo desde recuperaciones MANUALES. */
+function resetConnectingStalls(sessionId: string) {
+  connectingStalls[sessionId] = 0;
+  parkedSessions.delete(sessionId);
 }
 
 /**
@@ -327,11 +397,14 @@ async function initSession(
     generateHighQualityLinkPreview: true,
     printQRInTerminal: false,
     msgRetryCounterCache: makeMsgRetryCache(),
-    // Baileys NO tiene API para "traer todos los contactos": llegan por history-sync y
-    // eventos (contacts.upsert es poco fiable en WhatsApp personal — issue #522). Pedir el
-    // history completo maximiza chats+contactos al conectar. Sin costo de memoria porque ya
-    // no almacenamos mensajes (store.manager). Ver SCALABILITY-MULTI-SESSION.spec §2.3.
-    syncFullHistory: true,
+    // History completo SOLO en el primer emparejamiento (creds sin `registered`). Baileys
+    // no tiene API para "traer todos los contactos": llegan por history-sync. Pero el store
+    // vive en Mongo y PERSISTE entre reconexiones (ver "Store cargado de Mongo: N chats"),
+    // así que re-pedir el history completo en CADA reconexión es carga desperdiciada — y en
+    // cuentas pesadas (2426 chats) esa carga repetida es justo la que agrava el throttle de
+    // login de WhatsApp (incidente 2026-07-14). Ya emparejada, el store basta + eventos en
+    // vivo. Ver SCALABILITY-MULTI-SESSION.spec §2.3 y §10.e.
+    syncFullHistory: !state.creds.registered,
   });
 
   // Initialize store (Mongo-backed). Cargar ANTES de arrancar el timer para no pisar el doc.
@@ -361,6 +434,16 @@ async function initSession(
   // desde el último QR visible (no desde la creación del socket).
   let connectionSettled = false;
   let watchdogTimer: NodeJS.Timeout | null = null;
+  // Estado de stall POR SOCKET: `everOpened` marca si este socket llegó a 'open';
+  // `stallCounted` evita contar dos veces el mismo socket (el watchdog fuerza el cierre
+  // y `connection.close` puede llegar igual). El contador acumulado es module-level.
+  let everOpened = false;
+  let stallCounted = false;
+  const registerConnectingStall = (): number => {
+    if (stallCounted) return connectingStalls[sessionId] ?? 0;
+    stallCounted = true;
+    return (connectingStalls[sessionId] = (connectingStalls[sessionId] ?? 0) + 1);
+  };
   const startWatchdog = () => {
     if (watchdogTimer) clearTimeout(watchdogTimer);
     watchdogTimer = setTimeout(() => {
@@ -372,10 +455,20 @@ async function initSession(
           logger.warn(`Watchdog: sock.end falló para ${sessionId}: ${String(err)}`);
         }
         // sock.end() no emite connection.close si el socket nunca llegó a 'open'
-        // (Baileys stuck-connecting). Llamamos scheduleReconnect directamente; el guard
-        // interno (if reconnectTimers[sessionId]) evita duplicados si connection.close
-        // llega igual.
-        scheduleReconnect(sessionId, qrCb);
+        // (Baileys stuck-connecting). Contamos el stall y decidimos aquí: si ya son
+        // demasiados seguidos aparcamos (cortamos el loop); si no, reconectamos. El guard
+        // interno de scheduleReconnect evita duplicados si connection.close llega igual.
+        const stalls = registerConnectingStall();
+        if (stalls >= MAX_CONNECTING_STALLS) {
+          parkSession(sessionId);
+        } else {
+          // Throttle de login: espaciar YA en vez de martillar (ver STALL_BACKOFF_FLOOR).
+          reconnectAttempts[sessionId] = Math.max(
+            reconnectAttempts[sessionId] ?? 0,
+            STALL_BACKOFF_FLOOR_ATTEMPT
+          );
+          scheduleReconnect(sessionId, qrCb);
+        }
       }
     }, CONNECTION_TIMEOUT_MS);
   };
@@ -398,6 +491,7 @@ async function initSession(
     }
 
     if (connection === 'open') {
+      everOpened = true;
       const wasReconnect = (reconnectAttempts[sessionId] ?? 0) > 0;
       if (wasReconnect) {
         logger.info(`🔄 Session RECONECTADA para ${sessionId} tras ${reconnectAttempts[sessionId]} intento(s)`);
@@ -405,9 +499,10 @@ async function initSession(
         logger.info(`✅ Session connected successfully for ${sessionId}`);
       }
       readyClients.set(sessionId, true);
-      // Reconexión exitosa → resetear backoff y contador de 440s.
+      // Reconexión exitosa → resetear backoff, contador de 440s y stalls de conexión.
       reconnectAttempts[sessionId] = 0;
       consecutive440s[sessionId] = 0;
+      resetConnectingStalls(sessionId);
       clearReconnectTimer(sessionId);
 
       // Populate store with groups (wrap in try/catch)
@@ -473,6 +568,22 @@ async function initSession(
         reconnectAttempts[sessionId] = Math.max(reconnectAttempts[sessionId] ?? 0, 6);
         scheduleReconnect(sessionId, qrCb);
       } else if (code !== DisconnectReason.loggedOut) {
+        // Si el socket se cerró SIN haber abierto nunca, es un stall de handshake (no un
+        // corte de una sesión que estaba viva). WhatsApp NO manda 401 en este caso: el
+        // login simplemente se cuelga. Si se repite hasta el tope, aparcamos en vez de
+        // reintentar en bucle infinito (el backoff ya está en el techo y no abre).
+        if (!everOpened) {
+          const stalls = registerConnectingStall();
+          if (stalls >= MAX_CONNECTING_STALLS) {
+            parkSession(sessionId);
+            return;
+          }
+          // Throttle de login: espaciar YA en vez de martillar (ver STALL_BACKOFF_FLOOR).
+          reconnectAttempts[sessionId] = Math.max(
+            reconnectAttempts[sessionId] ?? 0,
+            STALL_BACKOFF_FLOOR_ATTEMPT
+          );
+        }
         // Reconexión RESILIENTE con reintentos (no un solo setTimeout): sobrevive a fallos
         // transitorios (red caída, Mongo/Atlas inalcanzable durante el corte).
         scheduleReconnect(sessionId, qrCb);
@@ -486,6 +597,7 @@ async function initSession(
         clearReconnectTimer(sessionId);
         reconnectAttempts[sessionId] = 0;
         consecutive440s[sessionId] = 0;
+        resetConnectingStalls(sessionId);
         delete sessions[sessionId];
         delete stores[sessionId];
         try {
@@ -642,6 +754,7 @@ export async function disconnectSession(sessionId: string): Promise<void> {
     shuttingDown.add(sessionId); // evita reconexión automática por el cierre que provoca logout
     clearReconnectTimer(sessionId);
     reconnectAttempts[sessionId] = 0;
+    resetConnectingStalls(sessionId);
     await sock.logout();
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
@@ -688,6 +801,10 @@ export async function restartSession(
   qrCb?: (qr: string) => void
 ): Promise<WASocket> {
   logger.info(`🔄 Restarting session ${sessionId} (soft, creds preserved)`);
+  // Reinicio manual = intención humana de recuperar: desaparca y resetea el contador de
+  // stalls para que el nuevo socket tenga el margen completo antes de volver a aparcar.
+  resetConnectingStalls(sessionId);
+  reconnectAttempts[sessionId] = 0;
   // `endSession` cierra el socket con `sock.end()` (sin logout → creds intactas) y marca
   // shuttingDown para que el cierre no dispare la reconexión automática. `startSession`
   // (vía initSession) limpia shuttingDown y crea un socket nuevo con las mismas creds.
@@ -714,6 +831,7 @@ export async function clearSession(sessionId: string): Promise<void> {
     shuttingDown.add(sessionId);
     clearReconnectTimer(sessionId);
     reconnectAttempts[sessionId] = 0;
+    resetConnectingStalls(sessionId);
 
     // 1. Logout if session is active
     const sock = sessions[sessionId];

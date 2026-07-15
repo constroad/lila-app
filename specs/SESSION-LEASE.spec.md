@@ -9,7 +9,15 @@
 > backoff largo + alerta en `sessions.simple.ts`), y dos procesos escribiendo
 > `whatsapp_auth` a la vez pueden corromper signal keys → re-escaneo forzado.
 >
-> **Estado:** propuesto (Julio 2026). No implementado.
+> **Estado:** propuesto (Julio 2026). No implementado — CON UNA EXCEPCIÓN parcial:
+> el 2026-07-13 se implementó un **lease PROCESS-LEVEL** complementario
+> (`src/whatsapp/baileys/instance-lease.ts`, colección `whatsapp_instance_lease`,
+> TTL 90s + heartbeat 30s, guard en startSession/pairing/restore, release en
+> shutdown, toggle `WHATSAPP_SOCKET_LEASE=false`). Ese candado garantiza "UN solo
+> proceso con sockets a la vez" (anti guerra 440 por proceso duplicado / dev sin
+> proxy) con failover automático — pero NO cubre el objetivo de ESTE spec: el
+> handoff prod↔dev POR SESIÓN con toggle en el super admin, que sigue propuesto.
+> Ver SCALABILITY-MULTI-SESSION.spec §10.d.
 > Relacionado: `specs/SCALABILITY-MULTI-SESSION.spec.md` (§5 persistencia creds en Mongo).
 
 ---

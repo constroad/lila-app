@@ -281,6 +281,53 @@ describe('reconnect / close handler', () => {
   });
 });
 
+describe('parking tras stalls repetidos (corta el loop infinito de reconexión)', () => {
+  const PARKED_ID = '51902049935';
+
+  // Simula el fallo real (incidente jul-2026): el socket conecta pero NUNCA emite 'open';
+  // el watchdog (90s) lo mata, cuenta un stall y el backoff programa otro intento. Avanzar
+  // el tiempo hace cascada de intentos; el guard `!isSessionParked` corta al aparcar.
+  const advanceUntilParked = async (id: string) => {
+    for (let i = 0; i < 40 && !subject.isSessionParked(id); i += 1) {
+      await jest.advanceTimersByTimeAsync(95_000); // watchdog del socket actual
+      await jest.advanceTimersByTimeAsync(900_000); // reconexión (incl. techo de 10min)
+    }
+  };
+
+  it('aparca la sesión que nunca completa el handshake y deja de reintentar', async () => {
+    await subject.startSession(PARKED_ID);
+    await advanceUntilParked(PARKED_ID);
+
+    expect(subject.isSessionParked(PARKED_ID)).toBe(true);
+    expect(subject.isSessionReady(PARKED_ID)).toBe(false);
+
+    // Loop cortado: no se crean más sockets aunque pase mucho tiempo.
+    const socketsAtPark = makeWASocket.mock.calls.length;
+    await jest.advanceTimersByTimeAsync(3_000_000);
+    expect(makeWASocket.mock.calls.length).toBe(socketsAtPark);
+  });
+
+  it('un restart manual desaparca la sesión (recuperación tras re-emparejar)', async () => {
+    await subject.startSession(PARKED_ID);
+    await advanceUntilParked(PARKED_ID);
+    expect(subject.isSessionParked(PARKED_ID)).toBe(true);
+
+    await subject.restartSession(PARKED_ID);
+    expect(subject.isSessionParked(PARKED_ID)).toBe(false);
+  });
+
+  it('un open exitoso resetea el contador: fallos intermitentes NO aparcan', async () => {
+    await subject.startSession(PARKED_ID);
+    // Un par de stalls (por debajo del tope) y luego conecta bien.
+    await jest.advanceTimersByTimeAsync(95_000);
+    await jest.advanceTimersByTimeAsync(900_000);
+    await fireOpen();
+
+    expect(subject.isSessionParked(PARKED_ID)).toBe(false);
+    expect(subject.isSessionReady(PARKED_ID)).toBe(true);
+  });
+});
+
 describe('reconnectDelayMs (backoff exponencial anti-throttle)', () => {
   // Jitter ±20% → cada intento se valida contra su rango [0.8x, 1.2x].
   const expectInRange = (actual: number, base: number) => {

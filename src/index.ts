@@ -26,6 +26,7 @@ import serviceManagementReportRoutes from './api/routes/service-management-repor
 import serviceMigrationRoutes from './api/routes/service-migration.routes.js';
 import exportsRoutes from './api/routes/exports.routes.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
+import { materializeThumbnailInBackground } from './services/thumbnail.service.js';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './api/docs/openapi.js';
 import jobScheduler from './jobs/scheduler.v2.instance.js';
@@ -239,6 +240,13 @@ app.use('/files/companies', (req, res, next) => {
         if (!target) {
           res.status(404).end();
           return;
+        }
+
+        // Fallback al original (thumb legacy/invalidado): servirlo esta vez,
+        // pero MATERIALIZAR el thumb en background para que los siguientes
+        // requests reciban el liviano (self-healing; ver thumbnail.service).
+        if (target.source === 'original-fallback') {
+          materializeThumbnailInBackground(target.absolutePath);
         }
 
         companiesStaticHeaders(res);

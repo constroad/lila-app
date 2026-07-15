@@ -40,6 +40,25 @@ describe('resolveThumbnailRequestTarget', () => {
     });
   });
 
+  it('serves a SIBLING thumbnail when the requested hash is stale (move/re-upload)', async () => {
+    const baseDir = path.join(root, 'globofas-s8k', 'services', 'svc-1', 'panelFotografico');
+    const currentThumb = path.join(baseDir, '.thumbs', 'thumb_1000646758_aaaaaaaaaa.jpg');
+    await fs.ensureDir(path.dirname(currentThumb));
+    await fs.writeFile(currentThumb, 'thumb-vigente');
+    // También existe el original; el hermano debe ganar (liviano vs multi-MB).
+    await fs.writeFile(path.join(baseDir, '1000646758.jpg'), 'original');
+
+    const result = await resolveThumbnailRequestTarget(
+      root,
+      '/globofas-s8k/services/svc-1/panelFotografico/.thumbs/thumb_1000646758_bbbbbbbbbb.jpg'
+    );
+
+    expect(result).toEqual({
+      absolutePath: currentThumb,
+      source: 'thumbnail',
+    });
+  });
+
   it('falls back to the original image when a stale thumbnail is requested', async () => {
     const originalPath = path.join(
       root,

@@ -99,6 +99,10 @@ var init_environment = __esm({
         aiEnabled: process.env.WHATSAPP_AI_ENABLED === "true",
         aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || "51949376824",
         baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || "fatal",
+        // Lease process-level de sockets (candado anti doble-instancia / guerra 440).
+        // Default habilitado; WHATSAPP_SOCKET_LEASE=false lo apaga (ej. entorno aislado
+        // con Mongo propio). Ver whatsapp/baileys/instance-lease.ts.
+        socketLease: process.env.WHATSAPP_SOCKET_LEASE !== "false",
         // RLS de envío: cuando true exige auth de tenant + ownership de sender en /message
         // y BLOQUEA cross-tenant. Default false = solo identifica/avisa (backward-compatible).
         // Es un toggle de comportamiento por entorno (off en dev, on en prod tras validar logs),
@@ -617,14 +621,14 @@ var require_buffer_equal_constant_time = __commonJS({
 var require_jwa = __commonJS({
   "node_modules/jwa/index.js"(exports, module) {
     var Buffer2 = require_safe_buffer().Buffer;
-    var crypto6 = __require("crypto");
+    var crypto7 = __require("crypto");
     var formatEcdsa = require_ecdsa_sig_formatter();
     var util2 = __require("util");
     var MSG_INVALID_ALGORITHM = '"%s" is not a valid algorithm.\n  Supported algorithms are:\n  "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512" and "none".';
     var MSG_INVALID_SECRET = "secret must be a string or buffer";
     var MSG_INVALID_VERIFIER_KEY = "key must be a string or a buffer";
     var MSG_INVALID_SIGNER_KEY = "key must be a string, a buffer or an object";
-    var supportsKeyObjects = typeof crypto6.createPublicKey === "function";
+    var supportsKeyObjects = typeof crypto7.createPublicKey === "function";
     if (supportsKeyObjects) {
       MSG_INVALID_VERIFIER_KEY += " or a KeyObject";
       MSG_INVALID_SECRET += "or a KeyObject";
@@ -714,17 +718,17 @@ var require_jwa = __commonJS({
       return function sign(thing, secret) {
         checkIsSecretKey(secret);
         thing = normalizeInput(thing);
-        var hmac = crypto6.createHmac("sha" + bits, secret);
+        var hmac = crypto7.createHmac("sha" + bits, secret);
         var sig = (hmac.update(thing), hmac.digest("base64"));
         return fromBase64(sig);
       };
     }
     var bufferEqual;
-    var timingSafeEqual2 = "timingSafeEqual" in crypto6 ? function timingSafeEqual3(a49, b63) {
+    var timingSafeEqual2 = "timingSafeEqual" in crypto7 ? function timingSafeEqual3(a49, b63) {
       if (a49.byteLength !== b63.byteLength) {
         return false;
       }
-      return crypto6.timingSafeEqual(a49, b63);
+      return crypto7.timingSafeEqual(a49, b63);
     } : function timingSafeEqual3(a49, b63) {
       if (!bufferEqual) {
         bufferEqual = require_buffer_equal_constant_time();
@@ -741,7 +745,7 @@ var require_jwa = __commonJS({
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto6.createSign("RSA-SHA" + bits);
+        var signer = crypto7.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign(privateKey, "base64"));
         return fromBase64(sig);
       };
@@ -751,7 +755,7 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto6.createVerify("RSA-SHA" + bits);
+        var verifier = crypto7.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify(publicKey, signature, "base64");
       };
@@ -760,11 +764,11 @@ var require_jwa = __commonJS({
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto6.createSign("RSA-SHA" + bits);
+        var signer = crypto7.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign({
           key: privateKey,
-          padding: crypto6.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto6.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto7.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto7.constants.RSA_PSS_SALTLEN_DIGEST
         }, "base64"));
         return fromBase64(sig);
       };
@@ -774,12 +778,12 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto6.createVerify("RSA-SHA" + bits);
+        var verifier = crypto7.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify({
           key: publicKey,
-          padding: crypto6.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto6.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto7.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto7.constants.RSA_PSS_SALTLEN_DIGEST
         }, signature, "base64");
       };
     }
@@ -2233,9 +2237,9 @@ var require_range = __commonJS({
       parseRange(range) {
         const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
         const memoKey = memoOpts + ":" + range;
-        const cached = cache.get(memoKey);
-        if (cached) {
-          return cached;
+        const cached2 = cache.get(memoKey);
+        if (cached2) {
+          return cached2;
         }
         const loose = this.options.loose;
         const hr2 = loose ? re12[t44.HYPHENRANGELOOSE] : re12[t44.HYPHENRANGE];
@@ -4573,6 +4577,36 @@ var init_telegram_alert_service = __esm({
   }
 });
 
+// src/whatsapp/baileys/baileys-version.ts
+import { fetchLatestBaileysVersion } from "@whiskeysockets/baileys";
+async function getBaileysVersion() {
+  const now = Date.now();
+  if (cached && now - cached.fetchedAt < VERSION_TTL_MS) {
+    return { version: cached.version, isLatest: cached.isLatest };
+  }
+  try {
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    cached = { version, isLatest, fetchedAt: now };
+    return { version: cached.version, isLatest };
+  } catch (error) {
+    if (cached) {
+      logger_default.warn(
+        `fetchLatestBaileysVersion fall\xF3; usando versi\xF3n cacheada ${cached.version.join(".")}: ${String(error)}`
+      );
+      return { version: cached.version, isLatest: cached.isLatest };
+    }
+    throw error;
+  }
+}
+var VERSION_TTL_MS, cached;
+var init_baileys_version = __esm({
+  "src/whatsapp/baileys/baileys-version.ts"() {
+    init_logger();
+    VERSION_TTL_MS = 6 * 60 * 60 * 1e3;
+    cached = null;
+  }
+});
+
 // src/database/sharedConnection.ts
 import mongoose from "mongoose";
 async function getSharedConnection() {
@@ -6280,17 +6314,19 @@ async function proxyTextMessage(sender, to3, message, options2 = {}) {
   };
 }
 async function resolveLocalStorageBuffer(options2) {
-  if (!options2.filePath || options2.buffer || !options2.companyId) return null;
+  const reference = options2.filePath || options2.fileUrl;
+  if (!reference || options2.buffer || !options2.companyId) return null;
   try {
     return await resolveFileBuffer({
       companyId: options2.companyId,
       filePath: options2.filePath,
+      fileUrl: options2.fileUrl,
       mimeType: options2.mimeType,
       fileName: options2.fileName
     });
   } catch (error) {
     logger_default.warn(
-      `WhatsApp proxy: filePath "${options2.filePath}" no resolvi\xF3 en el storage local (${error instanceof Error ? error.message : String(error)}) \u2014 se reenv\xEDa como path a prod`
+      `WhatsApp proxy: la referencia local "${reference}" no resolvi\xF3 en el storage local (${error instanceof Error ? error.message : String(error)}) \u2014 se reenv\xEDa a prod`
     );
     return null;
   }
@@ -6305,7 +6341,8 @@ async function proxyMediaMessage(kind, sender, to3, options2) {
       buffer: localFile.buffer,
       mimeType: localFile.mimeType,
       fileName: options2.fileName || localFile.fileName,
-      filePath: void 0
+      filePath: void 0,
+      fileUrl: void 0
     };
   }
   if (options2.buffer) {
@@ -6361,7 +6398,7 @@ __export(whatsapp_direct_service_exports, {
 });
 import path7 from "path";
 import fs5 from "fs/promises";
-var resolveUsageCompanyId, trackWhatsAppUsage, WhatsAppDirectService;
+var resolveUsageCompanyId, flushingOutbox, SEND_TIMEOUT_MS, sendWithTimeout, trackWhatsAppUsage, WhatsAppDirectService;
 var init_whatsapp_direct_service = __esm({
   "src/services/whatsapp-direct.service.ts"() {
     init_sessions_simple();
@@ -6377,6 +6414,22 @@ var init_whatsapp_direct_service = __esm({
     init_whatsapp_sender_ownership_service();
     init_whatsapp_proxy_service();
     resolveUsageCompanyId = (options2 = {}) => options2.companyId || options2.tenantId || "";
+    flushingOutbox = /* @__PURE__ */ new Set();
+    SEND_TIMEOUT_MS = 12e4;
+    sendWithTimeout = async (label, sendPromise) => {
+      let timer;
+      const timeout = new Promise((_58, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`WhatsApp send timeout (${SEND_TIMEOUT_MS / 1e3}s): ${label}`)),
+          SEND_TIMEOUT_MS
+        );
+      });
+      try {
+        return await Promise.race([sendPromise, timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
     trackWhatsAppUsage = async (sessionId, options2 = {}, context) => {
       if (options2.trackUsage === false) return;
       try {
@@ -6454,7 +6507,10 @@ var init_whatsapp_direct_service = __esm({
         try {
           const validTo = assertWhatsAppRecipient(routedTo);
           const sendOptions = getSendOptions(validTo);
-          const result = await sock.sendMessage(validTo, { text: message }, sendOptions);
+          const result = await sendWithTimeout(
+            `text ${id}\u2192${validTo}`,
+            sock.sendMessage(validTo, { text: message }, sendOptions)
+          );
           await trackWhatsAppUsage(id, options2, "text");
           return result;
         } catch (error) {
@@ -6552,16 +6608,19 @@ var init_whatsapp_direct_service = __esm({
           throw new Error("One of buffer, fileName, filePath, or fileUrl is required");
         }
         try {
-          const result = await sock.sendMessage(
-            validTo,
-            {
-              video: videoBuffer,
-              caption: options2.caption,
-              mimetype: resolvedMimeType,
-              ptv: false
-              // Not a video note
-            },
-            sendOptions
+          const result = await sendWithTimeout(
+            `video ${id}\u2192${validTo}`,
+            sock.sendMessage(
+              validTo,
+              {
+                video: videoBuffer,
+                caption: options2.caption,
+                mimetype: resolvedMimeType,
+                ptv: false
+                // Not a video note
+              },
+              sendOptions
+            )
           );
           await trackWhatsAppUsage(id, options2, "video");
           if (shouldCleanup && cleanupPath) {
@@ -6664,14 +6723,17 @@ var init_whatsapp_direct_service = __esm({
           throw new Error("One of buffer, fileName, filePath, or fileUrl is required");
         }
         try {
-          const result = await sock.sendMessage(
-            validTo,
-            {
-              image: imageBuffer,
-              caption: options2.caption,
-              mimetype: resolvedMimeType
-            },
-            sendOptions
+          const result = await sendWithTimeout(
+            `image ${id}\u2192${validTo}`,
+            sock.sendMessage(
+              validTo,
+              {
+                image: imageBuffer,
+                caption: options2.caption,
+                mimetype: resolvedMimeType
+              },
+              sendOptions
+            )
           );
           await trackWhatsAppUsage(id, options2, "image");
           if (shouldCleanup && cleanupPath) {
@@ -6777,16 +6839,19 @@ var init_whatsapp_direct_service = __esm({
           throw new Error("One of buffer, fileName, filePath, or fileUrl is required");
         }
         try {
-          const result = await sock.sendMessage(
-            validTo,
-            {
-              document: documentBuffer,
-              fileName: resolvedFileName,
-              // REQUIRED for WhatsApp
-              mimetype: resolvedMimeType,
-              caption: options2.caption
-            },
-            sendOptions
+          const result = await sendWithTimeout(
+            `document ${id}\u2192${validTo}`,
+            sock.sendMessage(
+              validTo,
+              {
+                document: documentBuffer,
+                fileName: resolvedFileName,
+                // REQUIRED for WhatsApp
+                mimetype: resolvedMimeType,
+                caption: options2.caption
+              },
+              sendOptions
+            )
           );
           await trackWhatsAppUsage(id, options2, "document");
           if (shouldCleanup && cleanupPath) {
@@ -6885,12 +6950,32 @@ var init_whatsapp_direct_service = __esm({
           logger_default.warn(`Cannot flush outbox for ${id}: session not ready`);
           return;
         }
+        if (flushingOutbox.has(id)) {
+          logger_default.info(`Flush already in progress for ${id}, skipping duplicate`);
+          return;
+        }
+        flushingOutbox.add(id);
+        try {
+          await this.flushOutboxLocked(id);
+        } finally {
+          flushingOutbox.delete(id);
+        }
+      },
+      /** Cuerpo real del flush; solo se entra con el lock de `flushingOutbox` tomado. */
+      async flushOutboxLocked(id) {
         const queue2 = await outbox_queue_default.list(id);
         if (queue2.length === 0) {
           return;
         }
         logger_default.info(`\u{1F4E4} Flushing ${queue2.length} queued messages for ${id}`);
         for (const item of queue2) {
+          if (isOutboxItemDroppable(item, Date.now())) {
+            await outbox_queue_default.remove(id, item.id);
+            logger_default.warn(
+              `\u{1F5D1} Dropped queued ${item.messageType} ${item.id} (attempts=${item.attempts}, createdAt=${item.createdAt}, lastError=${item.lastError ?? "none"})`
+            );
+            continue;
+          }
           try {
             if (item.messageType === "text") {
               await this.sendMessage(id, item.recipient, item.text, {
@@ -6900,33 +6985,23 @@ var init_whatsapp_direct_service = __esm({
                 trackUsage: item.trackUsage,
                 queueOnFail: false
               });
-              await outbox_queue_default.remove(id, item.id);
-              logger_default.info(`\u2705 Sent queued text message ${item.id}`);
-            } else if (item.messageType === "image" && item.mediaOptions) {
-              const options2 = { ...item.mediaOptions };
+            } else if (item.mediaOptions) {
+              const options2 = { ...item.mediaOptions, queueOnFail: false };
               if (options2.buffer) {
                 options2.buffer = Buffer.from(options2.buffer, "base64");
               }
-              await this.sendImageFile(id, item.recipient, options2);
-              await outbox_queue_default.remove(id, item.id);
-              logger_default.info(`\u2705 Sent queued image message ${item.id}`);
-            } else if (item.messageType === "video" && item.mediaOptions) {
-              const options2 = { ...item.mediaOptions };
-              if (options2.buffer) {
-                options2.buffer = Buffer.from(options2.buffer, "base64");
+              if (item.messageType === "image") {
+                await this.sendImageFile(id, item.recipient, options2);
+              } else if (item.messageType === "video") {
+                await this.sendVideoFile(id, item.recipient, options2);
+              } else {
+                await this.sendDocument(id, item.recipient, options2);
               }
-              await this.sendVideoFile(id, item.recipient, options2);
-              await outbox_queue_default.remove(id, item.id);
-              logger_default.info(`\u2705 Sent queued video message ${item.id}`);
-            } else if (item.messageType === "document" && item.mediaOptions) {
-              const options2 = { ...item.mediaOptions };
-              if (options2.buffer) {
-                options2.buffer = Buffer.from(options2.buffer, "base64");
-              }
-              await this.sendDocument(id, item.recipient, options2);
-              await outbox_queue_default.remove(id, item.id);
-              logger_default.info(`\u2705 Sent queued document message ${item.id}`);
+            } else {
+              throw new Error(`Queued ${item.messageType} message without mediaOptions`);
             }
+            await outbox_queue_default.remove(id, item.id);
+            logger_default.info(`\u2705 Sent queued ${item.messageType} message ${item.id}`);
           } catch (error) {
             if (error instanceof WhatsAppSenderOwnershipError) {
               await outbox_queue_default.remove(id, item.id);
@@ -6942,7 +7017,10 @@ var init_whatsapp_direct_service = __esm({
             };
             await outbox_queue_default.update(id, updated);
             logger_default.warn(`\u26A0\uFE0F Failed to flush queued message ${item.id}: ${String(error)}`);
-            break;
+            if (!isSessionReady(id)) {
+              logger_default.warn(`Flush interrupted for ${id}: session dropped mid-flush`);
+              break;
+            }
           }
         }
       }
@@ -6953,6 +7031,12 @@ var init_whatsapp_direct_service = __esm({
 // src/whatsapp/queue/outbox-queue.ts
 import path8 from "path";
 import { randomUUID as randomUUID2 } from "crypto";
+function isOutboxItemDroppable(item, nowMs) {
+  if (item.attempts >= OUTBOX_MAX_ATTEMPTS) return true;
+  const createdAtMs = Date.parse(item.createdAt);
+  if (!Number.isFinite(createdAtMs)) return true;
+  return nowMs - createdAtMs > OUTBOX_TTL_MS;
+}
 async function flushOutboxForSession(sessionPhone) {
   const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
   try {
@@ -6961,12 +7045,16 @@ async function flushOutboxForSession(sessionPhone) {
     logger_default.error(`Error flushing outbox for ${sessionPhone}:`, error);
   }
 }
-var OutboxQueue, outboxQueueInstance, outbox_queue_default;
+var OUTBOX_MAX_ATTEMPTS, OUTBOX_TTL_MS, OUTBOX_MAX_ITEMS, OutboxQueue, outboxQueueInstance, outbox_queue_default;
 var init_outbox_queue = __esm({
   "src/whatsapp/queue/outbox-queue.ts"() {
     init_json_store();
     init_logger();
     init_environment();
+    init_telegram_alert_service();
+    OUTBOX_MAX_ATTEMPTS = 5;
+    OUTBOX_TTL_MS = 24 * 60 * 60 * 1e3;
+    OUTBOX_MAX_ITEMS = 50;
     OutboxQueue = class {
       constructor() {
         const baseDir = path8.join(config.whatsapp.sessionDir, "../outbox");
@@ -6977,10 +7065,34 @@ var init_outbox_queue = __esm({
         return Array.isArray(data) ? data : [];
       }
       /**
+       * Aplica el cap OUTBOX_MAX_ITEMS con drop-oldest (FIFO: lo más viejo ya es lo más
+       * probable de expirar por TTL) y alerta por Telegram con dedupe por sesión.
+       */
+      enforceCap(sessionPhone, queue2) {
+        if (queue2.length < OUTBOX_MAX_ITEMS) {
+          return queue2;
+        }
+        const overflow = queue2.length - OUTBOX_MAX_ITEMS + 1;
+        const dropped = queue2.slice(0, overflow);
+        dropped.forEach((item) => {
+          logger_default.warn(
+            `\u{1F5D1} Outbox ${sessionPhone} lleno (${OUTBOX_MAX_ITEMS}): dropped oldest ${item.messageType} ${item.id} (createdAt=${item.createdAt})`
+          );
+        });
+        sendTelegramAlert({
+          dedupeKey: `outbox-overflow-${sessionPhone}`,
+          message: `\u26A0\uFE0F Outbox WhatsApp de ${sessionPhone} alcanz\xF3 el l\xEDmite de ${OUTBOX_MAX_ITEMS} mensajes.
+
+Se descartaron los m\xE1s viejos para encolar los nuevos. La sesi\xF3n lleva demasiado tiempo ca\xEDda: revisa su estado.`
+        }).catch(() => {
+        });
+        return queue2.slice(overflow);
+      }
+      /**
        * Enqueue a text message
        */
       async enqueue(sessionPhone, recipient, text, mentions, metadata = {}) {
-        const queue2 = await this.list(sessionPhone);
+        const queue2 = this.enforceCap(sessionPhone, await this.list(sessionPhone));
         const item = {
           id: randomUUID2(),
           sessionPhone,
@@ -7003,7 +7115,7 @@ var init_outbox_queue = __esm({
        * Enqueue a media message (image, video, document)
        */
       async enqueueMedia(sessionPhone, recipient, messageType, options2) {
-        const queue2 = await this.list(sessionPhone);
+        const queue2 = this.enforceCap(sessionPhone, await this.list(sessionPhone));
         const mediaOptions = {
           ...options2,
           buffer: options2.buffer ? options2.buffer.toString("base64") : void 0
@@ -7148,12 +7260,131 @@ var init_mongo_auth_state = __esm({
   }
 });
 
+// src/whatsapp/baileys/instance-lease.ts
+import os from "os";
+import crypto2 from "crypto";
+async function tryAcquireSocketLease() {
+  const now = /* @__PURE__ */ new Date();
+  const claim = {
+    holderId: HOLDER_ID,
+    hostname: os.hostname(),
+    pid: process.pid,
+    nodeEnv: config.nodeEnv,
+    renewedAt: now,
+    expiresAt: new Date(now.getTime() + LEASE_TTL_MS)
+  };
+  const col = await getLeaseCollection();
+  const renewed = await col.updateOne(
+    { _id: LEASE_DOC_ID, $or: [{ holderId: HOLDER_ID }, { expiresAt: { $lt: now } }] },
+    { $set: claim }
+  );
+  if (renewed.matchedCount > 0) {
+    return true;
+  }
+  try {
+    await col.insertOne({ _id: LEASE_DOC_ID, ...claim });
+    return true;
+  } catch (err) {
+    if (isDuplicateKeyError(err)) {
+      return false;
+    }
+    throw err;
+  }
+}
+function hasSocketLease() {
+  if (!leaseEnabled()) return true;
+  return holdingLease;
+}
+async function startSocketLeaseLoop() {
+  if (!leaseEnabled()) {
+    logger_default.warn("Socket lease DESHABILITADO por env (WHATSAPP_SOCKET_LEASE=false)");
+    return true;
+  }
+  await heartbeat();
+  if (!holdingLease) {
+    logger_default.error(
+      `\u{1F512} Otra instancia de lila-app posee el lease de sockets WhatsApp: este proceso queda PASIVO (sin sockets) y reintenta cada ${LEASE_HEARTBEAT_MS / 1e3}s. Failover autom\xE1tico si el holder muere.`
+    );
+    sendTelegramAlert({
+      dedupeKey: "socket-lease-passive",
+      message: `\u26A0\uFE0F lila-app ${HOLDER_ID} arranc\xF3 SIN el lease de sockets WhatsApp (otra instancia viva lo posee).
+
+Queda pasivo: no abre sesiones. Si no esperabas dos procesos, mata el duplicado.`
+    }).catch(() => {
+    });
+  }
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(() => void heartbeat(), LEASE_HEARTBEAT_MS);
+  heartbeatTimer.unref?.();
+  return holdingLease;
+}
+async function releaseSocketLease() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+  if (!leaseEnabled() || !holdingLease) return;
+  holdingLease = false;
+  try {
+    const col = await getLeaseCollection();
+    await col.deleteOne({ _id: LEASE_DOC_ID, holderId: HOLDER_ID });
+    logger_default.info(`\u{1F513} Socket lease liberado por ${HOLDER_ID}`);
+  } catch (err) {
+    logger_default.warn(`No se pudo liberar el socket lease (expira solo en ${LEASE_TTL_MS / 1e3}s): ${String(err)}`);
+  }
+}
+var COLLECTION3, LEASE_DOC_ID, LEASE_TTL_MS, LEASE_HEARTBEAT_MS, HOLDER_ID, holdingLease, heartbeatTimer, leaseEnabled, getLeaseCollection, isDuplicateKeyError, heartbeat;
+var init_instance_lease = __esm({
+  "src/whatsapp/baileys/instance-lease.ts"() {
+    init_sharedConnection();
+    init_environment();
+    init_logger();
+    init_telegram_alert_service();
+    COLLECTION3 = "whatsapp_instance_lease";
+    LEASE_DOC_ID = "whatsapp-socket-owner";
+    LEASE_TTL_MS = 9e4;
+    LEASE_HEARTBEAT_MS = 3e4;
+    HOLDER_ID = `${os.hostname()}#${process.pid}#${crypto2.randomUUID().slice(0, 8)}`;
+    holdingLease = false;
+    heartbeatTimer = null;
+    leaseEnabled = () => config.whatsapp.socketLease !== false;
+    getLeaseCollection = async () => {
+      const conn = await getSharedConnection();
+      return conn.collection(COLLECTION3);
+    };
+    isDuplicateKeyError = (err) => typeof err === "object" && err !== null && err.code === 11e3;
+    heartbeat = async () => {
+      try {
+        const acquired = await tryAcquireSocketLease();
+        if (acquired && !holdingLease) {
+          logger_default.info(`\u{1F513} Socket lease ADQUIRIDO por ${HOLDER_ID}`);
+        }
+        if (!acquired && holdingLease) {
+          logger_default.error(
+            `\u26A0\uFE0F Socket lease PERDIDO por ${HOLDER_ID}: otra instancia lo tom\xF3. Los sockets vivos NO se cierran (ver fencing en el header), pero revisa si hay un proceso duplicado.`
+          );
+          sendTelegramAlert({
+            dedupeKey: "socket-lease-lost",
+            message: `\u26A0\uFE0F lila-app ${HOLDER_ID} perdi\xF3 el lease de sockets WhatsApp.
+
+Otra instancia lo posee. Si no esperabas dos procesos, mata el duplicado.`
+          }).catch(() => {
+          });
+        }
+        holdingLease = acquired;
+      } catch (err) {
+        logger_default.warn(`Socket lease heartbeat fall\xF3 (estado se mantiene: holding=${holdingLease}): ${String(err)}`);
+      }
+    };
+  }
+});
+
 // src/whatsapp/baileys/sessions.simple.ts
 import {
   makeWASocket,
   Browsers,
   DisconnectReason,
-  fetchLatestBaileysVersion
+  makeCacheableSignalKeyStore
 } from "@whiskeysockets/baileys";
 import path9 from "path";
 import fs6 from "fs-extra";
@@ -7162,18 +7393,24 @@ function clearQR(sessionId) {
   delete qrCodes[sessionId];
   delete qrTimestamps[sessionId];
 }
+function reconnectDelayMs(attempt) {
+  const exponential = RECONNECT_BASE_DELAY_MS * 2 ** (Math.max(attempt, 1) - 1);
+  const capped = Math.min(exponential, RECONNECT_MAX_DELAY_MS);
+  const jitter = 0.8 + Math.random() * 0.4;
+  return Math.round(capped * jitter);
+}
 function scheduleReconnect(sessionId, qrCb) {
   if (shuttingDown.has(sessionId)) return;
   if (reconnectTimers[sessionId]) return;
   const attempt = reconnectAttempts[sessionId] = (reconnectAttempts[sessionId] ?? 0) + 1;
-  const delay = Math.min(3e3 * attempt, 6e4);
+  const delay = reconnectDelayMs(attempt);
   logger_default.info(`\u{1F501} Reconnect ${sessionId}: intento ${attempt} en ${delay}ms`);
   if (attempt === 5) {
     sendTelegramAlert({
       dedupeKey: `session-persistent-down-${sessionId}`,
       message: `\u26A0\uFE0F WhatsApp sesi\xF3n ${sessionId} ca\xEDda y no reconecta.
-Intentos: ${attempt} (~45s sin conexi\xF3n).
-Revisa logs o re-empareja si persiste.`
+Intentos fallidos: ${attempt}. El backoff sigue reintentando (m\xE1x cada ${RECONNECT_MAX_DELAY_MS / 6e4} min).
+NO re-emparejes a\xFAn: suele recuperarse sola cuando WhatsApp deja de throttlear el login.`
     }).catch(() => {
     });
   }
@@ -7187,6 +7424,30 @@ Revisa logs o re-empareja si persiste.`
       scheduleReconnect(sessionId, qrCb);
     }
   }, delay);
+}
+function parkSession(sessionId) {
+  parkedSessions.add(sessionId);
+  readyClients.set(sessionId, false);
+  clearReconnectTimer(sessionId);
+  const stalls = connectingStalls[sessionId] ?? 0;
+  logger_default.error(
+    `\u{1F17F}\uFE0F [${sessionId}] Sesi\xF3n APARCADA tras ${stalls} stalls de conexi\xF3n (el handshake nunca abri\xF3 con el backoff en el techo). Se detiene la reconexi\xF3n autom\xE1tica: requiere re-emparejar (QR) o un restart manual.`
+  );
+  sendTelegramAlert({
+    dedupeKey: `session-parked-${sessionId}`,
+    message: `\u{1F17F}\uFE0F WhatsApp sesi\xF3n ${sessionId} APARCADA.
+El socket no completa el login tras ${stalls} intentos con backoff m\xE1ximo \u2014 ya no es throttle transitorio: lo m\xE1s probable es que las credenciales est\xE9n desincronizadas.
+
+Acci\xF3n: re-emparejar la sesi\xF3n (escanear QR) desde el Portal. Los mensajes pendientes est\xE1n a salvo en el outbox y saldr\xE1n al reconectar.`
+  }).catch(() => {
+  });
+}
+function isSessionParked(sessionId) {
+  return parkedSessions.has(sessionId);
+}
+function resetConnectingStalls(sessionId) {
+  connectingStalls[sessionId] = 0;
+  parkedSessions.delete(sessionId);
 }
 function getStore(sessionId) {
   const store2 = stores[sessionId];
@@ -7226,6 +7487,11 @@ async function startSession(sessionId, qrCb) {
       "WhatsApp send-proxy activo: no se abren sesiones locales (el socket vive en prod). Quita WHATSAPP_PROXY_TARGET_URL para conectar un socket en esta m\xE1quina."
     );
   }
+  if (!hasSocketLease()) {
+    throw new Error(
+      "Esta instancia no posee el lease de sockets WhatsApp (otra instancia viva lo tiene). Mata el proceso duplicado o espera el failover autom\xE1tico."
+    );
+  }
   const inFlight = startingPromises[sessionId];
   if (inFlight) {
     logger_default.info(`[${sessionId}] Session init in progress, reusing in-flight start`);
@@ -7247,22 +7513,32 @@ async function startSession(sessionId, qrCb) {
 async function initSession(sessionId, qrCb) {
   shuttingDown.delete(sessionId);
   const { state: state2, saveCreds } = await useMongoAuthState(sessionId);
-  const { version, isLatest } = await fetchLatestBaileysVersion();
+  const { version, isLatest } = await getBaileysVersion();
   logger_default.info(`Using WA v${version.join(".")}, isLatest: ${isLatest}`);
-  const pinoLogger = pino({ level: "silent" });
+  const pinoLogger = pino({ level: config.whatsapp.baileysLogLevel ?? "fatal" });
   const sock = makeWASocket({
     version,
-    auth: state2,
+    // Cache de signal keys sobre el store Mongo: sin él, CADA cifrado/descifrado
+    // (por device en grupos) hace findOne a Atlas (~100ms RTT) — envíos lentos y
+    // acoplados a hipos de Atlas. Práctica estándar recomendada por Baileys.
+    auth: {
+      creds: state2.creds,
+      keys: makeCacheableSignalKeyStore(state2.keys, pinoLogger)
+    },
     logger: pinoLogger,
     // Baileys expects pino logger
     browser: Browsers.ubuntu("Chrome"),
     generateHighQualityLinkPreview: true,
     printQRInTerminal: false,
-    // Baileys NO tiene API para "traer todos los contactos": llegan por history-sync y
-    // eventos (contacts.upsert es poco fiable en WhatsApp personal — issue #522). Pedir el
-    // history completo maximiza chats+contactos al conectar. Sin costo de memoria porque ya
-    // no almacenamos mensajes (store.manager). Ver SCALABILITY-MULTI-SESSION.spec §2.3.
-    syncFullHistory: true
+    msgRetryCounterCache: makeMsgRetryCache(),
+    // History completo SOLO en el primer emparejamiento (creds sin `registered`). Baileys
+    // no tiene API para "traer todos los contactos": llegan por history-sync. Pero el store
+    // vive en Mongo y PERSISTE entre reconexiones (ver "Store cargado de Mongo: N chats"),
+    // así que re-pedir el history completo en CADA reconexión es carga desperdiciada — y en
+    // cuentas pesadas (2426 chats) esa carga repetida es justo la que agrava el throttle de
+    // login de WhatsApp (incidente 2026-07-14). Ya emparejada, el store basta + eventos en
+    // vivo. Ver SCALABILITY-MULTI-SESSION.spec §2.3 y §10.e.
+    syncFullHistory: !state2.creds.registered
   });
   const store2 = makeInMemoryStore(sessionId);
   stores[sessionId] = store2;
@@ -7279,6 +7555,13 @@ async function initSession(sessionId, qrCb) {
   });
   let connectionSettled = false;
   let watchdogTimer = null;
+  let everOpened = false;
+  let stallCounted = false;
+  const registerConnectingStall = () => {
+    if (stallCounted) return connectingStalls[sessionId] ?? 0;
+    stallCounted = true;
+    return connectingStalls[sessionId] = (connectingStalls[sessionId] ?? 0) + 1;
+  };
   const startWatchdog = () => {
     if (watchdogTimer) clearTimeout(watchdogTimer);
     watchdogTimer = setTimeout(() => {
@@ -7289,7 +7572,16 @@ async function initSession(sessionId, qrCb) {
         } catch (err) {
           logger_default.warn(`Watchdog: sock.end fall\xF3 para ${sessionId}: ${String(err)}`);
         }
-        scheduleReconnect(sessionId, qrCb);
+        const stalls = registerConnectingStall();
+        if (stalls >= MAX_CONNECTING_STALLS) {
+          parkSession(sessionId);
+        } else {
+          reconnectAttempts[sessionId] = Math.max(
+            reconnectAttempts[sessionId] ?? 0,
+            STALL_BACKOFF_FLOOR_ATTEMPT
+          );
+          scheduleReconnect(sessionId, qrCb);
+        }
       }
     }, CONNECTION_TIMEOUT_MS);
   };
@@ -7310,10 +7602,17 @@ async function initSession(sessionId, qrCb) {
       if (qrCb) qrCb(qr);
     }
     if (connection === "open") {
-      logger_default.info(`\u2705 Session connected successfully for ${sessionId}`);
+      everOpened = true;
+      const wasReconnect = (reconnectAttempts[sessionId] ?? 0) > 0;
+      if (wasReconnect) {
+        logger_default.info(`\u{1F504} Session RECONECTADA para ${sessionId} tras ${reconnectAttempts[sessionId]} intento(s)`);
+      } else {
+        logger_default.info(`\u2705 Session connected successfully for ${sessionId}`);
+      }
       readyClients.set(sessionId, true);
       reconnectAttempts[sessionId] = 0;
       consecutive440s[sessionId] = 0;
+      resetConnectingStalls(sessionId);
       clearReconnectTimer(sessionId);
       try {
         await populateStoreIfEmpty(sessionId, sock);
@@ -7335,8 +7634,11 @@ async function initSession(sessionId, qrCb) {
       readyClients.set(sessionId, false);
       clearQR(sessionId);
       logger_default.warn(`\u274C Session closed for ${sessionId}`);
-      const code = lastDisconnect?.error?.output?.statusCode;
-      logger_default.info(`Disconnect reason: ${code}`);
+      const boom = lastDisconnect?.error;
+      const code = boom?.output?.statusCode;
+      logger_default.info(
+        `Disconnect reason: ${code ?? "sin c\xF3digo"}${boom?.message ? ` \u2014 ${boom.message}` : ""}`
+      );
       if (shuttingDown.has(sessionId)) {
         logger_default.info(`Skipping reconnect for ${sessionId} (shutdown in progress)`);
         return;
@@ -7357,15 +7659,27 @@ Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado pa
           }).catch(() => {
           });
         }
-        reconnectAttempts[sessionId] = Math.max(reconnectAttempts[sessionId] ?? 0, 20);
+        reconnectAttempts[sessionId] = Math.max(reconnectAttempts[sessionId] ?? 0, 6);
         scheduleReconnect(sessionId, qrCb);
       } else if (code !== DisconnectReason.loggedOut) {
+        if (!everOpened) {
+          const stalls = registerConnectingStall();
+          if (stalls >= MAX_CONNECTING_STALLS) {
+            parkSession(sessionId);
+            return;
+          }
+          reconnectAttempts[sessionId] = Math.max(
+            reconnectAttempts[sessionId] ?? 0,
+            STALL_BACKOFF_FLOOR_ATTEMPT
+          );
+        }
         scheduleReconnect(sessionId, qrCb);
       } else {
         clearStoreTimer(sessionId);
         clearReconnectTimer(sessionId);
         reconnectAttempts[sessionId] = 0;
         consecutive440s[sessionId] = 0;
+        resetConnectingStalls(sessionId);
         delete sessions[sessionId];
         delete stores[sessionId];
         try {
@@ -7386,13 +7700,22 @@ async function createPairingSession(phone, sendCode) {
       "WhatsApp send-proxy activo: no se vinculan sesiones locales (el socket vive en prod). Quita WHATSAPP_PROXY_TARGET_URL para vincular en esta m\xE1quina."
     );
   }
+  if (!hasSocketLease()) {
+    throw new Error(
+      "Esta instancia no posee el lease de sockets WhatsApp (otra instancia viva lo tiene). Mata el proceso duplicado o espera el failover autom\xE1tico."
+    );
+  }
   const sessionId = phone.replace("+", "");
   const { state: state2, saveCreds } = await useMongoAuthState(sessionId);
-  const { version } = await fetchLatestBaileysVersion();
-  const pinoLogger = pino({ level: "silent" });
+  const { version } = await getBaileysVersion();
+  const pinoLogger = pino({ level: config.whatsapp.baileysLogLevel ?? "fatal" });
   const sock = makeWASocket({
     version,
-    auth: state2,
+    // Mismo cache de signal keys que initSession (menos roundtrips a Atlas).
+    auth: {
+      creds: state2.creds,
+      keys: makeCacheableSignalKeyStore(state2.keys, pinoLogger)
+    },
     logger: pinoLogger,
     // Baileys expects pino logger
     // El browser afecta la entrega del pairing code (Baileys #2306); usamos el mismo
@@ -7400,8 +7723,9 @@ async function createPairingSession(phone, sendCode) {
     browser: Browsers.ubuntu("Chrome"),
     printQRInTerminal: false,
     // pairing code es alternativo al QR
-    syncFullHistory: true
+    syncFullHistory: true,
     // maximiza contactos al conectar (ver startSession)
+    msgRetryCounterCache: makeMsgRetryCache()
   });
   const store2 = makeInMemoryStore(sessionId);
   stores[sessionId] = store2;
@@ -7468,6 +7792,7 @@ async function disconnectSession(sessionId) {
     shuttingDown.add(sessionId);
     clearReconnectTimer(sessionId);
     reconnectAttempts[sessionId] = 0;
+    resetConnectingStalls(sessionId);
     await sock.logout();
     clearStoreTimer(sessionId);
     delete sessions[sessionId];
@@ -7497,6 +7822,8 @@ async function endSession(sessionId) {
 }
 async function restartSession(sessionId, qrCb) {
   logger_default.info(`\u{1F504} Restarting session ${sessionId} (soft, creds preserved)`);
+  resetConnectingStalls(sessionId);
+  reconnectAttempts[sessionId] = 0;
   await endSession(sessionId);
   return startSession(sessionId, qrCb);
 }
@@ -7506,6 +7833,7 @@ async function clearSession(sessionId) {
     shuttingDown.add(sessionId);
     clearReconnectTimer(sessionId);
     reconnectAttempts[sessionId] = 0;
+    resetConnectingStalls(sessionId);
     const sock = sessions[sessionId];
     if (sock) {
       try {
@@ -7564,9 +7892,10 @@ async function clearSession(sessionId) {
     throw error;
   }
 }
-var sessions, stores, qrCodes, qrTimestamps, pairingCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, CONNECTION_TIMEOUT_MS, consecutive440s, clearStoreTimer, clearReconnectTimer;
+var sessions, stores, qrCodes, qrTimestamps, pairingCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, CONNECTION_TIMEOUT_MS, RECONNECT_BASE_DELAY_MS, RECONNECT_MAX_DELAY_MS, STALL_BACKOFF_FLOOR_ATTEMPT, consecutive440s, connectingStalls, parkedSessions, MAX_CONNECTING_STALLS, MSG_RETRY_CACHE_MAX, makeMsgRetryCache, clearStoreTimer, clearReconnectTimer;
 var init_sessions_simple = __esm({
   "src/whatsapp/baileys/sessions.simple.ts"() {
+    init_baileys_version();
     init_store_manager();
     init_logger();
     init_environment();
@@ -7577,6 +7906,7 @@ var init_sessions_simple = __esm({
     init_mongo_store();
     init_populate_store_simple();
     init_telegram_alert_service();
+    init_instance_lease();
     sessions = {};
     stores = {};
     qrCodes = {};
@@ -7589,7 +7919,31 @@ var init_sessions_simple = __esm({
     reconnectTimers = {};
     reconnectAttempts = {};
     CONNECTION_TIMEOUT_MS = 9e4;
+    RECONNECT_BASE_DELAY_MS = 3e3;
+    RECONNECT_MAX_DELAY_MS = 10 * 6e4;
+    STALL_BACKOFF_FLOOR_ATTEMPT = 6;
     consecutive440s = {};
+    connectingStalls = {};
+    parkedSessions = /* @__PURE__ */ new Set();
+    MAX_CONNECTING_STALLS = Number(process.env.WHATSAPP_MAX_CONNECTING_STALLS) || 12;
+    MSG_RETRY_CACHE_MAX = 5e3;
+    makeMsgRetryCache = () => {
+      const entries = /* @__PURE__ */ new Map();
+      return {
+        get: (key) => entries.get(key),
+        set: (key, value) => {
+          if (entries.size >= MSG_RETRY_CACHE_MAX) {
+            const oldest = entries.keys().next().value;
+            if (oldest !== void 0) entries.delete(oldest);
+          }
+          entries.set(key, value);
+        },
+        del: (key) => {
+          entries.delete(key);
+        },
+        flushAll: () => entries.clear()
+      };
+    };
     clearStoreTimer = (sessionId) => {
       const timer = storeTimers[sessionId];
       if (timer) {
@@ -15748,27 +16102,27 @@ var require_process = __commonJS({
 var require_filesystem = __commonJS({
   "node_modules/detect-libc/lib/filesystem.js"(exports, module) {
     "use strict";
-    var fs33 = __require("fs");
+    var fs34 = __require("fs");
     var LDD_PATH = "/usr/bin/ldd";
     var SELF_PATH = "/proc/self/exe";
     var MAX_LENGTH = 2048;
     var readFileSync = (path34) => {
-      const fd = fs33.openSync(path34, "r");
+      const fd = fs34.openSync(path34, "r");
       const buffer2 = Buffer.alloc(MAX_LENGTH);
-      const bytesRead = fs33.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
-      fs33.close(fd, () => {
+      const bytesRead = fs34.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
+      fs34.close(fd, () => {
       });
       return buffer2.subarray(0, bytesRead);
     };
     var readFile = (path34) => new Promise((resolve2, reject) => {
-      fs33.open(path34, "r", (err, fd) => {
+      fs34.open(path34, "r", (err, fd) => {
         if (err) {
           reject(err);
         } else {
           const buffer2 = Buffer.alloc(MAX_LENGTH);
-          fs33.read(fd, buffer2, 0, MAX_LENGTH, 0, (_58, bytesRead) => {
+          fs34.read(fd, buffer2, 0, MAX_LENGTH, 0, (_58, bytesRead) => {
             resolve2(buffer2.subarray(0, bytesRead));
-            fs33.close(fd, () => {
+            fs34.close(fd, () => {
             });
           });
         }
@@ -16495,20 +16849,20 @@ var require_sharp = __commonJS({
       `@img/sharp-${runtimePlatform}/sharp.node`,
       "@img/sharp-wasm32/sharp.node"
     ];
-    var sharp6;
+    var sharp7;
     var errors = [];
     for (const path34 of paths) {
       try {
-        sharp6 = __require(path34);
+        sharp7 = __require(path34);
         break;
       } catch (err) {
         errors.push(err);
       }
     }
-    if (sharp6) {
-      module.exports = sharp6;
+    if (sharp7) {
+      module.exports = sharp7;
     } else {
-      const [isLinux, isMacOs, isWindows] = ["linux", "darwin", "win32"].map((os2) => runtimePlatform.startsWith(os2));
+      const [isLinux, isMacOs, isWindows] = ["linux", "darwin", "win32"].map((os3) => runtimePlatform.startsWith(os3));
       const help = [`Could not load the "sharp" module using the ${runtimePlatform} runtime`];
       errors.forEach((err) => {
         if (err.code !== "MODULE_NOT_FOUND") {
@@ -16525,15 +16879,15 @@ var require_sharp = __commonJS({
           `    Requires ${expected}`
         );
       } else if (prebuiltPlatforms.includes(runtimePlatform)) {
-        const [os2, cpu] = runtimePlatform.split("-");
-        const libc = os2.endsWith("musl") ? " --libc=musl" : "";
+        const [os3, cpu] = runtimePlatform.split("-");
+        const libc = os3.endsWith("musl") ? " --libc=musl" : "";
         help.push(
           "- Ensure optional dependencies can be installed:",
           "    npm install --include=optional sharp",
           "- Ensure your package manager supports multi-platform installation:",
           "    See https://sharp.pixelplumbing.com/install#cross-platform",
           "- Add platform-specific dependencies:",
-          `    npm install --os=${os2.replace("musl", "")}${libc} --cpu=${cpu} sharp`
+          `    npm install --os=${os3.replace("musl", "")}${libc} --cpu=${cpu} sharp`
         );
       } else {
         help.push(
@@ -18386,7 +18740,7 @@ var require_input = __commonJS({
     "use strict";
     var color = require_color();
     var is = require_is();
-    var sharp6 = require_sharp();
+    var sharp7 = require_sharp();
     var align = {
       left: "low",
       center: "centre",
@@ -18721,7 +19075,7 @@ var require_input = __commonJS({
         if (this._isStreamInput()) {
           this.on("finish", () => {
             this._flattenBufferIn();
-            sharp6.metadata(this.options, (err, metadata2) => {
+            sharp7.metadata(this.options, (err, metadata2) => {
               if (err) {
                 callback(is.nativeError(err, stack));
               } else {
@@ -18730,7 +19084,7 @@ var require_input = __commonJS({
             });
           });
         } else {
-          sharp6.metadata(this.options, (err, metadata2) => {
+          sharp7.metadata(this.options, (err, metadata2) => {
             if (err) {
               callback(is.nativeError(err, stack));
             } else {
@@ -18744,7 +19098,7 @@ var require_input = __commonJS({
           return new Promise((resolve2, reject) => {
             const finished = () => {
               this._flattenBufferIn();
-              sharp6.metadata(this.options, (err, metadata2) => {
+              sharp7.metadata(this.options, (err, metadata2) => {
                 if (err) {
                   reject(is.nativeError(err, stack));
                 } else {
@@ -18760,7 +19114,7 @@ var require_input = __commonJS({
           });
         } else {
           return new Promise((resolve2, reject) => {
-            sharp6.metadata(this.options, (err, metadata2) => {
+            sharp7.metadata(this.options, (err, metadata2) => {
               if (err) {
                 reject(is.nativeError(err, stack));
               } else {
@@ -18777,7 +19131,7 @@ var require_input = __commonJS({
         if (this._isStreamInput()) {
           this.on("finish", () => {
             this._flattenBufferIn();
-            sharp6.stats(this.options, (err, stats2) => {
+            sharp7.stats(this.options, (err, stats2) => {
               if (err) {
                 callback(is.nativeError(err, stack));
               } else {
@@ -18786,7 +19140,7 @@ var require_input = __commonJS({
             });
           });
         } else {
-          sharp6.stats(this.options, (err, stats2) => {
+          sharp7.stats(this.options, (err, stats2) => {
             if (err) {
               callback(is.nativeError(err, stack));
             } else {
@@ -18800,7 +19154,7 @@ var require_input = __commonJS({
           return new Promise((resolve2, reject) => {
             this.on("finish", function() {
               this._flattenBufferIn();
-              sharp6.stats(this.options, (err, stats2) => {
+              sharp7.stats(this.options, (err, stats2) => {
                 if (err) {
                   reject(is.nativeError(err, stack));
                 } else {
@@ -18811,7 +19165,7 @@ var require_input = __commonJS({
           });
         } else {
           return new Promise((resolve2, reject) => {
-            sharp6.stats(this.options, (err, stats2) => {
+            sharp7.stats(this.options, (err, stats2) => {
               if (err) {
                 reject(is.nativeError(err, stack));
               } else {
@@ -19809,7 +20163,7 @@ var require_output = __commonJS({
     "use strict";
     var path34 = __require("node:path");
     var is = require_is();
-    var sharp6 = require_sharp();
+    var sharp7 = require_sharp();
     var formats = /* @__PURE__ */ new Map([
       ["heic", "heif"],
       ["heif", "heif"],
@@ -20534,7 +20888,7 @@ var require_output = __commonJS({
         if (this._isStreamInput()) {
           this.on("finish", () => {
             this._flattenBufferIn();
-            sharp6.pipeline(this.options, (err, data, info) => {
+            sharp7.pipeline(this.options, (err, data, info) => {
               if (err) {
                 callback(is.nativeError(err, stack));
               } else {
@@ -20543,7 +20897,7 @@ var require_output = __commonJS({
             });
           });
         } else {
-          sharp6.pipeline(this.options, (err, data, info) => {
+          sharp7.pipeline(this.options, (err, data, info) => {
             if (err) {
               callback(is.nativeError(err, stack));
             } else {
@@ -20556,7 +20910,7 @@ var require_output = __commonJS({
         if (this._isStreamInput()) {
           this.once("finish", () => {
             this._flattenBufferIn();
-            sharp6.pipeline(this.options, (err, data, info) => {
+            sharp7.pipeline(this.options, (err, data, info) => {
               if (err) {
                 this.emit("error", is.nativeError(err, stack));
               } else {
@@ -20571,7 +20925,7 @@ var require_output = __commonJS({
             this.emit("finish");
           }
         } else {
-          sharp6.pipeline(this.options, (err, data, info) => {
+          sharp7.pipeline(this.options, (err, data, info) => {
             if (err) {
               this.emit("error", is.nativeError(err, stack));
             } else {
@@ -20588,7 +20942,7 @@ var require_output = __commonJS({
           return new Promise((resolve2, reject) => {
             this.once("finish", () => {
               this._flattenBufferIn();
-              sharp6.pipeline(this.options, (err, data, info) => {
+              sharp7.pipeline(this.options, (err, data, info) => {
                 if (err) {
                   reject(is.nativeError(err, stack));
                 } else {
@@ -20603,7 +20957,7 @@ var require_output = __commonJS({
           });
         } else {
           return new Promise((resolve2, reject) => {
-            sharp6.pipeline(this.options, (err, data, info) => {
+            sharp7.pipeline(this.options, (err, data, info) => {
               if (err) {
                 reject(is.nativeError(err, stack));
               } else {
@@ -20661,10 +21015,10 @@ var require_utility = __commonJS({
     var detectLibc = require_detect_libc();
     var is = require_is();
     var { runtimePlatformArch } = require_libvips();
-    var sharp6 = require_sharp();
+    var sharp7 = require_sharp();
     var runtimePlatform = runtimePlatformArch();
-    var libvipsVersion = sharp6.libvipsVersion();
-    var format2 = sharp6.format();
+    var libvipsVersion = sharp7.libvipsVersion();
+    var format2 = sharp7.format();
     format2.heif.output.alias = ["avif", "heic"];
     format2.jpeg.output.alias = ["jpe", "jpg"];
     format2.tiff.output.alias = ["tif"];
@@ -20711,36 +21065,36 @@ var require_utility = __commonJS({
     function cache(options2) {
       if (is.bool(options2)) {
         if (options2) {
-          return sharp6.cache(50, 20, 100);
+          return sharp7.cache(50, 20, 100);
         } else {
-          return sharp6.cache(0, 0, 0);
+          return sharp7.cache(0, 0, 0);
         }
       } else if (is.object(options2)) {
-        return sharp6.cache(options2.memory, options2.files, options2.items);
+        return sharp7.cache(options2.memory, options2.files, options2.items);
       } else {
-        return sharp6.cache();
+        return sharp7.cache();
       }
     }
     cache(true);
     function concurrency(concurrency2) {
-      return sharp6.concurrency(is.integer(concurrency2) ? concurrency2 : null);
+      return sharp7.concurrency(is.integer(concurrency2) ? concurrency2 : null);
     }
-    if (detectLibc.familySync() === detectLibc.GLIBC && !sharp6._isUsingJemalloc()) {
-      sharp6.concurrency(1);
-    } else if (detectLibc.familySync() === detectLibc.MUSL && sharp6.concurrency() === 1024) {
-      sharp6.concurrency(__require("node:os").availableParallelism());
+    if (detectLibc.familySync() === detectLibc.GLIBC && !sharp7._isUsingJemalloc()) {
+      sharp7.concurrency(1);
+    } else if (detectLibc.familySync() === detectLibc.MUSL && sharp7.concurrency() === 1024) {
+      sharp7.concurrency(__require("node:os").availableParallelism());
     }
     var queue2 = new events2.EventEmitter();
     function counters() {
-      return sharp6.counters();
+      return sharp7.counters();
     }
     function simd(simd2) {
-      return sharp6.simd(is.bool(simd2) ? simd2 : null);
+      return sharp7.simd(is.bool(simd2) ? simd2 : null);
     }
     function block(options2) {
       if (is.object(options2)) {
         if (Array.isArray(options2.operation) && options2.operation.every(is.string)) {
-          sharp6.block(options2.operation, true);
+          sharp7.block(options2.operation, true);
         } else {
           throw is.invalidParameterError("operation", "Array<string>", options2.operation);
         }
@@ -20751,7 +21105,7 @@ var require_utility = __commonJS({
     function unblock(options2) {
       if (is.object(options2)) {
         if (Array.isArray(options2.operation) && options2.operation.every(is.string)) {
-          sharp6.block(options2.operation, false);
+          sharp7.block(options2.operation, false);
         } else {
           throw is.invalidParameterError("operation", "Array<string>", options2.operation);
         }
@@ -21155,7 +21509,7 @@ var require_has_flag = __commonJS({
 var require_supports_color = __commonJS({
   "node_modules/supports-color/index.js"(exports, module) {
     "use strict";
-    var os2 = __require("os");
+    var os3 = __require("os");
     var tty = __require("tty");
     var hasFlag = require_has_flag();
     var { env } = process;
@@ -21203,7 +21557,7 @@ var require_supports_color = __commonJS({
         return min;
       }
       if (process.platform === "win32") {
-        const osRelease = os2.release().split(".");
+        const osRelease = os3.release().split(".");
         if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
           return Number(osRelease[2]) >= 14931 ? 3 : 2;
         }
@@ -24517,13 +24871,13 @@ var require_minimatch = __commonJS({
 var require_readdir_glob = __commonJS({
   "node_modules/readdir-glob/index.js"(exports, module) {
     module.exports = readdirGlob;
-    var fs33 = __require("fs");
+    var fs34 = __require("fs");
     var { EventEmitter: EventEmitter2 } = __require("events");
     var { Minimatch } = require_minimatch();
     var { resolve: resolve2 } = __require("path");
     function readdir(dir, strict) {
       return new Promise((resolve3, reject) => {
-        fs33.readdir(dir, { withFileTypes: true }, (err, files) => {
+        fs34.readdir(dir, { withFileTypes: true }, (err, files) => {
           if (err) {
             switch (err.code) {
               case "ENOTDIR":
@@ -24556,7 +24910,7 @@ var require_readdir_glob = __commonJS({
     }
     function stat(file, followSymlinks) {
       return new Promise((resolve3, reject) => {
-        const statFunc = followSymlinks ? fs33.stat : fs33.lstat;
+        const statFunc = followSymlinks ? fs34.stat : fs34.lstat;
         statFunc(file, (err, stats) => {
           if (err) {
             switch (err.code) {
@@ -26621,54 +26975,54 @@ var require_polyfills = __commonJS({
     }
     var chdir;
     module.exports = patch;
-    function patch(fs33) {
+    function patch(fs34) {
       if (constants.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
-        patchLchmod(fs33);
+        patchLchmod(fs34);
       }
-      if (!fs33.lutimes) {
-        patchLutimes(fs33);
+      if (!fs34.lutimes) {
+        patchLutimes(fs34);
       }
-      fs33.chown = chownFix(fs33.chown);
-      fs33.fchown = chownFix(fs33.fchown);
-      fs33.lchown = chownFix(fs33.lchown);
-      fs33.chmod = chmodFix(fs33.chmod);
-      fs33.fchmod = chmodFix(fs33.fchmod);
-      fs33.lchmod = chmodFix(fs33.lchmod);
-      fs33.chownSync = chownFixSync(fs33.chownSync);
-      fs33.fchownSync = chownFixSync(fs33.fchownSync);
-      fs33.lchownSync = chownFixSync(fs33.lchownSync);
-      fs33.chmodSync = chmodFixSync(fs33.chmodSync);
-      fs33.fchmodSync = chmodFixSync(fs33.fchmodSync);
-      fs33.lchmodSync = chmodFixSync(fs33.lchmodSync);
-      fs33.stat = statFix(fs33.stat);
-      fs33.fstat = statFix(fs33.fstat);
-      fs33.lstat = statFix(fs33.lstat);
-      fs33.statSync = statFixSync(fs33.statSync);
-      fs33.fstatSync = statFixSync(fs33.fstatSync);
-      fs33.lstatSync = statFixSync(fs33.lstatSync);
-      if (fs33.chmod && !fs33.lchmod) {
-        fs33.lchmod = function(path34, mode, cb) {
+      fs34.chown = chownFix(fs34.chown);
+      fs34.fchown = chownFix(fs34.fchown);
+      fs34.lchown = chownFix(fs34.lchown);
+      fs34.chmod = chmodFix(fs34.chmod);
+      fs34.fchmod = chmodFix(fs34.fchmod);
+      fs34.lchmod = chmodFix(fs34.lchmod);
+      fs34.chownSync = chownFixSync(fs34.chownSync);
+      fs34.fchownSync = chownFixSync(fs34.fchownSync);
+      fs34.lchownSync = chownFixSync(fs34.lchownSync);
+      fs34.chmodSync = chmodFixSync(fs34.chmodSync);
+      fs34.fchmodSync = chmodFixSync(fs34.fchmodSync);
+      fs34.lchmodSync = chmodFixSync(fs34.lchmodSync);
+      fs34.stat = statFix(fs34.stat);
+      fs34.fstat = statFix(fs34.fstat);
+      fs34.lstat = statFix(fs34.lstat);
+      fs34.statSync = statFixSync(fs34.statSync);
+      fs34.fstatSync = statFixSync(fs34.fstatSync);
+      fs34.lstatSync = statFixSync(fs34.lstatSync);
+      if (fs34.chmod && !fs34.lchmod) {
+        fs34.lchmod = function(path34, mode, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs33.lchmodSync = function() {
+        fs34.lchmodSync = function() {
         };
       }
-      if (fs33.chown && !fs33.lchown) {
-        fs33.lchown = function(path34, uid, gid, cb) {
+      if (fs34.chown && !fs34.lchown) {
+        fs34.lchown = function(path34, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs33.lchownSync = function() {
+        fs34.lchownSync = function() {
         };
       }
       if (platform === "win32") {
-        fs33.rename = typeof fs33.rename !== "function" ? fs33.rename : (function(fs$rename) {
+        fs34.rename = typeof fs34.rename !== "function" ? fs34.rename : (function(fs$rename) {
           function rename(from, to3, cb) {
             var start = Date.now();
             var backoff = 0;
             fs$rename(from, to3, function CB(er3) {
               if (er3 && (er3.code === "EACCES" || er3.code === "EPERM" || er3.code === "EBUSY") && Date.now() - start < 6e4) {
                 setTimeout(function() {
-                  fs33.stat(to3, function(stater, st2) {
+                  fs34.stat(to3, function(stater, st2) {
                     if (stater && stater.code === "ENOENT")
                       fs$rename(from, to3, CB);
                     else
@@ -26684,9 +27038,9 @@ var require_polyfills = __commonJS({
           }
           if (Object.setPrototypeOf) Object.setPrototypeOf(rename, fs$rename);
           return rename;
-        })(fs33.rename);
+        })(fs34.rename);
       }
-      fs33.read = typeof fs33.read !== "function" ? fs33.read : (function(fs$read) {
+      fs34.read = typeof fs34.read !== "function" ? fs34.read : (function(fs$read) {
         function read(fd, buffer2, offset, length, position, callback_) {
           var callback;
           if (callback_ && typeof callback_ === "function") {
@@ -26694,22 +27048,22 @@ var require_polyfills = __commonJS({
             callback = function(er3, _58, __) {
               if (er3 && er3.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
-                return fs$read.call(fs33, fd, buffer2, offset, length, position, callback);
+                return fs$read.call(fs34, fd, buffer2, offset, length, position, callback);
               }
               callback_.apply(this, arguments);
             };
           }
-          return fs$read.call(fs33, fd, buffer2, offset, length, position, callback);
+          return fs$read.call(fs34, fd, buffer2, offset, length, position, callback);
         }
         if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
         return read;
-      })(fs33.read);
-      fs33.readSync = typeof fs33.readSync !== "function" ? fs33.readSync : /* @__PURE__ */ (function(fs$readSync) {
+      })(fs34.read);
+      fs34.readSync = typeof fs34.readSync !== "function" ? fs34.readSync : /* @__PURE__ */ (function(fs$readSync) {
         return function(fd, buffer2, offset, length, position) {
           var eagCounter = 0;
           while (true) {
             try {
-              return fs$readSync.call(fs33, fd, buffer2, offset, length, position);
+              return fs$readSync.call(fs34, fd, buffer2, offset, length, position);
             } catch (er3) {
               if (er3.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
@@ -26719,10 +27073,10 @@ var require_polyfills = __commonJS({
             }
           }
         };
-      })(fs33.readSync);
-      function patchLchmod(fs34) {
-        fs34.lchmod = function(path34, mode, callback) {
-          fs34.open(
+      })(fs34.readSync);
+      function patchLchmod(fs35) {
+        fs35.lchmod = function(path34, mode, callback) {
+          fs35.open(
             path34,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
@@ -26731,80 +27085,80 @@ var require_polyfills = __commonJS({
                 if (callback) callback(err);
                 return;
               }
-              fs34.fchmod(fd, mode, function(err2) {
-                fs34.close(fd, function(err22) {
+              fs35.fchmod(fd, mode, function(err2) {
+                fs35.close(fd, function(err22) {
                   if (callback) callback(err2 || err22);
                 });
               });
             }
           );
         };
-        fs34.lchmodSync = function(path34, mode) {
-          var fd = fs34.openSync(path34, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs35.lchmodSync = function(path34, mode) {
+          var fd = fs35.openSync(path34, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
-            ret = fs34.fchmodSync(fd, mode);
+            ret = fs35.fchmodSync(fd, mode);
             threw = false;
           } finally {
             if (threw) {
               try {
-                fs34.closeSync(fd);
+                fs35.closeSync(fd);
               } catch (er3) {
               }
             } else {
-              fs34.closeSync(fd);
+              fs35.closeSync(fd);
             }
           }
           return ret;
         };
       }
-      function patchLutimes(fs34) {
-        if (constants.hasOwnProperty("O_SYMLINK") && fs34.futimes) {
-          fs34.lutimes = function(path34, at3, mt6, cb) {
-            fs34.open(path34, constants.O_SYMLINK, function(er3, fd) {
+      function patchLutimes(fs35) {
+        if (constants.hasOwnProperty("O_SYMLINK") && fs35.futimes) {
+          fs35.lutimes = function(path34, at3, mt6, cb) {
+            fs35.open(path34, constants.O_SYMLINK, function(er3, fd) {
               if (er3) {
                 if (cb) cb(er3);
                 return;
               }
-              fs34.futimes(fd, at3, mt6, function(er4) {
-                fs34.close(fd, function(er22) {
+              fs35.futimes(fd, at3, mt6, function(er4) {
+                fs35.close(fd, function(er22) {
                   if (cb) cb(er4 || er22);
                 });
               });
             });
           };
-          fs34.lutimesSync = function(path34, at3, mt6) {
-            var fd = fs34.openSync(path34, constants.O_SYMLINK);
+          fs35.lutimesSync = function(path34, at3, mt6) {
+            var fd = fs35.openSync(path34, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
-              ret = fs34.futimesSync(fd, at3, mt6);
+              ret = fs35.futimesSync(fd, at3, mt6);
               threw = false;
             } finally {
               if (threw) {
                 try {
-                  fs34.closeSync(fd);
+                  fs35.closeSync(fd);
                 } catch (er3) {
                 }
               } else {
-                fs34.closeSync(fd);
+                fs35.closeSync(fd);
               }
             }
             return ret;
           };
-        } else if (fs34.futimes) {
-          fs34.lutimes = function(_a2, _b, _c, cb) {
+        } else if (fs35.futimes) {
+          fs35.lutimes = function(_a2, _b, _c, cb) {
             if (cb) process.nextTick(cb);
           };
-          fs34.lutimesSync = function() {
+          fs35.lutimesSync = function() {
           };
         }
       }
       function chmodFix(orig) {
         if (!orig) return orig;
         return function(target, mode, cb) {
-          return orig.call(fs33, target, mode, function(er3) {
+          return orig.call(fs34, target, mode, function(er3) {
             if (chownErOk(er3)) er3 = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -26814,7 +27168,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, mode) {
           try {
-            return orig.call(fs33, target, mode);
+            return orig.call(fs34, target, mode);
           } catch (er3) {
             if (!chownErOk(er3)) throw er3;
           }
@@ -26823,7 +27177,7 @@ var require_polyfills = __commonJS({
       function chownFix(orig) {
         if (!orig) return orig;
         return function(target, uid, gid, cb) {
-          return orig.call(fs33, target, uid, gid, function(er3) {
+          return orig.call(fs34, target, uid, gid, function(er3) {
             if (chownErOk(er3)) er3 = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -26833,7 +27187,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, uid, gid) {
           try {
-            return orig.call(fs33, target, uid, gid);
+            return orig.call(fs34, target, uid, gid);
           } catch (er3) {
             if (!chownErOk(er3)) throw er3;
           }
@@ -26853,13 +27207,13 @@ var require_polyfills = __commonJS({
             }
             if (cb) cb.apply(this, arguments);
           }
-          return options2 ? orig.call(fs33, target, options2, callback) : orig.call(fs33, target, callback);
+          return options2 ? orig.call(fs34, target, options2, callback) : orig.call(fs34, target, callback);
         };
       }
       function statFixSync(orig) {
         if (!orig) return orig;
         return function(target, options2) {
-          var stats = options2 ? orig.call(fs33, target, options2) : orig.call(fs33, target);
+          var stats = options2 ? orig.call(fs34, target, options2) : orig.call(fs34, target);
           if (stats) {
             if (stats.uid < 0) stats.uid += 4294967296;
             if (stats.gid < 0) stats.gid += 4294967296;
@@ -26888,7 +27242,7 @@ var require_legacy_streams = __commonJS({
   "node_modules/graceful-fs/legacy-streams.js"(exports, module) {
     var Stream2 = __require("stream").Stream;
     module.exports = legacy;
-    function legacy(fs33) {
+    function legacy(fs34) {
       return {
         ReadStream,
         WriteStream
@@ -26931,7 +27285,7 @@ var require_legacy_streams = __commonJS({
           });
           return;
         }
-        fs33.open(this.path, this.flags, this.mode, function(err, fd) {
+        fs34.open(this.path, this.flags, this.mode, function(err, fd) {
           if (err) {
             self2.emit("error", err);
             self2.readable = false;
@@ -26970,7 +27324,7 @@ var require_legacy_streams = __commonJS({
         this.busy = false;
         this._queue = [];
         if (this.fd === null) {
-          this._open = fs33.open;
+          this._open = fs34.open;
           this._queue.push([this._open, this.path, this.flags, this.mode, void 0]);
           this.flush();
         }
@@ -27005,7 +27359,7 @@ var require_clone = __commonJS({
 // node_modules/graceful-fs/graceful-fs.js
 var require_graceful_fs = __commonJS({
   "node_modules/graceful-fs/graceful-fs.js"(exports, module) {
-    var fs33 = __require("fs");
+    var fs34 = __require("fs");
     var polyfills = require_polyfills();
     var legacy = require_legacy_streams();
     var clone = require_clone();
@@ -27037,12 +27391,12 @@ var require_graceful_fs = __commonJS({
         m59 = "GFS4: " + m59.split(/\n/).join("\nGFS4: ");
         console.error(m59);
       };
-    if (!fs33[gracefulQueue]) {
+    if (!fs34[gracefulQueue]) {
       queue2 = global[gracefulQueue] || [];
-      publishQueue(fs33, queue2);
-      fs33.close = (function(fs$close) {
+      publishQueue(fs34, queue2);
+      fs34.close = (function(fs$close) {
         function close(fd, cb) {
-          return fs$close.call(fs33, fd, function(err) {
+          return fs$close.call(fs34, fd, function(err) {
             if (!err) {
               resetQueue();
             }
@@ -27054,40 +27408,40 @@ var require_graceful_fs = __commonJS({
           value: fs$close
         });
         return close;
-      })(fs33.close);
-      fs33.closeSync = (function(fs$closeSync) {
+      })(fs34.close);
+      fs34.closeSync = (function(fs$closeSync) {
         function closeSync(fd) {
-          fs$closeSync.apply(fs33, arguments);
+          fs$closeSync.apply(fs34, arguments);
           resetQueue();
         }
         Object.defineProperty(closeSync, previousSymbol, {
           value: fs$closeSync
         });
         return closeSync;
-      })(fs33.closeSync);
+      })(fs34.closeSync);
       if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) {
         process.on("exit", function() {
-          debug(fs33[gracefulQueue]);
-          __require("assert").equal(fs33[gracefulQueue].length, 0);
+          debug(fs34[gracefulQueue]);
+          __require("assert").equal(fs34[gracefulQueue].length, 0);
         });
       }
     }
     var queue2;
     if (!global[gracefulQueue]) {
-      publishQueue(global, fs33[gracefulQueue]);
+      publishQueue(global, fs34[gracefulQueue]);
     }
-    module.exports = patch(clone(fs33));
-    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs33.__patched) {
-      module.exports = patch(fs33);
-      fs33.__patched = true;
+    module.exports = patch(clone(fs34));
+    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs34.__patched) {
+      module.exports = patch(fs34);
+      fs34.__patched = true;
     }
-    function patch(fs34) {
-      polyfills(fs34);
-      fs34.gracefulify = patch;
-      fs34.createReadStream = createReadStream;
-      fs34.createWriteStream = createWriteStream;
-      var fs$readFile = fs34.readFile;
-      fs34.readFile = readFile;
+    function patch(fs35) {
+      polyfills(fs35);
+      fs35.gracefulify = patch;
+      fs35.createReadStream = createReadStream;
+      fs35.createWriteStream = createWriteStream;
+      var fs$readFile = fs35.readFile;
+      fs35.readFile = readFile;
       function readFile(path34, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
@@ -27103,8 +27457,8 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$writeFile = fs34.writeFile;
-      fs34.writeFile = writeFile;
+      var fs$writeFile = fs35.writeFile;
+      fs35.writeFile = writeFile;
       function writeFile(path34, data, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
@@ -27120,9 +27474,9 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$appendFile = fs34.appendFile;
+      var fs$appendFile = fs35.appendFile;
       if (fs$appendFile)
-        fs34.appendFile = appendFile;
+        fs35.appendFile = appendFile;
       function appendFile(path34, data, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
@@ -27138,9 +27492,9 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$copyFile = fs34.copyFile;
+      var fs$copyFile = fs35.copyFile;
       if (fs$copyFile)
-        fs34.copyFile = copyFile;
+        fs35.copyFile = copyFile;
       function copyFile(src, dest, flags, cb) {
         if (typeof flags === "function") {
           cb = flags;
@@ -27158,8 +27512,8 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$readdir = fs34.readdir;
-      fs34.readdir = readdir;
+      var fs$readdir = fs35.readdir;
+      fs35.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
       function readdir(path34, options2, cb) {
         if (typeof options2 === "function")
@@ -27200,21 +27554,21 @@ var require_graceful_fs = __commonJS({
         }
       }
       if (process.version.substr(0, 4) === "v0.8") {
-        var legStreams = legacy(fs34);
+        var legStreams = legacy(fs35);
         ReadStream = legStreams.ReadStream;
         WriteStream = legStreams.WriteStream;
       }
-      var fs$ReadStream = fs34.ReadStream;
+      var fs$ReadStream = fs35.ReadStream;
       if (fs$ReadStream) {
         ReadStream.prototype = Object.create(fs$ReadStream.prototype);
         ReadStream.prototype.open = ReadStream$open;
       }
-      var fs$WriteStream = fs34.WriteStream;
+      var fs$WriteStream = fs35.WriteStream;
       if (fs$WriteStream) {
         WriteStream.prototype = Object.create(fs$WriteStream.prototype);
         WriteStream.prototype.open = WriteStream$open;
       }
-      Object.defineProperty(fs34, "ReadStream", {
+      Object.defineProperty(fs35, "ReadStream", {
         get: function() {
           return ReadStream;
         },
@@ -27224,7 +27578,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      Object.defineProperty(fs34, "WriteStream", {
+      Object.defineProperty(fs35, "WriteStream", {
         get: function() {
           return WriteStream;
         },
@@ -27235,7 +27589,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileReadStream = ReadStream;
-      Object.defineProperty(fs34, "FileReadStream", {
+      Object.defineProperty(fs35, "FileReadStream", {
         get: function() {
           return FileReadStream;
         },
@@ -27246,7 +27600,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileWriteStream = WriteStream;
-      Object.defineProperty(fs34, "FileWriteStream", {
+      Object.defineProperty(fs35, "FileWriteStream", {
         get: function() {
           return FileWriteStream;
         },
@@ -27295,13 +27649,13 @@ var require_graceful_fs = __commonJS({
         });
       }
       function createReadStream(path34, options2) {
-        return new fs34.ReadStream(path34, options2);
+        return new fs35.ReadStream(path34, options2);
       }
       function createWriteStream(path34, options2) {
-        return new fs34.WriteStream(path34, options2);
+        return new fs35.WriteStream(path34, options2);
       }
-      var fs$open = fs34.open;
-      fs34.open = open;
+      var fs$open = fs35.open;
+      fs35.open = open;
       function open(path34, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
@@ -27317,20 +27671,20 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      return fs34;
+      return fs35;
     }
     function enqueue(elem) {
       debug("ENQUEUE", elem[0].name, elem[1]);
-      fs33[gracefulQueue].push(elem);
+      fs34[gracefulQueue].push(elem);
       retry();
     }
     var retryTimer;
     function resetQueue() {
       var now = Date.now();
-      for (var i50 = 0; i50 < fs33[gracefulQueue].length; ++i50) {
-        if (fs33[gracefulQueue][i50].length > 2) {
-          fs33[gracefulQueue][i50][3] = now;
-          fs33[gracefulQueue][i50][4] = now;
+      for (var i50 = 0; i50 < fs34[gracefulQueue].length; ++i50) {
+        if (fs34[gracefulQueue][i50].length > 2) {
+          fs34[gracefulQueue][i50][3] = now;
+          fs34[gracefulQueue][i50][4] = now;
         }
       }
       retry();
@@ -27338,9 +27692,9 @@ var require_graceful_fs = __commonJS({
     function retry() {
       clearTimeout(retryTimer);
       retryTimer = void 0;
-      if (fs33[gracefulQueue].length === 0)
+      if (fs34[gracefulQueue].length === 0)
         return;
-      var elem = fs33[gracefulQueue].shift();
+      var elem = fs34[gracefulQueue].shift();
       var fn = elem[0];
       var args = elem[1];
       var err = elem[2];
@@ -27362,7 +27716,7 @@ var require_graceful_fs = __commonJS({
           debug("RETRY", fn.name, args);
           fn.apply(null, args.concat([startTime]));
         } else {
-          fs33[gracefulQueue].push(elem);
+          fs34[gracefulQueue].push(elem);
         }
       }
       if (retryTimer === void 0) {
@@ -41642,9 +41996,9 @@ var require_commonjs4 = __commonJS({
        * @internal
        */
       children() {
-        const cached = __privateGet(this, _children).get(this);
-        if (cached) {
-          return cached;
+        const cached2 = __privateGet(this, _children).get(this);
+        if (cached2) {
+          return cached2;
         }
         const children = Object.assign([], { provisional: 0 });
         __privateGet(this, _children).set(this, children);
@@ -42489,7 +42843,7 @@ var require_commonjs4 = __commonJS({
        *
        * @internal
        */
-      constructor(cwd = process.cwd(), pathImpl, sep, { nocase, childrenCacheSize = 16 * 1024, fs: fs33 = defaultFS } = {}) {
+      constructor(cwd = process.cwd(), pathImpl, sep, { nocase, childrenCacheSize = 16 * 1024, fs: fs34 = defaultFS } = {}) {
         /**
          * The root Path entry for the current working directory of this Scurry
          */
@@ -42516,7 +42870,7 @@ var require_commonjs4 = __commonJS({
          */
         __publicField(this, "nocase");
         __privateAdd(this, _fs2);
-        __privateSet(this, _fs2, fsFromOption(fs33));
+        __privateSet(this, _fs2, fsFromOption(fs34));
         if (cwd instanceof URL || cwd.startsWith("file://")) {
           cwd = (0, node_url_1.fileURLToPath)(cwd);
         }
@@ -42590,9 +42944,9 @@ var require_commonjs4 = __commonJS({
             break;
           }
         }
-        const cached = __privateGet(this, _resolveCache).get(r39);
-        if (cached !== void 0) {
-          return cached;
+        const cached2 = __privateGet(this, _resolveCache).get(r39);
+        if (cached2 !== void 0) {
+          return cached2;
         }
         const result = this.cwd.resolve(r39).fullpath();
         __privateGet(this, _resolveCache).set(r39, result);
@@ -42620,9 +42974,9 @@ var require_commonjs4 = __commonJS({
             break;
           }
         }
-        const cached = __privateGet(this, _resolvePosixCache).get(r39);
-        if (cached !== void 0) {
-          return cached;
+        const cached2 = __privateGet(this, _resolvePosixCache).get(r39);
+        if (cached2 !== void 0) {
+          return cached2;
         }
         const result = this.cwd.resolve(r39).fullpathPosix();
         __privateGet(this, _resolvePosixCache).set(r39, result);
@@ -43079,8 +43433,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      newRoot(fs33) {
-        return new PathWin32(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs33 });
+      newRoot(fs34) {
+        return new PathWin32(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs34 });
       }
       /**
        * Return true if the provided path string is an absolute path
@@ -43109,8 +43463,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      newRoot(fs33) {
-        return new PathPosix(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs33 });
+      newRoot(fs34) {
+        return new PathPosix(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs34 });
       }
       /**
        * Return true if the provided path string is an absolute path
@@ -43435,9 +43789,9 @@ var require_processor = __commonJS({
       }
       storeWalked(target, pattern) {
         const fullpath = target.fullpath();
-        const cached = this.store.get(fullpath);
-        if (cached)
-          cached.add(pattern.globString());
+        const cached2 = this.store.get(fullpath);
+        if (cached2)
+          cached2.add(pattern.globString());
         else
           this.store.set(fullpath, /* @__PURE__ */ new Set([pattern.globString()]));
       }
@@ -44317,7 +44671,7 @@ var require_commonjs5 = __commonJS({
 // node_modules/archiver-utils/file.js
 var require_file = __commonJS({
   "node_modules/archiver-utils/file.js"(exports, module) {
-    var fs33 = require_graceful_fs();
+    var fs34 = require_graceful_fs();
     var path34 = __require("path");
     var flatten = require_flatten();
     var difference = require_difference();
@@ -44344,7 +44698,7 @@ var require_file = __commonJS({
     };
     file.exists = function() {
       var filepath = path34.join.apply(path34, arguments);
-      return fs33.existsSync(filepath);
+      return fs34.existsSync(filepath);
     };
     file.expand = function(...args) {
       var options2 = isPlainObject6(args[0]) ? args.shift() : {};
@@ -44362,7 +44716,7 @@ var require_file = __commonJS({
             if (typeof options2.filter === "function") {
               return options2.filter(filepath);
             } else {
-              return fs33.statSync(filepath)[options2.filter]();
+              return fs34.statSync(filepath)[options2.filter]();
             }
           } catch (e29) {
             return false;
@@ -44470,7 +44824,7 @@ var require_file = __commonJS({
 // node_modules/archiver-utils/index.js
 var require_archiver_utils = __commonJS({
   "node_modules/archiver-utils/index.js"(exports, module) {
-    var fs33 = require_graceful_fs();
+    var fs34 = require_graceful_fs();
     var path34 = __require("path");
     var isStream = require_is_stream();
     var lazystream = require_lazystream();
@@ -44519,7 +44873,7 @@ var require_archiver_utils = __commonJS({
     };
     utils.lazyReadStream = function(filepath) {
       return new lazystream.Readable(function() {
-        return fs33.createReadStream(filepath);
+        return fs34.createReadStream(filepath);
       });
     };
     utils.normalizeInputSource = function(source) {
@@ -44547,7 +44901,7 @@ var require_archiver_utils = __commonJS({
         callback = base;
         base = dirpath;
       }
-      fs33.readdir(dirpath, function(err, list) {
+      fs34.readdir(dirpath, function(err, list) {
         var i50 = 0;
         var file;
         var filepath;
@@ -44560,7 +44914,7 @@ var require_archiver_utils = __commonJS({
             return callback(null, results);
           }
           filepath = path34.join(dirpath, file);
-          fs33.stat(filepath, function(err2, stats) {
+          fs34.stat(filepath, function(err2, stats) {
             results.push({
               path: filepath,
               relative: path34.relative(base, filepath).replace(/\\/g, "/"),
@@ -50085,7 +50439,7 @@ var require_ours2 = __commonJS({
 // node_modules/archiver/lib/core.js
 var require_core = __commonJS({
   "node_modules/archiver/lib/core.js"(exports, module) {
-    var fs33 = __require("fs");
+    var fs34 = __require("fs");
     var glob = require_readdir_glob();
     var async = require_async();
     var path34 = __require("path");
@@ -50149,7 +50503,7 @@ var require_core = __commonJS({
       data.sourcePath = filepath;
       task.data = data;
       this._entriesCount++;
-      if (data.stats && data.stats instanceof fs33.Stats) {
+      if (data.stats && data.stats instanceof fs34.Stats) {
         task = this._updateQueueTaskWithStats(task, data.stats);
         if (task) {
           if (data.stats.size) {
@@ -50320,7 +50674,7 @@ var require_core = __commonJS({
         callback();
         return;
       }
-      fs33.lstat(task.filepath, function(err, stats) {
+      fs34.lstat(task.filepath, function(err, stats) {
         if (this._state.aborted) {
           setImmediate(callback);
           return;
@@ -50363,7 +50717,7 @@ var require_core = __commonJS({
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else if (stats.isSymbolicLink() && this._moduleSupports("symlink")) {
-        var linkPath = fs33.readlinkSync(task.filepath);
+        var linkPath = fs34.readlinkSync(task.filepath);
         var dirName = path34.dirname(task.filepath);
         task.data.type = "symlink";
         task.data.linkname = path34.relative(dirName, path34.resolve(dirName, linkPath));
@@ -65579,7 +65933,8 @@ var apiLimiter = rateLimit({
   legacyHeaders: false,
   // Deshabilitar los headers `X-RateLimit-*`
   skip: (req) => {
-    if (req.headers["x-api-key"] === process.env.API_SECRET_KEY) {
+    const globalKey = req.headers["x-api-key"];
+    if (typeof globalKey === "string" && globalKey.length > 0 && globalKey === process.env.API_SECRET_KEY) {
       return true;
     }
     if (hasValidTenantCredential(req)) {
@@ -65861,12 +66216,14 @@ async function getSessionStatusHandler(req, res, next) {
     }
     const isConnected = isSessionReady(phoneNumber);
     const qr = getQRCode(phoneNumber);
+    const needsRepair = isSessionParked(phoneNumber);
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         phoneNumber,
-        status: isConnected ? "connected" : "disconnected",
+        status: isConnected ? "connected" : needsRepair ? "needs_repair" : "disconnected",
         isConnected,
+        needsRepair,
         ...qr && { qr }
       }
     });
@@ -65880,6 +66237,13 @@ async function disconnectSessionHandler(req, res, next) {
     if (!phoneNumber) {
       const error = new Error("phoneNumber is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    if (isWhatsAppProxyMode()) {
+      const error = new Error(
+        "Send-proxy activo: desconecta la sesi\xF3n desde el entorno de producci\xF3n, no en local."
+      );
+      error.statusCode = HTTP_STATUS.CONFLICT;
       return next(error);
     }
     await disconnectSession(phoneNumber);
@@ -65897,6 +66261,13 @@ async function clearSessionHandler(req, res, next) {
     if (!phoneNumber) {
       const error = new Error("phoneNumber is required");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
+      return next(error);
+    }
+    if (isWhatsAppProxyMode()) {
+      const error = new Error(
+        "Send-proxy activo: restablece la sesi\xF3n desde el entorno de producci\xF3n, no en local (las credenciales viven en el Mongo compartido)."
+      );
+      error.statusCode = HTTP_STATUS.CONFLICT;
       return next(error);
     }
     logger_default.info(`Clearing session ${phoneNumber} (full reset)...`);
@@ -66108,7 +66479,7 @@ init_environment();
 init_logger();
 init_models();
 init_quota_validator_service();
-import crypto2 from "crypto";
+import crypto3 from "crypto";
 var API_KEY_PREFIX = "lk_fe_";
 var normalizeSender = (value) => value.replace(/[^\d]/g, "");
 var extractApiKey = (req) => {
@@ -66138,13 +66509,13 @@ var parseApiKey = (apiKey) => {
   }
   return { companyId, secret };
 };
-var hashApiKey = (apiKey) => crypto2.createHash("sha256").update(apiKey).digest("hex");
+var hashApiKey = (apiKey) => crypto3.createHash("sha256").update(apiKey).digest("hex");
 var timingSafeEqual = (a49, b63) => {
   try {
     const aBuf = Buffer.from(a49);
     const bBuf = Buffer.from(b63);
     if (aBuf.length !== bBuf.length) return false;
-    return crypto2.timingSafeEqual(aBuf, bBuf);
+    return crypto3.timingSafeEqual(aBuf, bBuf);
   } catch {
     return false;
   }
@@ -66337,6 +66708,37 @@ async function requireSenderOwnership(req, res, next) {
     return next(error);
   }
 }
+async function requireSessionOwnership(req, res, next) {
+  const companyId = req.companyId;
+  const phone = req.params?.phoneNumber || req.body?.phoneNumber;
+  if (!companyId || !phone) {
+    return next();
+  }
+  try {
+    const owners = await quotaValidatorService.listCompaniesByWhatsappSender(String(phone));
+    const ownerIds = owners.map((company) => company.companyId);
+    if (ownerIds.length === 0) {
+      logger_default.warn(
+        `Session ownership: sender ${phone} sin due\xF1o; permitido a ${companyId} (primer emparejamiento)`
+      );
+      return next();
+    }
+    if (ownerIds.includes(companyId)) {
+      return next();
+    }
+    logger_default.warn(
+      `Session ownership mismatch: ${companyId} intent\xF3 operar la sesi\xF3n ${phone} (owners=${ownerIds.join(", ")}) [BLOQUEADO]`
+    );
+    const error = new Error("La sesi\xF3n no pertenece a la empresa autenticada");
+    error.statusCode = 403;
+    return next(error);
+  } catch (err) {
+    logger_default.warn(`requireSessionOwnership lookup fall\xF3 para ${phone}: ${String(err)}`);
+    const error = new Error("No se pudo validar la propiedad de la sesi\xF3n");
+    error.statusCode = 503;
+    return next(error);
+  }
+}
 async function guardSharedSenderDestructive(req, res, next) {
   const companyId = req.companyId;
   const phone = req.params?.phoneNumber;
@@ -66380,12 +66782,32 @@ async function guardSharedSenderDestructive(req, res, next) {
 
 // src/api/routes/session.routes.ts
 var router = Router();
-router.get("/list", listActiveSessions);
-router.post("/", requireTenantOrApiKey, createSession);
-router.get("/:phoneNumber/qr", requireTenantOrApiKey, getQRCodeImage);
-router.post("/:phoneNumber/request-pairing-code", requireTenantOrApiKey, createPairingSessionHandler);
-router.get("/:phoneNumber/status", getSessionStatus);
-router.post("/:phoneNumber/restart", requireTenantOrApiKey, restartSession2);
+router.get("/list", requireTenantOrApiKey, listActiveSessions);
+router.post("/", requireTenantOrApiKey, requireSessionOwnership, createSession);
+router.get(
+  "/:phoneNumber/qr",
+  requireTenantOrApiKey,
+  requireSessionOwnership,
+  getQRCodeImage
+);
+router.post(
+  "/:phoneNumber/request-pairing-code",
+  requireTenantOrApiKey,
+  requireSessionOwnership,
+  createPairingSessionHandler
+);
+router.get(
+  "/:phoneNumber/status",
+  requireTenantOrApiKey,
+  requireSessionOwnership,
+  getSessionStatus
+);
+router.post(
+  "/:phoneNumber/restart",
+  requireTenantOrApiKey,
+  requireSessionOwnership,
+  restartSession2
+);
 router.post(
   "/:phoneNumber/logout",
   requireTenantOrApiKey,
@@ -66398,16 +66820,31 @@ router.post(
   guardSharedSenderDestructive,
   clearSession2
 );
-router.get("/:phoneNumber/groups", getGroupList);
-router.get("/:phoneNumber/syncGroups", requireTenantOrApiKey, syncGroups);
-router.get("/:phoneNumber/contacts", getContactsHandler);
+router.get(
+  "/:phoneNumber/groups",
+  requireTenantOrApiKey,
+  requireSessionOwnership,
+  getGroupList
+);
+router.get(
+  "/:phoneNumber/syncGroups",
+  requireTenantOrApiKey,
+  requireSessionOwnership,
+  syncGroups
+);
+router.get(
+  "/:phoneNumber/contacts",
+  requireTenantOrApiKey,
+  requireSessionOwnership,
+  getContactsHandler
+);
 router.delete(
   "/:phoneNumber",
   requireTenantOrApiKey,
   guardSharedSenderDestructive,
   disconnectSession2
 );
-router.get("/", getAllSessions);
+router.get("/", requireTenantOrApiKey, getAllSessions);
 var session_routes_default = router;
 
 // src/api/routes/jobs.routes.v2.ts
@@ -67860,8 +68297,57 @@ import puppeteer from "puppeteer";
 import Handlebars from "handlebars";
 import fs7 from "fs-extra";
 import path10 from "path";
-import os from "os";
+import os2 from "os";
 import { randomUUID as randomUUID3 } from "crypto";
+
+// src/utils/concurrency.ts
+async function mapWithConcurrency(items, limit, worker) {
+  let cursor = 0;
+  const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+}
+function createLimiter(max) {
+  const capacity = Math.max(1, max);
+  let running = 0;
+  const queue2 = [];
+  const release = () => {
+    running -= 1;
+    const next = queue2.shift();
+    if (next) next();
+  };
+  const acquire = () => new Promise((resolve2) => {
+    if (running < capacity) {
+      running += 1;
+      resolve2();
+      return;
+    }
+    queue2.push(() => {
+      running += 1;
+      resolve2();
+    });
+  });
+  return {
+    async run(fn) {
+      await acquire();
+      try {
+        return await fn();
+      } finally {
+        release();
+      }
+    },
+    active: () => running,
+    pending: () => queue2.length
+  };
+}
+
+// src/pdf/generator.service.ts
+var renderLimiter = createLimiter(Number(process.env.PDF_MAX_CONCURRENT_RENDERS) || 2);
+var IMAGES_READY_TIMEOUT_MS = 15e3;
 function resolveChromeExecutable() {
   const candidates = [];
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
@@ -67869,7 +68355,7 @@ function resolveChromeExecutable() {
   }
   candidates.push("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
   try {
-    const cacheRoot = path10.join(os.homedir(), ".cache", "puppeteer", "chrome");
+    const cacheRoot = path10.join(os2.homedir(), ".cache", "puppeteer", "chrome");
     const builds = fs7.readdirSync(cacheRoot).map((name) => {
       const major = Number((name.match(/mac_arm-(\d+)\./) || [])[1] || 0);
       return { name, major };
@@ -67996,6 +68482,29 @@ var PDFGenerator = class {
       throw error;
     }
   }
+  /**
+   * Espera (con tope) a que todas las <img> de la página estén decodificadas.
+   * Reemplaza a `networkidle0`: mismo objetivo (no imprimir imágenes a medias)
+   * sin el modo de falla de colgarse esperando quiescencia de red.
+   */
+  async waitForImagesReady(page) {
+    try {
+      await page.evaluate(async (timeoutMs) => {
+        const images = Array.from(document.images);
+        const allReady = Promise.all(
+          images.map(
+            (img) => img.complete ? Promise.resolve() : new Promise((resolve2) => {
+              img.addEventListener("load", () => resolve2(), { once: true });
+              img.addEventListener("error", () => resolve2(), { once: true });
+            })
+          )
+        );
+        await Promise.race([allReady, new Promise((resolve2) => setTimeout(resolve2, timeoutMs))]);
+      }, IMAGES_READY_TIMEOUT_MS);
+    } catch (error) {
+      logger_default.warn(`waitForImagesReady fall\xF3 (se contin\xFAa): ${String(error)}`);
+    }
+  }
   async generatePDF(request) {
     try {
       await this.ensureBrowser();
@@ -68005,19 +68514,26 @@ var PDFGenerator = class {
       const html = compiled(request.data);
       const filename = request.filename || `pdf-${randomUUID3()}.pdf`;
       const filepath = path10.join(this.uploadsDir, filename);
-      const page = await this.createPageWithRetry();
-      page.setDefaultNavigationTimeout(this.protocolTimeout);
-      page.setDefaultTimeout(this.protocolTimeout);
-      await page.setContent(html, { waitUntil: "networkidle0", timeout: this.protocolTimeout });
-      await page.pdf({
-        path: filepath,
-        format: "A4",
-        margin: { top: "20px", right: "20px", bottom: "20px", left: "20px" },
-        preferCSSPageSize: true
+      return await renderLimiter.run(async () => {
+        const page = await this.createPageWithRetry();
+        try {
+          page.setDefaultNavigationTimeout(this.protocolTimeout);
+          page.setDefaultTimeout(this.protocolTimeout);
+          await page.setContent(html, { waitUntil: "load", timeout: this.protocolTimeout });
+          await this.waitForImagesReady(page);
+          await page.pdf({
+            path: filepath,
+            format: "A4",
+            margin: { top: "20px", right: "20px", bottom: "20px", left: "20px" },
+            preferCSSPageSize: true
+          });
+        } finally {
+          await page.close().catch(() => {
+          });
+        }
+        logger_default.info(`PDF generated: ${filepath}`);
+        return filepath;
       });
-      await page.close();
-      logger_default.info(`PDF generated: ${filepath}`);
-      return filepath;
     } catch (error) {
       logger_default.error("Error generating PDF:", error);
       throw error;
@@ -68028,21 +68544,34 @@ var PDFGenerator = class {
       await this.ensureBrowser();
       const filepath = options2.outputPath ? options2.outputPath : path10.join(this.uploadsDir, options2.filename || `pdf-${randomUUID3()}.pdf`);
       await fs7.ensureDir(path10.dirname(filepath));
-      const page = await this.createPageWithRetry();
-      page.setDefaultNavigationTimeout(this.protocolTimeout);
-      page.setDefaultTimeout(this.protocolTimeout);
-      await page.setContent(html, { waitUntil: "networkidle0", timeout: this.protocolTimeout });
-      await page.pdf({
-        path: filepath,
-        format: options2.format || "A4",
-        landscape: Boolean(options2.landscape),
-        margin: options2.margin || { top: "20px", right: "20px", bottom: "20px", left: "20px" },
-        preferCSSPageSize: true,
-        printBackground: true
+      const startedAt = Date.now();
+      const htmlBytes = Buffer.byteLength(html);
+      return await renderLimiter.run(async () => {
+        const page = await this.createPageWithRetry();
+        try {
+          page.setDefaultNavigationTimeout(this.protocolTimeout);
+          page.setDefaultTimeout(this.protocolTimeout);
+          await page.setContent(html, { waitUntil: "load", timeout: this.protocolTimeout });
+          await this.waitForImagesReady(page);
+          await page.pdf({
+            path: filepath,
+            format: options2.format || "A4",
+            landscape: Boolean(options2.landscape),
+            margin: options2.margin || { top: "20px", right: "20px", bottom: "20px", left: "20px" },
+            preferCSSPageSize: true,
+            printBackground: true
+          });
+        } finally {
+          await page.close().catch(() => {
+          });
+        }
+        logger_default.info(`PDF generated from HTML: ${filepath}`, {
+          htmlBytes,
+          durationMs: Date.now() - startedAt,
+          queuedRenders: renderLimiter.pending()
+        });
+        return filepath;
       });
-      await page.close();
-      logger_default.info(`PDF generated from HTML: ${filepath}`);
-      return filepath;
     } catch (error) {
       logger_default.error("Error generating PDF from HTML:", error);
       throw error;
@@ -68058,32 +68587,34 @@ var PDFGenerator = class {
   async fetchPrintedHtml(url, options2 = {}) {
     await this.ensureBrowser();
     const timeout = options2.timeoutMs ?? Math.min(this.protocolTimeout, 6e4);
-    const page = await this.createPageWithRetry();
-    try {
-      page.setDefaultNavigationTimeout(timeout);
-      page.setDefaultTimeout(timeout);
-      const response = await page.goto(url, { waitUntil: "networkidle0", timeout });
-      if (response && !response.ok()) {
-        throw new Error(`print page respondi\xF3 ${response.status()}`);
+    return await renderLimiter.run(async () => {
+      const page = await this.createPageWithRetry();
+      try {
+        page.setDefaultNavigationTimeout(timeout);
+        page.setDefaultTimeout(timeout);
+        const response = await page.goto(url, { waitUntil: "networkidle0", timeout });
+        if (response && !response.ok()) {
+          throw new Error(`print page respondi\xF3 ${response.status()}`);
+        }
+        await page.waitForFunction(
+          "(window.__PRINT_READY__ === true) || Boolean(window.__PRINT_ERROR__)",
+          { timeout }
+        );
+        const result = await page.evaluate(() => ({
+          html: window.__CANVAS_PRINT_HTML__ || "",
+          error: window.__PRINT_ERROR__ || ""
+        }));
+        if (result.error) {
+          throw new Error(`print page error: ${result.error}`);
+        }
+        if (!result.html) {
+          throw new Error("print page devolvi\xF3 HTML vac\xEDo");
+        }
+        return result.html;
+      } finally {
+        await page.close().catch(() => void 0);
       }
-      await page.waitForFunction(
-        "(window.__PRINT_READY__ === true) || Boolean(window.__PRINT_ERROR__)",
-        { timeout }
-      );
-      const result = await page.evaluate(() => ({
-        html: window.__CANVAS_PRINT_HTML__ || "",
-        error: window.__PRINT_ERROR__ || ""
-      }));
-      if (result.error) {
-        throw new Error(`print page error: ${result.error}`);
-      }
-      if (!result.html) {
-        throw new Error("print page devolvi\xF3 HTML vac\xEDo");
-      }
-      return result.html;
-    } finally {
-      await page.close().catch(() => void 0);
-    }
+    });
   }
   async createTemplate(id, name, htmlContent) {
     try {
@@ -68223,12 +68754,12 @@ init_environment();
 init_environment();
 import fs8 from "fs-extra";
 import path11 from "path";
-import crypto3 from "crypto";
+import crypto4 from "crypto";
 import { createCanvas } from "@napi-rs/canvas";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 function getCacheKey(filePath, stat, page, scale) {
   const raw = `${filePath}:${stat.size}:${stat.mtimeMs}:${page}:${scale}`;
-  return crypto3.createHash("sha1").update(raw).digest("hex");
+  return crypto4.createHash("sha1").update(raw).digest("hex");
 }
 function clampScale(value) {
   if (Number.isNaN(value)) return 1;
@@ -68739,12 +69270,12 @@ var pdf_routes_default = router4;
 // src/api/routes/drive.routes.ts
 import { Router as Router5 } from "express";
 import multer2 from "multer";
-import fs17 from "fs-extra";
-import path20 from "path";
+import fs18 from "fs-extra";
+import path21 from "path";
 
 // src/api/controllers/drive.controller.ts
-import fs14 from "fs-extra";
-import path17 from "path";
+import fs15 from "fs-extra";
+import path18 from "path";
 init_storage_path_service();
 
 // src/middleware/quota.middleware.ts
@@ -68849,7 +69380,7 @@ init_logger();
 var import_sharp = __toESM(require_lib(), 1);
 import fs12 from "fs-extra";
 import path14 from "path";
-import crypto4 from "crypto";
+import crypto5 from "crypto";
 import { spawn } from "child_process";
 init_logger();
 
@@ -68913,6 +69444,8 @@ var VIDEO_EXTENSIONS = /* @__PURE__ */ new Set([
   ".mpg"
 ]);
 var thumbDirName = ".thumbs";
+var THUMBNAIL_MAX_PX = Number(process.env.THUMBNAIL_MAX_PX) || 640;
+var PDF_THUMBNAIL_MAX_PX = 1200;
 function resolveKind(mimeType, fileName) {
   const mime = (mimeType || "").toLowerCase();
   const ext = path14.extname(fileName).toLowerCase();
@@ -68944,7 +69477,7 @@ async function createThumbTargetPath(options2) {
   const stat = await fs12.stat(options2.filePath);
   const parsed = path14.parse(options2.fileName);
   const safeBase = sanitizeName(parsed.name || "file");
-  const hash = crypto4.createHash("sha1").update(`${options2.filePath}:${stat.size}:${stat.mtimeMs}`).digest("hex").slice(0, 10);
+  const hash = crypto5.createHash("sha1").update(`${options2.filePath}:${stat.size}:${stat.mtimeMs}`).digest("hex").slice(0, 10);
   const thumbName = `thumb_${safeBase}_${hash}.jpg`;
   const thumbDir = path14.join(options2.outputDir, thumbDirName);
   await fs12.ensureDir(thumbDir);
@@ -68973,7 +69506,7 @@ async function runFfmpeg(args) {
   });
 }
 async function generateImageThumbnail(options2, thumbPath) {
-  const buffer2 = await (0, import_sharp.default)(options2.filePath).rotate().resize(1200, 1200, {
+  const buffer2 = await (0, import_sharp.default)(options2.filePath).rotate().resize(THUMBNAIL_MAX_PX, THUMBNAIL_MAX_PX, {
     fit: "inside",
     withoutEnlargement: true
   }).jpeg({ quality: 72, progressive: true, mozjpeg: true }).toBuffer();
@@ -68981,7 +69514,7 @@ async function generateImageThumbnail(options2, thumbPath) {
 }
 async function generatePdfThumbnail(options2, thumbPath) {
   const { cacheFile } = await renderPdfPageToPng(options2.filePath, { page: 1, scale: 1.3 });
-  const buffer2 = await (0, import_sharp.default)(cacheFile).resize(1200, 1200, {
+  const buffer2 = await (0, import_sharp.default)(cacheFile).resize(PDF_THUMBNAIL_MAX_PX, PDF_THUMBNAIL_MAX_PX, {
     fit: "inside",
     withoutEnlargement: true
   }).jpeg({ quality: 78, progressive: true, mozjpeg: true }).toBuffer();
@@ -68997,12 +69530,40 @@ async function generateVideoThumbnail(options2, thumbPath) {
     "-frames:v",
     "1",
     "-vf",
-    "scale=1200:-2:force_original_aspect_ratio=decrease",
+    `scale=${THUMBNAIL_MAX_PX}:-2:force_original_aspect_ratio=decrease`,
     "-q:v",
     "5",
     thumbPath
   ];
   await runFfmpeg(args);
+}
+var materializing = /* @__PURE__ */ new Set();
+var materializeLimiter = createLimiter(2);
+function materializeThumbnailInBackground(originalAbsolutePath) {
+  if (materializing.has(originalAbsolutePath)) return;
+  materializing.add(originalAbsolutePath);
+  void materializeLimiter.run(
+    () => generateThumbnailForFile({
+      filePath: originalAbsolutePath,
+      fileName: path14.basename(originalAbsolutePath),
+      outputDir: path14.dirname(originalAbsolutePath)
+    })
+  ).then((result) => {
+    if (result.status === "ready") {
+      logger_default.info("[thumbnail] Materialized missing thumbnail", {
+        original: originalAbsolutePath,
+        thumbnailName: result.thumbnailName,
+        sizeBytes: result.sizeBytes
+      });
+    }
+  }).catch((error) => {
+    logger_default.warn("[thumbnail] Background materialization failed", {
+      original: originalAbsolutePath,
+      error: String(error)
+    });
+  }).finally(() => {
+    materializing.delete(originalAbsolutePath);
+  });
 }
 function buildThumbnailRelativePath(relativePath, thumbnailName) {
   if (relativePath) {
@@ -69171,7 +69732,7 @@ async function optimizeVideoForProgressiveStreaming(options2) {
 }
 
 // src/services/storage-file-name.service.ts
-import crypto5 from "crypto";
+import crypto6 from "crypto";
 import path16 from "path";
 var MAX_SAFE_BASENAME_LENGTH = 80;
 function sanitizeStorageFileName(name) {
@@ -69183,8 +69744,65 @@ function sanitizeStorageFileName(name) {
 function buildUniqueStorageFileName(originalName, uniqueSeed) {
   const safeName = sanitizeStorageFileName(originalName);
   const parsed = path16.parse(safeName);
-  const hash = crypto5.createHash("sha1").update(`${uniqueSeed || crypto5.randomUUID()}:${originalName}:${Date.now()}`).digest("hex").slice(0, 10);
+  const hash = crypto6.createHash("sha1").update(`${uniqueSeed || crypto6.randomUUID()}:${originalName}:${Date.now()}`).digest("hex").slice(0, 10);
   return `${parsed.name}_${hash}${parsed.ext}`;
+}
+
+// src/services/media-ingest.service.ts
+var import_sharp2 = __toESM(require_lib(), 1);
+init_logger();
+import path17 from "path";
+import { randomUUID as randomUUID5 } from "crypto";
+import fs14 from "fs-extra";
+var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp"]);
+var MEDIA_INGEST_MAX_PX = Number(process.env.MEDIA_INGEST_MAX_PX ?? 2560);
+var NORMALIZED_JPEG_QUALITY = 82;
+var isNormalizableImage = (fileName, mimeType) => {
+  const mime = (mimeType || "").toLowerCase();
+  if (mime.includes("svg") || mime.includes("gif")) return false;
+  if (mime.startsWith("image/")) return true;
+  return IMAGE_EXTENSIONS.has(path17.extname(fileName).toLowerCase());
+};
+async function normalizeImageInPlace(params) {
+  const maxPx = params.maxPx ?? MEDIA_INGEST_MAX_PX;
+  if (!Number.isFinite(maxPx) || maxPx <= 0) {
+    return { normalized: false, sizeDeltaBytes: 0, reason: "disabled" };
+  }
+  if (!isNormalizableImage(params.fileName, params.mimeType)) {
+    return { normalized: false, sizeDeltaBytes: 0, reason: "not-an-image" };
+  }
+  try {
+    const metadata = await (0, import_sharp2.default)(params.filePath).metadata();
+    const longestSide = Math.max(metadata.width ?? 0, metadata.height ?? 0);
+    if (!longestSide || longestSide <= maxPx) {
+      return { normalized: false, sizeDeltaBytes: 0, reason: "within-limit" };
+    }
+    const originalSize = (await fs14.stat(params.filePath)).size;
+    const hasAlpha = Boolean(metadata.hasAlpha);
+    const pipeline = (0, import_sharp2.default)(params.filePath).rotate().resize(maxPx, maxPx, { fit: "inside", withoutEnlargement: true });
+    const output = await (hasAlpha ? pipeline.png({ compressionLevel: 9 }) : pipeline.jpeg({ quality: NORMALIZED_JPEG_QUALITY, progressive: true, mozjpeg: true })).toBuffer();
+    const tmpPath = path17.join(
+      path17.dirname(params.filePath),
+      `.ingest-${randomUUID5()}.tmp`
+    );
+    await fs14.writeFile(tmpPath, output);
+    await fs14.move(tmpPath, params.filePath, { overwrite: true });
+    const sizeDeltaBytes = output.length - originalSize;
+    logger_default.info("[media-ingest] Imagen normalizada al techo de ingest", {
+      fileName: params.fileName,
+      fromPx: longestSide,
+      toPx: maxPx,
+      fromBytes: originalSize,
+      toBytes: output.length
+    });
+    return { normalized: true, sizeDeltaBytes };
+  } catch (error) {
+    logger_default.warn("[media-ingest] Fall\xF3 la normalizaci\xF3n, se conserva el original", {
+      fileName: params.fileName,
+      error: String(error)
+    });
+    return { normalized: false, sizeDeltaBytes: 0, reason: "error" };
+  }
 }
 
 // src/api/controllers/drive.controller.ts
@@ -69193,7 +69811,7 @@ init_json_store();
 init_environment();
 var MAX_MIGRATION_COPY_ENTRIES = 500;
 var migrationJobStore = new json_store_default({
-  baseDir: path17.join(config.storage.root, "migration-jobs"),
+  baseDir: path18.join(config.storage.root, "migration-jobs"),
   autoBackup: false
 });
 var activeMigrationCopyJobs = /* @__PURE__ */ new Set();
@@ -69248,22 +69866,22 @@ async function listEntries(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs14.pathExists(resolved);
+    const exists = await fs15.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stat = await fs14.stat(resolved);
+    const stat = await fs15.stat(resolved);
     if (!stat.isDirectory()) {
       const error = new Error("Path is not a folder");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const entries = (await fs14.readdir(resolved)).filter((name) => !name.startsWith("."));
+    const entries = (await fs15.readdir(resolved)).filter((name) => !name.startsWith("."));
     const results = await Promise.all(
       entries.map(async (name) => {
-        const entryStat = await fs14.stat(path17.join(resolved, name));
+        const entryStat = await fs15.stat(path18.join(resolved, name));
         const entry = toEntry(relativePath, name, entryStat, companyId);
         const result = { ...entry };
         if (entry.url) {
@@ -69308,19 +69926,19 @@ async function createFolder(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const parentExists = await fs14.pathExists(resolved);
+    const parentExists = await fs15.pathExists(resolved);
     if (!parentExists) {
       const error = new Error("Parent path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const target = path17.join(resolved, name);
+    const target = path18.join(resolved, name);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs14.ensureDir(target);
+    await fs15.ensureDir(target);
     const newPath = relativePath ? `${relativePath}/${name}` : name;
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
@@ -69361,30 +69979,44 @@ async function uploadFile(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs14.ensureDir(resolved);
+    await fs15.ensureDir(resolved);
     const MAX_ORDERS_BYTES2 = 100 * 1024 * 1024;
     const MAX_DRIVE_BYTES3 = 2 * 1024 * 1024 * 1024;
     const isDriveRoot = relativePath.startsWith("drive");
     const maxAllowedBytes = isDriveRoot ? MAX_DRIVE_BYTES3 : MAX_ORDERS_BYTES2;
     if (file.size > maxAllowedBytes) {
-      await fs14.remove(file.path).catch(() => {
+      await fs15.remove(file.path).catch(() => {
       });
       const error = new Error("File too large");
       error.statusCode = HTTP_STATUS.REQUEST_TOO_LONG;
       return next(error);
     }
     const storageFileName = buildUniqueStorageFileName(file.originalname, file.path);
-    const target = path17.join(resolved, storageFileName);
+    const target = path18.join(resolved, storageFileName);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs14.move(file.path, target, { overwrite: false });
+    await fs15.move(file.path, target, { overwrite: false });
     await incrementStorageUsage(companyId, file.size);
     const videoLike = isVideoFile(file.mimetype, storageFileName);
     let streamStatus = videoLike ? "ready" : "unsupported";
     const streamType = videoLike ? "progressive-range" : void 0;
+    if (!videoLike) {
+      const normalization = await normalizeImageInPlace({
+        filePath: target,
+        fileName: storageFileName,
+        mimeType: file.mimetype
+      });
+      if (normalization.normalized && normalization.sizeDeltaBytes !== 0) {
+        if (normalization.sizeDeltaBytes > 0) {
+          await incrementStorageUsage(companyId, normalization.sizeDeltaBytes);
+        } else {
+          await decrementStorageUsage(companyId, Math.abs(normalization.sizeDeltaBytes));
+        }
+      }
+    }
     if (videoLike) {
       const optimization = await optimizeVideoForProgressiveStreaming({
         filePath: target,
@@ -69467,16 +70099,16 @@ async function deleteEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs14.pathExists(resolved);
+    const exists = await fs15.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stats = await fs14.stat(resolved);
+    const stats = await fs15.stat(resolved);
     const isFile = stats.isFile();
     const fileSize = isFile ? stats.size : 0;
-    await fs14.remove(resolved);
+    await fs15.remove(resolved);
     if (isFile && fileSize > 0) {
       await decrementStorageUsage(companyId, fileSize);
     }
@@ -69517,14 +70149,14 @@ async function moveEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs14.pathExists(fromResolved);
+    const exists = await fs15.pathExists(fromResolved);
     if (!exists) {
       const error = new Error("Source not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    await fs14.ensureDir(path17.dirname(toResolved));
-    await fs14.move(fromResolved, toResolved, { overwrite: false });
+    await fs15.ensureDir(path18.dirname(toResolved));
+    await fs15.move(fromResolved, toResolved, { overwrite: false });
     const publicUrl = `/files/companies/${companyId}/${to3}`;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -69592,31 +70224,31 @@ var copyCompanyFileEntry = async (params) => {
     error.statusCode = HTTP_STATUS.FORBIDDEN;
     throw error;
   }
-  const sourceExists = await fs14.pathExists(sourceResolved);
+  const sourceExists = await fs15.pathExists(sourceResolved);
   if (!sourceExists) {
     const error = new Error("Source not found");
     error.statusCode = HTTP_STATUS.NOT_FOUND;
     throw error;
   }
-  const sourceStats = await fs14.stat(sourceResolved);
+  const sourceStats = await fs15.stat(sourceResolved);
   if (!sourceStats.isFile()) {
     const error = new Error("Source must be a file");
     error.statusCode = HTTP_STATUS.BAD_REQUEST;
     throw error;
   }
   await storagePathService.ensureCompanyStructure(params.targetCompanyId);
-  await fs14.ensureDir(path17.dirname(targetResolved));
-  const targetExists = await fs14.pathExists(targetResolved);
+  await fs15.ensureDir(path18.dirname(targetResolved));
+  const targetExists = await fs15.pathExists(targetResolved);
   let createdTarget = false;
   if (targetExists) {
-    const targetStats = await fs14.stat(targetResolved);
+    const targetStats = await fs15.stat(targetResolved);
     if (targetStats.size !== sourceStats.size) {
       const error = new Error("Target already exists with different size");
       error.statusCode = HTTP_STATUS.CONFLICT;
       throw error;
     }
   } else {
-    await fs14.copy(sourceResolved, targetResolved, { overwrite: false });
+    await fs15.copy(sourceResolved, targetResolved, { overwrite: false });
     await incrementStorageUsage(params.targetCompanyId, sourceStats.size);
     createdTarget = true;
   }
@@ -69629,13 +70261,13 @@ var deleteCompanyFileEntry = async (params) => {
     error.statusCode = HTTP_STATUS.FORBIDDEN;
     throw error;
   }
-  const exists = await fs14.pathExists(resolved);
+  const exists = await fs15.pathExists(resolved);
   if (!exists) {
     return { deleted: false, size: 0 };
   }
-  const stats = await fs14.stat(resolved);
+  const stats = await fs15.stat(resolved);
   const fileSize = stats.isFile() ? stats.size : 0;
-  await fs14.remove(resolved);
+  await fs15.remove(resolved);
   if (fileSize > 0) {
     await decrementStorageUsage(params.companyId, fileSize);
   }
@@ -69925,9 +70557,9 @@ async function getInfo(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const stat = await fs14.stat(resolved);
-    const name = path17.basename(resolved);
-    const parent = path17.dirname(targetPath).replace(/\\/g, "/");
+    const stat = await fs15.stat(resolved);
+    const name = path18.basename(resolved);
+    const parent = path18.dirname(targetPath).replace(/\\/g, "/");
     const base = parent === "." ? "" : parent;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -69949,8 +70581,8 @@ async function getInfo(req, res, next) {
 }
 
 // src/api/controllers/drive-pdf.controller.ts
-import fs15 from "fs-extra";
-import path18 from "path";
+import fs16 from "fs-extra";
+import path19 from "path";
 init_storage_path_service();
 function getPdfPathFromRequest(req) {
   const companyId = req.companyId;
@@ -69968,10 +70600,10 @@ function getPdfPathFromRequest(req) {
   return { resolved, normalized: pathParam };
 }
 function ensurePdfExtension(filePath) {
-  return path18.extname(filePath).toLowerCase() === ".pdf";
+  return path19.extname(filePath).toLowerCase() === ".pdf";
 }
 async function resolveExistingPdfPath(resolved, normalized, companyId) {
-  if (await fs15.pathExists(resolved)) {
+  if (await fs16.pathExists(resolved)) {
     return { resolved, normalized };
   }
   const candidates = [normalized.normalize("NFC"), normalized.normalize("NFD")].filter(
@@ -69979,7 +70611,7 @@ async function resolveExistingPdfPath(resolved, normalized, companyId) {
   );
   for (const candidate of candidates) {
     const altResolved = storagePathService.resolvePath(companyId, candidate);
-    if (await fs15.pathExists(altResolved)) {
+    if (await fs16.pathExists(altResolved)) {
       return { resolved: altResolved, normalized: candidate };
     }
   }
@@ -70004,7 +70636,7 @@ async function getPdfMetadata(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs15.pathExists(resolved);
+    const exists = await fs16.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -70047,7 +70679,7 @@ async function getPdfPageImage(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs15.pathExists(resolved);
+    const exists = await fs16.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -70058,7 +70690,7 @@ async function getPdfPageImage(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path18.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path19.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -70089,7 +70721,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs15.pathExists(resolved);
+    const exists = await fs16.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -70104,7 +70736,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path18.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path19.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -70244,28 +70876,28 @@ var uploadRateLimiter = companyRateLimiter({
 var import_server = __toESM(require_dist2(), 1);
 var import_file_store = __toESM(require_dist3(), 1);
 init_environment();
-import fs16 from "fs-extra";
-import path19 from "path";
+import fs17 from "fs-extra";
+import path20 from "path";
 init_logger();
 init_storage_path_service();
 init_quota_validator_service();
 var MAX_ORDERS_BYTES = 100 * 1024 * 1024;
 var MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024;
-var TUS_STORAGE_DIR = path19.join(config.storage.root, "temp", "tus-uploads");
+var TUS_STORAGE_DIR = path20.join(config.storage.root, "temp", "tus-uploads");
 try {
-  fs16.ensureDirSync(TUS_STORAGE_DIR);
+  fs17.ensureDirSync(TUS_STORAGE_DIR);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path19.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
-    fs16.ensureDirSync(fallback);
+    const fallback = path20.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
+    fs17.ensureDirSync(fallback);
     logger_default.warn(`[tus] Failed to init storage dir at ${TUS_STORAGE_DIR}. Using fallback: ${fallback}`);
     TUS_STORAGE_DIR = fallback;
   } else {
     throw error;
   }
 }
-var TUS_META_DIR = path19.join(TUS_STORAGE_DIR, "metadata");
-fs16.ensureDirSync(TUS_META_DIR);
+var TUS_META_DIR = path20.join(TUS_STORAGE_DIR, "metadata");
+fs17.ensureDirSync(TUS_META_DIR);
 function isValidEntryName2(name) {
   if (!name) return false;
   if (name === "." || name === "..") return false;
@@ -70310,8 +70942,8 @@ function getUploadId(upload4) {
   return String(upload4?.id || "");
 }
 async function storeUploadInfo(info) {
-  const infoPath = path19.join(TUS_META_DIR, `${info.id}.json`);
-  await fs16.writeJson(infoPath, info, { spaces: 2 });
+  const infoPath = path20.join(TUS_META_DIR, `${info.id}.json`);
+  await fs17.writeJson(infoPath, info, { spaces: 2 });
 }
 async function finalizeUpload(upload4, req) {
   const headerMetadata = parseMetadata(req.headers["upload-metadata"]);
@@ -70340,13 +70972,13 @@ async function finalizeUpload(upload4, req) {
   if (!storagePathService.validateAccess(resolved, companyId)) {
     throw new Error("Access denied: invalid path");
   }
-  await fs16.ensureDir(resolved);
-  const target = path19.join(resolved, storageFileName);
+  await fs17.ensureDir(resolved);
+  const target = path20.join(resolved, storageFileName);
   if (!storagePathService.validateAccess(target, companyId)) {
     throw new Error("Access denied: invalid target path");
   }
-  const tempPath = path19.join(TUS_STORAGE_DIR, getUploadId(upload4));
-  await fs16.move(tempPath, target, { overwrite: false });
+  const tempPath = path20.join(TUS_STORAGE_DIR, getUploadId(upload4));
+  await fs17.move(tempPath, target, { overwrite: false });
   await incrementStorageUsage(companyId, uploadSize);
   const filePath = relativePath ? `${relativePath}/${storageFileName}` : storageFileName;
   const publicUrl = `/files/companies/${companyId}/${filePath}`;
@@ -70504,15 +71136,15 @@ async function getTusUploadInfo(req, res, next) {
         error: { message: "Upload ID is required" }
       });
     }
-    const infoPath = path19.join(TUS_META_DIR, `${uploadId}.json`);
-    const exists = await fs16.pathExists(infoPath);
+    const infoPath = path20.join(TUS_META_DIR, `${uploadId}.json`);
+    const exists = await fs17.pathExists(infoPath);
     if (!exists) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         error: { message: "Upload info not found" }
       });
     }
-    const info = await fs16.readJson(infoPath);
+    const info = await fs17.readJson(infoPath);
     if (companyId && info.companyId && info.companyId !== companyId) {
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
@@ -70531,13 +71163,13 @@ async function getTusUploadInfo(req, res, next) {
 // src/api/routes/drive.routes.ts
 var router5 = Router5();
 var MAX_DRIVE_BYTES2 = 2 * 1024 * 1024 * 1024;
-var tempDir = path20.join(config.storage.root, "temp", "uploads");
+var tempDir = path21.join(config.storage.root, "temp", "uploads");
 try {
-  fs17.ensureDirSync(tempDir);
+  fs18.ensureDirSync(tempDir);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path20.join(process.cwd(), "data", "storage", "temp", "uploads");
-    fs17.ensureDirSync(fallback);
+    const fallback = path21.join(process.cwd(), "data", "storage", "temp", "uploads");
+    fs18.ensureDirSync(fallback);
     console.warn(
       `[drive] Failed to init temp dir at ${tempDir}. Using fallback: ${fallback}`
     );
@@ -70587,8 +71219,8 @@ import { Router as Router6 } from "express";
 
 // src/api/controllers/documents.controller.ts
 init_logger();
-import fs23 from "fs-extra";
-import path23 from "path";
+import fs25 from "fs-extra";
+import path24 from "path";
 
 // src/schemas/documents/control-imprimacion.schema.ts
 var emptyMeasurementValues = () => ({
@@ -81047,14 +81679,14 @@ async function getServiceReportModel() {
 init_storage_path_service();
 
 // src/services/report-html-renderer.service.ts
-var import_sharp3 = __toESM(require_lib(), 1);
+var import_sharp4 = __toESM(require_lib(), 1);
 init_storage_path_service();
-import fs18 from "fs-extra";
-import path21 from "path";
+import fs19 from "fs-extra";
+import path22 from "path";
 import axios3 from "axios";
 
 // src/services/image-compression.service.ts
-var import_sharp2 = __toESM(require_lib(), 1);
+var import_sharp3 = __toESM(require_lib(), 1);
 init_logger();
 var ImageCompressionService = class {
   /**
@@ -81064,13 +81696,16 @@ var ImageCompressionService = class {
   static async processImage(buffer2, filename) {
     const sizeMB = buffer2.length / (1024 * 1024);
     const maxSizeMB = Number(process.env.PDF_IMAGE_MAX_MB || 1);
+    let hasAlpha = false;
     try {
-      const metadata = await (0, import_sharp2.default)(buffer2).metadata();
+      const metadata = await (0, import_sharp3.default)(buffer2).metadata();
+      hasAlpha = Boolean(metadata.hasAlpha);
       logger_default.info("Processing image", {
         filename,
         originalSize: `${sizeMB.toFixed(2)}MB`,
         resolution: metadata.width && metadata.height ? `${metadata.width}x${metadata.height}` : "unknown",
-        format: metadata.format
+        format: metadata.format,
+        hasAlpha
       });
     } catch (error) {
       logger_default.warn("Failed to read image metadata", { filename, error: String(error) });
@@ -81079,17 +81714,15 @@ var ImageCompressionService = class {
       return buffer2;
     }
     try {
-      const compressed = await (0, import_sharp2.default)(buffer2).resize(1600, 1600, {
+      const pipeline = (0, import_sharp3.default)(buffer2).resize(1600, 1600, {
         fit: "inside",
         withoutEnlargement: true
-      }).jpeg({
-        quality: 75,
-        progressive: true,
-        mozjpeg: true
-      }).toBuffer();
+      });
+      const compressed = await (hasAlpha ? pipeline.png({ compressionLevel: 9, quality: 80, palette: true }) : pipeline.jpeg({ quality: 75, progressive: true, mozjpeg: true })).toBuffer();
       const compressedSizeMB = compressed.length / (1024 * 1024);
       logger_default.info("Image compressed", {
         filename,
+        format: hasAlpha ? "png (alpha preservado)" : "jpeg",
         originalSize: `${sizeMB.toFixed(2)}MB`,
         compressedSize: `${compressedSizeMB.toFixed(2)}MB`,
         reduction: `${((1 - compressedSizeMB / sizeMB) * 100).toFixed(1)}%`
@@ -83327,10 +83960,10 @@ ${signaturesHtml}`;
   }
   async resolveFileBuffer(filePath) {
     try {
-      if (path21.isAbsolute(filePath)) {
-        if (await fs18.pathExists(filePath)) {
-          const raw = await fs18.readFile(filePath);
-          return ImageCompressionService.processImage(raw, path21.basename(filePath));
+      if (path22.isAbsolute(filePath)) {
+        if (await fs19.pathExists(filePath)) {
+          const raw = await fs19.readFile(filePath);
+          return ImageCompressionService.processImage(raw, path22.basename(filePath));
         }
         return null;
       }
@@ -83338,9 +83971,9 @@ ${signaturesHtml}`;
         return null;
       }
       const resolved = this.resolveCompanyStoragePath(filePath);
-      if (resolved && await fs18.pathExists(resolved)) {
-        const raw = await fs18.readFile(resolved);
-        return ImageCompressionService.processImage(raw, path21.basename(resolved));
+      if (resolved && await fs19.pathExists(resolved)) {
+        const raw = await fs19.readFile(resolved);
+        return ImageCompressionService.processImage(raw, path22.basename(resolved));
       }
     } catch (error) {
       logger_default.warn("Failed to read photo file for PDF", { error: String(error), filePath });
@@ -83381,9 +84014,9 @@ ${signaturesHtml}`;
     try {
       const storagePath = this.resolveStoragePathFromUrl(urlCandidate);
       if (storagePath) {
-        if (await fs18.pathExists(storagePath)) {
-          const raw = await fs18.readFile(storagePath);
-          return ImageCompressionService.processImage(raw, path21.basename(storagePath));
+        if (await fs19.pathExists(storagePath)) {
+          const raw = await fs19.readFile(storagePath);
+          return ImageCompressionService.processImage(raw, path22.basename(storagePath));
         }
       }
     } catch (error) {
@@ -83398,7 +84031,7 @@ ${signaturesHtml}`;
         timeout: 1e4
       });
       const buffer2 = Buffer.from(response.data);
-      return ImageCompressionService.processImage(buffer2, path21.basename(urlCandidate));
+      return ImageCompressionService.processImage(buffer2, path22.basename(urlCandidate));
     } catch (error) {
       logger_default.warn("Failed to download image for PDF compression", {
         error: String(error),
@@ -83426,7 +84059,7 @@ ${signaturesHtml}`;
     let format2 = "jpeg";
     let outputBuffer = buffer2;
     try {
-      const metadata = await (0, import_sharp3.default)(buffer2).metadata();
+      const metadata = await (0, import_sharp4.default)(buffer2).metadata();
       if (metadata.format) {
         format2 = metadata.format;
       }
@@ -83435,7 +84068,7 @@ ${signaturesHtml}`;
     }
     if (format2 === "svg") {
       try {
-        outputBuffer = await (0, import_sharp3.default)(buffer2, { density: 300 }).png().toBuffer();
+        outputBuffer = await (0, import_sharp4.default)(buffer2, { density: 300 }).png().toBuffer();
         format2 = "png";
       } catch (error) {
         logger_default.warn("Failed to rasterize SVG image, falling back to raw SVG data URL", {
@@ -83555,14 +84188,115 @@ ${signaturesHtml}`;
 };
 
 // src/services/canvas-html-image-inliner.service.ts
-var import_sharp4 = __toESM(require_lib(), 1);
+var import_sharp5 = __toESM(require_lib(), 1);
 init_logger();
 init_storage_path_service();
-import path22 from "path";
 import axios4 from "axios";
-import fs19 from "fs-extra";
+
+// src/services/thumbnail-request.service.ts
+import fs20 from "fs-extra";
+import path23 from "path";
+var THUMB_DIR_NAME = ".thumbs";
+var THUMBNAIL_NAME_PATTERN = /^thumb_(.+)_[a-f0-9]{10}\.jpg$/i;
+var IMAGE_EXTENSIONS2 = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+function sanitizeName2(name) {
+  return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "file";
+}
+function normalizeRequestPath(requestPath) {
+  if (!requestPath) return null;
+  try {
+    const decoded = decodeURIComponent(requestPath);
+    const normalized = path23.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
+    if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+function toAbsolutePath(root, relativePath) {
+  return path23.join(root, ...relativePath.split("/"));
+}
+async function findOriginalForThumbnail(root, relativeThumbPath) {
+  const segments = relativeThumbPath.split("/");
+  const thumbDirIndex = segments.lastIndexOf(THUMB_DIR_NAME);
+  const thumbName = segments[segments.length - 1] || "";
+  const match = thumbName.match(THUMBNAIL_NAME_PATTERN);
+  if (thumbDirIndex <= 0 || !match?.[1]) {
+    return null;
+  }
+  const parentSegments = segments.slice(0, thumbDirIndex);
+  const parentDir = toAbsolutePath(root, parentSegments.join("/"));
+  const safeBase = match[1];
+  const entries = await fs20.readdir(parentDir).catch(() => []);
+  const candidates = await Promise.all(
+    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName2(path23.parse(entry).name || "file") === safeBase).map(async (entry) => {
+      const absolutePath = path23.join(parentDir, entry);
+      const stat = await fs20.stat(absolutePath).catch(() => null);
+      const ext = path23.extname(entry).toLowerCase();
+      if (!stat?.isFile() || !IMAGE_EXTENSIONS2.has(ext)) {
+        return null;
+      }
+      return {
+        absolutePath,
+        mtimeMs: stat.mtimeMs
+      };
+    })
+  );
+  const validCandidates = candidates.filter((candidate) => Boolean(candidate)).sort((a49, b63) => b63.mtimeMs - a49.mtimeMs);
+  return validCandidates[0]?.absolutePath || null;
+}
+async function findSiblingThumbForBase(root, relativeThumbPath) {
+  const segments = relativeThumbPath.split("/");
+  const thumbName = segments[segments.length - 1] || "";
+  const match = thumbName.match(THUMBNAIL_NAME_PATTERN);
+  if (!match?.[1]) return null;
+  const thumbDir = toAbsolutePath(root, segments.slice(0, -1).join("/"));
+  const prefix = `thumb_${match[1]}_`;
+  const entries = await fs20.readdir(thumbDir).catch(() => []);
+  const sibling = entries.find(
+    (entry) => entry.startsWith(prefix) && THUMBNAIL_NAME_PATTERN.test(entry)
+  );
+  return sibling ? path23.join(thumbDir, sibling) : null;
+}
+async function resolveThumbnailRequestTarget(root, requestPath) {
+  const relativePath = normalizeRequestPath(requestPath);
+  if (!relativePath || !relativePath.split("/").includes(THUMB_DIR_NAME)) {
+    return null;
+  }
+  const thumbPath = toAbsolutePath(root, relativePath);
+  if (await fs20.pathExists(thumbPath)) {
+    return {
+      absolutePath: thumbPath,
+      source: "thumbnail"
+    };
+  }
+  const siblingThumb = await findSiblingThumbForBase(root, relativePath);
+  if (siblingThumb) {
+    return {
+      absolutePath: siblingThumb,
+      source: "thumbnail"
+    };
+  }
+  const originalPath = await findOriginalForThumbnail(root, relativePath);
+  if (!originalPath) {
+    return null;
+  }
+  return {
+    absolutePath: originalPath,
+    source: "original-fallback"
+  };
+}
+
+// src/services/canvas-html-image-inliner.service.ts
+import fs21 from "fs-extra";
 var IMG_SRC_REGEX = /(<img\b[^>]*?\bsrc=)(["'])(.*?)\2/gi;
-var resolveStoragePathFromUrl = (urlCandidate, companyId) => {
+var IMG_DOWNLOAD_TIMEOUT_MS = 3e4;
+var INLINE_CONCURRENCY = 4;
+var PDF_IMAGE_MAX_PX = Number(process.env.PDF_INLINE_IMAGE_MAX_PX) || 1600;
+var PDF_IMAGE_JPEG_QUALITY = 72;
+var resolveStorageRefFromUrl = (urlCandidate, companyId) => {
   if (!companyId) return null;
   try {
     const rawPath = urlCandidate.startsWith("http") ? new URL(urlCandidate).pathname : urlCandidate;
@@ -83570,10 +84304,14 @@ var resolveStoragePathFromUrl = (urlCandidate, companyId) => {
     const idx = rawPath.indexOf(marker);
     if (idx === -1) return null;
     const remainder = rawPath.slice(idx + marker.length);
-    const parts = remainder.split("/").filter(Boolean);
+    const parts = remainder.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
     if (parts.length < 2) return null;
-    const relative = parts.slice(1).join("/");
-    return storagePathService.resolvePath(parts[0], relative);
+    const relativePath = parts.slice(1).join("/");
+    return {
+      absolutePath: storagePathService.resolvePath(parts[0], relativePath),
+      companyRoot: storagePathService.getCompanyRoot(parts[0]),
+      relativePath
+    };
   } catch (error) {
     logger_default.warn("canvasHtmlInliner: failed to resolve storage path", {
       error: String(error),
@@ -83582,26 +84320,36 @@ var resolveStoragePathFromUrl = (urlCandidate, companyId) => {
     return null;
   }
 };
-var resolveImageBuffer = async (urlCandidate, companyId) => {
-  const storagePath = resolveStoragePathFromUrl(urlCandidate, companyId);
-  if (storagePath) {
-    try {
-      if (await fs19.pathExists(storagePath)) {
-        const raw = await fs19.readFile(storagePath);
-        return ImageCompressionService.processImage(raw, path22.basename(storagePath));
-      }
-    } catch (error) {
-      logger_default.warn("canvasHtmlInliner: failed to read storage image", {
-        error: String(error),
-        storagePath
-      });
+var readLocalImage = async (ref) => {
+  try {
+    if (await fs21.pathExists(ref.absolutePath)) {
+      return await fs21.readFile(ref.absolutePath);
     }
+    const target = await resolveThumbnailRequestTarget(ref.companyRoot, ref.relativePath);
+    if (target) {
+      return await fs21.readFile(target.absolutePath);
+    }
+  } catch (error) {
+    logger_default.warn("canvasHtmlInliner: failed to read storage image", {
+      error: String(error),
+      storagePath: ref.absolutePath
+    });
+  }
+  return null;
+};
+var resolveImageBuffer = async (urlCandidate, companyId) => {
+  const ref = resolveStorageRefFromUrl(urlCandidate, companyId);
+  if (ref) {
+    const local = await readLocalImage(ref);
+    if (local) return local;
   }
   if (!urlCandidate.startsWith("http")) return null;
   try {
-    const response = await axios4.get(urlCandidate, { responseType: "arraybuffer", timeout: 1e4 });
-    const buffer2 = Buffer.from(response.data);
-    return ImageCompressionService.processImage(buffer2, path22.basename(urlCandidate));
+    const response = await axios4.get(urlCandidate, {
+      responseType: "arraybuffer",
+      timeout: IMG_DOWNLOAD_TIMEOUT_MS
+    });
+    return Buffer.from(response.data);
   } catch (error) {
     logger_default.warn("canvasHtmlInliner: failed to download image", {
       error: String(error),
@@ -83610,27 +84358,38 @@ var resolveImageBuffer = async (urlCandidate, companyId) => {
     return null;
   }
 };
-var bufferToDataUrl = async (buffer2) => {
+var toPdfDataUrl = async (buffer2) => {
   let format2 = "jpeg";
-  let outputBuffer = buffer2;
+  let hasAlpha = false;
   try {
-    const metadata = await (0, import_sharp4.default)(buffer2).metadata();
+    const metadata = await (0, import_sharp5.default)(buffer2).metadata();
     if (metadata.format) format2 = metadata.format;
+    hasAlpha = Boolean(metadata.hasAlpha);
   } catch (error) {
     logger_default.warn("canvasHtmlInliner: failed to detect image format", { error: String(error) });
+    return `data:image/jpeg;base64,${buffer2.toString("base64")}`;
   }
-  if (format2 === "svg") {
-    try {
-      outputBuffer = await (0, import_sharp4.default)(buffer2, { density: 300 }).png().toBuffer();
-      format2 = "png";
-    } catch {
-      format2 = "svg+xml";
-    }
+  try {
+    const source = format2 === "svg" ? (0, import_sharp5.default)(buffer2, { density: 300 }) : (0, import_sharp5.default)(buffer2);
+    const pipeline = source.resize(PDF_IMAGE_MAX_PX, PDF_IMAGE_MAX_PX, {
+      fit: "inside",
+      withoutEnlargement: true
+    });
+    const usePng = hasAlpha;
+    const output = await (usePng ? pipeline.png({ compressionLevel: 9 }) : pipeline.jpeg({ quality: PDF_IMAGE_JPEG_QUALITY, progressive: true, mozjpeg: true })).toBuffer();
+    return `data:image/${usePng ? "png" : "jpeg"};base64,${output.toString("base64")}`;
+  } catch (error) {
+    logger_default.warn("canvasHtmlInliner: failed to re-encode image, embedding as-is", {
+      error: String(error),
+      format: format2
+    });
+    const fallbackFormat = format2 === "svg" ? "svg+xml" : format2;
+    return `data:image/${fallbackFormat};base64,${buffer2.toString("base64")}`;
   }
-  return `data:image/${format2};base64,${outputBuffer.toString("base64")}`;
 };
 var inlineCanvasHtmlImages = async (html, companyId) => {
   if (!html) return html;
+  const startedAt = Date.now();
   const sources = /* @__PURE__ */ new Set();
   let match;
   IMG_SRC_REGEX.lastIndex = 0;
@@ -83640,18 +84399,25 @@ var inlineCanvasHtmlImages = async (html, companyId) => {
   }
   if (sources.size === 0) return html;
   const resolved = /* @__PURE__ */ new Map();
-  await Promise.all(
-    Array.from(sources).map(async (src) => {
-      const buffer2 = await resolveImageBuffer(src, companyId);
-      if (buffer2) resolved.set(src, await bufferToDataUrl(buffer2));
-    })
-  );
+  await mapWithConcurrency(Array.from(sources), INLINE_CONCURRENCY, async (src) => {
+    const buffer2 = await resolveImageBuffer(src, companyId);
+    if (buffer2) resolved.set(src, await toPdfDataUrl(buffer2));
+  });
   if (resolved.size === 0) return html;
   IMG_SRC_REGEX.lastIndex = 0;
-  return html.replace(IMG_SRC_REGEX, (whole, prefix, quote, src) => {
+  const inlined = html.replace(IMG_SRC_REGEX, (whole, prefix, quote, src) => {
     const dataUrl = resolved.get(src);
     return dataUrl ? `${prefix}${quote}${dataUrl}${quote}` : whole;
   });
+  logger_default.info("canvasHtmlInliner: inlined document images", {
+    companyId,
+    images: sources.size,
+    inlined: resolved.size,
+    htmlBytesBefore: Buffer.byteLength(html),
+    htmlBytesAfter: Buffer.byteLength(inlined),
+    durationMs: Date.now() - startedAt
+  });
+  return inlined;
 };
 
 // src/services/schema-customization.service.ts
@@ -83768,15 +84534,15 @@ function buildEffectiveSchema(baseSchema, overrides, customSections) {
 // src/services/pdf-merger.service.ts
 init_storage_path_service();
 init_logger();
-import fs20 from "fs-extra";
+import fs22 from "fs-extra";
 import axios5 from "axios";
 import { PDFDocument as PDFDocument2 } from "pdf-lib";
-function resolveStoragePathFromUrl2(url, companyId) {
+function resolveStoragePathFromUrl(url, companyId) {
   if (!url) return null;
   if (url.startsWith("http")) {
     try {
       const parsedUrl = new URL(url);
-      return resolveStoragePathFromUrl2(parsedUrl.pathname, companyId);
+      return resolveStoragePathFromUrl(parsedUrl.pathname, companyId);
     } catch {
       return null;
     }
@@ -83800,9 +84566,9 @@ async function resolveLetterheadBytes(letterhead, companyId) {
     const base64 = url.split(",")[1];
     return base64 ? Buffer.from(base64, "base64") : null;
   }
-  const storagePath = resolveStoragePathFromUrl2(url, companyId);
-  if (storagePath && await fs20.pathExists(storagePath)) {
-    return fs20.readFile(storagePath);
+  const storagePath = resolveStoragePathFromUrl(url, companyId);
+  if (storagePath && await fs22.pathExists(storagePath)) {
+    return fs22.readFile(storagePath);
   }
   if (url.startsWith("http")) {
     const response = await axios5.get(url, {
@@ -83819,32 +84585,93 @@ function isPdfBuffer(buffer2) {
 function isPngBuffer(buffer2) {
   return buffer2.subarray(1, 4).toString("utf8") === "PNG";
 }
+function isJpegBuffer(buffer2) {
+  return buffer2[0] === 255 && buffer2[1] === 216;
+}
+var A4_PT = { width: 595.28, height: 841.89 };
+var ANNEX_IMAGE_MARGIN_PT = 28;
+async function resolveAnnexBytes(url, companyId) {
+  const trimmed = String(url || "").trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("data:")) {
+    const base64 = trimmed.split(",")[1];
+    return base64 ? Buffer.from(base64, "base64") : null;
+  }
+  const storagePath = resolveStoragePathFromUrl(trimmed, companyId);
+  if (storagePath && await fs22.pathExists(storagePath)) {
+    return fs22.readFile(storagePath);
+  }
+  if (trimmed.startsWith("http")) {
+    try {
+      const response = await axios5.get(trimmed, {
+        responseType: "arraybuffer",
+        timeout: 15e3
+      });
+      return Buffer.from(response.data);
+    } catch (error) {
+      logger_default.warn("Annex download failed", { url: trimmed, error: String(error) });
+      return null;
+    }
+  }
+  return null;
+}
+async function addImageAnnexPage(mergedPdf, bytes) {
+  const image = isPngBuffer(bytes) ? await mergedPdf.embedPng(bytes) : await mergedPdf.embedJpg(bytes);
+  const page = mergedPdf.addPage([A4_PT.width, A4_PT.height]);
+  const maxW = A4_PT.width - ANNEX_IMAGE_MARGIN_PT * 2;
+  const maxH = A4_PT.height - ANNEX_IMAGE_MARGIN_PT * 2;
+  const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+  const drawW = image.width * scale;
+  const drawH = image.height * scale;
+  page.drawImage(image, {
+    x: (A4_PT.width - drawW) / 2,
+    y: (A4_PT.height - drawH) / 2,
+    width: drawW,
+    height: drawH
+  });
+}
 var PDFMergerService = class {
   static async getPageCount(pdfPath) {
-    const bytes = await fs20.readFile(pdfPath);
+    const bytes = await fs22.readFile(pdfPath);
     const pdf = await PDFDocument2.load(bytes);
     return pdf.getPageCount();
   }
   static async mergePDFWithAnnexes(mainPdfPath, annexes, outputPath, companyId) {
-    const mainPdfBytes = await fs20.readFile(mainPdfPath);
+    const mainPdfBytes = await fs22.readFile(mainPdfPath);
     const mergedPdf = await PDFDocument2.load(mainPdfBytes);
     const mainPageCount = mergedPdf.getPageCount();
     let totalAnnexPages = 0;
     const sorted = [...annexes].sort((a49, b63) => (a49.order ?? 0) - (b63.order ?? 0));
     for (const annex of sorted) {
-      const annexPath = resolveStoragePathFromUrl2(annex.pdfUrl, companyId);
-      if (!annexPath || !await fs20.pathExists(annexPath)) {
-        logger_default.warn("Annex PDF not found, skipping", { annexId: annex.id, pdfUrl: annex.pdfUrl });
+      const bytes = await resolveAnnexBytes(annex.pdfUrl, companyId);
+      if (!bytes) {
+        logger_default.warn("Annex not resolvable, skipping", { annexId: annex.id, pdfUrl: annex.pdfUrl });
         continue;
       }
-      const annexPdfBytes = await fs20.readFile(annexPath);
-      const annexPdf = await PDFDocument2.load(annexPdfBytes);
-      const copiedPages = await mergedPdf.copyPages(annexPdf, annexPdf.getPageIndices());
-      copiedPages.forEach((page) => mergedPdf.addPage(page));
-      totalAnnexPages += annexPdf.getPageCount();
+      try {
+        if (isPdfBuffer(bytes)) {
+          const annexPdf = await PDFDocument2.load(bytes);
+          const copiedPages = await mergedPdf.copyPages(annexPdf, annexPdf.getPageIndices());
+          copiedPages.forEach((page) => mergedPdf.addPage(page));
+          totalAnnexPages += annexPdf.getPageCount();
+        } else if (isPngBuffer(bytes) || isJpegBuffer(bytes)) {
+          await addImageAnnexPage(mergedPdf, bytes);
+          totalAnnexPages += 1;
+        } else {
+          logger_default.warn("Annex format unsupported, skipping", {
+            annexId: annex.id,
+            pdfUrl: annex.pdfUrl
+          });
+        }
+      } catch (error) {
+        logger_default.warn("Annex embed failed, skipping", {
+          annexId: annex.id,
+          error: String(error)
+        });
+      }
     }
     const mergedPdfBytes = await mergedPdf.save();
-    await fs20.writeFile(outputPath, mergedPdfBytes);
+    await fs22.writeFile(outputPath, mergedPdfBytes);
     return {
       totalPages: mergedPdf.getPageCount(),
       mainPages: mainPageCount,
@@ -83853,16 +84680,16 @@ var PDFMergerService = class {
   }
   static async applyLetterheadBackground(pdfPath, letterhead, outputPath, companyId) {
     if (!letterhead) {
-      if (pdfPath !== outputPath) await fs20.copyFile(pdfPath, outputPath);
+      if (pdfPath !== outputPath) await fs22.copyFile(pdfPath, outputPath);
       return;
     }
     try {
       const letterheadBytes = await resolveLetterheadBytes(letterhead, companyId);
       if (!letterheadBytes) {
-        if (pdfPath !== outputPath) await fs20.copyFile(pdfPath, outputPath);
+        if (pdfPath !== outputPath) await fs22.copyFile(pdfPath, outputPath);
         return;
       }
-      const sourcePdf = await PDFDocument2.load(await fs20.readFile(pdfPath));
+      const sourcePdf = await PDFDocument2.load(await fs22.readFile(pdfPath));
       const outputPdf = await PDFDocument2.create();
       const embeddedBackground = await this.embedBackground(outputPdf, letterheadBytes);
       for (const sourcePage of sourcePdf.getPages()) {
@@ -83872,13 +84699,13 @@ var PDFMergerService = class {
         this.drawBackground(outputPage, embeddedBackground, width, height);
         outputPage.drawPage(embeddedPage, { x: 0, y: 0, width, height });
       }
-      await fs20.writeFile(outputPath, await outputPdf.save());
+      await fs22.writeFile(outputPath, await outputPdf.save());
     } catch (error) {
       logger_default.warn("Letterhead background failed, copying original PDF", {
         error: String(error),
         letterheadId: letterhead.id
       });
-      if (pdfPath !== outputPath) await fs20.copyFile(pdfPath, outputPath);
+      if (pdfPath !== outputPath) await fs22.copyFile(pdfPath, outputPath);
     }
   }
   static async embedBackground(outputPdf, bytes) {
@@ -83900,17 +84727,17 @@ var PDFMergerService = class {
 };
 
 // src/services/folio-generator.service.ts
-import fs21 from "fs-extra";
+import fs23 from "fs-extra";
 import { PDFDocument as PDFDocument3, rgb as rgb2, StandardFonts as StandardFonts2 } from "pdf-lib";
 var FolioGeneratorService = class {
   static async addFolios(pdfPath, config2, outputPath, options2 = {}) {
     if (!config2.enabled) {
       if (pdfPath !== outputPath) {
-        await fs21.copyFile(pdfPath, outputPath);
+        await fs23.copyFile(pdfPath, outputPath);
       }
       return;
     }
-    const pdfBytes = await fs21.readFile(pdfPath);
+    const pdfBytes = await fs23.readFile(pdfPath);
     const pdfDoc = await PDFDocument3.load(pdfBytes);
     const font = await pdfDoc.embedFont(StandardFonts2.Helvetica);
     const fontSize = config2.fontSize || 10;
@@ -83942,7 +84769,7 @@ var FolioGeneratorService = class {
       });
     }
     const modifiedPdfBytes = await pdfDoc.save();
-    await fs21.writeFile(outputPath, modifiedPdfBytes);
+    await fs23.writeFile(outputPath, modifiedPdfBytes);
   }
   static formatFolio(template, current, total) {
     return template.replace("{current}", String(current)).replace("{total}", String(total));
@@ -83985,7 +84812,7 @@ init_environment();
 init_models();
 
 // src/services/pdf-to-docx.service.ts
-import fs22 from "fs-extra";
+import fs24 from "fs-extra";
 
 // node_modules/docx/build/index.mjs
 var __defProp2 = Object.defineProperty;
@@ -101716,7 +102543,7 @@ import { createRequire } from "module";
 import { createCanvas as createCanvas2 } from "@napi-rs/canvas";
 async function convertPdfToDocx(pdfPath, outputPath, options2 = {}) {
   const scale = options2.scale ?? 1.8;
-  const pdfBuffer = await fs22.readFile(pdfPath);
+  const pdfBuffer = await fs24.readFile(pdfPath);
   const pdfData = Buffer.isBuffer(pdfBuffer) ? new Uint8Array(pdfBuffer.buffer, pdfBuffer.byteOffset, pdfBuffer.byteLength) : new Uint8Array(pdfBuffer);
   const require2 = createRequire(import.meta.url);
   const candidates = [
@@ -101778,7 +102605,7 @@ async function convertPdfToDocx(pdfPath, outputPath, options2 = {}) {
     ]
   });
   const docxBuffer = await Packer.toBuffer(doc);
-  await fs22.writeFile(outputPath, docxBuffer);
+  await fs24.writeFile(outputPath, docxBuffer);
 }
 
 // src/api/controllers/documents.controller.ts
@@ -101939,7 +102766,8 @@ async function resolveReportHtml(input) {
     companyId: input.companyId,
     baseUrl: input.baseUrl
   });
-  return { html: await renderer.render(), source: "renderer" };
+  const renderedHtml = await renderer.render();
+  return { html: await inlineCanvasHtmlImages(renderedHtml, input.companyId), source: "renderer" };
 }
 function buildFolioOptions(data, limitPages) {
   const letterhead = getDocumentLetterhead(data);
@@ -102369,9 +103197,9 @@ async function generateDocument(req, res, next) {
     const reportsDir = storagePathService.getModulePath(
       companyId,
       "service",
-      path23.join("reports", report.serviceManagementId || "generic")
+      path24.join("reports", report.serviceManagementId || "generic")
     );
-    await fs23.ensureDir(reportsDir);
+    await fs25.ensureDir(reportsDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const baseFilename = `${report.type}-${timestamp}`;
     let docxUrl;
@@ -102385,7 +103213,7 @@ async function generateDocument(req, res, next) {
     let docxSizeBytes;
     if (generatePdf) {
       const pdfFilename = `${baseFilename}.pdf`;
-      const pdfPath = path23.join(reportsDir, pdfFilename);
+      const pdfPath = path24.join(reportsDir, pdfFilename);
       const pdfStarted = Date.now();
       const baseUrl = buildAbsoluteUrl4(req, "");
       const { html, source } = await resolveReportHtml({
@@ -102406,15 +103234,15 @@ async function generateDocument(req, res, next) {
       });
       const letterhead = getDocumentLetterhead(data);
       if (letterhead) {
-        const letterheadPath = path23.join(reportsDir, `${baseFilename}-letterhead.pdf`);
+        const letterheadPath = path24.join(reportsDir, `${baseFilename}-letterhead.pdf`);
         await PDFMergerService.applyLetterheadBackground(
           pdfPath,
           letterhead,
           letterheadPath,
           companyId
         );
-        await fs23.copyFile(letterheadPath, pdfPath);
-        await fs23.remove(letterheadPath);
+        await fs25.copyFile(letterheadPath, pdfPath);
+        await fs25.remove(letterheadPath);
       }
       pdfDuration = Date.now() - pdfStarted;
       let currentPdfPath = pdfPath;
@@ -102422,7 +103250,7 @@ async function generateDocument(req, res, next) {
       annexPages = 0;
       totalPages = mainPages;
       if (annexes.length > 0) {
-        const mergedPath = path23.join(reportsDir, `${baseFilename}-merged.pdf`);
+        const mergedPath = path24.join(reportsDir, `${baseFilename}-merged.pdf`);
         const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
           pdfPath,
           annexes,
@@ -102435,7 +103263,7 @@ async function generateDocument(req, res, next) {
         totalPages = mergeResult.totalPages;
       }
       if (folioConfig?.enabled) {
-        const folioPath = path23.join(reportsDir, `${baseFilename}-folio.pdf`);
+        const folioPath = path24.join(reportsDir, `${baseFilename}-folio.pdf`);
         const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
         await FolioGeneratorService.addFolios(
           currentPdfPath,
@@ -102446,35 +103274,35 @@ async function generateDocument(req, res, next) {
         currentPdfPath = folioPath;
       }
       if (currentPdfPath !== pdfPath) {
-        await fs23.copyFile(currentPdfPath, pdfPath);
-        await fs23.remove(currentPdfPath);
+        await fs25.copyFile(currentPdfPath, pdfPath);
+        await fs25.remove(currentPdfPath);
       }
-      pdfUrl = `/files/companies/${companyId}/${path23.posix.join(
+      pdfUrl = `/files/companies/${companyId}/${path24.posix.join(
         "service",
         "reports",
         report.serviceManagementId || "generic",
         pdfFilename
       )}`;
       try {
-        const stats = await fs23.stat(pdfPath);
+        const stats = await fs25.stat(pdfPath);
         pdfSizeBytes = stats.size;
       } catch (error) {
         logger_default.warn("Failed to read generated PDF size", { error: String(error), pdfPath });
       }
       if (generateDocx) {
         const docxFilename = `${baseFilename}.docx`;
-        const docxPath = path23.join(reportsDir, docxFilename);
+        const docxPath = path24.join(reportsDir, docxFilename);
         const docxStarted = Date.now();
         await convertPdfToDocx(pdfPath, docxPath);
         docxDuration = Date.now() - docxStarted;
-        docxUrl = `/files/companies/${companyId}/${path23.posix.join(
+        docxUrl = `/files/companies/${companyId}/${path24.posix.join(
           "service",
           "reports",
           report.serviceManagementId || "generic",
           docxFilename
         )}`;
         try {
-          const stats = await fs23.stat(docxPath);
+          const stats = await fs25.stat(docxPath);
           docxSizeBytes = stats.size;
         } catch (error) {
           logger_default.warn("Failed to read generated DOCX size", { error: String(error), docxPath });
@@ -102545,7 +103373,7 @@ async function previewDocument(req, res, next) {
     } = await resolveDocumentContext(req);
     const effectiveSchema = buildEffectiveSchema(schema, schemaOverrides, customSections);
     disableUnsupportedReportLetterhead(effectiveSchema, data);
-    await fs23.ensureDir(config.pdf.tempDir);
+    await fs25.ensureDir(config.pdf.tempDir);
     const baseUrl = buildAbsoluteUrl4(req, "");
     const { html, source } = await resolveReportHtml({
       canvasHtml: req.body?.html,
@@ -102557,7 +103385,7 @@ async function previewDocument(req, res, next) {
     });
     const previewId = `${report.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path23.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path24.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: effectiveSchema.pageSize || "A4",
@@ -102568,22 +103396,22 @@ async function previewDocument(req, res, next) {
     });
     const letterhead = getDocumentLetterhead(data);
     if (letterhead) {
-      const letterheadPath = path23.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
+      const letterheadPath = path24.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
       await PDFMergerService.applyLetterheadBackground(
         previewPath,
         letterhead,
         letterheadPath,
         companyId
       );
-      await fs23.copyFile(letterheadPath, previewPath);
-      await fs23.remove(letterheadPath);
+      await fs25.copyFile(letterheadPath, previewPath);
+      await fs25.remove(letterheadPath);
     }
     let currentPdfPath = previewPath;
     let mainPages = await PDFMergerService.getPageCount(previewPath);
     let annexPages = 0;
     let totalPages = mainPages;
     if (annexes.length > 0) {
-      const mergedPath = path23.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
+      const mergedPath = path24.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
       const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
         previewPath,
         annexes,
@@ -102596,7 +103424,7 @@ async function previewDocument(req, res, next) {
       totalPages = mergeResult.totalPages;
     }
     if (folioConfig?.enabled) {
-      const folioPath = path23.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
+      const folioPath = path24.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
       const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
       await FolioGeneratorService.addFolios(
         currentPdfPath,
@@ -102607,11 +103435,11 @@ async function previewDocument(req, res, next) {
       currentPdfPath = folioPath;
     }
     if (currentPdfPath !== previewPath) {
-      await fs23.copyFile(currentPdfPath, previewPath);
-      await fs23.remove(currentPdfPath);
+      await fs25.copyFile(currentPdfPath, previewPath);
+      await fs25.remove(currentPdfPath);
     }
-    const previewUrl = path23.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
-    const stat = await fs23.stat(previewPath);
+    const previewUrl = path24.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs25.stat(previewPath);
     logger_default.info("documents.preview.completed", {
       reportId: report?._id,
       type: report.type,
@@ -102689,8 +103517,8 @@ async function downloadDocument(req, res, next) {
 
 // src/api/controllers/quote-documents.controller.ts
 init_logger();
-import fs24 from "fs-extra";
-import path24 from "path";
+import fs26 from "fs-extra";
+import path25 from "path";
 init_environment();
 init_storage_path_service();
 
@@ -103908,10 +104736,10 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
   const startedAt = Date.now();
   try {
     const { payload, html, source } = await buildRenderContext(req);
-    await fs24.ensureDir(config.pdf.tempDir);
+    await fs26.ensureDir(config.pdf.tempDir);
     const previewId = `${previewPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path24.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path25.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -103934,8 +104762,8 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
       buildFolioOptions2(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
-    const stat = await fs24.stat(previewPath);
-    const previewUrl = path24.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs26.stat(previewPath);
+    const previewUrl = path25.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("quote_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -103965,16 +104793,16 @@ async function generateQuoteDocument(req, res, next, options2) {
       payload.quoteNumber || payload.schemaData?.header?.quoteNumber || payload.schemaData?.quoteNumber || "sin-numero"
     );
     const safeQuoteNumber = sanitizePathSegment(quoteNumberRaw);
-    const relativeDir = path24.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
+    const relativeDir = path25.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       "cotizaciones",
-      path24.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
+      path25.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
     );
-    await fs24.ensureDir(outputDir);
+    await fs26.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${options2.filenamePrefix}-${safeQuoteNumber}-${timestamp}.pdf`;
-    const outputPath = path24.join(outputDir, filename);
+    const outputPath = path25.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -103997,7 +104825,7 @@ async function generateQuoteDocument(req, res, next, options2) {
       buildFolioOptions2(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(outputPath);
-    const stat = await fs24.stat(outputPath);
+    const stat = await fs26.stat(outputPath);
     const pdfUrl = `/files/companies/${companyId}/${relativeDir}/${filename}`;
     logger_default.info("quote_documents.generate.completed", {
       companyId,
@@ -104044,8 +104872,8 @@ async function generateServiceQuoteDocument(req, res, next) {
 
 // src/api/controllers/purchase-order-documents.controller.ts
 init_logger();
-import fs25 from "fs-extra";
-import path25 from "path";
+import fs27 from "fs-extra";
+import path26 from "path";
 init_environment();
 init_storage_path_service();
 function resolveProto6(req) {
@@ -104720,10 +105548,10 @@ async function previewPurchaseOrder(req, res, next) {
   const startedAt = Date.now();
   try {
     const { payload, html } = await buildRenderContext2(req);
-    await fs25.ensureDir(config.pdf.tempDir);
+    await fs27.ensureDir(config.pdf.tempDir);
     const previewId = `ord-com-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path25.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path26.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -104744,8 +105572,8 @@ async function previewPurchaseOrder(req, res, next) {
       buildFolioOptions3(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
-    const stat = await fs25.stat(previewPath);
-    const previewUrl = path25.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs27.stat(previewPath);
+    const previewUrl = path26.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("purchase_order_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -104782,16 +105610,16 @@ async function generatePurchaseOrder(req, res, next) {
     ).toLowerCase() === "service";
     const moduleDir2 = isServiceOrder ? "ordenes-servicio" : "ordenes-compra";
     const filenamePrefix = isServiceOrder ? "orden-servicio" : "orden-compra";
-    const relativeDir = path25.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
+    const relativeDir = path26.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       moduleDir2,
       `nro-${safeOrderNumber}`
     );
-    await fs25.ensureDir(outputDir);
+    await fs27.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${filenamePrefix}-${safeOrderNumber}-${timestamp}.pdf`;
-    const outputPath = path25.join(outputDir, filename);
+    const outputPath = path26.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -104812,7 +105640,7 @@ async function generatePurchaseOrder(req, res, next) {
       buildFolioOptions3(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(outputPath);
-    const stat = await fs25.stat(outputPath);
+    const stat = await fs27.stat(outputPath);
     const pdfUrl = `/files/companies/${companyId}/${relativeDir}/${filename}`;
     logger_default.info("purchase_order_documents.generate.completed", {
       companyId,
@@ -104852,8 +105680,8 @@ init_logger();
 
 // src/services/dispatch-note-document.service.ts
 init_logger();
-import fs26 from "fs-extra";
-import path26 from "path";
+import fs28 from "fs-extra";
+import path27 from "path";
 import QRCode from "qrcode";
 init_environment();
 init_storage_path_service();
@@ -105256,10 +106084,10 @@ async function buildRenderContext3(params) {
 async function previewDispatchNoteDocument(params) {
   const startedAt = Date.now();
   const { html, companyId } = await buildRenderContext3(params);
-  await fs26.ensureDir(config.pdf.tempDir);
+  await fs28.ensureDir(config.pdf.tempDir);
   const previewId = `dispatch-note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const previewFilename = `${previewId}.pdf`;
-  const previewPath = path26.join(config.pdf.tempDir, previewFilename);
+  const previewPath = path27.join(config.pdf.tempDir, previewFilename);
   await generator_service_default.generateFromHtml(html, {
     outputPath: previewPath,
     format: "A4",
@@ -105271,8 +106099,8 @@ async function previewDispatchNoteDocument(params) {
       left: "0mm"
     }
   });
-  const stat = await fs26.stat(previewPath);
-  const previewUrl = path26.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+  const stat = await fs28.stat(previewPath);
+  const previewUrl = path27.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
   logger_default.info("dispatch_note_documents.preview.completed", {
     companyId,
     durationMs: Date.now() - startedAt,
@@ -105293,7 +106121,7 @@ async function generateDispatchNoteDocumentFile(params) {
     prePayload.orderNumber || prePayload.schemaData?.dispatch?.valeNumber || "sin-numero"
   );
   const safeDispatchNumber = sanitizePathSegment3(dispatchNumberRaw);
-  const relativeDir = path26.posix.join("vales", `nro-${safeDispatchNumber}`);
+  const relativeDir = path27.posix.join("vales", `nro-${safeDispatchNumber}`);
   const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
   const fileName = `vale-despacho-${safeDispatchNumber}-${timestamp}.pdf`;
   const { companyId, html } = await buildRenderContext3({
@@ -105303,8 +106131,8 @@ async function generateDispatchNoteDocumentFile(params) {
   });
   await storagePathService.ensureCompanyStructure(companyId);
   const outputDir = storagePathService.getModulePath(companyId, "dispatches", relativeDir);
-  await fs26.ensureDir(outputDir);
-  const outputPath = path26.join(outputDir, fileName);
+  await fs28.ensureDir(outputDir);
+  const outputPath = path27.join(outputDir, fileName);
   await generator_service_default.generateFromHtml(html, {
     outputPath,
     format: "A4",
@@ -105316,9 +106144,9 @@ async function generateDispatchNoteDocumentFile(params) {
       left: "0mm"
     }
   });
-  const stat = await fs26.stat(outputPath);
+  const stat = await fs28.stat(outputPath);
   const pdfUrl = `/files/companies/${companyId}/dispatches/${relativeDir}/${fileName}`;
-  const filePath = path26.posix.join("dispatches", relativeDir, fileName);
+  const filePath = path27.posix.join("dispatches", relativeDir, fileName);
   logger_default.info("dispatch_note_documents.generate.completed", {
     companyId,
     dispatchNumber: safeDispatchNumber,
@@ -105456,21 +106284,31 @@ function computeArrivalReminderDelayMs(etaDurationSeconds) {
   const withMargin = eta * 1.1 * 1e3;
   return Math.min(MAX_MS, Math.max(MIN_MS, Math.round(withMargin)));
 }
+function computeLocationShareDelayMs(etaDurationSeconds) {
+  const MIN_MS = 3 * 60 * 1e3;
+  const MAX_MS = 30 * 60 * 1e3;
+  const FALLBACK_MS = 10 * 60 * 1e3;
+  const eta = Number(etaDurationSeconds);
+  if (!Number.isFinite(eta) || eta <= 0) return FALLBACK_MS;
+  const quarter = eta * 0.25 * 1e3;
+  return Math.min(MAX_MS, Math.max(MIN_MS, Math.round(quarter)));
+}
 
 // src/services/driver-arrival-reminder.service.ts
 init_json_store();
 init_logger();
 init_environment();
-import path27 from "path";
-import { randomUUID as randomUUID5 } from "crypto";
+import path28 from "path";
+import { randomUUID as randomUUID6 } from "crypto";
 import axios6 from "axios";
 init_whatsapp_direct_service();
+var itemKind = (item) => item.kind ?? "arrival-reminder";
 var STORE_KEY2 = "queue";
 var MAX_ATTEMPTS = 3;
 var MAX_AGE_MS = 12 * 60 * 60 * 1e3;
 var DEFAULT_FLUSH_INTERVAL_MS2 = 60 * 1e3;
 var store = new json_store_default({
-  baseDir: path27.join(config.whatsapp.sessionDir, "../driver-reminders"),
+  baseDir: path28.join(config.whatsapp.sessionDir, "../driver-reminders"),
   autoBackup: true
 });
 async function listQueue() {
@@ -105502,40 +106340,60 @@ async function fetchDispatchTracking(companyId, dispatchId) {
     return null;
   }
 }
-async function scheduleDriverArrivalReminder(params) {
+async function enqueueDriverMessage(params) {
+  const availableAt = new Date(Date.now() + Math.max(0, params.delayMs)).toISOString();
+  const queue2 = await listQueue();
+  if (queue2.some((item) => item.dispatchId === params.dispatchId && itemKind(item) === params.kind)) {
+    return false;
+  }
+  queue2.push({
+    id: randomUUID6(),
+    companyId: params.companyId,
+    dispatchId: params.dispatchId,
+    sender: params.sender,
+    phone: params.phone,
+    message: params.message,
+    kind: params.kind,
+    availableAt,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    attempts: 0
+  });
+  await saveQueue(queue2);
+  logger_default.info("driver_reminder.scheduled", {
+    companyId: params.companyId,
+    dispatchId: params.dispatchId,
+    kind: params.kind,
+    availableAt
+  });
+  return true;
+}
+async function scheduleDriverFollowups(params) {
   try {
     const tracking = await fetchDispatchTracking(params.companyId, params.dispatchId);
-    const delayMs = computeArrivalReminderDelayMs(tracking?.durationSeconds);
-    const availableAt = new Date(Date.now() + delayMs).toISOString();
-    const queue2 = await listQueue();
-    if (queue2.some((item) => item.dispatchId === params.dispatchId)) {
-      return false;
-    }
-    queue2.push({
-      id: randomUUID5(),
+    const eta = tracking?.durationSeconds ?? null;
+    const base = {
       companyId: params.companyId,
       dispatchId: params.dispatchId,
       sender: params.sender,
-      phone: params.phone,
-      message: params.message,
-      availableAt,
-      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      attempts: 0
+      phone: params.phone
+    };
+    await enqueueDriverMessage({
+      ...base,
+      message: params.linkMessage,
+      kind: "location-share",
+      delayMs: computeLocationShareDelayMs(eta)
     });
-    await saveQueue(queue2);
-    logger_default.info("driver_reminder.scheduled", {
-      companyId: params.companyId,
-      dispatchId: params.dispatchId,
-      availableAt,
-      etaSeconds: tracking?.durationSeconds ?? null
+    await enqueueDriverMessage({
+      ...base,
+      message: params.arrivalMessage,
+      kind: "arrival-reminder",
+      delayMs: computeArrivalReminderDelayMs(eta)
     });
-    return true;
   } catch (error) {
-    logger_default.error("driver_reminder.schedule_failed", {
+    logger_default.error("driver_followups.schedule_failed", {
       dispatchId: params.dispatchId,
       error: error instanceof Error ? error.message : String(error)
     });
-    return false;
   }
 }
 var isFlushing2 = false;
@@ -106269,15 +107127,6 @@ ${normalizedDriverName || "Chofer"}, te enviamos la ubicaci\xF3n de la obra:
           `${normalizedDriverName || "Chofer"}, comparte tu ubicaci\xF3n en ruta y marca tu llegada a obra aqu\xED:`,
           `- \u{1F6F0}\uFE0F ${driverLink}`
         ].join("\n");
-        await withTimeout(
-          WhatsAppDirectService.sendMessage(sender, normalizedPhone, linkMessage, {
-            companyId,
-            queueOnFail: true
-          }),
-          25e3,
-          "dispatch driver link WhatsApp send"
-        );
-        logger_default.info("dispatch_vale.driver_link_sent", { companyId, dispatchId });
         const reminderMessage = [
           companyBotLabel,
           "",
@@ -106286,13 +107135,15 @@ ${normalizedDriverName || "Chofer"}, te enviamos la ubicaci\xF3n de la obra:
           "",
           "Si a\xFAn est\xE1s en ruta, ignora este mensaje."
         ].join("\n");
-        await scheduleDriverArrivalReminder({
+        await scheduleDriverFollowups({
           companyId,
           dispatchId,
           sender,
           phone: normalizedPhone,
-          message: reminderMessage
+          linkMessage,
+          arrivalMessage: reminderMessage
         });
+        logger_default.info("dispatch_vale.driver_followups_scheduled", { companyId, dispatchId });
       } catch (error) {
         logger_default.error("dispatch_vale.driver_link_failed", {
           companyId,
@@ -106421,7 +107272,7 @@ import axios9 from "axios";
 init_logger();
 
 // src/services/dispatch-notifications.service.ts
-var import_sharp5 = __toESM(require_lib(), 1);
+var import_sharp6 = __toESM(require_lib(), 1);
 import axios8 from "axios";
 init_environment();
 init_models();
@@ -106760,7 +107611,7 @@ function buildOrderCompletionSummarySvg(params) {
 }
 async function renderOrderCompletionImage(completion) {
   const svg = buildOrderCompletionSummarySvg(completion);
-  return (0, import_sharp5.default)(Buffer.from(svg)).png().toBuffer();
+  return (0, import_sharp6.default)(Buffer.from(svg)).png().toBuffer();
 }
 async function sendToTargets(sender, targets, message, companyId) {
   for (const target of targets) {
@@ -107355,17 +108206,17 @@ var dispatch_routes_default = router7;
 // src/api/routes/public.routes.ts
 import { Router as Router8 } from "express";
 import multer3 from "multer";
-import fs28 from "fs-extra";
-import path29 from "path";
+import fs30 from "fs-extra";
+import path30 from "path";
 
 // src/api/controllers/public.controller.ts
 var import_jsonwebtoken6 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 init_models();
 import axios10 from "axios";
-import { randomUUID as randomUUID6 } from "crypto";
-import fs27 from "fs-extra";
-import path28 from "path";
+import { randomUUID as randomUUID7 } from "crypto";
+import fs29 from "fs-extra";
+import path29 from "path";
 init_storage_path_service();
 init_telegram_alert_service();
 var CACHE_TTL_MS = 5 * 60 * 1e3;
@@ -107524,7 +108375,7 @@ var parseReceptionInput = (req) => {
   throw new Error("kind is invalid");
 };
 var cleanupUploadedFiles = async (files) => {
-  await Promise.allSettled(files.map((file) => fs27.remove(file.path)));
+  await Promise.allSettled(files.map((file) => fs29.remove(file.path)));
 };
 var fetchPortalInputList = async (companyId, level) => {
   const response = await axios10.get(buildPortalUrl("/api/input"), {
@@ -107665,11 +108516,11 @@ var storeFileInLilaDrive = async (companyId, lilaPublicBaseUrl, resourceId, file
   const targetDir = storagePathService.resolvePath(companyId, relativeDir);
   await storagePathService.ensureDir(targetDir, companyId);
   const storageFileName = buildUniqueStorageFileName(file.originalName, file.path);
-  const targetPath = path28.join(targetDir, storageFileName);
+  const targetPath = path29.join(targetDir, storageFileName);
   if (!storagePathService.validateAccess(targetPath, companyId)) {
     throw new Error("Ruta de almacenamiento invalida");
   }
-  await fs27.copy(file.path, targetPath, { overwrite: false });
+  await fs29.copy(file.path, targetPath, { overwrite: false });
   await incrementStorageUsage(companyId, file.size);
   const publicUrl = `/files/companies/${companyId}/${relativeDir}/${storageFileName}`;
   let thumbnailUrl;
@@ -108020,7 +108871,7 @@ var rollbackPortalFinancialMovement = async (params) => {
 var runPublicCashFlowWorkflow = async (input) => {
   let movementId;
   try {
-    const sourceId = `public-cash-flow-${randomUUID6()}`;
+    const sourceId = `public-cash-flow-${randomUUID7()}`;
     const movement = await createPortalFinancialMovement(input.companyId, {
       sourceModule: "manual",
       sourceId,
@@ -108099,13 +108950,13 @@ async function getCompanyLogin(req, res) {
         message: "slug invalido"
       });
     }
-    const cached = companyLoginCache.get(slug);
-    if (cached && cached.expiresAt > Date.now()) {
+    const cached2 = companyLoginCache.get(slug);
+    if (cached2 && cached2.expiresAt > Date.now()) {
       setPublicCacheHeaders(res);
-      if (!cached.data) {
+      if (!cached2.data) {
         return res.status(404).json({ ok: false, message: "Empresa no encontrada" });
       }
-      return res.status(200).json({ ok: true, data: cached.data });
+      return res.status(200).json({ ok: true, data: cached2.data });
     }
     const Company = await getCompanyModel();
     const company = await Company.findOne(
@@ -108229,8 +109080,8 @@ async function submitPublicFinancialMovement(req, res) {
 // src/api/routes/public.routes.ts
 init_environment();
 var router8 = Router8();
-var receptionUploadsDir = path29.join(config.storage.root, "temp", "public-receptions");
-fs28.ensureDirSync(receptionUploadsDir);
+var receptionUploadsDir = path30.join(config.storage.root, "temp", "public-receptions");
+fs30.ensureDirSync(receptionUploadsDir);
 var sanitizeFileName = (value) => value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "upload";
 var upload3 = multer3({
   storage: multer3.diskStorage({
@@ -108789,8 +109640,8 @@ init_logger();
 
 // src/services/service-migration.helpers.ts
 init_storage_path_service();
-import fs29 from "fs-extra";
-import path30 from "node:path";
+import fs31 from "fs-extra";
+import path31 from "node:path";
 import {
   Schema as Schema10,
   Types as Types2
@@ -109090,12 +109941,12 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!storagePathService.validateAccess(targetAbsolute, targetCompanyId)) {
         throw new Error("Ruta f\xEDsica destino inv\xE1lida.");
       }
-      if (!await fs29.pathExists(sourceAbsolute)) {
+      if (!await fs31.pathExists(sourceAbsolute)) {
         throw new Error(`Archivo origen no existe: ${sourceRelative}`);
       }
-      const sourceStats = await fs29.stat(sourceAbsolute);
-      if (await fs29.pathExists(targetAbsolute)) {
-        const targetStats = await fs29.stat(targetAbsolute);
+      const sourceStats = await fs31.stat(sourceAbsolute);
+      if (await fs31.pathExists(targetAbsolute)) {
+        const targetStats = await fs31.stat(targetAbsolute);
         if (targetStats.size !== sourceStats.size) {
           throw new Error(`Archivo destino ya existe con otro tama\xF1o: ${targetRelative}`);
         }
@@ -109104,12 +109955,12 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!sourceStats.isFile()) {
         throw new Error(`Origen no es un archivo regular: ${sourceRelative}`);
       }
-      const targetDirectory = path30.dirname(targetAbsolute);
+      const targetDirectory = path31.dirname(targetAbsolute);
       if (!targetDirectory || targetDirectory === ".") {
         throw new Error(`Directorio destino inv\xE1lido: ${targetRelative}`);
       }
-      await fs29.ensureDir(targetDirectory);
-      await fs29.copy(sourceAbsolute, targetAbsolute);
+      await fs31.ensureDir(targetDirectory);
+      await fs31.copy(sourceAbsolute, targetAbsolute);
       createdPaths.push(targetAbsolute);
       if (sourceStats.isFile()) {
         await incrementStorageUsage(targetCompanyId, sourceStats.size);
@@ -109128,9 +109979,9 @@ var deleteSourceFiles = async (files, sourceCompanyId) => {
       const sourceRelative = cleanCompanyPath(sourceCompanyId, file.sourcePath);
       const sourceAbsolute = storagePathService.resolvePath(sourceCompanyId, sourceRelative);
       if (!storagePathService.validateAccess(sourceAbsolute, sourceCompanyId)) continue;
-      if (!await fs29.pathExists(sourceAbsolute)) continue;
-      const stats = await fs29.stat(sourceAbsolute);
-      await fs29.remove(sourceAbsolute);
+      if (!await fs31.pathExists(sourceAbsolute)) continue;
+      const stats = await fs31.stat(sourceAbsolute);
+      await fs31.remove(sourceAbsolute);
       if (stats.isFile()) {
         await decrementStorageUsage(sourceCompanyId, stats.size);
       }
@@ -109145,9 +109996,9 @@ var deleteSourceFiles = async (files, sourceCompanyId) => {
 var rollbackCopiedFiles = async (targetCompanyId, createdPaths) => {
   for (const targetAbsolute of createdPaths) {
     try {
-      if (!await fs29.pathExists(targetAbsolute)) continue;
-      const stats = await fs29.stat(targetAbsolute);
-      await fs29.remove(targetAbsolute);
+      if (!await fs31.pathExists(targetAbsolute)) continue;
+      const stats = await fs31.stat(targetAbsolute);
+      await fs31.remove(targetAbsolute);
       if (stats.isFile()) {
         await decrementStorageUsage(targetCompanyId, stats.size);
       }
@@ -110101,17 +110952,17 @@ var import_archiver = __toESM(require_archiver(), 1);
 init_models();
 init_storage_path_service();
 init_logger();
-import path31 from "path";
-import fs30 from "fs-extra";
+import path32 from "path";
+import fs32 from "fs-extra";
 import { Types as Types3 } from "mongoose";
 var EXPORT_TTL_HOURS = 24;
 var EXPORTS_MODULE = "temp";
 var EXPORTS_SUBDIR = "order-exports";
 var isValidObjectId = (value) => Types3.ObjectId.isValid(value);
-var sanitizeName2 = (name) => name.replace(/[\\/:"*?<>|]+/g, "_").trim();
+var sanitizeName3 = (name) => name.replace(/[\\/:"*?<>|]+/g, "_").trim();
 var buildZipPath = (companyId, orderId) => storagePathService.resolvePath(
   companyId,
-  path31.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`)
+  path32.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`)
 );
 var resolveMediaAbsolutePath = (mediaUrl, companyId) => {
   try {
@@ -110135,7 +110986,7 @@ var buildFolderPathResolver = (folders) => {
     const folder = folderById.get(String(folderId));
     if (!folder) return "";
     const parentPath = resolve2(folder.parentId, depth + 1);
-    const current = sanitizeName2(String(folder.name ?? ""));
+    const current = sanitizeName3(String(folder.name ?? ""));
     if (!current) return parentPath;
     return parentPath ? `${parentPath}/${current}` : current;
   };
@@ -110179,20 +111030,20 @@ async function requestOrderExport(orderId) {
       const mediaUrl = String(media.url ?? "");
       if (!mediaUrl) continue;
       const absolutePath = resolveMediaAbsolutePath(mediaUrl, companyId);
-      if (!absolutePath || !await fs30.pathExists(absolutePath)) {
+      if (!absolutePath || !await fs32.pathExists(absolutePath)) {
         logger_default.warn("[order-export] Media sin archivo local, se omite del ZIP", {
           orderId,
           mediaId: String(media._id ?? "")
         });
         continue;
       }
-      const folderPath = resolveFolderPath(media.folderId) || sanitizeName2(String(media.type ?? ""));
-      const baseName = sanitizeName2(String(media.name ?? path31.basename(absolutePath)));
+      const folderPath = resolveFolderPath(media.folderId) || sanitizeName3(String(media.type ?? ""));
+      const baseName = sanitizeName3(String(media.name ?? path32.basename(absolutePath)));
       let entryName = folderPath ? `${folderPath}/${baseName}` : baseName;
       let dedupe = 1;
       while (usedNames.has(entryName)) {
-        const ext = path31.extname(baseName);
-        const stem = path31.basename(baseName, ext);
+        const ext = path32.extname(baseName);
+        const stem = path32.basename(baseName, ext);
         const candidate = `${stem} (${dedupe})${ext}`;
         entryName = folderPath ? `${folderPath}/${candidate}` : candidate;
         dedupe += 1;
@@ -110211,9 +111062,9 @@ async function requestOrderExport(orderId) {
       return { ok: false, code: "empty" };
     }
     const zipPath = buildZipPath(companyId, orderId);
-    await fs30.ensureDir(path31.dirname(zipPath));
-    await fs30.remove(zipPath);
-    const output = fs30.createWriteStream(zipPath);
+    await fs32.ensureDir(path32.dirname(zipPath));
+    await fs32.remove(zipPath);
+    const output = fs32.createWriteStream(zipPath);
     const archive = (0, import_archiver.default)("zip", { zlib: { level: 6 } });
     const archiveDone = new Promise((resolve2, reject) => {
       output.on("close", () => resolve2());
@@ -110226,14 +111077,14 @@ async function requestOrderExport(orderId) {
     }
     await archive.finalize();
     await archiveDone;
-    const stat = await fs30.stat(zipPath);
+    const stat = await fs32.stat(zipPath);
     const expiresAt = new Date(Date.now() + EXPORT_TTL_HOURS * 60 * 60 * 1e3).toISOString();
-    const obra = sanitizeName2(String(order.obra ?? "pedido"));
+    const obra = sanitizeName3(String(order.obra ?? "pedido"));
     await setExportJob(orderId, {
       id: jobId,
       status: "done",
       progress: 100,
-      filePath: path31.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`),
+      filePath: path32.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`),
       fileName: `${obra || "pedido"}-${orderId.slice(-6)}.zip`,
       sizeBytes: stat.size,
       finishedAt: nowIso(),
@@ -110275,7 +111126,7 @@ async function getOrderExportFile(orderId) {
   if (!storagePathService.validateAccess(absolutePath, companyId)) {
     return { ok: false, code: "not_ready" };
   }
-  if (!await fs30.pathExists(absolutePath)) {
+  if (!await fs32.pathExists(absolutePath)) {
     return { ok: false, code: "not_ready" };
   }
   return {
@@ -110292,7 +111143,7 @@ async function deleteOrderExport(orderId) {
   const companyId = String(order.companyId);
   const zipPath = buildZipPath(companyId, orderId);
   if (storagePathService.validateAccess(zipPath, companyId)) {
-    await fs30.remove(zipPath).catch(() => void 0);
+    await fs32.remove(zipPath).catch(() => void 0);
   }
   await setExportJob(orderId, null);
   return { ok: true };
@@ -110339,82 +111190,6 @@ router12.delete("/orders/:orderId", async (req, res, next) => {
   }
 });
 var exports_routes_default = router12;
-
-// src/services/thumbnail-request.service.ts
-import fs31 from "fs-extra";
-import path32 from "path";
-var THUMB_DIR_NAME = ".thumbs";
-var THUMBNAIL_NAME_PATTERN = /^thumb_(.+)_[a-f0-9]{10}\.jpg$/i;
-var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
-function sanitizeName3(name) {
-  return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "file";
-}
-function normalizeRequestPath(requestPath) {
-  if (!requestPath) return null;
-  try {
-    const decoded = decodeURIComponent(requestPath);
-    const normalized = path32.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
-    if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
-      return null;
-    }
-    return normalized;
-  } catch {
-    return null;
-  }
-}
-function toAbsolutePath(root, relativePath) {
-  return path32.join(root, ...relativePath.split("/"));
-}
-async function findOriginalForThumbnail(root, relativeThumbPath) {
-  const segments = relativeThumbPath.split("/");
-  const thumbDirIndex = segments.lastIndexOf(THUMB_DIR_NAME);
-  const thumbName = segments[segments.length - 1] || "";
-  const match = thumbName.match(THUMBNAIL_NAME_PATTERN);
-  if (thumbDirIndex <= 0 || !match?.[1]) {
-    return null;
-  }
-  const parentSegments = segments.slice(0, thumbDirIndex);
-  const parentDir = toAbsolutePath(root, parentSegments.join("/"));
-  const safeBase = match[1];
-  const entries = await fs31.readdir(parentDir).catch(() => []);
-  const candidates = await Promise.all(
-    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName3(path32.parse(entry).name || "file") === safeBase).map(async (entry) => {
-      const absolutePath = path32.join(parentDir, entry);
-      const stat = await fs31.stat(absolutePath).catch(() => null);
-      const ext = path32.extname(entry).toLowerCase();
-      if (!stat?.isFile() || !IMAGE_EXTENSIONS.has(ext)) {
-        return null;
-      }
-      return {
-        absolutePath,
-        mtimeMs: stat.mtimeMs
-      };
-    })
-  );
-  const validCandidates = candidates.filter((candidate) => Boolean(candidate)).sort((a49, b63) => b63.mtimeMs - a49.mtimeMs);
-  return validCandidates[0]?.absolutePath || null;
-}
-async function resolveThumbnailRequestTarget(root, requestPath) {
-  const relativePath = normalizeRequestPath(requestPath);
-  if (!relativePath || !relativePath.split("/").includes(THUMB_DIR_NAME)) {
-    return null;
-  }
-  const thumbPath = toAbsolutePath(root, relativePath);
-  if (await fs31.pathExists(thumbPath)) {
-    return {
-      absolutePath: thumbPath,
-      source: "thumbnail"
-    };
-  }
-  const originalPath = await findOriginalForThumbnail(root, relativePath);
-  if (!originalPath) {
-    return null;
-  }
-  return {
-    absolutePath: originalPath,
-    source: "original-fallback"
-  };
-}
 
 // src/index.ts
 import swaggerUi from "swagger-ui-express";
@@ -112317,9 +113092,10 @@ var restoreAllSessions = async () => {
 };
 
 // src/index.ts
+init_instance_lease();
 init_telegram_alert_service();
 import cron2 from "node-cron";
-import fs32 from "fs-extra";
+import fs33 from "fs-extra";
 import path33 from "path";
 var app = express();
 app.set("trust proxy", config.security.trustProxy);
@@ -112481,6 +113257,9 @@ app.use("/files/companies", (req, res, next) => {
         res.status(404).end();
         return;
       }
+      if (target.source === "original-fallback") {
+        materializeThumbnailInBackground(target.absolutePath);
+      }
       companiesStaticHeaders(res);
       res.sendFile(
         target.absolutePath,
@@ -112541,15 +113320,19 @@ async function startServer() {
     } catch (error) {
       logger_default.warn("Quota Validator initialization failed, quota validation will be disabled:", error);
     }
-    await generator_service_default.initialize();
-    await fs32.ensureDir(config.pdf.tempDir);
+    await fs33.ensureDir(config.pdf.tempDir);
     logger_default.info("\u{1F9FE} PDF temp directory configured", {
       tempDir: config.pdf.tempDir,
       publicBaseUrl: config.pdf.tempPublicBaseUrl
     });
     if (config.whatsapp.restoreSessions) {
       try {
-        await restoreAllSessions();
+        const isSocketHolder = await startSocketLeaseLoop();
+        if (isSocketHolder) {
+          await restoreAllSessions();
+        } else {
+          logger_default.warn("\u23ED Restore de sesiones OMITIDO: otra instancia posee el socket lease.");
+        }
       } catch (err) {
         logger_default.error("restoreAllSessions failed:", err);
       }
@@ -112564,15 +113347,15 @@ async function startServer() {
     );
     const cleanupPdfTemp = async () => {
       try {
-        const entries = await fs32.readdir(config.pdf.tempDir);
+        const entries = await fs33.readdir(config.pdf.tempDir);
         const now = Date.now();
         const maxAgeMs = pdfTempMaxAgeHours * 60 * 60 * 1e3;
         const removals = entries.map(async (entry) => {
           const fullPath = path33.join(config.pdf.tempDir, entry);
-          const stat = await fs32.stat(fullPath);
+          const stat = await fs33.stat(fullPath);
           if (!stat.isFile()) return;
           if (now - stat.mtimeMs > maxAgeMs) {
-            await fs32.remove(fullPath);
+            await fs33.remove(fullPath);
           }
         });
         await Promise.all(removals);
@@ -112637,6 +113420,7 @@ async function startServer() {
             }
           }
           logger_default.info("All WhatsApp sessions closed (creds preserved)");
+          await releaseSocketLease();
           if (shouldRunBackgroundJobs) {
             await scheduler_v2_instance_default.shutdown();
           }

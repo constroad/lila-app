@@ -93,6 +93,20 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   obras y totales acumulados.
 - Registry de schemas: `src/schemas/documents/registry.ts` (20+ codigos: VAL-SRV, ACT-CNF, CONT-SRV, LIQ-SRV, control-imprimacion, control-pista, informe-area-adicional, medidas IAA, etc.).
 - El schema `INF-ACT` (Informe de Actividades Realizadas) usa `actividades` como tabla editable y `registroFotografico.fotos[]` como panel fotografico. Portal puede enviar cada foto/PDF con metadata `activityId`, `activityLabel`, `activityIndex` y `activitySourceId`; `report-html-renderer.service.ts` agrupa esa seccion por actividad y omite actividades sin fotos. Los PDFs/documentos del panel se renderizan como tiles enlazados dentro de la tabla fotografica. Las fechas `date` recibidas como `YYYY-MM-DD` se formatean preservando el dia de calendario, sin parsearlas como UTC para evitar desfases por timezone.
+- **Pipeline de imágenes/PDF (hardening 2026-07-14, post-incidente IPP 180s):**
+  el HTML de TODO documento llega a Puppeteer **autocontenido** — `inlineCanvasHtmlImages`
+  corre para canvas, printUrl **y también para el renderer Handlebars** (antes el
+  renderer dejaba URLs http y `networkidle0` colgaba esperándolas). El inliner es
+  **disco-primero**: storage local → thumb faltante cae al ORIGINAL local vía
+  `resolveThumbnailRequestTarget` (antes se auto-descargaba por HTTP/Tailscale
+  disparando generación on-demand) → HTTP solo para URLs externas (timeout 30s).
+  Toda imagen se re-encoda a tamaño PDF (máx 1600px, JPEG q72; PNG solo con alfa;
+  SVG rasterizado) — antes cualquier foto ≤1MB entraba a resolución completa.
+  Pool acotado (4) vía `utils/concurrency.ts`. `generator.service`: `setContent`
+  con `load` + `waitForImagesReady` acotado (15s) en vez de `networkidle0`
+  (Puppeteer moderno lo eliminó de setContent), **límite de renders concurrentes**
+  (`PDF_MAX_CONCURRENT_RENDERS`, default 2, cola FIFO — incluye `fetchPrintedHtml`)
+  y `page.close()` en `finally` (antes fugaba pages ante error).
 - Controllers:
   - `documents.controller.ts` - generador generico de informes con membrete (REPORT_LETTERHEAD_CODES) y schema customization por empresa.
   - `service-management-report.controller.ts` - CRUD/lock de informes de servicio.
@@ -126,6 +140,29 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   - Recepcion de mediciones y movimientos financieros.
   - Subida via TUS (`tus-upload.service.ts`) para archivos grandes.
 - Callbacks a Portal: `portal-actions.service.ts` (POST JWT-signed a `/api/internal/*`).
+
+### Pipeline de medios (imágenes/video) — estado 2026-07-14
+
+Flujo estándar de renditions (post-auditoría):
+1. **Cliente (Portal)** optimiza imágenes antes de subir (`optimizeBrowserImageFile`:
+   umbral/target ~1MB vía canvas) y captura video con bitrate acotado. Es optimización
+   de UX/ancho de banda, NO la garantía.
+2. **Ingest (lila, `drive.controller` POST /files)**: red de seguridad server-side —
+   `media-ingest.service.normalizeImageInPlace` acota imágenes al techo
+   `MEDIA_INGEST_MAX_PX` (default 2560px, q82, PNG si alfa, escritura atómica,
+   0 = deshabilitado; no-op para archivos ya dentro del techo → sin doble pérdida).
+   Ajusta el contador de storage por delta (mismo patrón que el path de video).
+   Videos: `optimizeVideoForProgressiveStreaming` (existente). Thumbnail generado
+   al ingerir (existente) — imagen/video ahora a **640px** (`THUMBNAIL_MAX_PX`;
+   antes 1200px = tamaño display, no thumb), PDF conserva 1200px.
+3. **Serving (`/files/companies` + `.thumbs`)**: `resolveThumbnailRequestTarget`
+   resuelve exacto → **thumb HERMANO vigente** (el nombre lleva sha1(path:size:mtime);
+   un move/re-subida invalida el nombre guardado — antes caía al original multi-MB) →
+   original como último recurso, disparando **materialización lazy en background**
+   (`materializeThumbnailInBackground`, dedup + pool 2) para que los siguientes
+   requests sirvan el liviano. Self-healing para media legacy.
+4. **PDFs** consumen el mismo storage vía el inliner disco-primero (ver sección
+   Documentos). Video playback: range requests sobre el original (sin transcode).
 
 ### Storage Multi-Tenant
 - Raiz: `FILE_STORAGE_ROOT` (default `/mnt/constroad-storage`) en produccion, `./data/` en dev.

@@ -7,6 +7,17 @@ import { randomUUID } from 'crypto';
 import logger from '../utils/logger.js';
 import { PDFGenerationRequest } from '../types/index.js';
 import { config } from '../config/environment.js';
+import { createLimiter } from '../utils/concurrency.js';
+
+// Renders concurrentes máximos (páginas de Chromium abiertas a la vez). Dos
+// previews simultáneos con fotos ya saturaban la CPU de la Mac mini y los DOS
+// terminaban en timeout; el resto encola FIFO (ver incidente PDF jul-2026).
+const renderLimiter = createLimiter(Number(process.env.PDF_MAX_CONCURRENT_RENDERS) || 2);
+
+// Espera acotada a que las imágenes del documento terminen de decodificar antes
+// del pdf(). Con el HTML autocontenido (data URLs) esto es casi instantáneo;
+// si alguna imagen quedó por URL, la espera tiene tope y NUNCA cuelga el render.
+const IMAGES_READY_TIMEOUT_MS = 15_000;
 
 /**
  * Resuelve el ejecutable de Chrome a usar por Puppeteer.
@@ -195,6 +206,33 @@ export class PDFGenerator {
     }
   }
 
+  /**
+   * Espera (con tope) a que todas las <img> de la página estén decodificadas.
+   * Reemplaza a `networkidle0`: mismo objetivo (no imprimir imágenes a medias)
+   * sin el modo de falla de colgarse esperando quiescencia de red.
+   */
+  private async waitForImagesReady(page: Page): Promise<void> {
+    try {
+      await page.evaluate(async (timeoutMs: number) => {
+        const images = Array.from(document.images);
+        const allReady = Promise.all(
+          images.map((img) =>
+            img.complete
+              ? Promise.resolve()
+              : new Promise<void>((resolve) => {
+                  img.addEventListener('load', () => resolve(), { once: true });
+                  img.addEventListener('error', () => resolve(), { once: true });
+                })
+          )
+        );
+        await Promise.race([allReady, new Promise((resolve) => setTimeout(resolve, timeoutMs))]);
+      }, IMAGES_READY_TIMEOUT_MS);
+    } catch (error) {
+      // Mejor imprimir con una imagen a medias que abortar el documento entero.
+      logger.warn(`waitForImagesReady falló (se continúa): ${String(error)}`);
+    }
+  }
+
   async generatePDF(request: PDFGenerationRequest): Promise<string> {
     try {
       await this.ensureBrowser();
@@ -212,20 +250,27 @@ export class PDFGenerator {
       const filename = request.filename || `pdf-${randomUUID()}.pdf`;
       const filepath = path.join(this.uploadsDir, filename);
 
-      const page = await this.createPageWithRetry();
-      page.setDefaultNavigationTimeout(this.protocolTimeout);
-      page.setDefaultTimeout(this.protocolTimeout);
-      await page.setContent(html, { waitUntil: 'networkidle0', timeout: this.protocolTimeout });
-      await page.pdf({
-        path: filepath,
-        format: 'A4',
-        margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
-        preferCSSPageSize: true,
-      });
-      await page.close();
+      return await renderLimiter.run(async () => {
+        const page = await this.createPageWithRetry();
+        try {
+          page.setDefaultNavigationTimeout(this.protocolTimeout);
+          page.setDefaultTimeout(this.protocolTimeout);
+          await page.setContent(html, { waitUntil: 'load', timeout: this.protocolTimeout });
+          await this.waitForImagesReady(page);
+          await page.pdf({
+            path: filepath,
+            format: 'A4',
+            margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+            preferCSSPageSize: true,
+          });
+        } finally {
+          // Cerrar SIEMPRE: una page fugada queda viva en Chromium y acumula memoria.
+          await page.close().catch(() => {});
+        }
 
-      logger.info(`PDF generated: ${filepath}`);
-      return filepath;
+        logger.info(`PDF generated: ${filepath}`);
+        return filepath;
+      });
     } catch (error) {
       logger.error('Error generating PDF:', error);
       throw error;
@@ -250,23 +295,41 @@ export class PDFGenerator {
         : path.join(this.uploadsDir, options.filename || `pdf-${randomUUID()}.pdf`);
 
       await fs.ensureDir(path.dirname(filepath));
+      const startedAt = Date.now();
+      const htmlBytes = Buffer.byteLength(html);
 
-      const page = await this.createPageWithRetry();
-      page.setDefaultNavigationTimeout(this.protocolTimeout);
-      page.setDefaultTimeout(this.protocolTimeout);
-      await page.setContent(html, { waitUntil: 'networkidle0', timeout: this.protocolTimeout });
-      await page.pdf({
-        path: filepath,
-        format: options.format || 'A4',
-        landscape: Boolean(options.landscape),
-        margin: options.margin || { top: '20px', right: '20px', bottom: '20px', left: '20px' },
-        preferCSSPageSize: true,
-        printBackground: true,
+      return await renderLimiter.run(async () => {
+        const page = await this.createPageWithRetry();
+        try {
+          page.setDefaultNavigationTimeout(this.protocolTimeout);
+          page.setDefaultTimeout(this.protocolTimeout);
+          // `load` (no `networkidle0`): el HTML llega AUTOCONTENIDO (imágenes como
+          // data URLs vía inlineCanvasHtmlImages) y no hay red que esperar. Con
+          // `networkidle0`, cualquier imagen que quedara sin embeber mantenía la red
+          // ocupada y colgaba el setContent hasta 180s (informe IPP, jul-2026).
+          // Puppeteer moderno incluso eliminó networkidle de setContent.
+          await page.setContent(html, { waitUntil: 'load', timeout: this.protocolTimeout });
+          await this.waitForImagesReady(page);
+          await page.pdf({
+            path: filepath,
+            format: options.format || 'A4',
+            landscape: Boolean(options.landscape),
+            margin: options.margin || { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+            preferCSSPageSize: true,
+            printBackground: true,
+          });
+        } finally {
+          // Cerrar SIEMPRE: una page fugada queda viva en Chromium y acumula memoria.
+          await page.close().catch(() => {});
+        }
+
+        logger.info(`PDF generated from HTML: ${filepath}`, {
+          htmlBytes,
+          durationMs: Date.now() - startedAt,
+          queuedRenders: renderLimiter.pending(),
+        });
+        return filepath;
       });
-      await page.close();
-
-      logger.info(`PDF generated from HTML: ${filepath}`);
-      return filepath;
     } catch (error) {
       logger.error('Error generating PDF from HTML:', error);
       throw error;
@@ -283,32 +346,38 @@ export class PDFGenerator {
   async fetchPrintedHtml(url: string, options: { timeoutMs?: number } = {}): Promise<string> {
     await this.ensureBrowser();
     const timeout = options.timeoutMs ?? Math.min(this.protocolTimeout, 60000);
-    const page = await this.createPageWithRetry();
-    try {
-      page.setDefaultNavigationTimeout(timeout);
-      page.setDefaultTimeout(timeout);
-      const response = await page.goto(url, { waitUntil: 'networkidle0', timeout });
-      if (response && !response.ok()) {
-        throw new Error(`print page respondió ${response.status()}`);
+    // Dentro del limiter: es una page más de Chromium compitiendo por CPU.
+    // El goto SÍ usa networkidle0 a propósito: aquí se navega una URL real de
+    // Portal (Next) y hay que esperar su hidratación; el guard duro es el
+    // waitForFunction de __PRINT_READY__ con timeout acotado.
+    return await renderLimiter.run(async () => {
+      const page = await this.createPageWithRetry();
+      try {
+        page.setDefaultNavigationTimeout(timeout);
+        page.setDefaultTimeout(timeout);
+        const response = await page.goto(url, { waitUntil: 'networkidle0', timeout });
+        if (response && !response.ok()) {
+          throw new Error(`print page respondió ${response.status()}`);
+        }
+        await page.waitForFunction(
+          '(window.__PRINT_READY__ === true) || Boolean(window.__PRINT_ERROR__)',
+          { timeout }
+        );
+        const result = await page.evaluate(() => ({
+          html: (window as any).__CANVAS_PRINT_HTML__ || '',
+          error: (window as any).__PRINT_ERROR__ || '',
+        }));
+        if (result.error) {
+          throw new Error(`print page error: ${result.error}`);
+        }
+        if (!result.html) {
+          throw new Error('print page devolvió HTML vacío');
+        }
+        return result.html;
+      } finally {
+        await page.close().catch(() => undefined);
       }
-      await page.waitForFunction(
-        '(window.__PRINT_READY__ === true) || Boolean(window.__PRINT_ERROR__)',
-        { timeout }
-      );
-      const result = await page.evaluate(() => ({
-        html: (window as any).__CANVAS_PRINT_HTML__ || '',
-        error: (window as any).__PRINT_ERROR__ || '',
-      }));
-      if (result.error) {
-        throw new Error(`print page error: ${result.error}`);
-      }
-      if (!result.html) {
-        throw new Error('print page devolvió HTML vacío');
-      }
-      return result.html;
-    } finally {
-      await page.close().catch(() => undefined);
-    }
+    });
   }
 
   async createTemplate(id: string, name: string, htmlContent: string): Promise<void> {

@@ -8,9 +8,12 @@
 > **Estado:** en implementación por fases (§6). **Ya implementado (Junio 2026):**
 > Fase 0 (store sin mensajes + escritura async/atómica + dirty-flag), exención del
 > rate-limit por IP para tráfico autenticado de tenant, cache server-side de
-> grupos/contactos en Portal, y `mongoSanitize` global. Pendiente: RLS de `/message`
-> (ownership), rate-limit por tenant en Redis, y sharding horizontal (Fase 3).
-> **Última actualización:** Junio 2026.
+> grupos/contactos en Portal, y `mongoSanitize` global. **(2026-07-13, §10.d):**
+> backoff exponencial de reconexión, auth+ownership en TODAS las rutas de sesión,
+> lease process-level de sockets (anti guerra 440), signal key cache, outbox con
+> TTL/cap/lock y timeout de envíos. Pendiente: rate-limit por tenant en Redis y
+> sharding horizontal (Fase 3).
+> **Última actualización:** 2026-07-13.
 
 ---
 
@@ -369,15 +372,130 @@ Ordenado por prioridad. Nada de esto está hecho todavía.
    `companyId` autenticado en el request, no al "dueño" del sender. Decidir e implementar.
 4. **Portal (repo aparte)**: el botón de "reset/reconectar" debe llamar `POST /:phone/restart`
    (suave); dejar el `/clear` destructivo detrás de confirmación explícita + `force:true`.
-5. **Guard en re-emparejar**: `GET /:phone/qr` y `request-pairing-code` reemplazan creds al
-   escanear → también destruyen la sesión compartida. Hoy NO están tras el guard (fuera del
-   alcance de 10.b). Evaluar aplicar `guardSharedSenderDestructive` (o variante) ahí.
+5. ~~**Guard en re-emparejar**~~ ✅ RESUELTO en 10.d (2026-07-13): `/qr`, `request-pairing-code`
+   y demás rutas por número están tras `requireSessionOwnership` (dueño/co-dueño del sender).
 6. **`data/outbox` y `data/conversations`**: siguen en filesystem (no son "sesión" pero son
-   estado local). Migrar a Mongo para multi-instancia real (Fase 3).
+   estado local). Migrar a Mongo para multi-instancia real (Fase 3). Mitigado en 10.d con
+   cap de 50 items + TTL 24h + maxAttempts (ya no crece sin límite).
 7. **Recuperación de `51949376824`**: sus creds ya se borraron el 2026-07-01 → requiere
    re-emparejar (`GET /api/sessions/51949376824/qr`). El guard evita reincidencia, no resucita
    creds ya borradas.
 8. **Deuda de tests**: arreglar las ~10 suites que usan `jest.mock` (ESM) — ver §9.
+
+## 10.d Hardening post-incidente reconexión (✅ IMPLEMENTADO 2026-07-13)
+
+Contexto: incidente del 2026-07-13 — un blip de red (EPIPE a Atlas + disconnect `428`)
+tiró la sesión `51902049935`; el backoff lineal (3s×intento, cap 60s) martilló el login
+cada ~2.5 min y WhatsApp **throtleó el handshake** (14 intentos colgados sin open/close,
+el watchdog de 90s los mataba con `Disconnect reason: undefined`) durante ~35 min hasta
+aceptar uno en 2s. La auditoría posterior encontró además huecos cross-tenant en las
+rutas de sesión. Todo lo siguiente quedó implementado:
+
+### Resiliencia de reconexión (`sessions.simple.ts`)
+- **Backoff exponencial** `reconnectDelayMs()`: base 3s, duplica por intento, cap 10 min,
+  jitter ±20% (evita sincronizar reintentos multi-sesión tras un corte común). El caso
+  440 fuerza intento ≥6 (delay ≥96s). Reemplaza al lineal capado a 60s que sostenía el
+  throttle. Alerta Telegram al intento 5 ahora dice "NO re-emparejes: se recupera sola".
+- **Logger Baileys configurable**: `pino({ level: WHATSAPP_BAILEYS_LOG_LEVEL })` (default
+  `fatal`); antes hardcodeado `silent` = ceguera total durante handshakes fallidos.
+  `Disconnect reason` loggea código + mensaje del error (adiós `undefined` mudo).
+- **`makeCacheableSignalKeyStore`** sobre el auth-state Mongo: sin él, cada
+  cifrado/descifrado (por device en grupos) hacía `findOne` a Atlas (~100ms RTT) —
+  envíos lentos y capa cripto acoplada a hipos de Atlas.
+- **`msgRetryCounterCache`** (CacheStore Map propio, cap 5k, sin dependencia nueva):
+  dedupe de retry-receipts (evita bucles de reintento multi-device).
+- **Versión WA cacheada** (`baileys-version.ts`): TTL 6h + stale-on-error. Antes cada
+  reconexión hacía fetch a internet — quemaba intentos justo cuando la red estaba mal.
+
+### Lease process-level de sockets (`instance-lease.ts`) — anti guerra 440
+- Doc único en `whatsapp_instance_lease` con TTL 90s + heartbeat 30s. Solo el holder
+  abre sockets: guard en `startSession`/`createPairingSession` (cubre restore, reconnect
+  y QR); `restoreAllSessions` se omite en procesos pasivos (con alerta Telegram).
+- Failover automático al expirar el TTL; release explícito en graceful shutdown.
+- **Fencing suave deliberado**: perder el lease en caliente (Atlas inaccesible >TTL) NO
+  cierra sockets — matar sesiones sanas durante un corte de Mongo sería peor. Previene
+  el escenario real (dos procesos VIVOS restaurando a la vez).
+- Toggle: `WHATSAPP_SOCKET_LEASE=false`. NO es el handoff prod↔dev por sesión de
+  `SESSION-LEASE.spec.md` (ese sigue propuesto); es el candado "un proceso con sockets".
+
+### Seguridad de rutas de sesión (cierra 10.c#5 y amplía §4)
+- **TODAS** las rutas `/api/sessions/*` exigen `requireTenantOrApiKey`. Antes `/groups`,
+  `/contacts`, `/status`, `/list` y `GET /` estaban SIN auth — con lila expuesta por
+  HTTPS público era volcado de PII (contactos/grupos de cualquier sesión) a internet.
+- **`requireSessionOwnership`** (tenant.middleware) en `/qr`, `/request-pairing-code`,
+  `/restart`, `/status`, `/groups`, `/syncGroups`, `/contacts` y `POST /sessions`
+  (lee `:phoneNumber` o `body.phoneNumber`): dueño o co-dueño del sender; número SIN
+  dueño pasa con warn (1er emparejamiento); mismatch 403; lookup caído 503 fail-closed
+  (un QR no se regala por un hipo de Mongo). Sin esto, cualquier tenant autenticado
+  podía ver el QR de un sender ajeno (= account takeover del canal) o reiniciarle la
+  sesión (DoS que además dispara el throttle de login).
+- **Guard de modo proxy en `/clear` y `/disconnect`**: un `/clear` en una instancia dev
+  con send-proxy activo borraba las creds de PROD en el Mongo compartido.
+- Portal: `api/super/whatsapp-sessions` ahora firma JWT (`portal-super`) para `/list`.
+- Rate limiter: el bypass por API key global exige string no vacío (antes, sin
+  `API_SECRET_KEY` en el env, `undefined === undefined` desactivaba el límite).
+
+### Outbox robusto (`outbox-queue.ts` + `flushOutbox`)
+- `OUTBOX_MAX_ATTEMPTS=5` + `OUTBOX_TTL_MS=24h` + **skip** de items envenenados/expirados
+  (antes: break-on-first-error → un item podrido bloqueaba TODA la cola para siempre).
+  Solo corta si la sesión cae a mitad del flush.
+- Media del flush con `queueOnFail:false`: antes un fallo re-encolaba un DUPLICADO al
+  final y el flush daba el original por enviado (rotación infinita silenciosa).
+- **Cap `OUTBOX_MAX_ITEMS=50`** por sesión con drop-oldest + alerta Telegram (dedupe):
+  los media viajan base64 dentro del JSON (se reescribe entero por operación).
+- **Lock anti-flush concurrente** por sesión (dos `open` cercanos duplicaban envíos).
+- **Timeout defensivo 120s** en los 4 `sock.sendMessage` (text/image/video/document):
+  un socket medio muerto ya no cuelga el request del caller; al vencer cae al
+  `queueOnFail`. Trade-off: entrega post-timeout ⇒ posible duplicado (aceptado).
+
+Cobertura: ~50 tests nuevos (backoff, lease, ownership, outbox, timeout, guards).
+Detalle narrativo en `architecture-as-is.md` §Observaciones.
+
+## 10.e Throttle de login en cuentas pesadas: menos ruido + recuperación más rápida (✅ IMPLEMENTADO 2026-07-14)
+
+Contexto: log de prod 2026-07-14 — un blip de red tiró a la vez `51903124919`,
+`51949376824` y `51902049935` (varios `428` en 22:42–22:46). Los dos primeros (cuentas
+livianas, ~100–240 chats) reconectaron en 1–2 intentos. `51902049935` (cuenta PESADA: 2426
+chats / 3243 contactos, el número del send-proxy) entró en throttle de login: 10 intentos y
+~48 min de `session closed` / `watchdog 90s` antes de abrir (`RECONECTADA tras 10 intentos`
+a las 23:10). **Recuperó solo, SIN re-emparejar → las creds están VIVAS.** No es loop
+infinito ni creds muertas (hipótesis inicial descartada por el propio log). Es throttle, y
+duele solo en la cuenta pesada.
+
+Dos causas del RUIDO (no de la caída inicial, que es la red):
+1. **Backoff demasiado gradual**: el ramp 3s→6s→12s→24s→48s→81s (primeros ~6 intentos en
+   ~3 min) **martilla** el login y SOSTIENE el throttle; recién al espaciar ~200s+ (intento
+   7+) WhatsApp lo aceptó. Los primeros 6–8 `session closed` no aportaban nada.
+2. **`syncFullHistory:true` en CADA reconexión**: el store vive en Mongo y persiste (2426
+   chats se recargan de Mongo), así que re-pedir el history completo cada vez es carga
+   desperdiciada que además agrava el throttle en cuentas grandes.
+
+### Fixes (`sessions.simple.ts`)
+- **Piso de backoff ante STALL** `STALL_BACKOFF_FLOOR_ATTEMPT=6`: si un socket cierra/expira
+  SIN llegar nunca a `open` (= throttle, no corte normal), el siguiente reintento salta ya a
+  ~192s en vez de subir desde 3s. El primer reintento rápido (3s) sigue cubriendo el corte
+  transitorio; solo si ESE se cuelga espaciamos duro. Efecto: ~2–3 `session closed` en vez
+  de ~10 y recuperación más rápida. NO afecta a cuentas livianas (nunca hacen stall).
+- **`syncFullHistory: !state.creds.registered`**: history completo solo en el 1er
+  emparejamiento; ya emparejada, el store de Mongo basta + eventos en vivo. Menos carga por
+  reconexión en cuentas pesadas.
+
+### Estado terminal "aparcado" (red de seguridad, no el caso de hoy)
+- **`connectingStalls[sessionId]`** cuenta stalls (cierres sin `open`); flags por-socket
+  (`everOpened`, `stallCounted`) evitan doble conteo; un `open` lo resetea.
+- **`MAX_CONNECTING_STALLS=12`** (env `WHATSAPP_MAX_CONNECTING_STALLS`): al alcanzarlo,
+  `parkSession()` corta el loop, marca `readyClients=false` y alerta distinta ("APARCADA …
+  re-emparejar"). Con el backoff nuevo un throttle real recupera en pocos stalls (hoy fueron
+  ~10 con el ramp viejo), así que 12 NO se dispara por throttle: solo si algo está de verdad
+  muerto (~1.5–2 h colgado). Los mensajes siguen a salvo en el outbox.
+- **Desaparque solo MANUAL** (restart/pairing/disconnect/clear/loggedOut); la reconexión
+  automática NO resetea (si no, nunca llegaría al tope).
+- **`isSessionParked()`** → status `needs_repair` + `needsRepair:true` para Portal.
+- Cobertura: +3 tests (aparca y deja de crear sockets; restart desaparca; open resetea).
+
+> Nota operativa: el DISPARADOR diario es el blip de red de la Mac mini (varias sesiones
+> `428` a la vez). Estabilizar esa conectividad (o quitar el número de pruebas del restore
+> si no se usa en prod) elimina el ruido de raíz; los fixes de código lo hacen tolerable.
 
 ## 10. Nota: pairing-code (deprecado)
 
