@@ -350,13 +350,20 @@ export async function requireSenderOwnership(
   }
 
   try {
-    const owner = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
-    if (owner && owner.companyId === companyId) {
-      return next(); // ownership correcto
+    // Plural: un sender puede estar COMPARTIDO por varias companies (caso real:
+    // test comparte el número de constroad para no vincular un número aparte).
+    // Misma semántica que requireSessionOwnership; antes se resolvía a UN solo
+    // dueño (orden estable) y el resto recibía 403 al ENVIAR aunque sí podía
+    // leer/administrar la sesión. Sin dueños configurados se sigue bloqueando
+    // (enviar exige un sender asignado; distinto del caso QR/primer pairing).
+    const owners = await quotaValidatorService.listCompaniesByWhatsappSender(sessionPhone);
+    const ownerIds = owners.map((company) => company.companyId);
+    if (ownerIds.includes(companyId)) {
+      return next(); // ownership correcto (dueño único o compartido)
     }
     logger.warn(
       `Sender ownership mismatch: company ${companyId} intentó usar sender ${sessionPhone} ` +
-      `(owner=${owner?.companyId ?? 'desconocido'}) [BLOQUEADO]`
+      `(owners=${ownerIds.join(', ') || 'desconocido'}) [BLOQUEADO]`
     );
     const error: CustomError = new Error('El sender no pertenece a la empresa autenticada');
     error.statusCode = 403;

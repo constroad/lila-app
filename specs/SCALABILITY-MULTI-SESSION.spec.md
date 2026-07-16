@@ -16,8 +16,9 @@
 > §10.f):** ciclo de vida de QR/emparejamiento corregido de raíz (primer QR
 > 63s→2s, ventana `linking` post-pairing, idle-stop del ciclo QR, sesiones
 > local-only para E2E). **(2026-07-16, §10):** pairing-code reescrito sobre el
-> ciclo endurecido y VERIFICADO E2E. Pendiente: rate-limit por tenant en Redis y
-> sharding horizontal (Fase 3).
+> ciclo endurecido y VERIFICADO E2E; sender COMPARTIDO entre companies habilitado
+> (§10.g, ownership plural en /message). Pendiente: rate-limit por tenant en Redis
+> y sharding horizontal (Fase 3).
 > **Última actualización:** 2026-07-16.
 
 ---
@@ -637,6 +638,37 @@ al reiniciar (creds + sender en Mongo, sin re-escanear).
 > **Deuda:** `WHATSAPP_BAILEYS_LOG_LEVEL` quedó en `fatal` tras el diagnóstico. La página
 > `empresa/[[...section]].tsx` de Portal supera 600 líneas (preexistente); el wizard ya se
 > extrajo a su propio componente. El pairing-code quedó VERIFICADO (ver §10).
+
+## 10.g Sender COMPARTIDO entre companies (✅ HABILITADO 2026-07-16)
+
+Caso: la company `test` comparte el número de `constroad` (una sola sesión física en
+lila) para no vincular/quemar un número personal en pruebas. El diseño ya lo soportaba
+casi entero — la sesión se identifica por sender, no por company, y `whatsappConfig.sender`
+no es único:
+
+**Ya funcionaba (verificado E2E contra prod, JWTs de ambas companies):**
+- `requireSessionOwnership` (rutas de sesión) acepta a CUALQUIER co-dueño (plural).
+- `guardSharedSenderDestructive` bloquea clear/logout con 409 si hay >1 dueño (salvo
+  `force:true`) — la protección contra que una company mate la sesión de la otra.
+- `getCompanyByWhatsappSender` resuelve determinístico (orden estable por companyId)
+  con warning — el INBOUND (bot IA, notificaciones) se procesa SIEMPRE como el primer
+  dueño en ese orden (constroad < test).
+- `restoreAllSessions` deduplica por diseño (Set de senders + creds únicas por número):
+  2 companies mismo número = UNA sesión, UN login (test de regresión agregado).
+- Envíos desde Portal llevan `companyId` → quota/atribución por company correcta.
+- Send-proxy dev: `mintTenantToken` resuelve al primer dueño → funciona (atribuye a él).
+
+**Costura corregida (2026-07-16):** `requireSenderOwnership` (rutas `/message`, la de
+ENVÍOS) usaba resolución SINGULAR + igualdad estricta → el co-dueño no-primario recibía
+403 al enviar aunque sí podía leer/administrar la sesión. Fix: misma semántica plural
+que `requireSessionOwnership` (`listCompaniesByWhatsappSender` + `.includes`); sin
+dueños configurados sigue bloqueando. Tests: co-dueños pasan, terceros 403, fail-closed
+503 (18/18 en `tenant.middleware.test.ts`).
+
+**Tradeoffs deliberados (aceptables intra-organización, NO como feature multi-cliente):**
+visibilidad cruzada de grupos/contactos entre co-dueños; inbound de un solo dueño;
+rate-limit y blast-radius de ban compartidos. Para producto: modelo owner+borrowers
+(colección `whatsapp_senders` con ACL) e inbound por webhook fan-out — ver §4.4.
 
 ## 10. Pairing-code — ✅ VERIFICADO E2E (2026-07-16, reescrito sobre el ciclo endurecido)
 

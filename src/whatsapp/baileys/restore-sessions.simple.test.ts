@@ -59,6 +59,24 @@ describe('restoreAllSessions', () => {
     mockConfig.whatsapp.localSessions = [];
   });
 
+  it('sender COMPARTIDO por 2 companies → UNA sola sesión, un solo login', async () => {
+    // Caso real: constroad y test comparten el mismo número. Las creds en Mongo
+    // son únicas por número; el Set de senders configurados colapsa el duplicado.
+    listMongoAuthSessions.mockResolvedValue(['51949376824']);
+    findCompanies.mockReturnValue({
+      lean: jest.fn().mockResolvedValue([
+        { whatsappConfig: { sender: '51949376824' } },
+        { whatsappConfig: { sender: '51949376824' } },
+      ]),
+    });
+    const restoreAllSessions = await loadSubject();
+
+    await restoreAllSessions();
+
+    expect(startSessionMock).toHaveBeenCalledTimes(1);
+    expect(startSessionMock).toHaveBeenCalledWith('51949376824', expect.any(Function));
+  });
+
   it('does nothing when Mongo has no sessions', async () => {
     listMongoAuthSessions.mockResolvedValue([]);
     const restoreAllSessions = await loadSubject();

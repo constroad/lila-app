@@ -66735,12 +66735,13 @@ async function requireSenderOwnership(req, res, next) {
     return next();
   }
   try {
-    const owner = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
-    if (owner && owner.companyId === companyId) {
+    const owners = await quotaValidatorService.listCompaniesByWhatsappSender(sessionPhone);
+    const ownerIds = owners.map((company) => company.companyId);
+    if (ownerIds.includes(companyId)) {
       return next();
     }
     logger_default.warn(
-      `Sender ownership mismatch: company ${companyId} intent\xF3 usar sender ${sessionPhone} (owner=${owner?.companyId ?? "desconocido"}) [BLOQUEADO]`
+      `Sender ownership mismatch: company ${companyId} intent\xF3 usar sender ${sessionPhone} (owners=${ownerIds.join(", ") || "desconocido"}) [BLOQUEADO]`
     );
     const error = new Error("El sender no pertenece a la empresa autenticada");
     error.statusCode = 403;

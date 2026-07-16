@@ -49,12 +49,12 @@ const owners = (...ids: string[]) => ids.map((companyId) => ({ companyId }));
 describe('requireSenderOwnership', () => {
   beforeEach(() => {
     jest.resetModules();
-    getCompanyByWhatsappSender.mockReset();
-    getCompanyByWhatsappSender.mockResolvedValue(null);
+    listCompaniesByWhatsappSender.mockReset();
+    listCompaniesByWhatsappSender.mockResolvedValue([]);
   });
 
   it('allows the sender owned by the tenant', async () => {
-    getCompanyByWhatsappSender.mockResolvedValue({ companyId: 'constroad' });
+    listCompaniesByWhatsappSender.mockResolvedValue(owners('constroad'));
     const guard = await loadOwnershipGuard();
     const next = await run(guard, {
       companyId: 'constroad',
@@ -62,6 +62,23 @@ describe('requireSenderOwnership', () => {
     });
 
     expect(next).toHaveBeenCalledWith();
+  });
+
+  it('allows a SHARED sender for every co-owner (test comparte el número de constroad)', async () => {
+    listCompaniesByWhatsappSender.mockResolvedValue(owners('constroad', 'test'));
+    const guard = await loadOwnershipGuard();
+
+    const nextTest = await run(guard, {
+      companyId: 'test',
+      params: { sessionPhone: '51949376824' },
+    });
+    const nextConstroad = await run(guard, {
+      companyId: 'constroad',
+      params: { sessionPhone: '51949376824' },
+    });
+
+    expect(nextTest).toHaveBeenCalledWith();
+    expect(nextConstroad).toHaveBeenCalledWith();
   });
 
   it('blocks an unassigned or cross-company sender', async () => {
@@ -75,8 +92,20 @@ describe('requireSenderOwnership', () => {
     expect(error.statusCode).toBe(403);
   });
 
+  it('still blocks a company that is NOT among the co-owners', async () => {
+    listCompaniesByWhatsappSender.mockResolvedValue(owners('constroad', 'test'));
+    const guard = await loadOwnershipGuard();
+    const next = await run(guard, {
+      companyId: 'globofas-s8k',
+      params: { sessionPhone: '51949376824' },
+    });
+
+    const error = next.mock.calls[0][0] as { statusCode?: number };
+    expect(error.statusCode).toBe(403);
+  });
+
   it('fails closed when ownership cannot be verified', async () => {
-    getCompanyByWhatsappSender.mockRejectedValue(new Error('mongo down'));
+    listCompaniesByWhatsappSender.mockRejectedValue(new Error('mongo down'));
     const guard = await loadOwnershipGuard();
     const next = await run(guard, {
       companyId: 'test',
