@@ -27,8 +27,9 @@ export const cotizacionServicioSchema: DocumentSchema = {
           'header.issuerAddress',
         ],
         rightFields: [
-          // folioPrefix: el canvas muestra "SER - 0000058" (formato del PDF legacy).
-          { label: 'COTIZACION N°', key: 'header.quoteNumber', folioPrefix: 'SER' },
+          // folioPrefix NEUTRAL "COT": el documento del cliente no debe exponer un
+          // código de industria ("SER"). El tipo interno (Agrupada/COT-SER) no se imprime.
+          { label: 'COTIZACION N°', key: 'header.quoteNumber', folioPrefix: 'COT' },
           { label: 'FECHA', key: 'header.quoteDate' },
         ],
       },

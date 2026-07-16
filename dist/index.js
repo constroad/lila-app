@@ -112,7 +112,14 @@ var init_environment = __esm({
         // https://host.ts.net/api). Con esto seteado, los envíos WhatsApp locales se
         // reenvían a prod en vez de abrir un socket propio (un número = un socket vivo).
         // whatsapp-proxy.service la ignora con warning si nodeEnv === 'production'.
-        proxyTargetUrl: (process.env.WHATSAPP_PROXY_TARGET_URL || "").replace(/\/+$/, "")
+        proxyTargetUrl: (process.env.WHATSAPP_PROXY_TARGET_URL || "").replace(/\/+$/, ""),
+        // Sesiones LOCAL-ONLY (números separados por coma): su socket vive en la máquina
+        // de DESARROLLO que las declara, como excepción al send-proxy (para cerrar el E2E
+        // local: QR real + envíos reales del número de pruebas). La MISMA variable en el
+        // env de PROD significa lo inverso: prod NO abre ni restaura esas sesiones (las
+        // creds viven en el Mongo compartido; sin esta exclusión habría guerra 440).
+        // Ver whatsapp/baileys/local-sessions.ts.
+        localSessions: (process.env.WHATSAPP_LOCAL_SESSIONS || "").split(",").map((value) => value.trim().replace(/\D/g, "")).filter(Boolean)
       },
       // Claude API
       anthropic: {
@@ -6211,6 +6218,19 @@ var init_whatsapp_sender_ownership_service = __esm({
   }
 });
 
+// src/whatsapp/baileys/local-sessions.ts
+function isLocalOnlySession(sessionId) {
+  const normalized = normalizeSessionId(sessionId);
+  return Boolean(normalized) && (config.whatsapp.localSessions ?? []).includes(normalized);
+}
+var normalizeSessionId;
+var init_local_sessions = __esm({
+  "src/whatsapp/baileys/local-sessions.ts"() {
+    init_environment();
+    normalizeSessionId = (value) => String(value || "").replace(/\D/g, "");
+  }
+});
+
 // src/services/whatsapp-proxy.service.ts
 function isWhatsAppProxyMode() {
   const targetUrl = config.whatsapp.proxyTargetUrl;
@@ -6231,6 +6251,9 @@ function isWhatsAppProxyMode() {
     );
   }
   return true;
+}
+function isProxiedSender(sender) {
+  return isWhatsAppProxyMode() && !isLocalOnlySession(sender);
 }
 async function mintTenantToken(sender) {
   const company = await quotaValidatorService.getCompanyByWhatsappSender(sender);
@@ -6382,6 +6405,7 @@ var init_whatsapp_proxy_service = __esm({
     init_logger();
     init_quota_validator_service();
     init_whatsapp_media_utils();
+    init_local_sessions();
     TENANT_TOKEN_TTL = "5m";
     TEXT_TIMEOUT_MS = 3e4;
     MEDIA_TIMEOUT_MS = 12e4;
@@ -6453,7 +6477,7 @@ var init_whatsapp_direct_service = __esm({
        * Create session with QR code
        */
       async createSession(id, qrCb) {
-        if (isWhatsAppProxyMode()) {
+        if (isProxiedSender(id)) {
           throw new Error(
             "WhatsApp send-proxy activo: sesiones locales deshabilitadas. Quita WHATSAPP_PROXY_TARGET_URL para conectar aqu\xED."
           );
@@ -6461,17 +6485,11 @@ var init_whatsapp_direct_service = __esm({
         return await startSession(id, qrCb);
       },
       /**
-       * Create session with pairing code
-       */
-      createPairingSession: (phone, cb) => {
-        return createPairingSession(phone, cb);
-      },
-      /**
        * Send text message (DIRECT - no assertSessions)
        * @param queueOnFail - If true, queue message when send fails (default: true)
        */
       async sendMessage(id, to3, message, options2 = {}) {
-        if (isWhatsAppProxyMode()) {
+        if (isProxiedSender(id)) {
           return proxyTextMessage(id, to3, message, { mentions: options2.mentions });
         }
         await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options2));
@@ -6540,7 +6558,7 @@ var init_whatsapp_direct_service = __esm({
        * @param options - Send options (same as sendImageFile)
        */
       async sendVideoFile(id, to3, options2) {
-        if (isWhatsAppProxyMode()) {
+        if (isProxiedSender(id)) {
           return proxyMediaMessage("video", id, to3, options2);
         }
         await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options2));
@@ -6655,7 +6673,7 @@ var init_whatsapp_direct_service = __esm({
        *   - companyId: Required for filePath/fileUrl resolution
        */
       async sendImageFile(id, to3, options2) {
-        if (isWhatsAppProxyMode()) {
+        if (isProxiedSender(id)) {
           return proxyMediaMessage("image", id, to3, options2);
         }
         await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options2));
@@ -6766,7 +6784,7 @@ var init_whatsapp_direct_service = __esm({
        * @param options - Send options (same as sendImageFile)
        */
       async sendDocument(id, to3, options2) {
-        if (isWhatsAppProxyMode()) {
+        if (isProxiedSender(id)) {
           return proxyMediaMessage("file", id, to3, options2);
         }
         await assertCompanyOwnsWhatsAppSender(id, resolveUsageCompanyId(options2));
@@ -7394,6 +7412,30 @@ function clearQR(sessionId) {
   delete qrCodes[sessionId];
   delete qrTimestamps[sessionId];
 }
+function markQRRequested(sessionId) {
+  qrLastRequestedAt[sessionId] = Date.now();
+}
+function stopIdlePairingCycle(sessionId) {
+  logger_default.info(
+    `\u{1F6D1} [${sessionId}] QR sin consumidor hace >${QR_CONSUMER_IDLE_MS / 1e3}s \u2014 ciclo de emparejamiento DETENIDO (se reanuda al pedir el QR de nuevo desde Portal)`
+  );
+  clearReconnectTimer(sessionId);
+  clearStoreTimer(sessionId);
+  clearQR(sessionId);
+  delete pairingCodes[sessionId];
+  delete sessions[sessionId];
+  delete stores[sessionId];
+  readyClients.delete(sessionId);
+}
+function isPairingLoginInProgress(sessionId) {
+  const pairedAt = recentlyPairedAt[sessionId];
+  if (!pairedAt) return false;
+  if (Date.now() - pairedAt > PAIRING_LOGIN_WINDOW_MS) {
+    delete recentlyPairedAt[sessionId];
+    return false;
+  }
+  return !isSessionReady(sessionId);
+}
 function reconnectDelayMs(attempt) {
   const exponential = RECONNECT_BASE_DELAY_MS * 2 ** (Math.max(attempt, 1) - 1);
   const capped = Math.min(exponential, RECONNECT_MAX_DELAY_MS);
@@ -7483,20 +7525,25 @@ function getQRCodeGeneratedAt(sessionId) {
   return qrTimestamps[sessionId];
 }
 async function startSession(sessionId, qrCb) {
-  if (config.whatsapp.proxyTargetUrl && config.nodeEnv !== "production") {
+  if (config.nodeEnv === "production" && isLocalOnlySession(sessionId)) {
+    throw new Error(
+      `Sesi\xF3n ${sessionId} es LOCAL-ONLY (WHATSAPP_LOCAL_SESSIONS): su socket vive en una m\xE1quina de desarrollo. Prod no la abre ni la restaura (evita guerra 440).`
+    );
+  }
+  if (config.whatsapp.proxyTargetUrl && config.nodeEnv !== "production" && !isLocalOnlySession(sessionId)) {
     throw new Error(
       "WhatsApp send-proxy activo: no se abren sesiones locales (el socket vive en prod). Quita WHATSAPP_PROXY_TARGET_URL para conectar un socket en esta m\xE1quina."
     );
   }
-  if (!hasSocketLease()) {
+  if (!hasSocketLease() && !isLocalOnlySession(sessionId)) {
     throw new Error(
       "Esta instancia no posee el lease de sockets WhatsApp (otra instancia viva lo tiene). Mata el proceso duplicado o espera el failover autom\xE1tico."
     );
   }
-  const inFlight = startingPromises[sessionId];
-  if (inFlight) {
+  const inFlight2 = startingPromises[sessionId];
+  if (inFlight2) {
     logger_default.info(`[${sessionId}] Session init in progress, reusing in-flight start`);
-    return inFlight;
+    return inFlight2;
   }
   const existing = sessions[sessionId];
   if (existing && isSessionReady(sessionId)) {
@@ -7532,28 +7579,24 @@ async function initSession(sessionId, qrCb) {
     generateHighQualityLinkPreview: true,
     printQRInTerminal: false,
     msgRetryCounterCache: makeMsgRetryCache(),
-    // History completo SOLO en el primer emparejamiento (creds sin `registered`). Baileys
-    // no tiene API para "traer todos los contactos": llegan por history-sync. Pero el store
-    // vive en Mongo y PERSISTE entre reconexiones (ver "Store cargado de Mongo: N chats"),
-    // así que re-pedir el history completo en CADA reconexión es carga desperdiciada — y en
-    // cuentas pesadas (2426 chats) esa carga repetida es justo la que agrava el throttle de
-    // login de WhatsApp (incidente 2026-07-14). Ya emparejada, el store basta + eventos en
-    // vivo. Ver SCALABILITY-MULTI-SESSION.spec §2.3 y §10.e.
-    syncFullHistory: !state2.creds.registered
+    // History completo SOLO en el socket de EMPAREJAMIENTO (creds sin `me`). En Baileys
+    // 6.7.18 syncFullHistory solo viaja en el nodo de REGISTRO (`requireFullSync` del
+    // pairing payload) — el nodo de LOGIN de reconexiones no lo incluye, y `webSubPlatform`
+    // tampoco cambia con Browsers.ubuntu. El gate anterior (`!registered`) estaba roto:
+    // `registered` NUNCA flipa a true en el flujo QR (solo en pairing-code), así que toda
+    // sesión QR-emparejada lo mandaba siempre. `me` sí se setea en el pair-success, que es
+    // el corte real entre "emparejando" y "ya emparejada". El store vive en Mongo y
+    // persiste entre reconexiones. Ver SCALABILITY-MULTI-SESSION.spec §2.3 y §10.e.
+    syncFullHistory: !state2.creds.me,
+    // Vida uniforme de CADA QR = 20s (default Baileys: primer ref 60s, resto 20s).
+    // Portal muestra un countdown de 20s (QR_VALIDITY_MS); sin esto, el primer QR
+    // "expiraba" en pantalla a los 20s aunque seguía vigente 40s más.
+    qrTimeout: 2e4
   });
   const store2 = makeInMemoryStore(sessionId);
   stores[sessionId] = store2;
-  await store2.load();
-  clearStoreTimer(sessionId);
-  storeTimers[sessionId] = setInterval(() => store2.save(), 1e4);
-  store2.bind(sock.ev);
+  const storeLoaded = store2.load();
   sock.ev.on("creds.update", saveCreds);
-  sock.ev.on("messaging-history.set", ({ chats, contacts }) => {
-    logger_default.info(`\u{1F4E5} Received ${chats.length} chats and ${contacts.length} contacts`);
-    chats.forEach((chat) => store2.chats.set(chat.id, chat));
-    contacts.forEach((contact) => store2.contacts.set(contact.id, contact));
-    store2.markDirty();
-  });
   let connectionSettled = false;
   let watchdogTimer = null;
   let everOpened = false;
@@ -7566,15 +7609,23 @@ async function initSession(sessionId, qrCb) {
   };
   const startWatchdog = () => {
     if (watchdogTimer) clearTimeout(watchdogTimer);
+    const watchdogMs = isPairingLoginInProgress(sessionId) ? PAIRING_LOGIN_TIMEOUT_MS : CONNECTION_TIMEOUT_MS;
     watchdogTimer = setTimeout(() => {
       if (!connectionSettled && !shuttingDown.has(sessionId)) {
-        logger_default.warn(`\u23F1 [${sessionId}] Connection watchdog: socket sin respuesta por ${CONNECTION_TIMEOUT_MS / 1e3}s \u2014 forzando cierre`);
+        logger_default.warn(`\u23F1 [${sessionId}] Connection watchdog: socket sin respuesta por ${watchdogMs / 1e3}s \u2014 forzando cierre`);
         try {
           sock.end(new Error("connection-watchdog-timeout"));
         } catch (err) {
           logger_default.warn(`Watchdog: sock.end fall\xF3 para ${sessionId}: ${String(err)}`);
         }
         if (sawQR) {
+          if (state2.creds.me) {
+            recentlyPairedAt[sessionId] = Date.now();
+            logger_default.info(`\u{1F517} [${sessionId}] Pair-success detectado (watchdog) \u2014 primer login en curso`);
+          } else if (!hasActiveQRConsumer(sessionId)) {
+            stopIdlePairingCycle(sessionId);
+            return;
+          }
           logger_default.info(`\u{1F517} [${sessionId}] Watchdog en modo QR/pairing \u2014 reconectando r\xE1pido para refrescar el QR`);
           reconnectAttempts[sessionId] = 0;
           resetConnectingStalls(sessionId);
@@ -7592,10 +7643,17 @@ async function initSession(sessionId, qrCb) {
           scheduleReconnect(sessionId, qrCb);
         }
       }
-    }, CONNECTION_TIMEOUT_MS);
+    }, watchdogMs);
   };
   startWatchdog();
-  sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+    const phaseTrace = JSON.stringify({
+      ...update,
+      qr: qr ? "\xABqr\xBB" : void 0,
+      lastDisconnect: lastDisconnect ? "\xABver Disconnect reason\xBB" : void 0
+    });
+    logger_default.info(`\u{1F9ED} [${sessionId}] connection.update ${phaseTrace}`);
     if (connection === "open" || connection === "close") {
       connectionSettled = true;
       if (watchdogTimer) {
@@ -7612,6 +7670,8 @@ async function initSession(sessionId, qrCb) {
       if (qrCb) qrCb(qr);
     }
     if (connection === "open") {
+      await storeLoaded.catch(() => {
+      });
       everOpened = true;
       const wasReconnect = (reconnectAttempts[sessionId] ?? 0) > 0;
       if (wasReconnect) {
@@ -7624,6 +7684,8 @@ async function initSession(sessionId, qrCb) {
       consecutive440s[sessionId] = 0;
       resetConnectingStalls(sessionId);
       clearReconnectTimer(sessionId);
+      delete recentlyPairedAt[sessionId];
+      delete pairingCodes[sessionId];
       try {
         await populateStoreIfEmpty(sessionId, sock);
       } catch (err) {
@@ -7673,6 +7735,13 @@ Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado pa
         scheduleReconnect(sessionId, qrCb);
       } else if (code !== DisconnectReason.loggedOut) {
         if (!everOpened && sawQR) {
+          if (state2.creds.me) {
+            recentlyPairedAt[sessionId] = Date.now();
+            logger_default.info(`\u{1F517} [${sessionId}] Pair-success (QR escaneado) \u2014 primer login post-pairing en curso`);
+          } else if (!hasActiveQRConsumer(sessionId)) {
+            stopIdlePairingCycle(sessionId);
+            return;
+          }
           logger_default.info(`\u{1F517} [${sessionId}] Cierre en modo QR/pairing \u2014 reconectando r\xE1pido para refrescar el QR`);
           reconnectAttempts[sessionId] = 0;
           resetConnectingStalls(sessionId);
@@ -7699,6 +7768,7 @@ Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado pa
         resetConnectingStalls(sessionId);
         delete sessions[sessionId];
         delete stores[sessionId];
+        delete pairingCodes[sessionId];
         try {
           await clearMongoAuthState(sessionId);
           logger_default.info(`\u{1F9F9} Cleared dead Mongo creds for ${sessionId} (loggedOut)`);
@@ -7708,100 +7778,45 @@ Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado pa
       }
     }
   });
-  sessions[sessionId] = sock;
-  return sock;
-}
-async function createPairingSession(phone, sendCode) {
-  if (config.whatsapp.proxyTargetUrl && config.nodeEnv !== "production") {
-    throw new Error(
-      "WhatsApp send-proxy activo: no se vinculan sesiones locales (el socket vive en prod). Quita WHATSAPP_PROXY_TARGET_URL para vincular en esta m\xE1quina."
-    );
-  }
-  if (!hasSocketLease()) {
-    throw new Error(
-      "Esta instancia no posee el lease de sockets WhatsApp (otra instancia viva lo tiene). Mata el proceso duplicado o espera el failover autom\xE1tico."
-    );
-  }
-  const sessionId = phone.replace("+", "");
-  const { state: state2, saveCreds } = await useMongoAuthState(sessionId);
-  const { version } = await getBaileysVersion();
-  const pinoLogger = pino({ level: config.whatsapp.baileysLogLevel ?? "fatal" });
-  const sock = makeWASocket({
-    version,
-    // Mismo cache de signal keys que initSession (menos roundtrips a Atlas).
-    auth: {
-      creds: state2.creds,
-      keys: makeCacheableSignalKeyStore(state2.keys, pinoLogger)
-    },
-    logger: pinoLogger,
-    // Baileys expects pino logger
-    // El browser afecta la entrega del pairing code (Baileys #2306); usamos el mismo
-    // valor probado del flujo QR que sí funciona. 'Lila' (no-browser real) fallaba.
-    browser: Browsers.ubuntu("Chrome"),
-    printQRInTerminal: false,
-    // pairing code es alternativo al QR
-    syncFullHistory: true,
-    // maximiza contactos al conectar (ver startSession)
-    msgRetryCounterCache: makeMsgRetryCache()
-  });
-  const store2 = makeInMemoryStore(sessionId);
-  stores[sessionId] = store2;
-  await store2.load();
+  await storeLoaded;
   clearStoreTimer(sessionId);
   storeTimers[sessionId] = setInterval(() => store2.save(), 1e4);
   store2.bind(sock.ev);
-  sock.ev.on("creds.update", saveCreds);
-  let pairingDone = false;
-  sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect } = update;
-    if (connection === "open") {
-      logger_default.info(`\u2705 Session with ${phone} connected`);
-      readyClients.set(sessionId, true);
-      delete pairingCodes[sessionId];
-      try {
-        await populateStoreIfEmpty(sessionId, sock);
-      } catch (err) {
-        logger_default.error(`Error populating store for ${sessionId}:`, err);
-      }
-      try {
-        await flushOutboxForSession(sessionId);
-      } catch (err) {
-        logger_default.error(`Error flushing outbox for ${sessionId}:`, err);
-      }
-    }
-    if (connection === "close") {
-      readyClients.set(sessionId, false);
-      const statusCode = lastDisconnect?.error?.output?.statusCode;
-      logger_default.warn(`\u274C Session ${phone} closed`, statusCode);
-      if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-        delete sessions[sessionId];
-        delete stores[sessionId];
-        delete pairingCodes[sessionId];
-        try {
-          await clearMongoAuthState(sessionId);
-        } catch (err) {
-          logger_default.warn(`Failed to clear dead creds for ${sessionId}:`, err);
-        }
-      } else if (sock.authState.creds.registered) {
-        setTimeout(() => createPairingSession(phone, sendCode), 3e3);
-      } else {
-        logger_default.warn(`Pairing session ${phone} cerr\xF3 antes de emparejar; esperando reintento manual`);
-      }
-    }
-    if (!pairingDone && !sock.authState.creds.registered && connection === "connecting") {
-      try {
-        const msisdn = phone.replace(/\D/g, "");
-        const code = await sock.requestPairingCode(msisdn);
-        logger_default.info(`\u{1F4F2} Pairing code for ${msisdn}: ${code}`);
-        pairingCodes[sessionId] = code;
-        sendCode(code);
-        pairingDone = true;
-      } catch (err) {
-        logger_default.error("\u274C Error requesting pairing code:", err);
-      }
-    }
+  sock.ev.on("messaging-history.set", ({ chats, contacts }) => {
+    logger_default.info(`\u{1F4E5} Received ${chats.length} chats and ${contacts.length} contacts`);
+    chats.forEach((chat) => store2.chats.set(chat.id, chat));
+    contacts.forEach((contact) => store2.contacts.set(contact.id, contact));
+    store2.markDirty();
   });
   sessions[sessionId] = sock;
+  return sock;
+}
+async function requestPairingCodeForSession(sessionId) {
+  const normalizedId = sessionId.replace(/\D/g, "");
+  if (!normalizedId) {
+    throw new Error("N\xFAmero inv\xE1lido para vincular con c\xF3digo.");
+  }
+  markQRRequested(normalizedId);
+  const sock = getSession(normalizedId) ?? await startSession(normalizedId, () => {
+  });
+  if (isSessionReady(normalizedId) || sock.authState?.creds?.me) {
+    throw new Error(
+      "La sesi\xF3n ya est\xE1 emparejada o conectada: usa Desconectar/Limpiar antes de vincular con c\xF3digo."
+    );
+  }
+  const waitStart = Date.now();
+  while (!qrCodes[normalizedId] && Date.now() - waitStart < PAIRING_MODE_WAIT_MS) {
+    await new Promise((resolve2) => setTimeout(resolve2, 300));
+  }
+  if (!qrCodes[normalizedId]) {
+    throw new Error(
+      "El socket no entr\xF3 en modo emparejamiento (15s sin QR). Reintenta en unos segundos."
+    );
+  }
+  const code = await sock.requestPairingCode(normalizedId);
+  pairingCodes[normalizedId] = code;
+  logger_default.info(`\u{1F4F2} [${normalizedId}] Pairing code generado (v\xE1lido unos minutos)`);
+  return code;
 }
 async function disconnectSession(sessionId) {
   const sock = sessions[sessionId];
@@ -7909,7 +7924,7 @@ async function clearSession(sessionId) {
     throw error;
   }
 }
-var sessions, stores, qrCodes, qrTimestamps, pairingCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, CONNECTION_TIMEOUT_MS, RECONNECT_BASE_DELAY_MS, RECONNECT_MAX_DELAY_MS, STALL_BACKOFF_FLOOR_ATTEMPT, consecutive440s, connectingStalls, parkedSessions, MAX_CONNECTING_STALLS, MSG_RETRY_CACHE_MAX, makeMsgRetryCache, clearStoreTimer, clearReconnectTimer;
+var sessions, stores, qrCodes, qrTimestamps, pairingCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, CONNECTION_TIMEOUT_MS, PAIRING_LOGIN_TIMEOUT_MS, PAIRING_LOGIN_WINDOW_MS, recentlyPairedAt, qrLastRequestedAt, QR_CONSUMER_IDLE_MS, PAIRING_MODE_WAIT_MS, hasActiveQRConsumer, RECONNECT_BASE_DELAY_MS, RECONNECT_MAX_DELAY_MS, STALL_BACKOFF_FLOOR_ATTEMPT, consecutive440s, connectingStalls, parkedSessions, MAX_CONNECTING_STALLS, MSG_RETRY_CACHE_MAX, makeMsgRetryCache, clearStoreTimer, clearReconnectTimer;
 var init_sessions_simple = __esm({
   "src/whatsapp/baileys/sessions.simple.ts"() {
     init_baileys_version();
@@ -7924,6 +7939,7 @@ var init_sessions_simple = __esm({
     init_populate_store_simple();
     init_telegram_alert_service();
     init_instance_lease();
+    init_local_sessions();
     sessions = {};
     stores = {};
     qrCodes = {};
@@ -7936,6 +7952,13 @@ var init_sessions_simple = __esm({
     reconnectTimers = {};
     reconnectAttempts = {};
     CONNECTION_TIMEOUT_MS = 9e4;
+    PAIRING_LOGIN_TIMEOUT_MS = 5 * 6e4;
+    PAIRING_LOGIN_WINDOW_MS = 15 * 6e4;
+    recentlyPairedAt = {};
+    qrLastRequestedAt = {};
+    QR_CONSUMER_IDLE_MS = 9e4;
+    PAIRING_MODE_WAIT_MS = 15e3;
+    hasActiveQRConsumer = (sessionId) => Date.now() - (qrLastRequestedAt[sessionId] ?? 0) <= QR_CONSUMER_IDLE_MS;
     RECONNECT_BASE_DELAY_MS = 3e3;
     RECONNECT_MAX_DELAY_MS = 10 * 6e4;
     STALL_BACKOFF_FLOOR_ATTEMPT = 6;
@@ -66155,7 +66178,7 @@ async function createSessionHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const error = new Error(
         "Send-proxy activo: crea/vincula la sesi\xF3n desde el entorno de producci\xF3n, no en local."
       );
@@ -66163,6 +66186,7 @@ async function createSessionHandler(req, res, next) {
       return next(error);
     }
     logger_default.info(`Creating session for ${phoneNumber}`);
+    markQRRequested(phoneNumber);
     startSession(phoneNumber, (qr2) => {
       logger_default.info(`QR generated for ${phoneNumber}`);
     });
@@ -66189,26 +66213,20 @@ async function createPairingSessionHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    logger_default.info(`Creating pairing code session for ${phoneNumber}`);
-    const PAIRING_WAIT_MS = 2e4;
-    const pairingCode = await new Promise((resolve2) => {
-      let settled = false;
-      const finish = (code) => {
-        if (settled) return;
-        settled = true;
-        resolve2(code);
-      };
-      createPairingSession(phoneNumber, (code) => finish(code)).catch((error) => {
-        logger_default.error("Error creating pairing session:", error);
-        finish("");
-      });
-      setTimeout(() => finish(""), PAIRING_WAIT_MS);
-    });
-    if (!pairingCode) {
+    if (isProxiedSender(phoneNumber)) {
       const error = new Error(
-        "No se pudo generar el c\xF3digo de vinculaci\xF3n. Intenta de nuevo."
+        "Send-proxy activo: vincula la sesi\xF3n desde el entorno de producci\xF3n, no en local."
       );
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      error.statusCode = HTTP_STATUS.CONFLICT;
+      return next(error);
+    }
+    logger_default.info(`Creating pairing code session for ${phoneNumber}`);
+    let pairingCode;
+    try {
+      pairingCode = await requestPairingCodeForSession(phoneNumber);
+    } catch (pairingError) {
+      const error = pairingError instanceof Error ? pairingError : new Error(String(pairingError));
+      error.statusCode = error.statusCode ?? HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
     res.status(HTTP_STATUS.CREATED).json({
@@ -66234,11 +66252,12 @@ async function getSessionStatusHandler(req, res, next) {
     const isConnected = isSessionReady(phoneNumber);
     const qr = getQRCode(phoneNumber);
     const needsRepair = isSessionParked(phoneNumber);
+    const isLinking = isPairingLoginInProgress(phoneNumber);
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         phoneNumber,
-        status: isConnected ? "connected" : needsRepair ? "needs_repair" : "disconnected",
+        status: isConnected ? "connected" : isLinking ? "linking" : needsRepair ? "needs_repair" : "disconnected",
         isConnected,
         needsRepair,
         ...qr && { qr }
@@ -66256,7 +66275,7 @@ async function disconnectSessionHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const error = new Error(
         "Send-proxy activo: desconecta la sesi\xF3n desde el entorno de producci\xF3n, no en local."
       );
@@ -66280,7 +66299,7 @@ async function clearSessionHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const error = new Error(
         "Send-proxy activo: restablece la sesi\xF3n desde el entorno de producci\xF3n, no en local (las credenciales viven en el Mongo compartido)."
       );
@@ -66346,13 +66365,14 @@ async function getQRCodeImageHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const error = new Error(
         "Send-proxy activo: genera el QR desde el entorno de producci\xF3n, no en local."
       );
       error.statusCode = HTTP_STATUS.CONFLICT;
       return next(error);
     }
+    markQRRequested(phoneNumber);
     const existingSession = getSession(phoneNumber);
     if (!existingSession) {
       startSession(phoneNumber, (qr2) => {
@@ -66363,6 +66383,13 @@ async function getQRCodeImageHandler(req, res, next) {
       res.status(HTTP_STATUS.OK).json({
         success: true,
         data: { status: "connected", isConnected: true, qr: null, qrImage: null }
+      });
+      return;
+    }
+    if (isPairingLoginInProgress(phoneNumber)) {
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: { status: "linking", isConnected: false, qr: null, qrImage: null }
       });
       return;
     }
@@ -66405,7 +66432,7 @@ async function getGroupListHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const prodGroups = await proxySessionRead(phoneNumber, "groups");
       return res.status(HTTP_STATUS.OK).json(prodGroups);
     }
@@ -66428,7 +66455,7 @@ async function syncGroupsHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const prodSyncResult = await proxySessionRead(phoneNumber, "syncGroups");
       return res.status(HTTP_STATUS.OK).json(prodSyncResult);
     }
@@ -66463,7 +66490,7 @@ async function getContactsHandler(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const prodContacts = await proxySessionRead(phoneNumber, "contacts");
       return res.status(HTTP_STATUS.OK).json(prodContacts);
     }
@@ -69273,15 +69300,74 @@ async function downloadPlantSettlementPdf(req, res, next) {
   }
 }
 
+// src/api/middlewares/heavyLoad.ts
+init_logger();
+import rateLimit2 from "express-rate-limit";
+var parsePositiveInt = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+};
+var HEAVY_MAX_INFLIGHT = parsePositiveInt(process.env.HEAVY_MAX_INFLIGHT, 12);
+var inFlight = 0;
+var heavyRequestGuard = (req, res, next) => {
+  if (inFlight >= HEAVY_MAX_INFLIGHT) {
+    logger_default.warn("heavyRequestGuard: capacidad saturada \u2192 503", {
+      path: req.originalUrl,
+      inFlight,
+      max: HEAVY_MAX_INFLIGHT
+    });
+    res.setHeader("Retry-After", "15");
+    res.status(503).json({
+      success: false,
+      error: {
+        message: "Servidor ocupado generando documentos; reintenta en unos segundos",
+        statusCode: 503
+      }
+    });
+    return;
+  }
+  inFlight += 1;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    inFlight -= 1;
+  };
+  res.on("finish", release);
+  res.on("close", release);
+  next();
+};
+var HEAVY_RATE_WINDOW_MS = 5 * 60 * 1e3;
+var HEAVY_RATE_MAX = parsePositiveInt(process.env.HEAVY_RATE_MAX, 40);
+var isConstroadHostOrOrigin = (req) => {
+  const host = (req.hostname || req.get("host") || "").toLowerCase();
+  if (host.endsWith("constroad.com")) return true;
+  const origin = (req.get("origin") || req.get("referer") || "").toLowerCase();
+  if (!origin) return false;
+  try {
+    return new URL(origin).hostname.endsWith("constroad.com");
+  } catch {
+    return origin.includes("constroad.com");
+  }
+};
+var heavyRateLimiter = rateLimit2({
+  windowMs: HEAVY_RATE_WINDOW_MS,
+  max: HEAVY_RATE_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Demasiadas solicitudes de generaci\xF3n de documentos; intenta m\xE1s tarde",
+  skip: (req) => hasValidTenantCredential(req) || isConstroadHostOrOrigin(req)
+});
+
 // src/api/routes/pdf.routes.ts
 var router4 = Router4();
-router4.post("/generate", generatePDF);
-router4.post("/generate-vale", generateVale);
-router4.post("/plant-dispatch-settlement", requireTenant, downloadPlantSettlementPdf);
-router4.get("/templates/preview-grid", previewValeTemplateGrid);
-router4.post("/templates", createTemplate);
-router4.get("/templates", listTemplates);
-router4.delete("/templates/:templateId", deleteTemplate);
+router4.post("/generate", requireTenant, heavyRequestGuard, generatePDF);
+router4.post("/generate-vale", requireTenant, heavyRequestGuard, generateVale);
+router4.post("/plant-dispatch-settlement", requireTenant, heavyRequestGuard, downloadPlantSettlementPdf);
+router4.get("/templates/preview-grid", requireTenant, heavyRequestGuard, previewValeTemplateGrid);
+router4.post("/templates", requireTenant, createTemplate);
+router4.get("/templates", requireTenant, listTemplates);
+router4.delete("/templates/:templateId", requireTenant, deleteTemplate);
 var pdf_routes_default = router4;
 
 // src/api/routes/drive.routes.ts
@@ -74277,8 +74363,9 @@ var cotizacionAsfaltoSchema = {
           "header.issuerAddress"
         ],
         rightFields: [
-          // folioPrefix: el canvas muestra "ASF - 0000106" (formato del PDF legacy).
-          { label: "COTIZACION N\xB0", key: "header.quoteNumber", folioPrefix: "ASF" },
+          // folioPrefix NEUTRAL "COT": el documento del cliente no debe exponer un
+          // código de industria ("ASF"). El tipo interno (Simple/COT-ASF) no se imprime.
+          { label: "COTIZACION N\xB0", key: "header.quoteNumber", folioPrefix: "COT" },
           { label: "FECHA", key: "header.quoteDate" }
         ]
       }
@@ -74517,8 +74604,9 @@ var cotizacionServicioSchema = {
           "header.issuerAddress"
         ],
         rightFields: [
-          // folioPrefix: el canvas muestra "SER - 0000058" (formato del PDF legacy).
-          { label: "COTIZACION N\xB0", key: "header.quoteNumber", folioPrefix: "SER" },
+          // folioPrefix NEUTRAL "COT": el documento del cliente no debe exponer un
+          // código de industria ("SER"). El tipo interno (Agrupada/COT-SER) no se imprime.
+          { label: "COTIZACION N\xB0", key: "header.quoteNumber", folioPrefix: "COT" },
           { label: "FECHA", key: "header.quoteDate" }
         ]
       }
@@ -106248,16 +106336,16 @@ async function generateDispatchNoteDocument(req, res, next) {
 var router6 = Router6();
 router6.get("/schemas", getSchemas);
 router6.get("/schemas/:code", getSchema);
-router6.post("/generate", optionalTenant, generateDocument);
-router6.post("/preview", optionalTenant, previewDocument);
-router6.post("/quotes/asphalt/preview", optionalTenant, previewAsphaltQuoteDocument);
-router6.post("/quotes/asphalt/generate", optionalTenant, generateAsphaltQuoteDocument);
-router6.post("/quotes/service/preview", optionalTenant, previewServiceQuoteDocument);
-router6.post("/quotes/service/generate", optionalTenant, generateServiceQuoteDocument);
-router6.post("/purchase-orders/preview", optionalTenant, previewPurchaseOrderDocument);
-router6.post("/purchase-orders/generate", optionalTenant, generatePurchaseOrderDocument);
-router6.post("/dispatch-notes/preview", optionalTenant, previewDispatchNoteDocument2);
-router6.post("/dispatch-notes/generate", optionalTenant, generateDispatchNoteDocument);
+router6.post("/generate", requireTenant, heavyRequestGuard, generateDocument);
+router6.post("/preview", requireTenant, heavyRequestGuard, previewDocument);
+router6.post("/quotes/asphalt/preview", requireTenant, heavyRequestGuard, previewAsphaltQuoteDocument);
+router6.post("/quotes/asphalt/generate", requireTenant, heavyRequestGuard, generateAsphaltQuoteDocument);
+router6.post("/quotes/service/preview", requireTenant, heavyRequestGuard, previewServiceQuoteDocument);
+router6.post("/quotes/service/generate", requireTenant, heavyRequestGuard, generateServiceQuoteDocument);
+router6.post("/purchase-orders/preview", requireTenant, heavyRequestGuard, previewPurchaseOrderDocument);
+router6.post("/purchase-orders/generate", requireTenant, heavyRequestGuard, generatePurchaseOrderDocument);
+router6.post("/dispatch-notes/preview", requireTenant, heavyRequestGuard, previewDispatchNoteDocument2);
+router6.post("/dispatch-notes/generate", requireTenant, heavyRequestGuard, generateDispatchNoteDocument);
 router6.get("/report-data/:serviceId/:type", optionalTenant, getReportData);
 router6.post("/sandbox/random-data", optionalTenant, generateRandomData);
 router6.get("/:id", getDocument2);
@@ -111168,7 +111256,7 @@ async function deleteOrderExport(orderId) {
 
 // src/api/routes/exports.routes.ts
 var router12 = Router12();
-router12.post("/orders/:orderId/request", async (req, res, next) => {
+router12.post("/orders/:orderId/request", heavyRateLimiter, heavyRequestGuard, async (req, res, next) => {
   try {
     const result = await requestOrderExport(req.params.orderId);
     if (result.ok) {
@@ -111181,7 +111269,7 @@ router12.post("/orders/:orderId/request", async (req, res, next) => {
     next(error);
   }
 });
-router12.get("/orders/:orderId/download", async (req, res, next) => {
+router12.get("/orders/:orderId/download", heavyRateLimiter, async (req, res, next) => {
   try {
     const result = await getOrderExportFile(req.params.orderId);
     if (!result.ok) {
@@ -111198,7 +111286,7 @@ router12.get("/orders/:orderId/download", async (req, res, next) => {
     next(error);
   }
 });
-router12.delete("/orders/:orderId", async (req, res, next) => {
+router12.delete("/orders/:orderId", heavyRateLimiter, async (req, res, next) => {
   try {
     const result = await deleteOrderExport(req.params.orderId);
     res.status(result.ok ? 200 : 404).json({ success: result.ok });
@@ -113067,6 +113155,8 @@ init_sessions_simple();
 init_sessions_simple();
 init_mongo_auth_state();
 init_models();
+init_environment();
+init_local_sessions();
 var normalizeSender3 = (value) => String(value || "").replace(/\D/g, "");
 var listConfiguredActiveSenders = async () => {
   const CompanyModel = await getCompanyModel();
@@ -113081,13 +113171,18 @@ var listConfiguredActiveSenders = async () => {
     companies.map((company) => normalizeSender3(company.whatsappConfig?.sender)).filter(Boolean)
   );
 };
-var restoreAllSessions = async () => {
+var restoreAllSessions = async (options2 = {}) => {
   const [storedSessionIds, configuredSenders] = await Promise.all([
     listMongoAuthSessions(),
     listConfiguredActiveSenders()
   ]);
+  const isRestorableHere = (sessionId) => {
+    if (config.nodeEnv === "production") return !isLocalOnlySession(sessionId);
+    if (config.whatsapp.proxyTargetUrl) return isLocalOnlySession(sessionId);
+    return options2.localOnly ? isLocalOnlySession(sessionId) : true;
+  };
   const sessionIds = storedSessionIds.filter(
-    (sessionId) => /^\d{9,15}$/.test(sessionId) && configuredSenders.has(sessionId)
+    (sessionId) => /^\d{9,15}$/.test(sessionId) && configuredSenders.has(sessionId) && isRestorableHere(sessionId)
   );
   const ignoredSessionIds = storedSessionIds.filter(
     (sessionId) => /^\d{9,15}$/.test(sessionId) && !configuredSenders.has(sessionId)
@@ -113095,6 +113190,14 @@ var restoreAllSessions = async () => {
   if (ignoredSessionIds.length > 0) {
     console.warn(
       `Skipping unassigned WhatsApp sessions: ${ignoredSessionIds.join(", ")}`
+    );
+  }
+  const localOnlySkipped = storedSessionIds.filter(
+    (sessionId) => /^\d{9,15}$/.test(sessionId) && configuredSenders.has(sessionId) && !isRestorableHere(sessionId)
+  );
+  if (localOnlySkipped.length > 0) {
+    console.warn(
+      `Skipping WhatsApp sessions by WHATSAPP_LOCAL_SESSIONS split: ${localOnlySkipped.join(", ")}`
     );
   }
   for (const phone of sessionIds) {
@@ -113347,11 +113450,25 @@ async function startServer() {
         const isSocketHolder = await startSocketLeaseLoop();
         if (isSocketHolder) {
           await restoreAllSessions();
+        } else if (config.nodeEnv !== "production" && config.whatsapp.localSessions.length > 0) {
+          logger_default.warn(
+            `\u23ED Sin socket lease: restaurando SOLO sesiones local-only (${config.whatsapp.localSessions.join(", ")}).`
+          );
+          await restoreAllSessions({ localOnly: true });
         } else {
           logger_default.warn("\u23ED Restore de sesiones OMITIDO: otra instancia posee el socket lease.");
         }
       } catch (err) {
         logger_default.error("restoreAllSessions failed:", err);
+      }
+    } else if (config.nodeEnv !== "production" && config.whatsapp.localSessions.length > 0) {
+      try {
+        logger_default.info(
+          `\u267B\uFE0F Restaurando sesiones local-only (${config.whatsapp.localSessions.join(", ")})\u2026`
+        );
+        await restoreAllSessions({ localOnly: true });
+      } catch (err) {
+        logger_default.error("restore de sesiones local-only fall\xF3:", err);
       }
     } else {
       logger_default.warn("\u26A0\uFE0F WhatsApp session auto-restore DISABLED (nodeEnv=%s). Set WHATSAPP_RESTORE_SESSIONS=true to enable.", config.nodeEnv);

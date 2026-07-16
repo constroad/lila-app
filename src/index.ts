@@ -347,11 +347,38 @@ async function startServer() {
         const isSocketHolder = await startSocketLeaseLoop();
         if (isSocketHolder) {
           await restoreAllSessions();
+        } else if (
+          config.nodeEnv !== 'production' &&
+          config.whatsapp.localSessions.length > 0
+        ) {
+          // Dev sin lease (lo posee prod, Mongo compartido): restaurar SOLO las
+          // sesiones LOCAL-ONLY — están exentas del lease porque prod las bloquea.
+          logger.warn(
+            '⏭ Sin socket lease: restaurando SOLO sesiones local-only ' +
+              `(${config.whatsapp.localSessions.join(', ')}).`
+          );
+          await restoreAllSessions({ localOnly: true });
         } else {
           logger.warn('⏭ Restore de sesiones OMITIDO: otra instancia posee el socket lease.');
         }
       } catch (err) {
         logger.error('restoreAllSessions failed:', err);
+      }
+    } else if (
+      config.nodeEnv !== 'production' &&
+      config.whatsapp.localSessions.length > 0
+    ) {
+      // Sesiones LOCAL-ONLY (WHATSAPP_LOCAL_SESSIONS): restaurarlas SIEMPRE en dev,
+      // aunque el auto-restore general esté apagado — si no, cada restart de dev
+      // deja la sesión de pruebas muerta en silencio (los envíos caen al outbox y
+      // nunca salen). Exentas del lease/proxy, no tocan sesiones de prod.
+      try {
+        logger.info(
+          `♻️ Restaurando sesiones local-only (${config.whatsapp.localSessions.join(', ')})…`
+        );
+        await restoreAllSessions({ localOnly: true });
+      } catch (err) {
+        logger.error('restore de sesiones local-only falló:', err);
       }
     } else {
       logger.warn('⚠️ WhatsApp session auto-restore DISABLED (nodeEnv=%s). Set WHATSAPP_RESTORE_SESSIONS=true to enable.', config.nodeEnv);

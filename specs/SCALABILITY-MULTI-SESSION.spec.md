@@ -11,9 +11,14 @@
 > grupos/contactos en Portal, y `mongoSanitize` global. **(2026-07-13, §10.d):**
 > backoff exponencial de reconexión, auth+ownership en TODAS las rutas de sesión,
 > lease process-level de sockets (anti guerra 440), signal key cache, outbox con
-> TTL/cap/lock y timeout de envíos. Pendiente: rate-limit por tenant en Redis y
+> TTL/cap/lock y timeout de envíos. **(2026-07-14, §10.e):** piso de backoff ante
+> stall + `syncFullHistory` gateado + estado terminal "aparcado". **(2026-07-15,
+> §10.f):** ciclo de vida de QR/emparejamiento corregido de raíz (primer QR
+> 63s→2s, ventana `linking` post-pairing, idle-stop del ciclo QR, sesiones
+> local-only para E2E). **(2026-07-16, §10):** pairing-code reescrito sobre el
+> ciclo endurecido y VERIFICADO E2E. Pendiente: rate-limit por tenant en Redis y
 > sharding horizontal (Fase 3).
-> **Última actualización:** 2026-07-13.
+> **Última actualización:** 2026-07-16.
 
 ---
 
@@ -21,8 +26,11 @@
 
 - **Incluye:** persistencia del store, escritura a disco, uso de memoria, aislamiento
   multi-tenant (RLS), límites/backpressure, y camino a escalamiento horizontal.
-- **No incluye:** cambios al flujo de QR, reconexión automática ni a `makeWASocket`
-  (salvo lo indicado explícitamente). El pairing-code queda fuera (deprecado, ver nota final).
+- **No incluye:** sharding horizontal ni rate-limit por tenant en Redis (Fase 3).
+- **NOTA:** el flujo de QR, la reconexión y `makeWASocket` SÍ se tocaron
+  (§10.d, §10.e y sobre todo **§10.f**, que reescribe el ciclo de vida del
+  emparejamiento). El pairing-code se reescribió sobre ese mismo ciclo y quedó
+  VERIFICADO E2E el 2026-07-16 (ver §10 al final).
 
 ---
 
@@ -497,8 +505,164 @@ Dos causas del RUIDO (no de la caída inicial, que es la red):
 > `428` a la vez). Estabilizar esa conectividad (o quitar el número de pruebas del restore
 > si no se usa en prod) elimina el ruido de raíz; los fixes de código lo hacen tolerable.
 
-## 10. Nota: pairing-code (deprecado)
+## 10.f Ciclo de vida de QR/emparejamiento — reescritura de raíz (✅ IMPLEMENTADO 2026-07-15)
 
-El emparejamiento por código nunca funcionó (Portal ni lila-app). La UI de Portal ya se
-eliminó. El server aún expone `createPairingSession` + ruta `/pairing-code` (huérfanos).
-Recomendado: eliminarlos del controller/rutas/tests para reducir superficie.
+Contexto: `51902049935` (cuenta pesada del send-proxy, 2400+ chats) llevaba **semanas sin
+conectar**. Síntoma en logs: `408 (QR expired) → 515 (restart required) →
+watchdog-timeout 90s → backoff → repite`, nunca `connection:'open'`. El device index había
+llegado a `:32` (re-vinculado ~32 veces). **Hipótesis inicial: WhatsApp bloqueó/throttleó la
+cuenta. FALSA.** Con el ciclo de vida arreglado, la sesión vinculó al **primer** escaneo
+(`escaneo → 515 → reconexión 3s → open en ~6-7s`) y se mantuvo estable, incluso
+sobreviviendo a un restart del proceso (auto-restore reconectó en segundos). Los síntomas
+que parecían throttle de WhatsApp eran **self-inflicted**: el propio ciclo QR + watchdog + UX
+empujaban al usuario a re-vincular en cadena, quemando device indexes.
+
+### Root causes (todas en `sessions.simple.ts`, salvo la de Portal)
+
+1. **Primer QR perdido (medido 63s→2s).** Baileys emite el primer QR ~200ms tras el registro
+   y ese ref vive 60s (`qrTimeout` default; los siguientes 20s). lila registraba el listener
+   de `connection.update` **DESPUÉS** de `await store.load()` — cargar el snapshot de 2400+
+   chats desde Atlas tarda 1-2s, y el evento del primer QR ocurría en ese hueco → **se
+   perdía**. El usuario recién veía el SEGUNDO ref a los ~60s. Además quemaba 1 de los ~6
+   refs de la ventana de pairing. Riesgo gemelo con `creds.update`: un pair-success ocurrido
+   durante la carga no se persistía a Mongo.
+2. **"Regenerar QR" mataba el primer login.** Tras escanear (515), Portal seguía mostrando el
+   QR muerto ("Actualizando código…"); el usuario impaciente pulsaba "Regenerar QR" →
+   `forceRestart` → abortaba el primer login en vuelo → el teléfono reiniciaba el registro del
+   companion → nunca convergía → +1 device index. Este es el motor del `:32`.
+3. **Loop infinito de QRs (deuda del fix `sawQR` del 2026-07-14).** El guard `sawQR`
+   reconectaba rápido en cada cierre de modo pairing PARA SIEMPRE, aunque nadie mirara el QR.
+   Un QR pedido una vez dejaba a prod rotando QRs y llenando logs por horas (estado en memoria
+   del proceso; la DB vacía NO lo frena, al revés: sin creds siempre sale QR).
+4. **`syncFullHistory` mal gateado.** Era `!state.creds.registered`, pero `registered`
+   **NUNCA flipa a `true` en el flujo QR** (solo en pairing-code, Baileys 6.7.18 —
+   `messages-recv.js`), así que toda sesión QR-emparejada mandaba `syncFullHistory:true` en
+   cada reconexión. Y en 6.7.18 `syncFullHistory` solo pesa en el nodo de REGISTRO del pairing
+   (`requireFullSync`); en el nodo de LOGIN de reconexiones es inerte, igual que
+   `webSubPlatform` con `Browsers.ubuntu`. El gate correcto es `!state.creds.me` (`me` sí se
+   setea en el pair-success = corte real entre "emparejando" y "ya emparejada").
+5. **Watchdog de 90s demasiado agresivo en el PRIMER login post-pairing.** Tras el 515 el
+   teléfono registra el companion y prepara el estado inicial; en cuentas pesadas eso tarda
+   MÁS que un reconnect normal, y matar el socket a los 90s reinicia ese proceso en el
+   teléfono → nunca converge.
+
+### Fixes (`sessions.simple.ts`)
+- **Orden de listeners ANTES de cualquier `await`** (fix del root cause #1). `creds.update` y
+  `connection.update` se registran antes de `await store.load()`; el snapshot se carga en
+  PARALELO (`const storeLoaded = store.load()`) y se espera DESPUÉS (en el handler de `open`
+  para `populate`, y antes del timer de save). El primer QR ahora sale en ~2s.
+- **`qrTimeout: 20_000`** en `makeWASocket`: vida UNIFORME de cada QR (Baileys default es 60s
+  el primero, 20s el resto). Alinea con el countdown de 20s de Portal (`QR_VALIDITY_MS`) — sin
+  esto el anillo "expiraba" el primer QR a los 20s aunque seguía vigente 40s más.
+- **`syncFullHistory: !state.creds.me`** (fix root cause #4).
+- **Ventana `recentlyPairedAt` + status `linking`** (fix root cause #2 y #5). Un pair-success
+  (cierre 515 con `creds.me` ya seteado) marca `recentlyPairedAt[sessionId]` (ventana 15 min).
+  Mientras dura: (a) el watchdog usa `PAIRING_LOGIN_TIMEOUT_MS = 5min` en vez de 90s; (b)
+  `isPairingLoginInProgress()` es true → los endpoints `/qr` y `/status` devuelven
+  `status:'linking'`. Se limpia en `open` o al expirar la ventana.
+- **Idle-stop del ciclo QR** (fix root cause #3). El handler HTTP del QR llama
+  `markQRRequested(sessionId)` (Portal pollea cada 2.5-8s mientras el diálogo está abierto).
+  Si un cierre en modo pairing ocurre y `hasActiveQRConsumer()` es false (nadie pidió el QR en
+  `QR_CONSUMER_IDLE_MS = 90s`), `stopIdlePairingCycle()` limpia socket/QR/timers y NO
+  reprograma. Un nuevo `GET /qr` lo reanuda con socket nuevo.
+- **Traza de fase 🧭**: cada `connection.update` se loggea compacto (sin el string del QR),
+  exponiendo `isNewLogin` (pair-success procesado), `receivedPendingNotifications` (offline
+  sync completo), `isOnline`. Con solo "socket sin respuesta 90s" no se distinguía Noise vs
+  login vs sync; con esto sí. Subir `WHATSAPP_BAILEYS_LOG_LEVEL=debug` da el detalle de
+  `not logged in, attempting registration...` / `pair-device`.
+- Cobertura: +5 tests del ciclo (`rota QR con consumidor activo`; `DETIENE ciclo sin
+  consumidor`; `pair-success abre ventana linking y reconecta rápido`; `primer login recibe
+  watchdog extendido`; `open limpia la ventana`). Suite `sessions.simple.test.ts`: 57/57.
+
+### Sesiones LOCAL-ONLY para E2E (`local-sessions.ts`, `WHATSAPP_LOCAL_SESSIONS`)
+Para cerrar el E2E de QR en local (generar/escanear/enviar con el número de pruebas SIN
+tocar prod), se agregó una excepción al send-proxy: los números en `WHATSAPP_LOCAL_SESSIONS`
+(CSV) abren socket REAL en la máquina dev que los declara. `isProxiedSender(sender)` reemplaza
+a `isWhatsAppProxyMode()` en `whatsapp-direct.service` y `session.controller` (por-sender, no
+global). En PROD la MISMA var significa lo INVERSO: `startSession`/`createPairingSession` los
+rechazan y `restoreAllSessions` los omite (sin esto, un restart de prod restauraría las creds
+compartidas de Mongo → guerra 440 contra el dev). **La var debe estar en AMBOS entornos.** Al
+devolver la sesión a prod: comentar la var en dev + apagar lila local; prod adopta la sesión
+al reiniciar (creds + sender en Mongo, sin re-escanear).
+
+### Portal (repo aparte, mismo incidente)
+- **Rediseño del wizard** (`components/empresa/shadcn/WhatsAppPairingWizard.tsx`): 3 pasos
+  DERIVADOS del estado real del backend (`waiting_qr`/`linking`), no de clicks. QR envuelto en
+  `ProgressRing` (anillo de vigencia 20s). Paso `linking` explícito que OCULTA el QR muerto y
+  BLOQUEA regenerar/vincular (evita el root cause #2 desde la UI). Desaparecen "Regenerar QR"
+  como acción primaria y "Ya escaneé, verificar" (la detección es automática vía polling).
+- **`persistSender` gotcha (bug real de estado stale)**: tenía un early-return
+  `if (normalized === normalizeSessionPhone(sender)) return true` que confiaba en estado local
+  proveniente de un cache `useFetch` de 60s. Tras Desconectar (que borra el sender en DB) +
+  re-vincular, el estado local viejo "coincidía" y se saltaba el PUT → la sesión re-vinculada
+  quedaba huérfana (Portal la mostraba "Desconectado" con lila `connected`, grupos vacíos).
+  Fix: el PUT es idempotente y corre siempre en los eventos puntuales (pre-QR / conexión
+  detectada), sin early-return por estado local.
+- **`/api/whatsapp/v2/groups` no cachea listas VACÍAS**: una lectura hecha durante
+  linking/desconexión devolvía `[]` y quedaba cacheada 60s (server + browser) → el selector de
+  grupos quedaba vacío justo tras conectar. Ahora una lista vacía lanza (no se cachea) y el
+  cliente reintasa en el próximo poll.
+- **"Conectado" fantasma tras Desconectar (2026-07-16)**: el proxy `delete.ts` llamaba al
+  `/clear` de lila con `timeout: 7000`; en cuentas pesadas el clear (logout + borrar
+  creds/store) supera los 7s → axios abortaba → 500 → el catch del cliente no actualizaba
+  estado → la UI seguía en "Conectado" mientras lila SÍ terminaba el clear por detrás (solo un
+  F5 mostraba la verdad). Fix: timeout 30s + resync defensivo en el catch del cliente (consulta
+  `/status` real y refetch de sesiones aunque el proxy falle). Lección: en proxies de
+  operaciones MUTANTES, un timeout corto convierte una operación exitosa en un estado
+  fantasma — el cliente debe resincronizar contra la fuente de verdad ante CUALQUIER error.
+
+### Lecciones aprendidas (para NO repetir)
+1. **"WhatsApp bloqueó la cuenta" es la conclusión perezosa.** Los síntomas de throttle
+   (408/515/timeout en loop, device index alto) pueden ser 100% self-inflicted por el propio
+   ciclo de reconexión/UX. ANTES de culpar al proveedor: medir con traza de fase y comparar
+   con una cuenta sana en el mismo proceso.
+2. **El orden de registro de listeners vs `await` es correctness, no estilo.** Un evento que
+   se emite ~200ms tras crear el socket se PIERDE si el listener está detrás de un `await` de
+   1-2s. Registrar TODOS los `sock.ev.on(...)` que importan antes de cualquier I/O.
+3. **Los flags de Baileys no significan lo que su nombre sugiere.** `creds.registered` NUNCA
+   se activa en flujo QR; `syncFullHistory` es inerte en logins. Verificar contra
+   `node_modules/@whiskeysockets/baileys/lib` antes de gatear lógica sobre un flag.
+4. **Estado en memoria del proceso ≠ estado en DB.** Borrar creds de Mongo NO detiene un loop
+   de reconexión que vive en variables del proceso. Y un cache stale de 60s en el cliente
+   puede "coincidir" con la realidad y saltarse un guardado necesario (`persistSender`).
+5. **La UX puede FABRICAR el bug del backend.** El botón "Regenerar QR" visible durante el
+   primer login mataba ese login. La solución no fue solo backend (watchdog extendido) sino
+   quitar la tentación en la UI (estado `linking` que bloquea la acción).
+6. **NO editar código mientras el usuario prueba un flujo en vivo.** Un HMR/reload en medio del
+   post-pairing mató el polling y dejó el sender sin persistir; pareció "se cerró la sesión
+   sola". Terminar la prueba del usuario antes de tocar nada.
+7. **No cachear resultados vacíos de un recurso que puede estar "aún no listo".** Una lista
+   vacía por estado transitorio, cacheada, se ve idéntica a "no hay datos".
+
+> **Deuda:** `WHATSAPP_BAILEYS_LOG_LEVEL` quedó en `fatal` tras el diagnóstico. La página
+> `empresa/[[...section]].tsx` de Portal supera 600 líneas (preexistente); el wizard ya se
+> extrajo a su propio componente. El pairing-code quedó VERIFICADO (ver §10).
+
+## 10. Pairing-code — ✅ VERIFICADO E2E (2026-07-16, reescrito sobre el ciclo endurecido)
+
+Históricamente "nunca funcionó" — y la causa era la MISMA clase de bug de §10.f:
+`createPairingSession` era una copia huérfana del ciclo del socket (~130 líneas) SIN manejo
+del 515 post-pairing, sin reconexión resiliente, sin watchdog ni ventana linking. Al ingresar
+el código, el teléfono emparejaba, llegaba el 515… y el login moría en silencio.
+
+**Fix (2026-07-16):** se ELIMINÓ `createPairingSession` (y su wrapper muerto en
+`whatsapp-direct.service`) y se reemplazó por **`requestPairingCodeForSession(sessionId)`**:
+pide el código sobre el MISMO ciclo endurecido de `initSession` (guards proxy/local-only/lease,
+watchdog, 515→`linking`, reconexión, idle-stop). Detalles:
+- El código se pide UNA vez por click del usuario — pedirlo en cada reconexión da 429
+  rate-overlimit (Baileys #2008).
+- Espera a que el socket esté REALMENTE en modo pairing (primer QR emitido = registro
+  aceptado; ~2s con §10.f) antes de pedirlo; número saneado a E.164 solo dígitos.
+- Rechaza con mensaje claro si la sesión ya está emparejada/conectada (`creds.me`) —
+  y Portal, ante ese error, RESINCRONIZA el estado en vez de mostrarlo (caso UI stale).
+- El pair-success por código dispara el MISMO camino que el QR (`creds.me` + 515) →
+  ventana linking + reconexión rápida + `open`. QR y código conviven en el mismo socket;
+  el wizard prioriza mostrar el código.
+- El proxy de Portal (`pairing-code.ts`) espeja el mensaje/status real de lila (antes se
+  tragaba el detalle y el usuario veía "Request failed with status code 503").
+
+**Verificado en vivo 2026-07-16 (51902049935, cuenta 2400+ chats):** código generado
+00:05:32 → ingresado en el teléfono → `linking` → `connected` ~00:06 (≈35s total incluyendo
+el tipeo). Historia y grupos sincronizando de inmediato. Cobertura: tests del flujo nuevo en
+`sessions.simple.test.ts` (código registrado, rechazo si conectada, E.164, open invalida el
+código).

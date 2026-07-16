@@ -6,6 +6,16 @@ const startSessionMock = jest.fn(async (..._args: unknown[]) => undefined);
 const listMongoAuthSessions = jest.fn(async () => [] as string[]);
 const findCompanies = jest.fn();
 
+// Config controlado por el test (NO heredar el .env real: si el dev tiene
+// WHATSAPP_PROXY_TARGET_URL seteado, el filtro dev+proxy vaciaría el restore).
+const mockConfig = {
+  nodeEnv: 'test',
+  whatsapp: {
+    proxyTargetUrl: '',
+    localSessions: [] as string[],
+  },
+};
+
 jest.unstable_mockModule('./sessions.simple.js', () => ({
   __esModule: true,
   startSession: startSessionMock,
@@ -21,6 +31,11 @@ jest.unstable_mockModule('../../database/models.js', () => ({
   getCompanyModel: jest.fn(async () => ({
     find: findCompanies,
   })),
+}));
+
+jest.unstable_mockModule('../../config/environment.js', () => ({
+  __esModule: true,
+  config: mockConfig,
 }));
 
 const loadSubject = async () => {
@@ -39,6 +54,9 @@ describe('restoreAllSessions', () => {
     findCompanies.mockReturnValue({
       lean: jest.fn().mockResolvedValue([]),
     });
+    mockConfig.nodeEnv = 'test';
+    mockConfig.whatsapp.proxyTargetUrl = '';
+    mockConfig.whatsapp.localSessions = [];
   });
 
   it('does nothing when Mongo has no sessions', async () => {
@@ -94,5 +112,57 @@ describe('restoreAllSessions', () => {
     await restoreAllSessions();
 
     expect(startSessionMock).not.toHaveBeenCalled();
+  });
+
+  // Reparto WHATSAPP_LOCAL_SESSIONS (ver local-sessions.ts): prod excluye las
+  // local-only (su socket vive en dev); dev con send-proxy restaura SOLO las
+  // local-only; `localOnly: true` fuerza ese subconjunto (boot dev sin lease).
+  describe('reparto local-only (WHATSAPP_LOCAL_SESSIONS)', () => {
+    beforeEach(() => {
+      listMongoAuthSessions.mockResolvedValue(['51949376824', '51902049935']);
+      findCompanies.mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          { whatsappConfig: { sender: '51949376824' } },
+          { whatsappConfig: { sender: '51902049935' } },
+        ]),
+      });
+      mockConfig.whatsapp.localSessions = ['51902049935'];
+    });
+
+    it('prod NO restaura sesiones local-only', async () => {
+      mockConfig.nodeEnv = 'production';
+
+      const restoreAllSessions = await loadSubject();
+      await restoreAllSessions();
+
+      const calls = startSessionMock.mock.calls.map((c) => c[0] as string);
+      expect(calls).toEqual(['51949376824']);
+    });
+
+    it('dev con send-proxy restaura SOLO las local-only', async () => {
+      mockConfig.whatsapp.proxyTargetUrl = 'https://prod.example/api';
+
+      const restoreAllSessions = await loadSubject();
+      await restoreAllSessions();
+
+      const calls = startSessionMock.mock.calls.map((c) => c[0] as string);
+      expect(calls).toEqual(['51902049935']);
+    });
+
+    it('localOnly:true restaura solo las local-only aunque no haya proxy', async () => {
+      const restoreAllSessions = await loadSubject();
+      await restoreAllSessions({ localOnly: true });
+
+      const calls = startSessionMock.mock.calls.map((c) => c[0] as string);
+      expect(calls).toEqual(['51902049935']);
+    });
+
+    it('dev sin proxy ni localOnly restaura todas', async () => {
+      const restoreAllSessions = await loadSubject();
+      await restoreAllSessions();
+
+      const calls = startSessionMock.mock.calls.map((c) => c[0] as string).sort();
+      expect(calls).toEqual(['51902049935', '51949376824']);
+    });
   });
 });

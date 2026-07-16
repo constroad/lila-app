@@ -33,8 +33,9 @@ export const cotizacionAsfaltoSchema: DocumentSchema = {
           'header.issuerAddress',
         ],
         rightFields: [
-          // folioPrefix: el canvas muestra "ASF - 0000106" (formato del PDF legacy).
-          { label: 'COTIZACION N°', key: 'header.quoteNumber', folioPrefix: 'ASF' },
+          // folioPrefix NEUTRAL "COT": el documento del cliente no debe exponer un
+          // código de industria ("ASF"). El tipo interno (Simple/COT-ASF) no se imprime.
+          { label: 'COTIZACION N°', key: 'header.quoteNumber', folioPrefix: 'COT' },
           { label: 'FECHA', key: 'header.quoteDate' },
         ],
       },

@@ -13,11 +13,13 @@ const disconnectSession = jest.fn(async () => undefined);
 jest.unstable_mockModule('../../whatsapp/baileys/sessions.simple.js', () => ({
   __esModule: true,
   startSession: jest.fn(),
-  createPairingSession: jest.fn(),
+  requestPairingCodeForSession: jest.fn(async () => 'PAIR1234'),
   getQRCode: jest.fn(),
   getQRCodeGeneratedAt: jest.fn(),
   isSessionReady: jest.fn(() => false),
   isSessionParked: jest.fn(() => false),
+  isPairingLoginInProgress: jest.fn(() => false),
+  markQRRequested: jest.fn(),
   listSessions: jest.fn(() => []),
   disconnectSession,
   clearSession,
@@ -33,6 +35,9 @@ jest.unstable_mockModule('../../services/whatsapp-direct.service.js', () => ({
 jest.unstable_mockModule('../../services/whatsapp-proxy.service.js', () => ({
   __esModule: true,
   isWhatsAppProxyMode,
+  // El controller decide por sender (excepción local-only); en estos tests el
+  // sender no está en WHATSAPP_LOCAL_SESSIONS, así que equivale al modo global.
+  isProxiedSender: isWhatsAppProxyMode,
   proxySessionRead: jest.fn(),
 }));
 

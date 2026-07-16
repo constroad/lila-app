@@ -28,6 +28,7 @@ import { clearStoreSnapshot } from './mongo-store.js';
 import { clearPopulateCooldown } from './populate-store-simple.js';
 import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
 import { hasSocketLease } from './instance-lease.js';
+import { isLocalOnlySession } from './local-sessions.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -63,6 +64,76 @@ const reconnectAttempts: Record<string, number> = {};
 // Si el socket se crea pero `connection.open/close` no llega en este tiempo,
 // lo forzamos a cerrar para que el loop de reconexión lo reintente.
 const CONNECTION_TIMEOUT_MS = 90_000;
+
+// PRIMER login tras un emparejamiento (pair-success → 515 → reconnect): el teléfono
+// está registrando el companion y preparando el estado inicial; en cuentas pesadas
+// (2400+ chats) eso tarda MÁS que un reconnect normal, y matar el socket a los 90s
+// reinicia el proceso en el teléfono → nunca converge y fuerza otro re-link (el
+// device index del número de pruebas llegó a :32 así). A ese primer login se le da
+// una ventana mucho más ancha antes de que el watchdog lo corte.
+const PAIRING_LOGIN_TIMEOUT_MS = 5 * 60_000;
+// Cuánto dura el estado "vinculando" tras el pair-success antes de volver al
+// tratamiento normal (stall/backoff). Cubre 2-3 intentos con el watchdog extendido.
+const PAIRING_LOGIN_WINDOW_MS = 15 * 60_000;
+
+// Epoch ms del último pair-success (QR escaneado, creds.me seteado) por sesión.
+// Marca la ventana "login post-pairing en curso": watchdog extendido + status
+// 'linking' hacia Portal (que oculta el QR y bloquea "Regenerar" para no matar el
+// login en vuelo). Se limpia en 'open' o al expirar la ventana.
+const recentlyPairedAt: Record<string, number> = {};
+
+// Última vez que ALGUIEN pidió el QR de la sesión por HTTP (Portal pollea cada
+// 2.5-8s mientras el diálogo está abierto). El ciclo de emparejamiento (QR que
+// rota + reconexión rápida en cada 408) SOLO tiene sentido mientras hay un
+// consumidor mirando el QR: sin este corte, un QR pedido una vez dejaba un loop
+// infinito rotando QRs y llenando logs para siempre (observado en prod jul-2026,
+// deuda del fix sawQR). Si nadie pidió el QR en QR_CONSUMER_IDLE_MS, el ciclo se
+// DETIENE (el socket se limpia); volver a pedir el QR lo reanuda con socket nuevo.
+const qrLastRequestedAt: Record<string, number> = {};
+const QR_CONSUMER_IDLE_MS = 90_000;
+// Espera máxima a que un socket entre en modo emparejamiento (primer QR emitido)
+// antes de pedir un pairing code. Ver requestPairingCodeForSession.
+const PAIRING_MODE_WAIT_MS = 15_000;
+
+/** El handler HTTP del QR marca que hay un consumidor activo mirando el QR. */
+export function markQRRequested(sessionId: string): void {
+  qrLastRequestedAt[sessionId] = Date.now();
+}
+
+const hasActiveQRConsumer = (sessionId: string): boolean =>
+  Date.now() - (qrLastRequestedAt[sessionId] ?? 0) <= QR_CONSUMER_IDLE_MS;
+
+/**
+ * Detiene el ciclo de emparejamiento de una sesión en modo QR sin consumidores:
+ * limpia socket/QR/timers y NO reprograma reconexión. Un nuevo GET /qr la reanuda.
+ */
+function stopIdlePairingCycle(sessionId: string): void {
+  logger.info(
+    `🛑 [${sessionId}] QR sin consumidor hace >${QR_CONSUMER_IDLE_MS / 1000}s — ` +
+      'ciclo de emparejamiento DETENIDO (se reanuda al pedir el QR de nuevo desde Portal)'
+  );
+  clearReconnectTimer(sessionId);
+  clearStoreTimer(sessionId);
+  clearQR(sessionId);
+  delete pairingCodes[sessionId];
+  delete sessions[sessionId];
+  delete stores[sessionId];
+  readyClients.delete(sessionId);
+}
+
+/**
+ * True si la sesión completó el pairing (QR escaneado) y su primer login todavía
+ * no abre. Portal lo recibe como status 'linking'.
+ */
+export function isPairingLoginInProgress(sessionId: string): boolean {
+  const pairedAt = recentlyPairedAt[sessionId];
+  if (!pairedAt) return false;
+  if (Date.now() - pairedAt > PAIRING_LOGIN_WINDOW_MS) {
+    delete recentlyPairedAt[sessionId];
+    return false;
+  }
+  return !isSessionReady(sessionId);
+}
 
 // Backoff exponencial de reconexión. Los primeros intentos son rápidos (cortes breves
 // de red); a partir de ahí duplica hasta el techo. Martillar el login tras una caída
@@ -199,8 +270,8 @@ function scheduleReconnect(sessionId: string, qrCb?: (qr: string) => void) {
  * Aparca una sesión que no completa el handshake tras MAX_CONNECTING_STALLS intentos:
  * corta el loop de reconexión, la marca no-ready y alerta pidiendo re-emparejar. Los
  * mensajes entrantes siguen encolándose en el outbox y salen al reconectar. Se
- * "desaparca" con un restart/creación manual (restartSession, createPairingSession,
- * disconnect/clear) — nunca desde la reconexión automática, para que el contador suba.
+ * "desaparca" con un restart/creación manual (restartSession, disconnect/clear o el
+ * ciclo de emparejamiento) — nunca desde la reconexión automática, para que el contador suba.
  */
 function parkSession(sessionId: string) {
   parkedSessions.add(sessionId);
@@ -323,7 +394,18 @@ export async function startSession(
   // cubre TODOS los caminos (creación manual, endpoint de QR, restartSession, reconnect,
   // restore). Misma condición que whatsapp-proxy.isWhatsAppProxyMode (inline para no
   // acoplar el core Baileys a jwt/quota/media). Ver whatsapp-proxy.service.
-  if (config.whatsapp.proxyTargetUrl && config.nodeEnv !== 'production') {
+  if (config.nodeEnv === 'production' && isLocalOnlySession(sessionId)) {
+    throw new Error(
+      `Sesión ${sessionId} es LOCAL-ONLY (WHATSAPP_LOCAL_SESSIONS): su socket vive en una ` +
+        'máquina de desarrollo. Prod no la abre ni la restaura (evita guerra 440).'
+    );
+  }
+  // Excepción LOCAL-ONLY: esa sesión SÍ abre socket local en dev (E2E QR real).
+  if (
+    config.whatsapp.proxyTargetUrl &&
+    config.nodeEnv !== 'production' &&
+    !isLocalOnlySession(sessionId)
+  ) {
     throw new Error(
       'WhatsApp send-proxy activo: no se abren sesiones locales (el socket vive en prod). ' +
         'Quita WHATSAPP_PROXY_TARGET_URL para conectar un socket en esta máquina.'
@@ -332,7 +414,9 @@ export async function startSession(
 
   // Lease anti doble-instancia: solo el holder abre sockets. Cubre TODOS los caminos
   // (restore, reconnect, QR/create) igual que el guard del proxy. Ver instance-lease.ts.
-  if (!hasSocketLease()) {
+  // Las sesiones LOCAL-ONLY quedan exentas: el lease lo posee PROD (Mongo compartido),
+  // pero prod tiene esas sesiones bloqueadas, así que no hay doble socket posible.
+  if (!hasSocketLease() && !isLocalOnlySession(sessionId)) {
     throw new Error(
       'Esta instancia no posee el lease de sockets WhatsApp (otra instancia viva lo tiene). ' +
         'Mata el proceso duplicado o espera el failover automático.'
@@ -397,35 +481,36 @@ async function initSession(
     generateHighQualityLinkPreview: true,
     printQRInTerminal: false,
     msgRetryCounterCache: makeMsgRetryCache(),
-    // History completo SOLO en el primer emparejamiento (creds sin `registered`). Baileys
-    // no tiene API para "traer todos los contactos": llegan por history-sync. Pero el store
-    // vive en Mongo y PERSISTE entre reconexiones (ver "Store cargado de Mongo: N chats"),
-    // así que re-pedir el history completo en CADA reconexión es carga desperdiciada — y en
-    // cuentas pesadas (2426 chats) esa carga repetida es justo la que agrava el throttle de
-    // login de WhatsApp (incidente 2026-07-14). Ya emparejada, el store basta + eventos en
-    // vivo. Ver SCALABILITY-MULTI-SESSION.spec §2.3 y §10.e.
-    syncFullHistory: !state.creds.registered,
+    // History completo SOLO en el socket de EMPAREJAMIENTO (creds sin `me`). En Baileys
+    // 6.7.18 syncFullHistory solo viaja en el nodo de REGISTRO (`requireFullSync` del
+    // pairing payload) — el nodo de LOGIN de reconexiones no lo incluye, y `webSubPlatform`
+    // tampoco cambia con Browsers.ubuntu. El gate anterior (`!registered`) estaba roto:
+    // `registered` NUNCA flipa a true en el flujo QR (solo en pairing-code), así que toda
+    // sesión QR-emparejada lo mandaba siempre. `me` sí se setea en el pair-success, que es
+    // el corte real entre "emparejando" y "ya emparejada". El store vive en Mongo y
+    // persiste entre reconexiones. Ver SCALABILITY-MULTI-SESSION.spec §2.3 y §10.e.
+    syncFullHistory: !state.creds.me,
+    // Vida uniforme de CADA QR = 20s (default Baileys: primer ref 60s, resto 20s).
+    // Portal muestra un countdown de 20s (QR_VALIDITY_MS); sin esto, el primer QR
+    // "expiraba" en pantalla a los 20s aunque seguía vigente 40s más.
+    qrTimeout: 20_000,
   });
 
-  // Initialize store (Mongo-backed). Cargar ANTES de arrancar el timer para no pisar el doc.
+  // Store en el mapa YA (el open handler lo consulta); el snapshot se carga en
+  // PARALELO y se espera DESPUÉS de registrar los listeners (ver abajo).
   const store = makeInMemoryStore(sessionId);
   stores[sessionId] = store;
-  await store.load();
+  const storeLoaded = store.load();
 
-  clearStoreTimer(sessionId);
-  storeTimers[sessionId] = setInterval(() => store.save(), 10_000);
-
-  store.bind(sock.ev);
+  // ⚠️ ORDEN CRÍTICO (medido 2026-07-15): los listeners de `creds.update` y
+  // `connection.update` van ANTES de cualquier await. Baileys emite el PRIMER QR
+  // ~200ms después del registro (pair-device) y ese ref vive 60s; con el
+  // `await store.load()` delante (1-2s contra Atlas en cuentas de 2400+ chats) el
+  // primer QR se PERDÍA: el usuario recién veía el SEGUNDO ref a los ~60s
+  // (T0→QR visible: 63s medidos; con este orden: segundos). Además se quemaba 1 de
+  // los ~6 refs de la ventana de pairing. Mismo riesgo con creds.update: un
+  // pair-success ocurrido durante la carga no se persistía a Mongo.
   sock.ev.on('creds.update', saveCreds);
-
-  // Sync history: bind once at session creation (not inside 'open' which fires on every reconnect).
-  // Solo chats/contactos; los mensajes NO se almacenan (ver store.manager / SCALABILITY spec §3).
-  sock.ev.on('messaging-history.set', ({ chats, contacts }) => {
-    logger.info(`📥 Received ${chats.length} chats and ${contacts.length} contacts`);
-    chats.forEach((chat) => store.chats.set(chat.id, chat));
-    contacts.forEach((contact) => store.contacts.set(contact.id, contact));
-    store.markDirty();
-  });
 
   // Watchdog: si el socket no llega a 'open' ni 'close' en CONNECTION_TIMEOUT_MS,
   // lo forzamos a cerrar. Evita el bug observado donde la sesión quedaba en estado
@@ -451,9 +536,14 @@ async function initSession(
   };
   const startWatchdog = () => {
     if (watchdogTimer) clearTimeout(watchdogTimer);
+    // Primer login post-pairing: ventana ancha (el teléfono está registrando el
+    // companion; matarlo a los 90s reinicia ese proceso y nunca converge).
+    const watchdogMs = isPairingLoginInProgress(sessionId)
+      ? PAIRING_LOGIN_TIMEOUT_MS
+      : CONNECTION_TIMEOUT_MS;
     watchdogTimer = setTimeout(() => {
       if (!connectionSettled && !shuttingDown.has(sessionId)) {
-        logger.warn(`⏱ [${sessionId}] Connection watchdog: socket sin respuesta por ${CONNECTION_TIMEOUT_MS / 1000}s — forzando cierre`);
+        logger.warn(`⏱ [${sessionId}] Connection watchdog: socket sin respuesta por ${watchdogMs / 1000}s — forzando cierre`);
         try {
           sock.end(new Error('connection-watchdog-timeout'));
         } catch (err) {
@@ -463,6 +553,16 @@ async function initSession(
         // login: el QR simplemente no fue escaneado a tiempo. Reconectar YA con backoff
         // reseteado para presentar un QR fresco, sin contar stalls ni aparcar.
         if (sawQR) {
+          // Si el QR SÍ fue escaneado (pair-success dejó creds.me) marca la ventana
+          // de primer login: el próximo socket recibe watchdog extendido + 'linking'.
+          if (state.creds.me) {
+            recentlyPairedAt[sessionId] = Date.now();
+            logger.info(`🔗 [${sessionId}] Pair-success detectado (watchdog) — primer login en curso`);
+          } else if (!hasActiveQRConsumer(sessionId)) {
+            // Nadie está mirando el QR: no rotar en vano (loop infinito de QRs).
+            stopIdlePairingCycle(sessionId);
+            return;
+          }
           logger.info(`🔗 [${sessionId}] Watchdog en modo QR/pairing — reconectando rápido para refrescar el QR`);
           reconnectAttempts[sessionId] = 0;
           resetConnectingStalls(sessionId);
@@ -485,12 +585,29 @@ async function initSession(
           scheduleReconnect(sessionId, qrCb);
         }
       }
-    }, CONNECTION_TIMEOUT_MS);
+    }, watchdogMs);
   };
   startWatchdog();
 
   // Connection event handler
-  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    // Traza de FASE del handshake (barata: pocas líneas por socket). connection.update
+    // trae más que open/close: `isNewLogin` (pair-success procesado), `isOnline`,
+    // `receivedPendingNotifications` (offline sync completo). Con solo "socket sin
+    // respuesta 90s" no se distinguía Noise vs login vs sync; con esto sí:
+    //   - nunca llega nada → colgado en Noise/TCP
+    //   - llega isNewLogin y muere → pairing OK, WhatsApp no completa el login
+    //   - open sin receivedPendingNotifications → login OK, sync inicial colgado.
+    // El string del QR se omite (enorme); el detalle del close ya se loggea aparte.
+    const phaseTrace = JSON.stringify({
+      ...update,
+      qr: qr ? '«qr»' : undefined,
+      lastDisconnect: lastDisconnect ? '«ver Disconnect reason»' : undefined,
+    });
+    logger.info(`🧭 [${sessionId}] connection.update ${phaseTrace}`);
+
     if (connection === 'open' || connection === 'close') {
       connectionSettled = true;
       if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
@@ -507,6 +624,9 @@ async function initSession(
     }
 
     if (connection === 'open') {
+      // El snapshot puede seguir cargando (los listeners se registran antes del
+      // await — ver ORDEN CRÍTICO arriba); populate necesita el store hidratado.
+      await storeLoaded.catch(() => {});
       everOpened = true;
       const wasReconnect = (reconnectAttempts[sessionId] ?? 0) > 0;
       if (wasReconnect) {
@@ -520,6 +640,10 @@ async function initSession(
       consecutive440s[sessionId] = 0;
       resetConnectingStalls(sessionId);
       clearReconnectTimer(sessionId);
+      // Primer login post-pairing completado (si estaba en curso).
+      delete recentlyPairedAt[sessionId];
+      // Emparejado: el pairing code (si hubo) dejó de ser válido.
+      delete pairingCodes[sessionId];
 
       // Populate store with groups (wrap in try/catch)
       try {
@@ -594,6 +718,17 @@ async function initSession(
           // espera que reabras para dar un QR fresco). Tratarlo como stall aplicaba el
           // backoff largo (~2-3min, STALL_BACKOFF_FLOOR) y dejaba el QR muerto en Portal →
           // imposible escanear a tiempo. Reconectar YA con backoff reseteado.
+          // Si el cierre viene de un pair-success (515 con creds.me ya seteado), abrir la
+          // ventana de PRIMER LOGIN: watchdog extendido + status 'linking' hacia Portal.
+          if (state.creds.me) {
+            recentlyPairedAt[sessionId] = Date.now();
+            logger.info(`🔗 [${sessionId}] Pair-success (QR escaneado) — primer login post-pairing en curso`);
+          } else if (!hasActiveQRConsumer(sessionId)) {
+            // Nadie está mirando el QR (Portal dejó de pollear hace >90s): detener el
+            // ciclo en vez de rotar QRs para siempre. Se reanuda con el próximo GET /qr.
+            stopIdlePairingCycle(sessionId);
+            return;
+          }
           logger.info(`🔗 [${sessionId}] Cierre en modo QR/pairing — reconectando rápido para refrescar el QR`);
           reconnectAttempts[sessionId] = 0;
           resetConnectingStalls(sessionId);
@@ -628,6 +763,7 @@ async function initSession(
         resetConnectingStalls(sessionId);
         delete sessions[sessionId];
         delete stores[sessionId];
+        delete pairingCodes[sessionId];
         try {
           await clearMongoAuthState(sessionId);
           logger.info(`🧹 Cleared dead Mongo creds for ${sessionId} (loggedOut)`);
@@ -638,137 +774,77 @@ async function initSession(
     }
   });
 
+  // Esperar el snapshot ANTES del timer de save (no pisar el doc de Mongo) y del
+  // bind (mismo orden que siempre; los listeners de conexión ya están arriba).
+  await storeLoaded;
+
+  clearStoreTimer(sessionId);
+  storeTimers[sessionId] = setInterval(() => store.save(), 10_000);
+
+  store.bind(sock.ev);
+
+  // Sync history: bind once at session creation (not inside 'open' which fires on every reconnect).
+  // Solo chats/contactos; los mensajes NO se almacenan (ver store.manager / SCALABILITY spec §3).
+  sock.ev.on('messaging-history.set', ({ chats, contacts }) => {
+    logger.info(`📥 Received ${chats.length} chats and ${contacts.length} contacts`);
+    chats.forEach((chat) => store.chats.set(chat.id, chat));
+    contacts.forEach((contact) => store.contacts.set(contact.id, contact));
+    store.markDirty();
+  });
+
   sessions[sessionId] = sock;
   return sock;
 }
 
 /**
- * Create pairing session (phone number code)
+ * Solicita un pairing code ("vincular con número") sobre el ciclo de vida COMPLETO
+ * de initSession — guards (proxy/local-only/lease), watchdog, 515→linking,
+ * reconexión e idle-stop incluidos. El flujo anterior (createPairingSession) era
+ * una copia huérfana del socket SIN nada de eso: tras ingresar el código en el
+ * teléfono, el 515 post-pairing moría sin reconectar y el login nunca completaba
+ * ("nunca funcionó" histórico — ver spec §10.f y §10).
+ *
+ * El código se pide UNA sola vez por llamada (click del usuario): pedirlo en cada
+ * reconexión provoca 429 rate-overlimit (Baileys #2008). El browser del socket
+ * (Browsers.ubuntu, initSession) es el valor probado para la entrega del código
+ * (Baileys #2306). El pair-success por código dispara el MISMO camino que el QR
+ * (creds.me + cierre 515) → ventana linking + reconexión rápida + open.
  */
-export async function createPairingSession(
-  phone: string,
-  sendCode: (code: string) => void
-): Promise<void> {
-  // Send-proxy (dev): igual que startSession, el pairing abre un socket local con las
-  // creds de prod → guerra 440. Re-emparejar debe hacerse contra prod. Ver startSession.
-  if (config.whatsapp.proxyTargetUrl && config.nodeEnv !== 'production') {
+export async function requestPairingCodeForSession(sessionId: string): Promise<string> {
+  // E.164 SIN '+' (solo dígitos): Baileys genera el código PARA ese número; uno
+  // mal formado produce un código huérfano que nunca llega al teléfono.
+  const normalizedId = sessionId.replace(/\D/g, '');
+  if (!normalizedId) {
+    throw new Error('Número inválido para vincular con código.');
+  }
+
+  // Consumidor activo: mantiene vivo el ciclo de emparejamiento (ver idle-stop).
+  markQRRequested(normalizedId);
+
+  const sock = getSession(normalizedId) ?? (await startSession(normalizedId, () => {}));
+  if (isSessionReady(normalizedId) || sock.authState?.creds?.me) {
     throw new Error(
-      'WhatsApp send-proxy activo: no se vinculan sesiones locales (el socket vive en prod). ' +
-        'Quita WHATSAPP_PROXY_TARGET_URL para vincular en esta máquina.'
+      'La sesión ya está emparejada o conectada: usa Desconectar/Limpiar antes de vincular con código.'
     );
   }
 
-  // Lease anti doble-instancia (mismo guard que startSession).
-  if (!hasSocketLease()) {
+  // Esperar a que el socket esté REALMENTE en modo emparejamiento (primer QR
+  // emitido = registro aceptado por WhatsApp; con el fix §10.f llega en ~2s).
+  // Pedir el código antes de eso falla o genera un código huérfano.
+  const waitStart = Date.now();
+  while (!qrCodes[normalizedId] && Date.now() - waitStart < PAIRING_MODE_WAIT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  if (!qrCodes[normalizedId]) {
     throw new Error(
-      'Esta instancia no posee el lease de sockets WhatsApp (otra instancia viva lo tiene). ' +
-        'Mata el proceso duplicado o espera el failover automático.'
+      'El socket no entró en modo emparejamiento (15s sin QR). Reintenta en unos segundos.'
     );
   }
 
-  const sessionId = phone.replace('+', '');
-  // Credenciales Y store (chats/contactos) SIEMPRE en Mongo. Ya NO se usan archivos locales.
-  const { state, saveCreds } = await useMongoAuthState(sessionId);
-  const { version } = await getBaileysVersion();
-
-  // Create Pino logger for Baileys (nivel configurable, ver initSession)
-  const pinoLogger = pino({ level: config.whatsapp.baileysLogLevel ?? 'fatal' });
-
-  const sock = makeWASocket({
-    version,
-    // Mismo cache de signal keys que initSession (menos roundtrips a Atlas).
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, pinoLogger),
-    },
-    logger: pinoLogger, // Baileys expects pino logger
-    // El browser afecta la entrega del pairing code (Baileys #2306); usamos el mismo
-    // valor probado del flujo QR que sí funciona. 'Lila' (no-browser real) fallaba.
-    browser: Browsers.ubuntu('Chrome'),
-    printQRInTerminal: false, // pairing code es alternativo al QR
-    syncFullHistory: true, // maximiza contactos al conectar (ver startSession)
-    msgRetryCounterCache: makeMsgRetryCache(),
-  });
-
-  // Initialize store (Mongo-backed). Cargar ANTES de arrancar el timer para no pisar el doc.
-  const store = makeInMemoryStore(sessionId);
-  stores[sessionId] = store;
-  await store.load();
-  clearStoreTimer(sessionId);
-  storeTimers[sessionId] = setInterval(() => store.save(), 10_000);
-
-  store.bind(sock.ev);
-  sock.ev.on('creds.update', saveCreds);
-
-  let pairingDone = false;
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update;
-
-    if (connection === 'open') {
-      logger.info(`✅ Session with ${phone} connected`);
-      readyClients.set(sessionId, true);
-      delete pairingCodes[sessionId]; // ya emparejado: el código dejó de ser válido
-
-      // Populate store (wrap in try/catch)
-      try {
-        await populateStoreIfEmpty(sessionId, sock);
-      } catch (err) {
-        logger.error(`Error populating store for ${sessionId}:`, err);
-      }
-
-      // Flush outbox (send pending messages)
-      try {
-        await flushOutboxForSession(sessionId);
-      } catch (err) {
-        logger.error(`Error flushing outbox for ${sessionId}:`, err);
-      }
-    }
-
-    if (connection === 'close') {
-      readyClients.set(sessionId, false);
-      const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      logger.warn(`❌ Session ${phone} closed`, statusCode);
-
-      if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-        // Logout/401 → creds muertas: borrarlas de Mongo para no reintentarlas en el
-        // próximo restore (mismo criterio que initSession).
-        delete sessions[sessionId];
-        delete stores[sessionId];
-        delete pairingCodes[sessionId];
-        try {
-          await clearMongoAuthState(sessionId);
-        } catch (err) {
-          logger.warn(`Failed to clear dead creds for ${sessionId}:`, err);
-        }
-      } else if (sock.authState.creds.registered) {
-        // Ya emparejado: reconectar para establecer la sesión completa (patrón resiliente).
-        setTimeout(() => createPairingSession(phone, sendCode), 3000);
-      } else {
-        // Aún SIN emparejar: NO recrear. Cada socket nuevo pediría un pairing code nuevo
-        // y WhatsApp responde 429 rate-overlimit (Baileys #2008). El usuario re-dispara.
-        logger.warn(`Pairing session ${phone} cerró antes de emparejar; esperando reintento manual`);
-      }
-    }
-
-    if (!pairingDone && !sock.authState.creds.registered && connection === 'connecting') {
-      try {
-        // Baileys exige el número en E.164 SIN '+', paréntesis, espacios ni guiones
-        // (solo dígitos con código de país). Un número mal formado genera un código
-        // asociado a un número inválido → nunca llega al dispositivo real.
-        const msisdn = phone.replace(/\D/g, '');
-        const code = await sock.requestPairingCode(msisdn);
-        logger.info(`📲 Pairing code for ${msisdn}: ${code}`);
-        pairingCodes[sessionId] = code;
-        sendCode(code);
-        pairingDone = true;
-      } catch (err) {
-        logger.error('❌ Error requesting pairing code:', err);
-      }
-    }
-  });
-
-  sessions[sessionId] = sock;
+  const code = await sock.requestPairingCode(normalizedId);
+  pairingCodes[normalizedId] = code;
+  logger.info(`📲 [${normalizedId}] Pairing code generado (válido unos minutos)`);
+  return code;
 }
 
 /**

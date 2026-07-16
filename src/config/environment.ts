@@ -73,6 +73,16 @@ export const config = {
     // reenvían a prod en vez de abrir un socket propio (un número = un socket vivo).
     // whatsapp-proxy.service la ignora con warning si nodeEnv === 'production'.
     proxyTargetUrl: (process.env.WHATSAPP_PROXY_TARGET_URL || '').replace(/\/+$/, ''),
+    // Sesiones LOCAL-ONLY (números separados por coma): su socket vive en la máquina
+    // de DESARROLLO que las declara, como excepción al send-proxy (para cerrar el E2E
+    // local: QR real + envíos reales del número de pruebas). La MISMA variable en el
+    // env de PROD significa lo inverso: prod NO abre ni restaura esas sesiones (las
+    // creds viven en el Mongo compartido; sin esta exclusión habría guerra 440).
+    // Ver whatsapp/baileys/local-sessions.ts.
+    localSessions: (process.env.WHATSAPP_LOCAL_SESSIONS || '')
+      .split(',')
+      .map((value) => value.trim().replace(/\D/g, ''))
+      .filter(Boolean),
   },
   
   // Claude API

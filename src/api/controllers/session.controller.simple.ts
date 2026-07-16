@@ -10,11 +10,13 @@ import { Request, Response, NextFunction } from 'express';
 import qrcode from 'qrcode';
 import {
   startSession,
-  createPairingSession,
+  requestPairingCodeForSession,
   getQRCode,
   getQRCodeGeneratedAt,
   isSessionReady,
   isSessionParked,
+  isPairingLoginInProgress,
+  markQRRequested,
   listSessions,
   disconnectSession as disconnectSimpleSession,
   clearSession as clearSimpleSession,
@@ -23,7 +25,7 @@ import {
 } from '../../whatsapp/baileys/sessions.simple.js';
 import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js';
 import {
-  isWhatsAppProxyMode,
+  isProxiedSender,
   proxySessionRead,
 } from '../../services/whatsapp-proxy.service.js';
 import logger from '../../utils/logger.js';
@@ -81,7 +83,8 @@ export async function createSessionHandler(req: Request, res: Response, next: Ne
 
     // Send-proxy (dev): re-emparejar debe hacerse contra PROD (dueño del socket).
     // Sin este corte, startSession abriría un socket local → guerra 440 con prod.
-    if (isWhatsAppProxyMode()) {
+    // Las sesiones LOCAL-ONLY (WHATSAPP_LOCAL_SESSIONS) sí se crean aquí.
+    if (isProxiedSender(phoneNumber)) {
       const error: CustomError = new Error(
         'Send-proxy activo: crea/vincula la sesión desde el entorno de producción, no en local.'
       );
@@ -90,6 +93,10 @@ export async function createSessionHandler(req: Request, res: Response, next: Ne
     }
 
     logger.info(`Creating session for ${phoneNumber}`);
+
+    // Hay un consumidor mirando el QR: mantiene vivo el ciclo de emparejamiento
+    // (sin polls, el ciclo se detiene solo a los ~90s — ver stopIdlePairingCycle).
+    markQRRequested(phoneNumber);
 
     // Start session with QR
     startSession(phoneNumber, (qr) => {
@@ -132,30 +139,28 @@ export async function createPairingSessionHandler(
       return next(error);
     }
 
+    // Send-proxy (dev): mismo corte per-sender que QR/create (los guards duros
+    // también viven en startSession; aquí solo damos un 409 legible).
+    if (isProxiedSender(phoneNumber)) {
+      const error: CustomError = new Error(
+        'Send-proxy activo: vincula la sesión desde el entorno de producción, no en local.'
+      );
+      error.statusCode = HTTP_STATUS.CONFLICT;
+      return next(error);
+    }
+
     logger.info(`Creating pairing code session for ${phoneNumber}`);
 
-    // Esperar hasta PAIRING_WAIT_MS a que Baileys genere el código (no un sleep fijo:
-    // el código puede tardar unos segundos y el sleep de 2s a veces respondía vacío).
-    const PAIRING_WAIT_MS = 20000;
-    const pairingCode = await new Promise<string>((resolve) => {
-      let settled = false;
-      const finish = (code: string) => {
-        if (settled) return;
-        settled = true;
-        resolve(code);
-      };
-      createPairingSession(phoneNumber, (code) => finish(code)).catch((error) => {
-        logger.error('Error creating pairing session:', error);
-        finish('');
-      });
-      setTimeout(() => finish(''), PAIRING_WAIT_MS);
-    });
-
-    if (!pairingCode) {
-      const error: CustomError = new Error(
-        'No se pudo generar el código de vinculación. Intenta de nuevo.'
-      );
-      error.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+    // Flujo NUEVO (spec §10.f/§10): el código se pide sobre el ciclo endurecido de
+    // initSession (515→linking, reconexión, watchdog). El flujo viejo era una copia
+    // huérfana del socket y el login post-código moría sin reconectar.
+    let pairingCode: string;
+    try {
+      pairingCode = await requestPairingCodeForSession(phoneNumber);
+    } catch (pairingError) {
+      const error: CustomError =
+        pairingError instanceof Error ? pairingError : new Error(String(pairingError));
+      error.statusCode = error.statusCode ?? HTTP_STATUS.SERVICE_UNAVAILABLE;
       return next(error);
     }
 
@@ -192,12 +197,21 @@ export async function getSessionStatusHandler(req: Request, res: Response, next:
     // Aparcada: dejó de reintentar tras N handshakes fallidos → requiere re-emparejar.
     // Se expone aparte para que Portal muestre "re-emparejar" en vez de "conectando…".
     const needsRepair = isSessionParked(phoneNumber);
+    // QR escaneado, primer login en curso: Portal muestra "vinculando…" y NO debe
+    // regenerar el QR (un restart mataría el login en vuelo).
+    const isLinking = isPairingLoginInProgress(phoneNumber);
 
     res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         phoneNumber,
-        status: isConnected ? 'connected' : needsRepair ? 'needs_repair' : 'disconnected',
+        status: isConnected
+          ? 'connected'
+          : isLinking
+            ? 'linking'
+            : needsRepair
+              ? 'needs_repair'
+              : 'disconnected',
         isConnected,
         needsRepair,
         ...(qr && { qr }),
@@ -224,7 +238,7 @@ export async function disconnectSessionHandler(req: Request, res: Response, next
 
     // Send-proxy (dev): la sesión vive en PROD. El logout local no tendría socket, pero
     // cortar aquí evita cualquier efecto sobre el estado compartido. Operar desde prod.
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const error: CustomError = new Error(
         'Send-proxy activo: desconecta la sesión desde el entorno de producción, no en local.'
       );
@@ -270,7 +284,7 @@ export async function clearSessionHandler(req: Request, res: Response, next: Nex
     // Un /clear local ejecutaría clearMongoAuthState/clearStoreSnapshot y borraría las
     // credenciales de la sesión PRODUCTIVA → re-emparejar obligado. Igual que el guard
     // de create/QR/pairing: administrar sesiones solo desde prod.
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const error: CustomError = new Error(
         'Send-proxy activo: restablece la sesión desde el entorno de producción, no en local (las credenciales viven en el Mongo compartido).'
       );
@@ -365,13 +379,18 @@ export async function getQRCodeImageHandler(req: Request, res: Response, next: N
 
     // Send-proxy (dev): el QR es un stream atado al socket, que debe vivir en PROD.
     // Sin este corte, startSession abriría un socket local → guerra 440 con prod.
-    if (isWhatsAppProxyMode()) {
+    // Las sesiones LOCAL-ONLY (WHATSAPP_LOCAL_SESSIONS) sí generan QR local.
+    if (isProxiedSender(phoneNumber)) {
       const error: CustomError = new Error(
         'Send-proxy activo: genera el QR desde el entorno de producción, no en local.'
       );
       error.statusCode = HTTP_STATUS.CONFLICT;
       return next(error);
     }
+
+    // Hay un consumidor mirando el QR (Portal pollea cada 2.5-8s): mantiene vivo
+    // el ciclo de emparejamiento; sin polls se detiene solo (~90s).
+    markQRRequested(phoneNumber);
 
     // Start session if not exists
     const existingSession = getSession(phoneNumber);
@@ -386,6 +405,17 @@ export async function getQRCodeImageHandler(req: Request, res: Response, next: N
       res.status(HTTP_STATUS.OK).json({
         success: true,
         data: { status: 'connected', isConnected: true, qr: null, qrImage: null },
+      });
+      return;
+    }
+
+    // QR YA escaneado (pair-success) y primer login en curso: no hay QR nuevo que
+    // esperar (ahorra el bloqueo de QR_WAIT_MS) y Portal debe mostrar "vinculando…"
+    // en vez del QR muerto — y bloquear "Regenerar QR", que mataría el login.
+    if (isPairingLoginInProgress(phoneNumber)) {
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: { status: 'linking', isConnected: false, qr: null, qrImage: null },
       });
       return;
     }
@@ -444,7 +474,7 @@ export async function getGroupListHandler(req: Request, res: Response, next: Nex
 
     // Send-proxy (dev): la sesión y su store viven en PROD — servir la lectura
     // desde allá (mismo contrato de respuesta, pass-through).
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const prodGroups = await proxySessionRead(phoneNumber, 'groups');
       return res.status(HTTP_STATUS.OK).json(prodGroups);
     }
@@ -478,7 +508,7 @@ export async function syncGroupsHandler(req: Request, res: Response, next: NextF
     }
 
     // Send-proxy (dev): el sync real ocurre en PROD (dueño del socket y el store).
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const prodSyncResult = await proxySessionRead(phoneNumber, 'syncGroups');
       return res.status(HTTP_STATUS.OK).json(prodSyncResult);
     }
@@ -526,7 +556,7 @@ export async function getContactsHandler(req: Request, res: Response, next: Next
 
     // Send-proxy (dev): la sesión y su store viven en PROD — servir la lectura
     // desde allá (mismo contrato de respuesta, pass-through).
-    if (isWhatsAppProxyMode()) {
+    if (isProxiedSender(phoneNumber)) {
       const prodContacts = await proxySessionRead(phoneNumber, 'contacts');
       return res.status(HTTP_STATUS.OK).json(prodContacts);
     }

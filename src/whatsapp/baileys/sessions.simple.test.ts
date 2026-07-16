@@ -113,13 +113,19 @@ jest.unstable_mockModule('../../config/environment.js', () => ({
 // del loop 401 debe llamarlo cuando el logout es definitivo (creds muertas).
 const saveCredsMongo = jest.fn(async () => undefined);
 const clearMongoAuthState = jest.fn(async () => undefined);
+// Creds del socket ACTUAL, mutables desde los tests (simular pair-success = setear
+// `me`, como hace Baileys al escanear el QR). Cada startSession crea creds frescas.
+let currentCreds: { registered: boolean; me?: { id: string } };
 jest.unstable_mockModule('./mongo-auth-state.js', () => ({
   __esModule: true,
-  useMongoAuthState: jest.fn(async () => ({
-    state: { creds: { registered: false }, keys: { get: jest.fn(), set: jest.fn() } },
-    saveCreds: saveCredsMongo,
-    clearAuth: jest.fn(async () => undefined),
-  })),
+  useMongoAuthState: jest.fn(async () => {
+    currentCreds = { registered: false };
+    return {
+      state: { creds: currentCreds, keys: { get: jest.fn(), set: jest.fn() } },
+      saveCreds: saveCredsMongo,
+      clearAuth: jest.fn(async () => undefined),
+    };
+  }),
   clearMongoAuthState,
   listMongoAuthSessions: jest.fn(async () => []),
 }));
@@ -160,6 +166,10 @@ afterEach(() => {
 
 const fireOpen = async () => {
   currentSocket.ev.emit('connection.update', { connection: 'open' });
+  // El open handler tiene un await extra (storeLoaded) antes del flush: drenar
+  // suficientes microtasks para que complete.
+  await Promise.resolve();
+  await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 };
@@ -328,6 +338,123 @@ describe('parking tras stalls repetidos (corta el loop infinito de reconexión)'
   });
 });
 
+describe('ciclo de emparejamiento QR (idle-stop + pair-success)', () => {
+  const QR_ID = '51902049935';
+
+  it('rota el QR (reconexión rápida) mientras hay un consumidor activo', async () => {
+    await subject.startSession(QR_ID);
+    subject.markQRRequested(QR_ID); // Portal está polleando el QR
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' });
+    const socketsBefore = makeWASocket.mock.calls.length;
+
+    await fireClose(408); // rotación normal de Baileys (QR refs agotados)
+    await jest.advanceTimersByTimeAsync(10_000);
+
+    expect(makeWASocket.mock.calls.length).toBe(socketsBefore + 1);
+    expect(subject.isSessionParked(QR_ID)).toBe(false);
+  });
+
+  it('DETIENE el ciclo si nadie pidió el QR (no rota QRs en vano)', async () => {
+    await subject.startSession(QR_ID); // sin markQRRequested: nadie mira el QR
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' });
+    const socketsBefore = makeWASocket.mock.calls.length;
+
+    await fireClose(408);
+    await jest.advanceTimersByTimeAsync(600_000);
+
+    expect(makeWASocket.mock.calls.length).toBe(socketsBefore); // ni un socket más
+    expect(subject.getSession(QR_ID)).toBeUndefined();
+    expect(subject.isSessionReady(QR_ID)).toBe(false);
+  });
+
+  it('pair-success (515 con creds.me) abre la ventana linking y reconecta rápido', async () => {
+    await subject.startSession(QR_ID);
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' });
+    currentCreds.me = { id: `${QR_ID}:33@s.whatsapp.net` }; // Baileys setea me al escanear
+    const socketsBefore = makeWASocket.mock.calls.length;
+
+    await fireClose(515); // restart required post-pairing
+
+    expect(subject.isPairingLoginInProgress(QR_ID)).toBe(true);
+    await jest.advanceTimersByTimeAsync(10_000); // reconexión rápida (sin backoff largo)
+    expect(makeWASocket.mock.calls.length).toBe(socketsBefore + 1);
+  });
+
+  it('el primer login post-pairing recibe watchdog extendido (no muere a los 90s)', async () => {
+    await subject.startSession(QR_ID);
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' });
+    currentCreds.me = { id: `${QR_ID}:33@s.whatsapp.net` };
+    await fireClose(515);
+    await jest.advanceTimersByTimeAsync(10_000); // socket del primer login creado
+    const socketsAfterRelogin = makeWASocket.mock.calls.length;
+
+    // Con watchdog normal (90s) ya habría matado el socket y creado otro.
+    await jest.advanceTimersByTimeAsync(95_000);
+    expect(makeWASocket.mock.calls.length).toBe(socketsAfterRelogin);
+  });
+
+  it('un open limpia la ventana linking', async () => {
+    await subject.startSession(QR_ID);
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' });
+    currentCreds.me = { id: `${QR_ID}:33@s.whatsapp.net` };
+    await fireClose(515);
+    await jest.advanceTimersByTimeAsync(10_000);
+
+    await fireOpen();
+
+    expect(subject.isPairingLoginInProgress(QR_ID)).toBe(false);
+    expect(subject.isSessionReady(QR_ID)).toBe(true);
+  });
+});
+
+describe('requestPairingCodeForSession (sobre el ciclo endurecido)', () => {
+  const PAIR_ID = '51902049935';
+
+  it('devuelve el código y lo registra cuando el socket está en modo pairing', async () => {
+    await subject.startSession(PAIR_ID);
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' }); // modo pairing listo
+
+    const code = await subject.requestPairingCodeForSession(PAIR_ID);
+
+    expect(code).toBe('PAIR1234');
+    expect(subject.getPairingCode(PAIR_ID)).toBe('PAIR1234');
+    expect(currentSocket.requestPairingCode).toHaveBeenCalledWith(PAIR_ID);
+  });
+
+  it('sanea el número a solo dígitos (E.164 sin +/espacios/guiones)', async () => {
+    await subject.startSession('51111111111');
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' });
+
+    // El caller puede mandar el número con formato; Baileys exige solo dígitos —
+    // un número mal formado genera un código huérfano que nunca llega al teléfono.
+    await subject.requestPairingCodeForSession('+51 111-111-111');
+
+    expect(currentSocket.requestPairingCode).toHaveBeenCalledWith('51111111111');
+  });
+
+  it('rechaza si la sesión ya está conectada (hay que desconectar antes)', async () => {
+    await subject.startSession(PAIR_ID);
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' });
+    await fireOpen();
+
+    await expect(
+      subject.requestPairingCodeForSession(PAIR_ID)
+    ).rejects.toThrow(/emparejada o conectada/);
+    expect(currentSocket.requestPairingCode).not.toHaveBeenCalled();
+  });
+
+  it('un open (código ingresado y login OK) invalida el pairing code registrado', async () => {
+    await subject.startSession(PAIR_ID);
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' });
+    await subject.requestPairingCodeForSession(PAIR_ID);
+    expect(subject.getPairingCode(PAIR_ID)).toBe('PAIR1234');
+
+    await fireOpen();
+
+    expect(subject.getPairingCode(PAIR_ID)).toBeUndefined();
+  });
+});
+
 describe('reconnectDelayMs (backoff exponencial anti-throttle)', () => {
   // Jitter ±20% → cada intento se valida contra su rango [0.8x, 1.2x].
   const expectInRange = (actual: number, base: number) => {
@@ -478,82 +605,6 @@ describe('store-write timer single-instance per session (memory leak fix)', () =
     const afterCount = setIntervalSpy.mock.calls.length;
     expect(afterCount - firstCount).toBe(1);
     expect(clearIntervalSpy).toHaveBeenCalled();
-  });
-});
-
-describe('createPairingSession', () => {
-  const fireConnecting = async (sock: FakeSocket) => {
-    sock.ev.emit('connection.update', { connection: 'connecting' });
-    await Promise.resolve();
-    await Promise.resolve();
-  };
-
-  it('registers the session and wires events', async () => {
-    const sendCode = jest.fn();
-    await subject.createPairingSession('+51111111111', sendCode);
-    expect(subject.listSessions()).toEqual(['51111111111']);
-  });
-
-  it('requests pairing code (número saneado a solo dígitos) when creds are not registered', async () => {
-    const sendCode = jest.fn();
-    await subject.createPairingSession('+51 111-111-111', sendCode);
-    await fireConnecting(currentSocket);
-    // Baileys exige E.164 sin '+'/espacios/guiones: solo dígitos con código de país.
-    expect(currentSocket.requestPairingCode).toHaveBeenCalledWith('51111111111');
-    expect(sendCode).toHaveBeenCalledWith('PAIR1234');
-  });
-
-  it('does not re-request pairing code if already requested once', async () => {
-    const sendCode = jest.fn();
-    await subject.createPairingSession('+51111111111', sendCode);
-    await fireConnecting(currentSocket);
-    await fireConnecting(currentSocket);
-    await fireConnecting(currentSocket);
-    expect(currentSocket.requestPairingCode).toHaveBeenCalledTimes(1);
-  });
-
-  it('marks ready on connection.open and flushes outbox', async () => {
-    await subject.createPairingSession('+51111111111', jest.fn());
-    currentSocket.ev.emit('connection.update', { connection: 'open' });
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(subject.isSessionReady('51111111111')).toBe(true);
-    expect(flushOutboxForSession).toHaveBeenCalledWith('51111111111');
-  });
-
-  it('does NOT reconnect on non-loggedOut close while not yet paired (evita spam de códigos → 429)', async () => {
-    await subject.createPairingSession('+51111111111', jest.fn());
-    currentSocket.authState.creds.registered = false;
-    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-    currentSocket.ev.emit('connection.update', {
-      connection: 'close',
-      lastDisconnect: { error: { output: { statusCode: 500 } } },
-    });
-    await Promise.resolve();
-    expect(setTimeoutSpy).not.toHaveBeenCalled();
-  });
-
-  it('reconnects on non-loggedOut close once already paired (registered)', async () => {
-    await subject.createPairingSession('+51111111111', jest.fn());
-    currentSocket.authState.creds.registered = true;
-    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-    currentSocket.ev.emit('connection.update', {
-      connection: 'close',
-      lastDisconnect: { error: { output: { statusCode: 500 } } },
-    });
-    await Promise.resolve();
-    expect(setTimeoutSpy).toHaveBeenCalled();
-  });
-
-  it('cleans up on loggedOut close (does not reconnect)', async () => {
-    await subject.createPairingSession('+51111111111', jest.fn());
-    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-    currentSocket.ev.emit('connection.update', {
-      connection: 'close',
-      lastDisconnect: { error: { output: { statusCode: 401 } } },
-    });
-    await Promise.resolve();
-    expect(setTimeoutSpy).not.toHaveBeenCalled();
   });
 });
 

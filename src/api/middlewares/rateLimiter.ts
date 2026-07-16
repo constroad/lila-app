@@ -9,7 +9,7 @@ import { config } from '../../config/environment.js';
  * agotar el bucket por IP — para eso existen los límites por tenant en /message.
  * Ver SCALABILITY-MULTI-SESSION.spec §4.5.
  */
-const hasValidTenantCredential = (req: { headers: Record<string, any> }): boolean => {
+export const hasValidTenantCredential = (req: { headers: Record<string, any> }): boolean => {
   const auth = req.headers['authorization'];
   if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
     try {

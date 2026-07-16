@@ -99,6 +99,7 @@ jest.unstable_mockModule('./whatsapp-sender-ownership.service.js', () => ({
 jest.unstable_mockModule('./whatsapp-proxy.service.js', () => ({
   __esModule: true,
   isWhatsAppProxyMode: jest.fn(() => false),
+  isProxiedSender: jest.fn(() => false),
   proxyTextMessage: jest.fn(),
   proxyMediaMessage: jest.fn(),
 }));

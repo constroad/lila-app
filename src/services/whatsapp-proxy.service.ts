@@ -22,6 +22,7 @@ import { config } from '../config/environment.js';
 import logger from '../utils/logger.js';
 import { quotaValidatorService } from './quota-validator.service.js';
 import { resolveFileBuffer } from './whatsapp-media.utils.js';
+import { isLocalOnlySession } from '../whatsapp/baileys/local-sessions.js';
 
 const TENANT_TOKEN_TTL = '5m';
 const TEXT_TIMEOUT_MS = 30_000;
@@ -84,6 +85,16 @@ export function isWhatsAppProxyMode(): boolean {
     );
   }
   return true;
+}
+
+/**
+ * True si los envíos/lecturas de ESTE sender deben reenviarse a prod. Igual que
+ * isWhatsAppProxyMode() pero con la excepción de las sesiones LOCAL-ONLY
+ * (WHATSAPP_LOCAL_SESSIONS): su socket vive en ESTA máquina dev, así que sus
+ * mensajes salen por el pipeline local completo, no por el proxy.
+ */
+export function isProxiedSender(sender: string): boolean {
+  return isWhatsAppProxyMode() && !isLocalOnlySession(sender);
 }
 
 /**
