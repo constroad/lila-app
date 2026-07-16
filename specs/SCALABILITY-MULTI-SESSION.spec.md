@@ -670,6 +670,19 @@ visibilidad cruzada de grupos/contactos entre co-dueños; inbound de un solo due
 rate-limit y blast-radius de ban compartidos. Para producto: modelo owner+borrowers
 (colección `whatsapp_senders` con ACL) e inbound por webhook fan-out — ver §4.4.
 
+**UI de compartir (Portal `/admin/super/whatsapp-sessions`, 2026-07-16):** acción
+"Compartir sesión" con metáfora **owner→invitados** (estilo Drive, NO al revés): se
+inicia desde la fila que TIENE la sesión viva (con sender, no invitada) y se eligen las
+companies invitadas (`MultiSelect`); por debajo setea `whatsappConfig.sender` de cada
+invitada = el del dueño (endpoint `notifications` existente, sin QR). Dueño = primer
+co-dueño en orden estable por `companyId` (MISMO criterio que el inbound de lila) →
+chips 👑 "Dueño" / 🔗 "Invitado de X" que reflejan la verdad del backend. Invitado solo
+puede "Dejar de compartir" (limpia su sender); nunca "Desconectar" (lila lo frena 409).
+**Validación de número (`validateSenderPhone` en Portal):** exige código de país (limpia
+`+`/espacios/guiones/ceros de marcación), auto-prefija `51` a celular peruano local
+(9 dígitos empezando en 9, avisando), rechaza incompletos/>15 dígitos — antes un número
+sin código de país generaba QR/pairing-code para un número huérfano que nunca llegaba.
+
 ## 10. Pairing-code — ✅ VERIFICADO E2E (2026-07-16, reescrito sobre el ciclo endurecido)
 
 Históricamente "nunca funcionó" — y la causa era la MISMA clase de bug de §10.f:

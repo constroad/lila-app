@@ -103,6 +103,20 @@ export async function getUsageMetricModel(): Promise<Model<IUsageMetric>> {
   return usageMetricModel;
 }
 
+/** Tutoriales de la Academia (loose, read+write): lila los transcodea y escribe
+ *  renditions/poster/status. Colección global cross-company. */
+let academyTutorialModel: Model<Record<string, unknown>> | null = null;
+export async function getAcademyTutorialModel(): Promise<Model<Record<string, unknown>>> {
+  if (academyTutorialModel) {
+    return academyTutorialModel;
+  }
+  const conn = await getSharedConnection();
+  academyTutorialModel =
+    (conn.models.AcademyTutorial as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('AcademyTutorial', looseSchema, 'academy_tutorials');
+  return academyTutorialModel;
+}
+
 export async function getSharedModels(): Promise<{
   CronJobModel: Model<ICronJob>;
   CompanyModel: Model<ICompany>;

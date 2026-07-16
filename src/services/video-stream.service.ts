@@ -32,7 +32,7 @@ const supportsFaststart = (fileName: string): boolean => {
   return FASTSTART_EXTENSIONS.has(ext);
 };
 
-const runFfmpegWithTimeout = async (args: string[], timeoutMs: number): Promise<void> => {
+export const runFfmpegWithTimeout = async (args: string[], timeoutMs: number): Promise<void> => {
   const ffmpegCommand = getFfmpegCommand() || 'ffmpeg';
   await new Promise<void>((resolve, reject) => {
     const proc = spawn(ffmpegCommand, args, { stdio: ['ignore', 'ignore', 'pipe'] });

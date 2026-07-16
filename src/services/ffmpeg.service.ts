@@ -1,14 +1,33 @@
 import { spawnSync } from 'child_process';
+import { createRequire } from 'module';
 import logger from '../utils/logger.js';
 
 let ffmpegAvailableCache: boolean | null = null;
 let ffmpegMissingLogged = false;
 let ffmpegCommandCache: string | null = null;
 
+/**
+ * Binario de `ffmpeg-static` (dep del package.json): en `npm install` baja el
+ * ffmpeg de la plataforma (arm64 macOS de la Mac mini; Linux si se migra). Se
+ * antepone a los candidatos para NO depender de un `brew install` manual. Import
+ * defensivo (createRequire, patrón de `pdf-to-docx.service`): si el paquete aún
+ * no está instalado, cae a los candidatos del sistema sin romper el arranque.
+ */
+const getFfmpegStaticPath = (): string | null => {
+  try {
+    const require = createRequire(import.meta.url);
+    const resolved = require('ffmpeg-static');
+    return typeof resolved === 'string' && resolved.trim() ? resolved : null;
+  } catch {
+    return null;
+  }
+};
+
 const getFfmpegCandidates = (): string[] => {
   const fromEnv = (process.env.FFMPEG_PATH || '').trim();
   const candidates = [
-    fromEnv,
+    fromEnv, // override explícito gana
+    getFfmpegStaticPath() || '', // binario gestionado por npm
     'ffmpeg',
     '/opt/homebrew/bin/ffmpeg',
     '/usr/local/bin/ffmpeg',

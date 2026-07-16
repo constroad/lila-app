@@ -25,6 +25,7 @@ import cronRoutes from './api/routes/cron.routes.js';
 import serviceManagementReportRoutes from './api/routes/service-management-report.routes.js';
 import serviceMigrationRoutes from './api/routes/service-migration.routes.js';
 import exportsRoutes from './api/routes/exports.routes.js';
+import academyRoutes from './api/routes/academy.routes.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
 import { materializeThumbnailInBackground } from './services/thumbnail.service.js';
 import swaggerUi from 'swagger-ui-express';
@@ -124,15 +125,33 @@ const shouldDisableStaticCaching = (requestPath: string): boolean => {
   }
 };
 
+// Material didáctico de la Academia: contenido estable (una vez publicado no
+// cambia; re-grabar generará archivos versionados). Se cachea 30 días en el
+// navegador = "CDN gratis" para re-vistas sin Cloudflare. ACADEMY-TUTORIALS §4.5.
+const isAcademyTutorialPath = (requestPath: string): boolean => {
+  if (!requestPath) return false;
+  try {
+    const normalized = path.posix
+      .normalize(decodeURIComponent(requestPath).toLowerCase())
+      .replace(/^\/+/, '/');
+    return normalized.includes('/academy/tutorials/');
+  } catch {
+    return false;
+  }
+};
+
 const applyCompaniesStaticHeaders = (req: express.Request, res: express.Response) => {
   setStaticCorsHeaders(req, res);
-  if (!shouldDisableStaticCaching(req.path)) {
+  if (shouldDisableStaticCaching(req.path)) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return;
   }
 
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+  if (isAcademyTutorialPath(req.path)) {
+    res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+  }
 };
 
 const isSafeThumbRequestPath = (requestPath: string): boolean => {
@@ -216,6 +235,7 @@ app.use('/api/cron', cronRoutes);
 app.use('/api/service-management-report', serviceManagementReportRoutes);
 app.use('/api/service-migrations', serviceMigrationRoutes);
 app.use('/api/exports', exportsRoutes);
+app.use('/api/academy', academyRoutes);
 
 const companiesRoot = `${config.storage.root}/companies`;
 const companiesStaticHeaders = (res: express.Response) => {
