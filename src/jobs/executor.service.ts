@@ -372,7 +372,12 @@ export class JobExecutor {
       job.message?.chatId
     );
     if (!messages || messages.length === 0) {
-      logger.warn(`[JobExecutor] API response did not include messages to send`);
+      // No es un warning: es el caso NORMAL "no hay nada que alertar ahora"
+      // (sin certificados faltantes / kardex OK / etc.). El endpoint respondió
+      // 200 sin mensajes a propósito. A info para no ensuciar la señal de error.
+      logger.info(
+        `[JobExecutor] ${job.companyId}/${job.name}: sin mensajes que enviar (nada que alertar)`
+      );
     }
     return messages;
   }

@@ -132,6 +132,23 @@ function extractConsoleErrorPayload(args: any[]): { message: string; stack?: str
 }
 
 /**
+ * True si algún argumento es un objeto con forma de SessionEntry de libsignal
+ * (ratchet/chains/keys). libsignal loggea con `console.log("Closing session:", obj)`
+ * pasando el objeto como argumento SEPARADO; `args.join(' ')` lo vuelve
+ * "[object Object]" y los `.includes()` de texto NO lo detectan → el volcado
+ * (incluidas claves privadas `privKey`) se filtraba al log de prod. Detectarlo
+ * por sus keys cierra esa fuga.
+ */
+const SIGNAL_OBJECT_KEYS = ['_chains', 'currentRatchet', 'registrationId', 'indexInfo', 'pendingPreKey'];
+function hasSignalSessionObject(args: any[]): boolean {
+  return args.some((arg) => {
+    if (!arg || typeof arg !== 'object') return false;
+    if ((arg.constructor?.name ?? '') === 'SessionEntry') return true;
+    return SIGNAL_OBJECT_KEYS.some((key) => key in arg);
+  });
+}
+
+/**
  * Hijack console.log to prevent SessionEntry logging
  */
 console.log = (...args: any[]) => {
@@ -140,6 +157,7 @@ console.log = (...args: any[]) => {
 
   // Filter out noisy Signal Protocol messages that pollute logs
   if (
+    hasSignalSessionObject(args) ||
     message.includes('Closing open session in favor of') ||
     message.includes('Closing session: SessionEntry') ||
     message.includes('_chains:') ||

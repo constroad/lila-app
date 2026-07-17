@@ -221,6 +221,13 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Raíz: probes de uptime / navegador abierto en la URL base pegan a `/` y
+// generaban `Route not found: /` (404 ruidoso). Devolvemos 200 liviano (sin
+// exponer nada): es un health-check implícito, no una ruta de la API.
+app.get('/', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // API Routes
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/session', sessionRoutes);
