@@ -4,7 +4,7 @@ import { triggerAcademyTranscode } from '../controllers/academy.controller.js';
 
 /**
  * Academia / Material Didáctico — transcode de tutoriales. Portal (super-admin)
- * llama con JWT de `academia`. Ver Portal/specs/ACADEMY-TUTORIALS.spec.md §4/§7.
+ * llama con JWT de `academia`. Ver Portal/specs/ACADEMY-TUTORIALS.as-is.md §4/§7.
  */
 const router = Router();
 

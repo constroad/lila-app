@@ -12,7 +12,7 @@ import { storagePathService } from './storage-path.service.js';
  * La fuente (WebM grabado o MP4 externo) se guarda bajo la company `academy`;
  * lila la convierte a 2 renditions MP4 H.264 chicas (HD ~720p / SD ~480p) +
  * poster, con faststart, para reproducción fluida sin CDN (Range progresivo).
- * Ref: Portal/specs/ACADEMY-TUTORIALS.spec.md §4.
+ * Ref: Portal/specs/ACADEMY-TUTORIALS.as-is.md §4.
  *
  * Concurrencia acotada (createLimiter(1)): el re-encode compite con WhatsApp/PDF
  * en la Mac mini y es infrecuente (solo super-admin). Degrada sin romper: si
@@ -38,30 +38,53 @@ const relativePathFromUrl = (url: string): string | null => {
 const publicUrl = (relPath: string): string =>
   `/files/companies/${ACADEMY_COMPANY_ID}/${relPath}`;
 
-const hdArgs = (input: string, output: string): string[] => [
-  '-y', '-i', input,
-  '-vf', "scale='min(1280,iw)':-2",
-  '-r', '24',
-  '-c:v', 'libx264', '-profile:v', 'high', '-crf', '28',
+type SourceTrim = { startMs: number; endMs: number } | null;
+
+/**
+ * Recorte elegido en el review: `-ss`+`-t` como opciones de INPUT (frame-exacto
+ * con re-encode) — además solo se decodifica el rango conservado (más rápido).
+ */
+const trimInputArgs = (trim: SourceTrim): string[] =>
+  trim
+    ? ['-ss', (trim.startMs / 1000).toFixed(3), '-t', ((trim.endMs - trim.startMs) / 1000).toFixed(3)]
+    : [];
+
+/**
+ * UNA sola pasada para ambas renditions: decodifica el VP9 una vez y `split` →
+ * HD + SD en paralelo dentro del mismo proceso. Antes eran dos encodes
+ * secuenciales completos con preset `medium` (default) = minutos para videos
+ * cortos; `veryfast` + decode-once ≈ 5-10× más rápido con calidad visualmente
+ * igual en screen content (el maxrate acota el tamaño igual que antes).
+ * `-map 0:a?` = audio opcional (grabaciones sin mic/sistema no traen pista).
+ */
+const renditionArgs = (input: string, hdOut: string, sdOut: string, trim: SourceTrim): string[] => [
+  '-y', ...trimInputArgs(trim), '-i', input,
+  '-filter_complex',
+  "[0:v]split=2[vhd][vsd];[vhd]scale='min(1280,iw)':-2[hdv];[vsd]scale='min(854,iw)':-2[sdv]",
+  // HD ~720p
+  '-map', '[hdv]', '-r', '24',
+  '-c:v', 'libx264', '-preset', 'veryfast', '-profile:v', 'high', '-crf', '28',
   '-maxrate', '1000k', '-bufsize', '2000k', '-pix_fmt', 'yuv420p',
-  '-c:a', 'aac', '-b:a', '96k', '-ac', '1',
-  '-movflags', '+faststart', output,
-];
-
-const sdArgs = (input: string, output: string): string[] => [
-  '-y', '-i', input,
-  '-vf', "scale='min(854,iw)':-2",
-  '-r', '15',
-  '-c:v', 'libx264', '-profile:v', 'high', '-crf', '30',
+  '-map', '0:a?', '-c:a', 'aac', '-b:a', '96k', '-ac', '1',
+  '-movflags', '+faststart', hdOut,
+  // SD ~480p
+  '-map', '[sdv]', '-r', '15',
+  '-c:v', 'libx264', '-preset', 'veryfast', '-profile:v', 'high', '-crf', '30',
   '-maxrate', '600k', '-bufsize', '1200k', '-pix_fmt', 'yuv420p',
-  '-c:a', 'aac', '-b:a', '64k', '-ac', '1',
-  '-movflags', '+faststart', output,
+  '-map', '0:a?', '-c:a', 'aac', '-b:a', '64k', '-ac', '1',
+  '-movflags', '+faststart', sdOut,
 ];
 
-const posterArgs = (input: string, output: string): string[] => [
-  '-y', '-ss', '00:00:01', '-i', input, '-frames:v', '1',
-  '-vf', 'scale=640:-2', output,
-];
+/** Poster a ~1s DENTRO del rango recortado (clamp si el rango es más corto). */
+const posterArgs = (input: string, output: string, trim: SourceTrim): string[] => {
+  const startSec = trim ? trim.startMs / 1000 : 0;
+  const spanSec = trim ? (trim.endMs - trim.startMs) / 1000 : Number.POSITIVE_INFINITY;
+  const seekSec = startSec + Math.min(1, Math.max(0, spanSec / 2));
+  return [
+    '-y', '-ss', seekSec.toFixed(3), '-i', input, '-frames:v', '1',
+    '-vf', 'scale=640:-2', output,
+  ];
+};
 
 const markError = async (tutorialId: string, reason: string): Promise<void> => {
   const Tutorial = await getAcademyTutorialModel();
@@ -84,7 +107,7 @@ export async function transcodeAcademyTutorial(tutorialId: string): Promise<void
     return;
   }
 
-  const source = (doc as { source?: { url?: string } }).source;
+  const source = (doc as { source?: { url?: string; trim?: SourceTrim } }).source;
   const sourceRel = source?.url ? relativePathFromUrl(source.url) : null;
   if (!sourceRel) {
     await markError(tutorialId, 'source-url-invalid');
@@ -119,10 +142,20 @@ export async function transcodeAcademyTutorial(tutorialId: string): Promise<void
   try {
     await Tutorial.updateOne({ _id: tutorialId }, { $set: { status: 'processing', 'processing.state': 'transcoding' } });
 
+    // Trim válido = rango positivo; cualquier otra cosa se ignora (video completo).
+    const rawTrim = source?.trim;
+    const trim: SourceTrim =
+      rawTrim &&
+      Number.isFinite(rawTrim.startMs) &&
+      Number.isFinite(rawTrim.endMs) &&
+      rawTrim.startMs >= 0 &&
+      rawTrim.endMs > rawTrim.startMs
+        ? rawTrim
+        : null;
+
     await transcodeLimiter.run(async () => {
-      await runFfmpegWithTimeout(hdArgs(sourceAbs, hdAbs), RENDITION_TIMEOUT_MS);
-      await runFfmpegWithTimeout(sdArgs(sourceAbs, sdAbs), RENDITION_TIMEOUT_MS);
-      await runFfmpegWithTimeout(posterArgs(sourceAbs, posterAbs), POSTER_TIMEOUT_MS);
+      await runFfmpegWithTimeout(renditionArgs(sourceAbs, hdAbs, sdAbs, trim), RENDITION_TIMEOUT_MS);
+      await runFfmpegWithTimeout(posterArgs(sourceAbs, posterAbs, trim), POSTER_TIMEOUT_MS);
     });
 
     const [hdStat, sdStat] = await Promise.all([fs.stat(hdAbs), fs.stat(sdAbs)]);
