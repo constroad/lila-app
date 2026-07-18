@@ -191,3 +191,48 @@ export function enqueueAcademyTranscode(tutorialId: string): void {
     logger.error('[academy] enqueue transcode error', { tutorialId, error: String(error) });
   });
 }
+
+const WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
+const WATCHDOG_STALE_MS = 15 * 60 * 1000;
+const WATCHDOG_FIRST_SWEEP_MS = 30 * 1000; // recoger huérfanos de un reinicio
+
+/**
+ * Watchdog: re-encola tutoriales atascados en `processing`. El trigger desde
+ * Portal es fire-and-forget SIN retry; si se pierde (lila saturado o reiniciado
+ * a mitad de un transcode) el doc quedaba `processing` para siempre. Barrido:
+ * `processing` con updatedAt > 15 min → re-encolar ($inc attempts); al agotar
+ * MAX_ATTEMPTS → `error` (la UI muestra Reprocesar, que resetea intentos).
+ * Primer barrido a los 30s del boot (huérfanos de reinicio).
+ */
+export function startAcademyTranscodeWatchdog(): void {
+  const sweep = async (): Promise<void> => {
+    try {
+      const Tutorial = await getAcademyTutorialModel();
+      const staleBefore = new Date(Date.now() - WATCHDOG_STALE_MS);
+      const stuck = await Tutorial.find({ status: 'processing', updatedAt: { $lt: staleBefore } })
+        .select({ _id: 1, processing: 1 })
+        .limit(20)
+        .lean();
+      for (const doc of stuck as { _id: unknown; processing?: { attempts?: number } }[]) {
+        const tutorialId = String(doc._id);
+        const attempts = Number(doc.processing?.attempts ?? 0);
+        if (attempts >= MAX_ATTEMPTS) {
+          await markError(tutorialId, 'transcode-watchdog-max-retries');
+          continue;
+        }
+        await Tutorial.updateOne({ _id: doc._id }, { $inc: { 'processing.attempts': 1 } });
+        logger.warn('[academy] watchdog re-encola transcode atascado', { tutorialId, attempts });
+        enqueueAcademyTranscode(tutorialId);
+      }
+    } catch (error) {
+      logger.error('[academy] watchdog sweep error', { error: String(error) });
+    }
+  };
+
+  setTimeout(() => void sweep(), WATCHDOG_FIRST_SWEEP_MS);
+  setInterval(() => void sweep(), WATCHDOG_INTERVAL_MS);
+  logger.info('[academy] transcode watchdog activo', {
+    intervalMin: WATCHDOG_INTERVAL_MS / 60000,
+    staleMin: WATCHDOG_STALE_MS / 60000,
+  });
+}
