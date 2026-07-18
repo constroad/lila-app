@@ -242,6 +242,10 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     }
 
     const { path: parentPath } = req.body;
+    // Academia sube la fuente cruda y hace su PROPIO transcode async (HD/SD +
+    // poster). Con este flag lila NO corre faststart+thumbnail sincrónicos (dos
+    // ffmpeg que colgaban el POST en la Mac mini bajo carga). Solo guarda y responde.
+    const skipVideoProcessing = String((req.body as { skipVideoProcessing?: unknown })?.skipVideoProcessing) === 'true';
     const file = req.file;
 
     if (!file) {
@@ -317,7 +321,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
       }
     }
 
-    if (videoLike) {
+    if (videoLike && !skipVideoProcessing) {
       const optimization = await optimizeVideoForProgressiveStreaming({
         filePath: target,
         fileName: storageFileName,
@@ -339,24 +343,27 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     let thumbnailUrl: string | undefined;
     let thumbnailStatus: 'ready' | 'pending' | 'unsupported' | 'error' = 'pending';
 
-    const thumbnailResult = await generateThumbnailForFile({
-      filePath: target,
-      fileName: storageFileName,
-      mimeType: file.mimetype,
-      outputDir: resolved,
-    });
+    // Academia salta el thumbnail sincrónico (su transcode genera el poster).
+    if (!skipVideoProcessing) {
+      const thumbnailResult = await generateThumbnailForFile({
+        filePath: target,
+        fileName: storageFileName,
+        mimeType: file.mimetype,
+        outputDir: resolved,
+      });
 
-    if (thumbnailResult.status === 'ready' && thumbnailResult.thumbnailName) {
-      const thumbPath = buildThumbnailRelativePath(relativePath, thumbnailResult.thumbnailName);
-      thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
-      if (thumbnailResult.sizeBytes && thumbnailResult.sizeBytes > 0) {
-        await incrementStorageUsage(companyId, thumbnailResult.sizeBytes);
+      if (thumbnailResult.status === 'ready' && thumbnailResult.thumbnailName) {
+        const thumbPath = buildThumbnailRelativePath(relativePath, thumbnailResult.thumbnailName);
+        thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
+        if (thumbnailResult.sizeBytes && thumbnailResult.sizeBytes > 0) {
+          await incrementStorageUsage(companyId, thumbnailResult.sizeBytes);
+        }
+        thumbnailStatus = 'ready';
+      } else if (thumbnailResult.status === 'unsupported') {
+        thumbnailStatus = 'unsupported';
+      } else if (thumbnailResult.status === 'error') {
+        thumbnailStatus = 'error';
       }
-      thumbnailStatus = 'ready';
-    } else if (thumbnailResult.status === 'unsupported') {
-      thumbnailStatus = 'unsupported';
-    } else if (thumbnailResult.status === 'error') {
-      thumbnailStatus = 'error';
     }
 
     res.status(HTTP_STATUS.CREATED).json({

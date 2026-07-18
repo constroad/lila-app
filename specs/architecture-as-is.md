@@ -186,6 +186,14 @@ Flujo estándar de renditions (post-auditoría):
 - `jobs.controller.v2.ts` + `scheduler.service.ts`.
 - Persistencia migrada a MongoDB Portal (ver `scripts/migrate-cronjobs-to-mongo.ts`); fallback a JSON.
 - Tipos: `api` (axios GET) y `message` (WhatsApp).
+- **Contrato de headers para jobs `api`** (`executor.service.ts:324-341`): el executor
+  inyecta campos del job como headers hacia el endpoint destino (contrato que Portal
+  consume en sus crons `/api/cron/*`): `x-company-id` (job.companyId), `x-cronjob-chat-id`
+  (message.chatId), **`x-cronjob-message-template`** (URL-encoded `message.body` — plantilla
+  editable del aviso; el endpoint la decodifica/renderiza; usado por las alertas
+  self-service de Portal, ej. stock-alert con grupo + mensaje por rubro/company) y
+  `x-cronjob-return-message='1'` (cuando hay chatId sin flag explícito). Ref:
+  `WHATSAPP-GROUP-ALERTS-SELFSERVICE`.
 - La programación automática está habilitada por defecto únicamente con
   `NODE_ENV=production`. Development/test persisten y permiten ejecutar jobs
   manualmente, pero no registran tareas `node-cron`. `CRONJOBS_ENABLED=true`
