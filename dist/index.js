@@ -49569,10 +49569,19 @@ originalConsoleLog("\u{1F6E1}\uFE0F Console hijacking activated - Signal Protoco
 
 // src/index.ts
 init_logger();
-init_environment();
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+
+// src/utils/trusted-host.ts
+function isTrustedHost(hostname, rootDomain) {
+  const host = hostname.toLowerCase();
+  const root = rootDomain.toLowerCase();
+  return host === root || host.endsWith(`.${root}`);
+}
+
+// src/index.ts
+init_environment();
 
 // src/api/middlewares/rateLimiter.ts
 var import_jsonwebtoken = __toESM(require_jsonwebtoken(), 1);
@@ -49610,7 +49619,7 @@ var apiLimiter = rateLimit({
       return true;
     }
     const host = (req.hostname || req.get("host") || "").toLowerCase();
-    if (host.endsWith("constroad.com") || host === "localhost:3000") {
+    if (isTrustedHost(host, "constroad.com") || host === "localhost:3000") {
       return true;
     }
     const origin = (req.get("origin") || req.get("referer") || "").toLowerCase();
@@ -49619,9 +49628,9 @@ var apiLimiter = rateLimit({
     }
     try {
       const parsed = new URL(origin);
-      return parsed.hostname.endsWith("constroad.com") || parsed.hostname === "localhost" && parsed.port === "3000";
+      return isTrustedHost(parsed.hostname, "constroad.com") || parsed.hostname === "localhost" && parsed.port === "3000";
     } catch {
-      return origin.includes("constroad.com") || origin.includes("localhost:3000");
+      return false;
     }
   }
 });
@@ -49649,6 +49658,92 @@ var messageLimiter = rateLimit({
     return req.body?.chatId || req.ip || "unknown";
   }
 });
+
+// src/services/scanner-detection.service.ts
+init_telegram_alert_service();
+init_logger();
+var WINDOW_MS = 5 * 60 * 1e3;
+var ALERT_THRESHOLD = 5;
+var BAN_THRESHOLD = 40;
+var BAN_DURATION_MS = 30 * 60 * 1e3;
+var MAX_TRACKED_IPS = 5e3;
+var HIGH_CONFIDENCE_PROBE_PATTERNS = [
+  /\.env(\.|$)/i,
+  /^\/\.git(\/|$)/i,
+  /^\/\.aws(\/|$)/i,
+  /wp-config\.php/i,
+  /_ignition\//i,
+  /\.sql$/i,
+  /\.php$/i,
+  // esta app no corre PHP: cualquier .php es 100% ruido de scanner
+  /smtp[_.-]?(backup|log)/i,
+  /\.procmailrc/i,
+  /config\.inc\.php/i
+];
+function isHighConfidenceProbe(path35) {
+  return HIGH_CONFIDENCE_PROBE_PATTERNS.some((pattern) => pattern.test(path35));
+}
+var activity = /* @__PURE__ */ new Map();
+function getBucket(ip) {
+  const now = Date.now();
+  const existing = activity.get(ip);
+  if (existing && now - existing.windowStart <= WINDOW_MS) {
+    return existing;
+  }
+  const bucket = {
+    windowStart: now,
+    count: 0,
+    paths: [],
+    userAgents: /* @__PURE__ */ new Set(),
+    bannedUntil: existing?.bannedUntil ?? 0
+  };
+  activity.set(ip, bucket);
+  if (activity.size > MAX_TRACKED_IPS) {
+    const oldestKey = activity.keys().next().value;
+    if (oldestKey) activity.delete(oldestKey);
+  }
+  return bucket;
+}
+function isBanned(ip) {
+  const bucket = activity.get(ip);
+  return !!bucket && bucket.bannedUntil > Date.now();
+}
+function recordSuspiciousRequest(ip, path35, userAgent) {
+  const bucket = getBucket(ip);
+  const weight = isHighConfidenceProbe(path35) ? ALERT_THRESHOLD : 1;
+  bucket.count += weight;
+  if (bucket.paths.length < 5) bucket.paths.push(path35);
+  if (userAgent && bucket.userAgents.size < 3) bucket.userAgents.add(userAgent);
+  if (bucket.count >= BAN_THRESHOLD) {
+    bucket.bannedUntil = Date.now() + BAN_DURATION_MS;
+  }
+  if (bucket.count < ALERT_THRESHOLD) return;
+  const banned = bucket.bannedUntil > Date.now();
+  sendTelegramAlert({
+    dedupeKey: `scan:${ip}`,
+    message: [
+      "\u{1F575}\uFE0F Posible escaneo automatizado detectado",
+      "---------------------",
+      `ip: ${ip}`,
+      `ubicaci\xF3n: https://ipinfo.io/${ip}`,
+      `hits (5min, ponderado): ${bucket.count}`,
+      `rutas de muestra: ${bucket.paths.join(", ")}`,
+      bucket.userAgents.size > 0 ? `user-agent: ${[...bucket.userAgents].join(" | ")}` : "user-agent: (no enviado)",
+      banned ? `acci\xF3n: IP bloqueada ${BAN_DURATION_MS / 6e4}min` : "acci\xF3n: solo monitoreo"
+    ].join("\n")
+  }).catch((error) => {
+    logger_default.warn("Failed to send scanner-detection alert", error);
+  });
+}
+
+// src/api/middlewares/scannerGuard.middleware.ts
+function scannerGuard(req, res, next) {
+  if (isBanned(req.ip || "unknown")) {
+    res.status(404).end();
+    return;
+  }
+  next();
+}
 
 // src/middleware/mongo-sanitize.middleware.ts
 var isPlainObject = (value) => typeof value === "object" && value !== null && !Buffer.isBuffer(value);
@@ -49706,16 +49801,22 @@ function normalizeAlertPath(p64) {
   ).replace(/[a-f0-9]{24}/gi, ":id");
 }
 function errorHandler(err, req, res, next) {
-  const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_ERROR;
+  const isCorsRejection = err.message === "Not allowed by CORS";
+  const statusCode = err.statusCode || (isCorsRejection ? HTTP_STATUS.FORBIDDEN : HTTP_STATUS.INTERNAL_ERROR);
   const message = err.message || "Internal Server Error";
   logger_default.error("Error:", {
     statusCode,
     message,
     path: req.path,
     method: req.method,
+    ip: req.ip || "unknown",
+    userAgent: req.get("user-agent") || "none",
     details: err.details
   });
-  const shouldAlert = statusCode >= 500 || req.path.startsWith("/api/drive") || req.path.startsWith("/api/message");
+  if (isCorsRejection) {
+    recordSuspiciousRequest(req.ip || "unknown", req.path, req.get("user-agent"));
+  }
+  const shouldAlert = !isCorsRejection && (statusCode >= 500 || req.path.startsWith("/api/drive") || req.path.startsWith("/api/message"));
   if (shouldAlert) {
     const normalizedPath = normalizeAlertPath(req.path);
     const alertKey = `${statusCode}:${normalizedPath}:${message}`;
@@ -49752,6 +49853,7 @@ function notFoundHandler(req, res, next) {
   if (req.path.includes("_next/") || req.path.includes("/__webpack")) {
     return res.status(404).end();
   }
+  recordSuspiciousRequest(req.ip || "unknown", req.path, req.get("user-agent"));
   const error = new Error(`Route not found: ${req.path}`);
   error.statusCode = HTTP_STATUS.NOT_FOUND;
   next(error);
@@ -52973,13 +53075,13 @@ var HEAVY_RATE_WINDOW_MS = 5 * 60 * 1e3;
 var HEAVY_RATE_MAX = parsePositiveInt(process.env.HEAVY_RATE_MAX, 40);
 var isConstroadHostOrOrigin = (req) => {
   const host = (req.hostname || req.get("host") || "").toLowerCase();
-  if (host.endsWith("constroad.com")) return true;
+  if (isTrustedHost(host, "constroad.com")) return true;
   const origin = (req.get("origin") || req.get("referer") || "").toLowerCase();
   if (!origin) return false;
   try {
-    return new URL(origin).hostname.endsWith("constroad.com");
+    return isTrustedHost(new URL(origin).hostname, "constroad.com");
   } catch {
-    return origin.includes("constroad.com");
+    return false;
   }
 };
 var heavyRateLimiter = rateLimit2({
@@ -53709,6 +53811,7 @@ async function uploadFile(req, res, next) {
       return next(error);
     }
     const { path: parentPath } = req.body;
+    const skipVideoProcessing = String(req.body?.skipVideoProcessing) === "true";
     const file = req.file;
     if (!file) {
       const error = new Error("file is required");
@@ -53765,7 +53868,7 @@ async function uploadFile(req, res, next) {
         }
       }
     }
-    if (videoLike) {
+    if (videoLike && !skipVideoProcessing) {
       const optimization = await optimizeVideoForProgressiveStreaming({
         filePath: target,
         fileName: storageFileName,
@@ -53784,23 +53887,25 @@ async function uploadFile(req, res, next) {
     const streamUrl = videoLike ? publicUrl2 : void 0;
     let thumbnailUrl;
     let thumbnailStatus = "pending";
-    const thumbnailResult = await generateThumbnailForFile({
-      filePath: target,
-      fileName: storageFileName,
-      mimeType: file.mimetype,
-      outputDir: resolved
-    });
-    if (thumbnailResult.status === "ready" && thumbnailResult.thumbnailName) {
-      const thumbPath = buildThumbnailRelativePath(relativePath, thumbnailResult.thumbnailName);
-      thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
-      if (thumbnailResult.sizeBytes && thumbnailResult.sizeBytes > 0) {
-        await incrementStorageUsage(companyId, thumbnailResult.sizeBytes);
+    if (!skipVideoProcessing) {
+      const thumbnailResult = await generateThumbnailForFile({
+        filePath: target,
+        fileName: storageFileName,
+        mimeType: file.mimetype,
+        outputDir: resolved
+      });
+      if (thumbnailResult.status === "ready" && thumbnailResult.thumbnailName) {
+        const thumbPath = buildThumbnailRelativePath(relativePath, thumbnailResult.thumbnailName);
+        thumbnailUrl = `/files/companies/${companyId}/${thumbPath}`;
+        if (thumbnailResult.sizeBytes && thumbnailResult.sizeBytes > 0) {
+          await incrementStorageUsage(companyId, thumbnailResult.sizeBytes);
+        }
+        thumbnailStatus = "ready";
+      } else if (thumbnailResult.status === "unsupported") {
+        thumbnailStatus = "unsupported";
+      } else if (thumbnailResult.status === "error") {
+        thumbnailStatus = "error";
       }
-      thumbnailStatus = "ready";
-    } else if (thumbnailResult.status === "unsupported") {
-      thumbnailStatus = "unsupported";
-    } else if (thumbnailResult.status === "error") {
-      thumbnailStatus = "error";
     }
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
@@ -97071,12 +97176,14 @@ import fs34 from "fs-extra";
 import path34 from "path";
 var app = express();
 app.set("trust proxy", config.security.trustProxy);
+app.use(scannerGuard);
+app.use(apiLimiter);
 var corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || "").split(",").map((origin) => origin.trim()).filter(Boolean);
 var frameAncestors = ["'self'", ...corsOrigins];
 var isTrustedPortalOrigin = (origin) => {
   try {
     const parsed = new URL(origin);
-    return parsed.hostname === "localhost" || parsed.hostname.endsWith("constroad.com");
+    return parsed.hostname === "localhost" || isTrustedHost(parsed.hostname, "constroad.com");
   } catch {
     return false;
   }
@@ -97198,7 +97305,6 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(mongoSanitize);
 app.use(requestLogger);
-app.use(apiLimiter);
 app.get("/health", (req, res) => {
   res.status(200).json({
     success: true,
@@ -97277,13 +97383,19 @@ app.use(
     }
   })
 );
-app.use(
-  "/docs",
-  swaggerUi.serve,
-  swaggerUi.setup(openApiSpec, {
-    customSiteTitle: "WhatsApp API v2"
-  })
+var swaggerDocsEnabledOverride = process.env.SWAGGER_DOCS_ENABLED;
+var shouldServeSwaggerDocs = swaggerDocsEnabledOverride === void 0 ? config.nodeEnv !== "production" : ["1", "true", "yes", "on"].includes(
+  swaggerDocsEnabledOverride.trim().toLowerCase()
 );
+if (shouldServeSwaggerDocs) {
+  app.use(
+    "/docs",
+    swaggerUi.serve,
+    swaggerUi.setup(openApiSpec, {
+      customSiteTitle: "WhatsApp API v2"
+    })
+  );
+}
 app.get("/api/status", (req, res) => {
   const sessions2 = listSessions();
   res.status(200).json({

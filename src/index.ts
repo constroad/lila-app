@@ -5,8 +5,10 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import logger from './utils/logger.js';
+import { isTrustedHost } from './utils/trusted-host.js';
 import { config } from './config/environment.js';
 import { apiLimiter } from './api/middlewares/rateLimiter.js';
+import { scannerGuard } from './api/middlewares/scannerGuard.middleware.js';
 import { mongoSanitize } from './middleware/mongo-sanitize.middleware.js';
 import {
   errorHandler,
@@ -48,6 +50,18 @@ const app = express();
 // Trust proxy to honor X-Forwarded-For when behind reverse proxies
 app.set('trust proxy', config.security.trustProxy);
 
+// Corta ANTES de helmet/cors/body-parsing: una IP ya marcada como scanner
+// (ver scanner-detection.service) no gasta el resto del pipeline.
+app.use(scannerGuard);
+
+// apiLimiter ANTES de express.json/urlencoded a propósito: no necesita el body
+// parseado (su skip() solo lee headers), y así una IP que exceda el límite es
+// rechazada SIN que el server gaste CPU/memoria parseando su body de hasta
+// 10mb. Antes corría después del parseo — en un Mac mini de 8GB compartido con
+// Puppeteer/Baileys, cada request de más contaba igual para el límite pero ya
+// había costado la memoria completa del parseo.
+app.use(apiLimiter);
+
 const corsOrigins = (process.env.LILA_APP_CORS_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -60,7 +74,7 @@ const isTrustedPortalOrigin = (origin: string): boolean => {
     const parsed = new URL(origin);
     return (
       parsed.hostname === 'localhost' ||
-      parsed.hostname.endsWith('constroad.com')
+      isTrustedHost(parsed.hostname, 'constroad.com')
     );
   } catch {
     return false;
@@ -207,9 +221,8 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Sanitización anti NoSQL-injection (quita claves `$`/`.` de body/query/params)
 app.use(mongoSanitize);
 
-// Middleware de logging y rate limiting
+// Middleware de logging (apiLimiter ya corrió arriba, antes del parseo)
 app.use(requestLogger);
-app.use(apiLimiter);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -309,14 +322,26 @@ app.use(
   })
 );
 
-// Swagger UI
-app.use(
-  '/docs',
-  swaggerUi.serve,
-  swaggerUi.setup(openApiSpec, {
-    customSiteTitle: 'WhatsApp API v2',
-  })
-);
+// Swagger UI — expone el mapa completo de rutas/schemas de la API, así que
+// no debe quedar público en internet salvo override deliberado (mismo patrón
+// que CRONJOBS_ENABLED en environment.ts).
+const swaggerDocsEnabledOverride = process.env.SWAGGER_DOCS_ENABLED;
+const shouldServeSwaggerDocs =
+  swaggerDocsEnabledOverride === undefined
+    ? config.nodeEnv !== 'production'
+    : ['1', 'true', 'yes', 'on'].includes(
+        swaggerDocsEnabledOverride.trim().toLowerCase()
+      );
+
+if (shouldServeSwaggerDocs) {
+  app.use(
+    '/docs',
+    swaggerUi.serve,
+    swaggerUi.setup(openApiSpec, {
+      customSiteTitle: 'WhatsApp API v2',
+    })
+  );
+}
 
 // Status endpoint
 app.get('/api/status', (req, res) => {
