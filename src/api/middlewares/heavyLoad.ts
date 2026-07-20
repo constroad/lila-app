@@ -26,6 +26,7 @@ import type { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import logger from '../../utils/logger.js';
 import { hasValidTenantCredential } from './rateLimiter.js';
+import { isTrustedHost } from '../../utils/trusted-host.js';
 
 const parsePositiveInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
@@ -80,14 +81,14 @@ const HEAVY_RATE_MAX = parsePositiveInt(process.env.HEAVY_RATE_MAX, 40);
 /** ¿El request viene del propio Portal (host/origin constroad.com)? */
 const isConstroadHostOrOrigin = (req: Request): boolean => {
   const host = (req.hostname || req.get('host') || '').toLowerCase();
-  if (host.endsWith('constroad.com')) return true;
+  if (isTrustedHost(host, 'constroad.com')) return true;
 
   const origin = (req.get('origin') || req.get('referer') || '').toLowerCase();
   if (!origin) return false;
   try {
-    return new URL(origin).hostname.endsWith('constroad.com');
+    return isTrustedHost(new URL(origin).hostname, 'constroad.com');
   } catch {
-    return origin.includes('constroad.com');
+    return false;
   }
 };
 

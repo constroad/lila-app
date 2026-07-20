@@ -1,6 +1,7 @@
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config/environment.js';
+import { isTrustedHost } from '../../utils/trusted-host.js';
 
 /**
  * Verifica si el request trae una credencial de tenant válida (JWT de Portal o
@@ -51,7 +52,7 @@ export const apiLimiter = rateLimit({
     }
 
     const host = (req.hostname || req.get('host') || '').toLowerCase();
-    if (host.endsWith('constroad.com') || host === 'localhost:3000') {
+    if (isTrustedHost(host, 'constroad.com') || host === 'localhost:3000') {
       return true;
     }
 
@@ -63,11 +64,11 @@ export const apiLimiter = rateLimit({
     try {
       const parsed = new URL(origin);
       return (
-        parsed.hostname.endsWith('constroad.com') ||
+        isTrustedHost(parsed.hostname, 'constroad.com') ||
         (parsed.hostname === 'localhost' && parsed.port === '3000')
       );
     } catch {
-      return origin.includes('constroad.com') || origin.includes('localhost:3000');
+      return false;
     }
   },
 });

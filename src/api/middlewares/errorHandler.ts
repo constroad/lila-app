@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import logger from '../../utils/logger.js';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
+import { recordSuspiciousRequest } from '../../services/scanner-detection.service.js';
 
 export interface CustomError extends Error {
   statusCode?: number;
@@ -31,21 +32,38 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ) {
-  const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_ERROR;
+  // El middleware `cors` lanza un Error plano (sin statusCode) al rechazar un
+  // origin no permitido — sin este caso especial caía en 500 por default,
+  // lo que (a) es semánticamente incorrecto (es un 403, no un error interno)
+  // y (b) disparaba una alerta Telegram por CADA path distinto que un scanner
+  // probara (ver scanner-detection.service, que agrupa esto por IP en su lugar).
+  const isCorsRejection = err.message === 'Not allowed by CORS';
+  const statusCode =
+    err.statusCode || (isCorsRejection ? HTTP_STATUS.FORBIDDEN : HTTP_STATUS.INTERNAL_ERROR);
   const message = err.message || 'Internal Server Error';
 
+  // ip/userAgent SIEMPRE en el log de error (no solo cuando se alerta): es lo
+  // que faltó en el incidente del 2026-07-19 — sin esto, revisar una ráfaga
+  // pasada no permite saber qué IP/herramienta la generó.
   logger.error('Error:', {
     statusCode,
     message,
     path: req.path,
     method: req.method,
+    ip: req.ip || 'unknown',
+    userAgent: req.get('user-agent') || 'none',
     details: err.details,
   });
 
+  if (isCorsRejection) {
+    recordSuspiciousRequest(req.ip || 'unknown', req.path, req.get('user-agent'));
+  }
+
   const shouldAlert =
-    statusCode >= 500 ||
-    req.path.startsWith('/api/drive') ||
-    req.path.startsWith('/api/message');
+    !isCorsRejection &&
+    (statusCode >= 500 ||
+      req.path.startsWith('/api/drive') ||
+      req.path.startsWith('/api/message'));
 
   if (shouldAlert) {
     const normalizedPath = normalizeAlertPath(req.path);
@@ -89,6 +107,8 @@ export function notFoundHandler(req: Request, res: Response, next: NextFunction)
   if (req.path.includes('_next/') || req.path.includes('/__webpack')) {
     return res.status(404).end();
   }
+
+  recordSuspiciousRequest(req.ip || 'unknown', req.path, req.get('user-agent'));
 
   const error: CustomError = new Error(`Route not found: ${req.path}`);
   error.statusCode = HTTP_STATUS.NOT_FOUND;
