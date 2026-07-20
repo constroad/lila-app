@@ -6,7 +6,7 @@ import { WhatsAppDirectService } from '../services/whatsapp-direct.service.js';
 import logger from '../utils/logger.js';
 import { getCompanyBotLabel, replaceLegacyBotLabel } from '../utils/company-bot.js';
 import { normalizeWhatsAppRecipient } from '../utils/whatsapp-phone.js';
-import { materializeRetryJob, normalizeExecutorApiUrl } from './executor.utils.js';
+import { isPortalCronUrl, materializeRetryJob, normalizeExecutorApiUrl } from './executor.utils.js';
 
 /** Período mensual ('YYYY-MM') y día ('YYYY-MM-DD') para métricas de uso. */
 const getUsagePeriod = (date = new Date()) => date.toISOString().slice(0, 7);
@@ -338,6 +338,17 @@ export class JobExecutor {
       job.message?.chatId
     ) {
       requestHeaders['x-cronjob-return-message'] = '1';
+    }
+
+    // Auth de crons de Portal: enviar el secreto compartido SOLO a rutas
+    // /api/cron/* de Portal (nunca a APIs de terceros → no filtra el secreto).
+    const cronSecret = (process.env.CRON_SECRET || '').trim();
+    if (
+      cronSecret &&
+      !requestHeaders['x-cron-secret'] &&
+      isPortalCronUrl(resolvedUrl, config.portal?.baseUrl)
+    ) {
+      requestHeaders['x-cron-secret'] = cronSecret;
     }
 
     logger.info('[JobExecutor] API request prepared', {

@@ -194,6 +194,10 @@ Flujo estándar de renditions (post-auditoría):
   self-service de Portal, ej. stock-alert con grupo + mensaje por rubro/company) y
   `x-cronjob-return-message='1'` (cuando hay chatId sin flag explícito). Ref:
   `WHATSAPP-GROUP-ALERTS-SELFSERVICE`.
+- **Auth de crons Portal (2026-07):** el executor inyecta `x-cron-secret` (= `CRON_SECRET`)
+  **solo** a rutas `/api/cron` de Portal (`isPortalCronUrl`, nunca a APIs de terceros → no
+  filtra el secreto; auto-redactado en logs). El middleware Edge de Portal lo exige
+  (fail-closed). `CRON_SECRET` debe ser idéntico en lila `.env` y en Vercel (Portal).
 - La programación automática está habilitada por defecto únicamente con
   `NODE_ENV=production`. Development/test persisten y permiten ejecutar jobs
   manualmente, pero no registran tareas `node-cron`. `CRONJOBS_ENABLED=true`
@@ -336,9 +340,19 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 - `helmet` + `cors` (origenes via env).
 - Rate limiting por IP (`apiLimiter`) con excepciones por host/origin de Portal.
 - JWT por request via middleware `requireTenant`; companyId nunca proviene del cliente.
+  `requireTenant` acepta **ambos**: `Authorization: Bearer <jwt>` (Portal server-to-server
+  y, desde 2026-07, el flujo público-link que ahora recibe un JWT corto en vez de la
+  API key maestra) **y** `x-api-key: lk_fe_…`.
 - API keys publicas hasheadas SHA-256 en Mongo Portal.
 - Path traversal blocks en `storage-path.service`.
 - File name sanitization en `storage-file-name.service`.
+- **Guard SSRF de generación de PDF (2026-07):** `documents.controller.ts` `isAllowedPrintUrl`
+  solo deja que Puppeteer navegue a hosts de `PORTAL_PRINT_HOSTS` (dev=`localhost:3000`,
+  prod=`www.constroad.com,constroad.com`). Sin la env, el guard era un no-op (cualquier URL
+  http[s] pasaba) → SSRF con credencial de tenant filtrada. **Obligatorio setear la env.**
+- **`requireAdmin` (2026-07):** confía en el `role` del JWT verificado. Portal dejó de
+  reenviar `x-user-role` del cliente (era escalable). Ver auditoría integral en Portal:
+  `Portal/specs/SECURITY-AUDIT-2026-07.spec.md`.
 
 ## Observabilidad
 - Winston logs estructurados en `logs/`.

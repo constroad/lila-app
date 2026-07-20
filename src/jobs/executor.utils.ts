@@ -26,6 +26,23 @@ export function materializeRetryJob(job: ICronJob): ICronJob {
   return JSON.parse(JSON.stringify(job)) as ICronJob;
 }
 
+/**
+ * ¿La URL apunta a un endpoint `/api/cron/*` de Portal? Se usa para inyectar el
+ * header `x-cron-secret` SOLO hacia Portal (nunca a APIs de terceros: evita
+ * filtrar el secreto compartido). Con `portalBaseUrl`, además exige el mismo host.
+ */
+export function isPortalCronUrl(targetUrl: string, portalBaseUrl?: string): boolean {
+  try {
+    const target = new URL(targetUrl);
+    if (!target.pathname.includes('/api/cron/')) return false;
+    const portalBase = portalBaseUrl?.trim();
+    if (!portalBase) return true;
+    return target.host === new URL(portalBase).host;
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeExecutorApiUrl(rawUrl: string, portalBaseUrl?: string): string {
   const trimmed = rawUrl.trim();
   if (!trimmed) return trimmed;

@@ -994,9 +994,61 @@ export async function generateDocument(req: Request, res: Response, next: NextFu
   }
 }
 
+/**
+ * Preview SOLO-printUrl (expedientes de construcción: valorización y vales
+ * NIA/PECOSA): Portal manda únicamente el `printUrl` firmado — no existe
+ * ServiceReport ni schema lila detrás, así que `resolveDocumentContext`
+ * reventaba con "Report not found". La vista de impresión es una hoja
+ * autocontenida (body margin:0 + .sheet con sus propios márgenes) → margen
+ * Puppeteer 0, sin membrete/anexos/folios.
+ */
+async function previewFromPrintUrlOnly(req: Request, res: Response, startedAt: number) {
+  const printUrl = String(req.body.printUrl).trim();
+  const companyId = (req as any).companyId as string;
+  const fetched = await pdfGenerator.fetchPrintedHtml(printUrl);
+  const html = await inlineCanvasHtmlImages(fetched, companyId);
+
+  await fs.ensureDir(config.pdf.tempDir);
+  const previewId = `print-url-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const previewFilename = `${previewId}.pdf`;
+  const previewPath = path.join(config.pdf.tempDir, previewFilename);
+  await pdfGenerator.generateFromHtml(html, {
+    outputPath: previewPath,
+    format: 'A4',
+    margin: { top: '0', right: '0', bottom: '0', left: '0' },
+  });
+
+  const totalPages = await PDFMergerService.getPageCount(previewPath);
+  const previewUrl = path.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+  const stat = await fs.stat(previewPath);
+  logger.info('documents.preview.print_url_only.completed', {
+    companyId,
+    durationMs: Date.now() - startedAt,
+    totalPages,
+    sizeBytes: stat.size,
+  });
+  res.status(HTTP_STATUS.OK).json({
+    success: true,
+    data: {
+      previewUrl,
+      previewUrlAbsolute: buildAbsoluteUrl(req, previewUrl),
+      totalPages,
+      mainPages: totalPages,
+      annexPages: 0,
+      sizeBytes: stat.size,
+    },
+  });
+}
+
 export async function previewDocument(req: Request, res: Response, next: NextFunction) {
   const startedAt = Date.now();
   try {
+    // Modo printUrl-only: sin reportId/reportPayload no hay contexto que resolver.
+    const rawPrintUrl = typeof req.body?.printUrl === 'string' ? req.body.printUrl.trim() : '';
+    if (rawPrintUrl && !req.body?.reportId && !req.body?.reportPayload && isAllowedPrintUrl(rawPrintUrl)) {
+      await previewFromPrintUrlOnly(req, res, startedAt);
+      return;
+    }
     const {
       report,
       schema,

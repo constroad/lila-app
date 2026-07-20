@@ -1,5 +1,6 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import {
+  isPortalCronUrl,
   materializeRetryJob,
   normalizeExecutorApiUrl,
   shouldInitializeBackgroundJobs,
@@ -147,5 +148,27 @@ describe('JobExecutor helpers', () => {
         data: { custom: true },
       })
     );
+  });
+});
+
+describe('isPortalCronUrl', () => {
+  const PORTAL = 'https://constroad.com';
+
+  it('acepta rutas /api/cron del host de Portal', () => {
+    expect(isPortalCronUrl('https://constroad.com/api/cron/kardex-check', PORTAL)).toBe(true);
+    expect(
+      isPortalCronUrl('https://constroad.com/api/cron/weather-asphalt-forecast?run=6am', PORTAL)
+    ).toBe(true);
+  });
+
+  it('rechaza rutas que no son /api/cron (no filtra el secreto)', () => {
+    expect(isPortalCronUrl('https://constroad.com/api/order', PORTAL)).toBe(false);
+    expect(isPortalCronUrl('https://api.weather.com/api/cron/x', PORTAL)).toBe(false);
+    expect(isPortalCronUrl('not-a-url', PORTAL)).toBe(false);
+  });
+
+  it('sin portalBaseUrl confía solo en el path /api/cron', () => {
+    expect(isPortalCronUrl('https://constroad.com/api/cron/x')).toBe(true);
+    expect(isPortalCronUrl('https://third-party.com/api/jobs/x')).toBe(false);
   });
 });
