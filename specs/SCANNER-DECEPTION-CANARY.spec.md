@@ -92,3 +92,22 @@ cumpla CUALQUIERA de:
 - **Fake DB/servicios auto-hosteados** (en vez de Thinkst): mayor costo de
   mantenimiento por marginal ganancia de señal — no vale la pena mientras
   Thinkst cubra el caso gratis.
+
+## 6. Revisión red-team (2026-07-20) + cross-link
+
+Complementa la auditoría integral de Portal (`Portal/specs/SECURITY-AUDIT-2026-07.spec.md`):
+esa cierra los huecos (cross-tenant, SSRF, secretos); esto **detecta el uso** de una
+credencial filtrada. Son las dos mitades del mismo problema.
+
+Mejoras sugeridas al diseño §3:
+- **Canary específico de la app, no solo `.env` genérico.** El objetivo real acá (según el
+  audit) es una **credencial de tenant filtrada** (`lk_fe_…` o un JWT). Plantar un canary
+  con forma de `lk_fe_` (en el bait de `.env`, o como un registro de company señuelo) que
+  **dispare al usarse contra `requireTenant`** detecta exactamente el ataque que importa —
+  mucho más señal que el bait de AWS/WordPress (ruido de wordlist genérico).
+- **Cuidado con el acoplamiento 200-vs-404 (§3.2).** El detector actual pesa por volumen de
+  **404/CORS-reject**. Si el bait ahora responde **200**, esa request deja de contar salvo
+  que se re-incremente el contador explícitamente en el path del bait. Verificar que "sigue
+  contando" sea real, no implícito.
+- **Unicidad por path/deploy** para atribución: un token distinto por bait permite saber
+  QUÉ señuelo se consumió (y desde dónde se filtró), no solo que algo se disparó.

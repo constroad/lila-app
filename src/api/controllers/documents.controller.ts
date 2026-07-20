@@ -1012,6 +1012,12 @@ async function previewFromPrintUrlOnly(req: Request, res: Response, startedAt: n
   const previewId = `print-url-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const previewFilename = `${previewId}.pdf`;
   const previewPath = path.join(config.pdf.tempDir, previewFilename);
+  // Artefacto de depuración junto al PDF (permite ver qué HTML entregó la vista
+  // si el PDF sale mal). SOLO con la env activa: el temp dir es público
+  // (capability URLs) y no hay que ampliar superficie sin necesidad.
+  if (process.env.PRINT_URL_DEBUG_HTML === 'true') {
+    await fs.writeFile(previewPath.replace(/\.pdf$/, '.html'), html).catch(() => undefined);
+  }
   await pdfGenerator.generateFromHtml(html, {
     outputPath: previewPath,
     format: 'A4',
