@@ -28,6 +28,7 @@ import serviceManagementReportRoutes from './api/routes/service-management-repor
 import serviceMigrationRoutes from './api/routes/service-migration.routes.js';
 import exportsRoutes from './api/routes/exports.routes.js';
 import academyRoutes from './api/routes/academy.routes.js';
+import { startAcademyTranscodeWatchdog } from './services/academy-transcode.service.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
 import { materializeThumbnailInBackground } from './services/thumbnail.service.js';
 import swaggerUi from 'swagger-ui-express';
@@ -467,6 +468,10 @@ async function startServer() {
       logger.info('Initializing Job Scheduler...');
       await jobScheduler.initialize();
       cron.schedule(pdfTempCleanupCron, cleanupPdfTemp);
+      // Re-encola transcodes de academia atascados en `processing` (trigger
+      // perdido o reinicio a mitad). Solo la instancia de jobs (dev comparte
+      // Atlas: dos watchdogs procesarían el mismo doc en discos distintos).
+      startAcademyTranscodeWatchdog();
     } else {
       const isDevelopment = config.nodeEnv.trim().toLowerCase() === 'development';
       const banner = [
