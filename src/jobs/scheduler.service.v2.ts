@@ -168,6 +168,20 @@ class JobSchedulerV2 {
         Boolean(nextMessage?.chatId) ||
         Boolean(nextMessage?.body?.trim());
 
+      // Saneo de docs legados: jobs tipo "api" guardados con un subdoc `message`
+      // incompleto (sin chatId) hacían fallar CUALQUIER update — `job.save()`
+      // re-valida el doc completo y `message.chatId` es required. Si el job no es
+      // de mensaje y ni el update ni el doc traen un chatId válido, se retira el
+      // subdoc corrupto para que el update aplique (auto-heal).
+      if (
+        nextType !== "message" &&
+        !updates.message?.chatId &&
+        job.message &&
+        !job.message.chatId
+      ) {
+        job.set("message", undefined);
+      }
+
       if (requiresSender && !company.whatsappConfig?.sender) {
         throw new Error(
           `Company ${job.companyId} does not have WhatsApp sender configured`,
@@ -212,7 +226,8 @@ class JobSchedulerV2 {
       logger.info(`[JobScheduler] Updated job "${job.name}" (${jobId})`);
       return job;
     } catch (error) {
-      logger.error("[JobScheduler] Failed to update job:", error);
+      // Con id: sin él, el error era indiagnosticable (no se sabía QUÉ job fallaba).
+      logger.error(`[JobScheduler] Failed to update job ${jobId}:`, error);
       throw error;
     }
   }

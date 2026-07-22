@@ -4,6 +4,7 @@ import axios from 'axios';
 import JsonStore from '../storage/json.store.js';
 import logger from '../utils/logger.js';
 import { config } from '../config/environment.js';
+import { buildPortalCallbackHeaders } from '../utils/portal-callback.js';
 import { computeArrivalReminderDelayMs, computeLocationShareDelayMs } from '../utils/driver-link.js';
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 
@@ -65,7 +66,8 @@ async function fetchDispatchTracking(
     const base = String(config.portal.baseUrl).replace(/\/+$/, '');
     const response = await axios.get(`${base}/api/dispatch-tracking`, {
       params: { dispatchId },
-      headers: { 'x-company-id': companyId },
+      // Bearer de callback: sin él, Portal (hardening F0) responde 401.
+      headers: buildPortalCallbackHeaders(companyId, 'lila-driver-arrival'),
       timeout: 8000,
     });
     const data = response.data?.data ?? {};

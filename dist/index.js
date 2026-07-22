@@ -1090,9 +1090,9 @@ var require_jws = __commonJS({
 var require_decode = __commonJS({
   "node_modules/jsonwebtoken/decode.js"(exports, module) {
     var jws = require_jws();
-    module.exports = function(jwt7, options2) {
+    module.exports = function(jwt8, options2) {
       options2 = options2 || {};
-      var decoded = jws.decode(jwt7, options2);
+      var decoded = jws.decode(jwt8, options2);
       if (!decoded) {
         return null;
       }
@@ -50871,7 +50871,10 @@ var JobsControllerV2 = class {
           data: job
         });
       } catch (error) {
-        logger_default.error("[JobsControllerV2] Update job failed:", error);
+        logger_default.error(
+          `[JobsControllerV2] Update job ${req.params.id} failed:`,
+          error
+        );
         return res.status(500).json({
           ok: false,
           message: error.message
@@ -50975,6 +50978,17 @@ function materializeRetryJob(job) {
     });
   }
   return JSON.parse(JSON.stringify(job));
+}
+function isPortalCronUrl(targetUrl, portalBaseUrl) {
+  try {
+    const target = new URL(targetUrl);
+    if (!target.pathname.includes("/api/cron/")) return false;
+    const portalBase = portalBaseUrl?.trim();
+    if (!portalBase) return true;
+    return target.host === new URL(portalBase).host;
+  } catch {
+    return false;
+  }
 }
 function normalizeExecutorApiUrl(rawUrl, portalBaseUrl) {
   const trimmed = rawUrl.trim();
@@ -51252,6 +51266,10 @@ ${normalized}`;
     }
     if (!requestHeaders["x-cronjob-return-message"] && !requestHeaders["x-cronjob-use-response-message"] && job.message?.chatId) {
       requestHeaders["x-cronjob-return-message"] = "1";
+    }
+    const cronSecret = (process.env.CRON_SECRET || "").trim();
+    if (cronSecret && !requestHeaders["x-cron-secret"] && isPortalCronUrl(resolvedUrl, environment_default.portal?.baseUrl)) {
+      requestHeaders["x-cron-secret"] = cronSecret;
     }
     logger_default.info("[JobExecutor] API request prepared", {
       jobId: String(job._id),
@@ -51532,6 +51550,9 @@ var JobSchedulerV2 = class {
       const nextType = updates.type || job.type;
       const nextMessage = updates.message || job.message;
       const requiresSender = nextType === "message" || Boolean(nextMessage?.chatId) || Boolean(nextMessage?.body?.trim());
+      if (nextType !== "message" && !updates.message?.chatId && job.message && !job.message.chatId) {
+        job.set("message", void 0);
+      }
       if (requiresSender && !company.whatsappConfig?.sender) {
         throw new Error(
           `Company ${job.companyId} does not have WhatsApp sender configured`
@@ -51563,7 +51584,7 @@ var JobSchedulerV2 = class {
       logger_default.info(`[JobScheduler] Updated job "${job.name}" (${jobId})`);
       return job;
     } catch (error) {
-      logger_default.error("[JobScheduler] Failed to update job:", error);
+      logger_default.error(`[JobScheduler] Failed to update job ${jobId}:`, error);
       throw error;
     }
   }
@@ -87213,9 +87234,52 @@ async function generateDocument(req, res, next) {
     next(error);
   }
 }
+async function previewFromPrintUrlOnly(req, res, startedAt) {
+  const printUrl = String(req.body.printUrl).trim();
+  const companyId = req.companyId;
+  const fetched = await generator_service_default.fetchPrintedHtml(printUrl);
+  const html = await inlineCanvasHtmlImages(fetched, companyId);
+  await fs25.ensureDir(config.pdf.tempDir);
+  const previewId = `print-url-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const previewFilename = `${previewId}.pdf`;
+  const previewPath = path24.join(config.pdf.tempDir, previewFilename);
+  if (process.env.PRINT_URL_DEBUG_HTML === "true") {
+    await fs25.writeFile(previewPath.replace(/\.pdf$/, ".html"), html).catch(() => void 0);
+  }
+  await generator_service_default.generateFromHtml(html, {
+    outputPath: previewPath,
+    format: "A4",
+    margin: { top: "0", right: "0", bottom: "0", left: "0" }
+  });
+  const totalPages = await PDFMergerService.getPageCount(previewPath);
+  const previewUrl = path24.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+  const stat = await fs25.stat(previewPath);
+  logger_default.info("documents.preview.print_url_only.completed", {
+    companyId,
+    durationMs: Date.now() - startedAt,
+    totalPages,
+    sizeBytes: stat.size
+  });
+  res.status(HTTP_STATUS.OK).json({
+    success: true,
+    data: {
+      previewUrl,
+      previewUrlAbsolute: buildAbsoluteUrl4(req, previewUrl),
+      totalPages,
+      mainPages: totalPages,
+      annexPages: 0,
+      sizeBytes: stat.size
+    }
+  });
+}
 async function previewDocument(req, res, next) {
   const startedAt = Date.now();
   try {
+    const rawPrintUrl = typeof req.body?.printUrl === "string" ? req.body.printUrl.trim() : "";
+    if (rawPrintUrl && !req.body?.reportId && !req.body?.reportPayload && isAllowedPrintUrl(rawPrintUrl)) {
+      await previewFromPrintUrlOnly(req, res, startedAt);
+      return;
+    }
     const {
       report,
       schema,
@@ -90109,7 +90173,7 @@ import { Router as Router7 } from "express";
 init_logger();
 
 // src/services/dispatch-vale.service.ts
-var import_jsonwebtoken5 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken6 = __toESM(require_jsonwebtoken(), 1);
 init_logger();
 init_environment();
 init_models();
@@ -90156,6 +90220,21 @@ init_environment();
 import path28 from "path";
 import { randomUUID as randomUUID6 } from "crypto";
 import axios6 from "axios";
+
+// src/utils/portal-callback.ts
+var import_jsonwebtoken5 = __toESM(require_jsonwebtoken(), 1);
+init_environment();
+var buildPortalCallbackHeaders = (companyId, userId = "lila-callback") => ({
+  Authorization: `Bearer ${import_jsonwebtoken5.default.sign(
+    { companyId, userId, role: "admin" },
+    config.security.jwtSecret,
+    { expiresIn: "15m" }
+  )}`,
+  "Content-Type": "application/json",
+  "x-company-id": companyId
+});
+
+// src/services/driver-arrival-reminder.service.ts
 init_whatsapp_direct_service();
 var itemKind = (item) => item.kind ?? "arrival-reminder";
 var STORE_KEY2 = "queue";
@@ -90178,7 +90257,8 @@ async function fetchDispatchTracking(companyId, dispatchId) {
     const base = String(config.portal.baseUrl).replace(/\/+$/, "");
     const response = await axios6.get(`${base}/api/dispatch-tracking`, {
       params: { dispatchId },
-      headers: { "x-company-id": companyId },
+      // Bearer de callback: sin él, Portal (hardening F0) responde 401.
+      headers: buildPortalCallbackHeaders(companyId, "lila-driver-arrival"),
       timeout: 8e3
     });
     const data = response.data?.data ?? {};
@@ -90564,7 +90644,7 @@ async function withTimeout(promise, timeoutMs, label) {
   }
 }
 function buildPortalCallbackToken(companyId) {
-  return import_jsonwebtoken5.default.sign(
+  return import_jsonwebtoken6.default.sign(
     {
       companyId,
       userId: "lila-dispatch-vale",
@@ -91889,9 +91969,9 @@ async function callPortalIppSync(dispatchId, companyId) {
     `${String(config.portal.baseUrl).replace(/\/+$/, "")}/api/dispatch/${dispatchId}`,
     {},
     {
-      headers: {
-        "x-company-id": companyId
-      },
+      // Bearer de callback: sin él, el hardening de Portal (prueba de llamador)
+      // responde 401 y el sync IPP se pierde en silencio.
+      headers: buildPortalCallbackHeaders(companyId, "lila-dispatch-post-process"),
       timeout: 1e4
     }
   );
@@ -92065,7 +92145,7 @@ import fs30 from "fs-extra";
 import path30 from "path";
 
 // src/api/controllers/public.controller.ts
-var import_jsonwebtoken6 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken7 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 init_models();
 import axios10 from "axios";
@@ -92105,7 +92185,7 @@ var parseNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
-var buildPortalCallbackToken2 = (companyId) => import_jsonwebtoken6.default.sign(
+var buildPortalCallbackToken2 = (companyId) => import_jsonwebtoken7.default.sign(
   {
     companyId,
     userId: "lila-public-reception",
@@ -95233,6 +95313,37 @@ function enqueueAcademyTranscode(tutorialId) {
     logger_default.error("[academy] enqueue transcode error", { tutorialId, error: String(error) });
   });
 }
+var WATCHDOG_INTERVAL_MS = 5 * 60 * 1e3;
+var WATCHDOG_STALE_MS = 15 * 60 * 1e3;
+var WATCHDOG_FIRST_SWEEP_MS = 30 * 1e3;
+function startAcademyTranscodeWatchdog() {
+  const sweep = async () => {
+    try {
+      const Tutorial = await getAcademyTutorialModel();
+      const staleBefore = new Date(Date.now() - WATCHDOG_STALE_MS);
+      const stuck = await Tutorial.find({ status: "processing", updatedAt: { $lt: staleBefore } }).select({ _id: 1, processing: 1 }).limit(20).lean();
+      for (const doc of stuck) {
+        const tutorialId = String(doc._id);
+        const attempts = Number(doc.processing?.attempts ?? 0);
+        if (attempts >= MAX_ATTEMPTS2) {
+          await markError(tutorialId, "transcode-watchdog-max-retries");
+          continue;
+        }
+        await Tutorial.updateOne({ _id: doc._id }, { $inc: { "processing.attempts": 1 } });
+        logger_default.warn("[academy] watchdog re-encola transcode atascado", { tutorialId, attempts });
+        enqueueAcademyTranscode(tutorialId);
+      }
+    } catch (error) {
+      logger_default.error("[academy] watchdog sweep error", { error: String(error) });
+    }
+  };
+  setTimeout(() => void sweep(), WATCHDOG_FIRST_SWEEP_MS);
+  setInterval(() => void sweep(), WATCHDOG_INTERVAL_MS);
+  logger_default.info("[academy] transcode watchdog activo", {
+    intervalMin: WATCHDOG_INTERVAL_MS / 6e4,
+    staleMin: WATCHDOG_STALE_MS / 6e4
+  });
+}
 
 // src/api/controllers/academy.controller.ts
 var ACADEMY_COMPANY_ID2 = "academy";
@@ -97482,6 +97593,7 @@ async function startServer() {
       logger_default.info("Initializing Job Scheduler...");
       await scheduler_v2_instance_default.initialize();
       cron2.schedule(pdfTempCleanupCron, cleanupPdfTemp);
+      startAcademyTranscodeWatchdog();
     } else {
       const isDevelopment = config.nodeEnv.trim().toLowerCase() === "development";
       const banner = [

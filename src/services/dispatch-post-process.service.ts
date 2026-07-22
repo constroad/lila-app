@@ -6,6 +6,7 @@ import type {
   DispatchPostProcessInput,
 } from '../types/dispatch-post-process.js';
 import { getCompanyBotLabel } from '../utils/company-bot.js';
+import { buildPortalCallbackHeaders } from '../utils/portal-callback.js';
 import logger from '../utils/logger.js';
 import { sendDispatchNotifications } from './dispatch-notifications.service.js';
 
@@ -72,9 +73,9 @@ async function callPortalIppSync(dispatchId: string, companyId: string) {
     `${String(config.portal.baseUrl).replace(/\/+$/, '')}/api/dispatch/${dispatchId}`,
     {},
     {
-      headers: {
-        'x-company-id': companyId,
-      },
+      // Bearer de callback: sin él, el hardening de Portal (prueba de llamador)
+      // responde 401 y el sync IPP se pierde en silencio.
+      headers: buildPortalCallbackHeaders(companyId, 'lila-dispatch-post-process'),
       timeout: 10000,
     }
   );

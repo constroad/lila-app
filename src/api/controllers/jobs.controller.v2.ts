@@ -111,7 +111,10 @@ export class JobsControllerV2 {
         data: job,
       });
     } catch (error: any) {
-      logger.error('[JobsControllerV2] Update job failed:', error);
+      logger.error(
+        `[JobsControllerV2] Update job ${req.params.id} failed:`,
+        error,
+      );
       return res.status(500).json({
         ok: false,
         message: error.message,
