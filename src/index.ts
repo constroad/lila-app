@@ -42,6 +42,7 @@ import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.j
 import { startSocketLeaseLoop, releaseSocketLease } from './whatsapp/baileys/instance-lease.js';
 import { startTelegramQueueFlusher } from './services/telegram-alert.service.js';
 import { startDriverReminderFlusher } from './services/driver-arrival-reminder.service.js';
+import { startDispatchAutoCloseFlusher } from './services/dispatch-autoclose.service.js';
 import cron from 'node-cron';
 import fs from 'fs-extra';
 import path from 'path';
@@ -504,6 +505,9 @@ async function startServer() {
     const stopTelegramQueueFlusher = startTelegramQueueFlusher();
     // F8-C: recordatorios "marca tu llegada" al chofer (ETA + 10%).
     const stopDriverReminderFlusher = startDriverReminderFlusher();
+    // Cierre de fondo de la llegada al ETA si nadie la confirma (one-shot,
+    // se autodestruye) — así la unidad no queda "en ruta" para siempre.
+    const stopDispatchAutoCloseFlusher = startDispatchAutoCloseFlusher();
 
     // Phase 1: Extend HTTP server timeouts for large uploads (no breaking changes)
     const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
@@ -524,6 +528,7 @@ async function startServer() {
       // Stop background flushers early so they don't fire during shutdown
       stopTelegramQueueFlusher();
       stopDriverReminderFlusher();
+      stopDispatchAutoCloseFlusher();
 
       // Cerrar servidor HTTP
       server.close(async () => {

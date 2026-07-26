@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import path from 'path';
 import { config } from '../../config/environment.js';
 import { getCompanyModel } from '../../database/models.js';
+import { claimPublicReceptionIdempotency } from '../../models/public-reception-idempotency.model.js';
 import { incrementStorageUsage } from '../../middleware/quota.middleware.js';
 import { buildUniqueStorageFileName } from '../../services/storage-file-name.service.js';
 import { storagePathService } from '../../services/storage-path.service.js';
@@ -1164,6 +1165,24 @@ export async function submitPublicReception(req: Request, res: Response) {
 
   try {
     const input = parseReceptionInput(req);
+
+    // Idempotencia (§OFFLINE-PWA §4.4): la cola offline de Portal manda un
+    // `clientMutationId` estable. Si ya lo reclamamos, es un reintento de una
+    // recepción YA aceptada (se perdió el 202) → responder 202 sin re-encolar el
+    // workflow (no duplicar). Se reclama DESPUÉS de validar (un 400 no la consume).
+    const clientMutationId = trimValue(req.body?.clientMutationId);
+    const companyId = trimValue(req.companyId);
+    if (clientMutationId && companyId) {
+      const claimed = await claimPublicReceptionIdempotency(companyId, clientMutationId);
+      if (!claimed) {
+        await cleanupUploadedFiles(files);
+        return res.status(202).json({
+          success: true,
+          data: { accepted: true, kind: input.kind, duplicate: true },
+        });
+      }
+    }
+
     const accepted = enqueuePublicReceptionWorkflow(input);
     return res.status(202).json({
       success: true,

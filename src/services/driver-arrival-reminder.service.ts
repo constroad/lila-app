@@ -6,6 +6,7 @@ import logger from '../utils/logger.js';
 import { config } from '../config/environment.js';
 import { buildPortalCallbackHeaders } from '../utils/portal-callback.js';
 import { computeArrivalReminderDelayMs, computeLocationShareDelayMs } from '../utils/driver-link.js';
+import { scheduleDispatchAutoClose } from './dispatch-autoclose.service.js';
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 
 /**
@@ -160,6 +161,13 @@ export async function scheduleDriverFollowups(params: {
       message: params.arrivalMessage,
       kind: 'arrival-reminder',
       delayMs: computeArrivalReminderDelayMs(eta),
+    });
+    // Cierre de fondo si nadie confirma: al ETA (mismo que ya consultamos, sin
+    // sumarle margen). Es la escalación del recordatorio de arriba.
+    await scheduleDispatchAutoClose({
+      companyId: params.companyId,
+      dispatchId: params.dispatchId,
+      etaSeconds: eta,
     });
   } catch (error) {
     logger.error('driver_followups.schedule_failed', {

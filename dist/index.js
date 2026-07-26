@@ -4796,21 +4796,21 @@ var init_populate_store_simple = __esm({
       lastPopulatedAt.delete(id);
     };
     populateStoreIfEmpty = async (id, sock) => {
-      const store2 = getStore(id);
+      const store3 = getStore(id);
       const last = lastPopulatedAt.get(id);
       if (last !== void 0 && Date.now() - last < POPULATE_COOLDOWN_MS) {
         const remaining = Math.round((POPULATE_COOLDOWN_MS - (Date.now() - last)) / 1e3);
         logger_default.info(`\u23ED populateStore ${id}: cooldown activo, saltando API call (${remaining}s restantes)`);
-        return { success: true, groupCount: store2.chats.size, skipped: true };
+        return { success: true, groupCount: store3.chats.size, skipped: true };
       }
       try {
         const groups = await sock.groupFetchAllParticipating();
         const groupIds = Object.keys(groups);
         const authoritativeIds = new Set(groupIds);
         let removed = 0;
-        for (const chatId of Array.from(store2.chats.keys())) {
+        for (const chatId of Array.from(store3.chats.keys())) {
           if (chatId.endsWith("@g.us") && !authoritativeIds.has(chatId)) {
-            store2.chats.delete(chatId);
+            store3.chats.delete(chatId);
             removed += 1;
           }
         }
@@ -4818,10 +4818,10 @@ var init_populate_store_simple = __esm({
           logger_default.info(`\u{1F9F9} Removed ${removed} stale group(s) from store (no longer participating)`);
         }
         for (const group of Object.values(groups)) {
-          const existing = store2.chats.get(group.id);
+          const existing = store3.chats.get(group.id);
           if (!existing) {
             logger_default.info(`\u2795 Adding new group to store: ${group.subject} (${group.id})`);
-            store2.chats.set(group.id, {
+            store3.chats.set(group.id, {
               id: group.id,
               name: group.subject,
               participants: group.participants ?? []
@@ -4829,7 +4829,7 @@ var init_populate_store_simple = __esm({
           } else {
             if (existing.name !== group.subject) {
               logger_default.info(`\u{1F504} Updating group name in store: ${existing.name} \u2192 ${group.subject}`);
-              store2.chats.set(group.id, {
+              store3.chats.set(group.id, {
                 ...existing,
                 name: group.subject,
                 participants: group.participants ?? []
@@ -4837,10 +4837,10 @@ var init_populate_store_simple = __esm({
             }
           }
         }
-        if (sock.user && !store2.contacts.has(sock.user.id)) {
-          store2.contacts.set(sock.user.id, sock.user);
+        if (sock.user && !store3.contacts.has(sock.user.id)) {
+          store3.contacts.set(sock.user.id, sock.user);
         }
-        store2.markDirty();
+        store3.markDirty();
         lastPopulatedAt.set(id, Date.now());
         logger_default.info(`\u2705 Synced ${Object.keys(groups).length} groups to store`);
         return {
@@ -6893,22 +6893,22 @@ var init_whatsapp_direct_service = __esm({
        * List all chats
        */
       listChats: (id) => {
-        const store2 = getStore(id);
-        return Array.from(store2.chats.values());
+        const store3 = getStore(id);
+        return Array.from(store3.chats.values());
       },
       /**
        * List all contacts
        */
       listContacts: (id) => {
-        const store2 = getStore(id);
-        return Array.from(store2.contacts.values());
+        const store3 = getStore(id);
+        return Array.from(store3.contacts.values());
       },
       /**
        * List groups only
        */
       listGroups: (id) => {
-        const store2 = getStore(id);
-        return Array.from(store2.chats.values()).filter((chat) => chat.id.endsWith("@g.us")).map((group) => ({
+        const store3 = getStore(id);
+        return Array.from(store3.chats.values()).filter((chat) => chat.id.endsWith("@g.us")).map((group) => ({
           id: group.id,
           name: group.name,
           participants: group.participant?.map((p64) => p64) || []
@@ -7493,9 +7493,9 @@ function resetConnectingStalls(sessionId) {
   parkedSessions.delete(sessionId);
 }
 function getStore(sessionId) {
-  const store2 = stores[sessionId];
-  if (!store2) throw new Error(`No store found for session: ${sessionId}`);
-  return store2;
+  const store3 = stores[sessionId];
+  if (!store3) throw new Error(`No store found for session: ${sessionId}`);
+  return store3;
 }
 function getSession(id) {
   return sessions[id];
@@ -7593,9 +7593,9 @@ async function initSession(sessionId, qrCb) {
     // "expiraba" en pantalla a los 20s aunque seguía vigente 40s más.
     qrTimeout: 2e4
   });
-  const store2 = makeInMemoryStore(sessionId);
-  stores[sessionId] = store2;
-  const storeLoaded = store2.load();
+  const store3 = makeInMemoryStore(sessionId);
+  stores[sessionId] = store3;
+  const storeLoaded = store3.load();
   sock.ev.on("creds.update", saveCreds);
   let connectionSettled = false;
   let watchdogTimer = null;
@@ -7780,13 +7780,13 @@ Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado pa
   });
   await storeLoaded;
   clearStoreTimer(sessionId);
-  storeTimers[sessionId] = setInterval(() => store2.save(), 1e4);
-  store2.bind(sock.ev);
+  storeTimers[sessionId] = setInterval(() => store3.save(), 1e4);
+  store3.bind(sock.ev);
   sock.ev.on("messaging-history.set", ({ chats, contacts }) => {
     logger_default.info(`\u{1F4E5} Received ${chats.length} chats and ${contacts.length} contacts`);
-    chats.forEach((chat) => store2.chats.set(chat.id, chat));
-    contacts.forEach((contact) => store2.contacts.set(contact.id, contact));
-    store2.markDirty();
+    chats.forEach((chat) => store3.chats.set(chat.id, chat));
+    contacts.forEach((contact) => store3.contacts.set(contact.id, contact));
+    store3.markDirty();
   });
   sessions[sessionId] = sock;
   return sock;
@@ -16156,16 +16156,16 @@ var require_filesystem = __commonJS({
     var LDD_PATH = "/usr/bin/ldd";
     var SELF_PATH = "/proc/self/exe";
     var MAX_LENGTH = 2048;
-    var readFileSync = (path35) => {
-      const fd = fs35.openSync(path35, "r");
+    var readFileSync = (path36) => {
+      const fd = fs35.openSync(path36, "r");
       const buffer2 = Buffer.alloc(MAX_LENGTH);
       const bytesRead = fs35.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
       fs35.close(fd, () => {
       });
       return buffer2.subarray(0, bytesRead);
     };
-    var readFile = (path35) => new Promise((resolve2, reject) => {
-      fs35.open(path35, "r", (err, fd) => {
+    var readFile = (path36) => new Promise((resolve2, reject) => {
+      fs35.open(path36, "r", (err, fd) => {
         if (err) {
           reject(err);
         } else {
@@ -16284,11 +16284,11 @@ var require_detect_libc = __commonJS({
       }
       return null;
     };
-    var familyFromInterpreterPath = (path35) => {
-      if (path35) {
-        if (path35.includes("/ld-musl-")) {
+    var familyFromInterpreterPath = (path36) => {
+      if (path36) {
+        if (path36.includes("/ld-musl-")) {
           return MUSL;
-        } else if (path35.includes("/ld-linux-")) {
+        } else if (path36.includes("/ld-linux-")) {
           return GLIBC;
         }
       }
@@ -16335,8 +16335,8 @@ var require_detect_libc = __commonJS({
       cachedFamilyInterpreter = null;
       try {
         const selfContent = await readFile(SELF_PATH);
-        const path35 = interpreterPath(selfContent);
-        cachedFamilyInterpreter = familyFromInterpreterPath(path35);
+        const path36 = interpreterPath(selfContent);
+        cachedFamilyInterpreter = familyFromInterpreterPath(path36);
       } catch (e29) {
       }
       return cachedFamilyInterpreter;
@@ -16348,8 +16348,8 @@ var require_detect_libc = __commonJS({
       cachedFamilyInterpreter = null;
       try {
         const selfContent = readFileSync(SELF_PATH);
-        const path35 = interpreterPath(selfContent);
-        cachedFamilyInterpreter = familyFromInterpreterPath(path35);
+        const path36 = interpreterPath(selfContent);
+        cachedFamilyInterpreter = familyFromInterpreterPath(path36);
       } catch (e29) {
       }
       return cachedFamilyInterpreter;
@@ -16901,9 +16901,9 @@ var require_sharp = __commonJS({
     ];
     var sharp7;
     var errors = [];
-    for (const path35 of paths) {
+    for (const path36 of paths) {
       try {
-        sharp7 = __require(path35);
+        sharp7 = __require(path36);
         break;
       } catch (err) {
         errors.push(err);
@@ -18308,15 +18308,15 @@ var require_route = __commonJS({
       };
     }
     function wrapConversion(toModel, graph) {
-      const path35 = [graph[toModel].parent, toModel];
+      const path36 = [graph[toModel].parent, toModel];
       let fn = conversions[graph[toModel].parent][toModel];
       let cur = graph[toModel].parent;
       while (graph[cur].parent) {
-        path35.unshift(graph[cur].parent);
+        path36.unshift(graph[cur].parent);
         fn = link(conversions[graph[cur].parent][cur], fn);
         cur = graph[cur].parent;
       }
-      fn.conversion = path35;
+      fn.conversion = path36;
       return fn;
     }
     module.exports = function(fromModel) {
@@ -20211,7 +20211,7 @@ var require_channel = __commonJS({
 var require_output = __commonJS({
   "node_modules/sharp/lib/output.js"(exports, module) {
     "use strict";
-    var path35 = __require("node:path");
+    var path36 = __require("node:path");
     var is = require_is();
     var sharp7 = require_sharp();
     var formats = /* @__PURE__ */ new Map([
@@ -20242,9 +20242,9 @@ var require_output = __commonJS({
       let err;
       if (!is.string(fileOut)) {
         err = new Error("Missing output file path");
-      } else if (is.string(this.options.input.file) && path35.resolve(this.options.input.file) === path35.resolve(fileOut)) {
+      } else if (is.string(this.options.input.file) && path36.resolve(this.options.input.file) === path36.resolve(fileOut)) {
         err = new Error("Cannot use same file for input and output");
-      } else if (jp2Regex.test(path35.extname(fileOut)) && !this.constructor.format.jp2k.output.file) {
+      } else if (jp2Regex.test(path36.extname(fileOut)) && !this.constructor.format.jp2k.output.file) {
         err = errJp2Save();
       }
       if (err) {
@@ -22353,8 +22353,8 @@ var require_FileKvStore = __commonJS({
     var promises_1 = __importDefault(__require("node:fs/promises"));
     var node_path_1 = __importDefault(__require("node:path"));
     var FileKvStore = class {
-      constructor(path35) {
-        this.directory = path35;
+      constructor(path36) {
+        this.directory = path36;
       }
       async get(key) {
         try {
@@ -22720,12 +22720,12 @@ var require_BaseHandler = __commonJS({
     var reForwardedHost = /host="?([^";]+)/;
     var reForwardedProto = /proto=(https?)/;
     var BaseHandler = class extends node_events_1.default {
-      constructor(store2, options2) {
+      constructor(store3, options2) {
         super();
-        if (!store2) {
+        if (!store3) {
           throw new Error("Store must be defined");
         }
-        this.store = store2;
+        this.store = store3;
         this.options = options2;
       }
       write(res, status, headers = {}, body = "") {
@@ -22737,21 +22737,21 @@ var require_BaseHandler = __commonJS({
         return res.end();
       }
       generateUrl(req, id) {
-        const path35 = this.options.path === "/" ? "" : this.options.path;
+        const path36 = this.options.path === "/" ? "" : this.options.path;
         if (this.options.generateUrl) {
           const { proto: proto4, host: host2 } = this.extractHostAndProto(req);
           return this.options.generateUrl(req, {
             proto: proto4,
             host: host2,
-            path: path35,
+            path: path36,
             id
           });
         }
         if (this.options.relativeLocation) {
-          return `${path35}/${id}`;
+          return `${path36}/${id}`;
         }
         const { proto: proto3, host } = this.extractHostAndProto(req);
-        return `${proto3}://${host}${path35}/${id}`;
+        return `${proto3}://${host}${path36}/${id}`;
       }
       getFileIdFromRequest(req) {
         const match = reExtractFileID.exec(req.url);
@@ -22907,8 +22907,8 @@ var require_GetHandler = __commonJS({
           "application/ogg"
         ]);
       }
-      registerPath(path35, handler) {
-        this.paths.set(path35, handler);
+      registerPath(path36, handler) {
+        this.paths.set(path36, handler);
       }
       /**
        * Read data from the DataStore and send the stream.
@@ -23300,14 +23300,14 @@ var require_PostHandler = __commonJS({
     var HeaderValidator_1 = require_HeaderValidator();
     var log = (0, debug_1.default)("tus-node-server:handlers:post");
     var PostHandler = class extends BaseHandler_1.BaseHandler {
-      constructor(store2, options2) {
+      constructor(store3, options2) {
         if (options2.namingFunction && typeof options2.namingFunction !== "function") {
           throw new Error("'namingFunction' must be a function");
         }
         if (!options2.namingFunction) {
           options2.namingFunction = utils_1.Uid.rand;
         }
-        super(store2, options2);
+        super(store3, options2);
       }
       /**
        * Create a file in the DataStore.
@@ -23655,8 +23655,8 @@ var require_server = __commonJS({
           }
         });
       }
-      get(path35, handler) {
-        this.handlers.GET.registerPath(path35, handler);
+      get(path36, handler) {
+        this.handlers.GET.registerPath(path36, handler);
       }
       /**
        * Main server requestListener, invoked on every 'request' event.
@@ -24275,8 +24275,8 @@ var require_minimatch = __commonJS({
       return new Minimatch(pattern, options2).match(p64);
     };
     module.exports = minimatch;
-    var path35 = require_path();
-    minimatch.sep = path35.sep;
+    var path36 = require_path();
+    minimatch.sep = path36.sep;
     var GLOBSTAR = /* @__PURE__ */ Symbol("globstar **");
     minimatch.GLOBSTAR = GLOBSTAR;
     var expand = require_brace_expansion();
@@ -24882,8 +24882,8 @@ var require_minimatch = __commonJS({
         if (this.empty) return f64 === "";
         if (f64 === "/" && partial) return true;
         const options2 = this.options;
-        if (path35.sep !== "/") {
-          f64 = f64.split(path35.sep).join("/");
+        if (path36.sep !== "/") {
+          f64 = f64.split(path36.sep).join("/");
         }
         f64 = f64.split(slashSplit);
         this.debug(this.pattern, "split", f64);
@@ -24981,8 +24981,8 @@ var require_readdir_glob = __commonJS({
         });
       });
     }
-    async function* exploreWalkAsync(dir, path35, followSymlinks, useStat, shouldSkip, strict) {
-      let files = await readdir(path35 + dir, strict);
+    async function* exploreWalkAsync(dir, path36, followSymlinks, useStat, shouldSkip, strict) {
+      let files = await readdir(path36 + dir, strict);
       for (const file of files) {
         let name = file.name;
         if (name === void 0) {
@@ -24991,7 +24991,7 @@ var require_readdir_glob = __commonJS({
         }
         const filename = dir + "/" + name;
         const relative = filename.slice(1);
-        const absolute = path35 + "/" + relative;
+        const absolute = path36 + "/" + relative;
         let stats = null;
         if (useStat || followSymlinks) {
           stats = await stat(absolute, followSymlinks);
@@ -25005,15 +25005,15 @@ var require_readdir_glob = __commonJS({
         if (stats.isDirectory()) {
           if (!shouldSkip(relative)) {
             yield { relative, absolute, stats };
-            yield* exploreWalkAsync(filename, path35, followSymlinks, useStat, shouldSkip, false);
+            yield* exploreWalkAsync(filename, path36, followSymlinks, useStat, shouldSkip, false);
           }
         } else {
           yield { relative, absolute, stats };
         }
       }
     }
-    async function* explore(path35, followSymlinks, useStat, shouldSkip) {
-      yield* exploreWalkAsync("", path35, followSymlinks, useStat, shouldSkip, true);
+    async function* explore(path36, followSymlinks, useStat, shouldSkip) {
+      yield* exploreWalkAsync("", path36, followSymlinks, useStat, shouldSkip, true);
     }
     function readOptions(options2) {
       return {
@@ -27051,14 +27051,14 @@ var require_polyfills = __commonJS({
       fs35.fstatSync = statFixSync(fs35.fstatSync);
       fs35.lstatSync = statFixSync(fs35.lstatSync);
       if (fs35.chmod && !fs35.lchmod) {
-        fs35.lchmod = function(path35, mode, cb) {
+        fs35.lchmod = function(path36, mode, cb) {
           if (cb) process.nextTick(cb);
         };
         fs35.lchmodSync = function() {
         };
       }
       if (fs35.chown && !fs35.lchown) {
-        fs35.lchown = function(path35, uid, gid, cb) {
+        fs35.lchown = function(path36, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
         fs35.lchownSync = function() {
@@ -27125,9 +27125,9 @@ var require_polyfills = __commonJS({
         };
       })(fs35.readSync);
       function patchLchmod(fs36) {
-        fs36.lchmod = function(path35, mode, callback) {
+        fs36.lchmod = function(path36, mode, callback) {
           fs36.open(
-            path35,
+            path36,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -27143,8 +27143,8 @@ var require_polyfills = __commonJS({
             }
           );
         };
-        fs36.lchmodSync = function(path35, mode) {
-          var fd = fs36.openSync(path35, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs36.lchmodSync = function(path36, mode) {
+          var fd = fs36.openSync(path36, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -27165,8 +27165,8 @@ var require_polyfills = __commonJS({
       }
       function patchLutimes(fs36) {
         if (constants.hasOwnProperty("O_SYMLINK") && fs36.futimes) {
-          fs36.lutimes = function(path35, at3, mt6, cb) {
-            fs36.open(path35, constants.O_SYMLINK, function(er3, fd) {
+          fs36.lutimes = function(path36, at3, mt6, cb) {
+            fs36.open(path36, constants.O_SYMLINK, function(er3, fd) {
               if (er3) {
                 if (cb) cb(er3);
                 return;
@@ -27178,8 +27178,8 @@ var require_polyfills = __commonJS({
               });
             });
           };
-          fs36.lutimesSync = function(path35, at3, mt6) {
-            var fd = fs36.openSync(path35, constants.O_SYMLINK);
+          fs36.lutimesSync = function(path36, at3, mt6) {
+            var fd = fs36.openSync(path36, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -27297,11 +27297,11 @@ var require_legacy_streams = __commonJS({
         ReadStream,
         WriteStream
       };
-      function ReadStream(path35, options2) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path35, options2);
+      function ReadStream(path36, options2) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path36, options2);
         Stream2.call(this);
         var self2 = this;
-        this.path = path35;
+        this.path = path36;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -27346,10 +27346,10 @@ var require_legacy_streams = __commonJS({
           self2._read();
         });
       }
-      function WriteStream(path35, options2) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path35, options2);
+      function WriteStream(path36, options2) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path36, options2);
         Stream2.call(this);
-        this.path = path35;
+        this.path = path36;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -27492,14 +27492,14 @@ var require_graceful_fs = __commonJS({
       fs36.createWriteStream = createWriteStream;
       var fs$readFile = fs36.readFile;
       fs36.readFile = readFile;
-      function readFile(path35, options2, cb) {
+      function readFile(path36, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        return go$readFile(path35, options2, cb);
-        function go$readFile(path36, options3, cb2, startTime) {
-          return fs$readFile(path36, options3, function(err) {
+        return go$readFile(path36, options2, cb);
+        function go$readFile(path37, options3, cb2, startTime) {
+          return fs$readFile(path37, options3, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path36, options3, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path37, options3, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -27509,14 +27509,14 @@ var require_graceful_fs = __commonJS({
       }
       var fs$writeFile = fs36.writeFile;
       fs36.writeFile = writeFile;
-      function writeFile(path35, data, options2, cb) {
+      function writeFile(path36, data, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        return go$writeFile(path35, data, options2, cb);
-        function go$writeFile(path36, data2, options3, cb2, startTime) {
-          return fs$writeFile(path36, data2, options3, function(err) {
+        return go$writeFile(path36, data, options2, cb);
+        function go$writeFile(path37, data2, options3, cb2, startTime) {
+          return fs$writeFile(path37, data2, options3, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path36, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path37, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -27527,14 +27527,14 @@ var require_graceful_fs = __commonJS({
       var fs$appendFile = fs36.appendFile;
       if (fs$appendFile)
         fs36.appendFile = appendFile;
-      function appendFile(path35, data, options2, cb) {
+      function appendFile(path36, data, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        return go$appendFile(path35, data, options2, cb);
-        function go$appendFile(path36, data2, options3, cb2, startTime) {
-          return fs$appendFile(path36, data2, options3, function(err) {
+        return go$appendFile(path36, data, options2, cb);
+        function go$appendFile(path37, data2, options3, cb2, startTime) {
+          return fs$appendFile(path37, data2, options3, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path36, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path37, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -27565,31 +27565,31 @@ var require_graceful_fs = __commonJS({
       var fs$readdir = fs36.readdir;
       fs36.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir(path35, options2, cb) {
+      function readdir(path36, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path36, options3, cb2, startTime) {
-          return fs$readdir(path36, fs$readdirCallback(
-            path36,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path37, options3, cb2, startTime) {
+          return fs$readdir(path37, fs$readdirCallback(
+            path37,
             options3,
             cb2,
             startTime
           ));
-        } : function go$readdir2(path36, options3, cb2, startTime) {
-          return fs$readdir(path36, options3, fs$readdirCallback(
-            path36,
+        } : function go$readdir2(path37, options3, cb2, startTime) {
+          return fs$readdir(path37, options3, fs$readdirCallback(
+            path37,
             options3,
             cb2,
             startTime
           ));
         };
-        return go$readdir(path35, options2, cb);
-        function fs$readdirCallback(path36, options3, cb2, startTime) {
+        return go$readdir(path36, options2, cb);
+        function fs$readdirCallback(path37, options3, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path36, options3, cb2],
+                [path37, options3, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -27660,7 +27660,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path35, options2) {
+      function ReadStream(path36, options2) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -27680,7 +27680,7 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function WriteStream(path35, options2) {
+      function WriteStream(path36, options2) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -27698,22 +27698,22 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function createReadStream(path35, options2) {
-        return new fs36.ReadStream(path35, options2);
+      function createReadStream(path36, options2) {
+        return new fs36.ReadStream(path36, options2);
       }
-      function createWriteStream(path35, options2) {
-        return new fs36.WriteStream(path35, options2);
+      function createWriteStream(path36, options2) {
+        return new fs36.WriteStream(path36, options2);
       }
       var fs$open = fs36.open;
       fs36.open = open;
-      function open(path35, flags, mode, cb) {
+      function open(path36, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path35, flags, mode, cb);
-        function go$open(path36, flags2, mode2, cb2, startTime) {
-          return fs$open(path36, flags2, mode2, function(err, fd) {
+        return go$open(path36, flags, mode, cb);
+        function go$open(path37, flags2, mode2, cb2, startTime) {
+          return fs$open(path37, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path36, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path37, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -29818,22 +29818,22 @@ var require_lazystream = __commonJS({
 // node_modules/normalize-path/index.js
 var require_normalize_path = __commonJS({
   "node_modules/normalize-path/index.js"(exports, module) {
-    module.exports = function(path35, stripTrailing) {
-      if (typeof path35 !== "string") {
+    module.exports = function(path36, stripTrailing) {
+      if (typeof path36 !== "string") {
         throw new TypeError("expected path to be a string");
       }
-      if (path35 === "\\" || path35 === "/") return "/";
-      var len = path35.length;
-      if (len <= 1) return path35;
+      if (path36 === "\\" || path36 === "/") return "/";
+      var len = path36.length;
+      if (len <= 1) return path36;
       var prefix = "";
-      if (len > 4 && path35[3] === "\\") {
-        var ch = path35[2];
-        if ((ch === "?" || ch === ".") && path35.slice(0, 2) === "\\\\") {
-          path35 = path35.slice(2);
+      if (len > 4 && path36[3] === "\\") {
+        var ch = path36[2];
+        if ((ch === "?" || ch === ".") && path36.slice(0, 2) === "\\\\") {
+          path36 = path36.slice(2);
           prefix = "//";
         }
       }
-      var segs = path35.split(/[/\\]+/);
+      var segs = path36.split(/[/\\]+/);
       if (stripTrailing !== false && segs[segs.length - 1] === "") {
         segs.pop();
       }
@@ -38629,11 +38629,11 @@ var require_commonjs = __commonJS({
       return (f64) => f64.length === len && f64 !== "." && f64 !== "..";
     };
     var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-    var path35 = {
+    var path36 = {
       win32: { sep: "\\" },
       posix: { sep: "/" }
     };
-    exports.sep = defaultPlatform === "win32" ? path35.win32.sep : path35.posix.sep;
+    exports.sep = defaultPlatform === "win32" ? path36.win32.sep : path36.posix.sep;
     exports.minimatch.sep = exports.sep;
     exports.GLOBSTAR = /* @__PURE__ */ Symbol("globstar **");
     exports.minimatch.GLOBSTAR = exports.GLOBSTAR;
@@ -42026,13 +42026,13 @@ var require_commonjs4 = __commonJS({
       /**
        * Get the Path object referenced by the string path, resolved from this Path
        */
-      resolve(path35) {
+      resolve(path36) {
         var _a2;
-        if (!path35) {
+        if (!path36) {
           return this;
         }
-        const rootPath = this.getRootString(path35);
-        const dir = path35.substring(rootPath.length);
+        const rootPath = this.getRootString(path36);
+        const dir = path36.substring(rootPath.length);
         const dirParts = dir.split(this.splitSep);
         const result = rootPath ? __privateMethod(_a2 = this.getRoot(rootPath), _PathBase_instances, resolveParts_fn).call(_a2, dirParts) : __privateMethod(this, _PathBase_instances, resolveParts_fn).call(this, dirParts);
         return result;
@@ -42819,8 +42819,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path35) {
-        return node_path_1.win32.parse(path35).root;
+      getRootString(path36) {
+        return node_path_1.win32.parse(path36).root;
       }
       /**
        * @internal
@@ -42867,8 +42867,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path35) {
-        return path35.startsWith("/") ? "/" : "";
+      getRootString(path36) {
+        return path36.startsWith("/") ? "/" : "";
       }
       /**
        * @internal
@@ -42959,11 +42959,11 @@ var require_commonjs4 = __commonJS({
       /**
        * Get the depth of a provided path, string, or the cwd
        */
-      depth(path35 = this.cwd) {
-        if (typeof path35 === "string") {
-          path35 = this.cwd.resolve(path35);
+      depth(path36 = this.cwd) {
+        if (typeof path36 === "string") {
+          path36 = this.cwd.resolve(path36);
         }
-        return path35.depth();
+        return path36.depth();
       }
       /**
        * Return the cache of child entries.  Exposed so subclasses can create
@@ -43450,9 +43450,9 @@ var require_commonjs4 = __commonJS({
         process3();
         return results;
       }
-      chdir(path35 = this.cwd) {
+      chdir(path36 = this.cwd) {
         const oldCwd = this.cwd;
-        this.cwd = typeof path35 === "string" ? this.cwd.resolve(path35) : path35;
+        this.cwd = typeof path36 === "string" ? this.cwd.resolve(path36) : path36;
         this.cwd[setAsCwd](oldCwd);
       }
     };
@@ -43827,9 +43827,9 @@ var require_processor = __commonJS({
     exports.Processor = exports.SubWalks = exports.MatchRecord = exports.HasWalkedCache = void 0;
     var minimatch_1 = require_commonjs();
     var HasWalkedCache = class _HasWalkedCache {
-      constructor(store2 = /* @__PURE__ */ new Map()) {
+      constructor(store3 = /* @__PURE__ */ new Map()) {
         __publicField(this, "store");
-        this.store = store2;
+        this.store = store3;
       }
       copy() {
         return new _HasWalkedCache(new Map(this.store));
@@ -43858,8 +43858,8 @@ var require_processor = __commonJS({
       }
       // match, absolute, ifdir
       entries() {
-        return [...this.store.entries()].map(([path35, n43]) => [
-          path35,
+        return [...this.store.entries()].map(([path36, n43]) => [
+          path36,
           !!(n43 & 2),
           !!(n43 & 1)
         ]);
@@ -44068,7 +44068,7 @@ var require_walker = __commonJS({
     var makeIgnore = (ignore, opts) => typeof ignore === "string" ? new ignore_js_1.Ignore([ignore], opts) : Array.isArray(ignore) ? new ignore_js_1.Ignore(ignore, opts) : ignore;
     var _onResume, _ignore, _sep, _GlobUtil_instances, ignored_fn, childrenIgnored_fn;
     var GlobUtil = class {
-      constructor(patterns, path35, opts) {
+      constructor(patterns, path36, opts) {
         __privateAdd(this, _GlobUtil_instances);
         __publicField(this, "path");
         __publicField(this, "patterns");
@@ -44083,7 +44083,7 @@ var require_walker = __commonJS({
         __publicField(this, "maxDepth");
         __publicField(this, "includeChildMatches");
         this.patterns = patterns;
-        this.path = path35;
+        this.path = path36;
         this.opts = opts;
         __privateSet(this, _sep, !opts.posix && opts.platform === "win32" ? "\\" : "/");
         this.includeChildMatches = opts.includeChildMatches !== false;
@@ -44317,16 +44317,16 @@ var require_walker = __commonJS({
     _ignore = new WeakMap();
     _sep = new WeakMap();
     _GlobUtil_instances = new WeakSet();
-    ignored_fn = function(path35) {
-      return this.seen.has(path35) || !!__privateGet(this, _ignore)?.ignored?.(path35);
+    ignored_fn = function(path36) {
+      return this.seen.has(path36) || !!__privateGet(this, _ignore)?.ignored?.(path36);
     };
-    childrenIgnored_fn = function(path35) {
-      return !!__privateGet(this, _ignore)?.childrenIgnored?.(path35);
+    childrenIgnored_fn = function(path36) {
+      return !!__privateGet(this, _ignore)?.childrenIgnored?.(path36);
     };
     exports.GlobUtil = GlobUtil;
     var GlobWalker = class extends GlobUtil {
-      constructor(patterns, path35, opts) {
-        super(patterns, path35, opts);
+      constructor(patterns, path36, opts) {
+        super(patterns, path36, opts);
         __publicField(this, "matches", /* @__PURE__ */ new Set());
       }
       matchEmit(e29) {
@@ -44364,8 +44364,8 @@ var require_walker = __commonJS({
     };
     exports.GlobWalker = GlobWalker;
     var GlobStream = class extends GlobUtil {
-      constructor(patterns, path35, opts) {
-        super(patterns, path35, opts);
+      constructor(patterns, path36, opts) {
+        super(patterns, path36, opts);
         __publicField(this, "results");
         this.results = new minipass_1.Minipass({
           signal: this.signal,
@@ -44722,7 +44722,7 @@ var require_commonjs5 = __commonJS({
 var require_file = __commonJS({
   "node_modules/archiver-utils/file.js"(exports, module) {
     var fs35 = require_graceful_fs();
-    var path35 = __require("path");
+    var path36 = __require("path");
     var flatten = require_flatten();
     var difference = require_difference();
     var union = require_union();
@@ -44747,7 +44747,7 @@ var require_file = __commonJS({
       return result;
     };
     file.exists = function() {
-      var filepath = path35.join.apply(path35, arguments);
+      var filepath = path36.join.apply(path36, arguments);
       return fs35.existsSync(filepath);
     };
     file.expand = function(...args) {
@@ -44761,7 +44761,7 @@ var require_file = __commonJS({
       });
       if (options2.filter) {
         matches = matches.filter(function(filepath) {
-          filepath = path35.join(options2.cwd || "", filepath);
+          filepath = path36.join(options2.cwd || "", filepath);
           try {
             if (typeof options2.filter === "function") {
               return options2.filter(filepath);
@@ -44778,7 +44778,7 @@ var require_file = __commonJS({
     file.expandMapping = function(patterns, destBase, options2) {
       options2 = Object.assign({
         rename: function(destBase2, destPath) {
-          return path35.join(destBase2 || "", destPath);
+          return path36.join(destBase2 || "", destPath);
         }
       }, options2);
       var files = [];
@@ -44786,14 +44786,14 @@ var require_file = __commonJS({
       file.expand(options2, patterns).forEach(function(src) {
         var destPath = src;
         if (options2.flatten) {
-          destPath = path35.basename(destPath);
+          destPath = path36.basename(destPath);
         }
         if (options2.ext) {
           destPath = destPath.replace(/(\.[^\/]*)?$/, options2.ext);
         }
         var dest = options2.rename(destBase, destPath, options2);
         if (options2.cwd) {
-          src = path35.join(options2.cwd, src);
+          src = path36.join(options2.cwd, src);
         }
         dest = dest.replace(pathSeparatorRe, "/");
         src = src.replace(pathSeparatorRe, "/");
@@ -44875,7 +44875,7 @@ var require_file = __commonJS({
 var require_archiver_utils = __commonJS({
   "node_modules/archiver-utils/index.js"(exports, module) {
     var fs35 = require_graceful_fs();
-    var path35 = __require("path");
+    var path36 = __require("path");
     var isStream = require_is_stream();
     var lazystream = require_lazystream();
     var normalizePath2 = require_normalize_path();
@@ -44963,11 +44963,11 @@ var require_archiver_utils = __commonJS({
           if (!file) {
             return callback(null, results);
           }
-          filepath = path35.join(dirpath, file);
+          filepath = path36.join(dirpath, file);
           fs35.stat(filepath, function(err2, stats) {
             results.push({
               path: filepath,
-              relative: path35.relative(base, filepath).replace(/\\/g, "/"),
+              relative: path36.relative(base, filepath).replace(/\\/g, "/"),
               stats
             });
             if (stats && stats.isDirectory()) {
@@ -45029,7 +45029,7 @@ var require_core = __commonJS({
     var fs35 = __require("fs");
     var glob = require_readdir_glob();
     var async = require_async();
-    var path35 = __require("path");
+    var path36 = __require("path");
     var util2 = require_archiver_utils();
     var inherits2 = __require("util").inherits;
     var ArchiverError = require_error();
@@ -45305,9 +45305,9 @@ var require_core = __commonJS({
         task.source = Buffer.concat([]);
       } else if (stats.isSymbolicLink() && this._moduleSupports("symlink")) {
         var linkPath = fs35.readlinkSync(task.filepath);
-        var dirName = path35.dirname(task.filepath);
+        var dirName = path36.dirname(task.filepath);
         task.data.type = "symlink";
-        task.data.linkname = path35.relative(dirName, path35.resolve(dirName, linkPath));
+        task.data.linkname = path36.relative(dirName, path36.resolve(dirName, linkPath));
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else {
@@ -49680,8 +49680,8 @@ var HIGH_CONFIDENCE_PROBE_PATTERNS = [
   /\.procmailrc/i,
   /config\.inc\.php/i
 ];
-function isHighConfidenceProbe(path35) {
-  return HIGH_CONFIDENCE_PROBE_PATTERNS.some((pattern) => pattern.test(path35));
+function isHighConfidenceProbe(path36) {
+  return HIGH_CONFIDENCE_PROBE_PATTERNS.some((pattern) => pattern.test(path36));
 }
 var activity = /* @__PURE__ */ new Map();
 function getBucket(ip) {
@@ -49708,11 +49708,11 @@ function isBanned(ip) {
   const bucket = activity.get(ip);
   return !!bucket && bucket.bannedUntil > Date.now();
 }
-function recordSuspiciousRequest(ip, path35, userAgent) {
+function recordSuspiciousRequest(ip, path36, userAgent) {
   const bucket = getBucket(ip);
-  const weight = isHighConfidenceProbe(path35) ? ALERT_THRESHOLD : 1;
+  const weight = isHighConfidenceProbe(path36) ? ALERT_THRESHOLD : 1;
   bucket.count += weight;
-  if (bucket.paths.length < 5) bucket.paths.push(path35);
+  if (bucket.paths.length < 5) bucket.paths.push(path36);
   if (userAgent && bucket.userAgents.size < 3) bucket.userAgents.add(userAgent);
   if (bucket.count >= BAN_THRESHOLD) {
     bucket.bannedUntil = Date.now() + BAN_DURATION_MS;
@@ -64970,8 +64970,8 @@ var r38 = {};
 Xr(r38, { af_ZA: () => B58, ar: () => Y35, az: () => U39, base: () => Mi, cs_CZ: () => x61, da: () => le10, de: () => pr, de_AT: () => I40, de_CH: () => J42, dv: () => Q32, el: () => le9, en: () => ul, en_AU: () => be7, en_AU_ocker: () => P54, en_BORK: () => u60, en_CA: () => S41, en_GB: () => B46, en_GH: () => J39, en_HK: () => w42, en_IE: () => D49, en_IN: () => w43, en_NG: () => O41, en_US: () => A49, en_ZA: () => L39, eo: () => ro, es: () => ao3, es_MX: () => ia7, fa: () => wo, fi: () => A43, fr: () => Wi, fr_BE: () => I36, fr_CA: () => b32, fr_CH: () => _33, fr_LU: () => _34, fr_SN: () => _35, he: () => Z27, hr: () => C33, hu: () => U29, hy: () => j34, id_ID: () => F18, it: () => w21, ja: () => M24, ka_GE: () => H23, ko: () => G23, lv: () => $13, mk: () => S26, nb_NO: () => Z24, ne: () => j13, nl: () => an, nl_BE: () => j15, pl: () => ea3, pt_BR: () => W15, pt_PT: () => k17, ro: () => Mi2, ro_MD: () => j20, ru: () => ae4, sk: () => O8, sr_RS_latin: () => T7, sv: () => $5, th: () => E8, tr: () => V10, uk: () => S11, ur: () => yt, vi: () => U3, yo_NG: () => r3, zh_CN: () => Ke3, zh_TW: () => B5, zu_ZA: () => x5 });
 
 // src/services/random-data-generator.service.ts
-function setNestedValue(target, path35, value) {
-  const parts = path35.split(".");
+function setNestedValue(target, path36, value) {
+  const parts = path36.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -82973,8 +82973,8 @@ var File = class {
     return this.fontWrapper;
   }
 };
-function commonjsRequire(path35) {
-  throw new Error('Could not dynamically require "' + path35 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
+function commonjsRequire(path36) {
+  throw new Error('Could not dynamically require "' + path36 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
 }
 var jszip_min = { exports: {} };
 (function(module, exports) {
@@ -86499,14 +86499,14 @@ function resolveProto4(req) {
 var PUBLIC_BASE_URL = (process.env.LILA_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
 function buildAbsoluteUrl4(req, relativeUrl) {
   if (!relativeUrl) return relativeUrl;
-  const path35 = relativeUrl.startsWith("/") ? relativeUrl : `/${relativeUrl}`;
+  const path36 = relativeUrl.startsWith("/") ? relativeUrl : `/${relativeUrl}`;
   if (PUBLIC_BASE_URL) {
-    return `${PUBLIC_BASE_URL}${path35}`;
+    return `${PUBLIC_BASE_URL}${path36}`;
   }
   const host = req.get("x-forwarded-host") || req.get("host");
   if (!host) return relativeUrl;
   const proto3 = resolveProto4(req);
-  return `${proto3}://${host}${path35}`;
+  return `${proto3}://${host}${path36}`;
 }
 function isPlainObject2(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -86552,11 +86552,11 @@ function hasMeaningfulContractRows(value) {
 }
 function mergeContractAutofillData(currentData, serviceData) {
   const next = mergeDeep({}, currentData);
-  CONTRACT_AUTOFILL_PATHS.forEach((path35) => {
-    const currentValue = getNestedValue(next, path35);
-    const serviceValue = getNestedValue(serviceData, path35);
+  CONTRACT_AUTOFILL_PATHS.forEach((path36) => {
+    const currentValue = getNestedValue(next, path36);
+    const serviceValue = getNestedValue(serviceData, path36);
     if (isEmptyContractValue(currentValue) && !isEmptyContractValue(serviceValue)) {
-      setNestedValue2(next, path35, serviceValue);
+      setNestedValue2(next, path36, serviceValue);
     }
   });
   CONTRACT_TABLE_KEYS.forEach((key) => {
@@ -86693,8 +86693,8 @@ function roundValue(value, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round(num * factor) / factor;
 }
-function setNestedValue2(target, path35, value) {
-  const parts = path35.split(".");
+function setNestedValue2(target, path36, value) {
+  const parts = path36.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -86705,8 +86705,8 @@ function setNestedValue2(target, path35, value) {
   }
   current[parts[parts.length - 1]] = value;
 }
-function getNestedValue(target, path35) {
-  const parts = path35.split(".");
+function getNestedValue(target, path36) {
+  const parts = path36.split(".");
   let current = target;
   for (const key of parts) {
     if (!current || typeof current !== "object") return void 0;
@@ -90177,7 +90177,7 @@ var import_jsonwebtoken6 = __toESM(require_jsonwebtoken(), 1);
 init_logger();
 init_environment();
 init_models();
-import axios7 from "axios";
+import axios8 from "axios";
 init_whatsapp_direct_service();
 
 // src/utils/driver-link.ts
@@ -90217,9 +90217,9 @@ function computeLocationShareDelayMs(etaDurationSeconds) {
 init_json_store();
 init_logger();
 init_environment();
-import path28 from "path";
-import { randomUUID as randomUUID6 } from "crypto";
-import axios6 from "axios";
+import path29 from "path";
+import { randomUUID as randomUUID7 } from "crypto";
+import axios7 from "axios";
 
 // src/utils/portal-callback.ts
 var import_jsonwebtoken5 = __toESM(require_jsonwebtoken(), 1);
@@ -90234,15 +90234,21 @@ var buildPortalCallbackHeaders = (companyId, userId = "lila-callback") => ({
   "x-company-id": companyId
 });
 
-// src/services/driver-arrival-reminder.service.ts
-init_whatsapp_direct_service();
-var itemKind = (item) => item.kind ?? "arrival-reminder";
+// src/services/dispatch-autoclose.service.ts
+init_json_store();
+init_logger();
+init_environment();
+import path28 from "path";
+import { randomUUID as randomUUID6 } from "crypto";
+import axios6 from "axios";
 var STORE_KEY2 = "queue";
 var MAX_ATTEMPTS = 3;
 var MAX_AGE_MS = 12 * 60 * 60 * 1e3;
 var DEFAULT_FLUSH_INTERVAL_MS2 = 60 * 1e3;
+var NO_ETA_FALLBACK_MS = 90 * 60 * 1e3;
+var MAX_DELAY_MS = MAX_AGE_MS - 60 * 1e3;
 var store = new json_store_default({
-  baseDir: path28.join(config.whatsapp.sessionDir, "../driver-reminders"),
+  baseDir: path28.join(config.whatsapp.sessionDir, "../dispatch-autoclose"),
   autoBackup: true
 });
 async function listQueue() {
@@ -90252,10 +90258,146 @@ async function listQueue() {
 async function saveQueue(items) {
   await store.set(STORE_KEY2, items);
 }
+function computeAutoCloseDelayMs(etaSeconds) {
+  const eta = Number(etaSeconds);
+  const raw = Number.isFinite(eta) && eta > 0 ? eta * 1e3 : NO_ETA_FALLBACK_MS;
+  return Math.min(MAX_DELAY_MS, Math.max(0, Math.round(raw)));
+}
+async function scheduleDispatchAutoClose(params) {
+  try {
+    if (!params.companyId || !params.dispatchId) return false;
+    const queue2 = await listQueue();
+    if (queue2.some((item) => item.dispatchId === params.dispatchId)) {
+      return false;
+    }
+    const delayMs = computeAutoCloseDelayMs(params.etaSeconds);
+    const availableAt = new Date(Date.now() + delayMs).toISOString();
+    queue2.push({
+      id: randomUUID6(),
+      companyId: params.companyId,
+      dispatchId: params.dispatchId,
+      availableAt,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      attempts: 0
+    });
+    await saveQueue(queue2);
+    logger_default.info("dispatch_autoclose.scheduled", {
+      companyId: params.companyId,
+      dispatchId: params.dispatchId,
+      etaSeconds: params.etaSeconds ?? null,
+      availableAt
+    });
+    return true;
+  } catch (error) {
+    logger_default.error("dispatch_autoclose.schedule_failed", {
+      dispatchId: params.dispatchId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
+}
+async function postAutoClose(item) {
+  const base = String(config.portal.baseUrl).replace(/\/+$/, "");
+  try {
+    await axios6.post(
+      `${base}/api/dispatch/${item.dispatchId}/auto-close`,
+      {},
+      {
+        headers: buildPortalCallbackHeaders(item.companyId, "lila-dispatch-autoclose"),
+        timeout: 8e3
+      }
+    );
+    return "done";
+  } catch (error) {
+    const status = axios6.isAxiosError(error) && error.response ? error.response.status : null;
+    if (status !== null && status >= 400 && status < 500) return "done";
+    logger_default.warn("dispatch_autoclose.post_failed", {
+      companyId: item.companyId,
+      dispatchId: item.dispatchId,
+      status,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return "retry";
+  }
+}
+var isFlushing2 = false;
+async function flushDispatchAutoClose(now = /* @__PURE__ */ new Date()) {
+  if (isFlushing2) return { closed: 0, dropped: 0, remaining: 0 };
+  isFlushing2 = true;
+  let closed = 0;
+  let dropped = 0;
+  try {
+    const queue2 = await listQueue();
+    const keep = [];
+    for (const item of queue2) {
+      const age = now.getTime() - new Date(item.createdAt).getTime();
+      if (age > MAX_AGE_MS || item.attempts >= MAX_ATTEMPTS) {
+        dropped += 1;
+        continue;
+      }
+      if (new Date(item.availableAt).getTime() > now.getTime()) {
+        keep.push(item);
+        continue;
+      }
+      const outcome = await postAutoClose(item);
+      if (outcome === "done") {
+        closed += 1;
+        logger_default.info("dispatch_autoclose.fired", {
+          companyId: item.companyId,
+          dispatchId: item.dispatchId
+        });
+      } else {
+        keep.push({ ...item, attempts: item.attempts + 1, lastError: "transient" });
+      }
+    }
+    await saveQueue(keep);
+    return { closed, dropped, remaining: keep.length };
+  } catch (error) {
+    logger_default.error("dispatch_autoclose.flush_failed", {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return { closed, dropped, remaining: -1 };
+  } finally {
+    isFlushing2 = false;
+  }
+}
+function startDispatchAutoCloseFlusher(intervalMs = DEFAULT_FLUSH_INTERVAL_MS2) {
+  const tick = () => {
+    flushDispatchAutoClose().catch((err) => {
+      logger_default.error("[dispatch-autoclose] flush tick failed", err);
+    });
+  };
+  const handle = setInterval(tick, intervalMs);
+  if (typeof handle.unref === "function") handle.unref();
+  logger_default.info(`[dispatch-autoclose] flusher started (interval=${intervalMs}ms)`);
+  return () => {
+    clearInterval(handle);
+    logger_default.info("[dispatch-autoclose] flusher stopped");
+  };
+}
+
+// src/services/driver-arrival-reminder.service.ts
+init_whatsapp_direct_service();
+var itemKind = (item) => item.kind ?? "arrival-reminder";
+var STORE_KEY3 = "queue";
+var MAX_ATTEMPTS2 = 3;
+var MAX_AGE_MS2 = 12 * 60 * 60 * 1e3;
+var DEFAULT_FLUSH_INTERVAL_MS3 = 60 * 1e3;
+var store2 = new json_store_default({
+  baseDir: path29.join(config.whatsapp.sessionDir, "../driver-reminders"),
+  autoBackup: true
+});
+async function listQueue2() {
+  const data = await store2.get(STORE_KEY3);
+  return Array.isArray(data) ? data : [];
+}
+async function saveQueue2(items) {
+  await store2.set(STORE_KEY3, items);
+}
 async function fetchDispatchTracking(companyId, dispatchId) {
   try {
     const base = String(config.portal.baseUrl).replace(/\/+$/, "");
-    const response = await axios6.get(`${base}/api/dispatch-tracking`, {
+    const response = await axios7.get(`${base}/api/dispatch-tracking`, {
       params: { dispatchId },
       // Bearer de callback: sin él, Portal (hardening F0) responde 401.
       headers: buildPortalCallbackHeaders(companyId, "lila-driver-arrival"),
@@ -90277,12 +90419,12 @@ async function fetchDispatchTracking(companyId, dispatchId) {
 }
 async function enqueueDriverMessage(params) {
   const availableAt = new Date(Date.now() + Math.max(0, params.delayMs)).toISOString();
-  const queue2 = await listQueue();
+  const queue2 = await listQueue2();
   if (queue2.some((item) => item.dispatchId === params.dispatchId && itemKind(item) === params.kind)) {
     return false;
   }
   queue2.push({
-    id: randomUUID6(),
+    id: randomUUID7(),
     companyId: params.companyId,
     dispatchId: params.dispatchId,
     sender: params.sender,
@@ -90293,7 +90435,7 @@ async function enqueueDriverMessage(params) {
     createdAt: (/* @__PURE__ */ new Date()).toISOString(),
     attempts: 0
   });
-  await saveQueue(queue2);
+  await saveQueue2(queue2);
   logger_default.info("driver_reminder.scheduled", {
     companyId: params.companyId,
     dispatchId: params.dispatchId,
@@ -90324,6 +90466,11 @@ async function scheduleDriverFollowups(params) {
       kind: "arrival-reminder",
       delayMs: computeArrivalReminderDelayMs(eta)
     });
+    await scheduleDispatchAutoClose({
+      companyId: params.companyId,
+      dispatchId: params.dispatchId,
+      etaSeconds: eta
+    });
   } catch (error) {
     logger_default.error("driver_followups.schedule_failed", {
       dispatchId: params.dispatchId,
@@ -90331,18 +90478,18 @@ async function scheduleDriverFollowups(params) {
     });
   }
 }
-var isFlushing2 = false;
+var isFlushing3 = false;
 async function flushDriverReminders(now = /* @__PURE__ */ new Date()) {
-  if (isFlushing2) return { sent: 0, dropped: 0, remaining: 0 };
-  isFlushing2 = true;
+  if (isFlushing3) return { sent: 0, dropped: 0, remaining: 0 };
+  isFlushing3 = true;
   let sent = 0;
   let dropped = 0;
   try {
-    const queue2 = await listQueue();
+    const queue2 = await listQueue2();
     const keep = [];
     for (const item of queue2) {
       const age = now.getTime() - new Date(item.createdAt).getTime();
-      if (age > MAX_AGE_MS || item.attempts >= MAX_ATTEMPTS) {
+      if (age > MAX_AGE_MS2 || item.attempts >= MAX_ATTEMPTS2) {
         dropped += 1;
         continue;
       }
@@ -90377,7 +90524,7 @@ async function flushDriverReminders(now = /* @__PURE__ */ new Date()) {
         });
       }
     }
-    await saveQueue(keep);
+    await saveQueue2(keep);
     return { sent, dropped, remaining: keep.length };
   } catch (error) {
     logger_default.error("driver_reminder.flush_failed", {
@@ -90385,10 +90532,10 @@ async function flushDriverReminders(now = /* @__PURE__ */ new Date()) {
     });
     return { sent, dropped, remaining: -1 };
   } finally {
-    isFlushing2 = false;
+    isFlushing3 = false;
   }
 }
-function startDriverReminderFlusher(intervalMs = DEFAULT_FLUSH_INTERVAL_MS2) {
+function startDriverReminderFlusher(intervalMs = DEFAULT_FLUSH_INTERVAL_MS3) {
   const tick = () => {
     flushDriverReminders().catch((err) => {
       logger_default.error("[driver-reminder] flush tick failed", err);
@@ -90676,7 +90823,7 @@ async function registerValeMedia(params) {
     "x-company-id": companyId
   };
   try {
-    const response = await axios7.post(
+    const response = await axios8.post(
       `${config.portal.baseUrl}/api/internal/dispatches/vale-media`,
       payload,
       {
@@ -90695,7 +90842,7 @@ async function registerValeMedia(params) {
       orderId,
       endpoint: `${config.portal.baseUrl}/api/internal/dispatches/vale-media`
     });
-    const fallbackResponse = await axios7.post(
+    const fallbackResponse = await axios8.post(
       `${config.portal.baseUrl}/api/drive/register`,
       payload,
       {
@@ -91203,12 +91350,12 @@ async function generateValeAndNotify(req, res, next) {
 // src/services/dispatch-post-process.service.ts
 init_environment();
 init_models();
-import axios9 from "axios";
+import axios10 from "axios";
 init_logger();
 
 // src/services/dispatch-notifications.service.ts
 var import_sharp6 = __toESM(require_lib(), 1);
-import axios8 from "axios";
+import axios9 from "axios";
 init_environment();
 init_models();
 
@@ -91701,7 +91848,7 @@ function scheduleIppReadyNotification(params) {
 }
 async function generateIppPdfUrl(reportPayload) {
   if (!reportPayload) return "";
-  const response = await axios8.post(
+  const response = await axios9.post(
     `http://127.0.0.1:${config.port}/api/documents/generate`,
     {
       format: "pdf",
@@ -91965,7 +92112,7 @@ async function updateMaintenanceM3Config(companyId, quantity) {
   );
 }
 async function callPortalIppSync(dispatchId, companyId) {
-  await axios9.post(
+  await axios10.post(
     `${String(config.portal.baseUrl).replace(/\/+$/, "")}/api/dispatch/${dispatchId}`,
     {},
     {
@@ -92142,16 +92289,65 @@ var dispatch_routes_default = router7;
 import { Router as Router8 } from "express";
 import multer3 from "multer";
 import fs30 from "fs-extra";
-import path30 from "path";
+import path31 from "path";
 
 // src/api/controllers/public.controller.ts
 var import_jsonwebtoken7 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 init_models();
-import axios10 from "axios";
-import { randomUUID as randomUUID7 } from "crypto";
+import axios11 from "axios";
+import { randomUUID as randomUUID8 } from "crypto";
 import fs29 from "fs-extra";
-import path29 from "path";
+import path30 from "path";
+
+// src/models/public-reception-idempotency.model.ts
+init_sharedConnection();
+import { Schema as Schema10 } from "mongoose";
+var publicReceptionIdempotencySchema = new Schema10(
+  {
+    companyId: { type: String, required: true },
+    clientMutationId: { type: String, required: true },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      expires: 60 * 60 * 24 * 30
+    }
+  },
+  {
+    collection: "public_reception_idempotency"
+  }
+);
+publicReceptionIdempotencySchema.index(
+  { companyId: 1, clientMutationId: 1 },
+  { unique: true }
+);
+var publicReceptionIdempotencyModel = null;
+async function getPublicReceptionIdempotencyModel() {
+  if (publicReceptionIdempotencyModel) {
+    return publicReceptionIdempotencyModel;
+  }
+  const conn = await getSharedConnection();
+  publicReceptionIdempotencyModel = conn.models.PublicReceptionIdempotency || conn.model(
+    "PublicReceptionIdempotency",
+    publicReceptionIdempotencySchema
+  );
+  return publicReceptionIdempotencyModel;
+}
+function isDuplicateKeyError2(error) {
+  return typeof error === "object" && error !== null && error.code === 11e3;
+}
+async function claimPublicReceptionIdempotency(companyId, clientMutationId) {
+  const model = await getPublicReceptionIdempotencyModel();
+  try {
+    await model.create({ companyId, clientMutationId });
+    return true;
+  } catch (error) {
+    if (isDuplicateKeyError2(error)) return false;
+    throw error;
+  }
+}
+
+// src/api/controllers/public.controller.ts
 init_storage_path_service();
 init_telegram_alert_service();
 var CACHE_TTL_MS = 5 * 60 * 1e3;
@@ -92199,7 +92395,7 @@ var buildPortalHeaders = (companyId) => ({
   "Content-Type": "application/json",
   "x-company-id": companyId
 });
-var buildPortalUrl = (path35) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path35}`;
+var buildPortalUrl = (path36) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path36}`;
 var buildRequestPublicBaseUrl = (req) => {
   const forwardedProto = trimValue(req.headers["x-forwarded-proto"]).split(",")[0];
   const forwardedHost = trimValue(req.headers["x-forwarded-host"]).split(",")[0];
@@ -92313,7 +92509,7 @@ var cleanupUploadedFiles = async (files) => {
   await Promise.allSettled(files.map((file) => fs29.remove(file.path)));
 };
 var fetchPortalInputList = async (companyId, level) => {
-  const response = await axios10.get(buildPortalUrl("/api/input"), {
+  const response = await axios11.get(buildPortalUrl("/api/input"), {
     headers: buildPortalHeaders(companyId),
     params: {
       status: "Pending",
@@ -92324,7 +92520,7 @@ var fetchPortalInputList = async (companyId, level) => {
   return Array.isArray(response.data) ? response.data : [];
 };
 var fetchPortalMeasureList = async (companyId, typeId) => {
-  const response = await axios10.get(buildPortalUrl("/api/measure"), {
+  const response = await axios11.get(buildPortalUrl("/api/measure"), {
     headers: buildPortalHeaders(companyId),
     params: {
       status: "Pending",
@@ -92335,7 +92531,7 @@ var fetchPortalMeasureList = async (companyId, typeId) => {
   return Array.isArray(response.data) ? response.data : [];
 };
 var fetchPortalMediaCount = async (companyId, resourceId) => {
-  const response = await axios10.get(buildPortalUrl("/api/media"), {
+  const response = await axios11.get(buildPortalUrl("/api/media"), {
     headers: buildPortalHeaders(companyId),
     params: {
       resourceId
@@ -92346,14 +92542,14 @@ var fetchPortalMediaCount = async (companyId, resourceId) => {
   return Array.isArray(payload?.data) ? payload.data.length : 0;
 };
 var createPortalInput = async (companyId, payload) => {
-  const response = await axios10.post(buildPortalUrl("/api/input"), payload, {
+  const response = await axios11.post(buildPortalUrl("/api/input"), payload, {
     headers: buildPortalHeaders(companyId),
     timeout: PORTAL_TIMEOUT_MS
   });
   return response.data;
 };
 var updatePortalInput = async (companyId, inputId, payload) => {
-  const response = await axios10.put(
+  const response = await axios11.put(
     buildPortalUrl(`/api/input/${inputId}`),
     payload,
     {
@@ -92364,14 +92560,14 @@ var updatePortalInput = async (companyId, inputId, payload) => {
   return response.data;
 };
 var createPortalMeasure = async (companyId, payload) => {
-  const response = await axios10.post(buildPortalUrl("/api/measure"), payload, {
+  const response = await axios11.post(buildPortalUrl("/api/measure"), payload, {
     headers: buildPortalHeaders(companyId),
     timeout: PORTAL_TIMEOUT_MS
   });
   return response.data;
 };
 var updatePortalMeasure = async (companyId, measureId, payload) => {
-  const response = await axios10.put(
+  const response = await axios11.put(
     buildPortalUrl(`/api/measure/${measureId}`),
     payload,
     {
@@ -92382,14 +92578,14 @@ var updatePortalMeasure = async (companyId, measureId, payload) => {
   return response.data;
 };
 var createPortalMedia = async (companyId, payload) => {
-  const response = await axios10.post(buildPortalUrl("/api/media"), payload, {
+  const response = await axios11.post(buildPortalUrl("/api/media"), payload, {
     headers: buildPortalHeaders(companyId),
     timeout: PORTAL_TIMEOUT_MS
   });
   return response.data;
 };
 var createPortalFinancialMovement = async (companyId, payload) => {
-  const response = await axios10.post(
+  const response = await axios11.post(
     buildPortalUrl("/api/financial-movements"),
     payload,
     {
@@ -92400,7 +92596,7 @@ var createPortalFinancialMovement = async (companyId, payload) => {
   return response.data;
 };
 var updatePortalFinancialMovement = async (companyId, movementId, payload) => {
-  await axios10.put(
+  await axios11.put(
     buildPortalUrl(`/api/financial-movements/${movementId}`),
     payload,
     {
@@ -92411,7 +92607,7 @@ var updatePortalFinancialMovement = async (companyId, movementId, payload) => {
 };
 var notifyPortalWhatsApp = async (companyId, phone, message) => {
   try {
-    await axios10.post(
+    await axios11.post(
       buildPortalUrl("/api/notifications/whatsapp"),
       {
         type: "SendText",
@@ -92451,7 +92647,7 @@ var storeFileInLilaDrive = async (companyId, lilaPublicBaseUrl, resourceId, file
   const targetDir = storagePathService.resolvePath(companyId, relativeDir);
   await storagePathService.ensureDir(targetDir, companyId);
   const storageFileName = buildUniqueStorageFileName(file.originalName, file.path);
-  const targetPath = path29.join(targetDir, storageFileName);
+  const targetPath = path30.join(targetDir, storageFileName);
   if (!storagePathService.validateAccess(targetPath, companyId)) {
     throw new Error("Ruta de almacenamiento invalida");
   }
@@ -92806,7 +93002,7 @@ var rollbackPortalFinancialMovement = async (params) => {
 var runPublicCashFlowWorkflow = async (input) => {
   let movementId;
   try {
-    const sourceId = `public-cash-flow-${randomUUID7()}`;
+    const sourceId = `public-cash-flow-${randomUUID8()}`;
     const movement = await createPortalFinancialMovement(input.companyId, {
       sourceModule: "manual",
       sourceId,
@@ -92939,6 +93135,18 @@ async function submitPublicReception(req, res) {
   const files = parseReceptionFiles(req);
   try {
     const input = parseReceptionInput(req);
+    const clientMutationId = trimValue(req.body?.clientMutationId);
+    const companyId = trimValue(req.companyId);
+    if (clientMutationId && companyId) {
+      const claimed = await claimPublicReceptionIdempotency(companyId, clientMutationId);
+      if (!claimed) {
+        await cleanupUploadedFiles(files);
+        return res.status(202).json({
+          success: true,
+          data: { accepted: true, kind: input.kind, duplicate: true }
+        });
+      }
+    }
     const accepted = enqueuePublicReceptionWorkflow(input);
     return res.status(202).json({
       success: true,
@@ -93015,7 +93223,7 @@ async function submitPublicFinancialMovement(req, res) {
 // src/api/routes/public.routes.ts
 init_environment();
 var router8 = Router8();
-var receptionUploadsDir = path30.join(config.storage.root, "temp", "public-receptions");
+var receptionUploadsDir = path31.join(config.storage.root, "temp", "public-receptions");
 fs30.ensureDirSync(receptionUploadsDir);
 var sanitizeFileName = (value) => value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "upload";
 var upload3 = multer3({
@@ -93576,9 +93784,9 @@ init_logger();
 // src/services/service-migration.helpers.ts
 init_storage_path_service();
 import fs31 from "fs-extra";
-import path31 from "node:path";
+import path32 from "node:path";
 import {
-  Schema as Schema10,
+  Schema as Schema11,
   Types as Types2
 } from "mongoose";
 var SERVICE_MIGRATION_WARNING = "El servicio destino tiene otro cliente. Verifica contratos y visibilidad.";
@@ -93586,7 +93794,7 @@ var DRIVE_BLOCKER = "El servicio tiene v\xEDnculos al drive global. La migraci\x
 var ORDER_LINKED_FILES_BLOCKER = "El servicio usa archivos ligados a pedidos, despacho o laboratorio. La migraci\xF3n entre empresas a\xFAn no remapea ese alcance.";
 var ORDER_SUBTREE_BLOCKER = "El servicio tiene pedidos con despachos, medias, certificados, kardex, consumos o links propios. La migraci\xF3n entre empresas a\xFAn no remapea ese sub\xE1rbol completo.";
 var REPORT_WARNING = "Revisa el pairing de pedidos antes de migrar reportes y m\xE9tricas.";
-var looseSchema3 = new Schema10({}, { strict: false });
+var looseSchema3 = new Schema11({}, { strict: false });
 var asText = (value) => String(value ?? "").trim();
 var normalizePath = (value) => value.replace(/\\/g, "/").replace(/^\/+/, "");
 var toMongoIdentifier = (value) => Types2.ObjectId.isValid(value) ? new Types2.ObjectId(value) : value;
@@ -93890,7 +94098,7 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!sourceStats.isFile()) {
         throw new Error(`Origen no es un archivo regular: ${sourceRelative}`);
       }
-      const targetDirectory = path31.dirname(targetAbsolute);
+      const targetDirectory = path32.dirname(targetAbsolute);
       if (!targetDirectory || targetDirectory === ".") {
         throw new Error(`Directorio destino inv\xE1lido: ${targetRelative}`);
       }
@@ -94887,7 +95095,7 @@ var import_archiver = __toESM(require_archiver(), 1);
 init_models();
 init_storage_path_service();
 init_logger();
-import path32 from "path";
+import path33 from "path";
 import fs32 from "fs-extra";
 import { Types as Types3 } from "mongoose";
 var EXPORT_TTL_HOURS = 24;
@@ -94897,7 +95105,7 @@ var isValidObjectId = (value) => Types3.ObjectId.isValid(value);
 var sanitizeName3 = (name) => name.replace(/[\\/:"*?<>|]+/g, "_").trim();
 var buildZipPath = (companyId, orderId) => storagePathService.resolvePath(
   companyId,
-  path32.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`)
+  path33.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`)
 );
 var resolveMediaAbsolutePath = (mediaUrl, companyId) => {
   try {
@@ -94973,12 +95181,12 @@ async function requestOrderExport(orderId) {
         continue;
       }
       const folderPath = resolveFolderPath(media.folderId) || sanitizeName3(String(media.type ?? ""));
-      const baseName = sanitizeName3(String(media.name ?? path32.basename(absolutePath)));
+      const baseName = sanitizeName3(String(media.name ?? path33.basename(absolutePath)));
       let entryName = folderPath ? `${folderPath}/${baseName}` : baseName;
       let dedupe = 1;
       while (usedNames.has(entryName)) {
-        const ext = path32.extname(baseName);
-        const stem = path32.basename(baseName, ext);
+        const ext = path33.extname(baseName);
+        const stem = path33.basename(baseName, ext);
         const candidate = `${stem} (${dedupe})${ext}`;
         entryName = folderPath ? `${folderPath}/${candidate}` : candidate;
         dedupe += 1;
@@ -94997,7 +95205,7 @@ async function requestOrderExport(orderId) {
       return { ok: false, code: "empty" };
     }
     const zipPath = buildZipPath(companyId, orderId);
-    await fs32.ensureDir(path32.dirname(zipPath));
+    await fs32.ensureDir(path33.dirname(zipPath));
     await fs32.remove(zipPath);
     const output = fs32.createWriteStream(zipPath);
     const archive = (0, import_archiver.default)("zip", { zlib: { level: 6 } });
@@ -95019,7 +95227,7 @@ async function requestOrderExport(orderId) {
       id: jobId,
       status: "done",
       progress: 100,
-      filePath: path32.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`),
+      filePath: path33.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`),
       fileName: `${obra || "pedido"}-${orderId.slice(-6)}.zip`,
       sizeBytes: stat.size,
       finishedAt: nowIso(),
@@ -95132,13 +95340,13 @@ import { Router as Router13 } from "express";
 // src/services/academy-transcode.service.ts
 init_logger();
 import fs33 from "fs-extra";
-import path33 from "path";
+import path34 from "path";
 init_models();
 init_storage_path_service();
 var ACADEMY_COMPANY_ID = "academy";
 var RENDITION_TIMEOUT_MS = 10 * 60 * 1e3;
 var POSTER_TIMEOUT_MS = 60 * 1e3;
-var MAX_ATTEMPTS2 = 3;
+var MAX_ATTEMPTS3 = 3;
 var transcodeLimiter = createLimiter(1);
 var relativePathFromUrl = (url) => {
   const marker = `/files/companies/${ACADEMY_COMPANY_ID}/`;
@@ -95255,7 +95463,7 @@ async function transcodeAcademyTutorial(tutorialId) {
     return;
   }
   const attempts = Number(doc.processing?.attempts ?? 0);
-  if (attempts >= MAX_ATTEMPTS2) {
+  if (attempts >= MAX_ATTEMPTS3) {
     logger_default.warn("[academy] max intentos de transcode alcanzado", { tutorialId, attempts });
     return;
   }
@@ -95268,10 +95476,10 @@ async function transcodeAcademyTutorial(tutorialId) {
     await markError(tutorialId, "source-file-missing");
     return;
   }
-  const dirRel = path33.dirname(sourceRel);
-  const hdRel = path33.posix.join(dirRel, "hd.mp4");
-  const sdRel = path33.posix.join(dirRel, "sd.mp4");
-  const posterRel = path33.posix.join(dirRel, "poster.jpg");
+  const dirRel = path34.dirname(sourceRel);
+  const hdRel = path34.posix.join(dirRel, "hd.mp4");
+  const sdRel = path34.posix.join(dirRel, "sd.mp4");
+  const posterRel = path34.posix.join(dirRel, "poster.jpg");
   const hdAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, hdRel);
   const sdAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, sdRel);
   const posterAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, posterRel);
@@ -95325,7 +95533,7 @@ function startAcademyTranscodeWatchdog() {
       for (const doc of stuck) {
         const tutorialId = String(doc._id);
         const attempts = Number(doc.processing?.attempts ?? 0);
-        if (attempts >= MAX_ATTEMPTS2) {
+        if (attempts >= MAX_ATTEMPTS3) {
           await markError(tutorialId, "transcode-watchdog-max-retries");
           continue;
         }
@@ -97284,7 +97492,7 @@ init_instance_lease();
 init_telegram_alert_service();
 import cron2 from "node-cron";
 import fs34 from "fs-extra";
-import path34 from "path";
+import path35 from "path";
 var app = express();
 app.set("trust proxy", config.security.trustProxy);
 app.use(scannerGuard);
@@ -97341,7 +97549,7 @@ var shouldDisableStaticCaching = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path34.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
+    const normalized = path35.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
     return normalized.includes("/vale/");
   } catch {
     return false;
@@ -97350,7 +97558,7 @@ var shouldDisableStaticCaching = (requestPath) => {
 var isAcademyTutorialPath = (requestPath) => {
   if (!requestPath) return false;
   try {
-    const normalized = path34.posix.normalize(decodeURIComponent(requestPath).toLowerCase()).replace(/^\/+/, "/");
+    const normalized = path35.posix.normalize(decodeURIComponent(requestPath).toLowerCase()).replace(/^\/+/, "/");
     return normalized.includes("/academy/tutorials/");
   } catch {
     return false;
@@ -97372,7 +97580,7 @@ var isSafeThumbRequestPath = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path34.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
+    const normalized = path35.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
     return normalized.includes("/.thumbs/");
   } catch {
     return false;
@@ -97576,7 +97784,7 @@ async function startServer() {
         const now = Date.now();
         const maxAgeMs = pdfTempMaxAgeHours * 60 * 60 * 1e3;
         const removals = entries.map(async (entry) => {
-          const fullPath = path34.join(config.pdf.tempDir, entry);
+          const fullPath = path35.join(config.pdf.tempDir, entry);
           const stat = await fs34.stat(fullPath);
           if (!stat.isFile()) return;
           if (now - stat.mtimeMs > maxAgeMs) {
@@ -97620,6 +97828,7 @@ async function startServer() {
     });
     const stopTelegramQueueFlusher = startTelegramQueueFlusher();
     const stopDriverReminderFlusher = startDriverReminderFlusher();
+    const stopDispatchAutoCloseFlusher = startDispatchAutoCloseFlusher();
     const UPLOAD_TIMEOUT_MS = 10 * 60 * 1e3;
     server.timeout = UPLOAD_TIMEOUT_MS;
     server.keepAliveTimeout = UPLOAD_TIMEOUT_MS + 2e4;
@@ -97634,6 +97843,7 @@ async function startServer() {
 \u{1F4F4} Received ${signal}, shutting down gracefully...`);
       stopTelegramQueueFlusher();
       stopDriverReminderFlusher();
+      stopDispatchAutoCloseFlusher();
       server.close(async () => {
         logger_default.info("HTTP server closed");
         try {
