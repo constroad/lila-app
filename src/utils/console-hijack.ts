@@ -8,8 +8,15 @@
  * (SessionEntry objects containing private keys, chain keys, etc.)
  */
 
+// Referencias originales de CADA método. `console.info`/`warn`/`debug` NO son alias
+// vivos de `console.log`: Node les asigna la misma función, pero son propiedades
+// independientes. Reasignar solo `console.log` deja `console.info` apuntando al
+// original → todo lo que se loggee por ahí se salta el filtro (ver más abajo).
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
+const originalConsoleInfo = console.info;
+const originalConsoleWarn = console.warn;
+const originalConsoleDebug = console.debug;
 
 // Patterns to detect and silence Signal Protocol decrypt errors
 const signalDecryptErrorPatterns = [
@@ -148,15 +155,9 @@ function hasSignalSessionObject(args: any[]): boolean {
   });
 }
 
-/**
- * Hijack console.log to prevent SessionEntry logging
- */
-console.log = (...args: any[]) => {
-  const { sanitized, mutated } = sanitizeConsoleArgs(args);
-  const message = sanitized.join(' ');
-
-  // Filter out noisy Signal Protocol messages that pollute logs
-  if (
+/** True si el mensaje/args son material Signal que nunca debe llegar al log. */
+export function isSignalNoise(args: any[], message: string): boolean {
+  return (
     hasSignalSessionObject(args) ||
     message.includes('Closing open session in favor of') ||
     message.includes('Closing session: SessionEntry') ||
@@ -166,14 +167,32 @@ console.log = (...args: any[]) => {
     message.includes('indexInfo:') ||
     message.includes('pendingPreKey:') ||
     signalDecryptErrorPatterns.some((pattern) => message.includes(pattern))
-  ) {
-    // Silently drop these messages
-    return;
-  }
+  );
+}
 
-  // Log sanitized or original args
-  originalConsoleLog.apply(console, mutated ? sanitized : args);
-};
+/**
+ * Envuelve un método de consola con el filtro de material Signal.
+ *
+ * Se aplica a TODOS los métodos que escriben a stdout, no solo a `console.log`:
+ * libsignal loggea con `console.info("Closing session:", session)`
+ * (node_modules/libsignal/src/session_record.js), y como `console.info` es una
+ * propiedad independiente, hijackear solo `console.log` lo dejaba pasar — 1396
+ * volcados de SessionEntry con `privKey`/`rootKey`/`chainKey` en claro llegaron al
+ * log de producción entre may-2026 y jul-2026 por esta vía.
+ */
+function withSignalFilter(original: (...args: any[]) => void) {
+  return (...args: any[]) => {
+    const { sanitized, mutated } = sanitizeConsoleArgs(args);
+    const message = sanitized.join(' ');
+    if (isSignalNoise(args, message)) return; // Silently drop
+    original.apply(console, mutated ? sanitized : args);
+  };
+}
+
+console.log = withSignalFilter(originalConsoleLog);
+console.info = withSignalFilter(originalConsoleInfo);
+console.warn = withSignalFilter(originalConsoleWarn);
+console.debug = withSignalFilter(originalConsoleDebug);
 
 /**
  * Hijack console.error to handle Signal decrypt errors and prevent SessionEntry logging
