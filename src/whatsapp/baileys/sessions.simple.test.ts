@@ -135,6 +135,14 @@ jest.unstable_mockModule('../../utils/logger.js', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
+// La alerta de aparcado es OBSERVABLE: su contenido es el producto del diagnóstico
+// (¿re-emparejar o no?), así que los tests de abajo asertan sobre el mensaje.
+const sendTelegramAlert = jest.fn(async (_p: { dedupeKey?: string; message: string }) => true);
+jest.unstable_mockModule('../../services/telegram-alert.service.js', () => ({
+  __esModule: true,
+  sendTelegramAlert,
+}));
+
 // Lease process-level: estos tests asumen que el proceso es el holder.
 jest.unstable_mockModule('./instance-lease.js', () => ({
   __esModule: true,
@@ -157,6 +165,7 @@ beforeEach(async () => {
   saveCredsMongo.mockClear();
   clearMongoAuthState.mockClear();
   clearStoreSnapshot.mockClear();
+  sendTelegramAlert.mockClear();
   subject = await import('./sessions.simple.js');
 });
 
@@ -335,6 +344,86 @@ describe('parking tras stalls repetidos (corta el loop infinito de reconexión)'
 
     expect(subject.isSessionParked(PARKED_ID)).toBe(false);
     expect(subject.isSessionReady(PARKED_ID)).toBe(true);
+  });
+});
+
+// Incidente 2026-07-28: las 3 sesiones aparcaron a la vez con 405/408 tras un corte de
+// red y la alerta dijo "credenciales desincronizadas → re-emparejar". Re-emparejar de más
+// quema un device slot y sube el device ID, así que el diagnóstico tiene que salir de la
+// CAUSA de los stalls, no del conteo.
+describe('diagnóstico de la alerta de aparcado (causa, no conteo)', () => {
+  const ID_A = '51903124919';
+  const ID_B = '51949376824';
+
+  const parkedAlert = () =>
+    sendTelegramAlert.mock.calls.map(([p]) => p).filter((p) => p.message.includes('APARCADA'));
+
+  // Aparca acumulando cierres CON código (no timeouts del watchdog). Se cierra el socket
+  // apenas nace, antes de que su watchdog corra: si no, el stall se contaría como
+  // 'connection-watchdog-timeout' (causa ambigua) y contaminaría el diagnóstico.
+  const parkWithCode = async (id: string, code: number) => {
+    for (let i = 0; i < 40 && !subject.isSessionParked(id); i += 1) {
+      await fireClose(code);
+      const before = makeWASocket.mock.calls.length;
+      for (let t = 0; t < 100 && makeWASocket.mock.calls.length === before; t += 1) {
+        await jest.advanceTimersByTimeAsync(10_000);
+      }
+    }
+  };
+
+  it('405 repetido (throttle de login) ⇒ alerta de causa externa, NO pide re-emparejar', async () => {
+    await subject.startSession(ID_A);
+    await parkWithCode(ID_A, 405);
+
+    expect(subject.isSessionParked(ID_A)).toBe(true);
+    const alerts = parkedAlert();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].message).toContain('NO re-emparejes');
+    expect(alerts[0].message).toContain('405');
+    // La regresión concreta: nunca debe mandar a escanear el QR por un throttle.
+    expect(alerts[0].message).not.toContain('escanear QR');
+    expect(alerts[0].message).not.toContain('credenciales estén desincronizadas');
+  });
+
+  it('timeouts sin código (handshake colgado) ⇒ conserva el diagnóstico de credenciales', async () => {
+    await subject.startSession(ID_A);
+    // Camino del watchdog: el socket nunca responde y no hay código de cierre.
+    for (let i = 0; i < 40 && !subject.isSessionParked(ID_A); i += 1) {
+      await jest.advanceTimersByTimeAsync(95_000);
+      await jest.advanceTimersByTimeAsync(900_000);
+    }
+
+    expect(subject.isSessionParked(ID_A)).toBe(true);
+    const alerts = parkedAlert();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].message).toContain('escanear QR');
+    expect(alerts[0].message).toContain('desincronizadas');
+  });
+
+  it('≥2 sesiones aparcadas en la ventana ⇒ UNA alerta de causa común, no una por sesión', async () => {
+    await subject.startSession(ID_A);
+    await subject.startSession(ID_B);
+    // Ambas stallean en paralelo (mismo corte), igual que en el incidente real.
+    for (
+      let i = 0;
+      i < 40 && !(subject.isSessionParked(ID_A) && subject.isSessionParked(ID_B));
+      i += 1
+    ) {
+      await jest.advanceTimersByTimeAsync(95_000);
+      await jest.advanceTimersByTimeAsync(900_000);
+    }
+
+    expect(subject.isSessionParked(ID_A)).toBe(true);
+    expect(subject.isSessionParked(ID_B)).toBe(true);
+
+    const multi = sendTelegramAlert.mock.calls
+      .map(([p]) => p)
+      .filter((p) => p.dedupeKey === 'session-parked-multi');
+    expect(multi).toHaveLength(1);
+    expect(multi[0].message).toContain(ID_A);
+    expect(multi[0].message).toContain(ID_B);
+    expect(multi[0].message).toContain('NO re-emparejes');
+    expect(multi[0].message).toContain('causa es COMÚN');
   });
 });
 
