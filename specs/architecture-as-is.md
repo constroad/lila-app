@@ -69,6 +69,28 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   anti-flush concurrente, y media del flush con `queueOnFail:false` (sin duplicados).
   (g) Timeout defensivo 120s en los 4 `sock.sendMessage` (cae al queueOnFail) y
   rate limiter sin bypass accidental cuando falta `API_SECRET_KEY`.
+- **Diagnóstico del aparcado por CAUSA, no por conteo (2026-07-28):** `parkSession`
+  (`sessions.simple.ts`) dejó de asumir "credenciales desincronizadas" cada vez que una
+  sesión agota `MAX_CONNECTING_STALLS` (12). Ahora cada stall guarda su causa
+  (`StallCause = {code, message}`): los cierres del watchdog no traen código (handshake
+  colgado en Noise, la señal que SÍ sugiere creds rotas), mientras que `connection.close`
+  aporta el código real de WhatsApp. Si al menos la mitad de las causas son transitorias
+  (`405/408/428/500/503/515` o errores de red `ENOTFOUND`/`EAI_AGAIN`/`ECONNRESET`…), la
+  alerta dice **"NO re-emparejes: verificá red/DNS y reiniciá"**; el diagnóstico de
+  credenciales queda solo para el patrón de timeouts sin código. El umbral es "al menos la
+  mitad" y no mayoría estricta porque el costo es asimétrico: re-emparejar de más quema un
+  device slot y sube el device ID (el síntoma de pairing corrupto que se quería evitar),
+  esperar de más solo demora. Además, si **≥2 sesiones aparcan dentro de 20 min** se emite
+  UNA sola alerta de causa común (`dedupeKey: 'session-parked-multi'`, con las causas
+  agregadas de todas): las credenciales de cuentas independientes no se rompen a la vez, así
+  que varias caídas simultáneas son por definición red/IP/throttle. Origen: incidente
+  2026-07-28 — las 3 sesiones (51903124919, 51949376824, 51902049935) aparcaron entre 18:26
+  y 18:40 con `405 — Connection Failure` (+ `getaddrinfo ENOTFOUND web.whatsapp.com`) tras
+  inestabilidad de red, y salieron 3 alertas pidiendo re-emparejar. Cero `440`
+  (connectionReplaced) y cero `401` en la ventana: no hubo robo ni invalidación de creds.
+  El estado aparcado vive en memoria (`parkedSessions`), así que **un restart lo limpia sin
+  QR**. NOTA: `session.controller.simple.ts` sigue exponiendo `status:'needs_repair'` a
+  Portal para cualquier aparcado, sin distinguir la causa (ver deuda).
 - Listener IA de Anthropic existe (`src/whatsapp/ai-agent/*`) pero esta deshabilitado en produccion (early return en `message.listener.ts`, flag `WHATSAPP_AI_ENABLED`).
 - Una sesion por empresa, credenciales en `data/sessions/{companyPhone}` (volumen montado).
 - **Auth de rutas de sesion (`/api/sessions/*` state-changing):** middleware `requireTenantOrApiKey` (junio 2026) acepta JWT de tenant (Portal), API key `lk_fe_...` o, por compatibilidad, la API key global `x-api-key`. Antes exigian solo `x-api-key === API_SECRET_KEY`, lo que rompia el boton "Desconectar" de Portal (que firma JWT). Plan de deprecar el secreto global en `specs/SCALABILITY-MULTI-SESSION.spec.md` §4.4/§4.5.
@@ -353,9 +375,27 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 - **`requireAdmin` (2026-07):** confía en el `role` del JWT verificado. Portal dejó de
   reenviar `x-user-role` del cliente (era escalable). Ver auditoría integral en Portal:
   `Portal/specs/SECURITY-AUDIT-2026-07.spec.md`.
+- **Redacción de material Signal en consola — fuga cerrada (2026-07-28):**
+  `src/utils/console-hijack.ts` se importa PRIMERO en `src/index.ts` (antes que Baileys) y
+  descarta los volcados de `SessionEntry`. Hasta esta fecha solo envolvía `console.log` y
+  `console.error`, pero libsignal loggea con **`console.info`**
+  (`node_modules/libsignal/src/session_record.js:273`: `console.info("Closing session:", session)`).
+  `console.info` NO es un alias vivo de `console.log` — Node les asigna la misma función pero
+  son propiedades independientes, así que reasignar una no toca la otra. Resultado: **1396
+  volcados con `privKey`/`rootKey`/`chainKey` en claro** en `logs/lila-app.log` (el último
+  2026-07-28 19:37). El filtro se extrajo a `withSignalFilter` y se aplica ahora a
+  `log`/`info`/`warn`/`debug` (`error` conserva su manejo especial de errores de descifrado).
+  Cubierto por `src/utils/console-hijack.test.ts` (10 tests; 4 fallan contra el código previo).
+  **Alcance de la exposición:** `logs/` está en `.gitignore` y ningún log está trackeado; en la
+  historia de git solo hay ejemplos truncados en documentación (`<Buffer 05 ec 2c 8d ...>`), no
+  claves completas. La exposición se limita al disco local y a copias/backups de `logs/`.
+  **Regla:** al hijackear consola, envolver TODOS los métodos de escritura, nunca solo `log`.
 
 ## Observabilidad
 - Winston logs estructurados en `logs/`.
+- Console hijack global (`utils/console-hijack.ts`) sobre `log`/`info`/`warn`/`debug`/`error`:
+  descarta el ruido de libsignal y redacta material criptográfico antes de que llegue al log
+  (ver §Seguridad).
 - Request logger middleware.
 - Tailscale watchdog notifica Telegram en caidas de red.
 - Quota validator emite alertas a 80%, 95%, 100%.
@@ -380,9 +420,27 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 - Logs: `winston`.
 
 ## Tests
-- Jest configurado (`jest.config.cjs`).
-- Tests existentes: `telegram-queue`, `telegram-alert`, `service-migration.helpers`, `dispatch-post-process`, `dispatch-vale`, `dispatch-notifications`, `storage-file-name`, `thumbnail-request`, `whatsapp-media-source.util`.
-- Cobertura: parcial, foco en services criticos.
+- Jest en **dos `projects`** (`jest.config.cjs`), porque conviven dos estilos de test y
+  forzar un solo modo rompe una de las dos familias:
+  - **`esm`** (por defecto, 38 suites): todo lo que importe —aunque sea transitivamente— un
+    módulo con `import.meta` (p. ej. `config/environment.ts`) y todo lo que use
+    `jest.unstable_mockModule` (única forma de mockear módulos ESM). Requiere
+    `NODE_OPTIONS=--experimental-vm-modules`.
+  - **`cjs`** (11 suites): tests que dependen de los globals que Jest inyecta SOLO en CJS
+    (`jest`, `require`). En modo ESM fallan con "jest is not defined".
+  El reparto **se calcula leyendo los archivos** (no hay lista hardcodeada): va a `cjs` lo
+  que usa `jest.`/`require()` sin importar `@jest/globals`. Un test nuevo que importe
+  `@jest/globals` entra solo al proyecto ESM.
+- **Se corren como dos invocaciones separadas** (`npm test` = `test:esm && test:cjs`): con un
+  solo proceso, los workers se comparten entre proyectos y un módulo cargado como ESM en un
+  worker revienta al requerirse como CJS en otro ("Must use import to load ES Module"), lo que
+  producía fallos intermitentes.
+- Estado 2026-07-28: **397 tests pasando, 0 fallando**, 47/49 suites. Antes de arreglar la
+  config: 28 suites y 208 tests fallando (el repo es `type: module` pero Jest corría en CJS,
+  así que todo lo que tocaba `config/environment.ts` explotaba con "Cannot use 'import.meta'
+  outside a module").
+- Cobertura: parcial, foco en services criticos. Cubren explícitamente los invariantes de
+  `sessions.simple` (aparcado, backoff, ciclo QR, lease) y la redacción de `console-hijack`.
 
 ## Observaciones as-is / deuda
 - Listener IA permanece en repo pero deshabilitado (early return + flag).
@@ -391,6 +449,17 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 - Validacion API key legacy (`validateApiKey`) coexiste con JWT multi-tenant.
 - PDFs requieren Chromium para Puppeteer (verificar imagen Docker / runtime PM2).
 - Algunos tests dependen de fixtures locales sin mocking del Mongo Portal.
+- **2 suites siguen sin cargar** (`dispatch-vale.service.test.ts`,
+  `dispatch-post-process.service.test.ts`): mockean `config/environment` sin
+  `whatsapp.sessionDir` ni `logging.dir`, así que revientan al importar el módulo bajo prueba.
+  Ya estaban rotas antes del arreglo de la config de Jest; la causa no es ESM/CJS.
+- **`status:'needs_repair'` no distingue la causa del aparcado:**
+  `session.controller.simple.ts` lo devuelve para cualquier sesión aparcada, así que Portal
+  muestra "re-emparejar" incluso cuando el diagnóstico backend dice que fue throttle/red (ver
+  §WhatsApp, aparcado por causa). Arreglarlo cambia el contrato con Portal.
+- **`logs/lila-app.log` contiene claves de sesión en claro** de antes del fix de
+  `console-hijack` (1396 volcados). Conviene rotarlo/purgarlo, no solo dejar de escribir
+  nuevas.
 
 ## Cambios recientes (Mayo - Junio 2026)
 - **Julio 2026**: las alertas Telegram de progreso y fin de producción ya no
