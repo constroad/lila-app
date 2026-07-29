@@ -188,6 +188,48 @@ const parkedSessions = new Set<string>();
 // recuperarse solo, y corta el loop cuando ya no lo hará. Tunable por si acaso.
 const MAX_CONNECTING_STALLS = Number(process.env.WHATSAPP_MAX_CONNECTING_STALLS) || 12;
 
+/** Por qué murió un handshake: código de cierre de WhatsApp y/o error de red. */
+type StallCause = { code?: number; message?: string };
+
+// Causa de cada stall, para que parkSession DIAGNOSTIQUE en vez de asumir. El contador
+// solo, sin causa, no distingue un login throttleado de una credencial muerta.
+// Incidente 2026-07-28: las 3 sesiones aparcaron con 405/408 (+ ENOTFOUND a
+// web.whatsapp.com) tras un corte de red, y la alerta pidió re-emparejar — acción inútil
+// que además quema un device slot y sube el device ID (síntoma de pairing corrupto,
+// justo lo que se quería evitar).
+const stallCauses: Record<string, StallCause[]> = {};
+const MAX_TRACKED_STALL_CAUSES = MAX_CONNECTING_STALLS;
+
+// Cierres que señalan causa EXTERNA y transitoria — WhatsApp rechazando/throttleando el
+// LOGIN (405, 503, 515…) o la red local caída — y NO credenciales rotas. El 401
+// (loggedOut) y el 440 (replaced) nunca llegan aquí: se manejan antes en connection.close.
+const TRANSIENT_STALL_CODES = new Set([405, 408, 428, 500, 503, 515]);
+const TRANSIENT_ERROR_PATTERN =
+  /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|ENETDOWN|EHOSTUNREACH|EPIPE|socket hang up/i;
+
+export function isTransientStallCause(cause: StallCause): boolean {
+  if (cause.code !== undefined && TRANSIENT_STALL_CODES.has(cause.code)) return true;
+  return !!cause.message && TRANSIENT_ERROR_PATTERN.test(cause.message);
+}
+
+/** Resumen legible para la alerta: "405 ×7, 408 ×2, timeout sin código ×3". */
+function summarizeStallCauses(causes: StallCause[]): string {
+  const tally = new Map<string, number>();
+  for (const cause of causes) {
+    const label = cause.code !== undefined ? String(cause.code) : 'timeout sin código';
+    tally.set(label, (tally.get(label) ?? 0) + 1);
+  }
+  return [...tally.entries()].map(([label, n]) => `${label} ×${n}`).join(', ');
+}
+
+// Correlación de aparcados entre sesiones. Si ≥2 sesiones aparcan en la misma ventana, la
+// causa es común POR DEFINICIÓN (red/IP/throttle del servidor): las credenciales de cuentas
+// independientes no se rompen a la vez. En el incidente 2026-07-28 salieron 3 alertas de
+// "credenciales desincronizadas" para lo que era UN corte de red — hay que reportarlo como
+// un incidente único. La ventana cubre el espaciado real entre aparcados (18:26/18:39/18:40).
+const PARK_CORRELATION_WINDOW_MS = 20 * 60_000;
+const recentParks = new Map<string, number>();
+
 /**
  * CacheStore mínimo (Map, sin dependencia nueva) para `msgRetryCounterCache`.
  * Sin él, Baileys no dedupea los retry-receipts de mensajes que un peer no pudo
@@ -268,7 +310,9 @@ function scheduleReconnect(sessionId: string, qrCb?: (qr: string) => void) {
 
 /**
  * Aparca una sesión que no completa el handshake tras MAX_CONNECTING_STALLS intentos:
- * corta el loop de reconexión, la marca no-ready y alerta pidiendo re-emparejar. Los
+ * corta el loop de reconexión, la marca no-ready y alerta. La alerta DIAGNOSTICA por la
+ * causa de los stalls (throttle/red vs. credenciales) y correlaciona con otras sesiones
+ * aparcadas en la misma ventana, en vez de asumir siempre "re-emparejar". Los
  * mensajes entrantes siguen encolándose en el outbox y salen al reconectar. Se
  * "desaparca" con un restart/creación manual (restartSession, disconnect/clear o el
  * ciclo de emparejamiento) — nunca desde la reconexión automática, para que el contador suba.
@@ -278,19 +322,71 @@ function parkSession(sessionId: string) {
   readyClients.set(sessionId, false);
   clearReconnectTimer(sessionId);
   const stalls = connectingStalls[sessionId] ?? 0;
+
+  // 1) Diagnóstico por CAUSA, no por conteo: cierres con código transitorio (o error de
+  //    red) ⇒ throttle de login / red caída, NO credenciales. El umbral es "al menos la
+  //    mitad" y no "mayoría estricta" porque el costo es asimétrico: re-emparejar de más
+  //    quema un device slot y sube el device ID (daño real), mientras que esperar de más
+  //    solo demora. Ante el empate, conviene NO mandar a escanear el QR.
+  const causes = stallCauses[sessionId] ?? [];
+  const transientCount = causes.filter(isTransientStallCause).length;
+  const externalCause = causes.length > 0 && transientCount * 2 >= causes.length;
+  const causeSummary = causes.length > 0 ? summarizeStallCauses(causes) : 'sin causas registradas';
+
+  // 2) Correlación entre sesiones: ≥2 aparcadas en la ventana ⇒ causa común.
+  const now = Date.now();
+  for (const [id, at] of recentParks) {
+    if (now - at > PARK_CORRELATION_WINDOW_MS) recentParks.delete(id);
+  }
+  recentParks.set(sessionId, now);
+  const correlated = [...recentParks.keys()];
+  const isCommonCause = correlated.length >= 2;
+
   logger.error(
     `🅿️ [${sessionId}] Sesión APARCADA tras ${stalls} stalls de conexión ` +
-      `(el handshake nunca abrió con el backoff en el techo). Se detiene la reconexión ` +
-      `automática: requiere re-emparejar (QR) o un restart manual.`
+      `(causas: ${causeSummary}). Se detiene la reconexión automática. ` +
+      `Diagnóstico: ${externalCause || isCommonCause ? 'causa externa (throttle de login o red) — NO re-emparejar' : 'posible desincronización de credenciales — re-emparejar'}.`
   );
+
+  if (isCommonCause) {
+    // Causas agregadas de TODAS las sesiones del incidente (no solo la última en aparcar):
+    // es lo que permite ver de un vistazo que las 3 cayeron por el mismo 405/408.
+    const allCauses = correlated.flatMap((id) => stallCauses[id] ?? []);
+    const combinedSummary =
+      allCauses.length > 0 ? summarizeStallCauses(allCauses) : 'sin causas registradas';
+    // Una sola alerta para el incidente completo: dedupeKey compartida (no por sesión).
+    sendTelegramAlert({
+      dedupeKey: 'session-parked-multi',
+      message:
+        `🅿️ WhatsApp: ${correlated.length} sesiones APARCADAS en ${PARK_CORRELATION_WINDOW_MS / 60_000} min.\n` +
+        `Sesiones: ${correlated.join(', ')}\n` +
+        `Causas de cierre (todas): ${combinedSummary}\n\n` +
+        `Varias sesiones cayeron juntas ⇒ la causa es COMÚN (red local, o WhatsApp ` +
+        `throttleando el login desde esta IP). Las credenciales de cuentas independientes ` +
+        `no se desincronizan a la vez.\n\n` +
+        `Acción: NO re-emparejes. Verificá red/DNS y reiniciá el proceso cuando ceda el ` +
+        `throttle (el aparcado se limpia al reiniciar). Los mensajes pendientes están a ` +
+        `salvo en el outbox.`,
+    }).catch(() => {});
+    return;
+  }
+
   sendTelegramAlert({
     dedupeKey: `session-parked-${sessionId}`,
-    message:
-      `🅿️ WhatsApp sesión ${sessionId} APARCADA.\n` +
-      `El socket no completa el login tras ${stalls} intentos con backoff máximo — ya no ` +
-      `es throttle transitorio: lo más probable es que las credenciales estén ` +
-      `desincronizadas.\n\nAcción: re-emparejar la sesión (escanear QR) desde el Portal. ` +
-      `Los mensajes pendientes están a salvo en el outbox y saldrán al reconectar.`,
+    message: externalCause
+      ? `🅿️ WhatsApp sesión ${sessionId} APARCADA.\n` +
+        `El socket no completó el login tras ${stalls} intentos (causas: ${causeSummary}).\n\n` +
+        `Esos códigos son de causa EXTERNA — WhatsApp rechazando el login o la red caída — ` +
+        `no de credenciales rotas.\n\n` +
+        `Acción: NO re-emparejes. Verificá red/DNS y reiniciá el proceso cuando ceda el ` +
+        `throttle (el aparcado se limpia al reiniciar). Los mensajes pendientes están a ` +
+        `salvo en el outbox y saldrán al reconectar.`
+      : `🅿️ WhatsApp sesión ${sessionId} APARCADA.\n` +
+        `El socket no completa el login tras ${stalls} intentos con backoff máximo y sin ` +
+        `código de cierre (causas: ${causeSummary}) — el patrón típico de credenciales ` +
+        `desincronizadas.\n\n` +
+        `Acción: re-emparejar la sesión (escanear QR) desde el Portal. Los mensajes ` +
+        `pendientes están a salvo en el outbox y saldrán al reconectar.`,
   }).catch(() => {});
 }
 
@@ -302,7 +398,11 @@ export function isSessionParked(sessionId: string): boolean {
 /** Limpia el estado de stall/aparcado. Solo desde recuperaciones MANUALES. */
 function resetConnectingStalls(sessionId: string) {
   connectingStalls[sessionId] = 0;
+  delete stallCauses[sessionId];
   parkedSessions.delete(sessionId);
+  // Salir de la correlación: si esta sesión se recuperó, ya no cuenta como evidencia de
+  // un incidente común para las que aparquen después.
+  recentParks.delete(sessionId);
 }
 
 /**
@@ -529,9 +629,14 @@ async function initSession(
   // el backoff largo ni aparcar (si no, el QR muere en Portal y es imposible escanear).
   let sawQR = false;
   let stallCounted = false;
-  const registerConnectingStall = (): number => {
+  const registerConnectingStall = (cause: StallCause): number => {
     if (stallCounted) return connectingStalls[sessionId] ?? 0;
     stallCounted = true;
+    // La causa acompaña al contador: parkSession la necesita para no diagnosticar
+    // "credenciales desincronizadas" ante lo que es throttle de login o red caída.
+    const causes = (stallCauses[sessionId] ??= []);
+    causes.push(cause);
+    if (causes.length > MAX_TRACKED_STALL_CAUSES) causes.shift();
     return (connectingStalls[sessionId] = (connectingStalls[sessionId] ?? 0) + 1);
   };
   const startWatchdog = () => {
@@ -573,7 +678,9 @@ async function initSession(
         // (Baileys stuck-connecting). Contamos el stall y decidimos aquí: si ya son
         // demasiados seguidos aparcamos (cortamos el loop); si no, reconectamos. El guard
         // interno de scheduleReconnect evita duplicados si connection.close llega igual.
-        const stalls = registerConnectingStall();
+        // Watchdog: el socket nunca respondió — no hay código de cierre de WhatsApp.
+        // Es la causa AMBIGUA (handshake colgado en Noise), la que sí sugiere creds rotas.
+        const stalls = registerConnectingStall({ message: 'connection-watchdog-timeout' });
         if (stalls >= MAX_CONNECTING_STALLS) {
           parkSession(sessionId);
         } else {
@@ -736,7 +843,9 @@ async function initSession(
           return;
         }
         if (!everOpened) {
-          const stalls = registerConnectingStall();
+          // Aquí SÍ hay diagnóstico: WhatsApp mandó un código (405 throttle, 503 stream)
+          // o el socket murió con un error de red (ENOTFOUND…). parkSession lo usa.
+          const stalls = registerConnectingStall({ code, message: boom?.message });
           if (stalls >= MAX_CONNECTING_STALLS) {
             parkSession(sessionId);
             return;
