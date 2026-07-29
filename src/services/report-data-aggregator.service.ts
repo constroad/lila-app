@@ -62,6 +62,7 @@ function normalizeIds(ids: string[]): Array<string | mongoose.Types.ObjectId> {
 export interface AggregatedReportData {
   service: any;
   client: any;
+  company: any;
   orders: any[];
   dispatches: any[];
   certificates: any[];
@@ -73,21 +74,31 @@ export interface AggregatedReportData {
   orderMedia: any[];
 }
 
-function buildProjectData(service: any, orders: any[]) {
+/**
+ * Datos del proyecto para el informe. Autocompleta con FALLBACKS cuando el
+ * servicio no trae el campo explícito (el personal de campo no edita el servicio):
+ * contratista = cliente (contratista principal de la obra), subcontratista = la
+ * empresa que ejecuta el servicio, ubicación = URL de mapa o dirección. Los valores
+ * explícitos del servicio SIEMPRE ganan (misma convención que LIQ-SRV).
+ */
+function buildProjectData(service: any, orders: any[], client?: any, company?: any) {
   const orderNumbers = orders
     .map((o: any) => o.orderNumber || o.orderNumberId || o._id)
     .filter(Boolean)
     .join(', ');
 
+  const companyName = company?.legalInfo?.businessName || company?.name || '';
+
   return {
     proyecto: {
       obra: service.projectName || service.description || '',
-      contratista: service.contratista || service.contractor || '',
-      subcontratista: service.subcontratista || service.subcontractor || '',
-      rucSubcontratista: service.rucSubcontratista || '',
+      contratista:
+        service.contratista || service.contractor || client?.name || service.clientName || '',
+      subcontratista: service.subcontratista || service.subcontractor || companyName || '',
+      rucSubcontratista: service.rucSubcontratista || company?.legalInfo?.ruc || '',
       cui: service.cui || '',
       ordenCompra: orderNumbers,
-      ubicacion: service.locationUrl || '',
+      ubicacion: service.locationUrl || service.location?.address || '',
     },
   };
 }
@@ -98,6 +109,7 @@ export async function aggregateReportData(
   const ServiceManagement = await getFlexibleModel('ServiceManagement');
   const Order = await getFlexibleModel('Order');
   const Client = await getFlexibleModel('Client');
+  const Company = await getFlexibleModel('Company');
   const Dispatch = await getFlexibleModel('Dispatch');
   const Certificate = await getFlexibleModel('Certificate');
   const Invoice = await getFlexibleModel('Invoice');
@@ -111,6 +123,7 @@ export async function aggregateReportData(
     return {
       service: null,
       client: null,
+      company: null,
       orders: [],
       dispatches: [],
       certificates: [],
@@ -133,6 +146,12 @@ export async function aggregateReportData(
       : clientId
       ? await Client.findOne({ _id: clientId }).lean()
       : null;
+
+  // Empresa emisora del servicio: fallback de subcontratista (empresa ejecutora).
+  const serviceCompanyId = String(service.companyId || '').trim();
+  const company = serviceCompanyId
+    ? await Company.findOne({ companyId: serviceCompanyId }).lean()
+    : null;
 
   const orders = orderQueryIds.length
     ? await Order.find({ _id: { $in: orderQueryIds } }).lean()
@@ -178,6 +197,7 @@ export async function aggregateReportData(
   return {
     service,
     client,
+    company,
     orders,
     dispatches,
     certificates,
@@ -301,7 +321,7 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
   const service = rawData.service;
   const client = rawData.client;
   const orders = rawData.orders;
-  const projectData = buildProjectData(service, orders);
+  const projectData = buildProjectData(service, orders, client, rawData.company);
 
   switch (reportType) {
     case 'PNL-FOT':
@@ -522,6 +542,17 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
           : {}),
       };
     }
+    // RCP-CAM (recepcion de campo): quien ENTREGA el area es el cliente. La
+    // fecha NO se siembra aca a proposito: la pone Portal con la fecha de Lima
+    // (`REPORT_TYPES_WITH_DATE_DEFAULTS`); mandar un ISO desde el server la
+    // escribiria como medianoche UTC = dia anterior en Peru.
+    case 'RCP-CAM':
+      return {
+        ...projectData,
+        recepcion: {
+          entregadoPor: client?.name || projectData.proyecto.contratista || '',
+        },
+      };
     default:
       return {
         ...projectData,

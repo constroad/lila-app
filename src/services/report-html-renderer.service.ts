@@ -1385,15 +1385,27 @@ ${signaturesHtml}`;
     return `<div class="${classes.join(' ')}">${html}</div>`;
   }
 
+  // Igualdad de `showIf` para strings: insensible a caja y espacios. Los schemas
+  // usan literales en mayusculas ('VENTA', 'SERVICIO') pero el dato persistido
+  // puede venir en minusculas. Con `===` a secas el acta escondia sus secciones
+  // y aun asi imprimia el titulo derivado, que si normaliza con toUpperCase().
+  // Espejo exacto en Portal (`documentFormEngine.ts`).
+  private showIfEquals(actual: unknown, expected: unknown): boolean {
+    if (typeof actual === 'string' && typeof expected === 'string') {
+      return actual.trim().toUpperCase() === expected.trim().toUpperCase();
+    }
+    return actual === expected;
+  }
+
   private evaluateShowIf(condition: SectionSchema['showIf']): boolean {
     if (!condition) return true;
     const actual = this.getValue(condition.field);
     const expected = condition.value;
     switch (condition.operator) {
       case 'eq':
-        return actual === expected;
+        return this.showIfEquals(actual, expected);
       case 'ne':
-        return actual !== expected;
+        return !this.showIfEquals(actual, expected);
       case 'gt':
         return Number(actual) > Number(expected);
       case 'gte':
@@ -1403,11 +1415,11 @@ ${signaturesHtml}`;
       case 'lte':
         return Number(actual) <= Number(expected);
       case 'contains':
-        if (Array.isArray(actual)) return actual.includes(expected);
+        if (Array.isArray(actual)) return actual.some((entry) => this.showIfEquals(entry, expected));
         if (typeof actual === 'string') return actual.includes(String(expected));
         return false;
       case 'in':
-        if (Array.isArray(expected)) return expected.includes(actual);
+        if (Array.isArray(expected)) return expected.some((entry) => this.showIfEquals(actual, entry));
         return false;
       default:
         return true;

@@ -44,6 +44,24 @@ export interface ICompany extends Document {
     cronjobPrefix?: string;
   };
 
+  /**
+   * Webhook del proveedor de GPS (Flota F4). Se declara acá —y no se deja al
+   * schema laxo— porque por este campo se RESUELVE la empresa del token: una ruta
+   * no declarada que `strictQuery` descartara devolvería la primera empresa de la
+   * colección. El token en claro nunca se guarda: solo su hash.
+   */
+  fleetSettings?: {
+    gpsWebhook?: {
+      secretHash?: string;
+      tokenPrefix?: string;
+      provider?: string;
+      isActive?: boolean;
+      createdAt?: Date;
+      lastUsedAt?: Date;
+      lastPoints?: number;
+    };
+  };
+
   // Multi-tenant configuration
   limits: ICompanyLimits;
   isActive: boolean;
@@ -168,6 +186,19 @@ const CompanySchema = new Schema<ICompany>(
       adminGroupId: { type: String },
       aiEnabled: { type: Boolean, default: false },
       cronjobPrefix: { type: String },
+    },
+    // Solo el subdoc del webhook de GPS: el resto de `fleetSettings` lo administra
+    // el Portal y lila no necesita verlo (menos superficie, menos divergencia).
+    fleetSettings: {
+      gpsWebhook: {
+        secretHash: { type: String },
+        tokenPrefix: { type: String },
+        provider: { type: String },
+        isActive: { type: Boolean },
+        createdAt: { type: Date },
+        lastUsedAt: { type: Date },
+        lastPoints: { type: Number },
+      },
     },
     limits: {
       type: CompanyLimitsSchema,

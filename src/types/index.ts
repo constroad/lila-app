@@ -98,6 +98,8 @@ declare global {
         role?: string;
       };
       apiKeyAllowedSenders?: string[];
+      /** Proveedor del webhook de GPS (Flota F4): lo pone `requireGpsToken`. */
+      gpsProvider?: string;
     }
   }
 }

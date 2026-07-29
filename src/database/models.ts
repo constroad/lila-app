@@ -3,6 +3,7 @@ import { getSharedConnection } from './sharedConnection.js';
 import { CronJobSchema, ICronJob } from '../models/cronjob.model.js';
 import { CompanySchema, ICompany } from '../models/company.model.js';
 import { UsageMetricSchema, IUsageMetric } from '../models/usage-metric.model.js';
+import { GpsPositionSchema, IGpsPosition } from '../models/gps-position.model.js';
 
 let cronJobModel: Model<ICronJob> | null = null;
 let companyModel: Model<ICompany> | null = null;
@@ -115,6 +116,20 @@ export async function getAcademyTutorialModel(): Promise<Model<Record<string, un
     (conn.models.AcademyTutorial as Model<Record<string, unknown>>) ||
     conn.model<Record<string, unknown>>('AcademyTutorial', looseSchema, 'academy_tutorials');
   return academyTutorialModel;
+}
+
+/** Rastro GPS de flota (F4): lila SOLO escribe el ingest del proveedor; el
+ *  esquema y los índices (TTL 90d + único) los administra el Portal. */
+let gpsPositionModel: Model<IGpsPosition> | null = null;
+export async function getGpsPositionModel(): Promise<Model<IGpsPosition>> {
+  if (gpsPositionModel) {
+    return gpsPositionModel;
+  }
+  const conn = await getSharedConnection();
+  gpsPositionModel =
+    (conn.models.GpsPosition as Model<IGpsPosition>) ||
+    conn.model<IGpsPosition>('GpsPosition', GpsPositionSchema);
+  return gpsPositionModel;
 }
 
 export async function getSharedModels(): Promise<{

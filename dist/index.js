@@ -629,14 +629,14 @@ var require_buffer_equal_constant_time = __commonJS({
 var require_jwa = __commonJS({
   "node_modules/jwa/index.js"(exports, module) {
     var Buffer2 = require_safe_buffer().Buffer;
-    var crypto7 = __require("crypto");
+    var crypto8 = __require("crypto");
     var formatEcdsa = require_ecdsa_sig_formatter();
     var util2 = __require("util");
     var MSG_INVALID_ALGORITHM = '"%s" is not a valid algorithm.\n  Supported algorithms are:\n  "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512" and "none".';
     var MSG_INVALID_SECRET = "secret must be a string or buffer";
     var MSG_INVALID_VERIFIER_KEY = "key must be a string or a buffer";
     var MSG_INVALID_SIGNER_KEY = "key must be a string, a buffer or an object";
-    var supportsKeyObjects = typeof crypto7.createPublicKey === "function";
+    var supportsKeyObjects = typeof crypto8.createPublicKey === "function";
     if (supportsKeyObjects) {
       MSG_INVALID_VERIFIER_KEY += " or a KeyObject";
       MSG_INVALID_SECRET += "or a KeyObject";
@@ -726,18 +726,18 @@ var require_jwa = __commonJS({
       return function sign(thing, secret) {
         checkIsSecretKey(secret);
         thing = normalizeInput(thing);
-        var hmac = crypto7.createHmac("sha" + bits, secret);
+        var hmac = crypto8.createHmac("sha" + bits, secret);
         var sig = (hmac.update(thing), hmac.digest("base64"));
         return fromBase64(sig);
       };
     }
     var bufferEqual;
-    var timingSafeEqual2 = "timingSafeEqual" in crypto7 ? function timingSafeEqual3(a49, b63) {
+    var timingSafeEqual3 = "timingSafeEqual" in crypto8 ? function timingSafeEqual4(a49, b63) {
       if (a49.byteLength !== b63.byteLength) {
         return false;
       }
-      return crypto7.timingSafeEqual(a49, b63);
-    } : function timingSafeEqual3(a49, b63) {
+      return crypto8.timingSafeEqual(a49, b63);
+    } : function timingSafeEqual4(a49, b63) {
       if (!bufferEqual) {
         bufferEqual = require_buffer_equal_constant_time();
       }
@@ -746,14 +746,14 @@ var require_jwa = __commonJS({
     function createHmacVerifier(bits) {
       return function verify(thing, signature, secret) {
         var computedSig = createHmacSigner(bits)(thing, secret);
-        return timingSafeEqual2(Buffer2.from(signature), Buffer2.from(computedSig));
+        return timingSafeEqual3(Buffer2.from(signature), Buffer2.from(computedSig));
       };
     }
     function createKeySigner(bits) {
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto7.createSign("RSA-SHA" + bits);
+        var signer = crypto8.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign(privateKey, "base64"));
         return fromBase64(sig);
       };
@@ -763,7 +763,7 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto7.createVerify("RSA-SHA" + bits);
+        var verifier = crypto8.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify(publicKey, signature, "base64");
       };
@@ -772,11 +772,11 @@ var require_jwa = __commonJS({
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto7.createSign("RSA-SHA" + bits);
+        var signer = crypto8.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign({
           key: privateKey,
-          padding: crypto7.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto7.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto8.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto8.constants.RSA_PSS_SALTLEN_DIGEST
         }, "base64"));
         return fromBase64(sig);
       };
@@ -786,12 +786,12 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto7.createVerify("RSA-SHA" + bits);
+        var verifier = crypto8.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify({
           key: publicKey,
-          padding: crypto7.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto7.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto8.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto8.constants.RSA_PSS_SALTLEN_DIGEST
         }, signature, "base64");
       };
     }
@@ -3670,7 +3670,7 @@ var require_lodash = __commonJS({
       if (!value) {
         return value === 0 ? value : 0;
       }
-      value = toNumber3(value);
+      value = toNumber4(value);
       if (value === INFINITY || value === -INFINITY) {
         var sign = value < 0 ? -1 : 1;
         return sign * MAX_INTEGER;
@@ -3681,7 +3681,7 @@ var require_lodash = __commonJS({
       var result = toFinite(value), remainder = result % 1;
       return result === result ? remainder ? result - remainder : result : 0;
     }
-    function toNumber3(value) {
+    function toNumber4(value) {
       if (typeof value == "number") {
         return value;
       }
@@ -3756,7 +3756,7 @@ var require_lodash3 = __commonJS({
       if (!value) {
         return value === 0 ? value : 0;
       }
-      value = toNumber3(value);
+      value = toNumber4(value);
       if (value === INFINITY || value === -INFINITY) {
         var sign = value < 0 ? -1 : 1;
         return sign * MAX_INTEGER;
@@ -3767,7 +3767,7 @@ var require_lodash3 = __commonJS({
       var result = toFinite(value), remainder = result % 1;
       return result === result ? remainder ? result - remainder : result : 0;
     }
-    function toNumber3(value) {
+    function toNumber4(value) {
       if (typeof value == "number") {
         return value;
       }
@@ -3914,7 +3914,7 @@ var require_lodash7 = __commonJS({
       if (!value) {
         return value === 0 ? value : 0;
       }
-      value = toNumber3(value);
+      value = toNumber4(value);
       if (value === INFINITY || value === -INFINITY) {
         var sign = value < 0 ? -1 : 1;
         return sign * MAX_INTEGER;
@@ -3925,7 +3925,7 @@ var require_lodash7 = __commonJS({
       var result = toFinite(value), remainder = result % 1;
       return result === result ? remainder ? result - remainder : result : 0;
     }
-    function toNumber3(value) {
+    function toNumber4(value) {
       if (typeof value == "number") {
         return value;
       }
@@ -5578,6 +5578,19 @@ var init_company_model = __esm({
           adminGroupId: { type: String },
           aiEnabled: { type: Boolean, default: false },
           cronjobPrefix: { type: String }
+        },
+        // Solo el subdoc del webhook de GPS: el resto de `fleetSettings` lo administra
+        // el Portal y lila no necesita verlo (menos superficie, menos divergencia).
+        fleetSettings: {
+          gpsWebhook: {
+            secretHash: { type: String },
+            tokenPrefix: { type: String },
+            provider: { type: String },
+            isActive: { type: Boolean },
+            createdAt: { type: Date },
+            lastUsedAt: { type: Date },
+            lastPoints: { type: Number }
+          }
         },
         limits: {
           type: CompanyLimitsSchema,
@@ -8156,6 +8169,33 @@ var init_cronjob_model = __esm({
   }
 });
 
+// src/models/gps-position.model.ts
+import { Schema as Schema4 } from "mongoose";
+var GPS_POSITION_SOURCES, GPS_POSITION_TTL_DAYS, GpsPositionSchema;
+var init_gps_position_model = __esm({
+  "src/models/gps-position.model.ts"() {
+    GPS_POSITION_SOURCES = ["driver-app", "provider", "manual"];
+    GPS_POSITION_TTL_DAYS = 90;
+    GpsPositionSchema = new Schema4(
+      {
+        companyId: { type: String, required: true, immutable: true },
+        plate: { type: String, required: true },
+        tripId: { type: String, required: false },
+        driverId: { type: String, required: false },
+        lat: { type: Number, required: true },
+        lng: { type: Number, required: true },
+        speedKph: { type: Number, required: false },
+        headingDeg: { type: Number, required: false },
+        accuracyM: { type: Number, required: false },
+        source: { type: String, enum: GPS_POSITION_SOURCES, required: true, default: "provider" },
+        deviceId: { type: String, required: false },
+        at: { type: Date, required: true }
+      },
+      { timestamps: { createdAt: true, updatedAt: false }, autoIndex: false, collection: "gpspositions" }
+    );
+  }
+});
+
 // src/database/models.ts
 var models_exports = {};
 __export(models_exports, {
@@ -8164,12 +8204,13 @@ __export(models_exports, {
   getConfigModel: () => getConfigModel,
   getCronJobModel: () => getCronJobModel,
   getFolderModel: () => getFolderModel,
+  getGpsPositionModel: () => getGpsPositionModel,
   getMediaModel: () => getMediaModel,
   getOrderModel: () => getOrderModel,
   getSharedModels: () => getSharedModels,
   getUsageMetricModel: () => getUsageMetricModel
 });
-import { Schema as Schema4 } from "mongoose";
+import { Schema as Schema5 } from "mongoose";
 async function getCronJobModel() {
   if (cronJobModel) {
     return cronJobModel;
@@ -8236,6 +8277,14 @@ async function getAcademyTutorialModel() {
   academyTutorialModel = conn.models.AcademyTutorial || conn.model("AcademyTutorial", looseSchema, "academy_tutorials");
   return academyTutorialModel;
 }
+async function getGpsPositionModel() {
+  if (gpsPositionModel) {
+    return gpsPositionModel;
+  }
+  const conn = await getSharedConnection();
+  gpsPositionModel = conn.models.GpsPosition || conn.model("GpsPosition", GpsPositionSchema);
+  return gpsPositionModel;
+}
 async function getSharedModels() {
   const [CronJobModel, CompanyModel, ConfigModel] = await Promise.all([
     getCronJobModel(),
@@ -8244,22 +8293,24 @@ async function getSharedModels() {
   ]);
   return { CronJobModel, CompanyModel, ConfigModel };
 }
-var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, academyTutorialModel;
+var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, academyTutorialModel, gpsPositionModel;
 var init_models = __esm({
   "src/database/models.ts"() {
     init_sharedConnection();
     init_cronjob_model();
     init_company_model();
     init_usage_metric_model();
+    init_gps_position_model();
     cronJobModel = null;
     companyModel = null;
     configModel = null;
     usageMetricModel = null;
-    looseSchema = new Schema4({}, { strict: false });
+    looseSchema = new Schema5({}, { strict: false });
     orderModel = null;
     mediaModel = null;
     folderModel = null;
     academyTutorialModel = null;
+    gpsPositionModel = null;
   }
 });
 
@@ -9904,7 +9955,7 @@ var require_luxon = __commonJS({
         }
       }, null)[1];
     }
-    function pick(obj, keys) {
+    function pick2(obj, keys) {
       return keys.reduce((a49, k60) => {
         a49[k60] = obj[k60];
         return a49;
@@ -10077,7 +10128,7 @@ var require_luxon = __commonJS({
       }
     }
     function timeObject(obj) {
-      return pick(obj, ["hour", "minute", "second", "millisecond"]);
+      return pick2(obj, ["hour", "minute", "second", "millisecond"]);
     }
     var monthsLong = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     var monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -22580,11 +22631,11 @@ var require_lodash8 = __commonJS({
       if (typeof func != "function") {
         throw new TypeError(FUNC_ERROR_TEXT);
       }
-      wait = toNumber3(wait) || 0;
+      wait = toNumber4(wait) || 0;
       if (isObject(options2)) {
         leading = !!options2.leading;
         maxing = "maxWait" in options2;
-        maxWait = maxing ? nativeMax(toNumber3(options2.maxWait) || 0, wait) : maxWait;
+        maxWait = maxing ? nativeMax(toNumber4(options2.maxWait) || 0, wait) : maxWait;
         trailing = "trailing" in options2 ? !!options2.trailing : trailing;
       }
       function invokeFunc(time) {
@@ -22680,7 +22731,7 @@ var require_lodash8 = __commonJS({
     function isSymbol(value) {
       return typeof value == "symbol" || isObjectLike(value) && objectToString.call(value) == symbolTag;
     }
-    function toNumber3(value) {
+    function toNumber4(value) {
       if (typeof value == "number") {
         return value;
       }
@@ -57883,6 +57934,243 @@ var informeAreaAdicionalSchema = {
   }
 };
 
+// src/schemas/documents/recepcion-campo.schema.ts
+var recepcionCampoSchema = {
+  id: "recepcion-campo",
+  code: "RCP-CAM",
+  name: "Informe de Recepcion de Campo",
+  description: "Recepcion del area de trabajo por calle: estado recibido, tareas a corregir y evidencia.",
+  category: "Operations",
+  version: "1.0.0",
+  lastUpdated: "2026-07-28",
+  orientation: "portrait",
+  pageSize: "A4",
+  margins: { top: 15, right: 15, bottom: 15, left: 15 },
+  sections: [
+    {
+      id: "header",
+      type: "header",
+      headerConfig: {
+        logoKey: "header.logoUrl",
+        leftTextKey: "header.companyName",
+        centerLines: ["REGISTRO", "CONTROL DE CALIDAD", "INFORME DE RECEPCION DE CAMPO"],
+        rightFields: [
+          { label: "CODIGO", key: "header.codigo" },
+          { label: "VERSION", key: "header.version" },
+          { label: "FECHA", key: "header.fecha" },
+          { label: "FOLIO", key: "header.pagina" }
+        ]
+      }
+    },
+    {
+      id: "datosProyecto",
+      type: "projectData",
+      title: "Datos del Proyecto",
+      gridColumns: 4,
+      fields: [
+        { key: "proyecto.obra", label: "OBRA", type: "text", span: 4, required: true },
+        { key: "proyecto.entidad", label: "ENTIDAD", type: "text", span: 2 },
+        { key: "proyecto.contratista", label: "CONTRATISTA", type: "text", span: 2 },
+        { key: "proyecto.subcontratista", label: "SUBCONTRATISTA", type: "text", span: 2 },
+        { key: "proyecto.ubicacion", label: "UBICACION", type: "text", span: 2 }
+      ]
+    },
+    {
+      id: "datosRecepcion",
+      type: "simpleFields",
+      title: "Datos de la Recepcion",
+      gridColumns: 4,
+      fields: [
+        { key: "recepcion.fecha", label: "FECHA", type: "date", span: 2, required: true },
+        { key: "recepcion.turno", label: "TURNO", type: "text", span: 2 },
+        { key: "recepcion.entregadoPor", label: "ENTREGADO POR", type: "text", span: 2 },
+        { key: "recepcion.recibidoPor", label: "RECIBIDO POR", type: "text", span: 2 },
+        { key: "recepcion.clima", label: "CLIMA", type: "text", span: 2 },
+        {
+          key: "recepcion.libreImpedimentos",
+          label: "AREA LIBRE DE IMPEDIMENTOS",
+          type: "checkbox",
+          span: 2
+        }
+      ]
+    },
+    {
+      // Cuadro resumen: IDENTIFICA lo recibido (que calle, que tramo, de que
+      // medida) y su estado. `largo`/`ancho` delimitan el tramo; deliberadamente
+      // NO hay columna de area ni `totalColumns` (ver docstring del schema).
+      id: "calles",
+      type: "dataTable",
+      title: "Calles Recibidas",
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 100,
+      columns: [
+        { key: "item", label: "NRO", type: "text", width: 60, align: "center", editable: true },
+        { key: "calle", label: "CALLE / VIA", type: "text", width: 220, align: "left", editable: true, required: true },
+        { key: "tramo", label: "TRAMO (DESDE - HASTA)", type: "text", width: 200, align: "left", editable: true },
+        { key: "largo", label: "LARGO (m)", type: "number", width: 90, align: "right", editable: true, decimals: 2 },
+        { key: "ancho", label: "ANCHO (m)", type: "number", width: 90, align: "right", editable: true, decimals: 2 },
+        {
+          key: "estado",
+          label: "ESTADO",
+          type: "select",
+          width: 150,
+          align: "center",
+          editable: true,
+          required: true,
+          options: [
+            { value: "CONFORME", label: "CONFORME" },
+            { value: "CON_OBSERVACIONES", label: "CON OBSERVACIONES" },
+            { value: "NO_CONFORME", label: "NO CONFORME" }
+          ]
+        }
+      ]
+    },
+    {
+      // Punch list. `calleId` guarda el id de la fila de `calles`; el canvas lo
+      // convierte en select con las calles del informe (Portal, fase F3). En el
+      // schema base queda texto para que el tipo funcione sin ese reshaper.
+      id: "tareas",
+      type: "dataTable",
+      title: "Tareas a Corregir",
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 200,
+      columns: [
+        { key: "item", label: "NRO", type: "text", width: 60, align: "center", editable: true },
+        { key: "calleId", label: "CALLE", type: "text", width: 170, align: "left", editable: true },
+        { key: "descripcion", label: "DESCRIPCION", type: "text", width: 250, align: "left", editable: true, required: true },
+        {
+          key: "responsable",
+          label: "RESPONSABLE",
+          type: "select",
+          width: 120,
+          align: "center",
+          editable: true,
+          options: [
+            { value: "CLIENTE", label: "CLIENTE" },
+            { value: "CONTRATISTA", label: "CONTRATISTA" },
+            { value: "TERCERO", label: "TERCERO" }
+          ]
+        },
+        {
+          key: "prioridad",
+          label: "PRIORIDAD",
+          type: "select",
+          width: 90,
+          align: "center",
+          editable: true,
+          options: [
+            { value: "ALTA", label: "ALTA" },
+            { value: "MEDIA", label: "MEDIA" },
+            { value: "BAJA", label: "BAJA" }
+          ]
+        },
+        {
+          key: "estado",
+          label: "ESTADO",
+          type: "select",
+          width: 110,
+          align: "center",
+          editable: true,
+          options: [
+            { value: "PENDIENTE", label: "PENDIENTE" },
+            { value: "EN_PROCESO", label: "EN PROCESO" },
+            { value: "RESUELTO", label: "RESUELTO" }
+          ]
+        },
+        { key: "fechaCompromiso", label: "F. COMPROMISO", type: "date", width: 110, align: "center", editable: true }
+      ]
+    },
+    {
+      // Las fotos se agrupan por calle (`photo.category === calle.id`), igual que
+      // IAA agrupa por zona. Techo alto porque son N calles x varias fotos.
+      id: "panelFotografico",
+      type: "photoPanel",
+      title: "Panel Fotografico",
+      maxImages: 60,
+      layout: "2x3",
+      showProgresiva: false,
+      showFecha: true,
+      pageBreakBefore: true,
+      includeHeader: true,
+      headerOverride: {
+        logoKey: "header.logoUrl",
+        leftTextKey: "header.companyName",
+        centerLines: ["REGISTRO", "CONTROL DE CALIDAD", "PANEL FOTOGRAFICO"],
+        rightFields: [
+          { label: "CODIGO", key: "header.codigo" },
+          { label: "VERSION", key: "header.version" },
+          { label: "FECHA", key: "header.fecha" },
+          { label: "FOLIO", key: "header.pagina" }
+        ]
+      }
+    },
+    {
+      id: "observacionesGenerales",
+      type: "richText",
+      title: "Observaciones Generales"
+    },
+    {
+      // Entrega (cliente) y recibe (nosotros): las dos partes del acto. Sin CIP:
+      // el representante del cliente no es necesariamente colegiado.
+      id: "firmas",
+      type: "signatures",
+      title: "Firmas de Recepcion",
+      signatureStyle: "line",
+      signatures: [
+        { key: "entregadoPor", label: "ENTREGADO POR", sublabel: "Representante del cliente", required: true, showCIP: false },
+        { key: "recibidoPor", label: "RECIBIDO POR", sublabel: "Responsable de obra", required: true, showCIP: false }
+      ]
+    }
+  ],
+  defaultData: {
+    header: {
+      logoUrl: "",
+      companyName: "",
+      codigo: "",
+      version: "",
+      fecha: "",
+      pagina: "1-1",
+      correlativo: ""
+    },
+    proyecto: {
+      obra: "",
+      entidad: "",
+      contratista: "",
+      subcontratista: "",
+      ubicacion: ""
+    },
+    recepcion: {
+      fecha: "",
+      turno: "",
+      entregadoPor: "",
+      recibidoPor: "",
+      clima: "",
+      libreImpedimentos: false
+    },
+    // Fila semilla CON `id` estable: es la clave que liga la foto
+    // (`photo.category === calle.id`) y la tarea (`tarea.calleId`) con su calle.
+    // `estado` arranca VACIO a proposito: es una declaracion que se firma, no un
+    // default.
+    calles: [{ item: "01", id: "calle-1", calle: "", tramo: "", largo: "", ancho: "", estado: "" }],
+    // Punch list arranca VACIA (y sin fila semilla, para que el seeding de fechas
+    // de Portal no rellene `fechaCompromiso` con la fecha de hoy).
+    tareas: [],
+    panelFotografico: { fotos: [] },
+    observacionesGenerales: "",
+    firmas: {
+      entregadoPor: { nombre: "", cargo: "Representante del cliente" },
+      recibidoPor: { nombre: "", cargo: "Responsable de obra" }
+    }
+  },
+  exportOptions: {
+    docx: true,
+    pdf: true,
+    excel: false
+  }
+};
+
 // src/schemas/documents/informe-produccion-planta.schema.ts
 var informeProduccionPlantaSchema = {
   id: "informe-produccion-planta",
@@ -59342,6 +59630,7 @@ var schemaRegistry = {
   "protocolo-topo-completo": protocoloTopoCompletoSchema,
   "dossier-obra": dossierObraSchema,
   "informe-area-adicional": informeAreaAdicionalSchema,
+  "recepcion-campo": recepcionCampoSchema,
   "informe-produccion-planta": informeProduccionPlantaSchema,
   "cotizacion-asfalto": cotizacionAsfaltoSchema,
   "cotizacion-servicio": cotizacionServicioSchema,
@@ -65073,7 +65362,7 @@ function generateRandomDataForSchema(schema) {
 
 // src/services/report-data-aggregator.service.ts
 init_sharedConnection();
-import mongoose6, { Schema as Schema5 } from "mongoose";
+import mongoose6, { Schema as Schema6 } from "mongoose";
 var modelCache = /* @__PURE__ */ new Map();
 var LIQUIDACION_IGV_FACTOR = 1.18;
 function asRecord(value) {
@@ -65084,7 +65373,7 @@ async function getFlexibleModel(modelName) {
     return modelCache.get(modelName);
   }
   const conn = await getSharedConnection();
-  const model = conn.models[modelName] || conn.model(modelName, new Schema5({}, { strict: false }));
+  const model = conn.models[modelName] || conn.model(modelName, new Schema6({}, { strict: false }));
   modelCache.set(modelName, model);
   return model;
 }
@@ -65102,17 +65391,18 @@ function normalizeIds(ids) {
   }
   return results;
 }
-function buildProjectData(service, orders) {
+function buildProjectData(service, orders, client, company) {
   const orderNumbers = orders.map((o37) => o37.orderNumber || o37.orderNumberId || o37._id).filter(Boolean).join(", ");
+  const companyName = company?.legalInfo?.businessName || company?.name || "";
   return {
     proyecto: {
       obra: service.projectName || service.description || "",
-      contratista: service.contratista || service.contractor || "",
-      subcontratista: service.subcontratista || service.subcontractor || "",
-      rucSubcontratista: service.rucSubcontratista || "",
+      contratista: service.contratista || service.contractor || client?.name || service.clientName || "",
+      subcontratista: service.subcontratista || service.subcontractor || companyName || "",
+      rucSubcontratista: service.rucSubcontratista || company?.legalInfo?.ruc || "",
       cui: service.cui || "",
       ordenCompra: orderNumbers,
-      ubicacion: service.locationUrl || ""
+      ubicacion: service.locationUrl || service.location?.address || ""
     }
   };
 }
@@ -65120,6 +65410,7 @@ async function aggregateReportData(serviceId) {
   const ServiceManagement = await getFlexibleModel("ServiceManagement");
   const Order = await getFlexibleModel("Order");
   const Client = await getFlexibleModel("Client");
+  const Company = await getFlexibleModel("Company");
   const Dispatch = await getFlexibleModel("Dispatch");
   const Certificate = await getFlexibleModel("Certificate");
   const Invoice = await getFlexibleModel("Invoice");
@@ -65132,6 +65423,7 @@ async function aggregateReportData(serviceId) {
     return {
       service: null,
       client: null,
+      company: null,
       orders: [],
       dispatches: [],
       certificates: [],
@@ -65147,6 +65439,8 @@ async function aggregateReportData(serviceId) {
   const orderQueryIds = normalizeIds(orderIds);
   const clientId = String(service.clientId || "").trim();
   const client = clientId && mongoose6.Types.ObjectId.isValid(clientId) ? await Client.findById(new mongoose6.Types.ObjectId(clientId)).lean() : clientId ? await Client.findOne({ _id: clientId }).lean() : null;
+  const serviceCompanyId = String(service.companyId || "").trim();
+  const company = serviceCompanyId ? await Company.findOne({ companyId: serviceCompanyId }).lean() : null;
   const orders = orderQueryIds.length ? await Order.find({ _id: { $in: orderQueryIds } }).lean() : [];
   const dispatches = orderQueryIds.length ? await Dispatch.find({ orderId: { $in: orderQueryIds } }).lean() : [];
   const certificates = orderQueryIds.length ? await Certificate.find({ orderId: { $in: orderQueryIds } }).lean() : [];
@@ -65170,6 +65464,7 @@ async function aggregateReportData(serviceId) {
   return {
     service,
     client,
+    company,
     orders,
     dispatches,
     certificates,
@@ -65276,7 +65571,7 @@ function structureDataForReportType(reportType, rawData) {
   const service = rawData.service;
   const client = rawData.client;
   const orders = rawData.orders;
-  const projectData = buildProjectData(service, orders);
+  const projectData = buildProjectData(service, orders, client, rawData.company);
   switch (reportType) {
     case "PNL-FOT":
       return {
@@ -65488,6 +65783,17 @@ function structureDataForReportType(reportType, rawData) {
         } : {}
       };
     }
+    // RCP-CAM (recepcion de campo): quien ENTREGA el area es el cliente. La
+    // fecha NO se siembra aca a proposito: la pone Portal con la fecha de Lima
+    // (`REPORT_TYPES_WITH_DATE_DEFAULTS`); mandar un ISO desde el server la
+    // escribiria como medianoche UTC = dia anterior en Peru.
+    case "RCP-CAM":
+      return {
+        ...projectData,
+        recepcion: {
+          entregadoPor: client?.name || projectData.proyecto.contratista || ""
+        }
+      };
     default:
       return {
         ...projectData
@@ -65497,15 +65803,15 @@ function structureDataForReportType(reportType, rawData) {
 
 // src/models/service-report.model.ts
 init_sharedConnection();
-import { Schema as Schema6 } from "mongoose";
-var ServiceReportSchema = new Schema6(
+import { Schema as Schema7 } from "mongoose";
+var ServiceReportSchema = new Schema7(
   {
     serviceManagementId: { type: String, required: true },
     type: { type: String, required: true },
     status: { type: String, required: true, default: "draft" },
     title: { type: String, required: false },
     description: { type: String, required: false },
-    schemaData: { type: Schema6.Types.Mixed, required: false },
+    schemaData: { type: Schema7.Types.Mixed, required: false },
     generatedDocuments: {
       docxUrl: { type: String, required: false },
       pdfUrl: { type: String, required: false },
@@ -65515,11 +65821,11 @@ var ServiceReportSchema = new Schema6(
       annexPages: { type: Number, required: false }
     },
     draftData: {
-      schemaData: { type: Schema6.Types.Mixed, required: false },
-      schemaOverrides: { type: Schema6.Types.Mixed, required: false },
-      customSections: { type: [Schema6.Types.Mixed], required: false, default: [] },
-      annexes: { type: [Schema6.Types.Mixed], required: false, default: [] },
-      folioConfig: { type: Schema6.Types.Mixed, required: false },
+      schemaData: { type: Schema7.Types.Mixed, required: false },
+      schemaOverrides: { type: Schema7.Types.Mixed, required: false },
+      customSections: { type: [Schema7.Types.Mixed], required: false, default: [] },
+      annexes: { type: [Schema7.Types.Mixed], required: false, default: [] },
+      folioConfig: { type: Schema7.Types.Mixed, required: false },
       savedAt: { type: String, required: false },
       savedBy: { type: String, required: false }
     },
@@ -65528,14 +65834,14 @@ var ServiceReportSchema = new Schema6(
       lockedAt: { type: String, required: false },
       expiresAt: { type: String, required: false }
     },
-    auditLog: { type: [Schema6.Types.Mixed], required: false, default: [] },
-    attachments: { type: [Schema6.Types.Mixed], required: false, default: [] },
-    schemaOverrides: { type: Schema6.Types.Mixed, required: false },
-    customSections: { type: [Schema6.Types.Mixed], required: false, default: [] },
-    annexes: { type: [Schema6.Types.Mixed], required: false, default: [] },
-    folioConfig: { type: Schema6.Types.Mixed, required: false },
-    sections: { type: Schema6.Types.Mixed, required: false },
-    metrics: { type: Schema6.Types.Mixed, required: false },
+    auditLog: { type: [Schema7.Types.Mixed], required: false, default: [] },
+    attachments: { type: [Schema7.Types.Mixed], required: false, default: [] },
+    schemaOverrides: { type: Schema7.Types.Mixed, required: false },
+    customSections: { type: [Schema7.Types.Mixed], required: false, default: [] },
+    annexes: { type: [Schema7.Types.Mixed], required: false, default: [] },
+    folioConfig: { type: Schema7.Types.Mixed, required: false },
+    sections: { type: Schema7.Types.Mixed, required: false },
+    metrics: { type: Schema7.Types.Mixed, required: false },
     visibility: { type: Boolean, required: false, default: false }
   },
   { timestamps: true }
@@ -66900,15 +67206,26 @@ ${signaturesHtml}`;
     }
     return `<div class="${classes.join(" ")}">${html}</div>`;
   }
+  // Igualdad de `showIf` para strings: insensible a caja y espacios. Los schemas
+  // usan literales en mayusculas ('VENTA', 'SERVICIO') pero el dato persistido
+  // puede venir en minusculas. Con `===` a secas el acta escondia sus secciones
+  // y aun asi imprimia el titulo derivado, que si normaliza con toUpperCase().
+  // Espejo exacto en Portal (`documentFormEngine.ts`).
+  showIfEquals(actual, expected) {
+    if (typeof actual === "string" && typeof expected === "string") {
+      return actual.trim().toUpperCase() === expected.trim().toUpperCase();
+    }
+    return actual === expected;
+  }
   evaluateShowIf(condition) {
     if (!condition) return true;
     const actual = this.getValue(condition.field);
     const expected = condition.value;
     switch (condition.operator) {
       case "eq":
-        return actual === expected;
+        return this.showIfEquals(actual, expected);
       case "ne":
-        return actual !== expected;
+        return !this.showIfEquals(actual, expected);
       case "gt":
         return Number(actual) > Number(expected);
       case "gte":
@@ -66918,11 +67235,11 @@ ${signaturesHtml}`;
       case "lte":
         return Number(actual) <= Number(expected);
       case "contains":
-        if (Array.isArray(actual)) return actual.includes(expected);
+        if (Array.isArray(actual)) return actual.some((entry) => this.showIfEquals(entry, expected));
         if (typeof actual === "string") return actual.includes(String(expected));
         return false;
       case "in":
-        if (Array.isArray(expected)) return expected.includes(actual);
+        if (Array.isArray(expected)) return expected.some((entry) => this.showIfEquals(actual, entry));
         return false;
       default:
         return true;
@@ -90557,8 +90874,8 @@ init_whatsapp_phone();
 // src/services/dispatch-vale-payload.service.ts
 init_sharedConnection();
 init_models();
-import { Schema as Schema7, Types } from "mongoose";
-var looseSchema2 = new Schema7({}, { strict: false });
+import { Schema as Schema8, Types } from "mongoose";
+var looseSchema2 = new Schema8({}, { strict: false });
 async function getPortalModel(name, collection) {
   const conn = await getSharedConnection();
   return conn.models[name] || conn.model(name, looseSchema2, collection);
@@ -90715,8 +91032,8 @@ async function buildDispatchValePayloadFromPortal(params) {
 
 // src/models/dispatch-vale-run.model.ts
 init_sharedConnection();
-import mongoose8, { Schema as Schema8 } from "mongoose";
-var DispatchValeRunSchema = new Schema8(
+import mongoose8, { Schema as Schema9 } from "mongoose";
+var DispatchValeRunSchema = new Schema9(
   {
     companyId: { type: String, required: true, index: true },
     dispatchId: { type: String, required: true, index: true },
@@ -91361,8 +91678,8 @@ init_models();
 
 // src/models/dispatch-notification-flag.model.ts
 init_sharedConnection();
-import { Schema as Schema9 } from "mongoose";
-var dispatchNotificationFlagSchema = new Schema9(
+import { Schema as Schema10 } from "mongoose";
+var dispatchNotificationFlagSchema = new Schema10(
   {
     key: { type: String, required: true, unique: true },
     companyId: { type: String, required: true },
@@ -92302,8 +92619,8 @@ import path30 from "path";
 
 // src/models/public-reception-idempotency.model.ts
 init_sharedConnection();
-import { Schema as Schema10 } from "mongoose";
-var publicReceptionIdempotencySchema = new Schema10(
+import { Schema as Schema11 } from "mongoose";
+var publicReceptionIdempotencySchema = new Schema11(
   {
     companyId: { type: String, required: true },
     clientMutationId: { type: String, required: true },
@@ -93786,7 +94103,7 @@ init_storage_path_service();
 import fs31 from "fs-extra";
 import path32 from "node:path";
 import {
-  Schema as Schema11,
+  Schema as Schema12,
   Types as Types2
 } from "mongoose";
 var SERVICE_MIGRATION_WARNING = "El servicio destino tiene otro cliente. Verifica contratos y visibilidad.";
@@ -93794,7 +94111,7 @@ var DRIVE_BLOCKER = "El servicio tiene v\xEDnculos al drive global. La migraci\x
 var ORDER_LINKED_FILES_BLOCKER = "El servicio usa archivos ligados a pedidos, despacho o laboratorio. La migraci\xF3n entre empresas a\xFAn no remapea ese alcance.";
 var ORDER_SUBTREE_BLOCKER = "El servicio tiene pedidos con despachos, medias, certificados, kardex, consumos o links propios. La migraci\xF3n entre empresas a\xFAn no remapea ese sub\xE1rbol completo.";
 var REPORT_WARNING = "Revisa el pairing de pedidos antes de migrar reportes y m\xE9tricas.";
-var looseSchema3 = new Schema11({}, { strict: false });
+var looseSchema3 = new Schema12({}, { strict: false });
 var asText = (value) => String(value ?? "").trim();
 var normalizePath = (value) => value.replace(/\\/g, "/").replace(/^\/+/, "");
 var toMongoIdentifier = (value) => Types2.ObjectId.isValid(value) ? new Types2.ObjectId(value) : value;
@@ -95571,6 +95888,273 @@ async function triggerAcademyTranscode(req, res) {
 var router13 = Router13();
 router13.post("/transcode", requireTenant, triggerAcademyTranscode);
 var academy_routes_default = router13;
+
+// src/api/routes/gps.routes.ts
+import { Router as Router14 } from "express";
+
+// src/api/controllers/gps.controller.ts
+init_logger();
+
+// src/services/gps-ingest.service.ts
+init_models();
+init_logger();
+import crypto7 from "crypto";
+
+// src/services/gps-normalizer.ts
+init_gps_position_model();
+var MAX_INGEST_BATCH = 500;
+var MAX_CLOCK_SKEW_MS = 5 * 60 * 1e3;
+var ALIASES = {
+  lat: ["lat", "latitude", "latitud", "y"],
+  lng: ["lng", "lon", "long", "longitude", "longitud", "x"],
+  at: ["at", "timestamp", "ts", "time", "datetime", "fecha", "gpsTime"],
+  plate: ["plate", "placa", "unit", "unidad", "vehicle", "vehiculo", "license"],
+  speed: ["speedKph", "speed", "velocidad", "kph"],
+  heading: ["headingDeg", "heading", "course", "rumbo", "direccion"],
+  accuracy: ["accuracyM", "accuracy", "hdop", "precision"],
+  device: ["deviceId", "imei", "device", "equipo", "serial"]
+};
+var pick = (raw, keys) => {
+  for (const key of keys) {
+    if (raw[key] !== void 0 && raw[key] !== null && raw[key] !== "") return raw[key];
+  }
+  return void 0;
+};
+var toNumber3 = (value) => {
+  if (value === void 0) return void 0;
+  const parsed = typeof value === "string" ? Number(value.replace(",", ".")) : Number(value);
+  return Number.isFinite(parsed) ? parsed : void 0;
+};
+var toDate = (value) => {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const numeric = toNumber3(value);
+  if (numeric !== void 0 && String(value).trim().match(/^-?\d+(\.\d+)?$/)) {
+    const millis = numeric > 1e12 ? numeric : numeric * 1e3;
+    const date2 = new Date(millis);
+    return Number.isNaN(date2.getTime()) ? null : date2;
+  }
+  if (typeof value !== "string") return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+var isValidCoordinate = (lat, lng) => {
+  if (lat === void 0 || lng === void 0) return false;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
+  return !(Math.abs(lat) < 1e-4 && Math.abs(lng) < 1e-4);
+};
+var extractRawPoints = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+  const container = payload;
+  for (const key of ["positions", "points", "data", "records", "items", "gps"]) {
+    if (Array.isArray(container[key])) return container[key];
+  }
+  return [container];
+};
+function normalizeGpsBatch(payload, options2 = {}) {
+  const now = options2.now ?? /* @__PURE__ */ new Date();
+  const source = options2.source ?? "provider";
+  const rejected = {};
+  const reject = (reason) => {
+    rejected[reason] = (rejected[reason] ?? 0) + 1;
+  };
+  const raw = extractRawPoints(payload);
+  const overflow = Math.max(0, raw.length - MAX_INGEST_BATCH);
+  if (overflow > 0) rejected["sobre-el-tope"] = overflow;
+  const seen = {};
+  const points = [];
+  const minAt = now.getTime() - GPS_POSITION_TTL_DAYS * 24 * 60 * 60 * 1e3;
+  for (const item of raw.slice(0, MAX_INGEST_BATCH)) {
+    if (!item || typeof item !== "object") {
+      reject("coordenada-invalida");
+      continue;
+    }
+    const plate = String(pick(item, ALIASES.plate) ?? options2.defaultPlate ?? "").trim().toUpperCase();
+    if (!plate) {
+      reject("sin-placa");
+      continue;
+    }
+    const lat = toNumber3(pick(item, ALIASES.lat));
+    const lng = toNumber3(pick(item, ALIASES.lng));
+    if (!isValidCoordinate(lat, lng)) {
+      reject("coordenada-invalida");
+      continue;
+    }
+    const at3 = toDate(pick(item, ALIASES.at));
+    if (!at3) {
+      reject("fecha-invalida");
+      continue;
+    }
+    if (at3.getTime() > now.getTime() + MAX_CLOCK_SKEW_MS) {
+      reject("fecha-futura");
+      continue;
+    }
+    if (at3.getTime() < minAt) {
+      reject("fecha-expirada");
+      continue;
+    }
+    const key = `${plate}|${at3.toISOString()}`;
+    if (seen[key]) {
+      reject("duplicado");
+      continue;
+    }
+    seen[key] = true;
+    points.push({
+      plate,
+      lat,
+      lng,
+      at: at3,
+      speedKph: toNumber3(pick(item, ALIASES.speed)),
+      headingDeg: toNumber3(pick(item, ALIASES.heading)),
+      accuracyM: toNumber3(pick(item, ALIASES.accuracy)),
+      deviceId: pick(item, ALIASES.device) ? String(pick(item, ALIASES.device)) : void 0,
+      source
+    });
+  }
+  return { points: points.sort((a49, b63) => a49.at.getTime() - b63.at.getTime()), rejected };
+}
+
+// src/services/gps-ingest.service.ts
+var hashToken = (token) => crypto7.createHash("sha256").update(token).digest("hex");
+var timingSafeEqual2 = (a49, b63) => {
+  try {
+    const aBuf = Buffer.from(a49);
+    const bBuf = Buffer.from(b63);
+    if (aBuf.length !== bBuf.length) return false;
+    return crypto7.timingSafeEqual(aBuf, bBuf);
+  } catch {
+    return false;
+  }
+};
+async function resolveGpsIngestAuth(token) {
+  const clean = String(token || "").trim();
+  if (clean.length < 20) return null;
+  const expectedHash = hashToken(clean);
+  const Company = await getCompanyModel();
+  const company = await Company.findOne({
+    "fleetSettings.gpsWebhook.secretHash": expectedHash
+  }).select("companyId fleetSettings.gpsWebhook").lean();
+  const config2 = company?.fleetSettings?.gpsWebhook;
+  if (!company?.companyId || !config2?.secretHash) return null;
+  if (config2.isActive === false) return null;
+  if (!timingSafeEqual2(expectedHash, String(config2.secretHash))) return null;
+  return { companyId: company.companyId, provider: config2.provider };
+}
+var resolveWriteErrorCode = (writeError) => {
+  const flat = writeError;
+  return flat?.code ?? flat?.err?.code;
+};
+async function ingestGpsBatch(params) {
+  const normalized = normalizeGpsBatch(params.payload, {
+    defaultPlate: params.defaultPlate,
+    source: "provider",
+    now: params.now
+  });
+  if (normalized.points.length === 0) {
+    return { ...normalized, inserted: 0, duplicates: 0 };
+  }
+  const GpsPosition = await getGpsPositionModel();
+  const documents = normalized.points.map((point) => ({
+    ...point,
+    companyId: params.companyId
+  }));
+  try {
+    const created = await GpsPosition.insertMany(documents, { ordered: false });
+    return { ...normalized, inserted: created.length, duplicates: 0 };
+  } catch (error) {
+    const bulkError = error;
+    const writeErrors = Array.isArray(bulkError.writeErrors) ? bulkError.writeErrors : [];
+    const duplicates = writeErrors.filter((writeError) => resolveWriteErrorCode(writeError) === 11e3).length;
+    if (writeErrors.length > 0 && duplicates === writeErrors.length) {
+      const insertedCount = bulkError.result?.insertedCount;
+      const inserted = typeof insertedCount === "number" ? insertedCount : documents.length - duplicates;
+      return { ...normalized, inserted, duplicates };
+    }
+    throw error;
+  }
+}
+function touchGpsWebhookSafe(params) {
+  void (async () => {
+    const Company = await getCompanyModel();
+    await Company.updateOne(
+      { companyId: params.companyId },
+      {
+        $set: {
+          "fleetSettings.gpsWebhook.lastUsedAt": /* @__PURE__ */ new Date(),
+          "fleetSettings.gpsWebhook.lastPoints": params.points
+        }
+      }
+    );
+  })().catch((error) => {
+    logger_default.warn(`[gps-ingest] no se pudo sellar el uso del webhook: ${String(error)}`);
+  });
+}
+
+// src/api/controllers/gps.controller.ts
+async function ingestGpsPositions(req, res) {
+  const companyId = req.companyId;
+  if (!companyId) {
+    res.status(401).json({ ok: false, message: "Token inv\xE1lido" });
+    return;
+  }
+  if (!req.body) {
+    res.status(400).json({ ok: false, message: "Cuerpo vac\xEDo" });
+    return;
+  }
+  const plateParam = req.query.plate ?? req.query.placa;
+  const defaultPlate = typeof plateParam === "string" ? plateParam : void 0;
+  try {
+    const result = await ingestGpsBatch({ companyId, payload: req.body, defaultPlate });
+    if (result.inserted > 0) {
+      touchGpsWebhookSafe({ companyId, points: result.inserted });
+    }
+    const rejectedCount = Object.values(result.rejected).reduce((sum, count) => sum + count, 0);
+    if (rejectedCount > 0) {
+      logger_default.warn(
+        `[gps] ${companyId}: ${result.inserted} escritos, ${rejectedCount} descartados ${JSON.stringify(result.rejected)}`
+      );
+    }
+    res.status(200).json({
+      ok: true,
+      inserted: result.inserted,
+      duplicates: result.duplicates,
+      rejected: result.rejected
+    });
+  } catch (error) {
+    logger_default.error(`[gps] ingest fall\xF3 para ${companyId}:`, error);
+    res.status(503).json({ ok: false, message: "No se pudo registrar el lote" });
+  }
+}
+async function checkGpsToken(req, res) {
+  res.status(200).json({ ok: true, provider: req.gpsProvider ?? null });
+}
+
+// src/middleware/gps-token.middleware.ts
+var extractGpsToken = (req) => {
+  const header = req.headers["x-gps-token"];
+  if (typeof header === "string" && header.trim()) return header.trim();
+  const auth = req.headers.authorization;
+  if (typeof auth === "string" && auth.startsWith("Bearer ")) return auth.slice(7).trim();
+  const query = req.query.token;
+  if (typeof query === "string" && query.trim()) return query.trim();
+  return void 0;
+};
+async function requireGpsToken(req, res, next) {
+  const auth = await resolveGpsIngestAuth(extractGpsToken(req));
+  if (!auth) {
+    res.status(401).json({ ok: false, message: "Token inv\xE1lido" });
+    return;
+  }
+  req.companyId = auth.companyId;
+  req.gpsProvider = auth.provider;
+  next();
+}
+
+// src/api/routes/gps.routes.ts
+var router14 = Router14();
+router14.get("/check", requireGpsToken, checkGpsToken);
+router14.post("/positions", requireGpsToken, generousRateLimiter, ingestGpsPositions);
+var gps_routes_default = router14;
 
 // src/index.ts
 import swaggerUi from "swagger-ui-express";
@@ -97649,6 +98233,7 @@ app.use("/api/service-management-report", service_management_report_routes_defau
 app.use("/api/service-migrations", service_migration_routes_default);
 app.use("/api/exports", exports_routes_default);
 app.use("/api/academy", academy_routes_default);
+app.use("/api/gps", gps_routes_default);
 var companiesRoot = `${config.storage.root}/companies`;
 var companiesStaticHeaders = (res) => {
   applyCompaniesStaticHeaders(res.req, res);
