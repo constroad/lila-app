@@ -90,6 +90,18 @@ export const config = {
     apiKey: process.env.ANTHROPIC_API_KEY!,
   },
 
+  /**
+   * Lectura de imágenes por LLM (Flota §11.3-11) — agnóstica al proveedor.
+   * SIN `VISION_API_KEY` la feature queda apagada y el endpoint responde 503: el
+   * flujo de tipear el peso a mano sigue igual. Ver docs/VISION-OCR-SETUP.md.
+   */
+  vision: {
+    provider: process.env.VISION_PROVIDER || 'gemini',
+    apiKey: process.env.VISION_API_KEY || '',
+    model: process.env.VISION_MODEL || '',
+    baseUrl: process.env.VISION_BASE_URL || '',
+  },
+
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || '',
     errorsChatId:

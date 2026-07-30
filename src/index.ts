@@ -29,6 +29,7 @@ import serviceMigrationRoutes from './api/routes/service-migration.routes.js';
 import exportsRoutes from './api/routes/exports.routes.js';
 import academyRoutes from './api/routes/academy.routes.js';
 import gpsRoutes from './api/routes/gps.routes.js';
+import visionRoutes from './api/routes/vision.routes.js';
 import { startAcademyTranscodeWatchdog } from './services/academy-transcode.service.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
 import { materializeThumbnailInBackground } from './services/thumbnail.service.js';
@@ -263,6 +264,7 @@ app.use('/api/academy', academyRoutes);
 // Portal porque es un punto por minuto por unidad — en serverless eso es la
 // factura del mes; acá es un proceso que ya está prendido.
 app.use('/api/gps', gpsRoutes);
+app.use('/api/vision', visionRoutes);
 
 const companiesRoot = `${config.storage.root}/companies`;
 const companiesStaticHeaders = (res: express.Response) => {

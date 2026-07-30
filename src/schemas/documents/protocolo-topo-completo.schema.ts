@@ -52,7 +52,10 @@ export const protocoloTopoCompletoSchema: DocumentSchema = {
         { key: 'topografia.equipo', label: 'EQUIPO', type: 'text', span: 4 },
         { key: 'topografia.operador', label: 'OPERADOR', type: 'text', span: 4 },
         { key: 'topografia.sistemaReferencia', label: 'SISTEMA REF.', type: 'text', span: 5 },
-        { key: 'topografia.metodologia', label: 'METODOLOGIA', type: 'text', span: 4 }
+        { key: 'topografia.metodologia', label: 'METODOLOGIA', type: 'text', span: 4 },
+        // El "completo" es SUPERSET del simple (TOP-PROT): la precision del equipo
+        // aplica a los dos protocolos, no tiene por que faltar aca.
+        { key: 'topografia.precision', label: 'PRECISION', type: 'text', span: 2 }
       ]
     },
     {
@@ -66,6 +69,10 @@ export const protocoloTopoCompletoSchema: DocumentSchema = {
         { key: 'punto', label: 'PUNTO', type: 'text', width: 90, align: 'center', editable: true },
         { key: 'este', label: 'ESTE (m)', type: 'number', width: 120, align: 'right', editable: true },
         { key: 'norte', label: 'NORTE (m)', type: 'number', width: 120, align: 'right', editable: true },
+        // Error de cierre por punto (como TOP-PROT). Sin esto no se puede auditar
+        // como se llego al "SI" de `resumenControl`, que es lo que firma el
+        // supervisor. En ALTIMETRIA ese rol ya lo cumple `diferencia`: no se duplica.
+        { key: 'error', label: 'ERROR', type: 'number', width: 80, align: 'right', editable: true },
         { key: 'observacion', label: 'OBSERVACION', type: 'text', width: 200, align: 'left', editable: true }
       ]
     },
@@ -152,10 +159,11 @@ export const protocoloTopoCompletoSchema: DocumentSchema = {
       equipo: '',
       operador: '',
       sistemaReferencia: '',
-      metodologia: ''
+      metodologia: '',
+      precision: ''
     },
     planimetria: [
-      { punto: '', este: 0, norte: 0, observacion: '' }
+      { punto: '', este: 0, norte: 0, error: 0, observacion: '' }
     ],
     altimetria: [
       { punto: '', cota: 0, diferencia: 0, observacion: '' }
