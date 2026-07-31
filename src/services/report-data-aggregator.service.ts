@@ -72,6 +72,9 @@ export interface AggregatedReportData {
   financeMedia: ReportRecord[];
   serviceMedia: any[];
   orderMedia: any[];
+  /** Informes del MISMO servicio. Un informe puede citar a otro: el reclamo por
+   *  excedente se sustenta en los informes de area adicional ya levantados. */
+  reports: ReportRecord[];
 }
 
 /**
@@ -117,6 +120,7 @@ export async function aggregateReportData(
   const FinancialMovement = await getFlexibleModel('FinancialMovement');
   const Media = await getFlexibleModel('Media');
   const ServiceManagementDriveItem = await getFlexibleModel('ServiceManagementDriveItem');
+  const ServiceManagementReport = await getFlexibleModel('ServiceManagementReport');
 
   const service = await ServiceManagement.findById(serviceId).lean();
   if (!service) {
@@ -133,6 +137,7 @@ export async function aggregateReportData(
       financeMedia: [],
       serviceMedia: [],
       orderMedia: [],
+      reports: [],
     };
   }
 
@@ -194,6 +199,11 @@ export async function aggregateReportData(
     serviceManagementId: serviceId,
   }).lean();
 
+  // Solo lo necesario para citar informes entre si (tipo, fecha y su cuadro).
+  const reports = await ServiceManagementReport.find({ serviceManagementId: serviceId })
+    .select({ type: 1, date: 1, status: 1, 'schemaData.cuadroMetrado': 1 })
+    .lean();
+
   return {
     service,
     client,
@@ -207,7 +217,36 @@ export async function aggregateReportData(
     financeMedia,
     serviceMedia,
     orderMedia: [],
+    reports,
   };
+}
+
+/**
+ * Sustento del reclamo a partir de los INFORMES DE AREA ADICIONAL del servicio.
+ *
+ * IAA y REC-EXC no son el mismo informe -IAA prueba trabajo FUERA del contrato,
+ * midiendolo en campo; REC-EXC reclama MAS CANTIDAD de una partida existente-,
+ * pero estaban desconectados: el area ya medida con foto se volvia a tipear.
+ * NO se siembra el metrado ejecutado por partida: IAA mide por ZONA y el reclamo
+ * va por PARTIDA, asi que mapearlos seria adivinar. Se cita la evidencia, que es
+ * verificable, y el responsable decide cuanto reclama.
+ */
+function buildSustentoDesdeIaa(reports: ReportRecord[]): string {
+  const iaa = reports.filter((report) => String(report.type || '') === 'IAA');
+  if (iaa.length === 0) return '';
+
+  const detalle = iaa.map((report) => {
+    const zonas = ((asRecord(report.schemaData).cuadroMetrado as ReportRecord[]) || []);
+    const area = zonas.reduce((total, zona) => total + toCurrencyAmount(zona.area), 0);
+    const fecha = toLimaDateOnly(report.date);
+    return `- Informe de area adicional${fecha ? ` del ${fecha}` : ''}: ${zonas.length} zona(s), ${area.toFixed(2)} m2 medidos.`;
+  });
+
+  return [
+    'Sustento en informes de area adicional del servicio:',
+    ...detalle,
+    'El metrado ejecutado de cada partida debe verificarse contra estos informes.',
+  ].join('\n');
 }
 
 function toCurrencyAmount(value: unknown): number {
@@ -217,6 +256,52 @@ function toCurrencyAmount(value: unknown): number {
 
 function addLiquidacionIgv(subtotal: number): number {
   return Number((subtotal * LIQUIDACION_IGV_FACTOR).toFixed(2));
+}
+
+/** Fecha date-only en LIMA. Un despacho de las 02:00Z es del dia ANTERIOR en Peru. */
+function toLimaDateOnly(value: unknown): string {
+  const date = value instanceof Date ? value : new Date(String(value || ''));
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(date);
+}
+
+type ActividadRow = {
+  fecha: string;
+  actividad: string;
+  descripcion: string;
+  cantidad: number;
+  unidad: string;
+  ubicacion: string;
+};
+
+/**
+ * Actividades realizadas a partir de los DESPACHOS del servicio, agrupadas POR
+ * DIA: un dia con 8 viajes es una actividad con 8 viajes, no 8 filas. La cantidad
+ * es el m3 del dia y los equipos salen de las placas reales.
+ */
+function buildActividadesFromDispatches(dispatches: ReportRecord[]): ActividadRow[] {
+  const byDay = new Map<string, { cantidad: number; viajes: number; obra: string }>();
+
+  dispatches.forEach((dispatch) => {
+    const fecha = toLimaDateOnly(dispatch.date);
+    if (!fecha) return;
+    const current = byDay.get(fecha) || { cantidad: 0, viajes: 0, obra: '' };
+    current.cantidad += toCurrencyAmount(dispatch.quantity);
+    current.viajes += 1;
+    current.obra = current.obra || String(dispatch.obra || dispatch.destino || '');
+    byDay.set(fecha, current);
+  });
+
+  return [...byDay.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([fecha, day]) => ({
+      fecha,
+      actividad: 'Despacho y colocacion de mezcla asfaltica',
+      descripcion: `${day.viajes} viaje(s) despachado(s)`,
+      cantidad: Number(day.cantidad.toFixed(2)),
+      unidad: 'm3',
+      ubicacion: day.obra,
+    }));
 }
 
 function buildPartidaItemCode(partida: ReportRecord, index: number): string {
@@ -324,6 +409,175 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
   const projectData = buildProjectData(service, orders, client, rawData.company);
 
   switch (reportType) {
+    // DOS-OBR (dossier de obra): siembra proyecto y resumen. El INDICE de
+    // documentos NO se siembra aca: lo compila Portal desde los informes reales
+    // del servicio (DOSSIER-OBRA.spec.md D1) porque el estado de cada informe
+    // -aprobado o borrador- vive en `servicemanagementreports`, no aca.
+    case 'DOS-OBR':
+      return {
+        ...projectData,
+        resumen: {
+          periodo: '',
+          responsable: client?.name || '',
+          descripcion: service.projectName || service.description || '',
+        },
+      };
+    // ACT-CNF (acta de conformidad): el acta se creaba con contratista,
+    // subcontratista y monto VACIOS. Portal los rellena, pero recien cuando
+    // alguien ABRE el editor: un acta impresa sin abrirla salia sin las partes.
+    // No se duplica la regla: se mapean los MISMOS `projectData` que ya calcula
+    // `buildProjectData`, y el efecto de Portal solo rellena lo que siga vacio.
+    case 'ACT-CNF': {
+      const partidas = Array.isArray(service.partidas) ? service.partidas as ReportRecord[] : [];
+      const total = buildLiquidacionRows(partidas).reduce(
+        (sum, row) => sum + toCurrencyAmount(row.parcial),
+        0
+      );
+      return {
+        ...projectData,
+        contratista: {
+          razonSocial: projectData.proyecto.contratista,
+          ruc: client?.ruc || client?.taxId || '',
+          representante: client?.legalRepresentative || client?.representanteLegal || '',
+        },
+        subcontratista: {
+          razonSocial: projectData.proyecto.subcontratista,
+          ruc: projectData.proyecto.rucSubcontratista,
+          representanteLegal: '',
+        },
+        obra: { nombre: projectData.proyecto.obra, cui: projectData.proyecto.cui },
+        ...(total > 0 ? { valorizacion: { presupuestoMatriz: '', monto: total } } : {}),
+      };
+    }
+    // INF-ACT (informe de actividades): 200 filas a mano cuando el trabajo del dia
+    // ya esta en los DESPACHOS. Se agrupa por dia (no por viaje) y los equipos
+    // salen de las placas reales. Lo que no tenemos -personal, horas, avance- NO
+    // se inventa: queda vacio para que alguien lo ponga.
+    case 'INF-ACT': {
+      const dispatches = (rawData.dispatches || []) as ReportRecord[];
+      const actividades = buildActividadesFromDispatches(dispatches);
+      if (actividades.length === 0) return { ...projectData };
+      const placas = Array.from(
+        new Set(
+          dispatches
+            .map((dispatch) => String(dispatch.plate || '').trim())
+            .filter(Boolean)
+        )
+      );
+      return {
+        ...projectData,
+        actividades,
+        periodo: {
+          inicio: actividades[0].fecha,
+          fin: actividades[actividades.length - 1].fecha,
+          turno: '',
+          responsable: '',
+        },
+        resumen: {
+          avance: 0,
+          personal: 0,
+          equipos: placas.join(', '),
+          horas: 0,
+        },
+      };
+    }
+    // MET-RES (cuadro resumen de metrado): 300 filas a mano cuando el metrado ya
+    // vive en las partidas del servicio. Se siembra igual que el presupuesto del
+    // contrato; `parcial` y los totales los deriva el schema (formulas).
+    case 'MET-RES': {
+      const partidas = Array.isArray(service.partidas) ? service.partidas as ReportRecord[] : [];
+      const rows = buildLiquidacionRows(partidas);
+      if (rows.length === 0) return { ...projectData };
+      return {
+        ...projectData,
+        metrado: rows.map((row) => ({
+          item: row.item,
+          descripcion: row.descripcion,
+          unidad: row.unidad,
+          metrado: row.metrado,
+          precioUnitario: row.precioUnitario,
+          parcial: row.parcial,
+        })),
+        resumen: {
+          totalMetrado: rows.reduce((sum, row) => sum + toCurrencyAmount(row.metrado), 0),
+          totalParcial: rows.reduce((sum, row) => sum + toCurrencyAmount(row.parcial), 0),
+          observaciones: '',
+        },
+      };
+    }
+    // REC-EXC (reclamo por excedente): el metrado de CONTRATO ya vive en las
+    // partidas del servicio; retipearlo es la forma mas facil de reclamar contra
+    // una cifra equivocada. El EJECUTADO se deja en cero a proposito: es el dato
+    // que sostiene el reclamo y nadie mas que el responsable lo conoce.
+    case 'REC-EXC': {
+      const partidas = Array.isArray(service.partidas) ? service.partidas as ReportRecord[] : [];
+      const rows = buildLiquidacionRows(partidas);
+      const sustentoIaa = buildSustentoDesdeIaa(rawData.reports || []);
+      if (rows.length === 0) {
+        return sustentoIaa ? { ...projectData, sustento: sustentoIaa } : { ...projectData };
+      }
+      return {
+        ...projectData,
+        ...(sustentoIaa ? { sustento: sustentoIaa } : {}),
+        reclamo: {
+          fecha: toLimaDateOnly(new Date()),
+          solicitante: '',
+          contrato: '',
+          motivo: '',
+        },
+        metradoReclamo: rows.map((row) => ({
+          item: row.item,
+          descripcion: row.descripcion,
+          unidad: row.unidad,
+          metradoContrato: row.metrado,
+          metradoEjecutado: 0,
+          precioUnitario: row.precioUnitario,
+          observacion: '',
+        })),
+      };
+    }
+    // TOP-CMP / TOP-PROT: las lecturas nacen del equipo topografico; lo unico
+    // que se siembra es la fecha del levantamiento. El protocolo simple es el
+    // mismo caso que el completo, sin duplicar la rama.
+    case 'TOP-PROT':
+    case 'TOP-CMP':
+      return {
+        ...projectData,
+        topografia: {
+          fecha: toLimaDateOnly(new Date()),
+          equipo: '',
+          operador: '',
+          sistemaReferencia: '',
+          metodologia: '',
+          precision: '',
+          toleranciaPlanimetrica: 0,
+          toleranciaAltimetrica: 0,
+        },
+      };
+    // CAL-PROT: los ensayos los produce el laboratorio; se siembra la fecha del
+    // protocolo y nada mas.
+    case 'CAL-PROT':
+      return {
+        ...projectData,
+        control: {
+          fecha: toLimaDateOnly(new Date()),
+          laboratorio: '',
+          responsable: '',
+          norma: '',
+        },
+      };
+    // LEV-OBS: la observacion NACE en campo, asi que no hay nada que compilar.
+    // Lo unico que se siembra es la fecha del control, porque el cuadro la usa
+    // como referencia para los dias de atraso de lo que sigue abierto.
+    case 'LEV-OBS':
+      return {
+        ...projectData,
+        control: {
+          fecha: toLimaDateOnly(new Date()),
+          responsable: '',
+          area: '',
+        },
+      };
     case 'PNL-FOT':
       return {
         ...projectData,
@@ -504,6 +758,15 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
       const clientRepresentante = client?.legalRepresentative || client?.representanteLegal || '';
       const partidas = Array.isArray(service.partidas) ? service.partidas as ReportRecord[] : [];
       const contractRows = buildLiquidacionRows(partidas);
+      // C4: trazabilidad con la cotizacion de origen. El numero vive por PARTIDA
+      // (`sourceQuoteNro`), asi que un contrato puede venir de mas de una.
+      const quoteNumbers = Array.from(
+        new Set(
+          partidas
+            .map((partida) => String(partida.sourceQuoteNro ?? '').trim())
+            .filter((numero) => numero && numero !== '0')
+        )
+      );
       const contractTotal = contractRows.reduce(
         (sum, row) => sum + toCurrencyAmount(row.parcial),
         0
@@ -521,6 +784,9 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
           cui: service.cui || '',
           ubicacion: service.locationUrl || '',
         },
+        ...(quoteNumbers.length > 0
+          ? { cotizacion: { numeros: quoteNumbers.join(', '), fecha: '', observacion: '' } }
+          : {}),
         ...(contractRows.length > 0
           ? {
               monto: { total: contractTotal },
@@ -537,6 +803,20 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
                 metrado: row.metrado,
                 precioUnit: row.precioUnitario,
                 parcial: row.parcial,
+              })),
+              // C3 — Anexo 2: el cronograma nace con las partidas y sus metrados.
+              // `rendimiento` y fechas van en cero/vacio A PROPOSITO: los pacta la
+              // empresa. Un rendimiento inventado seria peor que ninguno, porque
+              // es la referencia contra la que se mide el cumplimiento del plazo.
+              cronograma: contractRows.map((row) => ({
+                item: row.item,
+                partida: row.descripcion,
+                unidad: row.unidad,
+                metrado: row.metrado,
+                rendimiento: 0,
+                dias: 0,
+                inicio: '',
+                fin: '',
               })),
             }
           : {}),

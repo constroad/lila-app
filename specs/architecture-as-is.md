@@ -91,7 +91,19 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   El estado aparcado vive en memoria (`parkedSessions`), así que **un restart lo limpia sin
   QR**. NOTA: `session.controller.simple.ts` sigue exponiendo `status:'needs_repair'` a
   Portal para cualquier aparcado, sin distinguir la causa (ver deuda).
-- Listener IA de Anthropic existe (`src/whatsapp/ai-agent/*`) pero esta deshabilitado en produccion (early return en `message.listener.ts`, flag `WHATSAPP_AI_ENABLED`).
+- Listener IA legacy (`src/whatsapp/ai-agent/*`): HUÉRFANO desde el refactor a
+  `sessions.simple` — nadie registra `messages.upsert` hacia él, así que ni la IA
+  ni sus acciones client-report corren (verificado 2026-07-30). Se conserva como
+  referencia (prompt "María", typing-simulator).
+- **Agente conversacional multi-vertical (2026-07-30, F1):** `src/agent/runtime/*`
+  — router puro con deps + persistencia Mongo (`bot_configs`, `bot_conversations`,
+  `bot_conversation_messages`) + wiring `messages.upsert` en `sessions.simple.ts`
+  (solo eventos `notify`). Doble gate: env `WHATSAPP_AGENT_ENABLED` (default
+  false → inerte) + `bot_configs.enabled` por company + allowlist `testNumbers`.
+  Grupos/broadcast siempre ignorados; idempotencia por `channelMessageId`; rate
+  limit 8 msg/min por jid; typing humano cap 4 s; quota vía
+  `incrementWhatsAppUsage`. Spec: `/projects/WHATSAPP-AGENT-VERTICALS.spec.md`
+  (runbook piloto §9).
 - Una sesion por empresa, credenciales en `data/sessions/{companyPhone}` (volumen montado).
 - **Auth de rutas de sesion (`/api/sessions/*` state-changing):** middleware `requireTenantOrApiKey` (junio 2026) acepta JWT de tenant (Portal), API key `lk_fe_...` o, por compatibilidad, la API key global `x-api-key`. Antes exigian solo `x-api-key === API_SECRET_KEY`, lo que rompia el boton "Desconectar" de Portal (que firma JWT). Plan de deprecar el secreto global en `specs/SCALABILITY-MULTI-SESSION.spec.md` §4.4/§4.5.
 - **Multi-sesion (junio 2026):** `startSession` tiene guard anti-duplicado (mapa `startingPromises` + chequeo `isSessionReady`) que reutiliza la inicializacion en curso / el socket vivo sin bloquear la reconexion automatica; el cuerpo real se movio a `initSession`. Los `setInterval` de persistencia del store se trackean en `storeTimers` y se cancelan con `clearStoreTimer` (en `startSession`, `createPairingSession`, `disconnectSession`, `endSession`, `clearSession`) para no fugar timers en reconexiones.
@@ -256,6 +268,7 @@ Flujo estándar de renditions (post-auditoría):
 /api/public                       recepcion publica (JWT firma Portal)
 /api/service-management-report    CRUD informes de servicio (con edit-lock)
 /api/service-migrations           migraciones cross-company
+/api/vision                       OCR de imagenes via LLM de vision (apagado por defecto)
 /files/companies/{companyId}/...  static multi-tenant
 ```
 
@@ -334,7 +347,8 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 | `WHATSAPP_RESTORE_SESSIONS` | true solo en production | Restaura sesiones Mongo al arrancar |
 | `WHATSAPP_MAX_RECONNECT_ATTEMPTS` | 0 | 0 = unlimited |
 | `WHATSAPP_AI_ENABLED` | false | Listener Claude (deshabilitado) |
-| `WHATSAPP_AI_TEST_NUMBER` | 51949376824 | Solo whitelist en test |
+| `WHATSAPP_AI_TEST_NUMBER` | 51949376824 | Solo whitelist en test (listener legacy, huérfano) |
+| `WHATSAPP_AGENT_ENABLED` | false | Kill-switch del agente conversacional F1 (`src/agent/*`); el gate por company vive en `bot_configs` |
 | `WHATSAPP_BAILEYS_LOG_LEVEL` | fatal | |
 | `ANTHROPIC_API_KEY` | - | Claude API |
 | `TELEGRAM_BOT_TOKEN` | - | Bot Telegram para alertas |
@@ -351,6 +365,10 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 | `FILE_STORAGE_ROOT` | `/mnt/constroad-storage` | Raiz multi-tenant |
 | `DRIVE_MAX_FILE_SIZE_MB` | 25 | |
 | `DRIVE_CACHE_DIR` | derivado | |
+| `VISION_PROVIDER` | - | `gemini` \| `anthropic` \| `openai-compatible`. Sin valor el OCR queda apagado |
+| `VISION_API_KEY` | - | Key del proveedor. **Vacía a propósito**: sin key, `/api/vision` responde 503 |
+| `VISION_MODEL` | `gemini-2.5-flash-lite` | Modelo de visión |
+| `VISION_BASE_URL` | - | Solo para `openai-compatible` |
 | `API_SECRET_KEY` | dev-secret-key | API key legacy |
 | `JWT_SECRET` | dev-jwt-secret | **Debe igualar `LILA_APP_JWT_SECRET` del Portal** |
 | `RATE_LIMIT_WINDOW` / `RATE_LIMIT_MAX` | 5m / 200 | Por IP |
@@ -462,6 +480,10 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
   nuevas.
 
 ## Cambios recientes (Mayo - Junio 2026)
+- **Julio 2026 (30)**: agente conversacional F1 (`src/agent/runtime/*` + wiring
+  `messages.upsert` en sessions.simple). Inerte sin `WHATSAPP_AGENT_ENABLED` +
+  `bot_configs.enabled`. Descubierto y documentado: el listener IA legacy quedó
+  huérfano (sin registro de `messages.upsert`) desde el refactor a sessions.simple.
 - **Julio 2026**: las alertas Telegram de progreso y fin de producción ya no
   dependen de un sender WhatsApp. El postproceso conserva WhatsApp como canal
   opcional, mantiene deduplicación por despacho y cierre diario, y encola fallos
@@ -548,3 +570,29 @@ Qué le toca a lila-app (y qué NO):
   cadena de folders del Portal o `media.type`. Estado en **`order.exportJob`**
   (`running|done|error`, fileName/sizeBytes/expiresAt 24 h) — el Portal lo lee
   por su propio `GET /api/order/:id` (el panel hace polling cada 3 s).
+
+## OCR de imágenes por LLM de visión — `/api/vision` (2026-07-29)
+
+Nace del ticket de balanza de Flota (Portal `specs/modules/FLOTA-TRANSPORTE.spec.md`
+§20.17): el chofer sube la foto del ticket y el peso se tipea a mano. El OCR
+transcribe; **el peso lo confirma un humano siempre**.
+
+- **Estado: APAGADO.** Sin `VISION_API_KEY` el controlador responde **503
+  `vision-not-configured`** y nada en Portal lo llama. Encenderlo es una decisión de
+  José (cuesta plata en cualquier proveedor pago). Paso a paso de activación:
+  `specs/VISION-OCR-SETUP.spec.md`.
+- **Agnóstico al proveedor a propósito** (`services/vision-ocr.service.ts`, 12 tests):
+  `resolveVisionProvider` lee provider+key+model de env; `buildVisionRequest` es lo
+  único que difiere por proveedor (gemini = `inline_data` + key en la URL; anthropic =
+  `x-api-key` + `anthropic-version`; openai-compatible = Bearer + data URL) y
+  `extractVisionText` normaliza la respuesta. Cambiar de proveedor = cambiar dos env
+  vars, no código.
+- **El LLM solo TRANSCRIBE** (`WEIGH_NOTE_PROMPT`: "No interpretes, no corrijas"). La
+  interpretación —kg→tn, placa, coherencia contra el viaje— vive en Portal
+  (`src/server/fleet/weighNoteParser.ts`, 13 tests) y su salida es una **propuesta**
+  (`ok|incompleto|incoherente|placa-distinta`, `requiresConfirmation` siempre true).
+  Un peso es dinero: no se factura lo que nadie confirmó.
+- **Ruta**: `POST /api/vision/weigh-note` con `requireTenant` + `strictRateLimiter`.
+  Techos de coste en el controlador: **60 imágenes por empresa por día** (contador en
+  memoria), 4 MB por imagen, timeout de 25 s. Errores al cliente genéricos
+  (429/502/422/504) — sin URL del proveedor ni stack.

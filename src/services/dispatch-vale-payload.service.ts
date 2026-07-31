@@ -2,6 +2,7 @@ import { Schema, Types } from 'mongoose';
 import { getSharedConnection } from '../database/sharedConnection.js';
 import { getCompanyModel } from '../database/models.js';
 import type { DispatchNoteDocumentPayload } from './dispatch-note-document.service.js';
+import { resolveClientFacingM3 } from '../utils/client-facing-m3.js';
 
 type PortalDispatch = {
   _id?: Types.ObjectId | string;
@@ -234,7 +235,10 @@ export async function buildDispatchValePayloadFromPortal(params: {
   const hourToSave = dispatch.hour?.trim() || peruvianTime;
   const companyName = company?.name || 'ConstRoad';
   const note = dispatch.note || '';
-  const quantity = dispatch.quantity || 0;
+  // El vale es un documento del CLIENTE: si hay override de presentación manda
+  // ese, igual que el vale manual de Portal. Antes usaba `dispatch.quantity`
+  // crudo, así que el vale automático y el manual imprimían números distintos.
+  const quantity = resolveClientFacingM3(dispatch);
   const driverName =
     dispatch.driverName?.trim() ||
     transport?.driverName?.trim() ||

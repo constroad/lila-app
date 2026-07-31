@@ -44,18 +44,28 @@ const MAX_ATTEMPTS = 3;
 const MAX_AGE_MS = 12 * 60 * 60 * 1000; // más viejo que una jornada no tiene sentido
 const DEFAULT_FLUSH_INTERVAL_MS = 60 * 1000;
 
-const store = new JsonStore({
-  baseDir: path.join(config.whatsapp.sessionDir, '../driver-reminders'),
-  autoBackup: true,
-});
+// Lazy: crear el store al primer uso, no al importar el módulo (mismo motivo
+// que dispatch-autoclose: leer config en load-time rompe suites CJS con
+// environment mockeado sin `whatsapp`, y un import no debería tocar filesystem).
+let store: JsonStore | null = null;
+
+function getStore(): JsonStore {
+  if (!store) {
+    store = new JsonStore({
+      baseDir: path.join(config.whatsapp.sessionDir, '../driver-reminders'),
+      autoBackup: true,
+    });
+  }
+  return store;
+}
 
 async function listQueue(): Promise<DriverReminderItem[]> {
-  const data = await store.get<DriverReminderItem[]>(STORE_KEY);
+  const data = await getStore().get<DriverReminderItem[]>(STORE_KEY);
   return Array.isArray(data) ? data : [];
 }
 
 async function saveQueue(items: DriverReminderItem[]): Promise<void> {
-  await store.set(STORE_KEY, items);
+  await getStore().set(STORE_KEY, items);
 }
 
 /** ETA (segundos) del despacho vía Portal (interna, x-company-id). Null si falla. */

@@ -9,8 +9,8 @@ export const levantamientoObsSchema: DocumentSchema = {
   name: 'Informe Levantamiento Observaciones',
   description: 'Registro de observaciones y acciones correctivas ejecutadas.',
   category: 'Quality',
-  version: '1.0.0',
-  lastUpdated: '2026-02-10',
+  version: '1.1.0',
+  lastUpdated: '2026-07-30',
   orientation: 'portrait',
   pageSize: 'A4',
   margins: { top: 10, right: 10, bottom: 10, left: 10 },
@@ -61,24 +61,67 @@ export const levantamientoObsSchema: DocumentSchema = {
       minRows: 1,
       maxRows: 200,
       columns: [
-        { key: 'codigo', label: 'CODIGO', type: 'text', width: 80, align: 'center', editable: true },
-        { key: 'descripcion', label: 'DESCRIPCION', type: 'text', width: 240, align: 'left', editable: true },
-        { key: 'ubicacion', label: 'UBICACION', type: 'text', width: 150, align: 'left', editable: true },
-        { key: 'accionCorrectiva', label: 'ACCION CORRECTIVA', type: 'text', width: 220, align: 'left', editable: true },
+        {
+          key: 'codigo',
+          label: 'CODIGO',
+          type: 'text',
+          width: 70,
+          align: 'center',
+          // Correlativo del documento, no del que tipea: borrar una fila del
+          // medio dejaba huecos (OBS-01, OBS-03) y dos filas con el mismo codigo
+          // rompen la trazabilidad de la observacion.
+          computed: true,
+          formula: "'OBS-' + String(rows.length + 1).padStart(2, '0')",
+          computedHint: 'Correlativo automatico: numera segun el orden de las filas.',
+        },
+        { key: 'descripcion', label: 'DESCRIPCION', type: 'text', width: 200, align: 'left', editable: true },
+        { key: 'ubicacion', label: 'UBICACION', type: 'text', width: 110, align: 'left', editable: true },
+        { key: 'responsable', label: 'RESPONSABLE', type: 'text', width: 110, align: 'left', editable: true },
+        { key: 'accionCorrectiva', label: 'ACCION CORRECTIVA', type: 'text', width: 180, align: 'left', editable: true },
+        { key: 'plazo', label: 'PLAZO', type: 'date', width: 90, align: 'center', editable: true },
+        { key: 'fechaLevantamiento', label: 'FECHA LEVANT.', type: 'date', width: 95, align: 'center', editable: true },
         {
           key: 'estado',
           label: 'ESTADO',
           type: 'select',
-          width: 110,
+          width: 95,
           align: 'center',
-          editable: true,
+          // El estado se DERIVA de la evidencia, no de la voluntad: se tipeaba
+          // aparte y el papel podia decir LEVANTADO con la fecha en blanco, o
+          // PENDIENTE con la observacion ya cerrada. Ahora manda el dato.
+          computed: true,
+          formula: "row.fechaLevantamiento ? 'LEVANTADO' : (String(row.accionCorrectiva || '').trim() ? 'EN_PROCESO' : 'PENDIENTE')",
+          computedHint: 'Se calcula solo: pon la FECHA LEVANT. para que pase a LEVANTADO (con solo la accion correctiva queda EN PROCESO).',
           options: [
             { value: 'PENDIENTE', label: 'PENDIENTE' },
             { value: 'EN_PROCESO', label: 'EN PROCESO' },
             { value: 'LEVANTADO', label: 'LEVANTADO' }
           ]
         },
-        { key: 'fechaLevantamiento', label: 'FECHA LEVANT.', type: 'date', width: 120, align: 'center', editable: true }
+        {
+          key: 'diasAtraso',
+          label: 'DIAS ATRASO',
+          type: 'number',
+          width: 70,
+          align: 'right',
+          // Contra la fecha DEL INFORME cuando sigue abierta, nunca contra "hoy":
+          // un documento firmado no puede cambiar de numeros al reimprimirse.
+          computed: true,
+          formula: "row.plazo ? Math.round((Date.parse(String(row.fechaLevantamiento || (data.control || {}).fecha || row.plazo)) - Date.parse(String(row.plazo))) / 86400000) : ''",
+          computedHint: 'Se calcula solo: PLAZO contra la fecha de levantamiento (o la del informe si sigue abierta).',
+        }
+      ]
+    },
+    {
+      id: 'resumenLevantamiento',
+      type: 'summary',
+      title: 'Resumen del Levantamiento',
+      gridColumns: 4,
+      fields: [
+        { key: 'resumen.total', label: 'OBSERVACIONES', type: 'number', span: 1 },
+        { key: 'resumen.levantadas', label: 'LEVANTADAS', type: 'number', span: 1 },
+        { key: 'resumen.pendientes', label: 'PENDIENTES', type: 'number', span: 1 },
+        { key: 'resumen.porcentaje', label: '% LEVANTAMIENTO', type: 'number', span: 1 }
       ]
     },
     {
@@ -135,11 +178,20 @@ export const levantamientoObsSchema: DocumentSchema = {
         codigo: 'OBS-01',
         descripcion: '',
         ubicacion: '',
+        responsable: '',
         accionCorrectiva: '',
+        plazo: '',
+        fechaLevantamiento: '',
         estado: 'PENDIENTE',
-        fechaLevantamiento: ''
+        diasAtraso: ''
       }
     ],
+    resumen: {
+      total: 0,
+      levantadas: 0,
+      pendientes: 0,
+      porcentaje: 0
+    },
     evidencias: { fotos: [] },
     observacionesGenerales: '',
     firmas: {
@@ -147,6 +199,30 @@ export const levantamientoObsSchema: DocumentSchema = {
       aprobadoPor: { nombre: '', cargo: 'Jefe de Proyecto', cip: '' }
     }
   },
+  // Las filas EN BLANCO no son observaciones: la tabla arranca con una y casi
+  // nadie la borra. Contarlas bajaria el % de levantamiento sin motivo.
+  computedFields: [
+    {
+      key: 'resumen.total',
+      formula: "(data.observaciones || []).filter((obs) => String(obs.descripcion || '').trim()).length",
+      dependencies: ['observaciones'],
+    },
+    {
+      key: 'resumen.levantadas',
+      formula: "(data.observaciones || []).filter((obs) => String(obs.descripcion || '').trim() && obs.fechaLevantamiento).length",
+      dependencies: ['observaciones'],
+    },
+    {
+      key: 'resumen.pendientes',
+      formula: 'num(data.resumen.total) - num(data.resumen.levantadas)',
+      dependencies: ['resumen.total', 'resumen.levantadas'],
+    },
+    {
+      key: 'resumen.porcentaje',
+      formula: 'round((num(data.resumen.levantadas) / Math.max(1, num(data.resumen.total))) * 100, 0)',
+      dependencies: ['resumen.total', 'resumen.levantadas'],
+    },
+  ],
   exportOptions: {
     docx: true,
     pdf: true,

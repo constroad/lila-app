@@ -74,6 +74,9 @@ export interface ColumnSchema {
   visible?: boolean;
   sortable?: boolean;
   computed?: boolean;
+  /** Por que esta celda no se puede tipear y que hay que llenar para moverla.
+   *  Una columna derivada sin explicacion se lee como un campo roto. */
+  computedHint?: string;
   formula?: string;
   exclusiveGroup?: string;
   options?: {

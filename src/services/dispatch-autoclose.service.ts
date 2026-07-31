@@ -44,18 +44,28 @@ const NO_ETA_FALLBACK_MS = 90 * 60 * 1000;
 // cerraría. Se acota para que siempre alcance a ejecutarse dentro de su vida.
 const MAX_DELAY_MS = MAX_AGE_MS - 60 * 1000;
 
-const store = new JsonStore({
-  baseDir: path.join(config.whatsapp.sessionDir, '../dispatch-autoclose'),
-  autoBackup: true,
-});
+// Lazy: crear el store al primer uso, no al importar el módulo. Leer
+// config.whatsapp.sessionDir en load-time rompía las suites CJS que mockean
+// environment.js sin ese subárbol (y un import no debería tocar el filesystem).
+let store: JsonStore | null = null;
+
+function getStore(): JsonStore {
+  if (!store) {
+    store = new JsonStore({
+      baseDir: path.join(config.whatsapp.sessionDir, '../dispatch-autoclose'),
+      autoBackup: true,
+    });
+  }
+  return store;
+}
 
 async function listQueue(): Promise<DispatchAutoCloseItem[]> {
-  const data = await store.get<DispatchAutoCloseItem[]>(STORE_KEY);
+  const data = await getStore().get<DispatchAutoCloseItem[]>(STORE_KEY);
   return Array.isArray(data) ? data : [];
 }
 
 async function saveQueue(items: DispatchAutoCloseItem[]): Promise<void> {
-  await store.set(STORE_KEY, items);
+  await getStore().set(STORE_KEY, items);
 }
 
 /** Delay del cierre = ETA de la unidad (segundos) tal cual. Sin ETA → fallback. */

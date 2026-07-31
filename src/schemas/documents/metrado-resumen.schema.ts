@@ -9,8 +9,8 @@ export const metradoResumenSchema: DocumentSchema = {
   name: 'Cuadro Resumen de Metrado',
   description: 'Resumen de metrados ejecutados por partidas y periodos.',
   category: 'Technical',
-  version: '1.0.0',
-  lastUpdated: '2026-02-10',
+  version: '1.1.0',
+  lastUpdated: '2026-07-30',
   orientation: 'portrait',
   pageSize: 'A4',
   margins: { top: 10, right: 10, bottom: 10, left: 10 },
@@ -66,7 +66,19 @@ export const metradoResumenSchema: DocumentSchema = {
         { key: 'unidad', label: 'UNIDAD', type: 'text', width: 80, align: 'center', editable: true },
         { key: 'metrado', label: 'METRADO', type: 'number', width: 90, align: 'right', editable: true },
         { key: 'precioUnitario', label: 'P.U.', type: 'currency', width: 90, align: 'right', editable: true },
-        { key: 'parcial', label: 'PARCIAL', type: 'currency', width: 100, align: 'right', editable: true }
+        {
+          key: 'parcial',
+          label: 'PARCIAL',
+          type: 'currency',
+          width: 100,
+          align: 'right',
+          // Derivado: metrado x P.U. Si se tipeara aparte, el cuadro se
+          // contradeciria a si mismo. `computed: true` es OBLIGATORIO: sin el la
+          // formula es inerte y la celda se queda con lo guardado, en silencio.
+          computed: true,
+          formula: 'round(num(row.metrado) * num(row.precioUnitario), 2)',
+          computedHint: 'Se calcula solo: METRADO por P. UNITARIO.',
+        }
       ]
     },
     {
@@ -124,6 +136,24 @@ export const metradoResumenSchema: DocumentSchema = {
       revisadoPor: { nombre: '', cargo: 'Supervisor', cip: '' }
     }
   },
+  // Los totales del resumen se DERIVAN de la tabla: nadie los suma a mano.
+  computedFields: [
+    {
+      key: 'resumen.totalMetrado',
+      formula: "round(sum(metrado, 'metrado'), 2)",
+      dependencies: ['metrado'],
+    },
+    {
+      // `parcial` es una columna COMPUTADA: se persiste solo cuando alguien
+      // edita la tabla en el canvas (`commitTableRows`). Una fila escrita por el
+      // agregador, por un import o por la API queda con el `parcial` guardado, y
+      // sumar esa columna daba un total que no cuadraba con sus propias filas.
+      // Derivarlo de lo crudo lo hace cierto venga de donde venga la data.
+      key: 'resumen.totalParcial',
+      formula: 'round((data.metrado || []).reduce((total, fila) => total + num(fila.metrado) * num(fila.precioUnitario), 0), 2)',
+      dependencies: ['metrado'],
+    },
+  ],
   exportOptions: {
     docx: true,
     pdf: true,

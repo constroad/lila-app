@@ -15,6 +15,18 @@ jest.mock('../config/environment.js', () => ({
   },
 }));
 
+// logger.ts lee config.logging.dir al CARGAR; con environment mockeado sin
+// `logging` la suite ni siquiera corría. Mismo mock que dispatch-vale.
+jest.mock('../utils/logger.js', () => ({
+  __esModule: true,
+  default: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 jest.mock('../database/models.js', () => ({
   getCompanyModel: jest.fn(),
   getConfigModel: jest.fn(),
@@ -119,13 +131,16 @@ describe('dispatch-post-process.service', () => {
   it('calls Portal IPP sync when orderId is present', async () => {
     await service.processPostDispatch(buildInput({ orderId: 'order-1' }));
 
+    // El callback va FIRMADO (buildPortalCallbackHeaders): JWT Bearer +
+    // x-company-id. La aserción valida el contrato, no el token exacto.
     expect(axios.post).toHaveBeenCalledWith(
       'https://portal.constroad.com/api/dispatch/dispatch-1',
       {},
       {
-        headers: {
+        headers: expect.objectContaining({
           'x-company-id': 'constroad',
-        },
+          Authorization: expect.stringMatching(/^Bearer .+/),
+        }),
         timeout: 10000,
       }
     );

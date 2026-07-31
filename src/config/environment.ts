@@ -58,6 +58,11 @@ export const config = {
     qrTimeout: 60000, // 60 segundos
     aiEnabled: process.env.WHATSAPP_AI_ENABLED === 'true',
     aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || '51949376824',
+    // Agente conversacional multi-vertical (WHATSAPP-AGENT-VERTICALS F1).
+    // Kill-switch GLOBAL del listener messages.upsert nuevo; el gate real por
+    // company vive en bot_configs (enabled + testNumbers). Default false:
+    // el deploy es inerte hasta encenderlo explícitamente.
+    agentEnabled: process.env.WHATSAPP_AGENT_ENABLED === 'true',
     baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || 'fatal',
     // Lease process-level de sockets (candado anti doble-instancia / guerra 440).
     // Default habilitado; WHATSAPP_SOCKET_LEASE=false lo apaga (ej. entorno aislado

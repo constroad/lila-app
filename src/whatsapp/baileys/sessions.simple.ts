@@ -29,6 +29,7 @@ import { clearPopulateCooldown } from './populate-store-simple.js';
 import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
 import { hasSocketLease } from './instance-lease.js';
 import { isLocalOnlySession } from './local-sessions.js';
+import { handleAgentMessagesUpsert } from '../../agent/runtime/agent-wiring.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -611,6 +612,14 @@ async function initSession(
   // los ~6 refs de la ventana de pairing. Mismo riesgo con creds.update: un
   // pair-success ocurrido durante la carga no se persistía a Mongo.
   sock.ev.on('creds.update', saveCreds);
+
+  // Agente conversacional (WHATSAPP-AGENT-VERTICALS F1): entrantes → router.
+  // Doble gate: WHATSAPP_AGENT_ENABLED (env, default off) + bot_configs.enabled
+  // por company (+ allowlist de pilotos). Sin ambos, este handler es no-op y el
+  // comportamiento de sesiones/grupos queda EXACTAMENTE igual que hoy.
+  sock.ev.on('messages.upsert', (upsert) => {
+    void handleAgentMessagesUpsert(sessionId, sock, upsert);
+  });
 
   // Watchdog: si el socket no llega a 'open' ni 'close' en CONNECTION_TIMEOUT_MS,
   // lo forzamos a cerrar. Evita el bug observado donde la sesión quedaba en estado
