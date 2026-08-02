@@ -19,6 +19,10 @@ function normalizeOrderCompletion(value: unknown): DispatchPostProcessInput['ord
           driverName: typeof row.driverName === 'string' ? row.driverName : '',
           hour: typeof row.hour === 'string' ? row.hour : '',
           note: typeof row.note === 'string' ? row.note : '',
+          unitNumber:
+            typeof row.unitNumber === 'number' && Number.isInteger(row.unitNumber)
+              ? row.unitNumber
+              : undefined,
           plate: typeof row.plate === 'string' ? row.plate : '',
           quantity: typeof row.quantity === 'number' ? row.quantity : 0,
         }))
@@ -79,6 +83,10 @@ export function validatePostProcessInput(body: unknown): ValidationResult {
       clientId: typeof payload.clientId === 'string' ? payload.clientId : undefined,
       state: payload.state,
       note: typeof payload.note === 'string' ? payload.note : undefined,
+      unitNumber:
+        typeof payload.unitNumber === 'number' && Number.isInteger(payload.unitNumber)
+          ? payload.unitNumber
+          : undefined,
       quantity: typeof payload.quantity === 'number' ? payload.quantity : undefined,
       plate: typeof payload.plate === 'string' ? payload.plate : undefined,
       driverName:

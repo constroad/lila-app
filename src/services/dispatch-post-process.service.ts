@@ -97,6 +97,7 @@ export async function processPostDispatch(input: DispatchPostProcessInput) {
     sender: input.sender || '(none)',
     pendingCount: input.pendingCount,
     dispatchedCount: input.dispatchedCount,
+    unitNumber: input.unitNumber,
   });
 
   const context = await fetchDispatchContext(input);

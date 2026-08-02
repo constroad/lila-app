@@ -218,6 +218,13 @@ export function buildOrderCompletionCaption(params: {
   ].join('\n');
 }
 
+/**
+ * Red de seguridad de la tabla del resumen. No es un recorte de presentacion:
+ * los pedidos reales llegan a 28 unidades y todas se dibujan. Si algun dia se
+ * supera, la imagen lo DICE en vez de perderlas en silencio.
+ */
+const MAX_SUMMARY_ROWS = 40;
+
 export function buildOrderCompletionSummarySvg(params: {
   clientName: string;
   date: string;
@@ -230,8 +237,26 @@ export function buildOrderCompletionSummarySvg(params: {
   const rowHeight = 54;
   const headerTop = 260;
   const tableTop = 330;
-  const rows = params.rows.slice(0, 14);
-  const height = Math.max(760, tableTop + rowHeight * (rows.length + 1) + 120);
+  // Portal manda los despachos con `date: -1` (el ultimo primero): sin ordenar,
+  // el cliente recibia su resumen desordenado (2, 1, 3). Manda el "Unidad N"
+  // congelado; sin el (payloads viejos) se cae a la hora de salida.
+  const ordered = [...params.rows].sort((left, right) => {
+    const leftUnit = Number(left.unitNumber) > 0 ? Number(left.unitNumber) : Number.MAX_SAFE_INTEGER;
+    const rightUnit = Number(right.unitNumber) > 0 ? Number(right.unitNumber) : Number.MAX_SAFE_INTEGER;
+    if (leftUnit !== rightUnit) return leftUnit - rightUnit;
+    return String(left.hour || '').localeCompare(String(right.hour || ''));
+  });
+  // Antes se recortaba en 14 filas SIN avisar: 16 de 307 pedidos de constroad
+  // pasan de 14 unidades (max 28), y el cliente recibia un encabezado que decia
+  // "28 Unidades" sobre una tabla de 14. La imagen ahora CRECE con las filas.
+  // El tope alto es solo una red de seguridad y, si se toca, se dice cuantas
+  // quedaron fuera: un recorte mudo es lo que estamos sacando.
+  const rows = ordered.slice(0, MAX_SUMMARY_ROWS);
+  const hiddenRows = ordered.length - rows.length;
+  const height = Math.max(
+    760,
+    tableTop + rowHeight * (rows.length + (hiddenRows > 0 ? 2 : 1)) + 120
+  );
   const rowSvg = rows
     .map((row, index) => {
       const y = tableTop + rowHeight * (index + 1);
@@ -246,6 +271,14 @@ export function buildOrderCompletionSummarySvg(params: {
       `;
     })
     .join('');
+
+  const hiddenSvg =
+    hiddenRows > 0
+      ? `
+        <rect x="32" y="${tableTop + rowHeight * (rows.length + 1)}" width="1136" height="${rowHeight}" fill="#fff7ed" />
+        <text x="72" y="${tableTop + rowHeight * (rows.length + 1) + 34}" class="cell">y ${hiddenRows} unidades mas en el detalle del pedido</text>
+      `
+      : '';
 
   return `
     <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="${height}" viewBox="0 0 1200 ${height}">
@@ -285,6 +318,7 @@ export function buildOrderCompletionSummarySvg(params: {
       <text x="830" y="${tableTop + 35}" class="head">NOTA</text>
       <text x="1095" y="${tableTop + 35}" class="head right">M3</text>
       ${rowSvg}
+      ${hiddenSvg}
     </svg>
   `;
 }
@@ -528,7 +562,16 @@ async function sendOrderCompletionSummary(params: {
   companyId: string;
   completion?: DispatchPostProcessInput['orderCompletion'];
 }): Promise<boolean> {
-  if (!params.completion || params.targets.length === 0) return false;
+  if (!params.completion || params.targets.length === 0) {
+    // Salida MUDA histórica: el resumen es lo último que ve el cliente de su
+    // pedido y no dejaba rastro ni cuando se enviaba ni cuando se saltaba.
+    logger.warn('dispatch_order_completion.skipped', {
+      companyId: params.companyId,
+      hasCompletion: Boolean(params.completion),
+      targets: params.targets.length,
+    });
+    return false;
+  }
 
   const shouldSend = await claimNotificationFlag(
     `dispatch-order-completion:${params.companyId}:${params.completion.orderId || params.completion.rows.map((row) => row.plate).join('|')}`,
@@ -547,6 +590,13 @@ async function sendOrderCompletionSummary(params: {
     });
     return false;
   }
+  logger.info('dispatch_order_completion.sending', {
+    companyId: params.companyId,
+    orderId: params.completion.orderId,
+    rows: params.completion.rows.length,
+    totalUnits: params.completion.totalUnits,
+    targets: params.targets.length,
+  });
   const caption = buildOrderCompletionCaption({
     botLabel: params.botLabel,
     clientName: params.completion.clientName,
@@ -633,7 +683,14 @@ export async function sendDispatchNotifications(params: NotificationParams) {
   const driverLicense = toSafeText(input.driverLicense);
   const driverPhoneNumber = toSafeText(input.driverPhoneNumber);
   const obra = toSafeText(input.obra, 'No especificada');
-  const dispatchOrdinal = Math.max(Number(input.dispatchedCount) || 0, 1);
+  // "Unidad N" del PEDIDO cuando Portal lo manda (congelado al salir): es el
+  // mismo numero que recibe el cliente y el que va en su vale. `dispatchedCount`
+  // queda como respaldo para payloads viejos, pero cuenta por EMPRESA y dia
+  // operativo: con dos pedidos el mismo dia numeraba distinto que el cliente.
+  const dispatchOrdinal =
+    Number.isInteger(input.unitNumber) && Number(input.unitNumber) > 0
+      ? Number(input.unitNumber)
+      : Math.max(Number(input.dispatchedCount) || 0, 1);
   const clientPendingCount = Math.max(Number(input.clientPendingCount) || 0, 0);
   const dispatchSent = await claimNotificationFlag(
     `dispatch-progress:${input.companyId}:${input.dispatchId}`,

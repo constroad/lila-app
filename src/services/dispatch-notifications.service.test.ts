@@ -699,4 +699,130 @@ describe('dispatch-notifications.service', () => {
       expect.anything()
     );
   });
+
+  it('numera el aviso de planta con el unitNumber del PEDIDO, no con dispatchedCount', async () => {
+    // `dispatchedCount` cuenta despachos por EMPRESA y dia operativo: con dos
+    // pedidos el mismo dia, planta veia un numero y el cliente otro por el MISMO
+    // camion. Portal ahora manda el "Unidad N" congelado del pedido.
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({ unitNumber: 2 }),
+      context: {
+        companyBotLabel: 'Bot',
+        plantGroupId: 'plant@g.us',
+        adminGroupId: 'admin@g.us',
+        plantProgressTemplate: '⚡ {{unidad}}/{{pendientes}}',
+      },
+    });
+
+    // buildTestInput trae dispatchedCount=4; con unitNumber=2 manda el 2.
+    expect(WhatsAppDirectService.sendMessage).toHaveBeenNthCalledWith(
+      1,
+      '51902049935',
+      'plant@g.us',
+      '⚡ 2/3',
+      expect.anything()
+    );
+  });
+
+  it('ordena las filas del resumen por unidad, no por como llegan', () => {
+    // Incidente 2026-08-02: la imagen del resumen salia 2,1,3 porque Portal
+    // manda los despachos con `date: -1` y aca no se ordenaba. El cliente ve
+    // una tabla desordenada de su propio pedido.
+    const svg = notifications.buildOrderCompletionSummarySvg({
+      clientName: 'Cliente',
+      date: '2026-08-02T12:00:00.000Z',
+      locationUrl: '',
+      obra: 'PACHACAMAC',
+      rows: [
+        { date: '2026-08-02', driverName: 'Clemente', hour: '08:06', note: 'Unidad 2', plate: 'C9R753', quantity: 24, unitNumber: 2 },
+        { date: '2026-08-02', driverName: 'Lucio', hour: '07:35', note: 'Unidad 1', plate: 'BBE942', quantity: 24, unitNumber: 1 },
+        { date: '2026-08-02', driverName: 'Jose', hour: '09:10', note: 'Unidad 3', plate: 'T2T809', quantity: 24, unitNumber: 3 },
+      ],
+      totalM3: 72,
+      totalUnits: 3,
+    });
+
+    const orden = ['Lucio', 'Clemente', 'Jose'].map((n) => svg.indexOf(n));
+    expect(orden).toEqual([...orden].sort((a, b) => a - b));
+  });
+
+  it('sin unitNumber (payload viejo) ordena por hora de salida', () => {
+    const svg = notifications.buildOrderCompletionSummarySvg({
+      clientName: 'Cliente',
+      date: '2026-08-02T12:00:00.000Z',
+      locationUrl: '',
+      obra: 'PACHACAMAC',
+      rows: [
+        { date: '2026-08-02', driverName: 'Tarde', hour: '09:10', note: '', plate: 'C', quantity: 24 },
+        { date: '2026-08-02', driverName: 'Temprano', hour: '07:35', note: '', plate: 'A', quantity: 24 },
+      ],
+      totalM3: 48,
+      totalUnits: 2,
+    });
+
+    expect(svg.indexOf('Temprano')).toBeLessThan(svg.indexOf('Tarde'));
+  });
+
+  const filasResumen = (cantidad: number) =>
+    Array.from({ length: cantidad }, (_, index) => ({
+      date: '2026-08-02T12:00:00.000Z',
+      driverName: `Chofer ${index + 1}`,
+      hour: `0${index % 9}:00`,
+      note: `Unidad ${index + 1}`,
+      plate: `PL-${index + 1}`,
+      quantity: 24,
+      unitNumber: index + 1,
+    }));
+
+  const resumenCon = (cantidad: number) =>
+    notifications.buildOrderCompletionSummarySvg({
+      clientName: 'Cliente',
+      date: '2026-08-02T12:00:00.000Z',
+      locationUrl: '',
+      obra: 'PACHACAMAC',
+      rows: filasResumen(cantidad),
+      totalM3: cantidad * 24,
+      totalUnits: cantidad,
+    });
+
+  it('no recorta el pedido mas grande de produccion (28 unidades)', () => {
+    // 16 de 307 pedidos de constroad pasan de 14 unidades (max 28). El recorte
+    // mudo dejaba al cliente con un encabezado que decia "28 Unidades" y una
+    // tabla con 14: el resumen se contradecia solo.
+    const svg = resumenCon(28);
+
+    expect(svg).toContain('Unidad 28');
+    expect(svg).toContain('Chofer 28');
+  });
+
+  it('la imagen crece con las filas en vez de perderlas', () => {
+    const alto = (svg: string) => Number(/height="(\d+)"/.exec(svg)?.[1]);
+
+    expect(alto(resumenCon(28))).toBeGreaterThan(alto(resumenCon(9)));
+  });
+
+  it('si el pedido es enorme avisa cuantas quedaron fuera, no las oculta', () => {
+    const svg = resumenCon(45);
+
+    expect(svg).toContain('unidades mas');
+    expect(svg).not.toContain('Unidad 45');
+  });
+
+  it('avisa cuando el resumen NO se envia, en vez de salirse mudo', async () => {
+    // El resumen es lo ultimo que ve el cliente de su pedido: si Portal no manda
+    // `orderCompletion` o no hay destinatarios, tiene que quedar rastro.
+    const loggerModule = require('../utils/logger');
+    const warnSpy = jest.spyOn(loggerModule.default ?? loggerModule.logger, 'warn');
+
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput({ dispatchFinished: true, orderCompletion: undefined }),
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'dispatch_order_completion.skipped',
+      expect.objectContaining({ hasCompletion: false })
+    );
+    warnSpy.mockRestore();
+  });
 });

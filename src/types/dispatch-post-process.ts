@@ -12,6 +12,13 @@ export interface DispatchPostProcessInput {
   clientDispatchedCount: number;
   truckDispatched?: boolean;
   note?: string;
+  /**
+   * "Unidad N" del PEDIDO, congelado por Portal al salir de planta. Es el numero
+   * que ve el cliente y el que va impreso en su vale. `dispatchedCount` NO sirve
+   * para esto: cuenta despachos por EMPRESA y dia operativo, asi que con dos
+   * pedidos el mismo dia planta y cliente veian numeros distintos.
+   */
+  unitNumber?: number;
   quantity?: number;
   plate?: string;
   driverName?: string;
@@ -47,6 +54,8 @@ export interface DispatchPostProcessInput {
       note: string;
       plate: string;
       quantity: number;
+      /** "Unidad N" congelado del pedido; ordena la tabla del resumen. */
+      unitNumber?: number;
     }>;
     totalM3: number;
     totalUnits: number;
