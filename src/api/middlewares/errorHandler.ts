@@ -7,6 +7,8 @@ import { recordSuspiciousRequest } from '../../services/scanner-detection.servic
 export interface CustomError extends Error {
   statusCode?: number;
   details?: any;
+  /** Lo pone busboy/axios cuando el stream se corta (ver `isTruncatedUpload`). */
+  code?: string;
 }
 
 /**
@@ -38,9 +40,24 @@ export function errorHandler(
   // y (b) disparaba una alerta Telegram por CADA path distinto que un scanner
   // probara (ver scanner-detection.service, que agrupa esto por IP en su lugar).
   const isCorsRejection = err.message === 'Not allowed by CORS';
+  /**
+   * El cuerpo multipart llegó cortado: el cliente abandonó la subida o el
+   * proxy/túnel de adelante partió el stream. NO es un fallo del server —
+   * busboy lo reporta como error suelto y terminaba en 500 + alerta, así que
+   * cada firma de asistencia con red mala despertaba al grupo.
+   */
+  const isTruncatedUpload =
+    err.message === 'Unexpected end of form' || err.code === 'ECONNABORTED';
   const statusCode =
-    err.statusCode || (isCorsRejection ? HTTP_STATUS.FORBIDDEN : HTTP_STATUS.INTERNAL_ERROR);
-  const message = err.message || 'Internal Server Error';
+    err.statusCode ||
+    (isCorsRejection
+      ? HTTP_STATUS.FORBIDDEN
+      : isTruncatedUpload
+        ? HTTP_STATUS.BAD_REQUEST
+        : HTTP_STATUS.INTERNAL_ERROR);
+  const message = isTruncatedUpload
+    ? 'La subida llegó incompleta: reintentá con mejor señal'
+    : err.message || 'Internal Server Error';
 
   // ip/userAgent SIEMPRE en el log de error (no solo cuando se alerta): es lo
   // que faltó en el incidente del 2026-07-19 — sin esto, revisar una ráfaga
@@ -61,6 +78,9 @@ export function errorHandler(
 
   const shouldAlert =
     !isCorsRejection &&
+    // Una subida truncada es del lado del cliente: se responde 400 y se loguea,
+    // pero no se alerta. Alertar por esto es ruido que tapa lo que sí importa.
+    !isTruncatedUpload &&
     (statusCode >= 500 ||
       req.path.startsWith('/api/drive') ||
       req.path.startsWith('/api/message'));
