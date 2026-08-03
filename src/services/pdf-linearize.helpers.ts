@@ -18,13 +18,3 @@ export const shouldLinearize = ({
   if (String(mimeType ?? '').toLowerCase().includes('pdf')) return true;
   return path.extname(String(fileName ?? '')).toLowerCase() === '.pdf';
 };
-
-/**
- * Argumentos de qpdf. Escribe SIEMPRE en un archivo aparte: si el proceso muere
- * a mitad de camino, el archivo que el usuario acaba de subir queda intacto.
- */
-export const buildQpdfArgs = (sourcePath: string, targetPath: string): string[] => [
-  '--linearize',
-  sourcePath,
-  targetPath,
-];
