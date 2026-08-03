@@ -1,3 +1,4 @@
+import { linearizePdfInPlace } from '../../services/pdf-linearize.service.js';
 import { Request, Response, NextFunction } from 'express';
 import fs from 'fs-extra';
 import path from 'path';
@@ -274,6 +275,8 @@ export async function generateVale(req: Request, res: Response, next: NextFuncti
     const outputPath = path.join(config.pdf.tempDir, filename);
     const pdfBytes = await pdfDoc.save();
     await fs.writeFile(outputPath, pdfBytes);
+    // El vale se arma con pdf-lib, no con Puppeteer: no pasa por el generador.
+    await linearizePdfInPlace(outputPath, { mimeType: 'application/pdf' });
 
     const publicUrl = `${config.pdf.tempPublicBaseUrl.replace(/\/+$/, '')}/${encodeURI(
       filename

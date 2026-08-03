@@ -22,10 +22,16 @@ import { shouldLinearize } from './pdf-linearize.helpers.js';
 import logger from '../utils/logger.js';
 
 /**
- * Tope de tamaño: el WASM trabaja en memoria, así que un PDF enorme se saltea
- * en vez de arriesgar la RAM del proceso que además sirve archivos y WhatsApp.
+ * Tope de tamaño. El WASM trabaja en memoria (entrada + salida), así que un PDF
+ * enorme se saltea antes que arriesgar la RAM del proceso que también sirve
+ * archivos y WhatsApp.
+ *
+ * 60 MB dejaba fuera justo a los que MÁS lo necesitan: un PDF de 165 MB por una
+ * red de 220 KB/s son ~12 minutos, y sin linearizar hay que bajarlo entero para
+ * ver la página 1 (caso real: diseño de mezcla asfáltica, 03/08/2026). A 220 MB
+ * entra, con un pico de RAM de ~500 MB durante la conversión.
  */
-const MAX_LINEARIZE_BYTES = 60 * 1024 * 1024;
+const MAX_LINEARIZE_BYTES = 220 * 1024 * 1024;
 
 const require = createRequire(import.meta.url);
 

@@ -6,10 +6,12 @@
  * reescribe con `qpdf --linearize` sin tocar la base de datos: cambia el
  * CONTENIDO del archivo, no su ruta ni su URL.
  *
- *   npx tsx scripts/linearize-existing-pdfs.ts --company constroad          # dry-run
- *   npx tsx scripts/linearize-existing-pdfs.ts --company constroad --apply
+ *   npx tsx scripts/linearize-existing-pdfs.ts --company constroad             # APLICA
+ *   npx tsx scripts/linearize-existing-pdfs.ts --company constroad --dry-run  # simula
  *
- * Sin `--company` recorre todas. `--apply` es obligatorio para escribir.
+ * Aplica por defecto: es idempotente (saltea los ya linearizados) y escribe en
+ * un temporal antes de renombrar, así que repetirlo es seguro. Sin `--company`
+ * recorre todas.
  */
 
 import 'dotenv/config';
@@ -19,7 +21,7 @@ import { resolveMediaAbsolutePath } from '../src/services/order-export.service.j
 import { isQpdfAvailable, linearizePdfInPlace } from '../src/services/pdf-linearize.service.js';
 
 const args = process.argv.slice(2);
-const apply = args.includes('--apply');
+const apply = !args.includes('--dry-run');
 const companyArg = args[args.indexOf('--company') + 1];
 const companyId = args.includes('--company') ? companyArg : undefined;
 

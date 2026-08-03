@@ -1,3 +1,4 @@
+import { linearizePdfInPlace } from '../services/pdf-linearize.service.js';
 import puppeteer, { Browser, Page } from 'puppeteer';
 import Handlebars from 'handlebars';
 import fs from 'fs-extra';
@@ -268,6 +269,11 @@ export class PDFGenerator {
           await page.close().catch(() => {});
         }
 
+        // Los PDF que GENERA lila (vales, informes, cotizaciones, órdenes) salen
+        // igual de "pesados de abrir" que los subidos: se linearizan acá, que es
+        // el punto por el que pasan todos.
+        await linearizePdfInPlace(filepath, { mimeType: 'application/pdf' });
+
         logger.info(`PDF generated: ${filepath}`);
         return filepath;
       });
@@ -322,6 +328,8 @@ export class PDFGenerator {
           // Cerrar SIEMPRE: una page fugada queda viva en Chromium y acumula memoria.
           await page.close().catch(() => {});
         }
+
+        await linearizePdfInPlace(filepath, { mimeType: 'application/pdf' });
 
         logger.info(`PDF generated from HTML: ${filepath}`, {
           htmlBytes,
