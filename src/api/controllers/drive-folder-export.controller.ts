@@ -22,6 +22,7 @@ import {
   resolveMediaAbsolutePath,
 } from '../../services/order-export.service.js';
 import {
+  ZIP_COMPRESSION_LEVEL,
   buildRelativeEntryName,
   collectFolderSubtree,
 } from '../../services/drive-folder-export.helpers.js';
@@ -85,7 +86,7 @@ export async function exportDriveFolder(req: Request, res: Response, next: NextF
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(zipName)}"`);
     res.setHeader('Cache-Control', 'no-store');
 
-    const archive = archiver('zip', { zlib: { level: 6 } });
+    const archive = archiver('zip', { zlib: { level: ZIP_COMPRESSION_LEVEL } });
     archive.on('error', (error) => {
       logger.error('[drive-export] Error armando el ZIP', { companyId, folderId, error });
       res.destroy();

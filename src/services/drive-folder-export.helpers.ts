@@ -11,6 +11,17 @@ type LooseFolder = Record<string, unknown>;
 
 const MAX_DEPTH = 20;
 
+/**
+ * Nivel de compresión del ZIP: 0 = guardar tal cual.
+ *
+ * El drive es casi todo PDF y JPG, formatos que YA vienen comprimidos. Medido
+ * contra producción (03/08/2026, los 15 PDFs del Almirante, 11.7 MB): deflate
+ * nivel 6 dejó 10.3 MB pero bajó el caudal de 141 KB/s a 51 KB/s — 200 s de
+ * espera para ahorrar 1.4 MB. Comprimir acá le cuesta al visitante casi tres
+ * veces más tiempo del que ahorra.
+ */
+export const ZIP_COMPRESSION_LEVEL = 0;
+
 const sanitizeSegment = (name: string): string =>
   name.replace(/[\\/:"*?<>|]+/g, '_').trim() || 'archivo';
 
