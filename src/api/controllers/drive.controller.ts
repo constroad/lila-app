@@ -1,3 +1,4 @@
+import { linearizePdfInPlace } from '../../services/pdf-linearize.service.js';
 import { Request, Response, NextFunction } from 'express';
 import fs from 'fs-extra';
 import path from 'path';
@@ -342,6 +343,9 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     const streamUrl = videoLike ? publicUrl : undefined;
     let thumbnailUrl: string | undefined;
     let thumbnailStatus: 'ready' | 'pending' | 'unsupported' | 'error' = 'pending';
+
+    // Linearizar ANTES del thumbnail: el thumb debe salir del archivo final.
+    await linearizePdfInPlace(target, { fileName: storageFileName, mimeType: file.mimetype });
 
     // Academia salta el thumbnail sincrónico (su transcode genera el poster).
     if (!skipVideoProcessing) {

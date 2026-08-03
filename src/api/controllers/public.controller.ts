@@ -1,3 +1,4 @@
+import { linearizePdfInPlace } from '../../services/pdf-linearize.service.js';
 import { Request, Response } from 'express';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
@@ -570,6 +571,8 @@ const storeFileInLilaDrive = async (
   const publicUrl = `/files/companies/${companyId}/${relativeDir}/${storageFileName}`;
   let thumbnailUrl: string | undefined;
   let thumbnailStatus: StoredReceptionMedia['thumbnailStatus'] = 'pending';
+  await linearizePdfInPlace(targetPath, { fileName: storageFileName, mimeType: file.mimeType });
+
   const thumbnailResult = await generateThumbnailForFile({
     filePath: targetPath,
     fileName: storageFileName,

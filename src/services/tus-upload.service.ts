@@ -1,3 +1,4 @@
+import { linearizePdfInPlace } from './pdf-linearize.service.js';
 import { Server } from '@tus/server';
 import { FileStore } from '@tus/file-store';
 import fs from 'fs-extra';
@@ -191,6 +192,8 @@ async function finalizeUpload(upload: any, req: Request): Promise<void> {
       }
     }
   }
+
+  await linearizePdfInPlace(target, { fileName: storageFileName, mimeType: metadata.filetype });
 
   const thumbnailResult = await generateThumbnailForFile({
     filePath: target,
