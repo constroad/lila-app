@@ -596,3 +596,65 @@ transcribe; **el peso lo confirma un humano siempre**.
   Techos de coste en el controlador: **60 imágenes por empresa por día** (contador en
   memoria), 4 MB por imagen, timeout de 25 s. Errores al cliente genéricos
   (429/502/422/504) — sin URL del proveedor ni stack.
+
+## Linearización de PDF y ZIP de carpeta del Drive (2026-08-03)
+
+Contexto y mediciones: `Portal/specs/DRIVE-PUBLIC-UX.spec.md`.
+
+### Linearización ("Fast Web View") — SEIS puntos de enganche
+
+Sin linearizar, el índice (xref) vive al final del archivo: cualquier visor debe
+llegar al final antes de pintar el primer píxel. Medido contra producción, eso
+era **22 s** para la primera página de un PDF de 3.4 MB; linearizado, **1.9 s**.
+
+`src/services/pdf-linearize.service.ts` se llama desde los seis lugares por los
+que un PDF llega al disco — **las subidas Y lo que genera lila**:
+
+| # | Punto | Qué cubre |
+| --- | --- | --- |
+| 1 | `drive.controller` (uploadFile) | subida al Drive desde Portal |
+| 2 | `public.controller` | subida por link público |
+| 3 | `tus-upload.service` | subida grande resumable |
+| 4-5 | `pdf/generator.service` (las 2 rutas de `page.pdf`) | TODO documento de Puppeteer: informes, cotizaciones, órdenes, liquidaciones |
+| 6 | `pdf-vale.controller` | el vale, armado con pdf-lib (no pasa por Puppeteer) |
+
+La primera versión solo cubría 1-3: los vales e informes generados iban a seguir
+saliendo sin linearizar indefinidamente.
+
+**Motor híbrido** (`resolveLinearizeEngine`), porque `tus` admite hasta 2 GB:
+
+| Tamaño | Motor | ¿Requiere instalar? |
+| --- | --- | --- |
+| ≤ 220 MB | `@neslinesli93/qpdf-wasm` (viaja en `node_modules`) | no |
+| > 220 MB con binario | `qpdf` del sistema (no carga en RAM) | sí |
+| > 220 MB sin binario | se saltea, original intacto | — |
+
+**Nunca rompe una subida**: escribe en un temporal y recién ahí renombra; ante
+PDF cifrado, corrupto o qpdf ausente conserva el original y solo registra aviso.
+
+**Al arrancar, lila reporta qué motores tiene** (`logLinearizeCapabilities`, en
+el `app.listen`). Si falta el binario nativo lo dice con el comando exacto de la
+plataforma (`brew install qpdf`, `apt-get`/`apk`) y la nota para el Dockerfile —
+así mudar lila de máquina o meterla en un contenedor no depende de que alguien
+se acuerde. **Ese log es también la forma de saber si el proceso levantó con el
+código nuevo**: tras deployar hay que reiniciar, o sigue corriendo el viejo.
+
+Backfill de lo ya subido: `scripts/linearize-existing-pdfs.ts` (APLICA por
+defecto; `--dry-run` simula). Idempotente: saltea los que ya tienen el marcador.
+
+### `GET /api/drive/folder-export` — ZIP de una carpeta
+
+Sin `requireTenant`: lo abre el navegador de quien tiene un enlace público, que
+no lleva JWT de tenant. Autoriza con un token propio que firma Portal (scope
+`drive-export`, 10 min). **El scope es la defensa clave**: los tokens de `/print`
+usan el MISMO secreto, y sin chequearlo uno de impresión serviría para bajarse el
+drive de una company.
+
+- El ZIP se **streamea** mientras se arma (`archiver` → `res`): no se
+  materializa en disco ni en RAM, y el navegador muestra su barra de descarga.
+- Alcance: la carpeta compartida y su descendencia (`collectFolderSubtree`),
+  nunca las hermanas. Rutas relativas a la carpeta, nombres saneados, homónimos
+  desambiguados con `(2)`.
+- **Sin compresión** (`ZIP_COMPRESSION_LEVEL = 0`): medido en producción, deflate
+  sobre PDFs —ya comprimidos— ahorraba 12% y costaba 3.8x de tiempo
+  (200 s contra 53 s para 11.7 MB).
