@@ -17,21 +17,22 @@
 
 import fs from 'fs-extra';
 import path from 'path';
+import { spawn } from 'child_process';
 import { createRequire } from 'module';
-import { shouldLinearize } from './pdf-linearize.helpers.js';
+import {
+  WASM_MAX_BYTES,
+  buildQpdfInstallHint,
+  resolveLinearizeEngine,
+  shouldLinearize,
+} from './pdf-linearize.helpers.js';
 import logger from '../utils/logger.js';
 
-/**
- * Tope de tamaño. El WASM trabaja en memoria (entrada + salida), así que un PDF
- * enorme se saltea antes que arriesgar la RAM del proceso que también sirve
- * archivos y WhatsApp.
- *
- * 60 MB dejaba fuera justo a los que MÁS lo necesitan: un PDF de 165 MB por una
- * red de 220 KB/s son ~12 minutos, y sin linearizar hay que bajarlo entero para
- * ver la página 1 (caso real: diseño de mezcla asfáltica, 03/08/2026). A 220 MB
- * entra, con un pico de RAM de ~500 MB durante la conversión.
- */
-const MAX_LINEARIZE_BYTES = 220 * 1024 * 1024;
+/** Timeout del binario nativo con archivos grandes. */
+const NATIVE_TIMEOUT_MS = 10 * 60_000;
+/** qpdf: 0 = ok, 3 = advertencias (el PDF salió igual). >3 = error real. */
+const QPDF_MAX_OK_CODE = 3;
+
+let nativeAvailable: boolean | null = null;
 
 const require = createRequire(import.meta.url);
 
@@ -66,6 +67,42 @@ const loadQpdf = async (): Promise<QpdfModule | null> => {
   return modulePromise;
 };
 
+/** Corre el binario del sistema. Solo se usa con archivos que el WASM no aguanta. */
+const runNativeQpdf = (args: string[]): Promise<number> =>
+  new Promise((resolve, reject) => {
+    const proc = spawn('qpdf', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    const timer = setTimeout(() => {
+      proc.kill('SIGKILL');
+      reject(new Error(`qpdf nativo excedió ${NATIVE_TIMEOUT_MS} ms`));
+    }, NATIVE_TIMEOUT_MS);
+
+    proc.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    proc.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== null && code <= QPDF_MAX_OK_CODE) resolve(code);
+      else reject(new Error(stderr || `qpdf nativo salió con código ${code}`));
+    });
+  });
+
+/** ¿Está el binario `qpdf` en esta máquina? Se resuelve una vez por proceso. */
+export async function isNativeQpdfAvailable(): Promise<boolean> {
+  if (nativeAvailable !== null) return nativeAvailable;
+  try {
+    await runNativeQpdf(['--version']);
+    nativeAvailable = true;
+  } catch {
+    nativeAvailable = false;
+  }
+  return nativeAvailable;
+}
+
 /** ¿Se puede linearizar en este proceso? */
 export async function isQpdfAvailable(): Promise<boolean> {
   return (await loadQpdf()) !== null;
@@ -93,18 +130,34 @@ export async function linearizePdfInPlace(
 
   try {
     const stat = await fs.stat(filePath);
-    if (stat.size > MAX_LINEARIZE_BYTES) {
-      logger.warn('[pdf-linearize] PDF demasiado grande, se deja como está', {
+    const engine = resolveLinearizeEngine({
+      bytes: stat.size,
+      nativeAvailable: await isNativeQpdfAvailable(),
+    });
+
+    if (engine === 'skip') {
+      logger.warn('[pdf-linearize] PDF demasiado grande para el motor disponible', {
         filePath,
         bytes: stat.size,
+        limiteWasm: WASM_MAX_BYTES,
+        remedio: `instalar el binario qpdf para cubrir archivos grandes: ${buildQpdfInstallHint()}`,
       });
       return false;
     }
 
+    if (engine === 'native') {
+      // El binario no carga el archivo en RAM: es el único que aguanta lo que
+      // `tus` permite subir (hasta 2 GB).
+      await runNativeQpdf(['--linearize', filePath, tempPath]);
+      const nativeStat = await fs.stat(tempPath);
+      if (nativeStat.size <= 0) throw new Error('qpdf nativo produjo un archivo vacío');
+      await fs.move(tempPath, filePath, { overwrite: true });
+      return true;
+    }
+
     qpdf.FS.writeFile(virtualIn, await fs.readFile(filePath));
-    // qpdf: 0 = ok, 3 = advertencias (el PDF salió igual). >3 = error real.
     const code = qpdf.callMain(['--linearize', virtualIn, virtualOut]);
-    if (code > 3) throw new Error(`qpdf salió con código ${code}`);
+    if (code > QPDF_MAX_OK_CODE) throw new Error(`qpdf salió con código ${code}`);
 
     const output = qpdf.FS.readFile(virtualOut);
     if (!output?.length) throw new Error('qpdf produjo un archivo vacío');
@@ -130,4 +183,37 @@ export async function linearizePdfInPlace(
       }
     });
   }
+}
+
+/**
+ * Reporta al arrancar qué motores de linearización hay.
+ *
+ * El WASM viaja con el proyecto, pero el binario nativo NO: al mover lila a otra
+ * máquina —o al meterla en un contenedor— es lo primero que se olvida. En vez de
+ * confiar en la memoria de alguien, lila lo dice cada vez que arranca, con el
+ * remedio y el tamaño exacto que queda sin cubrir.
+ */
+export async function logLinearizeCapabilities(): Promise<void> {
+  const [wasm, native] = await Promise.all([isQpdfAvailable(), isNativeQpdfAvailable()]);
+  const wasmMb = Math.round(WASM_MAX_BYTES / (1024 * 1024));
+
+  if (wasm && native) {
+    logger.info(`📄 Linearización de PDF: WASM + binario nativo (sin límite práctico)`);
+    return;
+  }
+  if (wasm) {
+    logger.warn(
+      `📄 Linearización de PDF: solo WASM. Los PDF de más de ${wasmMb} MB quedarán SIN ` +
+        `linearizar (el visitante espera la descarga completa para ver la página 1).\n` +
+        `   Para cubrirlos, instalar el binario qpdf en esta máquina:\n` +
+        `     ${buildQpdfInstallHint()}\n` +
+        `   Verificar con: qpdf --version   ·   luego reiniciar lila.\n` +
+        `   En un contenedor va en el Dockerfile (ej. RUN apt-get update && apt-get install -y qpdf).`
+    );
+    return;
+  }
+  logger.error(
+    '📄 Linearización de PDF NO disponible: falta el paquete @neslinesli93/qpdf-wasm. ' +
+      'Los PDF se guardan sin linearizar. Remedio: yarn install.'
+  );
 }

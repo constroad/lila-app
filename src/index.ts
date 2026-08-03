@@ -1,4 +1,5 @@
 // 🛡️ CRITICAL: Import console hijacking FIRST to prevent logging of sensitive data
+import { logLinearizeCapabilities } from './services/pdf-linearize.service.js';
 import './utils/console-hijack.js';
 
 import express from 'express';
@@ -507,6 +508,9 @@ async function startServer() {
       logger.info(`✅ Server running on port ${config.port}`);
       logger.info(`📊 Environment: ${config.nodeEnv}`);
       logger.info(`📁 WhatsApp sessions dir: ${config.whatsapp.sessionDir}`);
+      // Avisa si falta el binario nativo: es lo que se olvida al cambiar de
+      // máquina o al armar la imagen del contenedor.
+      void logLinearizeCapabilities();
     });
 
     const stopTelegramQueueFlusher = startTelegramQueueFlusher();
