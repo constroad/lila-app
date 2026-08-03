@@ -9,6 +9,7 @@ import { getCompanyBotLabel } from '../utils/company-bot.js';
 import { buildPortalCallbackHeaders } from '../utils/portal-callback.js';
 import logger from '../utils/logger.js';
 import { sendDispatchNotifications } from './dispatch-notifications.service.js';
+import { scheduleDispatchArrivalAutoClose } from './driver-arrival-reminder.service.js';
 
 type ConfigRecord = {
   _id: string;
@@ -98,6 +99,22 @@ export async function processPostDispatch(input: DispatchPostProcessInput) {
     pendingCount: input.pendingCount,
     dispatchedCount: input.dispatchedCount,
     unitNumber: input.unitNumber,
+  });
+
+  // Cierre de fondo de la llegada: acá, que es el evento canónico de SALIDA
+  // (pasa por toda transición a despachado, venga del admin o de /public). Antes
+  // solo se programaba desde el flujo del vale, que en el admin corre únicamente
+  // si alguien reprocesa el vale a mano → esos despachos quedaban "en ruta" para
+  // siempre. Best-effort: nunca corta el post-process.
+  await scheduleDispatchArrivalAutoClose({
+    companyId: input.companyId,
+    dispatchId: input.dispatchId,
+  }).catch((error: unknown) => {
+    logger.warn('dispatch_autoclose.schedule_skipped', {
+      companyId: input.companyId,
+      dispatchId: input.dispatchId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   });
 
   const context = await fetchDispatchContext(input);

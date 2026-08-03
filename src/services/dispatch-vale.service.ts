@@ -9,7 +9,10 @@ import {
 } from './dispatch-note-document.service.js';
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 import { buildDriverLink } from '../utils/driver-link.js';
-import { scheduleDriverFollowups } from './driver-arrival-reminder.service.js';
+import {
+  scheduleDispatchArrivalAutoClose,
+  scheduleDriverFollowups,
+} from './driver-arrival-reminder.service.js';
 import { sendTelegramAlert } from './telegram-alert.service.js';
 import { normalizeWhatsAppPhoneNumber } from '../utils/whatsapp-phone.js';
 import { buildDispatchValePayloadFromPortal } from './dispatch-vale-payload.service.js';
@@ -455,6 +458,12 @@ export async function generateDispatchValeWorkflow(input: DispatchValeWorkflowIn
       fileError: '',
       locationError: '',
     };
+
+    // El cierre de fondo de la llegada va ANTES y FUERA de estas guardas: no
+    // tiene nada que ver con mandarle el vale al chofer. Apagar "Enviar vale al
+    // conductor" dejaba unidades "en ruta" para siempre (constroad, 02/08/2026).
+    // Dedupe por dispatch, así que no choca con nada.
+    await scheduleDispatchArrivalAutoClose({ companyId, dispatchId });
 
     if (!sendDriverPdf) {
       whatsapp.skippedReason = 'sendDriverPdf disabled';

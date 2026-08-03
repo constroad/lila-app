@@ -3,9 +3,10 @@ import { describe, it, expect, jest, beforeAll, beforeEach } from '@jest/globals
 // Cola en memoria (respaldo del JsonStore mockeado).
 const storeState: { data: Record<string, unknown> } = { data: {} };
 
+const warnMock = jest.fn();
 jest.unstable_mockModule('../utils/logger.js', () => ({
   __esModule: true,
-  default: { error: jest.fn(), info: jest.fn(), warn: jest.fn(), debug: jest.fn() },
+  default: { error: jest.fn(), info: jest.fn(), warn: warnMock, debug: jest.fn() },
 }));
 
 jest.unstable_mockModule('../config/environment.js', () => ({
@@ -175,5 +176,20 @@ describe('flushDispatchAutoClose', () => {
     expect(postMock).not.toHaveBeenCalled();
     expect(res.dropped).toBe(1);
     expect(queue()).toHaveLength(0);
+  });
+
+  it('un 4xx se descarta pero deja rastro (no fue un cierre)', async () => {
+    // El log `dispatch_autoclose.fired` se leia como exito aunque Portal hubiera
+    // rechazado. En dev el callback moria con 409 sin dejar rastro.
+    warnMock.mockClear();
+    postMock.mockRejectedValueOnce(axiosError(409));
+
+    await scheduleDispatchAutoClose({ companyId: 'c1', dispatchId: 'd-409', etaSeconds: 1 });
+    await flushDispatchAutoClose(new Date(Date.now() + 60_000));
+
+    expect(warnMock).toHaveBeenCalledWith(
+      'dispatch_autoclose.rejected',
+      expect.objectContaining({ dispatchId: 'd-409', status: 409 })
+    );
   });
 });

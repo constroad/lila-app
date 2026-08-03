@@ -6,7 +6,10 @@ import logger from '../utils/logger.js';
 import { config } from '../config/environment.js';
 import { buildPortalCallbackHeaders } from '../utils/portal-callback.js';
 import { computeArrivalReminderDelayMs, computeLocationShareDelayMs } from '../utils/driver-link.js';
-import { scheduleDispatchAutoClose } from './dispatch-autoclose.service.js';
+import {
+  hasScheduledAutoClose,
+  scheduleDispatchAutoClose,
+} from './dispatch-autoclose.service.js';
 import { WhatsAppDirectService } from './whatsapp-direct.service.js';
 
 /**
@@ -172,15 +175,41 @@ export async function scheduleDriverFollowups(params: {
       kind: 'arrival-reminder',
       delayMs: computeArrivalReminderDelayMs(eta),
     });
-    // Cierre de fondo si nadie confirma: al ETA (mismo que ya consultamos, sin
-    // sumarle margen). Es la escalación del recordatorio de arriba.
+  } catch (error) {
+    logger.error('driver_followups.schedule_failed', {
+      dispatchId: params.dispatchId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * Programa SOLO el cierre de fondo de la llegada, sin depender del chofer.
+ *
+ * Vivía dentro de `scheduleDriverFollowups`, que a su vez cuelga del bloque del
+ * vale al conductor (`sendDriverPdf` + teléfono + sender). Consecuencia real
+ * (constroad, 02/08/2026): un pedido con "Enviar vale al conductor" APAGADO se
+ * quedó con 5 unidades "en ruta" para siempre — el job nunca se creó. El as-is
+ * §6.1 promete "no depende del chofer"; ahora sí se cumple.
+ *
+ * Best-effort: nunca lanza. Dedupe por dispatch (llamarla dos veces no duplica).
+ */
+export async function scheduleDispatchArrivalAutoClose(params: {
+  companyId: string;
+  dispatchId: string;
+}): Promise<void> {
+  try {
+    // El post-process (toda salida) y el vale pueden pedirlo para el mismo
+    // despacho: si ya está programado se corta ANTES de consultar el ETA.
+    if (await hasScheduledAutoClose(params.dispatchId)) return;
+    const tracking = await fetchDispatchTracking(params.companyId, params.dispatchId);
     await scheduleDispatchAutoClose({
       companyId: params.companyId,
       dispatchId: params.dispatchId,
-      etaSeconds: eta,
+      etaSeconds: tracking?.durationSeconds ?? null,
     });
   } catch (error) {
-    logger.error('driver_followups.schedule_failed', {
+    logger.error('dispatch_autoclose.schedule_failed', {
       dispatchId: params.dispatchId,
       error: error instanceof Error ? error.message : String(error),
     });

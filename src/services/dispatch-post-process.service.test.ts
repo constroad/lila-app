@@ -36,11 +36,18 @@ jest.mock('./dispatch-notifications.service.js', () => ({
   sendDispatchNotifications: jest.fn(),
 }));
 
+jest.mock('./driver-arrival-reminder.service.js', () => ({
+  scheduleDispatchArrivalAutoClose: jest.fn().mockResolvedValue(undefined),
+}));
+
 const axios = require('axios');
 const { getCompanyModel, getConfigModel } = require('../database/models.js');
 const {
   sendDispatchNotifications,
 } = require('./dispatch-notifications.service.js');
+const {
+  scheduleDispatchArrivalAutoClose,
+} = require('./driver-arrival-reminder.service.js');
 const service = require('./dispatch-post-process.service.js');
 
 function buildInput(overrides = {}) {
@@ -68,6 +75,7 @@ function buildInput(overrides = {}) {
 describe('dispatch-post-process.service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    scheduleDispatchArrivalAutoClose.mockResolvedValue(undefined);
     getCompanyModel.mockResolvedValue({
       findOne: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue({
@@ -166,5 +174,30 @@ describe('dispatch-post-process.service', () => {
       input: expect.objectContaining({ sender: '' }),
       context: expect.objectContaining({ companyBotLabel: '🤖 ConstroadBot' }),
     });
+  });
+
+  // El cierre de fondo se programaba SOLO desde el flujo del vale, que en el
+  // admin corre unicamente si alguien reprocesa el vale a mano. Un despacho
+  // cerrado desde el panel se quedaba sin job y "en ruta" para siempre.
+  it('programa el cierre de llegada aunque el vale nunca corra (despacho del admin)', async () => {
+    await service.processPostDispatch(buildInput({ sendDispatchMessage: false }));
+
+    expect(scheduleDispatchArrivalAutoClose).toHaveBeenCalledWith({
+      companyId: 'constroad',
+      dispatchId: 'dispatch-1',
+    });
+  });
+
+  it('no lo programa si el despacho no salio', async () => {
+    await service.processPostDispatch(buildInput({ state: 'progreso' }));
+
+    expect(scheduleDispatchArrivalAutoClose).not.toHaveBeenCalled();
+  });
+
+  it('si programar el cierre falla, el post-process sigue', async () => {
+    scheduleDispatchArrivalAutoClose.mockRejectedValueOnce(new Error('store roto'));
+
+    await expect(service.processPostDispatch(buildInput())).resolves.toBeUndefined();
+    expect(sendDispatchNotifications).toHaveBeenCalled();
   });
 });

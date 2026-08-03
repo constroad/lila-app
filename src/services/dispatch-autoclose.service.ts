@@ -80,6 +80,20 @@ function computeAutoCloseDelayMs(etaSeconds: number | null | undefined): number 
  * dispatch (reprogramar no duplica). Best-effort: nunca lanza. `etaSeconds` lo
  * pasa el llamador que ya lo consultó a Portal (no re-consulta el tracking).
  */
+/**
+ * ¿Ya hay job para este despacho? Permite al llamador evitar el fetch de ETA
+ * cuando el cierre ya está programado (el post-process y el vale pueden pedirlo
+ * los dos para el mismo despacho).
+ */
+export async function hasScheduledAutoClose(dispatchId: string): Promise<boolean> {
+  try {
+    const queue = await listQueue();
+    return queue.some((item) => item.dispatchId === dispatchId);
+  } catch {
+    return false;
+  }
+}
+
 export async function scheduleDispatchAutoClose(params: {
   companyId: string;
   dispatchId: string;
@@ -141,7 +155,18 @@ async function postAutoClose(item: DispatchAutoCloseItem): Promise<'done' | 'ret
       axios.isAxiosError(error) && error.response ? error.response.status : null;
     // 4xx = respuesta definitiva de Portal (id inválido / no encontrado) → no
     // reintentar. 5xx / sin respuesta (red, timeout) → transitorio → reintentar.
-    if (status !== null && status >= 400 && status < 500) return 'done';
+    if (status !== null && status >= 400 && status < 500) {
+      // Se descarta, pero NO en silencio: un 401/403/409 acá significa que el
+      // cierre nunca ocurrió y el `dispatch_autoclose.fired` de abajo se leía
+      // como éxito. Así se detectó que en dev el callback moría con 409
+      // ("Scope de empresa inconsistente") sin dejar rastro.
+      logger.warn('dispatch_autoclose.rejected', {
+        companyId: item.companyId,
+        dispatchId: item.dispatchId,
+        status,
+      });
+      return 'done';
+    }
     logger.warn('dispatch_autoclose.post_failed', {
       companyId: item.companyId,
       dispatchId: item.dispatchId,
