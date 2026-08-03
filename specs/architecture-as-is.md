@@ -617,6 +617,15 @@ que un PDF llega al disco — **las subidas Y lo que genera lila**:
 | 3 | `tus-upload.service` | subida grande resumable |
 | 4-5 | `pdf/generator.service` (las 2 rutas de `page.pdf`) | TODO documento de Puppeteer: informes, cotizaciones, órdenes, liquidaciones |
 | 6 | `pdf-vale.controller` | el vale, armado con pdf-lib (no pasa por Puppeteer) |
+| 7 | `pdf-merger.service` | merge de anexos y membrete |
+| 8 | `folio-generator.service` | folios "Página X de Y" |
+
+**7 y 8 son la trampa que costó encontrar**: linearizar al GENERAR no alcanza si
+algo reescribe el PDF después. Ambos usan pdf-lib, que reescribe el archivo y
+deshace la linearización EN SILENCIO — no falla, el PDF sale lento de abrir. Se
+detectó porque la cotización salía sin linearizar con 4-5 ya enganchados.
+`addFolios` lo usan también `documents.controller` (informes) y
+`purchase-order-documents.controller`, así que afectaba a los tres.
 
 La primera versión solo cubría 1-3: los vales e informes generados iban a seguir
 saliendo sin linearizar indefinidamente.

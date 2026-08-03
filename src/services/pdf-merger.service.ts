@@ -1,3 +1,4 @@
+import { linearizePdfInPlace } from './pdf-linearize.service.js';
 import fs from 'fs-extra';
 import axios from 'axios';
 import { PDFDocument } from 'pdf-lib';
@@ -190,6 +191,9 @@ export class PDFMergerService {
 
     const mergedPdfBytes = await mergedPdf.save();
     await fs.writeFile(outputPath, mergedPdfBytes);
+    // pdf-lib reescribe el archivo y PIERDE la linearización que puso el
+    // generador: el PDF final es este, así que se rehace acá.
+    await linearizePdfInPlace(outputPath, { mimeType: 'application/pdf' });
 
     return {
       totalPages: mergedPdf.getPageCount(),
@@ -229,6 +233,7 @@ export class PDFMergerService {
       }
 
       await fs.writeFile(outputPath, await outputPdf.save());
+      await linearizePdfInPlace(outputPath, { mimeType: 'application/pdf' });
     } catch (error) {
       logger.warn('Letterhead background failed, copying original PDF', {
         error: String(error),

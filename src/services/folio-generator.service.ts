@@ -1,3 +1,4 @@
+import { linearizePdfInPlace } from './pdf-linearize.service.js';
 import fs from 'fs-extra';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
@@ -73,6 +74,10 @@ export class FolioGeneratorService {
 
     const modifiedPdfBytes = await pdfDoc.save();
     await fs.writeFile(outputPath, modifiedPdfBytes);
+    // Estampar folios con pdf-lib REESCRIBE el archivo y pierde la
+    // linearización del generador. Este es el PDF final de cotizaciones,
+    // informes y órdenes de compra: se rehace acá o sale sin linearizar.
+    await linearizePdfInPlace(outputPath, { mimeType: 'application/pdf' });
   }
 
   private static formatFolio(template: string, current: number, total: number): string {
