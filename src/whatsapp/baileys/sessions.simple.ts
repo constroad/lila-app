@@ -60,6 +60,33 @@ const startingPromises: Record<string, Promise<WASocket>> = {};
 // `setTimeout` (si ese intento falla —ej. Mongo inalcanzable durante un corte de red— la sesión
 // quedaba muerta). Reintentamos con backoff hasta recuperar. Ver auto-recuperación (history).
 const reconnectTimers: Record<string, NodeJS.Timeout> = {};
+
+// Generación del socket vigente por sesión. Un socket viejo puede emitir `open` DESPUÉS
+// de que su reemplazo ya fue programado (observado 2026-08-04, 51902049935: cierre a las
+// 16:18:58 → reconnect programado a 164s → un `open` a las 16:19:03 desde el socket
+// anterior). Ese `open` marcaba la sesión lista Y cancelaba el reconnect pendiente, con
+// lo que la sesión quedaba "lista" sobre un socket muerto: 4h41m sin reintentar y sin
+// vaciar el outbox (que solo se vacía en `open`). Comparar generaciones descarta al
+// socket obsoleto. La spec ya había visto el síntoma ("dos `open` cercanos duplicaban
+// envíos", §10.d) y lo tapó con un lock de flush; esto ataca la causa.
+const socketEpoch: Record<string, number> = {};
+
+/**
+ * True si el websocket sigue realmente abierto. Baileys expone `sock.ws.isOpen`
+ * (readyState === OPEN). Si la propiedad no existe (mocks de test, versión distinta),
+ * asumimos vivo para no romper el camino normal.
+ */
+function isSocketAlive(sock: WASocket | undefined): boolean {
+  const ws = (sock as unknown as { ws?: { isOpen?: boolean } } | undefined)?.ws;
+  return ws?.isOpen ?? true;
+}
+
+// Reconciliación de liveness: `readyClients` se escribía SOLO en los eventos open/close,
+// así que cualquier estado inconsistente (ver socketEpoch) era permanente — nada volvía a
+// mirar si el socket seguía vivo. Este barrido cierra ese agujero: es la red de seguridad
+// para el zombi que no se haya evitado en el origen.
+const LIVENESS_SWEEP_MS = Number(process.env.WHATSAPP_LIVENESS_SWEEP_MS) || 60_000;
+let livenessTimer: NodeJS.Timeout | null = null;
 const reconnectAttempts: Record<string, number> = {};
 
 // Si el socket se crea pero `connection.open/close` no llega en este tiempo,
@@ -391,6 +418,46 @@ function parkSession(sessionId: string) {
   }).catch(() => {});
 }
 
+/**
+ * Barrido de liveness: degrada las sesiones marcadas como listas cuyo websocket ya no
+ * está abierto y les programa reconexión. Sin esto, un estado inconsistente era
+ * PERMANENTE (`readyClients` solo se escribía en open/close): el 2026-08-04 una sesión
+ * quedó "lista" 4h41m sobre un socket muerto, encolando todo al outbox sin reintentar.
+ * Ignora sesiones aparcadas (su estado terminal es deliberado) y las que se están apagando.
+ */
+export function sweepDeadSessions(): number {
+  let demoted = 0;
+  for (const [sessionId, ready] of readyClients) {
+    if (!ready || shuttingDown.has(sessionId) || parkedSessions.has(sessionId)) continue;
+    if (isSocketAlive(sessions[sessionId])) continue;
+    logger.warn(`👻 [${sessionId}] Sesión marcada lista con el websocket cerrado — degradando y reconectando`);
+    readyClients.set(sessionId, false);
+    demoted += 1;
+    scheduleReconnect(sessionId);
+  }
+  return demoted;
+}
+
+/** Arranca el barrido periódico (idempotente). Se llama al crear la primera sesión. */
+function startLivenessSweep(): void {
+  if (livenessTimer) return;
+  livenessTimer = setInterval(() => {
+    try {
+      sweepDeadSessions();
+    } catch (error) {
+      logger.warn(`Liveness sweep falló: ${String(error)}`);
+    }
+  }, LIVENESS_SWEEP_MS);
+  livenessTimer.unref?.(); // no debe mantener vivo el proceso en tests/shutdown
+}
+
+/** Detiene el barrido (shutdown / tests). */
+export function stopLivenessSweep(): void {
+  if (!livenessTimer) return;
+  clearInterval(livenessTimer);
+  livenessTimer = null;
+}
+
 /** True si la sesión fue aparcada por stalls repetidos (requiere re-emparejar/restart). */
 export function isSessionParked(sessionId: string): boolean {
   return parkedSessions.has(sessionId);
@@ -597,6 +664,10 @@ async function initSession(
     qrTimeout: 20_000,
   });
 
+  // Generación de ESTE socket. Cualquier socket creado después la incrementa, así que un
+  // `open` tardío de este puede detectarse como obsoleto (ver `socketEpoch`).
+  const myEpoch = (socketEpoch[sessionId] = (socketEpoch[sessionId] ?? 0) + 1);
+
   // Store en el mapa YA (el open handler lo consulta); el snapshot se carga en
   // PARALELO y se espera DESPUÉS de registrar los listeners (ver abajo).
   const store = makeInMemoryStore(sessionId);
@@ -740,6 +811,23 @@ async function initSession(
     }
 
     if (connection === 'open') {
+      // Un `open` de un socket OBSOLETO (ya reemplazado por un reconnect posterior) no
+      // debe marcar la sesión lista ni —sobre todo— cancelar el reconnect pendiente:
+      // dejaba la sesión "lista" sobre un socket muerto. Ver `socketEpoch`.
+      if (socketEpoch[sessionId] !== myEpoch) {
+        logger.warn(
+          `👻 [${sessionId}] Ignorando 'open' de un socket obsoleto (gen ${myEpoch}, vigente ${socketEpoch[sessionId]})`
+        );
+        return;
+      }
+      // Baileys emite `open` y el socket puede morir en el mismo tick (observado: el
+      // `sendPresenceUpdate` siguiente falla con "Connection Closed"). Marcar lista una
+      // sesión cuyo ws ya no está abierto es justamente el estado zombi.
+      if (!isSocketAlive(sock)) {
+        logger.warn(`👻 [${sessionId}] 'open' recibido pero el websocket ya no está abierto — no se marca lista`);
+        scheduleReconnect(sessionId, qrCb);
+        return;
+      }
       // El snapshot puede seguir cargando (los listeners se registran antes del
       // await — ver ORDEN CRÍTICO arriba); populate necesita el store hidratado.
       await storeLoaded.catch(() => {});
@@ -773,6 +861,16 @@ async function initSession(
         await sock.sendPresenceUpdate('available');
       } catch (err) {
         logger.error(`Error setting presence for ${sessionId}:`, err);
+      }
+
+      // La presencia es el primer uso REAL del socket tras el `open`. Si falló y el ws ya
+      // no está abierto, el `open` fue espurio: degradar y reintentar en vez de quedarnos
+      // "listos" sobre un socket muerto (era exactamente el caso de las 16:19 del 08-04).
+      if (!isSocketAlive(sock)) {
+        logger.warn(`👻 [${sessionId}] El websocket murió justo tras el 'open' — degradando y reconectando`);
+        readyClients.set(sessionId, false);
+        scheduleReconnect(sessionId, qrCb);
+        return;
       }
 
       // Flush outbox (send pending messages)
@@ -911,6 +1009,7 @@ async function initSession(
   });
 
   sessions[sessionId] = sock;
+  startLivenessSweep();
   return sock;
 }
 

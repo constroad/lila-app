@@ -8,6 +8,9 @@ type FakeSocket = {
   sendPresenceUpdate: jest.Mock<() => Promise<void>>;
   requestPairingCode: jest.Mock<(phone: string) => Promise<string>>;
   authState: { creds: { registered: boolean } };
+  // Espeja `sock.ws.isOpen` de Baileys: lila lo consulta para no marcar lista una
+  // sesión cuyo websocket ya murió. Los tests lo mutan para simular ese caso.
+  ws: { isOpen: boolean };
 };
 
 const makeFakeSocket = (): FakeSocket => {
@@ -20,6 +23,7 @@ const makeFakeSocket = (): FakeSocket => {
     sendPresenceUpdate: jest.fn(async () => undefined),
     requestPairingCode: jest.fn(async () => 'PAIR1234'),
     authState: { creds: { registered: false } },
+    ws: { isOpen: true },
   };
 };
 
@@ -424,6 +428,82 @@ describe('diagnóstico de la alerta de aparcado (causa, no conteo)', () => {
     expect(multi[0].message).toContain(ID_B);
     expect(multi[0].message).toContain('NO re-emparejes');
     expect(multi[0].message).toContain('causa es COMÚN');
+  });
+});
+
+// Incidente 2026-08-04 (51902049935): un socket viejo emitió 'open' 5s después del cierre,
+// marcó la sesión lista y CANCELÓ el reconnect programado a 164s. La sesión quedó "lista"
+// sobre un socket muerto 4h41m: no reintentaba (se creía conectada) y el outbox no se
+// vaciaba (solo se vacía en 'open'). Todo envío caía a la cola en silencio.
+describe('sesión zombi: lista sobre un socket muerto', () => {
+  const ID = '51902049935';
+
+  it("ignora el 'open' de un socket obsoleto y NO cancela el reconnect pendiente", async () => {
+    await subject.startSession(ID);
+    await fireOpen(); // la sesión venía SANA (como en el incidente): backoff normal, no piso de stall
+    const viejo = currentSocket;
+
+    // El socket cae → se programa un reconnect → nace un socket nuevo (gen+1).
+    await fireClose(428);
+    await jest.advanceTimersByTimeAsync(10_000);
+    expect(makeWASocket.mock.calls.length).toBeGreaterThan(1);
+    expect(currentSocket).not.toBe(viejo);
+
+    // Ahora el socket VIEJO emite 'open' tarde. No debe marcar lista la sesión.
+    viejo.ev.emit('connection.update', { connection: 'open' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(subject.isSessionReady(ID)).toBe(false);
+  });
+
+  it("no marca lista la sesión si el websocket ya está cerrado al llegar el 'open'", async () => {
+    await subject.startSession(ID);
+    currentSocket.ws.isOpen = false; // murió en el mismo tick que el 'open'
+
+    await fireOpen();
+
+    expect(subject.isSessionReady(ID)).toBe(false);
+  });
+
+  it('degrada la sesión si el websocket muere justo después del open (fallo de presencia)', async () => {
+    await subject.startSession(ID);
+    // El 'open' llega con el ws vivo, pero muere durante la secuencia de bring-up:
+    // es exactamente el "Error setting presence: Connection Closed" del incidente.
+    currentSocket.sendPresenceUpdate.mockImplementationOnce(async () => {
+      currentSocket.ws.isOpen = false;
+      throw new Error('Connection Closed');
+    });
+
+    await fireOpen();
+
+    expect(subject.isSessionReady(ID)).toBe(false);
+  });
+
+  it('el barrido de liveness degrada y reconecta una sesión lista con el socket muerto', async () => {
+    await subject.startSession(ID);
+    await fireOpen();
+    expect(subject.isSessionReady(ID)).toBe(true);
+
+    // El socket muere sin emitir 'close' (el caso que dejaba el estado inconsistente
+    // para siempre: nada volvía a mirar).
+    currentSocket.ws.isOpen = false;
+    const socketsAntes = makeWASocket.mock.calls.length;
+
+    expect(subject.sweepDeadSessions()).toBe(1);
+    expect(subject.isSessionReady(ID)).toBe(false);
+
+    // Y además reintenta: sin esto quedaría caída para siempre.
+    await jest.advanceTimersByTimeAsync(10_000);
+    expect(makeWASocket.mock.calls.length).toBeGreaterThan(socketsAntes);
+  });
+
+  it('el barrido NO toca sesiones sanas ni aparcadas', async () => {
+    await subject.startSession(ID);
+    await fireOpen();
+
+    expect(subject.sweepDeadSessions()).toBe(0);
+    expect(subject.isSessionReady(ID)).toBe(true);
   });
 });
 
