@@ -69,6 +69,27 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   anti-flush concurrente, y media del flush con `queueOnFail:false` (sin duplicados).
   (g) Timeout defensivo 120s en los 4 `sock.sendMessage` (cae al queueOnFail) y
   rate limiter sin bypass accidental cuando falta `API_SECRET_KEY`.
+- **Sesión zombi: socket muerto marcado como listo (✅ CORREGIDO 2026-08-04):** `readyClients`
+  se escribía SOLO en los eventos `open`/`close`, sin ninguna verificación de que el websocket
+  siguiera vivo. El 2026-08-04 `51902049935` cerró a las 16:18:58 (reconnect programado a
+  164s) y a las 16:19:03 el socket **anterior** emitió `open`: marcó la sesión lista y
+  **canceló el reconnect pendiente**. Quedó "conectada" sobre un socket muerto **7 horas** —
+  no reintentaba (se creía viva) y el outbox no se vaciaba (solo se vacía en `open`), así que
+  todo envío caía a la cola en silencio. Es la causa raíz del síntoma que §10.d ya había
+  rozado ("dos `open` cercanos duplicaban envíos") y tapado con un lock de flush. Tres capas:
+  (a) `socketEpoch` por sesión — un `open` de un socket ya reemplazado se descarta, que es lo
+  que impide cancelar el reconnect; (b) liveness vía `sock.ws.isOpen` en el bring-up — no se
+  marca lista una sesión cuyo ws murió, y si `sendPresenceUpdate` falla con el ws cerrado se
+  degrada y reconecta; (c) `sweepDeadSessions()` cada 60s (`WHATSAPP_LIVENESS_SWEEP_MS`) como
+  red de seguridad, porque sin ella un estado inconsistente era PERMANENTE. +5 tests.
+- **Distribución real de las caídas de sesión (medición 2026-08-01/04, 92 caídas):** 46% son
+  caídas AISLADAS de una sola sesión (`428 Connection Terminated` ×31, `503` ×11), repartidas
+  parejo entre las tres (17/14/11) — es **churn normal de WhatsApp Web**, lo absorbe el
+  backoff (mediana de recuperación 6-15s, 99,8% uptime, ratio de envío 117:1). 39% coinciden
+  con reinicios del proceso (deploys). Solo 4 episodios fueron caídas simultáneas de varias
+  sesiones. **Matiza la nota operativa de §10.e** ("el disparador diario es el blip de red"):
+  hoy el blip simultáneo es minoritario. Antes de tratar las caídas como incidente, medir la
+  correlación temporal — el conteo agregado engaña.
 - **Diagnóstico del aparcado por CAUSA, no por conteo (2026-07-28):** `parkSession`
   (`sessions.simple.ts`) dejó de asumir "credenciales desincronizadas" cada vez que una
   sesión agota `MAX_CONNECTING_STALLS` (12). Ahora cada stall guarda su causa
