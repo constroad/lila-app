@@ -58,6 +58,9 @@ type PublicReceptionInput = {
   purchaseOrderNumber?: string;
   driver?: string;
   m3?: number;
+  /** Recepción de over del vertical chancadora (CHANCADO.spec.md §3.2). */
+  esponjamientoPct?: number;
+  measuredState?: 'banco' | 'suelto';
   arriveDate?: string;
   files: UploadedReceptionFile[];
 };
@@ -286,6 +289,16 @@ const parseReceptionInput = (req: Request): PublicReceptionWorkflowInput => {
       purchaseOrderNumber: trimValue(req.body?.purchaseOrderNumber) || undefined,
       driver: trimValue(req.body?.driver),
       m3: parseNumber(req.body?.m3, 0),
+      // Chancadora: el over en banco y el suelto no son el mismo volumen
+      // (~25-30%). Este parser ENUMERA campos, así que sin estas dos líneas el
+      // dato llegaría del form y se perdería sin aviso.
+      esponjamientoPct: req.body?.esponjamientoPct !== undefined && req.body?.esponjamientoPct !== ''
+        ? parseNumber(req.body?.esponjamientoPct, 0)
+        : undefined,
+      measuredState:
+        req.body?.measuredState === 'banco' || req.body?.measuredState === 'suelto'
+          ? req.body.measuredState
+          : undefined,
       arriveDate: trimValue(req.body?.arriveDate) || undefined,
       files,
     };
@@ -771,6 +784,11 @@ const runInputReceptionWorkflow = async (input: PublicReceptionInput) => {
     const createdInput = await createPortalInput(input.companyId, {
       driver: input.driver,
       m3: input.m3 || 0,
+      // Cuarto lugar que enumera campos en esta cadena (form → lila parser →
+      // este reenvío → mapper del Portal). Omitirlo acá dejaba el dato vivo en
+      // lila y ausente en la base.
+      esponjamientoPct: input.esponjamientoPct,
+      measuredState: input.measuredState,
       level: input.materialLevel,
       materialId: input.materialId,
       locationId: input.locationId,
