@@ -262,6 +262,18 @@ export function renderDispatchNoteHtml(
         .row-split .cell { flex: 1.4; min-width: 0; }
         .row-split .cell.tight { flex: none; }
         .row-split .cell .row-value { white-space: nowrap; -webkit-line-clamp: 1; }
+        .quality {
+          display: flex; gap: 2.5mm; align-items: flex-start;
+          margin-top: 2mm; padding: 2mm 2.5mm; border-radius: 1.5mm;
+          border: 0.3mm solid #cbd5e1; background: #f8fafc;
+        }
+        .quality.ok { border-color: #86efac; background: #f0fdf4; }
+        .quality.warn { border-color: #fcd34d; background: #fffbeb; }
+        .quality-label { font-size: 2.1mm; font-weight: 700; letter-spacing: 0.3mm; color: #64748b; padding-top: 0.3mm; }
+        .quality.ok .quality-label { color: #15803d; }
+        .quality.warn .quality-label { color: #b45309; }
+        .quality-title { font-size: 2.6mm; font-weight: 700; color: #0f172a; }
+        .quality-meta { font-size: 2.2mm; color: #475569; margin-top: 0.4mm; }
         .bottom {
           margin-top: auto;
           display: flex;
@@ -372,6 +384,23 @@ export function renderDispatchNoteHtml(
           </div>`
             : ''}
         </section>
+
+        ${dispatch.quality?.show
+          ? `<section class="quality ${dispatch.quality.kind === 'certificate' ? 'ok' : 'warn'}">
+          <div class="quality-label">${dispatch.quality.kind === 'certificate' ? 'CALIDAD' : 'CONSTANCIA'}</div>
+          <div class="quality-body">
+            <div class="quality-title">${escapeHtml(dispatch.quality.label || '')}</div>
+            ${dispatch.quality.kind === 'certificate'
+              ? `<div class="quality-meta">${[
+                  dispatch.quality.husoKey ? `Huso ${escapeHtml(dispatch.quality.husoKey)}` : '',
+                  dispatch.quality.testDate ? `Ensayo ${escapeHtml(dispatch.quality.testDate)}` : '',
+                  dispatch.quality.validUntil ? `Vigente hasta ${escapeHtml(dispatch.quality.validUntil)}` : '',
+                  dispatch.quality.laboratory ? escapeHtml(dispatch.quality.laboratory) : '',
+                ].filter(Boolean).join(' &middot; ')}</div>`
+              : ''}
+          </div>
+        </section>`
+          : ''}
 
         <section class="bottom">
           <div class="signature">
