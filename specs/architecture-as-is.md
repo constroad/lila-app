@@ -506,6 +506,14 @@ independientes a propósito: si lila cae los backups siguen; si el plist no exis
 migrar —el plist vive en `~/Library/LaunchAgents` y **no viaja con el repo git**— lila
 lo detecta al día siguiente.
 
+**Alertas con dedupe y aviso de recuperación:** el backup de la base corre CADA HORA, así
+que un fallo persistente (disco desconectado un fin de semana, permiso faltante) alertaría
+24 veces al día. `backup_notify_failure` alerta siempre ante un fallo NUEVO o distinto —la
+firma es el hash de las primeras líneas del detalle, para no silenciar un problema nuevo
+por culpa del viejo— y repite el mismo cada 6h. Al recuperarse avisa, cerrando el ciclo.
+Origen: 2026-08-08, la primera noche real generó 1 alerta por hora por el permiso TCC
+faltante.
+
 **Falla ruidoso:** todos los preflight (disco montado, escribible, clave legible)
 alertan por Telegram y salen con código ≠ 0. El modo de fallo clásico es "terminó bien"
 sin haber respaldado nada. Verificado en vivo: el primer disparo del agente falló por

@@ -78,7 +78,7 @@ cleanup() { rm -f "$LOCK_FILE"; }
 
 fail() {
   log "ERROR: $1"
-  notify "🔴 RÉPLICA OFFSITE FALLÓ
+  backup_notify_failure offsite "🔴 RÉPLICA OFFSITE FALLÓ
 
 $1
 
@@ -170,6 +170,9 @@ La application key NO debe tener permiso deleteFiles (ver cabecera del script)."
 
   if [ ${#PROBLEMAS[@]} -eq 0 ]; then
     date +%s > "$HEARTBEAT_FILE"
+    backup_notify_recovery offsite "✅ RÉPLICA OFFSITE RECUPERADA
+
+Volvió a funcionar tras uno o más fallos."
     log "=== Réplica offsite OK ==="
   else
     local detalle

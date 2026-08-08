@@ -85,11 +85,14 @@ cleanup() {
 
 fail() {
   log "ERROR: $1"
-  notify "🔴 BACKUP DE BASE DE DATOS FALLÓ
+  # Con dedupe: este job corre CADA HORA y un fallo persistente alertaría 24
+  # veces al día (ver backup_notify_failure en backup-common.sh).
+  backup_notify_failure db "🔴 BACKUP DE BASE DE DATOS FALLÓ
 
 $1
 
-Atlas es M0 (sin backups propios): la base quedó en copia única."
+Atlas es M0 (sin backups propios): la base quedó en copia única.
+(Si el fallo persiste, esta alerta se repite cada 6h, no cada hora.)"
   cleanup
   exit 1
 }
@@ -183,6 +186,12 @@ $(echo "$out" | tail -4)"
   # perdido (p.ej. tras migrar de máquina) no se detecta hasta que se necesita
   # restaurar. Se escribe SOLO en éxito.
   date +%s > "$HEARTBEAT_FILE"
+
+  # Cierra el ciclo: si veníamos fallando, avisa que se recuperó. Sin esto
+  # quedás sin saber si el problema sigue o se arregló solo.
+  backup_notify_recovery db "✅ BACKUP DE BASE DE DATOS RECUPERADO
+
+Volvió a funcionar tras uno o más fallos. ${added} nuevos, ${elapsed}s."
 
   log "=== Backup de DB: fin (${elapsed}s) ==="
 }

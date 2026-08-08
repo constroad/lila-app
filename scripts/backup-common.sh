@@ -80,6 +80,52 @@ backup_notify() {
     "https://api.telegram.org/bot${token}/sendMessage" 2>/dev/null || true
 }
 
+# ---- alertas con dedupe ----------------------------------------------------
+# El backup de la base corre CADA HORA: sin dedupe, un fallo persistente —el
+# disco desconectado un fin de semana, o un permiso que falta— dispara 24
+# alertas por día. Una alerta que suena cada hora por lo mismo entrena a
+# ignorarlas, y entonces la que importa pasa desapercibida.
+#
+# Reglas: se alerta SIEMPRE ante un fallo NUEVO o distinto al anterior; si el
+# mismo fallo persiste, se repite cada ALERT_REPEAT_SECONDS; y se avisa cuando
+# se RECUPERA, para cerrar el ciclo (si no, quedás sin saber si sigue roto).
+ALERT_REPEAT_SECONDS="${BACKUP_ALERT_REPEAT_SECONDS:-21600}" # 6h
+
+# $1 = clave del job (media|db|offsite|verify) · $2 = mensaje
+backup_notify_failure() {
+  local job="$1" mensaje="$2"
+  local estado="${BACKUP_CONFIG_DIR}/alert-state-${job}"
+  local firma ahora previa_firma previa_ts
+  # Firma = primera línea del detalle: distingue "disco desconectado" de
+  # "clave ilegible" para no silenciar un problema nuevo por culpa del viejo.
+  firma=$(printf '%s' "$mensaje" | head -3 | shasum -a 256 | cut -c1-16)
+  ahora=$(date +%s)
+
+  if [ -r "$estado" ]; then
+    previa_firma=$(cut -d' ' -f1 < "$estado" 2>/dev/null)
+    previa_ts=$(cut -d' ' -f2 < "$estado" 2>/dev/null)
+    if [ "$firma" = "$previa_firma" ] && [ -n "$previa_ts" ] \
+       && [ $((ahora - previa_ts)) -lt "$ALERT_REPEAT_SECONDS" ]; then
+      backup_log "Alerta silenciada (mismo fallo, próxima en $(( (ALERT_REPEAT_SECONDS - (ahora - previa_ts)) / 60 )) min)"
+      return 0
+    fi
+  fi
+
+  mkdir -p "$BACKUP_CONFIG_DIR"
+  echo "$firma $ahora" > "$estado"
+  backup_notify "$mensaje"
+}
+
+# Se llama tras un éxito: si veníamos de un fallo, avisa que se recuperó y
+# limpia el estado.
+backup_notify_recovery() {
+  local job="$1" mensaje="$2"
+  local estado="${BACKUP_CONFIG_DIR}/alert-state-${job}"
+  [ -r "$estado" ] || return 0
+  rm -f "$estado"
+  backup_notify "$mensaje"
+}
+
 # Preflight común: sin esto, el modo de fallo es "terminó bien sin respaldar".
 verificar_binarios() {
   [ -n "$RESTIC" ] && [ -x "$RESTIC" ] || {

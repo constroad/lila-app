@@ -97,7 +97,7 @@ notify() {
 fail() {
   local message="$1"
   log "ERROR: $message"
-  notify "🔴 BACKUP DE MEDIOS FALLÓ
+  backup_notify_failure media "🔴 BACKUP DE MEDIOS FALLÓ
 
 $message
 
@@ -237,6 +237,9 @@ snapshot APFS (requiere correr como root/LaunchDaemon)."
   # plist NO viaja con el repo git— no se detecta hasta que hay que restaurar.
   # Se escribe SOLO en éxito, que es lo que hace que el silencio sea la señal.
   date +%s > "$HEARTBEAT_FILE"
+  backup_notify_recovery media "✅ BACKUP DE MEDIOS RECUPERADO
+
+Volvió a funcionar tras uno o más fallos. ${files} archivos, ${elapsed}s."
 
   log "=== Backup de medios: fin (${elapsed}s) ==="
   release_lock
