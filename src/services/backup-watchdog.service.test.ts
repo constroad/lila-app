@@ -32,6 +32,7 @@ const todosAlDia = async () => {
   await escribirHeartbeat('last-media-backup', 3);
   await escribirHeartbeat('last-db-backup', 0.5);
   await escribirHeartbeat('last-verify', 24);
+  await escribirHeartbeat('last-offsite', 3);
 };
 
 beforeEach(async () => {
@@ -64,7 +65,7 @@ describe('dead man\'s switch de backups', () => {
     const r = await subject.checkBackupHeartbeats();
 
     expect(r.every((x) => x.vencido)).toBe(true);
-    expect(sendTelegramAlert).toHaveBeenCalledTimes(3); // medios + base + verificación
+    expect(sendTelegramAlert).toHaveBeenCalledTimes(4); // medios + base + verificación + offsite
     const msg = sendTelegramAlert.mock.calls.map(([p]) => p.message).join('\n');
     expect(msg).toContain('NUNCA se registró un backup exitoso');
     expect(msg).toContain('install-backup-agent.sh');
@@ -119,6 +120,20 @@ describe('dead man\'s switch de backups', () => {
 
     expect(r.find((x) => x.nombre === 'medios')?.horas).toBeNull();
     expect(r.find((x) => x.nombre === 'medios')?.vencido).toBe(true);
+  });
+});
+
+describe('vigilancia de la réplica offsite', () => {
+  // Si la réplica se detiene, las copias locales siguen pero se vuelve a estar
+  // expuesto a incendio/robo/ransomware sin enterarse.
+  it('alerta si la réplica offsite lleva más de 25h detenida', async () => {
+    await todosAlDia();
+    await escribirHeartbeat('last-offsite', 30);
+
+    const r = await subject.checkBackupHeartbeats();
+
+    expect(r.find((x) => x.nombre === 'réplica offsite')?.vencido).toBe(true);
+    expect(sendTelegramAlert).toHaveBeenCalledTimes(1);
   });
 });
 

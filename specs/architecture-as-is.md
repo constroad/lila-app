@@ -525,9 +525,29 @@ con documentos legibles** (2.543 despachos, 479 pedidos); `restic check` sin err
   punto-en-el-tiempo entre colecciones. Con 77 MB el dump tarda segundos, así que el
   skew es de segundos. Si se pasa a tier pago, agregar `--oplog`/`--oplogReplay`.
 - **Requiere Acceso total al disco para `/bin/bash`** (el agente corre bajo launchd).
-- **No cumple 3-2-1**: es una sola copia local, en el mismo edificio, siempre conectada.
-  No cubre robo, incendio ni ransomware. La capa offsite (B2/S3 con Object Lock) queda
-  pendiente — restic ya la soporta sin rediseño.
+- **La réplica offsite requiere credenciales de B2** (ver abajo). Hasta configurarlas,
+  sigue siendo una sola copia local y NO se cumple 3-2-1.
+
+**Réplica offsite → Backblaze B2 (`scripts/backup-offsite.sh`, diaria 02:00).** Usa
+`restic copy` y no un segundo backup desde el origen: replica exactamente la cadena de
+snapshots ya verificada localmente, y no vuelve a leer los 10.600 archivos del disco
+interno. Los repos destino se inicializan con `--copy-chunker-params` — sin eso la
+deduplicación entre origen y destino no es compatible y cada corrida retransfiere todo.
+
+**Inmutabilidad — la parte no obvia:** NO se usa Object Lock con retención por defecto.
+Entra en conflicto con restic, que necesita borrar bloques que ningún snapshot usa ya
+(`prune`); un bucket con retención forzada rompe el mantenimiento del repositorio. La
+forma correcta es una **application key sin permiso `deleteFiles`**: restic no necesita
+borrar — cuando descarta algo escribe un marcador de ocultamiento, que es una versión
+nueva y no destruye la anterior. Las lifecycle rules del bucket retienen las versiones
+previas. Efecto: quien comprometa la Mac mini Y esa clave **no puede vaciar el bucket**.
+Ese es el "+1" (copia inmutable) de 3-2-1-1-0. El `prune` NO corre contra el bucket: la
+retención remota se resuelve con lifecycle rules.
+
+El agente offsite se instala **condicionalmente**: si faltan las credenciales en `.env`,
+el instalador lo omite con un aviso en vez de agendarlo para que falle —y alerte— cada
+noche. Una alerta que suena a diario por algo ya sabido entrena a ignorar las alertas
+de verdad.
 
 **Capacidad:** 5,9 GB usados de 954 GB. Crecimiento medido 1,3-4 GB/mes (agosto
 acelerando), lo que da ~20-60 años de margen. El disco no es la limitante; cuando lo

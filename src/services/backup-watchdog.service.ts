@@ -40,6 +40,9 @@ const VIGILADOS: Vigilado[] = [
   // se prueba es exactamente el escenario que 3-2-1-1-0 quiere evitar. 7 días
   // + 1 de gracia.
   { nombre: 'verificación', archivo: 'last-verify', maxHoras: 8 * 24 },
+  // Réplica offsite: si se detiene, las copias locales siguen pero se vuelve a
+  // estar expuesto a incendio/robo/ransomware sin saberlo.
+  { nombre: 'réplica offsite', archivo: 'last-offsite', maxHoras: 25 },
 ];
 
 const CHECK_INTERVAL_MS = Number(process.env.BACKUP_WATCHDOG_INTERVAL_MS) || 60 * 60 * 1000;

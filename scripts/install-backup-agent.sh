@@ -133,6 +133,35 @@ install_agent "com.constroad.backup-db" \
     </dict>" \
   "base de datos, cada hora"
 
+# Réplica offsite DIARIA a las 02:00: después del backup de medios (00:30) para
+# replicar lo del día, y antes de la verificación semanal (03:00) para no
+# solaparse con el `prune`, que toma lock exclusivo.
+#
+# CONDICIONAL a propósito: sin credenciales de B2 el agente fallaría cada noche
+# y alertaría por Telegram. Una alerta que suena todos los días por algo que ya
+# se sabe se vuelve ruido, y el ruido entrena a ignorar las alertas de verdad.
+ENV_FILE_PATH="${BACKUP_ENV_FILE:-${REPO_DIR}/.env}"
+if [ -r "$ENV_FILE_PATH" ] && grep -qE '^B2_ACCOUNT_ID=.+' "$ENV_FILE_PATH" 2>/dev/null; then
+  install_agent "com.constroad.backup-offsite" \
+    "${REPO_DIR}/scripts/backup-offsite.sh" \
+"    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>" \
+    "réplica offsite a B2, diaria"
+else
+  echo "→ com.constroad.backup-offsite (réplica offsite): OMITIDO"
+  info "faltan credenciales B2 en $ENV_FILE_PATH — agregá B2_ACCOUNT_ID/B2_ACCOUNT_KEY/B2_BUCKET"
+  info "y volvé a correr este script. Sin esto NO hay copia fuera del edificio."
+  echo
+  # El agente viejo se descarga si existía, para no dejarlo fallando en silencio
+  # tras quitar las credenciales.
+  launchctl bootout "gui/${UID_NUM}/com.constroad.backup-offsite" 2>/dev/null || true
+fi
+
 # Verificación SEMANAL (domingos 03:00): es más cara que un backup porque LEE
 # los datos y restaura de verdad. Un backup sin simulacro de restauración no
 # está probado — es el "0" de 3-2-1-1-0.
