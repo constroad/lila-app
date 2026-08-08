@@ -17,6 +17,20 @@
 #     level 3 -> kill + relaunch Tailscale.app
 #     level 4 -> Telegram alert — Tailscale recovery exhausted
 #
+# GUARD DE SESIÓN (2026-08-08): TODAS las acciones de arriba se abortan si el
+# nodo está DESLOGUEADO, y se verifica el estado después de cada una. Ninguna
+# acción automática recupera un nodo sin sesión —`up` exige login interactivo—
+# así que insistir solo alarga la caída. En ese caso se alerta con la URL de
+# login y se detiene la escalación.
+# Origen: ese día el funnel flapeó, el probe escaló, y `down && up` sobre una
+# sesión expirada dejó el acceso público caído 35 min hasta que una persona
+# autenticó. La automatización convirtió un microcorte de 1 min en una caída
+# que necesitó intervención manual.
+#
+# REINTENTO EN EL PROBE: un timeout aislado ya no cuenta como fallo (ver
+# probe_external). Los microcortes de ~1 min, medidos ~1/hora, eran los que
+# alimentaban el contador hasta disparar las acciones destructivas.
+#
 # Each level fires after another FAIL_THRESHOLD consecutive failures. On any
 # successful probe the level resets to 0. The current level survives script
 # restarts via /tmp state file so KeepAlive=true doesn't reset escalation.
@@ -40,6 +54,7 @@ LAST_ALERT_FILE="${STATE_DIR}/tailscale-probe-last-alert"
 DOWN_SINCE_FILE="${STATE_DIR}/tailscale-probe-down-since"
 CHECK_INTERVAL=60        # seconds between probes
 PROBE_TIMEOUT=10         # per-curl timeout
+PROBE_RETRY_DELAY=5      # espera antes del reintento inmediato (ver probe_external)
 FAIL_THRESHOLD=3         # consecutive failures before next escalation step
 ALERT_REPEAT_SECONDS=900 # re-alert every 15 min while still down
 POST_ACTION_COOLDOWN=15  # wait this long after a recovery action before counting again
@@ -174,19 +189,71 @@ probe_external() {
     return 1
   fi
   last_code="000"
-  while IFS= read -r ip; do
-    [ -z "$ip" ] && continue
-    http_code=$(/usr/bin/curl -sS -o /dev/null -w '%{http_code}' \
-      --max-time "$PROBE_TIMEOUT" \
-      --resolve "${HOST}:443:${ip}" \
-      "https://${HOST}${PROBE_PATH}" 2>/dev/null || echo "000")
-    last_code="$http_code"
-    if [[ "$http_code" =~ ^[23] ]]; then
-      return 0
-    fi
-  done <<< "$ips"
-  PROBE_DETAIL="dns=ok funnel_https=FAIL(last_code=$last_code)"
+  local intento
+  # REINTENTO INMEDIATO antes de dar el probe por fallido (2026-08-08): el
+  # funnel tiene microcortes de ~1 min que se recuperan solos —medidos ~1/hora—
+  # y cada uno sumaba al contador de escalación. Tres microcortes seguidos
+  # disparaban acciones DESTRUCTIVAS sobre Tailscale para un problema que se
+  # arreglaba solo. Un timeout aislado de curl no es una caída: se reintenta.
+  for intento in 1 2; do
+    while IFS= read -r ip; do
+      [ -z "$ip" ] && continue
+      # Sin `|| echo "000"`: curl ya escribe "000" en stdout con -w cuando falla,
+      # así que el fallback duplicaba y producía el "last_code=000000" ilegible
+      # de los logs.
+      http_code=$(/usr/bin/curl -sS -o /dev/null -w '%{http_code}' \
+        --max-time "$PROBE_TIMEOUT" \
+        --resolve "${HOST}:443:${ip}" \
+        "https://${HOST}${PROBE_PATH}" 2>/dev/null)
+      [ -z "$http_code" ] && http_code="000"
+      last_code="$http_code"
+      if [[ "$http_code" =~ ^[23] ]]; then
+        [ "$intento" -gt 1 ] && log "Probe OK en el reintento (microcorte transitorio, no cuenta como fallo)"
+        return 0
+      fi
+    done <<< "$ips"
+    [ "$intento" -eq 1 ] && sleep "$PROBE_RETRY_DELAY"
+  done
+  PROBE_DETAIL="dns=ok funnel_https=FAIL(last_code=$last_code, 2 intentos)"
   return 1
+}
+
+# ---- estado de sesión de Tailscale -----------------------------------------
+#
+# INCIDENTE 2026-08-08: el funnel flapeó, el probe escaló, y `tailscale down &&
+# tailscale up` dejó el nodo DESLOGUEADO — la sesión había expirado, así que el
+# `up` no reconectó: exigió login interactivo. La automatización convirtió un
+# microcorte de 1 min en 35 min de caída pública que necesitó a una persona.
+# Ninguna acción automática arregla un nodo deslogueado; insistir solo empeora.
+tailscale_esta_logueado() {
+  ! "$TAILSCALE" status 2>&1 | head -1 | grep -qi "logged out"
+}
+
+tailscale_login_url() {
+  "$TAILSCALE" status 2>&1 | grep -oE "https://login\.tailscale\.com/[^ ]+" | head -1
+}
+
+# Se llama tras CADA acción de recuperación: si la acción nos dejó deslogueados,
+# hay que avisar YA y dejar de escalar.
+abortar_si_deslogueado() {
+  local contexto="$1"
+  tailscale_esta_logueado && return 1
+  local url
+  url=$(tailscale_login_url)
+  log "DESLOGUEADO tras ${contexto} — se detiene la escalación"
+  send_telegram_alert "🚨 TAILSCALE DESLOGUEADO — funnel caído
+
+El nodo perdió la sesión${contexto:+ tras ${contexto}} y NINGUNA acción automática
+puede recuperarlo: requiere login interactivo.
+
+👉 Autenticar acá:
+${url:-https://login.tailscale.com}
+
+Después: tailscale funnel --bg ${PORT}
+
+lila-app sigue corriendo bien; lo que está caído es el acceso PÚBLICO
+(las páginas públicas no cargan imágenes ni logo)."
+  return 0
 }
 
 # ---- recovery actions — Tailscale/DERP path --------------------------------
@@ -196,13 +263,25 @@ action_funnel_reset() {
   "$TAILSCALE" funnel reset >> "$LOG_FILE" 2>&1 || true
   sleep 2
   "$TAILSCALE" funnel --bg "$PORT" >> "$LOG_FILE" 2>&1 || true
+
+  # Fue esta acción la que el 2026-08-08 terminó con el nodo deslogueado.
+  abortar_si_deslogueado "'tailscale funnel reset'" || true
 }
 
 action_tailscale_down_up() {
+  # `down && up` es la acción que puede dejar el nodo pidiendo login: si la
+  # sesión ya expiró, el `up` NO reconecta. Se comprueba ANTES de tocar nada —
+  # si ya estamos deslogueados, no hay nada que reiniciar, solo hay que avisar.
+  if abortar_si_deslogueado ""; then return 0; fi
+
   log "ESCALATION 2 (Tailscale): 'tailscale down && tailscale up'"
   "$TAILSCALE" down >> "$LOG_FILE" 2>&1 || true
   sleep 3
   "$TAILSCALE" up >> "$LOG_FILE" 2>&1 || true
+
+  # Y DESPUÉS: si esta acción nos deslogueó, alertar en el acto en vez de dejar
+  # que la escalación siga con acciones aún más agresivas.
+  if abortar_si_deslogueado "'tailscale down && up'"; then return 0; fi
   # Keep DNS decoupled from Tailscale: MagicDNS (100.100.100.100) flapping on
   # down/up was breaking the app's MongoDB SRV lookups (querySrv ECONNREFUSED).
   "$TAILSCALE" set --accept-dns=false >> "$LOG_FILE" 2>&1 || true
@@ -211,12 +290,18 @@ action_tailscale_down_up() {
 }
 
 action_relaunch_tailscale() {
+  # Matar la app sobre un nodo deslogueado no recupera nada y complica el login
+  # manual posterior.
+  if abortar_si_deslogueado ""; then return 0; fi
+
   log "ESCALATION 3 (Tailscale): kill + relaunch Tailscale.app"
   /usr/bin/pkill -x Tailscale 2>/dev/null || true
   sleep 3
   /usr/bin/open -a Tailscale 2>/dev/null || true
   sleep 8
   "$TAILSCALE" funnel --bg "$PORT" >> "$LOG_FILE" 2>&1 || true
+
+  abortar_si_deslogueado "el relanzamiento de Tailscale.app" || true
 }
 
 action_alert_tailscale() {

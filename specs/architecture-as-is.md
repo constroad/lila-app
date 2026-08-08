@@ -439,6 +439,28 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 - Tailscale watchdog notifica Telegram en caidas de red.
 - Quota validator emite alertas a 80%, 95%, 100%.
 
+## Tailscale funnel — guard de sesión en el probe (✅ 2026-08-08)
+
+Incidente: el funnel flapeó (microcortes de ~1 min, ~1/hora), el probe acumuló 3 fallos y
+escaló. `tailscale down && tailscale up` sobre una sesión EXPIRADA no reconecta: exige
+login interactivo. Resultado: **35 min de acceso público caído** —las páginas públicas sin
+imágenes ni logo— hasta que una persona autenticó. lila-app nunca dejó de servir (200 en
+local todo el tiempo); lo caído era el camino público. La automatización convirtió un
+microcorte de 1 min en una caída que necesitó intervención manual.
+
+Dos fixes en `scripts/tailscale-external-probe.sh`:
+- **Guard de sesión**: `tailscale_esta_logueado()` se comprueba ANTES y DESPUÉS de cada
+  acción de recuperación. Si el nodo está deslogueado, ninguna acción automática ayuda:
+  se alerta con la URL de login y se DETIENE la escalación en vez de seguir con acciones
+  más agresivas (matar Tailscale.app complicaba además el login manual posterior).
+- **Reintento en el probe**: un timeout aislado ya no cuenta como fallo. Eran los
+  microcortes los que alimentaban el contador hasta disparar lo destructivo. De paso se
+  corrigió el `last_code=000000` ilegible (curl ya escribe "000" con `-w`, y el
+  `|| echo "000"` lo duplicaba).
+
+Es el mismo patrón que §Backups evita en sus preflight: **el remedio de un health-check no
+debe causar más daño que el síntoma**.
+
 ## Backups (✅ IMPLEMENTADO 2026-08-08)
 
 Antes de esto **no había ninguna copia**: los medios vivían solo en el disco interno
