@@ -466,8 +466,29 @@ segunda corrida **0 B en 2 s**.
 - `scripts/backup-media.sh` — excluye `.thumbs` (43% de los archivos, 6% del peso,
   regenerables por `thumbnail.service.ts`) y `temp/`. Retención 7d/4w/6m.
 - `scripts/backup-db.sh` — `mongodump` de las 4 bases → restic. Retención 24h/7d/4w.
-- `scripts/install-backup-agent.sh` — instala ambos agentes launchd. **Idempotente.**
+- `scripts/verify-backups.sh` — verificación + simulacro semanal (ver abajo).
+- `scripts/install-backup-agent.sh` — instala los 3 agentes launchd. **Idempotente.**
 - `src/services/backup-watchdog.service.ts` — dead man's switch.
+
+**Verificación semanal (domingos 03:00) — el "0" de 3-2-1-1-0.** Un backup que nunca
+se restauró no es un backup. Tres niveles, de barato a caro:
+1. `restic check` — estructura y metadata.
+2. `check --read-data-subset=10%` — LEE los bloques y recalcula hashes. Es lo único
+   que detecta bit rot; rotando 10% semanal, el repo entero queda cubierto cada ~10
+   semanas.
+3. **Simulacro real**: restaura 25 archivos al azar y compara **SHA-256 contra el
+   origen vivo**, más el dump de la base parseando BSON. Compara CONTENIDO, no
+   cantidad: contar archivos da falsos OK (durante el desarrollo, una comparación mal
+   escrita reportó diferencias inexistentes — al revés habría dado ✅ sobre un backup
+   roto). Cronometra, para que el RTO sea un dato y no un deseo.
+
+Medido en la primera corrida: **13s** total, 25/25 archivos con hash idéntico, 244
+colecciones y `orders` con 479 documentos legibles. Dos hallazgos, ambos del script de
+verificación y no de los backups: un **lock huérfano** hacía que `check` reportara
+"errores de estructura" (se distingue de corrupción real, porque conflacionarlos genera
+fatiga de alertas), y la muestra aleatoria incluía archivos creados DESPUÉS del último
+snapshot (falso positivo que enmascararía uno real; ahora se corta por la fecha del
+snapshot).
 
 **launchd, no cron ni el JobExecutor.** cron está deprecado en macOS, pero el motivo
 real es TCC: con cron como padre, macOS deniega el acceso a rutas protegidas **en
@@ -478,7 +499,8 @@ avanza), y lila se reinicia seguido (33 veces en 3 días, medido), (c) el backup
 sobrevivir a la falla de lo que respalda.
 
 **Vigilancia cruzada:** launchd ejecuta, lila vigila. Los scripts escriben un heartbeat
-solo en éxito; `backup-watchdog.service.ts` alerta si medios >25 h o base >2 h
+solo en éxito; `backup-watchdog.service.ts` alerta si medios >25 h, base >2 h o la
+verificación semanal >8 días
 (frecuencia + 1 h de gracia, para que el jitter no genere ruido). Son mecanismos
 independientes a propósito: si lila cae los backups siguen; si el plist no existe tras
 migrar —el plist vive en `~/Library/LaunchAgents` y **no viaja con el repo git**— lila

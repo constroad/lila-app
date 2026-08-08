@@ -133,6 +133,22 @@ install_agent "com.constroad.backup-db" \
     </dict>" \
   "base de datos, cada hora"
 
+# Verificación SEMANAL (domingos 03:00): es más cara que un backup porque LEE
+# los datos y restaura de verdad. Un backup sin simulacro de restauración no
+# está probado — es el "0" de 3-2-1-1-0.
+install_agent "com.constroad.verify-backups" \
+  "${REPO_DIR}/scripts/verify-backups.sh" \
+"    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>" \
+  "verificación + simulacro de restauración, semanal"
+
 printf -v WHEN '%02d:%02d' "$MEDIA_HOUR" "$MEDIA_MINUTE"
 cat <<EOF
 Agentes instalados:

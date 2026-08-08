@@ -23,6 +23,17 @@ const escribirHeartbeat = async (archivo: string, horasAtras: number) => {
   await fs.writeFile(path.join(dir, archivo), String(epoch), 'utf8');
 };
 
+/**
+ * Deja los tres vigilados al día. Cada test sobrescribe SOLO el que ejercita,
+ * para que un vencido no contamine las aserciones de otro (si no, agregar un
+ * vigilado nuevo rompe todos los tests anteriores).
+ */
+const todosAlDia = async () => {
+  await escribirHeartbeat('last-media-backup', 3);
+  await escribirHeartbeat('last-db-backup', 0.5);
+  await escribirHeartbeat('last-verify', 24);
+};
+
 beforeEach(async () => {
   jest.resetModules();
   sendTelegramAlert.mockClear();
@@ -39,8 +50,7 @@ afterEach(async () => {
 
 describe('dead man\'s switch de backups', () => {
   it('no alerta cuando ambos backups están al día', async () => {
-    await escribirHeartbeat('last-media-backup', 3);
-    await escribirHeartbeat('last-db-backup', 0.5);
+    await todosAlDia();
 
     const r = await subject.checkBackupHeartbeats();
 
@@ -54,15 +64,15 @@ describe('dead man\'s switch de backups', () => {
     const r = await subject.checkBackupHeartbeats();
 
     expect(r.every((x) => x.vencido)).toBe(true);
-    expect(sendTelegramAlert).toHaveBeenCalledTimes(2);
+    expect(sendTelegramAlert).toHaveBeenCalledTimes(3); // medios + base + verificación
     const msg = sendTelegramAlert.mock.calls.map(([p]) => p.message).join('\n');
     expect(msg).toContain('NUNCA se registró un backup exitoso');
     expect(msg).toContain('install-backup-agent.sh');
   });
 
   it('alerta si los medios pasan de 25h (24h + 1h de gracia)', async () => {
+    await todosAlDia();
     await escribirHeartbeat('last-media-backup', 26);
-    await escribirHeartbeat('last-db-backup', 0.5);
 
     const r = await subject.checkBackupHeartbeats();
 
@@ -74,8 +84,8 @@ describe('dead man\'s switch de backups', () => {
   // La gracia existe para que el jitter normal no genere ruido: una alerta que
   // salta sin motivo se termina ignorando, y entonces no sirve para nada.
   it('NO alerta a las 24.5h de los medios: es jitter, no una falla', async () => {
+    await todosAlDia();
     await escribirHeartbeat('last-media-backup', 24.5);
-    await escribirHeartbeat('last-db-backup', 0.5);
 
     await subject.checkBackupHeartbeats();
 
@@ -83,7 +93,7 @@ describe('dead man\'s switch de backups', () => {
   });
 
   it('la base tolera menos: alerta a las 3h (RPO horario)', async () => {
-    await escribirHeartbeat('last-media-backup', 3);
+    await todosAlDia();
     await escribirHeartbeat('last-db-backup', 3);
 
     const r = await subject.checkBackupHeartbeats();
@@ -102,12 +112,33 @@ describe('dead man\'s switch de backups', () => {
   });
 
   it('un heartbeat corrupto se trata como ausente, no revienta', async () => {
+    await todosAlDia();
     await fs.writeFile(path.join(dir, 'last-media-backup'), 'basura', 'utf8');
-    await escribirHeartbeat('last-db-backup', 0.5);
 
     const r = await subject.checkBackupHeartbeats();
 
     expect(r.find((x) => x.nombre === 'medios')?.horas).toBeNull();
     expect(r.find((x) => x.nombre === 'medios')?.vencido).toBe(true);
+  });
+});
+
+describe('vigilancia de la verificación semanal', () => {
+  it('alerta si la verificación no corre hace más de 8 días', async () => {
+    await todosAlDia();
+    await escribirHeartbeat('last-verify', 9 * 24);
+
+    const r = await subject.checkBackupHeartbeats();
+
+    expect(r.find((x) => x.nombre === 'verificación')?.vencido).toBe(true);
+    expect(sendTelegramAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('no alerta a los 7.5 días: es jitter del agendado semanal', async () => {
+    await todosAlDia();
+    await escribirHeartbeat('last-verify', 7.5 * 24);
+
+    await subject.checkBackupHeartbeats();
+
+    expect(sendTelegramAlert).not.toHaveBeenCalled();
   });
 });

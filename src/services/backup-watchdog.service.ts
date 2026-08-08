@@ -36,6 +36,10 @@ type Vigilado = { nombre: string; archivo: string; maxHoras: number };
 const VIGILADOS: Vigilado[] = [
   { nombre: 'medios', archivo: 'last-media-backup', maxHoras: 25 },
   { nombre: 'base de datos', archivo: 'last-db-backup', maxHoras: 2 },
+  // La verificación semanal también se vigila: un backup que corre pero nunca
+  // se prueba es exactamente el escenario que 3-2-1-1-0 quiere evitar. 7 días
+  // + 1 de gracia.
+  { nombre: 'verificación', archivo: 'last-verify', maxHoras: 8 * 24 },
 ];
 
 const CHECK_INTERVAL_MS = Number(process.env.BACKUP_WATCHDOG_INTERVAL_MS) || 60 * 60 * 1000;
