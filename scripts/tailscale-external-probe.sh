@@ -76,8 +76,13 @@ load_env() {
 
 # ---- alerting --------------------------------------------------------------
 
+# $2 = "force" para saltar el dedupe. Necesario para las alertas ACCIONABLES
+# (nodo deslogueado, recuperación agotada): el dedupe global de 15 min hacía que
+# el aviso temprano las silenciara, y son justo las que traen qué hacer —p.ej. la
+# URL de login. Una alerta suprimida por otra menos importante es peor que no
+# tener dedupe.
 send_telegram_alert() {
-  local message="$1"
+  local message="$1" force="${2:-}"
   load_env
   if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_ERRORS_CHAT_ID" ]; then
     log "Telegram alert skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_ERRORS_CHAT_ID in $ENV_FILE"
@@ -87,7 +92,7 @@ send_telegram_alert() {
   now=$(date +%s)
   last=0
   [ -r "$LAST_ALERT_FILE" ] && last=$(cat "$LAST_ALERT_FILE" 2>/dev/null || echo 0)
-  if [ $((now - last)) -lt "$ALERT_REPEAT_SECONDS" ]; then
+  if [ "$force" != "force" ] && [ $((now - last)) -lt "$ALERT_REPEAT_SECONDS" ]; then
     local remaining=$(( ALERT_REPEAT_SECONDS - (now - last) ))
     log "Telegram alert deduped (próximo en ${remaining}s)"
     return 0
@@ -252,7 +257,7 @@ ${url:-https://login.tailscale.com}
 Después: tailscale funnel --bg ${PORT}
 
 lila-app sigue corriendo bien; lo que está caído es el acceso PÚBLICO
-(las páginas públicas no cargan imágenes ni logo)."
+(las páginas públicas no cargan imágenes ni logo)." force
   return 0
 }
 
@@ -319,7 +324,7 @@ Diagnóstico: ${diag}
 Check:
 - tailscale funnel status
 - dig +short ${HOST} @${PUBLIC_RESOLVER}
-- ${LOG_FILE}"
+- ${LOG_FILE}" force
 }
 
 # ---- recovery actions — lila-app down path ---------------------------------
@@ -362,7 +367,26 @@ run_escalation_step() {
       3|*) action_alert_app_down "$diag" ;;
     esac
   else
-    # Tailscale/DERP/WAN issue
+    # Tailscale/DERP/WAN issue.
+    #
+    # AVISO TEMPRANO (2026-08-08): antes la ÚNICA alerta estaba en el nivel 4,
+    # o sea tras 4×FAIL_THRESHOLD fallos (~12 min) Y después de tres acciones
+    # destructivas. En el incidente de ese día el acceso público estuvo caído 35
+    # min y NUNCA llegó una alerta, porque se resolvió a mano en el nivel 2.
+    # Enterarse último, después de que la automatización ya flageló el sistema,
+    # es al revés de lo que sirve. Ahora se avisa al EMPEZAR a escalar.
+    if [ "$level" -eq 1 ]; then
+      send_telegram_alert "⚠️ ACCESO PÚBLICO CAÍDO (funnel de Tailscale)
+
+Host: ${HOST}
+Diagnóstico: ${diag}
+
+lila-app está BIEN (local_app=ok): lo caído es el camino público, así que las
+páginas públicas no cargan imágenes ni logo.
+
+Intentando recuperación automática. Si no vuelve, te aviso de nuevo."
+    fi
+
     case "$level" in
       1) action_funnel_reset ;;
       2) action_tailscale_down_up ;;

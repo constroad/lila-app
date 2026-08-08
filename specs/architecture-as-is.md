@@ -458,6 +458,20 @@ Dos fixes en `scripts/tailscale-external-probe.sh`:
   corrigió el `last_code=000000` ilegible (curl ya escribe "000" con `-w`, y el
   `|| echo "000"` lo duplicaba).
 
+- **Aviso temprano**: la única alerta estaba en el nivel 4 —tras ~12 min y tres acciones
+  destructivas—. Ese día el acceso público estuvo caído 35 min y **nunca llegó una
+  alerta**, porque se resolvió a mano en el nivel 2. Ahora se avisa al EMPEZAR a escalar,
+  y las alertas ACCIONABLES (deslogueo, recuperación agotada) saltan el dedupe de 15 min:
+  una alerta con la URL de login suprimida por un aviso genérico es peor que no dedupear.
+
+**Causa raíz del deslogueo:** el nodo ya estaba deslogueado ANTES de la escalación — el
+`Logged out.` del log es la SALIDA del comando de Tailscale, no su efecto. Por eso fallaba
+el funnel. No hay evidencia en los logs de por qué perdió la sesión; la hipótesis principal
+es expiración de la clave del nodo (Tailscale expira a los 180 días por defecto). Tras
+re-autenticar, `KeyExpiry` quedó en 2027-02-04, exactamente 180 días. **Va a repetirse en
+esa fecha salvo que se deshabilite la expiración de clave** para esta máquina en el admin
+de Tailscale — es la práctica estándar para nodos servidor siempre encendidos.
+
 Es el mismo patrón que §Backups evita en sus preflight: **el remedio de un health-check no
 debe causar más daño que el síntoma**.
 
