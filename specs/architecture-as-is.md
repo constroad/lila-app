@@ -549,6 +549,17 @@ el instalador lo omite con un aviso en vez de agendarlo para que falle —y aler
 noche. Una alerta que suena a diario por algo ya sabido entrena a ignorar las alertas
 de verdad.
 
+**Runbook operativo: `docs/BACKUP-RUNBOOK.md`** — cómo restaurar, cómo migrar a otra
+máquina (Fase 5) y qué hacer en cada escenario de falla. Se lee cuando algo ya se rompió.
+
+**Portabilidad (`scripts/backup-common.sh`):** ningún script contiene rutas a `/Users` ni
+a `/opt`. La raíz sale de la ubicación del propio script, el origen de los medios de
+`FILE_STORAGE_ROOT` en `.env` (misma fuente de verdad que usa lila para escribirlos, así
+que si cambia el storage el backup lo sigue solo), y los binarios se descubren con
+`command -v` probando Homebrew de Apple Silicon **e** Intel. Antes había 16 rutas
+absolutas repartidas en 4 scripts: en una máquina con otro usuario fallaban las cuatro,
+y fallaban DESPUÉS de migrar, cuando nadie mira.
+
 **Capacidad:** 5,9 GB usados de 954 GB. Crecimiento medido 1,3-4 GB/mes (agosto
 acelerando), lo que da ~20-60 años de margen. El disco no es la limitante; cuando lo
 sea, la salida es tiering a object storage, no un disco más grande.

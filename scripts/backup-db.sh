@@ -25,15 +25,21 @@
 
 set -uo pipefail
 
+# Config y utilidades compartidas: deriva rutas y descubre binarios, para que
+# esto siga funcionando al migrar de máquina (ver backup-common.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/backup-common.sh"
+
 # ---- configuración ---------------------------------------------------------
 
-REPO="${DB_BACKUP_REPO:-/Volumes/CONSTROAD-BACKUP/restic-db}"
-PASSWORD_FILE="${BACKUP_PASSWORD_FILE:-$HOME/.config/constroad-backup/restic-media.pass}"
-ENV_FILE="${BACKUP_ENV_FILE:-/Users/jose/projects/lila-app/.env}"
-LOG_FILE="${DB_BACKUP_LOG_FILE:-/Users/jose/projects/lila-app/logs/backup-db.log}"
-HEARTBEAT_FILE="${DB_HEARTBEAT_FILE:-$HOME/.config/constroad-backup/last-db-backup}"
-RESTIC="${RESTIC_BIN:-/opt/homebrew/bin/restic}"
-MONGODUMP="${MONGODUMP_BIN:-/opt/homebrew/bin/mongodump}"
+REPO="$DB_REPO"
+# Misma clave que el repo de medios: un solo secreto que proteger fuera de la
+# máquina, en vez de dos que recordar.
+PASSWORD_FILE="$BACKUP_PASSWORD_FILE"
+ENV_FILE="$BACKUP_ENV_FILE"
+LOG_FILE="${DB_BACKUP_LOG_FILE:-${BACKUP_LOG_DIR}/backup-db.log}"
+HEARTBEAT_FILE="${DB_HEARTBEAT_FILE:-${BACKUP_CONFIG_DIR}/last-db-backup}"
+
+
 LOCK_FILE="/tmp/constroad-backup-db.lock"
 
 # Bases a respaldar. Se listan explícitamente en vez de volcar TODO: `admin`,

@@ -33,15 +33,19 @@
 
 set -uo pipefail
 
+# Config y utilidades compartidas: deriva rutas y descubre binarios, para que
+# esto siga funcionando al migrar de máquina (ver backup-common.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/backup-common.sh"
+
 # ---- configuración ---------------------------------------------------------
 
-REPO="${BACKUP_REPO:-/Volumes/CONSTROAD-BACKUP/restic-media}"
-SOURCE="${BACKUP_SOURCE:-/Users/jose/constroad-storage/companies}"
-PASSWORD_FILE="${BACKUP_PASSWORD_FILE:-$HOME/.config/constroad-backup/restic-media.pass}"
-ENV_FILE="${BACKUP_ENV_FILE:-/Users/jose/projects/lila-app/.env}"
-LOG_FILE="${BACKUP_LOG_FILE:-/Users/jose/projects/lila-app/logs/backup-media.log}"
-HEARTBEAT_FILE="${MEDIA_HEARTBEAT_FILE:-$HOME/.config/constroad-backup/last-media-backup}"
-RESTIC="${RESTIC_BIN:-/opt/homebrew/bin/restic}"
+REPO="$MEDIA_REPO"
+SOURCE="$(resolver_source)"
+PASSWORD_FILE="$BACKUP_PASSWORD_FILE"
+ENV_FILE="$BACKUP_ENV_FILE"
+LOG_FILE="${BACKUP_LOG_FILE:-${BACKUP_LOG_DIR}/backup-media.log}"
+HEARTBEAT_FILE="${MEDIA_HEARTBEAT_FILE:-${BACKUP_CONFIG_DIR}/last-media-backup}"
+
 LOCK_FILE="/tmp/constroad-backup-media.lock"
 
 # Retención: 7 diarios / 4 semanales / 6 mensuales. A ~1.3-4 GB/mes de

@@ -27,16 +27,20 @@
 
 set -uo pipefail
 
+# Config y utilidades compartidas: deriva rutas y descubre binarios, para que
+# esto siga funcionando al migrar de máquina (ver backup-common.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/backup-common.sh"
+
 # ---- configuración ---------------------------------------------------------
 
-MEDIA_REPO="${BACKUP_REPO:-/Volumes/CONSTROAD-BACKUP/restic-media}"
-DB_REPO="${DB_BACKUP_REPO:-/Volumes/CONSTROAD-BACKUP/restic-db}"
-SOURCE="${BACKUP_SOURCE:-/Users/jose/constroad-storage/companies}"
-PASSWORD_FILE="${BACKUP_PASSWORD_FILE:-$HOME/.config/constroad-backup/restic-media.pass}"
-ENV_FILE="${BACKUP_ENV_FILE:-/Users/jose/projects/lila-app/.env}"
-LOG_FILE="${VERIFY_LOG_FILE:-/Users/jose/projects/lila-app/logs/verify-backups.log}"
-HEARTBEAT_FILE="${VERIFY_HEARTBEAT_FILE:-$HOME/.config/constroad-backup/last-verify}"
-RESTIC="${RESTIC_BIN:-/opt/homebrew/bin/restic}"
+
+
+SOURCE="$(resolver_source)"
+PASSWORD_FILE="$BACKUP_PASSWORD_FILE"
+ENV_FILE="$BACKUP_ENV_FILE"
+LOG_FILE="${VERIFY_LOG_FILE:-${BACKUP_LOG_DIR}/verify-backups.log}"
+HEARTBEAT_FILE="${VERIFY_HEARTBEAT_FILE:-${BACKUP_CONFIG_DIR}/last-verify}"
+
 
 SAMPLE_SIZE="${VERIFY_SAMPLE_SIZE:-25}"      # archivos a restaurar y comparar
 READ_DATA_PCT="${VERIFY_READ_DATA_PCT:-10}"  # % de bloques leídos de verdad
@@ -195,7 +199,7 @@ simulacro_db() {
     local docs
     docs=$(node -e "
       const fs=require('fs');
-      const {BSON}=require('/Users/jose/projects/lila-app/node_modules/bson/lib/bson.cjs');
+      const {BSON}=require('${BACKUP_REPO_DIR}/node_modules/bson/lib/bson.cjs');
       const b=fs.readFileSync('$orders'); let o=0,n=0;
       while(o<b.length){const s=b.readInt32LE(o); if(s<=0||o+s>b.length)break; BSON.deserialize(b.subarray(o,o+s)); n++; o+=s;}
       console.log(n);

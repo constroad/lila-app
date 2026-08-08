@@ -33,15 +33,19 @@
 
 set -uo pipefail
 
+# Config y utilidades compartidas: deriva rutas y descubre binarios, para que
+# esto siga funcionando al migrar de máquina (ver backup-common.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/backup-common.sh"
+
 # ---- configuración ---------------------------------------------------------
 
-MEDIA_REPO_LOCAL="${BACKUP_REPO:-/Volumes/CONSTROAD-BACKUP/restic-media}"
-DB_REPO_LOCAL="${DB_BACKUP_REPO:-/Volumes/CONSTROAD-BACKUP/restic-db}"
-PASSWORD_FILE="${BACKUP_PASSWORD_FILE:-$HOME/.config/constroad-backup/restic-media.pass}"
-ENV_FILE="${BACKUP_ENV_FILE:-/Users/jose/projects/lila-app/.env}"
-LOG_FILE="${OFFSITE_LOG_FILE:-/Users/jose/projects/lila-app/logs/backup-offsite.log}"
-HEARTBEAT_FILE="${OFFSITE_HEARTBEAT_FILE:-$HOME/.config/constroad-backup/last-offsite}"
-RESTIC="${RESTIC_BIN:-/opt/homebrew/bin/restic}"
+MEDIA_REPO_LOCAL="$MEDIA_REPO"
+DB_REPO_LOCAL="$DB_REPO"
+PASSWORD_FILE="$BACKUP_PASSWORD_FILE"
+ENV_FILE="$BACKUP_ENV_FILE"
+LOG_FILE="${OFFSITE_LOG_FILE:-${BACKUP_LOG_DIR}/backup-offsite.log}"
+HEARTBEAT_FILE="${OFFSITE_HEARTBEAT_FILE:-${BACKUP_CONFIG_DIR}/last-offsite}"
+
 LOCK_FILE="/tmp/constroad-backup-offsite.lock"
 
 PROBLEMAS=()
