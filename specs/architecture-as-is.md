@@ -439,6 +439,78 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 - Tailscale watchdog notifica Telegram en caidas de red.
 - Quota validator emite alertas a 80%, 95%, 100%.
 
+## Backups (✅ IMPLEMENTADO 2026-08-08)
+
+Antes de esto **no había ninguna copia**: los medios vivían solo en el disco interno
+y Atlas es tier **M0**, que no tiene backups de ningún tipo. Ambos activos estaban en
+copia única.
+
+**Objetivos (clasificados por BIA, MTD < medio día):**
+
+| Activo | Tier | RPO | Frecuencia |
+|---|---|---|---|
+| MongoDB (77 MB, 4 bases) | 1 | 1 h | horaria (`backup-db.sh`) |
+| Medios (7,3 GB, 18.530 archivos) | 2 | 24 h | diaria 00:30 (`backup-media.sh`) |
+
+RTO objetivo 4 h, pero **hoy no se cumple si muere el hardware**: la Mac mini es punto
+único de fallo y conseguir/configurar otra máquina domina el tiempo, no restaurar. La
+máquina más potente prevista debería quedar como standby (Fase 5).
+
+**Herramienta: restic** (repo cifrado, content-addressed, incremental-forever) sobre SSD
+externo APFS. NO se usa zip ni rsync, y no por gusto: comprimir estos medios ahorra
+**1,8%** (medido sobre 400 archivos reales — ya son jpg/mp4/webm), y rsync es un espejo
+que replica borrados y cifrados al backup. Medido: baseline 6,08 GiB en **17 s**;
+segunda corrida **0 B en 2 s**.
+
+**Piezas:**
+- `scripts/backup-media.sh` — excluye `.thumbs` (43% de los archivos, 6% del peso,
+  regenerables por `thumbnail.service.ts`) y `temp/`. Retención 7d/4w/6m.
+- `scripts/backup-db.sh` — `mongodump` de las 4 bases → restic. Retención 24h/7d/4w.
+- `scripts/install-backup-agent.sh` — instala ambos agentes launchd. **Idempotente.**
+- `src/services/backup-watchdog.service.ts` — dead man's switch.
+
+**launchd, no cron ni el JobExecutor.** cron está deprecado en macOS, pero el motivo
+real es TCC: con cron como padre, macOS deniega el acceso a rutas protegidas **en
+silencio** — el peor modo de fallo para un backup. Y no va como cronjob de lila porque
+(a) el JobExecutor solo soporta `message`/`api`; un tipo "ejecutar comando" convertiría
+un write a `cronjobs` en RCE, (b) el scheduler **no recupera jobs perdidos** (`nextRun`
+avanza), y lila se reinicia seguido (33 veces en 3 días, medido), (c) el backup debe
+sobrevivir a la falla de lo que respalda.
+
+**Vigilancia cruzada:** launchd ejecuta, lila vigila. Los scripts escriben un heartbeat
+solo en éxito; `backup-watchdog.service.ts` alerta si medios >25 h o base >2 h
+(frecuencia + 1 h de gracia, para que el jitter no genere ruido). Son mecanismos
+independientes a propósito: si lila cae los backups siguen; si el plist no existe tras
+migrar —el plist vive en `~/Library/LaunchAgents` y **no viaja con el repo git**— lila
+lo detecta al día siguiente.
+
+**Falla ruidoso:** todos los preflight (disco montado, escribible, clave legible)
+alertan por Telegram y salen con código ≠ 0. El modo de fallo clásico es "terminó bien"
+sin haber respaldado nada. Verificado en vivo: el primer disparo del agente falló por
+TCC y avisó correctamente.
+
+**Verificado de punta a punta (no asumido):** restauración de medios con **checksums
+idénticos byte a byte**; dump de DB restaurado desde restic y **16 colecciones parseadas
+con documentos legibles** (2.543 despachos, 479 pedidos); `restic check` sin errores.
+
+**Limitaciones asumidas, documentadas en las cabeceras de cada script:**
+- **Sin snapshot APFS.** `tmutil localsnapshot` corre sin sudo pero `mount_apfs` exige
+  root (obligaría a LaunchDaemon). Se acepta porque los medios son write-once: medido,
+  el 100% deja de modificarse **≤47 s** tras crearse (pipeline de ingesta). El script
+  **instrumenta** el riesgo — si restic reporta archivos cambiados durante la lectura,
+  alerta y ahí se escala con evidencia.
+- **`mongodump` sin `--oplog`** (Atlas M0 no expone el oplog): no hay consistencia
+  punto-en-el-tiempo entre colecciones. Con 77 MB el dump tarda segundos, así que el
+  skew es de segundos. Si se pasa a tier pago, agregar `--oplog`/`--oplogReplay`.
+- **Requiere Acceso total al disco para `/bin/bash`** (el agente corre bajo launchd).
+- **No cumple 3-2-1**: es una sola copia local, en el mismo edificio, siempre conectada.
+  No cubre robo, incendio ni ransomware. La capa offsite (B2/S3 con Object Lock) queda
+  pendiente — restic ya la soporta sin rediseño.
+
+**Capacidad:** 5,9 GB usados de 954 GB. Crecimiento medido 1,3-4 GB/mes (agosto
+acelerando), lo que da ~20-60 años de margen. El disco no es la limitante; cuando lo
+sea, la salida es tiering a object storage, no un disco más grande.
+
 ## Ejecucion
 - `npm run dev`: `tsx src/index.ts` con hot reload.
 - `npm run dev:resilient`: `resilient-dev.cjs` con auto-restart.

@@ -32,6 +32,7 @@ import academyRoutes from './api/routes/academy.routes.js';
 import gpsRoutes from './api/routes/gps.routes.js';
 import visionRoutes from './api/routes/vision.routes.js';
 import { startAcademyTranscodeWatchdog } from './services/academy-transcode.service.js';
+import { startBackupWatchdog } from './services/backup-watchdog.service.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
 import { materializeThumbnailInBackground } from './services/thumbnail.service.js';
 import swaggerUi from 'swagger-ui-express';
@@ -481,6 +482,10 @@ async function startServer() {
       // perdido o reinicio a mitad). Solo la instancia de jobs (dev comparte
       // Atlas: dos watchdogs procesarían el mismo doc en discos distintos).
       startAcademyTranscodeWatchdog();
+      // Dead man's switch de los backups: alerta si DEJAN de ocurrir (un backup
+      // que no corre no produce errores). Va en la instancia de jobs para no
+      // duplicar alertas cuando dev comparte Atlas con prod.
+      startBackupWatchdog();
     } else {
       const isDevelopment = config.nodeEnv.trim().toLowerCase() === 'development';
       const banner = [
