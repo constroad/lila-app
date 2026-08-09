@@ -196,16 +196,38 @@ simulacro_db() {
   local orders
   orders=$(find "$destino" -path "*constroad_db/orders.bson" | head -1)
   if [ -n "$orders" ] && [ -s "$orders" ]; then
-    local docs
-    docs=$(node -e "
+    # NO PODER EJECUTAR EL CHEQUEO ≠ QUE EL CHEQUEO FALLE. Antes, si faltaba
+    # `node` (el PATH de launchd es mínimo y no trae Homebrew) esto reportaba
+    # "BSON corrupto": una falsa alarma de corrupción de datos, que es de las
+    # peores porque erosiona la confianza en las alertas reales. Ahora se avisa
+    # que la verificación quedó INCOMPLETA, que es lo que de verdad pasó.
+    if [ -z "$NODE" ] || [ ! -x "$NODE" ]; then
+      log "AVISO: no se encontró 'node' — se omite el parseo de BSON (verificación PARCIAL)"
+      problema "verificación INCOMPLETA: falta 'node' para parsear el BSON (no es corrupción)"
+      return 0
+    fi
+
+    local docs salida_node
+    salida_node=$("$NODE" -e "
       const fs=require('fs');
       const {BSON}=require('${BACKUP_REPO_DIR}/node_modules/bson/lib/bson.cjs');
       const b=fs.readFileSync('$orders'); let o=0,n=0;
       while(o<b.length){const s=b.readInt32LE(o); if(s<=0||o+s>b.length)break; BSON.deserialize(b.subarray(o,o+s)); n++; o+=s;}
       console.log(n);
-    " 2>/dev/null || echo "ERROR")
-    if [ "$docs" = "ERROR" ] || [ "${docs:-0}" -lt 1 ]; then
-      problema "el BSON de constroad_db/orders no se pudo parsear"
+    " 2>&1)
+    if [ $? -ne 0 ]; then
+      # El intérprete corrió pero algo explotó: puede ser corrupción REAL o un
+      # problema de entorno. Se distingue por el mensaje.
+      if echo "$salida_node" | grep -qiE "cannot find module|no such file"; then
+        problema "verificación INCOMPLETA: falta la librería bson (no es corrupción)"
+      else
+        problema "el BSON de constroad_db/orders NO se pudo parsear — posible CORRUPCIÓN: $(echo "$salida_node" | head -1)"
+      fi
+      return 0
+    fi
+    docs=$(echo "$salida_node" | tail -1)
+    if [ "${docs:-0}" -lt 1 ] 2>/dev/null; then
+      problema "el BSON de constroad_db/orders se parseó pero está VACÍO (0 documentos)"
     else
       log "Simulacro DB: ${colecciones} colecciones, orders con ${docs} documentos legibles (${dur}s)"
     fi
@@ -232,6 +254,21 @@ main() {
     notify "🔴 VERIFICACIÓN DE BACKUPS FALLÓ
 
 El disco CONSTROAD-BACKUP no está montado. No se pudo verificar nada."
+    exit 1
+  fi
+
+  # El origen sale de FILE_STORAGE_ROOT en .env. Si el .env no se puede leer o
+  # falta la variable, SOURCE queda VACÍO y el simulacro reportaba el confuso
+  # "no se pudo tomar una muestra de " (con la ruta en blanco). Un preflight
+  # explícito dice qué pasa de verdad, en vez de disfrazarlo de fallo del backup.
+  if [ -z "$SOURCE" ] || [ ! -d "$SOURCE" ]; then
+    log "ERROR: no se pudo resolver el origen de los medios (SOURCE='${SOURCE}')"
+    notify "🔴 VERIFICACIÓN DE BACKUPS FALLÓ
+
+No se pudo resolver el origen de los medios.
+Revisar FILE_STORAGE_ROOT en ${ENV_FILE}.
+
+No es un problema de los backups: es que la verificación no pudo correr."
     exit 1
   fi
 

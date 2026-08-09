@@ -38,6 +38,12 @@ descubrir_binario() {
 
 RESTIC="${RESTIC_BIN:-$(descubrir_binario restic || echo '')}"
 MONGODUMP="${MONGODUMP_BIN:-$(descubrir_binario mongodump || echo '')}"
+# `node` también se descubre: bajo launchd el PATH es mínimo (/usr/bin:/bin:...)
+# y no incluye Homebrew. El 2026-08-09 la verificación semanal reportó "BSON
+# corrupto" cuando en realidad `node` no existía en ese PATH — una falsa alarma
+# de corrupción de datos, que es de las peores porque erosiona la confianza en
+# las alertas reales.
+NODE="${NODE_BIN:-$(descubrir_binario node || echo '')}"
 
 # ---- destino de los backups ------------------------------------------------
 

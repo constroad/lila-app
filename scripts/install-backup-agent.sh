@@ -162,6 +162,20 @@ else
   launchctl bootout "gui/${UID_NUM}/com.constroad.backup-offsite" 2>/dev/null || true
 fi
 
+# Reporte DIARIO a las 08:00 (hora de mirar el teléfono): confirmación POSITIVA
+# de que el sistema funciona. Sin esto solo llegaban malas noticias, y confiar en
+# un backup que nunca dice nada exige un acto de fe.
+install_agent "com.constroad.backup-report" \
+  "${REPO_DIR}/scripts/backup-report.sh" \
+"    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>" \
+  "reporte diario de estado"
+
 # Verificación SEMANAL (domingos 03:00): es más cara que un backup porque LEE
 # los datos y restaura de verdad. Un backup sin simulacro de restauración no
 # está probado — es el "0" de 3-2-1-1-0.

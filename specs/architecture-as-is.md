@@ -550,10 +550,25 @@ por culpa del viejo— y repite el mismo cada 6h. Al recuperarse avisa, cerrando
 Origen: 2026-08-08, la primera noche real generó 1 alerta por hora por el permiso TCC
 faltante.
 
+**Reporte diario (`scripts/backup-report.sh`, 08:00):** confirmación POSITIVA de que el
+sistema funciona. El diseño original era "el silencio es la señal" + dead man's switch, y
+eso evita ruido, pero deja sin respuesta "¿esto está funcionando?" — confiar en un backup
+que nunca dice nada exige un acto de fe. Es un RESUMEN y no un mensaje por corrida porque
+la base corre cada hora: 24 mensajes diarios serían ruido que sepulta la alerta que
+importa. Corre aunque todos los backups hayan fallado, y en ese caso lo dice.
+
 **Falla ruidoso:** todos los preflight (disco montado, escribible, clave legible)
 alertan por Telegram y salen con código ≠ 0. El modo de fallo clásico es "terminó bien"
 sin haber respaldado nada. Verificado en vivo: el primer disparo del agente falló por
 TCC y avisó correctamente.
+
+**No poder ejecutar un chequeo ≠ que el chequeo falle (2026-08-09).** La verificación
+semanal reportó "BSON corrupto" cuando en realidad faltaba `node`: bajo launchd el PATH es
+mínimo y no incluye Homebrew. Una falsa alarma de CORRUPCIÓN DE DATOS es de las peores,
+porque erosiona la confianza en las alertas reales. `node` ahora se descubre igual que
+restic/mongodump, y el chequeo distingue "verificación INCOMPLETA" de "posible corrupción".
+Mismo día: un hipo de DNS resolviendo el SRV de Atlas tiraba el backup horario entero →
+ahora reintenta 3 veces.
 
 **Verificado de punta a punta (no asumido):** restauración de medios con **checksums
 idénticos byte a byte**; dump de DB restaurado desde restic y **16 colecciones parseadas

@@ -136,13 +136,25 @@ Falta 'Acceso total al disco' para el proceso del backup."
   local started dumped=0
   started=$(date +%s)
 
+  # REINTENTO ante fallos transitorios (2026-08-09): un hipo de DNS resolviendo
+  # el SRV de Atlas (`lookup _mongodb._tcp... read udp`) tiraba el backup de esa
+  # hora entero. Con RPO de 1h, perder una corrida por un fallo de red de un
+  # segundo es desproporcionado — y encima genera una alerta que parece grave.
+  local intento
   for db in "${DATABASES[@]}"; do
-    if "$MONGODUMP" --uri="$MONGO_URI" --db="$db" --out="$WORK_DIR" \
-         --quiet >>"$LOG_FILE" 2>&1; then
-      dumped=$((dumped + 1))
-    else
-      fail "mongodump falló para la base '$db'"
-    fi
+    for intento in 1 2 3; do
+      if "$MONGODUMP" --uri="$MONGO_URI" --db="$db" --out="$WORK_DIR" \
+           --quiet >>"$LOG_FILE" 2>&1; then
+        dumped=$((dumped + 1))
+        [ "$intento" -gt 1 ] && log "'$db' OK en el intento ${intento} (fallo transitorio)"
+        break
+      fi
+      if [ "$intento" -eq 3 ]; then
+        fail "mongodump falló para la base '$db' tras 3 intentos"
+      fi
+      log "mongodump falló para '$db' (intento ${intento}/3) — reintentando en 10s"
+      sleep 10
+    done
   done
 
   local dump_size
