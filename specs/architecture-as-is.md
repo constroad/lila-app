@@ -464,6 +464,15 @@ Dos fixes en `scripts/tailscale-external-probe.sh`:
   y las alertas ACCIONABLES (deslogueo, recuperación agotada) saltan el dedupe de 15 min:
   una alerta con la URL de login suprimida por un aviso genérico es peor que no dedupear.
 
+**Vigilancia de vencimientos (`scripts/check-tailscale-health.sh`, diario 08:05):** revisa
+sesión activa, expiración de la clave del nodo y **vencimiento del certificado TLS** del
+funnel (~90 días, lo renueva Tailscale solo). Avisa a 21 días y urge a 7. Calla si todo
+está bien — un chequeo que saluda a diario entrena a ignorarlo. La expiración de clave se
+deshabilitó en el admin el 2026-08-09 (`KeyExpiry: sin expiración`, verificado por CLI), así
+que ese modo de fallo está cerrado; el chequeo lo cubre igual por si alguien la reactiva.
+El cert es el vencimiento vivo: si la renovación automática falla, el síntoma es idéntico
+al del incidente — páginas públicas sin imágenes.
+
 **Causa raíz del deslogueo:** el nodo ya estaba deslogueado ANTES de la escalación — el
 `Logged out.` del log es la SALIDA del comando de Tailscale, no su efecto. Por eso fallaba
 el funnel. No hay evidencia en los logs de por qué perdió la sesión; la hipótesis principal
