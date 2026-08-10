@@ -430,6 +430,20 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
   claves completas. La exposición se limita al disco local y a copias/backups de `logs/`.
   **Regla:** al hijackear consola, envolver TODOS los métodos de escritura, nunca solo `log`.
 
+## Monitoreo de recursos y compromiso (✅ 2026-08-09)
+
+`scripts/check-resources.sh`, cada 30 min. Dos propósitos en uno:
+- **Salud operativa**: CPU/RAM/disco saturados degradan lila (un request lento bloquea el
+  event loop y el bot deja de responder).
+- **Detección de compromiso**: el síntoma clásico de un servidor secuestrado para minar
+  cripto es CPU al techo SOSTENIDA. No alerta por picos —Puppeteer, ffmpeg y los exports
+  saturan legítimamente un rato— sino por CPU alta en la MAYORÍA de 5 muestras espaciadas
+  20s. Eso distingue "trabajando duro" de "alguien mina con tu máquina". Además busca
+  procesos de minería por nombre (xmrig, kdevtmpfsi, kinsing…) y conexiones a puertos
+  típicos de pools.
+
+Calla si todo está bien. Umbrales: CPU 85%, RAM 90%, disco 85%.
+
 ## Observabilidad
 - Winston logs estructurados en `logs/`.
 - Console hijack global (`utils/console-hijack.ts`) sobre `log`/`info`/`warn`/`debug`/`error`:

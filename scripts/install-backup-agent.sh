@@ -189,6 +189,15 @@ install_agent "com.constroad.tailscale-health" \
     </dict>" \
   "vencimientos de Tailscale, diario"
 
+# Recursos cada 30 min: CPU/RAM/disco + detección de minería. Más frecuente que
+# los demás porque el objetivo secundario es detectar un COMPROMISO, y ahí las
+# horas importan. La corrida cuesta ~100s de muestreo liviano.
+install_agent "com.constroad.check-resources" \
+  "${REPO_DIR}/scripts/check-resources.sh" \
+"    <key>StartInterval</key>
+    <integer>1800</integer>" \
+  "recursos + antiminería, cada 30 min"
+
 # Verificación SEMANAL (domingos 03:00): es más cara que un backup porque LEE
 # los datos y restaura de verdad. Un backup sin simulacro de restauración no
 # está probado — es el "0" de 3-2-1-1-0.
