@@ -191,58 +191,159 @@ router.get('/health', basicAuth, async (_req: Request, res: Response) => {
 const humano = (s: number) =>
   s < 0 ? 'nunca' : s < 3600 ? `hace ${Math.floor(s / 60)} min` : s < 86400 ? `hace ${Math.floor(s / 3600)} h` : `hace ${Math.floor(s / 86400)} d`;
 
-const ico = (s: number, umbral: number) => (s < 0 || s > umbral ? '🔴' : '✅');
-const icoPct = (p: number, umbral: number) => (p >= umbral ? '🔴' : p >= umbral - 15 ? '🟡' : '✅');
+/**
+ * Estado como {icono, etiqueta, tono}. NUNCA solo color: la paleta de estado
+ * documenta que en superficie clara los tonos warning/serious quedan por debajo
+ * de 3:1 de contraste, y que la mitigación es el par ÍCONO + ETIQUETA. Además,
+ * un panel que distingue "ok" de "mal" solo por color es ilegible para daltónicos
+ * y en impresión.
+ */
+type Estado = { ico: string; txt: string; tono: 'good' | 'warning' | 'critical' };
+const OK: Estado = { ico: '●', txt: 'OK', tono: 'good' };
+const ATENCION: Estado = { ico: '▲', txt: 'Atención', tono: 'warning' };
+const CRITICO: Estado = { ico: '■', txt: 'Crítico', tono: 'critical' };
+
+const porEdad = (s: number, umbral: number): Estado =>
+  s < 0 || s > umbral ? CRITICO : s > umbral * 0.75 ? ATENCION : OK;
+const porPct = (p: number, umbral: number): Estado =>
+  p >= umbral ? CRITICO : p >= umbral - 15 ? ATENCION : OK;
+
+const esc = (v: string) => v.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] || c);
 
 function renderHtml(e: Awaited<ReturnType<typeof construirEstado>>): string {
   const b = e.backups;
-  const fila = (etiqueta: string, valor: string, estado: string) =>
-    `<tr><td>${estado}</td><td>${etiqueta}</td><td class="v">${valor}</td></tr>`;
+
+  // Medidor: barra fina anclada a la línea base, con extremo redondeado. El
+  // número va afuera en tinta de texto — el color de la barra no debe ser el
+  // único portador del dato.
+  const medidor = (etiqueta: string, pct: number, detalle: string, st: Estado) => `
+    <div class="m">
+      <div class="mh"><span class="lbl">${esc(etiqueta)}</span>
+        <span class="num">${pct}%</span></div>
+      <div class="bar"><i class="t-${st.tono}" style="width:${Math.max(2, Math.min(100, pct))}%"></i></div>
+      <div class="det">${esc(detalle)}</div>
+    </div>`;
+
+  const fila = (etiqueta: string, valor: string, st: Estado) => `
+    <li><span class="ico t-${st.tono}" aria-hidden="true">${st.ico}</span>
+      <span class="k">${esc(etiqueta)}</span>
+      <span class="v">${esc(valor)}</span>
+      <span class="tag t-${st.tono}">${st.txt}</span></li>`;
+
+  const stCpu = porPct(e.cpu.pct, 85);
+  const stMem = porPct(e.memoria.pct, 90);
+  const stDs = e.disco.sistema ? porPct(e.disco.sistema.pct, 85) : CRITICO;
+  const stDb = e.disco.backup ? porPct(e.disco.backup.pct, 85) : CRITICO;
+  const stM = porEdad(b.medios.segundos, b.medios.umbral);
+  const stB = porEdad(b.base.segundos, b.base.umbral);
+  const stV = porEdad(b.verificacion.segundos, b.verificacion.umbral);
+
+  const todos = [stCpu, stMem, stDs, stDb, stM, stB, stV];
+  const criticos = todos.filter((x) => x.tono === 'critical').length;
+  const avisos = todos.filter((x) => x.tono === 'warning').length;
+  // Titular único: la pregunta real es "¿tengo que hacer algo?".
+  const hero = criticos
+    ? { tono: 'critical', ico: '■', txt: `${criticos} ${criticos === 1 ? 'problema' : 'problemas'}` }
+    : avisos
+      ? { tono: 'warning', ico: '▲', txt: `${avisos} ${avisos === 1 ? 'aviso' : 'avisos'}` }
+      : { tono: 'good', ico: '●', txt: 'Todo en orden' };
 
   const sesiones = e.whatsapp.length
-    ? e.whatsapp.map((s) => fila(s.id, s.lista ? 'lista' : 'no lista', s.lista ? '✅' : '🔴')).join('')
-    : '<tr><td>—</td><td colspan="2">sin sesiones registradas</td></tr>';
+    ? e.whatsapp.map((s) => fila(s.id, s.lista ? 'conectada' : 'caída', s.lista ? OK : CRITICO)).join('')
+    : '<li><span class="ico" aria-hidden="true">–</span><span class="k">sin sesiones registradas</span></li>';
 
   return `<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>lila-app · salud</title>
 <style>
-:root{color-scheme:dark light}
-body{font:15px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding:16px;
-  background:#0f1115;color:#e6e6e6}
-h1{font-size:19px;margin:0 0 4px} .sub{color:#8b93a1;font-size:13px;margin-bottom:18px}
-h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#8b93a1;
-  margin:22px 0 8px;font-weight:600}
-table{width:100%;border-collapse:collapse;background:#171a21;border-radius:10px;overflow:hidden}
-td{padding:11px 12px;border-bottom:1px solid #232733}
-tr:last-child td{border-bottom:none}
-td:first-child{width:30px;text-align:center}
-.v{text-align:right;color:#9aa4b2;font-variant-numeric:tabular-nums}
-@media(prefers-color-scheme:light){body{background:#f5f6f8;color:#1a1a1a}
-  table{background:#fff}td{border-color:#e6e8ec}.v{color:#5a6472}}
+/* Superficies y tinta de la paleta validada. El modo oscuro se declara
+   explícitamente (no es un invertido automático del claro). */
+:root{
+  --sf:#fcfcfb; --sf2:#ffffff; --ink:#0b0b0b; --ink2:#52514e; --line:#e7e6e2;
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:where(:not([data-theme="light"])){
+    --sf:#131312; --sf2:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --line:#2b2b28;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --sf:#131312; --sf2:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --line:#2b2b28;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:20px 16px 40px;background:var(--sf);color:var(--ink);
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;max-width:640px;margin-inline:auto}
+.t-good{--c:var(--good)} .t-warning{--c:var(--warn)} .t-critical{--c:var(--crit)}
+
+header{margin-bottom:22px}
+h1{font-size:14px;font-weight:600;letter-spacing:.02em;color:var(--ink2);margin:0 0 14px}
+.hero{display:flex;align-items:center;gap:12px}
+.hero .dot{font-size:26px;line-height:1;color:var(--c)}
+.hero .txt{font-size:27px;font-weight:650;letter-spacing:-.02em}
+.meta{color:var(--ink2);font-size:13px;margin-top:6px}
+
+h2{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--ink2);margin:26px 0 10px}
+
+.card{background:var(--sf2);border:1px solid var(--line);border-radius:14px;padding:4px 14px}
+.m{padding:12px 0;border-bottom:1px solid var(--line)}
+.m:last-child{border-bottom:none}
+.mh{display:flex;justify-content:space-between;align-items:baseline}
+.lbl{font-size:14px}
+.num{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+/* Barra fina, extremo redondeado, anclada a la base. */
+.bar{height:6px;background:var(--line);border-radius:3px;margin:7px 0 5px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px;background:var(--c);transition:width .3s}
+.det{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;align-items:center;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}
+li:last-child{border-bottom:none}
+.ico{color:var(--c);font-size:11px;width:12px;text-align:center;flex:none}
+.k{flex:1;font-size:14px}
+.v{color:var(--ink2);font-size:13px;font-variant-numeric:tabular-nums}
+/* Etiqueta de texto junto al color: el estado nunca se lee solo por el tono. */
+.tag{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--c);border:1px solid var(--c);border-radius:5px;padding:2px 6px;flex:none}
+.na{color:var(--ink2);font-size:13px;padding:13px 0}
+footer{margin-top:24px;color:var(--ink2);font-size:12px;text-align:center}
 </style></head><body>
-<h1>lila-app · salud del sistema</h1>
-<div class="sub">${new Date(e.ahora).toLocaleString('es-PE')} · uptime ${e.uptimeHoras} h · se refresca solo cada 30 s</div>
+
+<header>
+  <h1>lila-app · salud del sistema</h1>
+  <div class="hero t-${hero.tono}">
+    <span class="dot" aria-hidden="true">${hero.ico}</span>
+    <span class="txt">${hero.txt}</span>
+  </div>
+  <div class="meta">${new Date(e.ahora).toLocaleString('es-PE')} · uptime ${e.uptimeHoras} h</div>
+</header>
 
 <h2>Recursos</h2>
-<table>
-${fila('CPU', `${e.cpu.pct}% · carga ${e.cpu.carga1} / ${e.cpu.nucleos} núcleos`, icoPct(e.cpu.pct, 85))}
-${fila('Memoria', `${e.memoria.pct}% de ${e.memoria.totalGB} GB`, icoPct(e.memoria.pct, 90))}
-${e.disco.sistema ? fila('Disco sistema', `${e.disco.sistema.pct}% · ${e.disco.sistema.libre} libres`, icoPct(e.disco.sistema.pct, 85)) : fila('Disco sistema', 'no disponible', '🔴')}
-${e.disco.backup ? fila('Disco backup', `${e.disco.backup.pct}% · ${e.disco.backup.libre} libres`, icoPct(e.disco.backup.pct, 85)) : fila('Disco backup', 'DESCONECTADO', '🔴')}
-</table>
+<div class="card">
+  ${medidor('CPU', e.cpu.pct, `carga ${e.cpu.carga1} · ${e.cpu.nucleos} núcleos`, stCpu)}
+  ${medidor('Memoria', e.memoria.pct, `${e.memoria.totalGB} GB totales`, stMem)}
+  ${e.disco.sistema ? medidor('Disco del sistema', e.disco.sistema.pct, `${e.disco.sistema.libre} libres de ${e.disco.sistema.total}`, stDs) : '<div class="na">Disco del sistema no disponible</div>'}
+  ${e.disco.backup ? medidor('Disco de backup', e.disco.backup.pct, `${e.disco.backup.libre} libres de ${e.disco.backup.total}`, stDb) : '<div class="na">■ Disco de backup DESCONECTADO</div>'}
+</div>
 
 <h2>Backups</h2>
-<table>
-${fila('Medios', humano(b.medios.segundos), ico(b.medios.segundos, b.medios.umbral))}
-${fila('Base de datos', humano(b.base.segundos), ico(b.base.segundos, b.base.umbral))}
-${fila('Verificación', humano(b.verificacion.segundos), ico(b.verificacion.segundos, b.verificacion.umbral))}
-${fila('Copia en la nube', b.offsite.estado, '—')}
-</table>
+<div class="card"><ul>
+  ${fila('Medios', humano(b.medios.segundos), stM)}
+  ${fila('Base de datos', humano(b.base.segundos), stB)}
+  ${fila('Verificación', humano(b.verificacion.segundos), stV)}
+  <li><span class="ico" aria-hidden="true">–</span><span class="k">Copia en la nube</span>
+    <span class="v">${esc(b.offsite.estado)}</span></li>
+</ul></div>
 
 <h2>WhatsApp</h2>
-<table>${sesiones}</table>
+<div class="card"><ul>${sesiones}</ul></div>
 
+<footer>se actualiza solo cada 30 s</footer>
 <script>setTimeout(()=>location.reload(),30000)</script>
 </body></html>`;
 }
