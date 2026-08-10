@@ -500,6 +500,10 @@ debe causar más daño que el síntoma**.
 
 ## Backups (✅ IMPLEMENTADO 2026-08-08)
 
+> Las lecciones de diseño de alertas/monitoreo que salieron de construir esto —y de sus
+> fallos reales— están en `specs/OBSERVABILITY-ALERTING.spec.md`. Leerlas ANTES de agregar
+> una alerta o un chequeo nuevo; incluye checklist.
+
 Antes de esto **no había ninguna copia**: los medios vivían solo en el disco interno
 y Atlas es tier **M0**, que no tiene backups de ningún tipo. Ambos activos estaban en
 copia única.

@@ -613,6 +613,10 @@ al reiniciar (creds + sender en Mongo, sin re-escanear).
   fantasma — el cliente debe resincronizar contra la fuente de verdad ante CUALQUIER error.
 
 ### Lecciones aprendidas (para NO repetir)
+
+> Estas son de WhatsApp/sesiones. Las de **observabilidad y alertas** (remedios que dañan
+> más que el síntoma, fatiga de alertas, falsas alarmas de corrupción, dead man's switch)
+> viven en `specs/OBSERVABILITY-ALERTING.spec.md`.
 1. **"WhatsApp bloqueó la cuenta" es la conclusión perezosa.** Los síntomas de throttle
    (408/515/timeout en loop, device index alto) pueden ser 100% self-inflicted por el propio
    ciclo de reconexión/UX. ANTES de culpar al proveedor: medir con traza de fase y comparar

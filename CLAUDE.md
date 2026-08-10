@@ -26,4 +26,12 @@ incidente de GB-Hrs en Vercel, jul-2026). Reglas duras para este backend:
 - Multi-tenant: todo query y todo cache server-side llevan `companyId` en
   scope/key.
 
+## Alertas y monitoreo
+Antes de agregar una alerta, un chequeo o un job agendado, leer
+`specs/OBSERVABILITY-ALERTING.spec.md` (lecciones de fallos reales + checklist).
+Reglas duras: distinguir "no pude chequear" de "está roto"; dedupe por firma del
+fallo si el job es frecuente; avisar también al recuperarse; no alertar por tareas
+sin configurar; y toda ruta HTTP nueva se expone CON guard de auth, verificado con
+`curl` sin credenciales contra la URL pública.
+
 > El resto de convenciones (estructura, comandos, naming, tests) está en `AGENTS.md`.
