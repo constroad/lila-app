@@ -580,6 +580,12 @@ que nunca dice nada exige un acto de fe. Es un RESUMEN y no un mensaje por corri
 la base corre cada hora: 24 mensajes diarios serían ruido que sepulta la alerta que
 importa. Corre aunque todos los backups hayan fallado, y en ese caso lo dice.
 
+**Vigilar solo lo configurado:** el watchdog distingue "dejó de funcionar" de "todavía no
+se configuró" (campo `configurado` en `VIGILADOS`). El 2026-08-09 alertó "RÉPLICA OFFSITE
+DETENIDO" por una tarea deliberadamente NO instalada —el instalador la omite sin
+credenciales de B2— y encima contradecía al reporte diario, que sí decía "sin configurar".
+Una tarea sin configurar se omite; el día que se configure, se vigila sola.
+
 **Falla ruidoso:** todos los preflight (disco montado, escribible, clave legible)
 alertan por Telegram y salen con código ≠ 0. El modo de fallo clásico es "terminó bien"
 sin haber respaldado nada. Verificado en vivo: el primer disparo del agente falló por

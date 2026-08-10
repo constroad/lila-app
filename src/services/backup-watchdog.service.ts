@@ -31,7 +31,20 @@ const HEARTBEAT_DIR =
 // Umbral = frecuencia + 1h de gracia. Un job "cada 24h" nunca corre exactamente
 // cada 24h; sin la gracia, el jitter normal dispararía falsas alarmas y la
 // alerta se volvería ruido que se ignora.
-type Vigilado = { nombre: string; archivo: string; maxHoras: number };
+/**
+ * `configurado` distingue "dejó de funcionar" de "todavía no se configuró".
+ * Sin esto el watchdog alertaba por la réplica offsite —deliberadamente NO
+ * instalada mientras falten credenciales de B2— gritando "DETENIDO" por algo
+ * que nunca arrancó. Es la fatiga de alertas que este archivo intenta evitar, y
+ * además CONTRADECÍA al reporte diario, que sí decía "sin configurar".
+ * Una tarea no configurada se omite; el día que se configure, se vigila sola.
+ */
+type Vigilado = {
+  nombre: string;
+  archivo: string;
+  maxHoras: number;
+  configurado?: () => boolean;
+};
 
 const VIGILADOS: Vigilado[] = [
   { nombre: 'medios', archivo: 'last-media-backup', maxHoras: 25 },
@@ -41,8 +54,14 @@ const VIGILADOS: Vigilado[] = [
   // + 1 de gracia.
   { nombre: 'verificación', archivo: 'last-verify', maxHoras: 8 * 24 },
   // Réplica offsite: si se detiene, las copias locales siguen pero se vuelve a
-  // estar expuesto a incendio/robo/ransomware sin saberlo.
-  { nombre: 'réplica offsite', archivo: 'last-offsite', maxHoras: 25 },
+  // estar expuesto a incendio/robo/ransomware sin saberlo. Solo se vigila si hay
+  // credenciales de B2 — el instalador omite el agente sin ellas.
+  {
+    nombre: 'réplica offsite',
+    archivo: 'last-offsite',
+    maxHoras: 25,
+    configurado: () => Boolean(process.env.B2_ACCOUNT_ID?.trim()),
+  },
 ];
 
 const CHECK_INTERVAL_MS = Number(process.env.BACKUP_WATCHDOG_INTERVAL_MS) || 60 * 60 * 1000;
@@ -63,10 +82,14 @@ async function horasDesdeUltimoBackup(archivo: string): Promise<number | null> {
 
 /** Una pasada de verificación. Exportada para poder testearla sin timers. */
 export async function checkBackupHeartbeats(): Promise<
-  { nombre: string; horas: number | null; vencido: boolean }[]
+  { nombre: string; horas: number | null; vencido: boolean; omitido?: boolean }[]
 > {
   const resultados = await Promise.all(
     VIGILADOS.map(async (v) => {
+      // Una tarea sin configurar no está "detenida": nunca arrancó a propósito.
+      if (v.configurado && !v.configurado()) {
+        return { nombre: v.nombre, horas: null, vencido: false, omitido: true };
+      }
       const horas = await horasDesdeUltimoBackup(v.archivo);
       return { nombre: v.nombre, horas, vencido: horas === null || horas > v.maxHoras };
     })

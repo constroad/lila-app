@@ -33,6 +33,7 @@ const todosAlDia = async () => {
   await escribirHeartbeat('last-db-backup', 0.5);
   await escribirHeartbeat('last-verify', 24);
   await escribirHeartbeat('last-offsite', 3);
+  process.env.B2_ACCOUNT_ID = 'test-key-id'; // offsite configurado
 };
 
 beforeEach(async () => {
@@ -44,6 +45,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  delete process.env.B2_ACCOUNT_ID;
   subject.stopBackupWatchdog();
   await fs.rm(dir, { recursive: true, force: true });
   delete process.env.BACKUP_HEARTBEAT_DIR;
@@ -64,8 +66,10 @@ describe('dead man\'s switch de backups', () => {
   it('alerta cuando NUNCA hubo backup (heartbeat ausente)', async () => {
     const r = await subject.checkBackupHeartbeats();
 
-    expect(r.every((x) => x.vencido)).toBe(true);
-    expect(sendTelegramAlert).toHaveBeenCalledTimes(4); // medios + base + verificación + offsite
+    // Los CONFIGURADOS están todos vencidos; offsite se omite por no estarlo.
+    expect(r.filter((x) => !x.omitido).every((x) => x.vencido)).toBe(true);
+    expect(r.find((x) => x.nombre === 'réplica offsite')?.omitido).toBe(true);
+    expect(sendTelegramAlert).toHaveBeenCalledTimes(3);
     const msg = sendTelegramAlert.mock.calls.map(([p]) => p.message).join('\n');
     expect(msg).toContain('NUNCA se registró un backup exitoso');
     expect(msg).toContain('install-backup-agent.sh');
@@ -124,6 +128,22 @@ describe('dead man\'s switch de backups', () => {
 });
 
 describe('vigilancia de la réplica offsite', () => {
+  // FALSA ALARMA REAL (2026-08-09): el watchdog gritó "DETENIDO" por la réplica
+  // offsite, que estaba deliberadamente SIN instalar por faltar credenciales de
+  // B2. Además contradecía al reporte diario, que sí decía "sin configurar".
+  it('NO alerta si la réplica no está configurada (sin credenciales B2)', async () => {
+    await todosAlDia();
+    delete process.env.B2_ACCOUNT_ID; // no configurada
+    await fs.rm(path.join(dir, 'last-offsite'), { force: true });
+
+    const r = await subject.checkBackupHeartbeats();
+
+    const off = r.find((x) => x.nombre === 'réplica offsite');
+    expect(off?.omitido).toBe(true);
+    expect(off?.vencido).toBe(false);
+    expect(sendTelegramAlert).not.toHaveBeenCalled();
+  });
+
   // Si la réplica se detiene, las copias locales siguen pero se vuelve a estar
   // expuesto a incendio/robo/ransomware sin enterarse.
   it('alerta si la réplica offsite lleva más de 25h detenida', async () => {
