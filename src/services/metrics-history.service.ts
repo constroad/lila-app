@@ -5,15 +5,21 @@
  * gráficos de área — que necesitan una serie temporal. Un número suelto no
  * responde "¿esto viene subiendo?", que es la pregunta que hace útil al gráfico.
  *
- * DELIBERADAMENTE EN MEMORIA Y CORTO: 60 muestras cada 60s = 1 hora de
- * historia, ~1 KB. No es un sistema de series temporales ni pretende serlo; para
+ * DELIBERADAMENTE EN MEMORIA Y CORTO: 120 muestras cada 30s = 1 hora de
+ * historia, ~2 KB. No es un sistema de series temporales ni pretende serlo; para
  * tendencias de días haría falta almacenamiento aparte (ver as-is §Monitoreo).
  * Se pierde al reiniciar y está bien: el gráfico es para ver la última hora, no
  * para auditar el mes.
  *
+ * EL TAMAÑO ACOMPAÑA AL INTERVALO: al pasar de 60s a 30s se duplicó también el
+ * buffer. Si solo se baja el intervalo, la ventana se parte a la mitad y el
+ * gráfico pasa a mostrar 30 min sin que nadie lo pida — el detalle sube, pero se
+ * pierde contexto. Ventana × resolución = tamaño del buffer.
+ *
  * COSTO: `os.loadavg()` es gratis. `memory_pressure` spawnea un proceso, así que
- * se muestrea 1 vez por minuto y nunca en el camino de un request HTTP — la
- * regla de performance del proyecto es que nada lento cuelgue de un request.
+ * se muestrea fuera del camino de un request HTTP — la regla de performance del
+ * proyecto es que nada lento cuelgue de un request. A 30s son 2 procesos por
+ * minuto, de ~1s cada uno: despreciable contra Puppeteer o ffmpeg.
  */
 import os from 'os';
 import { execFile } from 'child_process';
@@ -24,8 +30,8 @@ const execFileAsync = promisify(execFile);
 
 export type Muestra = { t: number; cpu: number; ram: number };
 
-const MAX_MUESTRAS = Number(process.env.METRICS_HISTORY_SIZE) || 60;
-const INTERVALO_MS = Number(process.env.METRICS_SAMPLE_MS) || 60_000;
+const MAX_MUESTRAS = Number(process.env.METRICS_HISTORY_SIZE) || 120;
+const INTERVALO_MS = Number(process.env.METRICS_SAMPLE_MS) || 30_000;
 
 const historia: Muestra[] = [];
 let timer: NodeJS.Timeout | null = null;

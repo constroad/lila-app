@@ -453,8 +453,10 @@ una sola página, así que sus ítems son anclas a secciones.
 HTTP directo (JSON-RPC): `get_screen` devuelve `htmlCode` y `screenshot` de cada pantalla.
 Ese es el camino para volver a consultarlo.
 
-**Gráficos:** área en SVG puro desde `metrics-history.service.ts` — 60 muestras cada 60s
-(1 hora, ~1 KB, en memoria, se pierde al reiniciar). Eje Y fijo 0-100 porque son porcentajes:
+**Gráficos:** área en SVG puro desde `metrics-history.service.ts` — 120 muestras cada 30s
+(1 hora, ~2 KB, en memoria, se pierde al reiniciar). El tamaño del buffer acompaña al
+intervalo: bajar solo el intervalo parte la ventana a la mitad y el gráfico pasa a mostrar
+media hora sin que nadie lo pida. Ventana × resolución = tamaño del buffer. Eje Y fijo 0-100 porque son porcentajes:
 autoescalar haría que una variación de 2% se viera como una montaña. No es un sistema de
 series temporales; para tendencias de días haría falta almacenamiento aparte.
 
