@@ -34,6 +34,7 @@ import gpsRoutes from './api/routes/gps.routes.js';
 import visionRoutes from './api/routes/vision.routes.js';
 import { startAcademyTranscodeWatchdog } from './services/academy-transcode.service.js';
 import { startBackupWatchdog } from './services/backup-watchdog.service.js';
+import { startMetricsHistory } from './services/metrics-history.service.js';
 import { resolveThumbnailRequestTarget } from './services/thumbnail-request.service.js';
 import { materializeThumbnailInBackground } from './services/thumbnail.service.js';
 import swaggerUi from 'swagger-ui-express';
@@ -490,6 +491,8 @@ async function startServer() {
       // que no corre no produce errores). Va en la instancia de jobs para no
       // duplicar alertas cuando dev comparte Atlas con prod.
       startBackupWatchdog();
+      // Serie corta de CPU/RAM para los gráficos de /admin/health.
+      startMetricsHistory();
     } else {
       const isDevelopment = config.nodeEnv.trim().toLowerCase() === 'development';
       const banner = [

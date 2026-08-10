@@ -442,6 +442,22 @@ que no puede mandar headers propios al escribir una URL; poner el secreto en la 
 dejaría en logs e historial. Sin esa env la ruta devuelve 404 (fail-closed), nunca se sirve
 sin protección. Verificado desde internet: 401 sin credencial, 200 con ella.
 
+**Diseño tomado del proyecto Stitch "Unified System Monitor"** (superficies `#0b1326`/`#171f33`,
+acento cian `#4cd6ff`, Inter + Material Symbols). Sus TRES pantallas (mobile/tablet/desktop)
+se resuelven en UN documento con breakpoints en 900px (aparece la sidebar) y 1240px (columna
+derecha), no en tres HTML. La sidebar del diseño navega entre pantallas distintas; acá hay
+una sola página, así que sus ítems son anclas a secciones.
+
+**Nota sobre el MCP de Stitch:** el cliente MCP de Claude Code no puede cargar sus tools
+(`can't resolve reference #/$defs/ScreenInstance`), pero el servidor responde perfecto por
+HTTP directo (JSON-RPC): `get_screen` devuelve `htmlCode` y `screenshot` de cada pantalla.
+Ese es el camino para volver a consultarlo.
+
+**Gráficos:** área en SVG puro desde `metrics-history.service.ts` — 60 muestras cada 60s
+(1 hora, ~1 KB, en memoria, se pierde al reiniciar). Eje Y fijo 0-100 porque son porcentajes:
+autoescalar haría que una variación de 2% se viera como una montaña. No es un sistema de
+series temporales; para tendencias de días haría falta almacenamiento aparte.
+
 **Memoria vía `memory_pressure`, no `os.freemem()`**: en macOS `freemem` no cuenta la
 memoria purgeable como libre y reportaba 92% donde el sistema estaba al 27% — el panel
 marcaba 🔴 mientras `check-resources.sh` decía OK. Misma fuente para los dos (lección #5).
