@@ -180,8 +180,32 @@ diagnose() {
 
 # ---- probe -----------------------------------------------------------------
 
+# Con REINTENTO (2026-08-10): una consulta DNS que falla no significa que el host
+# no exista. El 10-ago hubo una racha de `dns=FAIL(no-A-records)` que disparó dos
+# escalaciones y alertas de "lila-app no alcanzable", con el funnel perfectamente
+# arriba — era el `dig` el que fallaba, no el servicio.
+# Ayer se agregó reintento al camino HTTPS y se omitió ESTE, que devolvía fallo
+# de inmediato. Mismo criterio: un hipo aislado no es una caída.
+#
+# FILTRA A IPv4 VÁLIDAS: con el resolver inalcanzable, `dig +short` escribe
+# ";; connection timed out; no servers could be reached" en STDOUT (no en
+# stderr). Sin filtrar, esa línea se tomaba como lista de IPs y el probe
+# intentaba `curl --resolve host:443:;; connection timed out…` → fallaba con 000
+# y lo reportaba como "funnel caído", escondiendo que el problema era DNS.
+# Bug preexistente, no introducido por el reintento.
 resolve_derp_ips() {
-  /usr/bin/dig "@$PUBLIC_RESOLVER" +short +time=3 +tries=1 A "$HOST" 2>/dev/null | head -4
+  local ips intento
+  for intento in 1 2 3; do
+    ips=$(/usr/bin/dig "@$PUBLIC_RESOLVER" +short +time=3 +tries=1 A "$HOST" 2>/dev/null \
+          | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -4)
+    if [ -n "$ips" ]; then
+      [ "$intento" -gt 1 ] && log "DNS resuelto en el intento ${intento} (hipo transitorio)"
+      echo "$ips"
+      return 0
+    fi
+    [ "$intento" -lt 3 ] && sleep 2
+  done
+  return 1
 }
 
 probe_external() {
