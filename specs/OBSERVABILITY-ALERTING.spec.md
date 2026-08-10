@@ -232,6 +232,49 @@ con `grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'`.
 
 ---
 
+## 14. Un hallazgo sospechoso no es una causa hasta verificarlo
+
+**Incidente (2026-08-10).** Diagnosticando por qué no funcionaba Remote Control de
+Claude Code, apareció que `ANTHROPIC_BASE_URL` estaba seteada. La documentación
+oficial dice, textual, que esa variable **deshabilita** Remote Control y que hay que
+quitarla. Encaje perfecto: variable presente + doc que la señala = causa encontrada.
+
+Era falso. Al mirar el **valor** —no solo si existía— apuntaba a
+`https://api.anthropic.com`, que es exactamente el host permitido. No bloqueaba nada.
+De haber parado en el hallazgo, la recomendación habría sido borrar una variable
+inofensiva y el problema habría seguido igual, con la confianza extra de "ya lo
+arreglamos".
+
+**Regla.** Encontrar algo que *encaja* con el síntoma no es lo mismo que confirmarlo.
+Antes de declarar una causa: leer el valor, no la presencia; y preguntarse *"¿qué
+observaría si esta NO fuera la causa?"*. Es la misma disciplina de la lección #8
+(correlación temporal, no aritmética de agregados) y de la #13 (validar la forma, no
+que haya salida): las tres son formas de parar antes de la primera explicación
+plausible.
+
+**Cómo se resolvió.** Descartadas todas las variables por valor, el diagnóstico
+oficial (`claude doctor`) confirmó que no había bloqueo — el problema era operativo,
+no de configuración.
+
+---
+
+## 15. Distinguir "esto existe" de "esto se podría construir"
+
+**Incidente (2026-08-10).** Al proponer un dashboard de salud se escribió *"una ruta
+en lila (`/admin/health`)"* como ejemplo de lo que **se podría** construir. Se leyó
+como algo que ya existía: se navegó a esa URL y devolvió 404.
+
+**Regla.** Al proponer trabajo futuro, nombrar rutas, comandos o archivos concretos
+hace que la propuesta se lea como descripción de algo existente. Si se mencionan, hay
+que marcar explícitamente que **todavía no existen**. Vale para specs, propuestas y
+respuestas: el lector no tiene forma de distinguir un ejemplo de un hecho.
+
+Aplica también al revés — al documentar algo como hecho, tiene que estar verificado
+corriendo, no solo escrito.
+
+
+---
+
 ## Checklist al agregar una alerta o un chequeo
 
 - [ ] ¿Cuántas veces por día puede dispararse? ¿Necesita dedupe por firma?
@@ -246,3 +289,5 @@ con `grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'`.
 - [ ] Si verifica datos: ¿compara contenido, o solo cuenta?
 - [ ] ¿Validás la FORMA de lo que devuelve cada comando, o solo que devuelva algo?
 - [ ] Al arreglar un camino: ¿revisaste los otros caminos de la misma función?
+- [ ] ¿Verificaste el VALOR de lo que encontraste, o solo que estuviera presente?
+- [ ] Si nombrás una ruta/comando en una propuesta: ¿aclaraste que aún no existe?
