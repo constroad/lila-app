@@ -59,6 +59,14 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   (d) `makeCacheableSignalKeyStore` sobre el auth-state Mongo + `msgRetryCounterCache`
   + versión WA cacheada (`baileys-version.ts`, TTL 6h, stale-on-error) + logger Baileys
   configurable (`WHATSAPP_BAILEYS_LOG_LEVEL`, ya no hardcode silent).
+  (e2) **Restore tras failover del lease (✅ 2026-08-10):** la decisión de restaurar
+  sesiones se tomaba UNA vez al arrancar, según si el proceso tenía el lease en ese
+  instante. Un proceso que arrancaba pasivo y ganaba el lease después (failover al
+  vencer el TTL del anterior) lo retenía **sin abrir un solo socket** — caída silenciosa
+  y, peor, bloqueando a cualquier otra instancia que sí hubiera podido levantarlas.
+  Pasó con un reinicio: `kickstart -k` mata con SIGKILL y el proceso saliente no libera
+  el lease, así que el nuevo arranca pasivo. Ahora `setOnLeaseAcquiredLate()` dispara
+  `restoreAllSessions` en la adquisición tardía. +2 tests.
   (e) **Lease process-level de sockets** (`instance-lease.ts`, colección
   `whatsapp_instance_lease`, TTL 90s + heartbeat 30s): solo el holder abre sockets;
   segundo proceso queda pasivo con alerta y failover automático. Guard en

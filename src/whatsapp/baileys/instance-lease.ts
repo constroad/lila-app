@@ -96,11 +96,42 @@ export function hasSocketLease(): boolean {
   return holdingLease;
 }
 
+/**
+ * Handler para la adquisición TARDÍA del lease (failover), que index.ts usa para
+ * restaurar las sesiones.
+ *
+ * POR QUÉ EXISTE (incidente 2026-08-10): la decisión de restaurar sesiones se
+ * tomaba UNA sola vez, al arrancar, según si el proceso tenía el lease en ese
+ * instante. El heartbeat sí podía ganarlo después —failover al expirar el TTL
+ * del holder anterior— pero solo lo LOGUEABA. Resultado: un proceso que arranca
+ * pasivo y después gana el lease lo retiene PARA SIEMPRE sin abrir una sola
+ * sesión. Caída silenciosa y permanente de WhatsApp, con el agravante de que el
+ * lease queda tomado, así que ninguna otra instancia puede tomar el relevo.
+ *
+ * Pasó con un reinicio: el proceso nuevo arrancó mientras el viejo aún figuraba
+ * vivo (SIGKILL no libera el lease), quedó pasivo, y 2 minutos después ganó el
+ * lease por TTL — con las sesiones ya nunca levantadas.
+ */
+let onLeaseAcquiredLate: (() => void | Promise<void>) | null = null;
+let yaArrancado = false;
+
+export function setOnLeaseAcquiredLate(handler: () => void | Promise<void>): void {
+  onLeaseAcquiredLate = handler;
+}
+
 const heartbeat = async (): Promise<void> => {
   try {
     const acquired = await tryAcquireSocketLease();
     if (acquired && !holdingLease) {
       logger.info(`🔓 Socket lease ADQUIRIDO por ${HOLDER_ID}`);
+      // Solo en adquisiciones POSTERIORES al arranque: la inicial ya la maneja
+      // index.ts con su propio restore.
+      if (yaArrancado && onLeaseAcquiredLate) {
+        logger.info('🔁 Lease ganado por failover — restaurando sesiones WhatsApp');
+        void Promise.resolve(onLeaseAcquiredLate()).catch((error) =>
+          logger.error(`Restore tras failover del lease falló: ${String(error)}`)
+        );
+      }
     }
     if (!acquired && holdingLease) {
       logger.error(
@@ -131,6 +162,9 @@ export async function startSocketLeaseLoop(): Promise<boolean> {
     return true;
   }
   await heartbeat();
+  // A partir de acá, cualquier adquisición es TARDÍA (failover) y debe disparar
+  // el restore — ver setOnLeaseAcquiredLate.
+  yaArrancado = true;
   if (!holdingLease) {
     logger.error(
       '🔒 Otra instancia de lila-app posee el lease de sockets WhatsApp: este proceso queda PASIVO ' +
@@ -174,4 +208,6 @@ export function __resetSocketLeaseForTests(): void {
     heartbeatTimer = null;
   }
   holdingLease = false;
+  onLeaseAcquiredLate = null;
+  yaArrancado = false;
 }

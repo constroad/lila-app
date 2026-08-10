@@ -275,6 +275,37 @@ corriendo, no solo escrito.
 
 ---
 
+## 16. Una recuperación a medias es peor que ninguna
+
+**Incidente (2026-08-10).** Las sesiones de WhatsApp quedaron caídas y no volvían.
+Causa: la decisión de restaurar sesiones se tomaba **una sola vez, al arrancar**,
+según si el proceso tenía el lease de sockets en ese instante. Tras un reinicio el
+proceso nuevo arrancó PASIVO —`kickstart -k` mata con SIGKILL y el anterior no
+alcanza a liberar el lease— y dos minutos después lo ganó al vencer el TTL. El
+heartbeat detectaba esa adquisición tardía, pero **solo la logueaba**.
+
+Resultado: el proceso quedó **reteniendo el lease sin abrir un solo socket**. Y ahí
+está lo peor: el lease existe para que solo una instancia abra sockets, así que al
+retenerlo sin usarlo también **bloqueaba a cualquier otra instancia** que sí
+hubiera podido levantarlas. Un mecanismo de exclusión mutua que se queda a mitad
+de camino no deja el sistema como estaba: lo deja peor.
+
+**Regla.** Si un mecanismo puede adquirir un recurso *más tarde* (failover, retry,
+reconexión), el camino tardío tiene que ejecutar **las mismas acciones** que el
+camino inicial. Preguntarse siempre: *"si esto se consigue en el segundo intento
+en vez del primero, ¿el sistema queda igual de funcional?"*. Si la respuesta es
+no, falta código en el camino tardío.
+
+Es pariente de la lección #12 (un arreglo se aplica a todos los caminos
+equivalentes): acá los dos caminos son "conseguir el lease al arrancar" y
+"conseguirlo después", y solo uno estaba completo.
+
+**Aplicado en.** `instance-lease.ts` → `setOnLeaseAcquiredLate()`, con
+`index.ts` registrando `restoreAllSessions`. +2 tests que fallan sin el fix.
+
+
+---
+
 ## Checklist al agregar una alerta o un chequeo
 
 - [ ] ¿Cuántas veces por día puede dispararse? ¿Necesita dedupe por firma?
@@ -291,3 +322,5 @@ corriendo, no solo escrito.
 - [ ] Al arreglar un camino: ¿revisaste los otros caminos de la misma función?
 - [ ] ¿Verificaste el VALOR de lo que encontraste, o solo que estuviera presente?
 - [ ] Si nombrás una ruta/comando en una propuesta: ¿aclaraste que aún no existe?
+- [ ] Si un recurso puede conseguirse TARDE (failover/retry): ¿ese camino hace lo
+      mismo que el inicial, o se queda a medias reteniéndolo sin usarlo?

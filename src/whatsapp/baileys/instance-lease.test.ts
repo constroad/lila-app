@@ -177,3 +177,48 @@ describe('releaseSocketLease', () => {
     expect(leaseDoc?.holderId).toBe('otra#2');
   });
 });
+
+// Incidente 2026-08-10: un reinicio dejó al proceso nuevo arrancando PASIVO
+// (SIGKILL no libera el lease del anterior). Dos minutos más tarde ganó el lease
+// al vencer el TTL... y NUNCA restauró las sesiones, porque esa decisión se
+// tomaba una sola vez, al arrancar. Quedó reteniendo el lease sin abrir un solo
+// socket: caída silenciosa de WhatsApp y, peor, bloqueando a cualquier otra
+// instancia que sí hubiera podido levantarlas.
+describe('restore tras ganar el lease por failover', () => {
+  const otroHolder = (expiraEnMs: number) => {
+    leaseDoc = {
+      _id: 'whatsapp-socket-owner',
+      holderId: 'otra-instancia#999#deadbeef',
+      expiresAt: new Date(Date.now() + expiraEnMs),
+    };
+  };
+
+  it('dispara el restore cuando el lease se gana DESPUÉS del arranque', async () => {
+    jest.useFakeTimers();
+    otroHolder(60_000); // el holder anterior sigue vivo
+
+    const restore = jest.fn(async () => undefined);
+    subject.setOnLeaseAcquiredLate(restore);
+
+    expect(await subject.startSocketLeaseLoop()).toBe(false); // arranca pasivo
+    expect(restore).not.toHaveBeenCalled();
+
+    // El holder anterior muere: su lease vence y este proceso lo gana.
+    otroHolder(-1000);
+    await jest.advanceTimersByTimeAsync(subject.LEASE_HEARTBEAT_MS + 50);
+
+    expect(subject.hasSocketLease()).toBe(true);
+    expect(restore).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  // La adquisición inicial NO debe disparar el handler: index.ts ya restaura ahí,
+  // y hacerlo dos veces abriría sockets duplicados.
+  it('NO dispara el restore en la adquisición inicial', async () => {
+    const restore = jest.fn(async () => undefined);
+    subject.setOnLeaseAcquiredLate(restore);
+
+    expect(await subject.startSocketLeaseLoop()).toBe(true);
+    expect(restore).not.toHaveBeenCalled();
+  });
+});

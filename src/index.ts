@@ -45,7 +45,7 @@ import pdfGenerator from './pdf/generator.service.js';
 // 🔄 USING SIMPLE SESSIONS (notifications approach)
 import { listSessions, endSession } from './whatsapp/baileys/sessions.simple.js';
 import { restoreAllSessions } from './whatsapp/baileys/restore-sessions.simple.js';
-import { startSocketLeaseLoop, releaseSocketLease } from './whatsapp/baileys/instance-lease.js';
+import { startSocketLeaseLoop, releaseSocketLease, setOnLeaseAcquiredLate } from './whatsapp/baileys/instance-lease.js';
 import { startTelegramQueueFlusher } from './services/telegram-alert.service.js';
 import { startDriverReminderFlusher } from './services/driver-arrival-reminder.service.js';
 import { startDispatchAutoCloseFlusher } from './services/dispatch-autoclose.service.js';
@@ -412,6 +412,10 @@ async function startServer() {
       try {
         // Lease anti doble-instancia: si otro proceso vivo lo posee, este arranca
         // PASIVO (sin sockets) y toma el lease automáticamente si aquel muere.
+        // Si el lease se gana DESPUÉS del arranque (failover porque el holder
+        // anterior murió), hay que restaurar igual: sin esto el proceso retiene
+        // el lease sin abrir una sola sesión, y nadie más puede tomarlo.
+        setOnLeaseAcquiredLate(() => restoreAllSessions());
         const isSocketHolder = await startSocketLeaseLoop();
         if (isSocketHolder) {
           await restoreAllSessions();
