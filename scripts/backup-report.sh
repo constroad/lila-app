@@ -93,7 +93,8 @@ main() {
   e_d=$(edad_segundos last-db-backup);    db=$(humanizar "$e_d")
   e_v=$(edad_segundos last-verify);       verif=$(humanizar "$e_v")
   e_o=$(edad_segundos last-offsite);      offsite=$(humanizar "$e_o")
-  [ "$e_o" -lt 0 ] && offsite="sin configurar (faltan credenciales B2)"
+  # No es un pendiente: se decidió NO hacer backup en la nube (2026-08-10).
+  [ "$e_o" -lt 0 ] && offsite="no aplica (sin copia en la nube, por decisión)"
 
   local ok24 fallos24 snaps_m snaps_d
   ok24=$(db_ok_24h); fallos24=$(db_fallos_24h)

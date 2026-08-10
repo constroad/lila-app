@@ -617,10 +617,17 @@ con documentos legibles** (2.543 despachos, 479 pedidos); `restic check` sin err
   punto-en-el-tiempo entre colecciones. Con 77 MB el dump tarda segundos, así que el
   skew es de segundos. Si se pasa a tier pago, agregar `--oplog`/`--oplogReplay`.
 - **Requiere Acceso total al disco para `/bin/bash`** (el agente corre bajo launchd).
-- **La réplica offsite requiere credenciales de B2** (ver abajo). Hasta configurarlas,
-  sigue siendo una sola copia local y NO se cumple 3-2-1.
+- **SIN copia offsite — DECISIÓN TOMADA (2026-08-10), no un pendiente.** Se evaluó
+  Backblaze B2 (el código está escrito y probado, ver abajo) y se decidió NO hacer backup
+  en la nube. **Riesgo aceptado explícitamente:** los backups viven en un disco conectado
+  a la misma Mac mini que respaldan, así que un incendio, un robo o un ransomware que
+  alcance el volumen montado se lleva el original Y la copia. NO se cumple 3-2-1.
+  El agente offsite queda inerte: el instalador lo omite sin credenciales y el watchdog no
+  lo vigila, así que no genera ruido. Si algún día se revierte la decisión, alcanza con
+  poner `B2_*` en `.env` y correr el instalador.
 
-**Réplica offsite → Backblaze B2 (`scripts/backup-offsite.sh`, diaria 02:00).** Usa
+**Réplica offsite → Backblaze B2 (`scripts/backup-offsite.sh`) — IMPLEMENTADA PERO NO
+ACTIVADA por decisión (ver arriba).** Se documenta el diseño por si se reactiva. Usa
 `restic copy` y no un segundo backup desde el origen: replica exactamente la cadena de
 snapshots ya verificada localmente, y no vuelve a leer los 10.600 archivos del disco
 interno. Los repos destino se inicializan con `--copy-chunker-params` — sin eso la

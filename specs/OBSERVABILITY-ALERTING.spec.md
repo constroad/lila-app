@@ -192,6 +192,46 @@ Funnel sin WAF; lo que responde a internet es lo único que cuenta.
 
 ---
 
+## 12. Un arreglo se aplica a TODOS los caminos equivalentes, no al que falló
+
+**Incidente (2026-08-10).** El 09-ago se agregó reintento al chequeo HTTPS del probe,
+porque los microcortes aislados alimentaban la escalación. Al día siguiente llegaron
+alertas de *"lila-app no alcanzable"* con el funnel perfectamente arriba: el reintento
+se había puesto **solo en el camino HTTPS**, y el camino DNS —que corre ANTES y
+devuelve fallo de inmediato— quedó sin él. Un hipo aislado de `dig` volvía a contar
+como caída.
+
+**Regla.** Cuando un arreglo nace de un síntoma, buscar los **demás caminos con la
+misma forma** antes de darlo por cerrado. En un chequeo con varias etapas
+(resolver → conectar → validar), la robustez de la más débil es la del conjunto.
+Preguntarse: *"¿qué otras ramas de esta función pueden fallar por lo mismo?"*.
+
+Vale también hacia atrás: el descubrimiento de binarios se arregló para `restic` y
+`mongodump`, y `node` quedó afuera (lección #2). Mismo patrón, dos veces.
+
+---
+
+## 13. Una herramienta puede escribir su error en STDOUT: validá la FORMA, no que haya salida
+
+**Incidente (2026-08-10).** Con el resolver inalcanzable, `dig +short` escribe
+`;; connection timed out; no servers could be reached` en **stdout**, no en stderr.
+El probe hacía `ips=$(dig ...)` y comprobaba `[ -n "$ips" ]`, así que tomaba esa
+línea como una lista de IPs válida. Después intentaba
+`curl --resolve host:443:;; connection timed out…`, fallaba con 000, y lo reportaba
+como **`funnel_https=FAIL`**. Resultado: un problema de DNS diagnosticado como
+"funnel caído" — durante semanas, porque el bug era preexistente.
+
+**Regla.** No alcanza con que un comando devuelva ALGO: hay que validar que lo que
+devolvió tiene la **forma esperada**. Filtrar por patrón (acá, IPv4 con regex) en vez
+de confiar en "no vacío". Si no, el diagnóstico apunta al componente equivocado y se
+persigue el problema donde no está.
+
+**Aplicado en.** `scripts/tailscale-external-probe.sh` → `resolve_derp_ips()` filtra
+con `grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'`.
+
+
+---
+
 ## Checklist al agregar una alerta o un chequeo
 
 - [ ] ¿Cuántas veces por día puede dispararse? ¿Necesita dedupe por firma?
@@ -204,3 +244,5 @@ Funnel sin WAF; lo que responde a internet es lo único que cuenta.
 - [ ] ¿Se calla cuando la tarea no está configurada?
 - [ ] Si vigila un job: ¿hay dead man's switch por un mecanismo distinto?
 - [ ] Si verifica datos: ¿compara contenido, o solo cuenta?
+- [ ] ¿Validás la FORMA de lo que devuelve cada comando, o solo que devuelva algo?
+- [ ] Al arreglar un camino: ¿revisaste los otros caminos de la misma función?

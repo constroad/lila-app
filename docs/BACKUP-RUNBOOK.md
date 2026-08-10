@@ -6,7 +6,7 @@ El diseño y el porqué de cada decisión están en `specs/architecture-as-is.md
 > **Lo único imprescindible:** la clave del repositorio.
 > Vive en `~/.config/constroad-backup/restic-media.pass` **y** debe existir una copia
 > fuera de esta máquina (gestor de contraseñas). Sin ella los backups son
-> matemáticamente irrecuperables — ni Backblaze ni nadie puede abrirlos. Si al leer
+> matemáticamente irrecuperables — nadie puede abrirlos sin ella. Si al leer
 > esto no tenés esa copia externa, hacela ahora antes de seguir.
 
 ---
@@ -21,12 +21,9 @@ export RESTIC_REPOSITORY=/Volumes/CONSTROAD-BACKUP/restic-media   # medios
 # para la base:  /Volumes/CONSTROAD-BACKUP/restic-db
 ```
 
-Si el disco no está disponible, usar la copia offsite (necesita `B2_ACCOUNT_ID` y
-`B2_ACCOUNT_KEY` exportadas):
-
-```bash
-export RESTIC_REPOSITORY=b2:constroad-backups:medios
-```
+> ⚠️ **NO hay copia en la nube.** Se decidió no hacerla (2026-08-10). Si el SSD no está
+> disponible, **no hay de dónde restaurar**. Riesgo aceptado: incendio, robo o un
+> ransomware que alcance el volumen se llevan original y copia.
 
 ### Recuperar UN archivo que alguien borró
 
@@ -83,11 +80,16 @@ restic stats latest                  # tamaño
 |---|---|---|
 | `com.constroad.backup-media` | diario 00:30 | medios → SSD |
 | `com.constroad.backup-db` | cada hora :15 | MongoDB → SSD |
-| `com.constroad.backup-offsite` | diario 02:00 | SSD → Backblaze B2 |
+| `com.constroad.backup-report` | diario 08:00 | resumen de estado a Telegram |
+| `com.constroad.tailscale-health` | diario 08:05 | vencimientos (cert TLS, clave del nodo) |
+| `com.constroad.check-resources` | cada 30 min | CPU/RAM/disco + detección de minería |
 | `com.constroad.verify-backups` | domingos 03:00 | integridad + simulacro de restauración |
 
+(`com.constroad.backup-offsite` existe en el código pero NO se instala: se decidió no
+hacer copia en la nube.)
+
 Y `backup-watchdog.service.ts`, dentro de lila-app, vigila que todo eso **siga
-ocurriendo**: alerta si medios >25 h, base >2 h, offsite >25 h o verificación >8 días.
+ocurriendo**: alerta si medios >25 h, base >2 h o verificación >8 días.
 Es deliberado que el vigilante NO comparta mecanismo con lo vigilado.
 
 ```bash
@@ -121,8 +123,7 @@ No hay rutas a `/Users/<alguien>` que arreglar.
    `mongodump`/`mongorestore` a `/opt/homebrew/bin`.
 
 2. **Clonar el repo y configurar `.env`** — mínimo `FILE_STORAGE_ROOT`,
-   `PORTAL_MONGO_URI`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ERRORS_CHAT_ID`, y
-   `B2_ACCOUNT_ID`/`B2_ACCOUNT_KEY`/`B2_BUCKET` si se quiere la réplica offsite.
+   `PORTAL_MONGO_URI`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ERRORS_CHAT_ID`.
 
 3. **Restaurar la clave del repositorio** desde el gestor de contraseñas:
    ```bash
@@ -144,7 +145,7 @@ No hay rutas a `/Users/<alguien>` que arreglar.
    ```bash
    ./scripts/install-backup-agent.sh
    ```
-   Es idempotente. Omite el agente offsite si faltan las credenciales de B2, avisando.
+   Es idempotente.
 
 7. **Verificar de verdad, no asumir**
    ```bash
@@ -168,28 +169,25 @@ número real. Basta con que pueda levantar lila y montar el SSD.
 ## 4. Escenarios de falla
 
 ### El SSD murió o se perdió
-Los backups locales no existen más; la copia de B2 sí. Conseguir otro disco, formatearlo
-**APFS / GUID**, nombrarlo `CONSTROAD-BACKUP`, y repoblarlo desde B2:
+**Los backups se perdieron.** No hay copia en la nube (decisión 2026-08-10), así que no
+hay de dónde recuperarlos. Los datos VIVOS siguen en la Mac mini y en Atlas; lo que se
+pierde es el historial de versiones y la capacidad de volver atrás.
 
-```bash
-export RESTIC_PASSWORD_FILE=~/.config/constroad-backup/restic-media.pass
-restic -r /Volumes/CONSTROAD-BACKUP/restic-media init \
-  --from-repo b2:constroad-backups:medios --copy-chunker-params
-restic -r /Volumes/CONSTROAD-BACKUP/restic-media copy --from-repo b2:constroad-backups:medios
-```
+Acción: conseguir otro disco, formatearlo **APFS / GUID**, nombrarlo `CONSTROAD-BACKUP` y
+correr `./scripts/backup-media.sh` para empezar una base nueva desde cero.
 
-Mientras tanto los backups diarios fallan y alertan: es correcto, no lo silencies.
+Mientras tanto los backups fallan y alertan: es correcto, no lo silencies.
 
 ### La Mac mini murió
 Ver §3 (migración). Los datos están a salvo si tenés la clave. **El tiempo lo domina
 conseguir el hardware.**
 
 ### Ransomware / borrado malicioso
-La application key de B2 **no tiene permiso `deleteFiles`**: un atacante con acceso a la
-máquina y a la clave puede escribir, pero no vaciar el bucket. Lo que restic "borra" son
-marcadores de ocultamiento, y las lifecycle rules retienen las versiones previas.
+⚠️ **Sin copia en la nube, esta es la exposición aceptada.** Un cifrador que alcance el
+volumen montado se lleva original y copia. La única defensa hoy es desconectar el SSD
+apenas se detecte algo.
 
-Recuperación: identificar el último snapshot bueno (`restic snapshots`, mirar fechas
+Si el repositorio sobrevivió: identificar el último snapshot bueno (`restic snapshots`, mirar fechas
 anteriores al incidente) y restaurar **ese**, no `latest`.
 
 Primero: desconectar el SSD para que no se propague.
