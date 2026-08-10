@@ -192,16 +192,15 @@ const humano = (s: number) =>
   s < 0 ? 'nunca' : s < 3600 ? `hace ${Math.floor(s / 60)} min` : s < 86400 ? `hace ${Math.floor(s / 3600)} h` : `hace ${Math.floor(s / 86400)} d`;
 
 /**
- * Estado como {icono, etiqueta, tono}. NUNCA solo color: la paleta de estado
- * documenta que en superficie clara los tonos warning/serious quedan por debajo
- * de 3:1 de contraste, y que la mitigación es el par ÍCONO + ETIQUETA. Además,
- * un panel que distingue "ok" de "mal" solo por color es ilegible para daltónicos
- * y en impresión.
+ * Estado como {icono, etiqueta, tono}. NUNCA solo color: un panel que distingue
+ * "ok" de "mal" únicamente por el tono es ilegible para daltónicos y en
+ * impresión. El diseño de Stitch ya usa ícono + texto, así que ambas cosas
+ * coinciden.
  */
-type Estado = { ico: string; txt: string; tono: 'good' | 'warning' | 'critical' };
-const OK: Estado = { ico: '●', txt: 'OK', tono: 'good' };
-const ATENCION: Estado = { ico: '▲', txt: 'Atención', tono: 'warning' };
-const CRITICO: Estado = { ico: '■', txt: 'Crítico', tono: 'critical' };
+type Estado = { ico: string; txt: string; tono: 'ok' | 'warn' | 'bad' };
+const OK: Estado = { ico: 'check_circle', txt: 'Nominal', tono: 'ok' };
+const ATENCION: Estado = { ico: 'warning', txt: 'Atención', tono: 'warn' };
+const CRITICO: Estado = { ico: 'error', txt: 'Crítico', tono: 'bad' };
 
 const porEdad = (s: number, umbral: number): Estado =>
   s < 0 || s > umbral ? CRITICO : s > umbral * 0.75 ? ATENCION : OK;
@@ -210,25 +209,15 @@ const porPct = (p: number, umbral: number): Estado =>
 
 const esc = (v: string) => v.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] || c);
 
+/**
+ * Lenguaje visual tomado del proyecto de Stitch "Unified System Monitor"
+ * (pantalla "Panel de Monitoreo - Mobile"): superficies azul marino
+ * (#0b1326 / #171f33), acento cian (#4cd6ff), verde esmeralda para "online",
+ * tipografía Inter e iconografía Material Symbols. Los datos son reales; solo
+ * el lenguaje visual viene del diseño.
+ */
 function renderHtml(e: Awaited<ReturnType<typeof construirEstado>>): string {
   const b = e.backups;
-
-  // Medidor: barra fina anclada a la línea base, con extremo redondeado. El
-  // número va afuera en tinta de texto — el color de la barra no debe ser el
-  // único portador del dato.
-  const medidor = (etiqueta: string, pct: number, detalle: string, st: Estado) => `
-    <div class="m">
-      <div class="mh"><span class="lbl">${esc(etiqueta)}</span>
-        <span class="num">${pct}%</span></div>
-      <div class="bar"><i class="t-${st.tono}" style="width:${Math.max(2, Math.min(100, pct))}%"></i></div>
-      <div class="det">${esc(detalle)}</div>
-    </div>`;
-
-  const fila = (etiqueta: string, valor: string, st: Estado) => `
-    <li><span class="ico t-${st.tono}" aria-hidden="true">${st.ico}</span>
-      <span class="k">${esc(etiqueta)}</span>
-      <span class="v">${esc(valor)}</span>
-      <span class="tag t-${st.tono}">${st.txt}</span></li>`;
 
   const stCpu = porPct(e.cpu.pct, 85);
   const stMem = porPct(e.memoria.pct, 90);
@@ -239,111 +228,176 @@ function renderHtml(e: Awaited<ReturnType<typeof construirEstado>>): string {
   const stV = porEdad(b.verificacion.segundos, b.verificacion.umbral);
 
   const todos = [stCpu, stMem, stDs, stDb, stM, stB, stV];
-  const criticos = todos.filter((x) => x.tono === 'critical').length;
-  const avisos = todos.filter((x) => x.tono === 'warning').length;
-  // Titular único: la pregunta real es "¿tengo que hacer algo?".
-  const hero = criticos
-    ? { tono: 'critical', ico: '■', txt: `${criticos} ${criticos === 1 ? 'problema' : 'problemas'}` }
+  const malos = todos.filter((x) => x.tono === 'bad').length;
+  const avisos = todos.filter((x) => x.tono === 'warn').length;
+  const global = malos ? CRITICO : avisos ? ATENCION : OK;
+  const globalTxt = malos
+    ? `${malos} ${malos === 1 ? 'problema' : 'problemas'}`
     : avisos
-      ? { tono: 'warning', ico: '▲', txt: `${avisos} ${avisos === 1 ? 'aviso' : 'avisos'}` }
-      : { tono: 'good', ico: '●', txt: 'Todo en orden' };
+      ? `${avisos} ${avisos === 1 ? 'aviso' : 'avisos'}`
+      : 'System Nominal';
+
+  const uptime = e.uptimeHoras >= 24
+    ? `${Math.floor(e.uptimeHoras / 24)}D ${Math.round(e.uptimeHoras % 24)}H`
+    : `${e.uptimeHoras.toFixed(1)}H`;
+
+  // Tarjeta de métrica: ícono, etiqueta en mayúsculas, número grande y barra fina.
+  const metrica = (ico: string, etiqueta: string, pct: number, detalle: string, st: Estado) => `
+    <div class="mc">
+      <div class="mc-h"><span class="ms">${ico}</span><span>${esc(etiqueta)}</span></div>
+      <div class="mc-v t-${st.tono}">${pct}%</div>
+      <div class="bar"><i class="t-${st.tono}" style="width:${Math.max(2, Math.min(100, pct))}%"></i></div>
+      <div class="mc-d">${esc(detalle)}</div>
+    </div>`;
+
+  const filaBackup = (ico: string, titulo: string, sub: string, st: Estado) => `
+    <div class="row">
+      <div class="row-ico t-${st.tono}"><span class="ms">${ico}</span></div>
+      <div class="row-txt"><div class="row-t">${esc(titulo)}<span class="dot t-${st.tono}"></span></div>
+        <div class="row-s">${esc(sub)}</div></div>
+      <div class="row-tag t-${st.tono}">${st.txt}</div>
+    </div>`;
 
   const sesiones = e.whatsapp.length
-    ? e.whatsapp.map((s) => fila(s.id, s.lista ? 'conectada' : 'caída', s.lista ? OK : CRITICO)).join('')
-    : '<li><span class="ico" aria-hidden="true">–</span><span class="k">sin sesiones registradas</span></li>';
+    ? e.whatsapp
+        .map((s) => `
+    <div class="row">
+      <div class="row-ico ${s.lista ? 't-ok' : 't-bad'}"><span class="ms">smartphone</span></div>
+      <div class="row-txt"><div class="row-t">+${esc(s.id)}</div>
+        <div class="row-s"><span class="dot ${s.lista ? 't-ok' : 't-bad'}"></span>${s.lista ? 'conectada' : 'caída'}</div></div>
+      <div class="row-tag ${s.lista ? 't-ok' : 't-bad'}">${s.lista ? 'ONLINE' : 'OFFLINE'}</div>
+    </div>`)
+        .join('')
+    : '<div class="empty">Sin sesiones registradas</div>';
+
+  const online = e.whatsapp.filter((s) => s.lista).length;
 
   return `<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<title>lila-app · salud</title>
+<title>lila-app · monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=swap" rel="stylesheet">
 <style>
-/* Superficies y tinta de la paleta validada. El modo oscuro se declara
-   explícitamente (no es un invertido automático del claro). */
+/* Tokens del proyecto Stitch "Unified System Monitor". Es un tema oscuro
+   deliberado (no un invertido del claro), así que se fija color-scheme. */
 :root{
-  --sf:#fcfcfb; --sf2:#ffffff; --ink:#0b0b0b; --ink2:#52514e; --line:#e7e6e2;
-  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
-  color-scheme:light;
-}
-@media (prefers-color-scheme:dark){
-  :root:where(:not([data-theme="light"])){
-    --sf:#131312; --sf2:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --line:#2b2b28;
-    color-scheme:dark;
-  }
-}
-:root[data-theme="dark"]{
-  --sf:#131312; --sf2:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --line:#2b2b28;
+  --bg:#0b1326; --card:#171f33; --card2:#131b2e; --line:#2d3449; --bright:#31394d;
+  --ink:#dae2fd; --ink2:#bbc9cf; --ink3:#8e9bb3;
+  --accent:#4cd6ff; --accent2:#00d1ff;
+  --ok:#10b981; --warn:#feb127; --bad:#ff6b6b;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-body{margin:0;padding:20px 16px 40px;background:var(--sf);color:var(--ink);
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
-  -webkit-font-smoothing:antialiased;max-width:640px;margin-inline:auto}
-.t-good{--c:var(--good)} .t-warning{--c:var(--warn)} .t-critical{--c:var(--crit)}
+body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,-apple-system,system-ui,sans-serif;font-size:14px;
+  -webkit-font-smoothing:antialiased}
+.ms{font-family:'Material Symbols Outlined';font-size:16px;line-height:1;
+  font-variation-settings:'FILL' 0,'wght' 400}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px 40px}
+.t-ok{--c:var(--ok)} .t-warn{--c:var(--warn)} .t-bad{--c:var(--bad)}
 
-header{margin-bottom:22px}
-h1{font-size:14px;font-weight:600;letter-spacing:.02em;color:var(--ink2);margin:0 0 14px}
-.hero{display:flex;align-items:center;gap:12px}
-.hero .dot{font-size:26px;line-height:1;color:var(--c)}
-.hero .txt{font-size:27px;font-weight:650;letter-spacing:-.02em}
-.meta{color:var(--ink2);font-size:13px;margin-top:6px}
+/* Barra superior: marca + chips de estado, como en el diseño. */
+.top{display:flex;align-items:center;gap:12px;padding:16px 0 14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px}
+.logo{width:30px;height:30px;border-radius:8px;background:var(--accent);
+  color:#003543;display:grid;place-items:center}
+.logo .ms{font-size:19px;font-variation-settings:'FILL' 1}
+.bname{font-weight:700;letter-spacing:.06em;font-size:14px}
+.bsub{font-size:9px;letter-spacing:.14em;color:var(--ink3);text-transform:uppercase}
+.chips{display:flex;gap:7px;margin-left:auto;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:6px;background:var(--card);
+  border:1px solid var(--line);padding:5px 10px;border-radius:7px;font-size:11px}
+.chip b{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+.chip .k{color:var(--ink3);text-transform:uppercase;letter-spacing:.07em;font-size:9px}
 
-h2{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;
-  color:var(--ink2);margin:26px 0 10px}
+/* Estado global: la primera pregunta al abrir es "¿tengo que hacer algo?". */
+.hero{display:flex;align-items:center;gap:11px;background:var(--card2);
+  border:1px solid var(--line);border-radius:13px;padding:15px 17px;margin-bottom:20px}
+.hero .ms{font-size:26px;color:var(--c)}
+.hero .h1{font-size:20px;font-weight:650;letter-spacing:-.01em}
+.hero .h2{font-size:11.5px;color:var(--ink3);margin-top:2px}
 
-.card{background:var(--sf2);border:1px solid var(--line);border-radius:14px;padding:4px 14px}
-.m{padding:12px 0;border-bottom:1px solid var(--line)}
-.m:last-child{border-bottom:none}
-.mh{display:flex;justify-content:space-between;align-items:baseline}
-.lbl{font-size:14px}
-.num{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
-/* Barra fina, extremo redondeado, anclada a la base. */
-.bar{height:6px;background:var(--line);border-radius:3px;margin:7px 0 5px;overflow:hidden}
-.bar i{display:block;height:100%;border-radius:3px;background:var(--c);transition:width .3s}
-.det{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+h2{font-size:11px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--ink3);margin:0 0 11px;display:flex;align-items:center;gap:8px}
+h2 .n{margin-left:auto;color:var(--ink3);font-weight:500;letter-spacing:.04em}
+section{margin-bottom:24px}
 
-ul{list-style:none;margin:0;padding:0}
-li{display:flex;align-items:center;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}
-li:last-child{border-bottom:none}
-.ico{color:var(--c);font-size:11px;width:12px;text-align:center;flex:none}
-.k{flex:1;font-size:14px}
-.v{color:var(--ink2);font-size:13px;font-variant-numeric:tabular-nums}
-/* Etiqueta de texto junto al color: el estado nunca se lee solo por el tono. */
-.tag{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
-  color:var(--c);border:1px solid var(--c);border-radius:5px;padding:2px 6px;flex:none}
-.na{color:var(--ink2);font-size:13px;padding:13px 0}
-footer{margin-top:24px;color:var(--ink2);font-size:12px;text-align:center}
-</style></head><body>
+/* Métricas en grilla, como las tarjetas CPU/RAM/DISK del diseño. */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.mc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 14px}
+.mc-h{display:flex;align-items:center;gap:7px;color:var(--ink3);font-size:10px;
+  text-transform:uppercase;letter-spacing:.09em}
+.mc-h .ms{font-size:14px}
+.mc-v{font-size:25px;font-weight:700;margin:7px 0 9px;color:var(--c);
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.bar{height:4px;background:var(--bright);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:2px;background:var(--c)}
+.mc-d{font-size:10.5px;color:var(--ink3);margin-top:8px;font-variant-numeric:tabular-nums}
 
-<header>
-  <h1>lila-app · salud del sistema</h1>
-  <div class="hero t-${hero.tono}">
-    <span class="dot" aria-hidden="true">${hero.ico}</span>
-    <span class="txt">${hero.txt}</span>
+/* Filas de lista: ícono, título, subtítulo y etiqueta de estado. */
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.row-ico{width:34px;height:34px;border-radius:9px;background:var(--card2);
+  display:grid;place-items:center;color:var(--c);flex:none}
+.row-txt{flex:1;min-width:0}
+.row-t{font-size:13.5px;font-weight:550;display:flex;align-items:center;gap:7px}
+.row-s{font-size:11px;color:var(--ink3);margin-top:2px;display:flex;align-items:center;gap:6px;
+  font-variant-numeric:tabular-nums}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--c);flex:none}
+/* Etiqueta de texto además del color: el estado nunca se lee solo por el tono. */
+.row-tag{font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--c);border:1px solid var(--c);border-radius:5px;padding:3px 7px;flex:none;opacity:.9}
+.empty{padding:15px;color:var(--ink3);font-size:12.5px}
+footer{text-align:center;color:var(--ink3);font-size:10.5px;margin-top:26px;
+  letter-spacing:.05em;text-transform:uppercase}
+</style></head><body><div class="wrap">
+
+<div class="top">
+  <div class="brand">
+    <div class="logo"><span class="ms">monitoring</span></div>
+    <div><div class="bname">LILA-APP</div><div class="bsub">Mac mini · node 01</div></div>
   </div>
-  <div class="meta">${new Date(e.ahora).toLocaleString('es-PE')} · uptime ${e.uptimeHoras} h</div>
-</header>
-
-<h2>Recursos</h2>
-<div class="card">
-  ${medidor('CPU', e.cpu.pct, `carga ${e.cpu.carga1} · ${e.cpu.nucleos} núcleos`, stCpu)}
-  ${medidor('Memoria', e.memoria.pct, `${e.memoria.totalGB} GB totales`, stMem)}
-  ${e.disco.sistema ? medidor('Disco del sistema', e.disco.sistema.pct, `${e.disco.sistema.libre} libres de ${e.disco.sistema.total}`, stDs) : '<div class="na">Disco del sistema no disponible</div>'}
-  ${e.disco.backup ? medidor('Disco de backup', e.disco.backup.pct, `${e.disco.backup.libre} libres de ${e.disco.backup.total}`, stDb) : '<div class="na">■ Disco de backup DESCONECTADO</div>'}
+  <div class="chips">
+    <div class="chip"><span class="k">Uptime</span><b>${uptime}</b></div>
+    <div class="chip"><span class="k">CPU</span><b>${e.cpu.pct}%</b></div>
+    <div class="chip"><span class="k">RAM</span><b>${e.memoria.pct}%</b></div>
+  </div>
 </div>
 
-<h2>Backups</h2>
-<div class="card"><ul>
-  ${fila('Medios', humano(b.medios.segundos), stM)}
-  ${fila('Base de datos', humano(b.base.segundos), stB)}
-  ${fila('Verificación', humano(b.verificacion.segundos), stV)}
-  <li><span class="ico" aria-hidden="true">–</span><span class="k">Copia en la nube</span>
-    <span class="v">${esc(b.offsite.estado)}</span></li>
-</ul></div>
+<div class="hero t-${global.tono}">
+  <span class="ms">${global.ico}</span>
+  <div><div class="h1">${globalTxt}</div>
+    <div class="h2">${new Date(e.ahora).toLocaleString('es-PE')}</div></div>
+</div>
 
-<h2>WhatsApp</h2>
-<div class="card"><ul>${sesiones}</ul></div>
+<section>
+  <h2>Recursos</h2>
+  <div class="grid">
+    ${metrica('memory', 'CPU', e.cpu.pct, `carga ${e.cpu.carga1} · ${e.cpu.nucleos} núcleos`, stCpu)}
+    ${metrica('developer_board', 'RAM', e.memoria.pct, `${e.memoria.totalGB} GB totales`, stMem)}
+    ${e.disco.sistema ? metrica('hard_drive', 'Disco sistema', e.disco.sistema.pct, `${e.disco.sistema.libre} libres`, stDs) : ''}
+    ${e.disco.backup ? metrica('backup', 'Disco backup', e.disco.backup.pct, `${e.disco.backup.libre} libres`, stDb) : '<div class="mc"><div class="mc-h"><span class="ms">backup</span><span>Disco backup</span></div><div class="mc-v t-bad">—</div><div class="mc-d">DESCONECTADO</div></div>'}
+  </div>
+</section>
 
-<footer>se actualiza solo cada 30 s</footer>
+<section>
+  <h2>Backups <span class="n">${b.offsite.estado.includes('decisión') ? 'sin copia en la nube' : ''}</span></h2>
+  <div class="card">
+    ${filaBackup('perm_media', 'Medios', humano(b.medios.segundos), stM)}
+    ${filaBackup('database', 'Base de datos', humano(b.base.segundos), stB)}
+    ${filaBackup('verified', 'Verificación', humano(b.verificacion.segundos), stV)}
+  </div>
+</section>
+
+<section>
+  <h2>Sesiones WhatsApp <span class="n">${online} online</span></h2>
+  <div class="card">${sesiones}</div>
+</section>
+
+<footer>se actualiza cada 30 s</footer>
+</div>
 <script>setTimeout(()=>location.reload(),30000)</script>
 </body></html>`;
 }
