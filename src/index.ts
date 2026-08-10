@@ -17,6 +17,7 @@ import {
   requestLogger,
 } from './api/middlewares/errorHandler.js';
 import sessionRoutes from './api/routes/session.routes.js';
+import adminHealthRoutes from './api/routes/admin-health.routes.js';
 import jobsRoutes from './api/routes/jobs.routes.v2.js';
 import messageRoutes from './api/routes/message.routes.js';
 import pdfRoutes from './api/routes/pdf.routes.js';
@@ -246,6 +247,9 @@ app.get('/health', (req, res) => {
 app.get('/', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
+
+// Dashboard de salud (Basic Auth con API_SECRET_KEY; fail-closed sin esa env).
+app.use('/admin', adminHealthRoutes);
 
 // API Routes
 app.use('/api/sessions', sessionRoutes);

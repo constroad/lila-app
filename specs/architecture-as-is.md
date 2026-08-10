@@ -430,6 +430,23 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
   claves completas. La exposición se limita al disco local y a copias/backups de `logs/`.
   **Regla:** al hijackear consola, envolver TODOS los métodos de escritura, nunca solo `log`.
 
+## Dashboard de salud `/admin/health` (✅ 2026-08-10)
+
+Panel HTML con el estado ACTUAL: CPU, memoria, disco del sistema y del backup, antigüedad
+de cada backup y sesiones de WhatsApp. Se refresca solo cada 30s y hay `/admin/health.json`
+para consumo por script. Complementa a las alertas (que avisan cuando algo se rompe) y al
+reporte diario: responde "¿cómo está todo AHORA?" sin entrar por SSH.
+
+**Auth: HTTP Basic** con `API_SECRET_KEY`. Es deliberado — se consulta desde un navegador,
+que no puede mandar headers propios al escribir una URL; poner el secreto en la query lo
+dejaría en logs e historial. Sin esa env la ruta devuelve 404 (fail-closed), nunca se sirve
+sin protección. Verificado desde internet: 401 sin credencial, 200 con ella.
+
+**Memoria vía `memory_pressure`, no `os.freemem()`**: en macOS `freemem` no cuenta la
+memoria purgeable como libre y reportaba 92% donde el sistema estaba al 27% — el panel
+marcaba 🔴 mientras `check-resources.sh` decía OK. Misma fuente para los dos (lección #5).
+Los umbrales también son los mismos que usan el watchdog y el reporte diario.
+
 ## Monitoreo de recursos y compromiso (✅ 2026-08-09)
 
 `scripts/check-resources.sh`, cada 30 min. Dos propósitos en uno:
