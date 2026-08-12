@@ -85,7 +85,11 @@ export const controlImprimacionSchema: DocumentSchema = {
       id: 'registroFotografico',
       type: 'photoPanel',
       title: 'Panel Fotografico',
-      pageBreakBefore: true,
+      // SIN salto forzado: el panel FLUYE detrás del control. Con pocas fotos
+      // el informe entra en una sola hoja; con muchas, el panel desborda solo y
+      // las firmas terminan al final, que es donde deben ir. Con el salto fijo,
+      // un informe SIN fotos abría igual una hoja invisible que se llevaba las
+      // firmas atrás (reporte de José, 12/08/2026).
       includeHeader: true,
       pageOrientation: 'portrait',
       maxImages: 20,
@@ -98,7 +102,11 @@ export const controlImprimacionSchema: DocumentSchema = {
       type: 'signatures',
       title: 'Firmas',
       signatureStyle: 'line',
-      pageBreakBefore: true,
+      // SIN salto forzado: las firmas van pegadas al contenido que avalan. Con
+      // `pageBreakBefore` el informe terminaba en una hoja con SOLO el bloque de
+      // firmas y el resto en blanco — no es un documento presentable a un
+      // cliente (reporte de José, 12/08/2026). Si no entran al pie, la
+      // paginación las baja sola; el canvas además deja separarlas por informe.
       pageOrientation: 'portrait',
       signatures: [
         { key: 'responsable', label: 'RESPONSABLE', sublabel: 'Responsable', showCIP: true },
