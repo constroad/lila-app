@@ -68,7 +68,11 @@ export const cotizacionAsfaltoSchema: DocumentSchema = {
       showTitle: false,
       // tableStyle 'columns' + relleno hasta 12 filas + decimales fijos = PDF legacy.
       tableStyle: 'columns',
-      minVisibleRows: 12,
+      // Relleno de la tabla a la MITAD (12 -> 6). Con 1 solo ítem, 12 filas
+      // vacías comían un tercio de la hoja y empujaban el cierre (firma + cuentas)
+      // a una segunda página (producción, COT-0000273). 6 alcanzan para que la
+      // tabla se lea "cerrada" sin gastar la hoja.
+      minVisibleRows: 6,
       dynamicRows: true,
       minRows: 1,
       columns: [

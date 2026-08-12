@@ -62,7 +62,11 @@ export const cotizacionServicioSchema: DocumentSchema = {
       showTitle: false,
       // tableStyle 'columns' + agrupacion por fase (1 / 1.1 / 1.2…) + relleno = PDF legacy.
       tableStyle: 'columns',
-      minVisibleRows: 20,
+      // Relleno de la tabla a la MITAD (20 -> 10). Con 1 solo ítem, 20 filas
+      // vacías comían un tercio de la hoja y empujaban el cierre (firma + cuentas)
+      // a una segunda página (producción, COT-0000273). 10 alcanzan para que la
+      // tabla se lea "cerrada" sin gastar la hoja.
+      minVisibleRows: 10,
       groupBy: { key: 'phase', codeColumnKey: 'itemCode' },
       dynamicRows: true,
       minRows: 1,
