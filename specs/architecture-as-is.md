@@ -158,6 +158,19 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   obras y totales acumulados.
 - Registry de schemas: `src/schemas/documents/registry.ts` (20+ codigos: VAL-SRV, ACT-CNF, CONT-SRV, LIQ-SRV, control-imprimacion, control-pista, informe-area-adicional, medidas IAA, etc.).
 - El schema `INF-ACT` (Informe de Actividades Realizadas) usa `actividades` como tabla editable y `registroFotografico.fotos[]` como panel fotografico. Portal puede enviar cada foto/PDF con metadata `activityId`, `activityLabel`, `activityIndex` y `activitySourceId`; `report-html-renderer.service.ts` agrupa esa seccion por actividad y omite actividades sin fotos. Los PDFs/documentos del panel se renderizan como tiles enlazados dentro de la tabla fotografica. Las fechas `date` recibidas como `YYYY-MM-DD` se formatean preservando el dia de calendario, sin parsearlas como UTC para evitar desfases por timezone.
+- **Los schemas mandan sobre la paginación del PDF (12/08/2026).** `pageBreakBefore`
+  en una seccion la hace ARRANCAR hoja propia, entre o no entre el resto. Dos bugs de
+  produccion salieron de ahi:
+  - `control-imprimacion`: `firmas` y `registroFotografico` lo declaraban. Las firmas
+    terminaban solas en la ultima hoja, y sin fotos el panel abria igual una hoja
+    invisible que se las llevaba atras. **Ambos saltos removidos**: el panel fluye
+    detras del control y las firmas van pegadas al contenido que avalan.
+  - `cotizacion-asfalto` / `cotizacion-servicio`: `minVisibleRows` (12 y 20) pintaba
+    filas vacias que con 1 item se comian un tercio de la hoja y empujaban el cierre
+    a una segunda pagina. **Reducidos a la mitad** (6 y 10).
+  Regla: `pageBreakBefore` solo cuando la seccion DEBE empezar fresca. Para "que no se
+  corte" el mecanismo es `break-inside: avoid` en el render (Portal), no un salto fijo.
+  Detalle y como medir el espacio: `Portal/specs/CANVAS-EDITOR.as-is.md` §6b.
 - **Pipeline de imágenes/PDF (hardening 2026-07-14, post-incidente IPP 180s):**
   el HTML de TODO documento llega a Puppeteer **autocontenido** — `inlineCanvasHtmlImages`
   corre para canvas, printUrl **y también para el renderer Handlebars** (antes el
