@@ -41,7 +41,11 @@ case "$APP" in
     # funcionaba corriéndolo a mano y fallaba disparado por el webhook, con
     # "Cannot find package 'esbuild'" — que es devDependency y hace el build.
     # El peor tipo de bug: depende de quién lo invoca, no de lo que hace.
-    BUILD_CMD="npm ci --include=dev --no-audit --no-fund && npm run build"
+    INSTALL_CMD="npm ci --include=dev --no-audit --no-fund"
+    # MEDIDO: 630 tests en 21 s. Ese es todo el costo de tener portón de calidad
+    # en el entorno real, contra los 9+ minutos que tardaba GitHub solo en instalar.
+    TEST_CMD="npm test"
+    COMPILE_CMD="npm run build"
     # Artefacto que PRUEBA que el build sirvió. Ver el bloque de verificación.
     ARTEFACTO=dist/index.js
     SERVICE=com.constroad.lila
@@ -62,7 +66,10 @@ case "$APP" in
     # pero habría que rehacer el clon normal para volver a trabajar ahí.
     REPO_URL=git@github.com:constroad/Portal.git
     BRANCH=main
-    BUILD_CMD="npm ci --include=dev --no-audit --no-fund && npm run build"
+    INSTALL_CMD="npm ci --include=dev --no-audit --no-fund"
+    # MEDIDO: ~127 s. Más caro que lila pero sigue siendo una fracción del deploy.
+    TEST_CMD="npm test"
+    COMPILE_CMD="npm run build"
     # BUILD_ID solo existe si `next build` llegó al final. `.next` a secas no
     # sirve: se crea al empezar y queda a medias si el build muere en el medio.
     ARTEFACTO=.next/BUILD_ID
@@ -93,7 +100,9 @@ case "$APP" in
     # pero habría que rehacer el clon normal para volver a trabajar ahí.
     REPO_URL=git@github.com:constroad/torre.git
     BRANCH=main
-    BUILD_CMD="npm ci --include=dev --no-audit --no-fund && npm run build"
+    INSTALL_CMD="npm ci --include=dev --no-audit --no-fund"
+    TEST_CMD="npm test"
+    COMPILE_CMD="npm run build"
     ARTEFACTO=.next/BUILD_ID
     SERVICE=com.constroad.torre
     # `/api/health` y NO `/`: la raíz está detrás del Basic Auth del middleware y
@@ -324,32 +333,6 @@ log "=== Deploy de $APP · $SHORT → $NOMBRE ==="
 mkdir -p "$DEST" || fatal "No pude crear $DEST"
 git archive "$SHA" | tar -x -C "$DEST" || fatal "No pude extraer el SHA"
 
-# Los archivos compartidos (secretos) viven FUERA de las releases y se enlazan.
-# Así rotar un secreto no obliga a rebuildear, y las releases no los duplican.
-for f in "${SHARED_FILES[@]}"; do
-  if [ ! -f "$SHARED/$f" ]; then
-    # Respaldo: tomarlo de la copia de trabajo. OJO — esto NO funciona cuando el
-    # repo es un mirror (una app nueva bootstrapeada), porque un mirror no tiene
-    # working tree del que copiar. Es correcto que no funcione: los secretos de
-    # una app nueva no están en su repositorio, alguien tiene que ponerlos.
-    [ -f "$REPO_DIR/$f" ] && cp "$REPO_DIR/$f" "$SHARED/$f" && chmod 600 "$SHARED/$f" \
-      && log "Primer deploy: $f copiado a shared/"
-  fi
-
-  # FALLA EN VEZ DE CALLAR. Antes, si el archivo no aparecía por ningún lado, este
-  # bucle simplemente no hacía nada: el build seguía adelante sin las variables y
-  # sin una sola línea en el log. Ese es exactamente el modo de fallo más caro que
-  # tuvimos —config ausente que no se anuncia— y en Next es peor todavía, porque
-  # las env vars del middleware se inlinean al compilar: la release queda
-  # permanentemente rota y hay que rebuildear para arreglarla, no basta con poner
-  # el archivo y reiniciar.
-  if [ ! -f "$SHARED/$f" ]; then
-    fatal "Falta $SHARED/$f — la app lo declara en SHARED_FILES.
-       Poné el archivo ahí (modo 600) y volvé a deployar. Si es una app nueva,
-       sus secretos no vienen en el repo: hay que crearlo a mano."
-  fi
-  ln -sfn "$SHARED/$f" "$DEST/$f"
-done
 
 # LOCK GLOBAL, SOLO ALREDEDOR DEL BUILD.
 #
@@ -378,11 +361,72 @@ done
 LOCK_BUILD_TOMADO=1
 [ "$espera" -gt 0 ] && log "Turno tomado tras ${espera}s de espera"
 
+log "Instalando dependencias…"
+( cd "$DEST" && eval "$INSTALL_CMD" ) >> "$LOG" 2>&1 \
+  || fatal "Falló la instalación de dependencias"
+
+# PORTÓN DE TESTS — ACÁ, y el lugar importa por dos razones distintas.
+#
+# ANTES DE ENLAZAR LOS SECRETOS: en este punto la release todavía NO tiene su
+# `.env`, así que los tests no pueden leer credenciales de producción ni por
+# accidente. Correrlos después sería darles la URI de Mongo real a un montón de
+# código que nadie audita con esa lupa.
+#
+# ANTES DE COMPILAR: fallar acá cuesta segundos; fallar después cuesta también los
+# minutos del build. Portal compila en ~2 min y pica en 2,3 GB de memoria: no vale
+# la pena gastarlo en un commit cuyos tests ya sabemos que no pasan.
+#
+# POR QUÉ EN LA MINI Y NO EN GITHUB (decisión del 14/08/2026): los 630 tests de
+# lila tardan **21 segundos acá**, contra los 9+ minutos que GitHub tardaba sólo en
+# instalar dependencias. Y corren en el mismo entorno que produccion, no en un
+# runner limpio sin las envs. El Action quedó reducido a lo único que aportaba de
+# verdad: disparar el deploy.
+if [ -n "${TEST_CMD:-}" ]; then
+  log "Corriendo tests…"
+  inicio_tests=$(date +%s)
+  ( cd "$DEST" && eval "$TEST_CMD" ) >> "$LOG" 2>&1
+  rc_tests=$?
+  if [ $rc_tests -ne 0 ]; then
+    registrar fallo-tests "$(( $(date +%s) - INICIO ))"
+    # La release queda en disco para poder mirar qué falló, pero NO se activa:
+    # `current` sigue apuntando a la anterior y producción no se entera.
+    fatal "Tests fallaron (código $rc_tests) — la release NO se activa. Log: $LOG"
+  fi
+  log "Tests OK · $(( $(date +%s) - inicio_tests ))s"
+fi
+
+# Los archivos compartidos (secretos) viven FUERA de las releases y se enlazan.
+# Así rotar un secreto no obliga a rebuildear, y las releases no los duplican.
+for f in "${SHARED_FILES[@]}"; do
+  if [ ! -f "$SHARED/$f" ]; then
+    # Respaldo: tomarlo de la copia de trabajo. OJO — esto NO funciona cuando el
+    # repo es un mirror (una app nueva bootstrapeada), porque un mirror no tiene
+    # working tree del que copiar. Es correcto que no funcione: los secretos de
+    # una app nueva no están en su repositorio, alguien tiene que ponerlos.
+    [ -f "$REPO_DIR/$f" ] && cp "$REPO_DIR/$f" "$SHARED/$f" && chmod 600 "$SHARED/$f" \
+      && log "Primer deploy: $f copiado a shared/"
+  fi
+
+  # FALLA EN VEZ DE CALLAR. Antes, si el archivo no aparecía por ningún lado, este
+  # bucle simplemente no hacía nada: el build seguía adelante sin las variables y
+  # sin una sola línea en el log. Ese es exactamente el modo de fallo más caro que
+  # tuvimos —config ausente que no se anuncia— y en Next es peor todavía, porque
+  # las env vars del middleware se inlinean al compilar: la release queda
+  # permanentemente rota y hay que rebuildear para arreglarla, no basta con poner
+  # el archivo y reiniciar.
+  if [ ! -f "$SHARED/$f" ]; then
+    fatal "Falta $SHARED/$f — la app lo declara en SHARED_FILES.
+       Poné el archivo ahí (modo 600) y volvé a deployar. Si es una app nueva,
+       sus secretos no vienen en el repo: hay que crearlo a mano."
+  fi
+  ln -sfn "$SHARED/$f" "$DEST/$f"
+done
+
 log "Compilando…"
 (
   cd "$DEST" || exit 1
   [ -n "${NODE_OPTIONS_BUILD:-}" ] && export NODE_OPTIONS="$NODE_OPTIONS_BUILD"
-  eval "$BUILD_CMD"
+  eval "$COMPILE_CMD"
 ) >> "$LOG" 2>&1
 rc_build=$?
 
