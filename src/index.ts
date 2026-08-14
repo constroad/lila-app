@@ -52,6 +52,7 @@ import { startDispatchAutoCloseFlusher } from './services/dispatch-autoclose.ser
 import cron from 'node-cron';
 import fs from 'fs-extra';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 
@@ -622,7 +623,33 @@ async function startServer() {
 }
 
 // Iniciar si es módulo principal
-if (import.meta.url === `file://${process.argv[1]}`) {
+// ¿Se está ejecutando este archivo directamente (vs. importado por un test)?
+//
+// COMPARA RUTAS REALES, y no es una sutileza: `import.meta.url` SIEMPRE trae la
+// ruta física —Node resuelve los symlinks al cargar módulos— mientras que
+// `process.argv[1]` trae literalmente lo que se escribió en la línea de comandos.
+// Como producción corre desde `deploys/lila/current`, que es un symlink a la
+// release, las dos cadenas describen el mismo archivo y no coinciden nunca.
+//
+// El fallo que produce es de los peores que vi (14/08/2026, 30 min de caída):
+// el proceso arranca, carga todos los módulos, monta todas las rutas, no imprime
+// un solo error… y se queda para siempre en el event loop sin llamar a
+// `startServer()`. No escucha, no falla, no reinicia: launchd lo ve vivo y sano.
+// Y depende de CÓMO se lo invocó, así que "a mano funciona" era literalmente
+// cierto —una ruta relativa se resuelve contra el cwd físico y sí coincide—.
+const esEjecucionDirecta = (() => {
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  try {
+    return fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(argv1);
+  } catch {
+    // Si alguna de las dos rutas no existe, se cae al comportamiento anterior en
+    // vez de no arrancar: fallar cerrado acá significaría no levantar el servidor.
+    return import.meta.url === `file://${argv1}`;
+  }
+})();
+
+if (esEjecucionDirecta) {
   startServer();
 }
 
