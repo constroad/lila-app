@@ -38,6 +38,8 @@ case "$APP" in
     # "Cannot find package 'esbuild'" — que es devDependency y hace el build.
     # El peor tipo de bug: depende de quién lo invoca, no de lo que hace.
     BUILD_CMD="npm ci --include=dev --no-audit --no-fund && npm run build"
+    # Artefacto que PRUEBA que el build sirvió. Ver el bloque de verificación.
+    ARTEFACTO=dist/index.js
     SERVICE=com.constroad.lila
     HEALTH_URL=http://127.0.0.1:3001/health
     SHARED_FILES=(.env)
@@ -46,6 +48,14 @@ case "$APP" in
     REPO_DIR=/Users/jose/projects/Portal
     BRANCH=main
     BUILD_CMD="npm ci --include=dev --no-audit --no-fund && npm run build"
+    # BUILD_ID solo existe si `next build` llegó al final. `.next` a secas no
+    # sirve: se crea al empezar y queda a medias si el build muere en el medio.
+    ARTEFACTO=.next/BUILD_ID
+    # El build de Portal necesita ~6 GB; con el default de Node muere por OOM y
+    # —peor— sale con 0. Va como variable EXPORTADA y no como prefijo del comando:
+    # `VAR=x cmd1 && cmd2` solo se la pasa a cmd1, así que el prefijo llegaba al
+    # `npm ci` y no al `npm run build`, que es el que la necesita.
+    NODE_OPTIONS_BUILD="--max-old-space-size=6144"
     SERVICE=com.constroad.portal
     HEALTH_URL=http://127.0.0.1:3002/
     SHARED_FILES=(.env.local)
@@ -159,12 +169,33 @@ for f in "${SHARED_FILES[@]}"; do
 done
 
 log "Compilando…"
-if ! ( cd "$DEST" && eval "$BUILD_CMD" ) >> "$LOG" 2>&1; then
-  log "✗ BUILD FALLÓ — producción NO se tocó (sigue en $(readlink "$CURRENT" 2>/dev/null | xargs basename 2>/dev/null || echo 'sin release'))"
+(
+  cd "$DEST" || exit 1
+  [ -n "${NODE_OPTIONS_BUILD:-}" ] && export NODE_OPTIONS="$NODE_OPTIONS_BUILD"
+  eval "$BUILD_CMD"
+) >> "$LOG" 2>&1
+rc_build=$?
+
+# NO ALCANZA CON EL CÓDIGO DE SALIDA (incidente 2026-08-14): el build de Portal
+# crasheó por falta de memoria —stack trace de V8 en el log— y `npm run build`
+# igual salió con 0. Next se comió el crash de un worker de generación estática y
+# terminó "bien" sin producir `.next`. El script activó una release SIN BUILD.
+#
+# Con los plists ya apuntando a `current`, eso habría tumbado Portal: launchd
+# arrancando un Next sin build, en crash-loop, con KeepAlive reintentando para
+# siempre. Es la misma lección que el `tail` que enmascaró el exit code de npm:
+# **verificar el artefacto, no el código de salida.** El artefacto no miente.
+if [ $rc_build -ne 0 ] || [ ! -e "$DEST/$ARTEFACTO" ]; then
+  if [ $rc_build -eq 0 ]; then
+    log "✗ BUILD MINTIÓ: salió con 0 pero NO generó $ARTEFACTO"
+  else
+    log "✗ BUILD FALLÓ (código $rc_build)"
+  fi
+  log "  Producción NO se tocó (sigue en $(readlink "$CURRENT" 2>/dev/null | xargs basename 2>/dev/null || echo 'sin release'))"
   rm -rf "$DEST"
   exit 1
 fi
-log "Build OK"
+log "Build OK · artefacto verificado: $ARTEFACTO"
 
 ANTERIOR=$(readlink "$CURRENT" 2>/dev/null)
 activar "$DEST"; rc=$?
