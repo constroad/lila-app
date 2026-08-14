@@ -42,6 +42,13 @@ case "$APP" in
     ARTEFACTO=dist/index.js
     SERVICE=com.constroad.lila
     HEALTH_URL=http://127.0.0.1:3001/health
+    # MEDIDO: lila tarda ~85 s en responder. Abre el puerto AL FINAL, después de
+    # conectar Mongo y restaurar las sesiones de WhatsApp. Con el default de 60 s
+    # el health check daba por muerto un deploy sano y disparaba un auto-rollback
+    # innecesario — que además "fallaba" también, por la misma razón, y dejaba el
+    # log gritando que ni la release anterior servía. 240 s dan margen para un día
+    # con más sesiones o Mongo lento.
+    SALUD_TIMEOUT=240
     SHARED_FILES=(.env)
     ;;
   portal)
@@ -67,6 +74,8 @@ case "$APP" in
     NODE_OPTIONS_BUILD="--max-old-space-size=3072"
     SERVICE=com.constroad.portal
     HEALTH_URL=http://127.0.0.1:3002/
+    # Portal arranca en segundos: `next start` sirve apenas bindea.
+    SALUD_TIMEOUT=90
     SHARED_FILES=(.env.local)
     ;;
   *)
@@ -83,6 +92,22 @@ CONSERVAR=5
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 fatal() { log "✗ $*"; exit 1; }
+
+# Historial en JSONL, una línea por deploy (spec §5.5). Es lo que alimenta la
+# página de Deployments de Torre.
+#
+# SE ESCRIBE TAMBIÉN EN LOS FALLOS, a propósito: un historial que solo guarda los
+# éxitos miente sobre la salud del pipeline, y es justo lo que uno va a mirar
+# cuando algo anda mal. Ver un `fallo-build` de hace 3 minutos explica en un
+# vistazo por qué producción sigue en la versión vieja.
+#
+# `>>` sobre un archivo de texto es atómico para líneas cortas en un solo write,
+# así que dos deploys simultáneos de apps distintas no se corrompen entre sí.
+HISTORIAL=/Users/jose/deploys/deploys.jsonl
+registrar() {   # $1 = resultado, $2 = duración en segundos
+  printf '{"ts":%s,"app":"%s","sha":"%s","release":"%s","resultado":"%s","duracionSeg":%s}\n' \
+    "$(date +%s)000" "$APP" "${SHA:-}" "${NOMBRE:-}" "$1" "${2:-0}" >> "$HISTORIAL" 2>/dev/null || true
+}
 
 mkdir -p "$RELEASES" "$SHARED" "$(dirname "$LOG")"
 
@@ -104,14 +129,21 @@ listar() {
   done
 }
 
+# El timeout es POR APP y no un número global: lo que tarda cada una en estar
+# lista varía en un orden de magnitud, y un valor único obliga a elegir entre
+# rollbacks falsos (si es corto) o tardar una eternidad en detectar una caída
+# real (si es largo).
 salud_ok() {
-  local i
-  for i in $(seq 1 20); do
-    local code
+  local esperado=${SALUD_TIMEOUT:-90} transcurrido=0 code
+  while [ $transcurrido -lt $esperado ]; do
     code=$(/usr/bin/curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null)
-    [[ "$code" =~ ^[23] ]] && return 0
-    sleep 3
+    if [[ "$code" =~ ^[23] ]]; then
+      [ $transcurrido -gt 0 ] && log "  (respondió tras ${transcurrido}s)"
+      return 0
+    fi
+    sleep 3; transcurrido=$((transcurrido + 3))
   done
+  log "  (sin respuesta tras ${esperado}s)"
   return 1
 }
 
@@ -158,6 +190,7 @@ git fetch origin "$BRANCH" --quiet || fatal "git fetch falló"
 [ -z "$SHA" ] && SHA=$(git rev-parse "origin/$BRANCH")
 SHORT=$(git rev-parse --short "$SHA") || fatal "SHA inválido: $SHA"
 
+INICIO=$(date +%s)
 NOMBRE="$(date '+%Y%m%d-%H%M%S')-$SHORT"
 DEST="$RELEASES/$NOMBRE"
 log "=== Deploy de $APP · $SHORT → $NOMBRE ==="
@@ -202,6 +235,7 @@ if [ $rc_build -ne 0 ] || [ ! -e "$DEST/$ARTEFACTO" ]; then
   fi
   log "  Producción NO se tocó (sigue en $(readlink "$CURRENT" 2>/dev/null | xargs basename 2>/dev/null || echo 'sin release'))"
   rm -rf "$DEST"
+  registrar fallo-build "$(( $(date +%s) - INICIO ))"
   exit 1
 fi
 log "Build OK · artefacto verificado: $ARTEFACTO"
@@ -226,12 +260,14 @@ activar "$DEST"; rc=$?
 
 if salud_ok; then
   log "✓ Deploy OK — $APP responde en $HEALTH_URL"
+  registrar ok "$(( $(date +%s) - INICIO ))"
 else
   log "✗ $APP NO responde tras el deploy"
   if [ -n "$ANTERIOR" ] && [ -d "$ANTERIOR" ]; then
     log "AUTO-ROLLBACK a $(basename "$ANTERIOR")"
     activar "$ANTERIOR"
     salud_ok && log "✓ Rollback OK: producción restaurada" || log "🚨 Ni la release anterior responde — revisar a mano"
+    registrar fallo-salud "$(( $(date +%s) - INICIO ))"
   else
     log "🚨 No hay release anterior para volver"
   fi
