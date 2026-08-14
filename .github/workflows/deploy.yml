@@ -1,0 +1,78 @@
+# CI y disparo del deploy en la Mac mini.
+#
+# El build corre en runners HOSTED de GitHub, nunca en un runner self-hosted en
+# la mini: meter CI en el host de producción mezcla riesgos (un test puede
+# consumir toda la RAM de la máquina que sirve WhatsApp), y los runners en macOS
+# tienen fallas documentadas de estado fantasma con LaunchAgents.
+#
+# Lo único que se manda a Torre es `app` + `sha`. NO el comando de build, ni
+# rutas, ni variables: el *qué* y el *cómo* salen de `torre.apps.json`, que está
+# versionado en el repo de Torre. Consecuencia concreta: alguien que consiga
+# editar ESTE archivo no gana ejecución arbitraria en la mini — como mucho pide
+# el deploy de un SHA de una app ya registrada.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Un solo deploy en vuelo por rama. Sin esto, dos push seguidos disparan dos
+  # deploys que se pisan el symlink `current`.
+  group: deploy-lila
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  desplegar:
+    needs: verificar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Firmar y disparar el deploy
+        env:
+          SECRETO: ${{ secrets.TORRE_HMAC }}
+          TORRE_URL: ${{ vars.TORRE_URL || 'https://torre.constroad.com' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SECRETO:-}" ]; then
+            echo "::error::Falta el secreto TORRE_HMAC en este repo"
+            exit 1
+          fi
+
+          BODY="{\"app\":\"lila\",\"sha\":\"${GITHUB_SHA}\"}"
+          TS=$(date +%s000)
+
+          # La firma cubre "<timestamp>.<body>", no solo el body: sin el
+          # timestamp adentro, capturar UNA petición válida permitiría
+          # reenviarla para siempre y forzar deploys.
+          FIRMA=$(printf '%s' "${TS}.${BODY}" \
+            | openssl dgst -sha256 -hmac "$SECRETO" -r | cut -d' ' -f1)
+
+          CODIGO=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
+            --max-time 30 \
+            -X POST "${TORRE_URL}/api/hooks/deploy" \
+            -H 'Content-Type: application/json' \
+            -H "x-torre-timestamp: ${TS}" \
+            -H "x-torre-signature: ${FIRMA}" \
+            --data-raw "$BODY")
+
+          echo "Torre respondió ${CODIGO}: $(cat /tmp/resp.txt)"
+          # 202 = encolado. Se acepta 409 (ya hay uno en curso) para no marcar el
+          # workflow en rojo por una condición normal de dos push seguidos.
+          case "$CODIGO" in
+            202) echo "::notice::Deploy encolado" ;;
+            409) echo "::warning::Ya había un deploy en curso; este push no lo interrumpe" ;;
+            *)   echo "::error::Torre rechazó el disparo (HTTP $CODIGO)"; exit 1 ;;
+          esac
