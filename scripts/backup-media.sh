@@ -61,13 +61,22 @@ SOURCE="$(resolver_source)"
 # como el usuario, así que incluirla solo lograría un error de permisos por
 # corrida. La copia de ~/.cloudflared/ tiene el mismo contenido y sí es legible.
 CONFIG_CRITICA=()
-for ruta in "$HOME/.cloudflared" /usr/local/etc/cloudflared; do
+for ruta in "$HOME/.cloudflared" /usr/local/etc/cloudflared "$HOME/.config/constroad"; do
   [ -d "$ruta" ] || continue
   if compgen -G "$ruta"/*.json > /dev/null 2>&1 && \
      [ -r "$(compgen -G "$ruta"/*.json | head -1)" ]; then
     CONFIG_CRITICA+=("$ruta")
   fi
 done
+# `~/.config/constroad` guarda los secretos HMAC de despliegue (torre-hmac.json).
+# Perderlos no tumba nada: los deploys automáticos empiezan a dar 401 y hay que
+# regenerar cada secreto desde Torre y volver a pegarlo en GitHub. Molesto, no
+# catastrófico — pero cuesta 260 bytes evitarlo.
+#
+# OJO con lo que NO va acá: `restic-media.pass` vive en ese mismo directorio y
+# guardarla dentro del repo que ella misma abre sería circular. Por eso se
+# incluyen solo los `*.json` de la carpeta, no la carpeta entera... salvo que
+# restic reciba el directorio. Se verifica abajo con un EXCLUDE explícito.
 PASSWORD_FILE="$BACKUP_PASSWORD_FILE"
 ENV_FILE="$BACKUP_ENV_FILE"
 LOG_FILE="${BACKUP_LOG_FILE:-${BACKUP_LOG_DIR}/backup-media.log}"
@@ -87,6 +96,11 @@ KEEP_MONTHLY="${BACKUP_KEEP_MONTHLY:-6}"
 # faltan. Excluirlos casi parte a la mitad el conteo de archivos, que es lo que
 # domina el tiempo de escaneo. `temp/` es descartable por definición.
 EXCLUDES=(
+  # La contraseña del repositorio restic NO entra al repositorio que ella misma
+  # abre: sería una dependencia circular — si se pierde, el backup que la
+  # contiene es justo el que no se puede descifrar. Vive solo en el gestor de
+  # contraseñas (docs/BACKUP-RUNBOOK.md).
+  --exclude "*.pass"
   --exclude ".thumbs"
   --exclude ".DS_Store"
   --exclude "._*"
