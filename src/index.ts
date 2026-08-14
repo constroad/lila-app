@@ -232,8 +232,49 @@ app.use(mongoSanitize);
 // Middleware de logging (apiLimiter ya corrió arriba, antes del parseo)
 app.use(requestLogger);
 
-// Health check
+/**
+ * ¿Terminó de inicializar? El puerto se abre ANTES de que esto sea `true`.
+ *
+ * POR QUÉ EXISTE (medido 2026-08-14): lila tardaba **138 segundos** en volver tras
+ * un deploy, porque `app.listen()` se llamaba al final —después de Mongo, del
+ * scheduler y de restaurar las sesiones de WhatsApp—. Durante esos dos minutos no
+ * había NADIE escuchando en el puerto, así que cloudflared recibía "connection
+ * refused" y Cloudflare le mostraba a los usuarios su página de error genérica.
+ *
+ * Abrir el puerto de entrada cambia el síntoma de "el sitio se cayó" a "el sitio
+ * está arrancando", que además es verdad. Pero exige distinguir dos estados que
+ * antes eran uno solo, y de ahí esta bandera.
+ */
+let inicializado = false;
+export const marcarInicializado = () => {
+  inicializado = true;
+};
+
+/**
+ * Health check con DOS estados, y la distinción no es cosmética.
+ *
+ * `deploy.sh` decide con esta ruta si una release nueva sirve, y si no responde
+ * dispara un auto-rollback. Si devolviera 200 apenas se abre el puerto, el deploy
+ * se daría por bueno en un segundo —antes de saber si Mongo conectó o si las
+ * sesiones de WhatsApp volvieron— y se perdería justamente la verificación que
+ * hace seguro deployar. Por eso el 200 sigue significando exactamente lo que
+ * significaba: **lila está lista de verdad**.
+ *
+ * El 503 mientras tanto es para el otro público: un cliente que llega en medio del
+ * arranque recibe una respuesta que explica qué pasa y un `Retry-After`, en vez de
+ * un rechazo de conexión que nadie puede interpretar.
+ */
 app.get('/health', (req, res) => {
+  if (!inicializado) {
+    res.setHeader('Retry-After', '30');
+    res.status(503).json({
+      success: false,
+      status: 'starting',
+      message: 'Server is starting: restaurando sesiones y conexiones',
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
   res.status(200).json({
     success: true,
     message: 'Server is running',
@@ -247,6 +288,35 @@ app.get('/health', (req, res) => {
 // exponer nada): es un health-check implícito, no una ruta de la API.
 app.get('/', (_req, res) => {
   res.status(200).json({ status: 'ok' });
+});
+
+/**
+ * Puerta de arranque: nada de la API se atiende hasta que lila esté lista.
+ *
+ * IMPRESCINDIBLE AL ABRIR EL PUERTO TEMPRANO. Las rutas de Express se registran al
+ * cargar el módulo, así que en cuanto `app.listen()` corre están TODAS vivas —
+ * aunque Mongo todavía no haya conectado y las sesiones de WhatsApp no se hayan
+ * restaurado—. Sin esta puerta, adelantar el `listen` no arreglaría nada: cambiaría
+ * un "connection refused" honesto por errores internos peores, del tipo
+ * `MongooseError: buffering timed out`, que además ensucian los logs justo en el
+ * arranque y hacen creer que el deploy salió mal.
+ *
+ * Va ANTES de montar las rutas y DESPUÉS de `/health` y `/`, que son las dos que sí
+ * deben contestar durante el arranque: una para que `deploy.sh` sepa en qué estado
+ * está, la otra para que un navegador no vea un error.
+ *
+ * El 503 con `Retry-After` es la respuesta correcta y no un 500: dice "todavía no,
+ * volvé a intentar", que es exactamente lo que pasa. Los clientes HTTP seriamente
+ * escritos —y Cloudflare— saben qué hacer con eso.
+ */
+app.use((req, res, next) => {
+  if (inicializado) return next();
+  res.setHeader('Retry-After', '30');
+  res.status(503).json({
+    success: false,
+    status: 'starting',
+    message: 'lila está arrancando (restaurando sesiones y conexiones). Reintentá en unos segundos.',
+  });
 });
 
 // Dashboard de salud (Basic Auth con API_SECRET_KEY; fail-closed sin esa env).
@@ -380,6 +450,20 @@ app.use(errorHandler);
 async function startServer() {
   try {
     logger.info('🚀 Starting WhatsApp Server...');
+
+    // EL PUERTO SE ABRE ACÁ, ANTES de toda la inicialización pesada.
+    //
+    // MEDIDO (2026-08-14): con el `listen` al final, lila tardaba **138 s** en
+    // volver tras un deploy y en todo ese rato no había nadie escuchando — el
+    // túnel recibía "connection refused" y Cloudflare mostraba su página de error.
+    // Abriéndolo primero, hay alguien atendiendo en ~1 s.
+    //
+    // Lo que se sirve mientras tanto lo decide la puerta de arranque de más
+    // arriba: 503 con `Retry-After` para la API, y `/health` diciendo `starting`.
+    // Nadie recibe una respuesta a medias.
+    const server = app.listen(config.port, () => {
+      logger.info(`🔌 Puerto ${config.port} abierto — inicializando servicios…`);
+    });
 
     // Inicializar QuotaValidator (Fase 10 - MongoDB only)
     logger.info('Initializing Quota Validator...');
@@ -519,15 +603,17 @@ async function startServer() {
       });
     }
 
-    // Iniciar servidor HTTP
-    const server = app.listen(config.port, () => {
-      logger.info(`✅ Server running on port ${config.port}`);
-      logger.info(`📊 Environment: ${config.nodeEnv}`);
-      logger.info(`📁 WhatsApp sessions dir: ${config.whatsapp.sessionDir}`);
-      // Avisa si falta el binario nativo: es lo que se olvida al cambiar de
-      // máquina o al armar la imagen del contenedor.
-      void logLinearizeCapabilities();
-    });
+    // A PARTIR DE ACÁ lila atiende de verdad: la puerta de arranque deja pasar y
+    // `/health` empieza a devolver 200. `deploy.sh` espera exactamente este
+    // momento, así que el auto-rollback conserva la misma garantía que antes:
+    // un deploy solo se da por bueno cuando la app está realmente lista.
+    marcarInicializado();
+    logger.info(`✅ Server running on port ${config.port}`);
+    logger.info(`📊 Environment: ${config.nodeEnv}`);
+    logger.info(`📁 WhatsApp sessions dir: ${config.whatsapp.sessionDir}`);
+    // Avisa si falta el binario nativo: es lo que se olvida al cambiar de
+    // máquina o al armar la imagen del contenedor.
+    void logLinearizeCapabilities();
 
     const stopTelegramQueueFlusher = startTelegramQueueFlusher();
     // F8-C: recordatorios "marca tu llegada" al chofer (ETA + 10%).
