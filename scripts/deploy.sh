@@ -175,11 +175,34 @@ case "$ARG" in
   --list) listar; exit 0 ;;
   --rollback)
     actual=$(readlink "$CURRENT" 2>/dev/null | xargs basename 2>/dev/null)
-    anterior=$(ls -1 "$RELEASES" | sort -r | grep -v "^${actual}$" | head -1)
+    PEDIDA="${3:-}"
+    if [ -n "$PEDIDA" ]; then
+      # DESTINO EXPLÍCITO — llega desde la UI de Torre, así que se valida como
+      # entrada hostil aunque venga de un panel con contraseña:
+      #   1. Formato estricto: <fecha>-<hora>-<sha>. Nada de `..` ni `/`.
+      #   2. Tiene que EXISTIR como directorio en releases/. No se concatena una
+      #      ruta con lo que llegó: se comprueba contra lo que hay en disco.
+      # Sin el paso 2, un nombre con formato válido pero inexistente dejaría el
+      # symlink apuntando a la nada y el servicio en crash-loop.
+      case "$PEDIDA" in
+        *[!a-zA-Z0-9-]*|*..*) fatal "Nombre de release inválido: $PEDIDA" ;;
+      esac
+      [ -d "$RELEASES/$PEDIDA" ] || fatal "La release $PEDIDA no existe en disco"
+      [ "$PEDIDA" = "$actual" ] && fatal "La release $PEDIDA ya es la activa"
+      anterior="$PEDIDA"
+    else
+      anterior=$(ls -1 "$RELEASES" | sort -r | grep -v "^${actual}$" | head -1)
+    fi
     [ -z "$anterior" ] && fatal "No hay release anterior a la que volver"
     log "ROLLBACK: $actual → $anterior (sin rebuild)"
     activar "$RELEASES/$anterior"
-    salud_ok && log "✓ Rollback OK, $APP responde" || log "⚠️  $APP no responde tras el rollback"
+    if salud_ok; then
+      log "✓ Rollback OK, $APP responde"
+      SHA=""; NOMBRE="$anterior"; registrar rollback 0
+    else
+      log "⚠️  $APP no responde tras el rollback"
+      SHA=""; NOMBRE="$anterior"; registrar fallo-salud 0
+    fi
     exit 0 ;;
 esac
 
