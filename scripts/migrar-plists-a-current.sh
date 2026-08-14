@@ -24,7 +24,7 @@ for app in lila portal; do
   DEST="$BASE/$app/current"
   [ -e "$DEST" ] || { echo "✗ No existe $DEST — deployá $app antes de migrar"; exit 1; }
 done
-[ -f "$BASE/lila/current/resilient-dev.cjs" ] || { echo "✗ Falta resilient-dev.cjs en la release de lila"; exit 1; }
+[ -f "$BASE/lila/current/node_modules/tsx/dist/cli.mjs" ] || { echo "✗ Falta tsx en la release de lila"; exit 1; }
 [ -f "$BASE/portal/current/node_modules/next/dist/bin/next" ] || { echo "✗ Falta el binario de next en la release de portal"; exit 1; }
 [ -d "$BASE/portal/current/.next" ] || { echo "✗ Falta el build (.next) en la release de portal"; exit 1; }
 echo "✓ Ambas releases están completas"
@@ -66,7 +66,10 @@ mkdir -p /Users/jose/projects/lila-app/logs /Users/jose/projects/Portal/logs
 escribir_plist com.constroad.lila "$BASE/lila/current" \
   /Users/jose/projects/lila-app/logs/lila-app.log \
   /Users/jose/projects/lila-app/logs/lila-app-err.log \
-  /usr/local/bin/node "$BASE/lila/current/resilient-dev.cjs"
+  /usr/local/bin/node
+  # tsx DIRECTO: ver nota sobre KeepAlive en migrate-to-launchdaemons.sh
+  "$BASE/lila/current/node_modules/tsx/dist/cli.mjs"
+  "$BASE/lila/current/src/index.ts"
 
 escribir_plist com.constroad.portal "$BASE/portal/current" \
   /Users/jose/projects/Portal/logs/portal.log \

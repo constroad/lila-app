@@ -54,7 +54,13 @@ crear_plist() {
 }
 
 crear_plist com.constroad.lila "$LILA" "$LILA/logs/lila-app.log" "$LILA/logs/lila-app-err.log" \
-  /usr/local/bin/node "$LILA/resilient-dev.cjs"
+  /usr/local/bin/node
+  # tsx DIRECTO, sin `resilient-dev.cjs`: ese wrapper reinicia al hijo por su
+  # cuenta, así que launchd nunca ve la caída y su KeepAlive —que hace
+  # exactamente lo mismo— no llega a entrar nunca. Dos supervisores para un
+  # proceso, y el de abajo tapando al de arriba.
+  "$LILA/node_modules/tsx/dist/cli.mjs"
+  "$LILA/src/index.ts"
 
 crear_plist com.constroad.portal "$PORTAL" "$PORTAL/logs/portal.log" "$PORTAL/logs/portal-err.log" \
   /usr/local/bin/node "$PORTAL/node_modules/next/dist/bin/next" start -p 3002
