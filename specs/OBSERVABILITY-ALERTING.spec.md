@@ -304,6 +304,116 @@ equivalentes): acá los dos caminos son "conseguir el lease al arrancar" y
 `index.ts` registrando `restoreAllSessions`. +2 tests que fallan sin el fix.
 
 
+## 17. Un código de salida 0 no prueba que el trabajo se hizo: verificá el ARTEFACTO
+
+**Tres incidentes el mismo día (2026-08-14), todos del mismo molde.**
+
+1. Un build de Portal se leyó como exitoso porque el script miraba el exit code de
+   `tail`, no el de `npm` — la tubería devuelve el código del ÚLTIMO comando.
+2. `next build` **crasheó por falta de memoria**, dejó un stack trace de V8 en el
+   log y **salió con 0**. Next se comió el crash de un worker de generación
+   estática. El deploy lo dio por bueno y **activó una release sin `.next`**.
+3. `npm ci` "instaló bien" pero omitió las devDependencies, así que el build
+   siguiente falló por un paquete ausente (ver #19).
+
+**Regla.** Un proceso que termina no es un proceso que funcionó. Todo paso que
+produce algo tiene que verificarse por **su producto**, no por su código de
+salida: ¿existe el archivo que debía generar? ¿tiene tamaño razonable? ¿tiene el
+marcador de completitud?
+
+El artefacto se elige con cuidado: para Next se comprueba `.next/BUILD_ID` y NO
+`.next` a secas, porque ese directorio se crea al EMPEZAR y queda a medias si el
+build muere en el medio. El artefacto correcto es el que **solo puede existir si
+el trabajo llegó al final**.
+
+**Aplicado en.** `deploy.sh` → variable `ARTEFACTO` por app (`dist/index.js`,
+`.next/BUILD_ID`) y un chequeo que distingue "falló" de "mintió".
+
+
+## 18. Contar por IP es contar por oficina: el NAT rompe todo límite por IP
+
+**Incidente (2026-08-14). Costó usuarios reales bloqueados, dos veces.**
+
+Primero en `scannerShield` de Portal: baneaba 30 minutos a cualquier IP tras 40
+peticiones en 5 minutos. En los logs quedaron IPs bloqueadas cuyo último path era
+`/api/pwa/manifest` y `/api/public/provision` — tráfico normal de la app.
+
+Horas después, la MISMA falla en una regla de rate limiting de Cloudflare sobre
+`/api/auth/*`, 10 peticiones cada 10 segundos. Resultado: **55 bloqueos** y
+usuarios reportando cierres de sesión, porque NextAuth consulta
+`/api/auth/session` de forma continua y sin eso la sesión se cae.
+
+**Por qué duele acá en particular:** en una obra o una oficina TODOS los
+dispositivos salen por una sola IP pública. Con el gate público-interno polleando
+cada 60 s en dos efectos —~2 req/min por dispositivo— bastan tres o cuatro
+personas para cruzar cualquier umbral pensado "por usuario".
+
+**Regla.** Antes de fijar un límite por IP, calcular cuántos DISPOSITIVOS pueden
+compartir esa IP y multiplicar. Y separar qué se cuenta:
+
+- **Sondas** (`.env`, `.git`, `wp-config.php`) — un cliente legítimo NUNCA las
+  pide. Tres bastan para banear y no hay falso positivo posible.
+- **Tráfico normal** — solo puede ganarse un 429 temporal, con un umbral
+  calculado sobre el NAT (en Portal: 1200/5min ≈ 120 dispositivos simultáneos).
+
+Un contador único para ambos convierte a un usuario intenso en un atacante.
+
+**Regla derivada, y la más cara:** un límite en el EDGE no distingue nada — cuenta
+peticiones a un prefijo. Si el prefijo incluye una ruta que la app consulta sola
+(sesión, health, manifest), el límite ya no protege el login: corta la app.
+
+**Aplicado en.** `scannerShield.ts` → contadores separados (`sondas` vs
+`requests`) + lista blanca por prefijo de IP. La regla de Cloudflare se
+**desactivó**: Portal ya tiene `rateLimiter.ts` propio y el escudo cubre el
+escaneo.
+
+
+## 19. El entorno heredado cambia el comportamiento: probá como lo va a invocar la máquina
+
+**Incidente (2026-08-14).** El deploy de lila funcionaba corriéndolo a mano y
+fallaba disparado por el webhook, con `Cannot find package 'esbuild'`.
+
+Causa: `npm ci` **omite las devDependencies cuando encuentra `NODE_ENV=production`
+en el entorno**. Torre corre como LaunchDaemon con `NODE_ENV=production` en su
+plist, y esa variable se hereda al proceso del deploy que lanza. Desde una
+terminal esa variable no existe.
+
+Habría fallado el **100% de los deploys automáticos y el 0% de las pruebas
+manuales** — el peor tipo de bug, porque el resultado depende de QUIÉN invoca y no
+de lo que hace el comando.
+
+**Regla.** Probar en las mismas condiciones en que va a correr: mismo usuario,
+mismo entorno, mismo invocador. Y hacer explícito lo que no debe depender del
+ambiente (`--include=dev` gana sobre `NODE_ENV`).
+
+**Corolario de shell:** `VAR=x cmd1 && cmd2` **solo** le pasa `VAR` a `cmd1`. El
+techo de memoria que se puso como prefijo llegaba al `npm ci` y no al
+`npm run build`, que era el que lo necesitaba. Para toda una cadena, `export`.
+
+
+## 20. Un timeout de salud mal calibrado revierte deploys buenos
+
+**Incidente (2026-08-14).** Un deploy sano de lila se marcó como fallido, disparó
+un auto-rollback innecesario, y el rollback "también falló" — dejando el log
+gritando que ni la release anterior servía, cuando lila estaba perfecta.
+
+Causa: el health check esperaba 60 s fijos. **Medido: lila tarda 85 s en frío y
+138 s tras un deploy**, porque abre el puerto AL FINAL — primero conecta Mongo y
+restaura las sesiones de WhatsApp.
+
+**Regla.** El timeout de salud se **mide**, no se estima, y va **por app**: lo que
+tarda cada una en estar lista varía en un orden de magnitud. Un valor único obliga
+a elegir entre rollbacks falsos (si es corto) o tardar una eternidad en detectar
+una caída real (si es largo).
+
+Y lo más importante: **un auto-rollback que se dispara por un arranque lento es
+peor que no tener auto-rollback.** Revierte deploys buenos y enseña a desconfiar
+del pipeline, que es cuando la gente empieza a deployar a mano.
+
+**Aplicado en.** `deploy.sh` → `SALUD_TIMEOUT` por app (lila 240 s, Portal 90 s) y
+el log registra cuánto tardó en responder, para poder recalibrar con datos.
+
+
 ---
 
 ## Checklist al agregar una alerta o un chequeo
@@ -324,3 +434,20 @@ equivalentes): acá los dos caminos son "conseguir el lease al arrancar" y
 - [ ] Si nombrás una ruta/comando en una propuesta: ¿aclaraste que aún no existe?
 - [ ] Si un recurso puede conseguirse TARDE (failover/retry): ¿ese camino hace lo
       mismo que el inicial, o se queda a medias reteniéndolo sin usarlo?
+
+### Al agregar un paso de build o deploy
+
+- [ ] ¿Verificás el ARTEFACTO que produce, o confiás en el código de salida?
+- [ ] ¿El artefacto elegido solo puede existir si el trabajo llegó al final?
+- [ ] ¿Hay una tubería que pueda enmascarar el código de salida real?
+- [ ] ¿Lo probaste como lo va a invocar la MÁQUINA (mismo usuario, mismo entorno)?
+- [ ] Si usás `VAR=x` como prefijo: ¿aplica a toda la cadena, o solo al primero?
+- [ ] ¿El timeout de salud está MEDIDO para esa app, o copiado de otra?
+
+### Al fijar cualquier límite por IP
+
+- [ ] ¿Cuántos dispositivos pueden compartir esa IP pública? (obra, oficina, NAT)
+- [ ] ¿Separás sondas de tráfico normal, o un usuario intenso cuenta como atacante?
+- [ ] Si el límite está en el EDGE: ¿el prefijo incluye alguna ruta que la app
+      consulta sola (sesión, health, manifest)? Ahí el límite corta la app, no al
+      atacante.
