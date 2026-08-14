@@ -78,8 +78,34 @@ case "$APP" in
     SALUD_TIMEOUT=90
     SHARED_FILES=(.env.local)
     ;;
+  torre)
+    REPO_DIR=/Users/jose/projects/torre
+    BRANCH=main
+    BUILD_CMD="npm ci --include=dev --no-audit --no-fund && npm run build"
+    ARTEFACTO=.next/BUILD_ID
+    SERVICE=com.constroad.torre
+    # `/api/health` y NO `/`: la raíz está detrás del Basic Auth del middleware y
+    # devuelve 401, que el chequeo leería como "no arrancó" y dispararía un
+    # auto-rollback de un deploy sano. `/api/health` está exento a propósito.
+    HEALTH_URL=http://127.0.0.1:4000/api/health
+    SALUD_TIMEOUT=90
+    # Torre lee TORRE_USER/TORRE_PASSWORD desde `middleware.ts`, que corre en el
+    # runtime Edge: ahí Next **inlinea** las env vars al COMPILAR, no al arrancar.
+    # Por eso este archivo tiene que estar enlazado antes del build —lo está, el
+    # enlace de shared files pasa unas líneas antes que `eval "$BUILD_CMD"`—. Si
+    # se invirtiera ese orden, el middleware compilaría con las credenciales en
+    # `undefined` y el fail-closed devolvería 503 a todo el panel.
+    SHARED_FILES=(.env.local)
+    # ATENCIÓN — TORRE SE DEPLOYA A SÍ MISMA: este script reinicia el servicio que
+    # muy posiblemente lo lanzó. Por eso el webhook rechaza `torre` con 409 y esto
+    # se corre A MANO desde una terminal, donde el padre es la shell y no el
+    # proceso que se reinicia. El riesgo que se evita no es la molestia de perder
+    # el stream de logs: es que launchd se lleve el script a mitad de camino y
+    # deje `current` apuntando a una release que nadie llegó a verificar, sin el
+    # rollback automático que justamente cubre ese caso.
+    ;;
   *)
-    echo "Uso: $0 {lila|portal} [sha|--rollback|--list]"; exit 1 ;;
+    echo "Uso: $0 {lila|portal|torre} [sha|--rollback|--list]"; exit 1 ;;
 esac
 
 BASE=/Users/jose/deploys/$APP

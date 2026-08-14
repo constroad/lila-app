@@ -416,6 +416,43 @@ el log registra cuánto tardó en responder, para poder recalibrar con datos.
 
 ---
 
+### 21. Un health check contra un puerto no prueba que la release nueva sea la que responde
+
+**Qué pasó (14/08/2026, primer deploy de torre).** El deploy compiló la release,
+apuntó `current` a ella, reinició el servicio y reportó `✓ Deploy OK — torre
+responde`. Todo cierto y todo irrelevante: el plist de torre todavía apuntaba al
+árbol de git, así que lo que contestó en el 4000 fue el proceso viejo. La release
+nueva no se ejecutó ni un segundo, y el pipeline la dio por buena.
+
+**Por qué es la lección #17 otra vez, disfrazada.** Aquella decía "verificá el
+artefacto, no el código de salida". Esta es el escalón siguiente: verificar el
+artefacto tampoco alcanza si después no se comprueba que *ese* artefacto es el
+que está sirviendo. Un chequeo por puerto responde una pregunta más débil de la
+que uno cree: no dice "la versión nueva anda", dice "alguien atiende ahí".
+
+**Por qué muerde justo en el 0-1.** Es imposible en régimen —el plist ya apunta a
+`current`— y casi seguro la primera vez, cuando el servicio todavía arranca desde
+el repo. Es decir: aparece exactamente cuando nadie tiene aún la costumbre de
+desconfiar del resultado.
+
+**Qué hacer.**
+- Antes de dar por buena la primera release de una app, levantarla en un puerto
+  libre y pegarle ahí. Es la única prueba que no puede confundirse de proceso.
+- Chequear también lo que el ejercicio de auth revela: en Next, `middleware.ts`
+  corre en runtime Edge y las env vars se **inlinean al compilar**. Si los shared
+  files se enlazaran después del build, las credenciales quedarían `undefined` y
+  el fail-closed devolvería 503 a todo. Un 401 sin credenciales y un 200 con
+  ellas prueban que el orden fue el correcto.
+- Cambiar `ProgramArguments` o `WorkingDirectory` exige `bootout` + `bootstrap`:
+  `kickstart` reinicia el proceso pero relee la definición cacheada, así que
+  revive en la ruta vieja y el plist nuevo parece no haber hecho nada.
+
+**Checklist de primer deploy de una app**
+- [ ] La release responde en un puerto aislado, no solo "el puerto responde".
+- [ ] El proceso que sirve tiene su ruta dentro de `deploys/<app>/current`.
+- [ ] Auth: 401 sin credenciales, 200 con ellas (prueba el inlineado de Edge).
+- [ ] Tras cambiar el plist: `bootout` + `bootstrap`, no `kickstart`.
+
 ## Checklist al agregar una alerta o un chequeo
 
 - [ ] ¿Cuántas veces por día puede dispararse? ¿Necesita dedupe por firma?
