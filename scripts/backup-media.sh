@@ -41,6 +41,33 @@ source "$(dirname "${BASH_SOURCE[0]}")/backup-common.sh"
 
 REPO="$MEDIA_REPO"
 SOURCE="$(resolver_source)"
+
+# ---- config crítica que NO son medios --------------------------------------
+#
+# POR QUÉ (2026-08-13): el respaldo cubría solo FILE_STORAGE_ROOT. La credencial
+# del túnel de Cloudflare vive fuera de ahí, y es LA LLAVE del túnel: si se
+# pierde hay que rehacer el túnel entero y volver a crear todos los registros DNS
+# —o sea, constroad.com y lila.constroad.com caídos hasta rehacerlo a mano—.
+# Pesa 175 bytes y casi nunca cambia; con la deduplicación de restic el costo de
+# incluirla es indistinguible de cero.
+#
+# LO QUE NO VA ACÁ, Y ES DELIBERADO: la contraseña del repositorio restic
+# (`restic-media.pass`). Guardarla DENTRO del repo que ella misma abre es una
+# dependencia circular: si se pierde, el backup que la contiene es justamente el
+# que no se puede abrir. Esa sigue viviendo solo en el gestor de contraseñas
+# (ver docs/BACKUP-RUNBOOK.md).
+# Se exige poder LEER una credencial, no solo que el directorio exista: la copia
+# de /usr/local/etc/cloudflared/ es de root con permisos 600 y este backup corre
+# como el usuario, así que incluirla solo lograría un error de permisos por
+# corrida. La copia de ~/.cloudflared/ tiene el mismo contenido y sí es legible.
+CONFIG_CRITICA=()
+for ruta in "$HOME/.cloudflared" /usr/local/etc/cloudflared; do
+  [ -d "$ruta" ] || continue
+  if compgen -G "$ruta"/*.json > /dev/null 2>&1 && \
+     [ -r "$(compgen -G "$ruta"/*.json | head -1)" ]; then
+    CONFIG_CRITICA+=("$ruta")
+  fi
+done
 PASSWORD_FILE="$BACKUP_PASSWORD_FILE"
 ENV_FILE="$BACKUP_ENV_FILE"
 LOG_FILE="${BACKUP_LOG_FILE:-${BACKUP_LOG_DIR}/backup-media.log}"
@@ -186,8 +213,8 @@ Si la Mac mini muere y la clave vivía solo acá, los backups son irrecuperables
   local started elapsed out rc
   started=$(date +%s)
 
-  log "Respaldando $SOURCE"
-  out=$("$RESTIC" backup "$SOURCE" "${EXCLUDES[@]}" \
+  log "Respaldando $SOURCE${CONFIG_CRITICA[*]:+ + config crítica (${CONFIG_CRITICA[*]})}"
+  out=$("$RESTIC" backup "$SOURCE" ${CONFIG_CRITICA[@]+"${CONFIG_CRITICA[@]}"} "${EXCLUDES[@]}" \
         --tag medios --tag automatico \
         --exclude-caches 2>&1)
   rc=$?

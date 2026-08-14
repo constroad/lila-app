@@ -3,6 +3,16 @@
 Documento **operativo**: se lee cuando algo ya se rompió, o cuando se migra de máquina.
 El diseño y el porqué de cada decisión están en `specs/architecture-as-is.md` §Backups.
 
+> **Qué se respalda además de los medios (desde 2026-08-13):** `~/.cloudflared/`,
+> que contiene **la credencial del túnel de Cloudflare**. Es la llave del túnel: si
+> se pierde hay que rehacerlo y volver a crear todos los registros DNS, con
+> `constroad.com` y `lila.constroad.com` caídos mientras tanto. Pesa 175 bytes.
+>
+> Para recuperarla:
+> ```bash
+> restic restore latest --target /tmp/rec --include "*/.cloudflared/*"
+> ```
+>
 > **Lo único imprescindible:** la clave del repositorio.
 > Vive en `~/.config/constroad-backup/restic-media.pass` **y** debe existir una copia
 > fuera de esta máquina (gestor de contraseñas). Sin ella los backups son
