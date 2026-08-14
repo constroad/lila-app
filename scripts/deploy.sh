@@ -303,6 +303,35 @@ if [ -d "$DEST/.next/cache" ]; then
   log "Caché de build podada: $((antes/1024)) MB → $((despues/1024)) MB"
 fi
 
+# CONSERVAR LOS ASSETS DE LA RELEASE ANTERIOR (skew de despliegue).
+#
+# EL PROBLEMA, medido el 14/08/2026 con el primer deploy de torre: los chunks de
+# Next llevan un hash en el nombre, y los del runtime —`webpack-*`, `main-app-*`,
+# `layout-*`— cambian de nombre en CUALQUIER build que toque algo. La pestaña que
+# alguien ya tenía abierta sigue pidiendo los nombres viejos; tras el swap esos
+# archivos ya no existen, dan 404, React no llega a arrancar y el usuario ve
+# "Application error: a client-side exception has occurred". La página no está
+# rota: le falta el JS con el que se cargó.
+#
+# POR QUÉ IMPORTA MÁS DE LO QUE PARECE: no es una molestia de quien deploya. Cada
+# deploy de Portal rompe la pestaña de todos los que estén con la app abierta en
+# ese momento, y se reporta como "se cayó la página" sin nada en los logs del
+# servidor —que responde 200 a todo— para explicarlo.
+#
+# LA SOLUCIÓN: unir los estáticos de la release anterior a los de la nueva. Los
+# nombres llevan hash de contenido, así que nunca colisionan con contenido
+# distinto y la unión no puede pisar nada; `-n` lo garantiza igual. Cuesta unos
+# pocos MB por release y hace que las pestañas viejas sigan funcionando hasta que
+# se recarguen solas. Es lo mismo que hace la "skew protection" de Vercel.
+#
+# ALCANCE HONESTO: cubre una generación. Dos deploys seguidos y la pestaña que
+# venía de antes se rompe igual — para eso está el aviso de recargar.
+PREVIA=$(readlink "$CURRENT" 2>/dev/null)
+if [ -n "$PREVIA" ] && [ -d "$PREVIA/.next/static" ] && [ -d "$DEST/.next/static" ]; then
+  cp -Rn "$PREVIA/.next/static/." "$DEST/.next/static/" 2>/dev/null || true
+  log "Assets de la release anterior conservados (pestañas abiertas siguen andando)"
+fi
+
 ANTERIOR=$(readlink "$CURRENT" 2>/dev/null)
 activar "$DEST"; rc=$?
 [ $rc -eq 2 ] && { log "Deploy dejado en su lugar; falta el reinicio manual"; exit 0; }

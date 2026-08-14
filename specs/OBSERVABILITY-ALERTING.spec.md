@@ -488,3 +488,45 @@ desconfiar del resultado.
 - [ ] Si el límite está en el EDGE: ¿el prefijo incluye alguna ruta que la app
       consulta sola (sesión, health, manifest)? Ahí el límite corta la app, no al
       atacante.
+
+### 22. Un deploy rompe todas las pestañas que ya estaban abiertas, y el servidor responde 200 mientras tanto
+
+**Qué pasó (14/08/2026).** Tras activar la primera release de torre, el panel
+mostró *"Application error: a client-side exception has occurred"* en el
+navegador. Todas las páginas devolvían 200 por curl, el SSR entregaba el HTML
+completo, y un navegador limpio las abría sin un solo error. Solo fallaba la
+pestaña que ya estaba abierta desde antes.
+
+**La causa.** Los chunks de Next llevan hash de contenido en el nombre, y los del
+runtime —`webpack-*`, `main-app-*`, `layout-*`— cambian en cualquier build que
+toque algo. La pestaña vieja sigue pidiendo los nombres con los que se cargó;
+después del swap esos archivos ya no existen en la release nueva y dan 404. React
+no llega a arrancar. La página no está rota: le falta el JavaScript con el que
+nació.
+
+**Por qué es peligroso más allá de la molestia.** No lo sufre quien deploya: lo
+sufre todo el que tuviera la app abierta en ese momento. En Portal son decenas de
+personas, y llega como "se cayó la página" sin absolutamente nada en los logs del
+servidor que lo respalde —responde 200 a todo—. Es el reporte de usuario más
+difícil de creer que existe: el que no deja rastro del lado del servidor.
+
+**Cómo NO diagnosticarlo.** Probar con curl, con un navegador nuevo o en incógnito
+da todo verde y lleva a concluir "no puedo reproducirlo, debe ser su máquina". La
+prueba que sirve es al revés: pedirle al servidor de hoy un chunk del build
+anterior y ver el 404.
+
+**Qué se hizo.** `deploy.sh` une los estáticos de la release anterior a los de la
+nueva antes de activar (`cp -Rn` sobre `.next/static`). Los nombres llevan hash de
+contenido, así que la unión no puede pisar nada con contenido distinto. Cuesta
+unos pocos MB por release y es la misma idea que la "skew protection" de Vercel.
+
+**Límite honesto.** Cubre una generación. Dos deploys seguidos y la pestaña que
+venía de antes se rompe igual. No es un sustituto de recargar; es lo que evita
+que un deploy rutinario se convierta en un incidente reportado.
+
+**Checklist**
+- [ ] ¿El deploy conserva los estáticos de la release anterior?
+- [ ] Ante un "se rompió la página" sin nada en los logs: pedir un chunk del build
+      viejo antes de sospechar del usuario.
+- [ ] Un navegador limpio NO reproduce esta falla — no alcanza como descarte.
+
