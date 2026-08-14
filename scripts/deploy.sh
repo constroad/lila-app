@@ -324,12 +324,37 @@ fi
 # pocos MB por release y hace que las pestañas viejas sigan funcionando hasta que
 # se recarguen solas. Es lo mismo que hace la "skew protection" de Vercel.
 #
-# ALCANCE HONESTO: cubre una generación. Dos deploys seguidos y la pestaña que
-# venía de antes se rompe igual — para eso está el aviso de recargar.
-PREVIA=$(readlink "$CURRENT" 2>/dev/null)
-if [ -n "$PREVIA" ] && [ -d "$PREVIA/.next/static" ] && [ -d "$DEST/.next/static" ]; then
-  cp -Rn "$PREVIA/.next/static/." "$DEST/.next/static/" 2>/dev/null || true
-  log "Assets de la release anterior conservados (pestañas abiertas siguen andando)"
+# ALCANCE: cubre las últimas $CONSERVAR releases, no una sola.
+#
+# POR QUÉ SE COPIA DE UN SNAPSHOT Y NO DE LA RELEASE ANTERIOR A SECAS: la primera
+# versión copiaba `.next/static` de la release previa, que a su vez ya tenía dentro
+# la suya y la de antes. La cadena nunca se cortaba: medido, cada deploy sumaba ~9
+# archivos —33 → 43 → 52 → 61 → 70 en cuatro deploys— y ninguna release volvía a
+# quedar limpia. Funcionaba, y de hecho cubría MÁS generaciones de las que yo había
+# documentado, pero crecía sin techo: a ese ritmo son ~180 KB por deploy que nadie
+# borra nunca, porque el podado de releases viejas no alcanza a lo que ya se copió
+# hacia adelante.
+#
+# Con el snapshot pristino cada release guarda aparte sus estáticos RECIÉN
+# compilados, y la unión se arma leyendo los pristinos de las releases retenidas.
+# La cobertura pasa a ser explícita ($CONSERVAR generaciones) y el tamaño deja de
+# depender de cuántos deploys se hicieron en total.
+if [ -d "$DEST/.next/static" ]; then
+  cp -R "$DEST/.next/static" "$DEST/.next/static-pristino" 2>/dev/null || true
+
+  copiadas=0
+  for previa in $(ls -1 "$RELEASES" 2>/dev/null | sort -r | grep -v "^${NOMBRE}$" | head -"$CONSERVAR"); do
+    # Las releases anteriores a este cambio no tienen pristino; se usa su `static`,
+    # que para ellas es equivalente.
+    ORIGEN="$RELEASES/$previa/.next/static-pristino"
+    [ -d "$ORIGEN" ] || ORIGEN="$RELEASES/$previa/.next/static"
+    [ -d "$ORIGEN" ] || continue
+    cp -Rn "$ORIGEN/." "$DEST/.next/static/" 2>/dev/null || true
+    copiadas=$((copiadas + 1))
+  done
+
+  [ "$copiadas" -gt 0 ] && \
+    log "Assets de $copiadas release(s) anterior(es) conservados (las pestañas abiertas siguen andando)"
 fi
 
 ANTERIOR=$(readlink "$CURRENT" 2>/dev/null)

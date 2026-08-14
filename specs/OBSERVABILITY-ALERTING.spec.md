@@ -520,9 +520,23 @@ nueva antes de activar (`cp -Rn` sobre `.next/static`). Los nombres llevan hash 
 contenido, así que la unión no puede pisar nada con contenido distinto. Cuesta
 unos pocos MB por release y es la misma idea que la "skew protection" de Vercel.
 
-**Límite honesto.** Cubre una generación. Dos deploys seguidos y la pestaña que
-venía de antes se rompe igual. No es un sustituto de recargar; es lo que evita
-que un deploy rutinario se convierta en un incidente reportado.
+**Corrección posterior, el mismo día.** La primera versión copiaba `.next/static`
+de la release anterior, que ya traía dentro la suya y la de antes. La cadena no se
+cortaba nunca: medido, cada deploy sumaba ~9 archivos —33 → 43 → 52 → 61 → 70— y
+ninguna release volvía a quedar limpia. O sea que cubría MÁS generaciones de las
+que yo había documentado, pero crecía sin techo, porque podar releases viejas no
+alcanza a lo que ya se copió hacia adelante. Ahora cada release guarda aparte un
+snapshot de sus estáticos recién compilados y la unión se arma con los snapshots
+de las releases retenidas: la cobertura es explícita y el tamaño deja de depender
+de cuántos deploys se hicieron en total.
+
+**La lección dentro de la lección.** Una mitigación que se alimenta de su propia
+salida anterior acumula sin que nadie lo note, porque cada paso agrega poco. Se ve
+contando —no midiendo el tamaño, que tardaba en moverse— y conviene contar apenas
+se implementa, no cuando el disco avisa.
+
+**Límite honesto.** Cubre las últimas 5 releases. No es un sustituto de recargar;
+es lo que evita que un deploy rutinario se convierta en un incidente reportado.
 
 **Checklist**
 - [ ] ¿El deploy conserva los estáticos de la release anterior?
