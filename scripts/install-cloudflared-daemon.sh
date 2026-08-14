@@ -31,12 +31,18 @@ tunnel: $UUID
 credentials-file: $DESTINO/$UUID.json
 logDirectory: /var/log/cloudflared
 
-# El orden importa: lo específico ANTES del wildcard, o el wildcard se come lila.
+# EL ORDEN IMPORTA Y NO ES COSMÉTICO: cloudflared evalúa de arriba abajo y gana
+# la PRIMERA que matchea. Todo lo específico va ANTES del wildcard; si el
+# wildcard quedara primero se comería lila y torre, y ambas terminarían sirviendo
+# Portal — con un síntoma confuso, porque responderían 200.
+#
 # La última regla sin hostname es OBLIGATORIA: sin ella cloudflared no arranca y
 # el error no dice por qué.
 ingress:
   - hostname: lila.constroad.com
     service: http://127.0.0.1:3001
+  - hostname: torre.constroad.com
+    service: http://127.0.0.1:4000
   - hostname: constroad.com
     service: http://127.0.0.1:3002
   - hostname: "*.constroad.com"
