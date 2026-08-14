@@ -544,3 +544,53 @@ es lo que evita que un deploy rutinario se convierta en un incidente reportado.
       viejo antes de sospechar del usuario.
 - [ ] Un navegador limpio NO reproduce esta falla — no alcanza como descarte.
 
+### 23. Un requisito manual escondido convierte un 0-1 en un 1-1
+
+**Qué pasó (14/08/2026).** El asistente de alta de apps documentaba como primer
+paso "clonar el repo en `/Users/jose/projects/<app>`". Sonaba razonable hasta que
+alguien planteó el caso real: la app la crea un desarrollador en su laptop y la
+pushea a GitHub por primera vez; la Mac mini no sabe nada de ese repositorio. El
+pipeline entero —registro, secreto, workflow, plist— estaba listo y el primer
+deploy moría con `No existe /Users/jose/projects/<app>`.
+
+**La trampa de fondo.** Todas las apps existentes ya estaban clonadas, porque la
+mini también era la máquina donde se programaba. El paso faltante era invisible
+para cualquier prueba hecha con ellas: el 0-1 solo se rompe la primera vez, y
+nunca más. Un flujo de alta hay que probarlo con algo que la máquina realmente no
+conozca, no con lo que ya está.
+
+**Qué se hizo.** `deploy.sh` clona si el repo no está. Decisiones que valen:
+
+- **Mirror, no copia de trabajo.** No tiene working tree que pueda quedar sucio ni
+  en otra rama, y el directorio de deploy deja de ser donde alguien programa.
+- **Mirror y no clone-por-deploy**, que es lo que hacen Dokploy y Coolify: ellos
+  terminan metiendo todo en una imagen, así que el clon es efímero de todos modos.
+  Sin Docker, mantener el mirror y traer deltas es mucho más barato en una máquina
+  que además sirve tráfico.
+- **La credencial es la clave SSH de la máquina**, que ya lee los repos privados de
+  la organización: no hace falta una por app. Contrapartida conocida: es una clave
+  de cuenta, no una deploy key por repo, así que da más acceso del mínimo.
+
+**Dos bugs que el cambio destapó, y ninguno se veía con las apps existentes:**
+
+1. **`origin/main` no existe en un mirror.** Los refs se copian 1:1, sin el
+   namespace `refs/remotes/`. Y falla de la peor manera: `git rev-parse` escribe el
+   argumento sin resolver en **stdout** además del error en stderr, así que un
+   `$(...)` descuidado captura la cadena `"origin/main"` creyendo que es un SHA y
+   el fallo aparece mucho después, disfrazado. Se resuelve probando ambos con
+   `--verify -q`, que no imprime nada si no resuelve.
+2. **El respaldo del archivo compartido no funciona sin working tree.** Copiaba el
+   `.env` desde la copia de trabajo; con un mirror no hay de dónde. El bucle
+   simplemente no hacía nada —sin una línea en el log— y el build seguía sin
+   variables. En Next es peor: las env vars del middleware se inlinean al compilar,
+   así que la release queda rota de forma permanente y no alcanza con poner el
+   archivo y reiniciar. Ahora falla y dice qué crear.
+
+**Checklist de un flujo de alta**
+- [ ] Probarlo contra algo que la máquina NO conozca, nunca contra lo ya instalado.
+- [ ] Listar los prerrequisitos manuales y preguntarse cuál puede hacer el pipeline.
+- [ ] Config declarada y ausente → fallar diciéndolo, jamás seguir en silencio.
+- [ ] El primer deploy no puede terminar en 🚨 cuando en realidad salió bien: si el
+      servicio todavía no existe, decirlo y dar los pasos, no disparar un rollback
+      contra una release anterior que no existe.
+

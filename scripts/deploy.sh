@@ -29,6 +29,10 @@ ARG="${2:-}"
 case "$APP" in
   lila)
     REPO_DIR=/Users/jose/projects/lila-app
+    # Copia de trabajo, no mirror: acá también se programa. Si el directorio
+    # desapareciera, el bootstrap la reclona como mirror — sirve para deployar,
+    # pero habría que rehacer el clon normal para volver a trabajar ahí.
+    REPO_URL=git@github.com:constroad/lila-app.git
     BRANCH=main
     # `--include=dev` EXPLÍCITO, y no es redundante (incidente 2026-08-14):
     # `npm ci` omite las devDependencies cuando NODE_ENV=production está en el
@@ -53,6 +57,10 @@ case "$APP" in
     ;;
   portal)
     REPO_DIR=/Users/jose/projects/Portal
+    # Copia de trabajo, no mirror: acá también se programa. Si el directorio
+    # desapareciera, el bootstrap la reclona como mirror — sirve para deployar,
+    # pero habría que rehacer el clon normal para volver a trabajar ahí.
+    REPO_URL=git@github.com:constroad/Portal.git
     BRANCH=main
     BUILD_CMD="npm ci --include=dev --no-audit --no-fund && npm run build"
     # BUILD_ID solo existe si `next build` llegó al final. `.next` a secas no
@@ -80,6 +88,10 @@ case "$APP" in
     ;;
   torre)
     REPO_DIR=/Users/jose/projects/torre
+    # Copia de trabajo, no mirror: acá también se programa. Si el directorio
+    # desapareciera, el bootstrap la reclona como mirror — sirve para deployar,
+    # pero habría que rehacer el clon normal para volver a trabajar ahí.
+    REPO_URL=git@github.com:constroad/torre.git
     BRANCH=main
     BUILD_CMD="npm ci --include=dev --no-audit --no-fund && npm run build"
     ARTEFACTO=.next/BUILD_ID
@@ -173,7 +185,7 @@ salud_ok() {
   return 1
 }
 
-activar() {   # $1 = ruta de la release a activar
+activar_sin_reinicio() {   # $1 = ruta de la release a activar
   # SWAP ATÓMICO, y en macOS cuesta más de lo que parece:
   #   · `mv -T` (la forma GNU) NO existe en BSD/macOS — probado, falla.
   #   · `mv -f tmp current` con `current` apuntando a un DIRECTORIO mueve el
@@ -187,6 +199,10 @@ activar() {   # $1 = ruta de la release a activar
   /usr/bin/python3 -c 'import os,sys; os.rename(sys.argv[1], sys.argv[2])' \
     "$CURRENT.tmp" "$CURRENT" || { rm -f "$CURRENT.tmp"; return 1; }
   log "current → $(basename "$1")"
+}
+
+activar() {   # $1 = ruta de la release a activar, y reinicia el servicio
+  activar_sin_reinicio "$1" || return 1
   # kickstart necesita root porque son LaunchDaemons; sin sudo se avisa y sigue.
   if sudo -n launchctl kickstart -k "system/$SERVICE" 2>/dev/null; then
     log "Servicio $SERVICE reiniciado"
@@ -234,9 +250,56 @@ esac
 
 # ---- deploy -----------------------------------------------------------------
 SHA="${ARG:-}"
+
+# BOOTSTRAP: si el repo no está en esta máquina, clonarlo.
+#
+# EL CASO QUE ESTO RESUELVE: una app nueva la crea alguien en su laptop y la
+# pushea a GitHub por primera vez. La mini no sabe nada de ese repositorio. Sin
+# este paso, el primer deploy moría con "No existe /Users/jose/..." y había que
+# clonar a mano — un requisito manual escondido que convertía el 0-1 en un 1-1.
+#
+# MIRROR Y NO COPIA DE TRABAJO: un mirror no tiene working tree que pueda quedar
+# sucio ni en otra rama, y `git archive` funciona igual desde uno. Además el
+# directorio de deploy deja de ser la copia donde alguien programa: borrar por
+# accidente un `node_modules` mientras se deploya deja de ser posible.
+#
+# POR QUÉ NO SE CLONA EN CADA DEPLOY, que es lo que hacen Dokploy y Coolify: ellos
+# terminan metiendo todo en una imagen, así que el clon es efímero igual. Acá no
+# hay Docker; mantener el mirror y traer solo los deltas es órdenes de magnitud más
+# barato en una máquina que además está sirviendo tráfico.
+#
+# CREDENCIAL: la clave SSH de la máquina (`~/.ssh/id_ed25519`), que ya autentica
+# como `constroad` y lee los repos privados de la organización. No hace falta
+# ninguna credencial nueva por app. Contrapartida conocida: es una clave de cuenta,
+# no una deploy key por repo, así que da más acceso del mínimo necesario.
+if [ ! -d "$REPO_DIR" ]; then
+  [ -n "${REPO_URL:-}" ] || fatal "El repo no está clonado y no hay REPO_URL declarada para $APP"
+  log "Repo ausente en la máquina — clonando $REPO_URL"
+  mkdir -p "$(dirname "$REPO_DIR")" || fatal "No pude crear el directorio padre"
+  # Timeout: un clone que pide contraseña se quedaría colgado para siempre y el
+  # deploy nunca terminaría ni fallaría. `BatchMode` hace que falle en vez de pedirla.
+  GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new" \
+    git clone --mirror "$REPO_URL" "$REPO_DIR" --quiet \
+    || fatal "No pude clonar $REPO_URL — ¿la clave SSH de la mini tiene acceso al repo?"
+  log "Clonado en $REPO_DIR"
+fi
+
 cd "$REPO_DIR" || fatal "No existe $REPO_DIR"
 git fetch origin "$BRANCH" --quiet || fatal "git fetch falló"
-[ -z "$SHA" ] && SHA=$(git rev-parse "origin/$BRANCH")
+# Resolver el HEAD del branch SIRVIENDO A LAS DOS FORMAS de repo, porque no
+# nombran igual la misma rama:
+#   · copia de trabajo → `origin/main` (el ref remoto vive en refs/remotes/)
+#   · mirror           → `main` a secas (los refs se copian 1:1, sin namespace)
+# Probado: en un mirror `git rev-parse origin/main` falla con "not a valid object
+# name". Y falla de la peor manera, porque `git rev-parse` ADEMÁS escribe el
+# argumento sin resolver en stdout — así que un `$(...)` descuidado captura la
+# cadena "origin/main" como si fuera un SHA y el error aparece mucho más tarde,
+# disfrazado de otra cosa. Por eso se usa `--verify -q`, que no imprime nada si no
+# resuelve.
+if [ -z "$SHA" ]; then
+  SHA=$(git rev-parse --verify -q "origin/$BRANCH" || git rev-parse --verify -q "$BRANCH") \
+    || fatal "No pude resolver el branch '$BRANCH' en $REPO_DIR"
+fi
 SHORT=$(git rev-parse --short "$SHA") || fatal "SHA inválido: $SHA"
 
 INICIO=$(date +%s)
@@ -253,10 +316,27 @@ git archive "$SHA" | tar -x -C "$DEST" || fatal "No pude extraer el SHA"
 # Así rotar un secreto no obliga a rebuildear, y las releases no los duplican.
 for f in "${SHARED_FILES[@]}"; do
   if [ ! -f "$SHARED/$f" ]; then
+    # Respaldo: tomarlo de la copia de trabajo. OJO — esto NO funciona cuando el
+    # repo es un mirror (una app nueva bootstrapeada), porque un mirror no tiene
+    # working tree del que copiar. Es correcto que no funcione: los secretos de
+    # una app nueva no están en su repositorio, alguien tiene que ponerlos.
     [ -f "$REPO_DIR/$f" ] && cp "$REPO_DIR/$f" "$SHARED/$f" && chmod 600 "$SHARED/$f" \
       && log "Primer deploy: $f copiado a shared/"
   fi
-  [ -f "$SHARED/$f" ] && ln -sfn "$SHARED/$f" "$DEST/$f"
+
+  # FALLA EN VEZ DE CALLAR. Antes, si el archivo no aparecía por ningún lado, este
+  # bucle simplemente no hacía nada: el build seguía adelante sin las variables y
+  # sin una sola línea en el log. Ese es exactamente el modo de fallo más caro que
+  # tuvimos —config ausente que no se anuncia— y en Next es peor todavía, porque
+  # las env vars del middleware se inlinean al compilar: la release queda
+  # permanentemente rota y hay que rebuildear para arreglarla, no basta con poner
+  # el archivo y reiniciar.
+  if [ ! -f "$SHARED/$f" ]; then
+    fatal "Falta $SHARED/$f — la app lo declara en SHARED_FILES.
+       Poné el archivo ahí (modo 600) y volvé a deployar. Si es una app nueva,
+       sus secretos no vienen en el repo: hay que crearlo a mano."
+  fi
+  ln -sfn "$SHARED/$f" "$DEST/$f"
 done
 
 log "Compilando…"
@@ -358,6 +438,29 @@ if [ -d "$DEST/.next/static" ]; then
 fi
 
 ANTERIOR=$(readlink "$CURRENT" 2>/dev/null)
+
+# PRIMER DEPLOY DE UNA APP NUEVA: el plist todavía no existe.
+#
+# Es el orden correcto y no se puede invertir — el plist apunta a
+# `deploys/<app>/current`, así que instalarlo ANTES del primer deploy deja el
+# daemon en bucle de reinicio contra un symlink que no existe.
+#
+# Sin este caso, el primer deploy terminaba de la peor manera posible: kickstart
+# fallaba, el health check no encontraba a nadie escuchando, se disparaba el
+# auto-rollback, no había release anterior a la que volver, y el log cerraba con un
+# 🚨 alarmante. Todo eso describiendo un deploy que en realidad salió bien: la
+# release está compilada y verificada, solo falta darle de alta el servicio.
+if [ ! -f "/Library/LaunchDaemons/$SERVICE.plist" ]; then
+  activar_sin_reinicio "$DEST"
+  log "✓ Release lista y activada — falta dar de alta el servicio (primer deploy)"
+  log "  1. Instalá el plist en /Library/LaunchDaemons/$SERVICE.plist"
+  log "  2. sudo launchctl bootstrap system /Library/LaunchDaemons/$SERVICE.plist"
+  log "  3. Agregá la línea de sudoers para poder reiniciarlo en los próximos deploys"
+  log "  Los cuatro archivos salen de https://torre.constroad.com/setup/nueva"
+  registrar ok-sin-servicio "$(( $(date +%s) - INICIO ))"
+  exit 0
+fi
+
 activar "$DEST"; rc=$?
 [ $rc -eq 2 ] && { log "Deploy dejado en su lugar; falta el reinicio manual"; exit 0; }
 
