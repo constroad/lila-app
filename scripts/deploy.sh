@@ -51,11 +51,20 @@ case "$APP" in
     # BUILD_ID solo existe si `next build` llegó al final. `.next` a secas no
     # sirve: se crea al empezar y queda a medias si el build muere en el medio.
     ARTEFACTO=.next/BUILD_ID
-    # El build de Portal necesita ~6 GB; con el default de Node muere por OOM y
-    # —peor— sale con 0. Va como variable EXPORTADA y no como prefijo del comando:
-    # `VAR=x cmd1 && cmd2` solo se la pasa a cmd1, así que el prefijo llegaba al
-    # `npm ci` y no al `npm run build`, que es el que la necesita.
-    NODE_OPTIONS_BUILD="--max-old-space-size=6144"
+    # MEDIDO (14/08/2026), no estimado: el build pico en **2.260 MB** y el heap
+    # por defecto de Node EN ESTA MÁQUINA es **2.096 MB**. Se pasa por 164 MB.
+    #
+    # Node deriva ese default de la RAM del sistema: 8 GB → ~2 GB de heap; en una
+    # máquina de 16 GB daría ~4 GB y el MISMO build pasaría sin bandera. Por eso
+    # "en mi máquina compila bien" es literalmente cierto y no había nada roto.
+    #
+    # 3072 y no 6144: el primer intento fue una sobrecorrección: 6 GB en una
+    # máquina de 8 GB compite con lila, Portal y Torre, y puede empujar a swap
+    # justo mientras se sirve tráfico. 3 GB dan 35% de margen sobre el pico real.
+    #
+    # Va EXPORTADA y no como prefijo: `VAR=x cmd1 && cmd2` solo se la pasa a cmd1,
+    # así que llegaba al `npm ci` en vez del `npm run build`, que la necesita.
+    NODE_OPTIONS_BUILD="--max-old-space-size=3072"
     SERVICE=com.constroad.portal
     HEALTH_URL=http://127.0.0.1:3002/
     SHARED_FILES=(.env.local)
@@ -196,6 +205,20 @@ if [ $rc_build -ne 0 ] || [ ! -e "$DEST/$ARTEFACTO" ]; then
   exit 1
 fi
 log "Build OK · artefacto verificado: $ARTEFACTO"
+
+# PODA DE LA CACHÉ DE BUILD. Medido: `.next` pesa 2,04 GB por release, de los
+# cuales **2,0 GB son `cache/webpack`** — caché de compilación incremental que en
+# una release INMUTABLE no se reutiliza jamás (cada deploy compila en un
+# directorio nuevo). Lo que sirve producción son 74 MB.
+#
+# Sin podar, 5 releases ocupan 10,2 GB; podando, 370 MB. Y `next start` no la
+# necesita: la caché del optimizador de imágenes se regenera sola en runtime.
+if [ -d "$DEST/.next/cache" ]; then
+  antes=$(du -sk "$DEST/.next" | cut -f1)
+  rm -rf "$DEST/.next/cache"
+  despues=$(du -sk "$DEST/.next" | cut -f1)
+  log "Caché de build podada: $((antes/1024)) MB → $((despues/1024)) MB"
+fi
 
 ANTERIOR=$(readlink "$CURRENT" 2>/dev/null)
 activar "$DEST"; rc=$?
