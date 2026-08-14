@@ -61,6 +61,34 @@ SOURCE="$(resolver_source)"
 # como el usuario, así que incluirla solo lograría un error de permisos por
 # corrida. La copia de ~/.cloudflared/ tiene el mismo contenido y sí es legible.
 CONFIG_CRITICA=()
+
+# LOS `.env` DE CADA APP — el agujero más caro que tenía este respaldo.
+#
+# `/Users/jose/deploys/<app>/shared/` guarda lo que las releases enlazan al
+# compilar: la URI de Mongo con su contraseña, `NEXTAUTH_SECRET`, la clave de
+# Anthropic, el `CRON_SECRET` compartido con Portal, el Basic Auth de Torre.
+# **No están en git, y eso es correcto** — justamente por eso no hay ninguna otra
+# copia. Perder la máquina significaba perderlos y tener que reconstruir a mano la
+# configuración de cada app, adivinando qué variables existían.
+#
+# Se descubrió comparando con lo que sí se respaldaba: el archivo de secretos HMAC
+# está incluido con el argumento de que "cuesta 260 bytes evitarlo", y perderlo
+# solo obliga a regenerarlos. Los `.env` son mucho más difíciles de rehacer y no
+# estaban. El costo es igual de irrelevante y crece con cada app nueva.
+#
+# Va cada `shared/` por separado y no `/Users/jose/deploys` entero: ahí adentro
+# están también las releases, que pesan ~280 MB cada una, se regeneran con un
+# rebuild y no tienen por qué entrar al respaldo.
+for compartido in /Users/jose/deploys/*/shared; do
+  [ -d "$compartido" ] || continue
+  # Que exista al menos un archivo legible: un directorio vacío solo agregaría
+  # ruido, y uno ilegible haría fallar la corrida entera por permisos.
+  if find "$compartido" -maxdepth 1 -type f -readable 2>/dev/null | read -r _ \
+     || [ -n "$(find "$compartido" -maxdepth 1 -type f -perm -u+r 2>/dev/null | head -1)" ]; then
+    CONFIG_CRITICA+=("$compartido")
+  fi
+done
+
 for ruta in "$HOME/.cloudflared" /usr/local/etc/cloudflared "$HOME/.config/constroad"; do
   [ -d "$ruta" ] || continue
   if compgen -G "$ruta"/*.json > /dev/null 2>&1 && \

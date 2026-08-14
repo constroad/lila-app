@@ -126,6 +126,8 @@ SHARED=$BASE/shared
 CURRENT=$BASE/current
 LOG=$BASE/deploy.log
 LOCK=/tmp/constroad-deploy-$APP.lock
+# Compartido por TODAS las apps: serializa la fase de compilación (ver más abajo).
+GLOBAL_LOCK=/tmp/constroad-build.lock.d
 CONSERVAR=5
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
@@ -156,8 +158,18 @@ flock -n 9 2>/dev/null || {
   if ! mkdir "$LOCK.d" 2>/dev/null; then
     fatal "Ya hay un deploy de $APP en curso (si no es cierto: rm -rf $LOCK.d)"
   fi
-  trap 'rmdir "$LOCK.d" 2>/dev/null' EXIT
+  LOCK_APP_TOMADO=1
 }
+
+# UN SOLO trap para todos los candados. Bash admite un único EXIT: definir un
+# segundo `trap ... EXIT` más abajo NO agrega, REEMPLAZA — y el candado del
+# primero quedaría sin liberar hasta que alguien lo borrara a mano.
+limpiar() {
+  [ -n "${LOCK_APP_TOMADO:-}" ] && rmdir "$LOCK.d" 2>/dev/null
+  [ -n "${LOCK_BUILD_TOMADO:-}" ] && rm -rf "$GLOBAL_LOCK" 2>/dev/null
+  return 0
+}
+trap limpiar EXIT
 
 listar() {
   echo "Releases de $APP (actual marcada con →):"
@@ -339,6 +351,33 @@ for f in "${SHARED_FILES[@]}"; do
   ln -sfn "$SHARED/$f" "$DEST/$f"
 done
 
+# LOCK GLOBAL, SOLO ALREDEDOR DEL BUILD.
+#
+# El lock de más arriba es POR APP: evita dos deploys de la misma, pero deja que
+# dos apps distintas compilen a la vez. Con una o dos apps eso nunca pasó; con
+# cada app nueva la probabilidad sube, y el resultado sería malo: el build de
+# Portal pica en 2.260 MB y su techo está en 3.072. Dos builds simultáneos piden
+# hasta 6 GB de heap en una máquina de 8 GB que además está sirviendo tráfico —
+# swap justo cuando hay usuarios conectados, o un OOM que mata un deploy sano.
+#
+# ESPERA EN VEZ DE FALLAR: el lock por app usa `-n` porque un segundo deploy de la
+# misma app es un error. Acá no: que otra app esté compilando es normal y transitorio,
+# y rechazar el deploy por eso obligaría a reintentar a mano. Se espera con techo,
+# porque colgarse para siempre es peor que fallar diciéndolo.
+espera=0
+while ! mkdir "$GLOBAL_LOCK" 2>/dev/null; do
+  # Candado huérfano: si quedó de un proceso muerto, a los 30 min se ignora.
+  if [ -d "$GLOBAL_LOCK" ] && [ -n "$(find "$GLOBAL_LOCK" -maxdepth 0 -mmin +30 2>/dev/null)" ]; then
+    log "⚠️  Candado de build huérfano (>30 min) — se descarta"
+    rm -rf "$GLOBAL_LOCK"; continue
+  fi
+  [ "$espera" -eq 0 ] && log "Otra app está compilando — esperando turno…"
+  sleep 10; espera=$((espera + 10))
+  [ "$espera" -ge 1800 ] && fatal "30 min esperando el candado de build; algo quedó colgado"
+done
+LOCK_BUILD_TOMADO=1
+[ "$espera" -gt 0 ] && log "Turno tomado tras ${espera}s de espera"
+
 log "Compilando…"
 (
   cd "$DEST" || exit 1
@@ -368,6 +407,11 @@ if [ $rc_build -ne 0 ] || [ ! -e "$DEST/$ARTEFACTO" ]; then
   exit 1
 fi
 log "Build OK · artefacto verificado: $ARTEFACTO"
+
+# Se suelta ACÁ y no al salir: lo que compite por memoria es el build, no el
+# health check. Retenerlo hasta el final bloquearía 240 s a las otras apps
+# —el timeout de lila— sin que nada lo justifique.
+rm -rf "$GLOBAL_LOCK" 2>/dev/null; LOCK_BUILD_TOMADO=
 
 # PODA DE LA CACHÉ DE BUILD. Medido: `.next` pesa 2,04 GB por release, de los
 # cuales **2,0 GB son `cache/webpack`** — caché de compilación incremental que en
