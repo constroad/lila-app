@@ -247,6 +247,70 @@ probe_external() {
   return 1
 }
 
+# ---- IPv6: el punto ciego del probe ----------------------------------------
+#
+# POR QUÉ EXISTE (2026-08-10): `resolve_derp_ips` pide SOLO registros A y filtra
+# a IPv4. Tailscale publica el funnel con A **y** AAAA, así que la mitad de los
+# caminos que puede tomar un cliente real nunca se probaba. Importa porque los
+# operadores móviles son mayoritariamente IPv6-first: si el ingress IPv6 se
+# cayera, un celular en datos fallaría mientras el probe reportaba todo verde.
+# El filtro a IPv4 fue correcto para su bug (basura de `dig` en stdout), pero
+# dejó sin cubrir a su hermano — la misma forma que la lección #12.
+#
+# NO ALIMENTA LA ESCALACIÓN, a propósito. La escalación ejecuta acciones
+# DESTRUCTIVAS sobre Tailscale, y este chequeo no puede distinguir "el ingress
+# IPv6 está caído" de "esta máquina no tiene IPv6" sin salida IPv6 propia.
+# Cablearlo a la escalación sería un falso positivo permanente con consecuencias
+# reales. Informa y alerta; nunca actúa.
+IPV6_CHECK_EVERY=${IPV6_CHECK_EVERY:-10}   # ciclos (10 × 60s = ~10 min)
+
+# ¿Tiene ESTE host salida IPv6? Sin ella el chequeo no es concluyente y se
+# reporta como "no evaluable", que es la verdad — no como éxito ni como fallo.
+host_tiene_ipv6() {
+  /usr/bin/curl -6 -s -o /dev/null --max-time 6 https://one.one.one.one/ 2>/dev/null
+}
+
+resolve_derp_ips6() {
+  /usr/bin/dig "@$PUBLIC_RESOLVER" +short +time=3 +tries=1 AAAA "$HOST" 2>/dev/null \
+    | grep -E '^[0-9a-fA-F:]+$' | head -2
+}
+
+# Devuelve: 0 = IPv6 ok · 1 = IPv6 FALLA · 2 = no evaluable (host sin IPv6).
+probe_external_ipv6() {
+  local ips ip http_code
+  host_tiene_ipv6 || return 2
+  ips=$(resolve_derp_ips6)
+  [ -z "$ips" ] && { IPV6_DETAIL="dns=FAIL(no-AAAA)"; return 1; }
+  while IFS= read -r ip; do
+    [ -z "$ip" ] && continue
+    # Corchetes obligatorios: `--resolve host:443:[v6]`.
+    http_code=$(/usr/bin/curl -6 -sS -o /dev/null -w '%{http_code}' \
+      --max-time "$PROBE_TIMEOUT" \
+      --resolve "${HOST}:443:[${ip}]" \
+      "https://${HOST}${PROBE_PATH}" 2>/dev/null)
+    [[ "$http_code" =~ ^[23] ]] && return 0
+  done <<< "$ips"
+  IPV6_DETAIL="funnel_https_v6=FAIL(last_code=${http_code:-000})"
+  return 1
+}
+
+# Notificación PROPIA, deliberadamente sin pasar por `send_telegram_alert`.
+# Esa función estampa el timestamp compartido en $LAST_ALERT_FILE, así que una
+# alerta informativa de IPv6 dejaría en silencio durante ALERT_REPEAT_SECONDS a
+# una alerta CRÍTICA de caída total. Una señal de severidad baja jamás debe poder
+# suprimir una alta. Acá no hay dedupe por tiempo porque el llamador ya solo
+# dispara en TRANSICIONES de estado.
+notificar_ipv6_degradado() {
+  load_env
+  [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_ERRORS_CHAT_ID" ] && return 0
+  /usr/bin/curl -sS -o /dev/null --max-time 5 \
+    -d "chat_id=${TELEGRAM_ERRORS_CHAT_ID}" \
+    --data-urlencode "text=⚠️ Funnel accesible por IPv4 pero NO por IPv6 (${IPV6_DETAIL:-}).
+
+Clientes en redes IPv6-first (datos móviles) pueden no llegar. El acceso IPv4 sigue vigilado aparte; no se ejecuta ninguna acción automática." \
+    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" 2>/dev/null || true
+}
+
 # ---- estado de sesión de Tailscale -----------------------------------------
 #
 # INCIDENTE 2026-08-08: el funnel flapeó, el probe escaló, y `tailscale down &&
@@ -427,7 +491,34 @@ log "=== External probe starting (host=$HOST resolver=$PUBLIC_RESOLVER interval=
 
 fail_count=0
 last_diag=""
+# Estado del chequeo IPv6: se loguea solo en TRANSICIONES, para no repetir la
+# misma línea cada 10 min. Arranca vacío para que el primer resultado se registre
+# siempre — incluido "no evaluable", que hace visible el punto ciego en vez de
+# dejarlo silencioso.
+ipv6_estado=""
+ciclo=0
 while true; do
+  ciclo=$((ciclo + 1))
+  if [ $((ciclo % IPV6_CHECK_EVERY)) -eq 1 ]; then
+    IPV6_DETAIL=""
+    probe_external_ipv6; rc=$?
+    case "$rc" in
+      0) nuevo="ok" ;;
+      2) nuevo="no-evaluable" ;;
+      *) nuevo="FAIL" ;;
+    esac
+    if [ "$nuevo" != "$ipv6_estado" ]; then
+      case "$nuevo" in
+        ok)  log "IPv6: el funnel responde por AAAA" ;;
+        no-evaluable)
+             log "IPv6: NO EVALUABLE — este host no tiene salida IPv6, así que el probe solo cubre IPv4. Un fallo del ingress IPv6 sería invisible desde acá." ;;
+        FAIL)
+             log "IPv6: FALLA [${IPV6_DETAIL:-}] — este host SÍ tiene salida IPv6, así que apunta al ingress IPv6 del funnel, no a la red local."
+             notificar_ipv6_degradado ;;
+      esac
+      ipv6_estado="$nuevo"
+    fi
+  fi
   if probe_external; then
     level=$(get_level)
     if [ "$fail_count" -gt 0 ] || [ "$level" -gt 0 ]; then
