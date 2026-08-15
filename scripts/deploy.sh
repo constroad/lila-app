@@ -618,6 +618,31 @@ done
 # GC muera en media hora en vez de girar hasta que alguien lo mire.
 BUILD_TIMEOUT=${BUILD_TIMEOUT:-1800}
 
+# DIAGNÓSTICO DEL ENTORNO DEL BUILD, antes de compilar.
+#
+# El 15/08/2026 Portal falló su propio guard —"build sin NEXT_PUBLIC_LILA_SERVER_URL"—
+# mientras que `loadEnvConfig` sobre esa misma carpeta SÍ devolvía la variable. Las
+# dos cosas no pueden ser ciertas a la vez, y sin este registro cada intento de
+# entender por qué cuesta un build de 6 minutos y termina en conjeturas.
+#
+# Se ejecuta con el MISMO cargador que usa Next (`@next/env`), desde el MISMO
+# directorio y con el mismo entorno que va a tener el build. Si acá aparecen y en
+# el build no, el problema está entre Next y su config; si acá tampoco aparecen,
+# está en cómo llega el archivo.
+if [ -f "$DEST/.env.local" ]; then
+  ( cd "$DEST" && node -e '
+    try {
+      const { loadEnvConfig } = require("@next/env");
+      const r = loadEnvConfig(process.cwd(), false);
+      const files = (r.loadedEnvFiles || []).map(f => f.path.split("/").pop()).join(", ") || "ninguno";
+      const pub = Object.keys(process.env).filter(k => k.startsWith("NEXT_PUBLIC_")).sort();
+      console.log(`env del build · archivos: ${files} · NEXT_PUBLIC_* visibles: ${pub.length ? pub.join(" ") : "NINGUNA"}`);
+    } catch (e) {
+      console.log(`env del build · no se pudo comprobar: ${e.message}`);
+    }
+  ' ) >> "$LOG" 2>&1
+fi
+
 log "Compilando…"
 inicio_build=$(date +%s)
 (
