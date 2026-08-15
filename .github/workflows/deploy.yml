@@ -22,13 +22,29 @@ on:
     branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: deploy-lila
-  cancel-in-progress: false
+# ⚠️ ACÁ NO VA `concurrency`, Y ESA AUSENCIA ES EL ARREGLO DE UN INCIDENTE.
+#
+# Estaba a nivel de workflow (`group: deploy-lila`), y a ese nivel el candado lo
+# toma EL RUN ENTERO — los dos jobs, tests incluidos. El 14/08/2026 un run se
+# quedó trabado en `tests` hasta el techo de GitHub (6 h exactas: empezó 21:07 y
+# el siguiente arrancó 03:07). Mientras tanto los pushes de 21:27, 21:29 y 21:48
+# quedaron pendientes y GitHub los fue cancelando —solo sobrevive el más
+# reciente— y el de 22:39 se desplegó recién a las 3 de la mañana.
+#
+# O sea: la CI que "no bloquea el deploy" lo bloqueó igual, por la puerta de
+# atrás. La independencia entre jobs no vale nada si comparten el candado.
+#
+# Ahora el `concurrency` vive DENTRO de `desplegar` —que es lo único que hay que
+# serializar, porque dos deploys de la misma app se pisan el symlink— y `tests`
+# corre libre. Y tiene techo propio, así que un cuelgue dura 15 min, no 6 h.
 
 jobs:
   desplegar:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: deploy-lila
+      cancel-in-progress: false
     steps:
       - name: Firmar y disparar el deploy
         env:
@@ -52,8 +68,38 @@ jobs:
             *)   echo "::error::Torre rechazó el disparo"; exit 1 ;;
           esac
 
+      # El aviso de que el disparo NO salió. Sin esto, un TORRE_HMAC rotado o el
+      # túnel caído se traducen en "mi commit no aparece" y nada más: el deploy
+      # nunca llegó a empezar, así que la mini tampoco tiene nada que avisar.
+      - name: Avisar si el disparo falló
+        if: failure()
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_ALERTS_CHAT_ID }}
+        run: |
+          set -uo pipefail
+          [ -n "${TOKEN:-}" ] && [ -n "${CHAT:-}" ] || exit 0
+          # EL TEXTO SE ARMA CON `printf`, no como cadena de varias líneas: dentro
+          # de un bloque `run: |` toda línea tiene que ir indentada, y esa
+          # indentación se colaría en el mensaje. Escrito así, el YAML queda
+          # válido y el mensaje sale sin espacios de más.
+          TEXTO=$(printf '%s\n' \
+            "🔌 <b>lila</b> · no se pudo disparar el deploy" \
+            "<code>${GITHUB_SHA:0:7}</code>" \
+            "<i>Torre no respondió 202 — el commit NO llegó a desplegarse</i>" \
+            "<a href=\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\">ver el run</a>")
+          curl -s --max-time 10 -o /dev/null \
+            "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text=${TEXTO}"
+
   tests:
     runs-on: ubuntu-latest
+    # Techo propio. El default de GitHub son 360 minutos, y ese default fue el que
+    # convirtió un jest colgado en un deploy de madrugada.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -61,8 +107,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # NODE_ENV=test explícito: varios guards fail-closed de seguridad lanzan
-      # excepción si se creen en producción sin los secretos cargados.
+      # NODE_ENV=test: varios guards fail-closed de seguridad lanzan excepción si
+      #   se creen en producción sin los secretos cargados.
       # --maxWorkers=2: el runner tiene 4 núcleos y jest por defecto levanta
       #   ncpu-1 workers; con happy-dom eso los mata y jest sale 1 aunque los
       #   tests pasen. Medido: local (8 núcleos) pasa en 28 s con exit 0; el
@@ -70,8 +116,48 @@ jobs:
       # --forceExit: happy-dom deja handles abiertos (los "Cannot log after tests
       #   are done"). Sin esto jest se cuelga al final y sale 1 con TODO en verde,
       #   que fue exactamente lo que bloqueó deploys de producción.
-      # NODE_ENV=test: varios guards fail-closed lanzan excepción si se creen en
-      #   producción sin los secretos cargados.
       - run: npm test -- --ci --maxWorkers=2 --forceExit
         env:
           NODE_ENV: test
+
+      # AVISO DE TESTS ROJOS.
+      #
+      # Hace falta justamente PORQUE los tests no bloquean el deploy: el commit
+      # ya está en producción y la pestaña de Actions no la mira nadie. Sin este
+      # mensaje, "verde en la mini" y "roto en CI" conviven en silencio.
+      #
+      # `if: always()` y no `failure()`: un job que se pasa del techo se CANCELA,
+      # y `failure()` no cubre ese caso — que es el que originó todo esto.
+      - name: Avisar a Telegram
+        if: always()
+        env:
+          ESTADO: ${{ job.status }}
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_ALERTS_CHAT_ID }}
+        run: |
+          set -uo pipefail
+          [ "$ESTADO" = "success" ] && exit 0
+          [ -n "${TOKEN:-}" ] && [ -n "${CHAT:-}" ] || {
+            echo "::warning::Sin TELEGRAM_BOT_TOKEN/TELEGRAM_ALERTS_CHAT_ID en los secrets del repo — no aviso"
+            exit 0
+          }
+          esc() { printf '%s' "${1:-}" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+          ASUNTO=$(git log -1 --format=%s 2>/dev/null | cut -c1-80)
+          if [ "$ESTADO" = "cancelled" ]; then
+            ICONO="⏱️"; QUE="los tests se cancelaron (¿techo de 15 min?)"
+          else
+            ICONO="❌"; QUE="los tests fallaron en CI"
+          fi
+          TEXTO=$(printf '%s\n' \
+            "${ICONO} <b>lila</b> · ${QUE}" \
+            "<code>${GITHUB_SHA:0:7}</code> $(esc "$ASUNTO")" \
+            "<i>$(esc "$GITHUB_ACTOR")</i>" \
+            "<a href=\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\">ver el run</a>" \
+            "<i>el deploy siguió igual — producción YA tiene este commit</i>")
+          curl -s --max-time 10 -o /tmp/tg.json \
+            "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text=${TEXTO}"
+          grep -q '"ok":true' /tmp/tg.json || echo "::warning::Telegram rechazó el aviso: $(cat /tmp/tg.json)"

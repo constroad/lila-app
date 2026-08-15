@@ -144,7 +144,20 @@ CONSERVAR=5
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
-# Aviso por Telegram del resultado del deploy.
+# Segundos → "45s" / "5m 54s" / "1h 07m".
+#
+# Un deploy dura minutos, y "1846s" obliga a dividir de cabeza para saber si eso
+# es normal o es un incendio. La unidad tiene que estar en la escala de lo que
+# mide, sobre todo en un aviso que se lee de reojo en el celular.
+fmt_dur() {
+  local s=${1:-0}
+  if   [ "$s" -ge 3600 ]; then printf '%dh %02dm' "$((s / 3600))" "$(((s % 3600) / 60))"
+  elif [ "$s" -ge 60   ]; then printf '%dm %02ds' "$((s / 60))"   "$((s % 60))"
+  else                         printf '%ds' "$s"
+  fi
+}
+
+# ─── Aviso por Telegram ───────────────────────────────────────────────────────
 #
 # POR QUÉ IMPORTA MÁS EN LOS FALLOS: un deploy que sale bien se nota porque el
 # cambio aparece. Uno que falla NO se nota — el auto-rollback deja producción
@@ -152,26 +165,76 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 # desplegado simplemente no está. Sin este aviso, esa diferencia se descubre
 # cuando alguien pregunta por qué su cambio no aparece.
 #
-# FIRE-AND-FORGET Y CON TIMEOUT: avisar es lo último que debe poder trabar o
-# tumbar un deploy. Si Telegram no responde, se pierde el mensaje y ya.
-avisar_telegram() {   # $1 = emoji/estado, $2 = detalle
-  local token chat env_file="$SHARED/.env"
+# UN SOLO MENSAJE POR DEPLOY, QUE SE VA EDITANDO. Se manda al arrancar y después
+# se reescribe con el resultado (`editMessageText`). Dos mensajes sueltos
+# —"empecé" y "terminé"— duplican el ruido del canal y obligan a emparejarlos a
+# ojo cuando hay varias apps deployando a la vez; editando, queda una línea por
+# deploy con su estado final a la vista, y mientras corre se ve el "desplegando".
+#
+# HTML Y NO MARKDOWN: con `parse_mode=Markdown` un asunto de commit con un `_` o
+# un `*` suelto hace que la API conteste 400 y EL MENSAJE SE PIERDA ENTERO. En
+# HTML hay que escapar tres caracteres y ya.
+#
+# TIMEOUT SIEMPRE, Y EL RECHAZO SE ANOTA: si Telegram no contesta, el deploy
+# sigue igual. Pero un aviso que se pierde en silencio es exactamente cómo se
+# descubre —un mes después— que hace un mes que no llega nada.
+TG_MSG_ID=""
+TG_TOKEN=""
+TG_CHAT=""
+
+tg_escapar() { printf '%s' "${1:-}" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+
+tg_credenciales() {
+  local env_file="$SHARED/.env"
   [ -f "$env_file" ] || env_file="/Users/jose/deploys/lila/shared/.env"
-  [ -f "$env_file" ] || return 0
-  token=$(grep -m1 '^TELEGRAM_BOT_TOKEN=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
-  chat=$(grep -m1 '^TELEGRAM_ALERTS_CHAT_ID=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
-  [ -n "$token" ] && [ -n "$chat" ] || return 0
-  curl -s -o /dev/null --max-time 8 \
-    "https://api.telegram.org/bot${token}/sendMessage" \
-    --data-urlencode "chat_id=${chat}" \
-    --data-urlencode "text=${1} *${APP}* — ${2}" \
-    --data-urlencode "parse_mode=Markdown" 2>/dev/null || true
+  [ -f "$env_file" ] || return 1
+  TG_TOKEN=$(grep -m1 '^TELEGRAM_BOT_TOKEN=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
+  TG_CHAT=$(grep -m1 '^TELEGRAM_ALERTS_CHAT_ID=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
+  [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ]
 }
+
+avisar_telegram() {   # $1 = cuerpo del mensaje, en HTML ya escapado
+  local resp metodo extra=()
+  tg_credenciales || return 0
+  if [ -n "$TG_MSG_ID" ]; then
+    metodo=editMessageText
+    extra=(--data-urlencode "message_id=${TG_MSG_ID}")
+  else
+    metodo=sendMessage
+  fi
+  resp=$(curl -s --max-time 8 \
+    "https://api.telegram.org/bot${TG_TOKEN}/${metodo}" \
+    --data-urlencode "chat_id=${TG_CHAT}" \
+    --data-urlencode "text=${1}" \
+    --data-urlencode "parse_mode=HTML" \
+    --data-urlencode "disable_web_page_preview=true" \
+    ${extra[@]+"${extra[@]}"} 2>/dev/null) || return 0
+  case "$resp" in
+    '{"ok":true'*)
+      [ -n "$TG_MSG_ID" ] || TG_MSG_ID=$(printf '%s' "$resp" \
+        | sed -n 's/.*"message_id":\([0-9]*\).*/\1/p' | head -1)
+      ;;
+    *)
+      # El token no entra al log, obviamente: solo el cuerpo de la respuesta.
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️  Telegram rechazó el aviso: ${resp:0:180}" >> "$LOG"
+      # Si falló un `edit` —mensaje viejo, borrado, chat migrado— olvidar el id
+      # hace que el próximo aviso salga como mensaje nuevo. Un resultado que no
+      # se puede editar no puede quedar sin contarse.
+      TG_MSG_ID=""
+      ;;
+  esac
+}
+
+# Encabezado común de todos los avisos: qué se está desplegando. Se rellena en
+# cuanto se conoce el SHA; antes de eso los avisos salen sin él.
+TG_QUE=""
+
 fatal() {
   log "✗ $*"
   # El aviso va en el fatal y no en cada punto de fallo: así ninguna causa nueva
   # se queda sin avisar por olvido.
-  avisar_telegram "❌" "deploy abortado — ${1%%$'\n'*}"
+  avisar_telegram "❌ <b>${APP}</b> · deploy abortado${TG_QUE}
+$(tg_escapar "${1%%$'\n'*}")"
   exit 1
 }
 
@@ -230,6 +293,7 @@ salud_ok() {
   while [ $transcurrido -lt $esperado ]; do
     code=$(/usr/bin/curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null)
     if [[ "$code" =~ ^[23] ]]; then
+      T_SALUD=$transcurrido
       [ $transcurrido -gt 0 ] && log "  (respondió tras ${transcurrido}s)"
       return 0
     fi
@@ -361,6 +425,21 @@ NOMBRE="$(date '+%Y%m%d-%H%M%S')-$SHORT"
 DEST="$RELEASES/$NOMBRE"
 log "=== Deploy de $APP · $SHORT → $NOMBRE ==="
 
+# QUÉ se está desplegando, no solo su hash. Un aviso que dice `6f78e77` obliga a
+# ir a GitHub para saber si eso es un cambio de copy o una migración de base.
+ASUNTO=$(git log -1 --format=%s "$SHA" 2>/dev/null | cut -c1-80)
+AUTOR=$(git log -1 --format=%an "$SHA" 2>/dev/null)
+TG_QUE="
+<code>$SHORT</code> $(tg_escapar "$ASUNTO")"
+[ -n "$AUTOR" ] && TG_QUE="$TG_QUE
+<i>$(tg_escapar "$AUTOR")</i>"
+
+avisar_telegram "🚀 <b>${APP}</b> · desplegando…${TG_QUE}"
+
+# Duraciones por fase. Sin esto un "5m 54s" no dice nada: cinco minutos de npm
+# son normales la primera vez, cinco minutos de build son un problema.
+T_DEPS=0; T_BUILD=0; T_SALUD=0
+
 # Checkout limpio del SHA en la release nueva. `git worktree` no: dejaría la
 # release atada al repo y un `git gc` podría romperla. Un archive es autónomo.
 mkdir -p "$DEST" || fatal "No pude crear $DEST"
@@ -454,7 +533,8 @@ else
     mv "$DEST/node_modules" "$ARBOL" && touch "$ARBOL/.completo" \
       && ln -sfn "$ARBOL" "$DEST/node_modules"
   fi
-  log "Dependencias instaladas y guardadas en el almacén ($(( $(date +%s) - inicio_nm ))s)"
+  T_DEPS=$(( $(date +%s) - inicio_nm ))
+  log "Dependencias instaladas y guardadas en el almacén ($(fmt_dur $T_DEPS))"
 fi
 
 # Poda: se conservan los 3 árboles más recientes. Cada uno pesa cientos de MB y
@@ -527,6 +607,7 @@ done
 BUILD_TIMEOUT=${BUILD_TIMEOUT:-1800}
 
 log "Compilando…"
+inicio_build=$(date +%s)
 (
   cd "$DEST" || exit 1
   [ -n "${NODE_OPTIONS_BUILD:-}" ] && export NODE_OPTIONS="$NODE_OPTIONS_BUILD"
@@ -558,15 +639,18 @@ pid_vigia=$!
 
 wait "$pid_build"
 rc_build=$?
+T_BUILD=$(( $(date +%s) - inicio_build ))
 kill "$pid_vigia" 2>/dev/null
 
 # SOLO EL TRAMO DE ESTE DEPLOY. El log es acumulativo, así que buscar en todo el
 # archivo encontraba el OOM de un deploy de hace una hora y reportaba "sin
 # memoria" un build que había fallado por otra cosa. Un diagnóstico automático que
 # se equivoca es peor que no darlo: manda a subir un techo que no era el problema.
+CAUSA_BUILD=""
 if [ $rc_build -ne 0 ] && \
    awk -v r="$NOMBRE" '$0 ~ ("→ " r) {p=1} p' "$LOG" 2>/dev/null | grep -q "heap out of memory"; then
   log "⚠️  El build se quedó SIN MEMORIA. Subí NODE_OPTIONS_BUILD para esta app."
+  CAUSA_BUILD="se quedó sin memoria — subir NODE_OPTIONS_BUILD"
 fi
 
 # NO ALCANZA CON EL CÓDIGO DE SALIDA (incidente 2026-08-14): el build de Portal
@@ -581,12 +665,22 @@ fi
 if [ $rc_build -ne 0 ] || [ ! -e "$DEST/$ARTEFACTO" ]; then
   if [ $rc_build -eq 0 ]; then
     log "✗ BUILD MINTIÓ: salió con 0 pero NO generó $ARTEFACTO"
+    [ -n "$CAUSA_BUILD" ] || CAUSA_BUILD="salió con 0 pero no generó $ARTEFACTO"
   else
     log "✗ BUILD FALLÓ (código $rc_build)"
+    [ -n "$CAUSA_BUILD" ] || CAUSA_BUILD="el build salió con código $rc_build"
   fi
-  log "  Producción NO se tocó (sigue en $(readlink "$CURRENT" 2>/dev/null | xargs basename 2>/dev/null || echo 'sin release'))"
+  ACTIVA=$(readlink "$CURRENT" 2>/dev/null | xargs basename 2>/dev/null || echo 'sin release')
+  log "  Producción NO se tocó (sigue en $ACTIVA)"
   rm -rf "$DEST"
   registrar fallo-build "$(( $(date +%s) - INICIO ))"
+  # ESTE AVISO FALTABA, y era el que más falta hacía: un build roto salía por acá
+  # sin pasar por `fatal()`, así que los tres builds fallidos del 13/08 no
+  # avisaron nada. Producción quedaba sana en la versión vieja —correcto— y en
+  # silencio —peligroso—: el commit no estaba desplegado y nadie se enteraba.
+  avisar_telegram "❌ <b>${APP}</b> · el build falló en $(fmt_dur $(( $(date +%s) - INICIO )))${TG_QUE}
+$(tg_escapar "$CAUSA_BUILD")
+<i>producción intacta en $(tg_escapar "$ACTIVA") — el cambio NO está desplegado</i>"
   exit 1
 fi
 log "Build OK · artefacto verificado: $ARTEFACTO"
@@ -685,16 +779,26 @@ if [ ! -f "/Library/LaunchDaemons/$SERVICE.plist" ]; then
   log "  3. Agregá la línea de sudoers para poder reiniciarlo en los próximos deploys"
   log "  Los cuatro archivos salen de https://torre.constroad.com/setup/nueva"
   registrar ok-sin-servicio "$(( $(date +%s) - INICIO ))"
+  avisar_telegram "🆕 <b>${APP}</b> · primera release lista en $(fmt_dur $(( $(date +%s) - INICIO )))${TG_QUE}
+<i>falta dar de alta el servicio — los archivos están en torre.constroad.com/setup/nueva</i>"
   exit 0
 fi
 
 activar "$DEST"; rc=$?
 [ $rc -eq 2 ] && { log "Deploy dejado en su lugar; falta el reinicio manual"; exit 0; }
 
+TOTAL=$(( $(date +%s) - INICIO ))
+
+# Desglose por fase. Es lo que convierte el aviso en algo accionable: "6m" no
+# dice nada, "6m de los cuales 5m25s fueron npm" dice que el lockfile cambió y
+# que el próximo deploy va a durar un minuto.
+DESGLOSE="deps $(fmt_dur $T_DEPS) · build $(fmt_dur $T_BUILD) · arranque $(fmt_dur $T_SALUD)"
+
 if salud_ok; then
   log "✓ Deploy OK — $APP responde en $HEALTH_URL"
-  registrar ok "$(( $(date +%s) - INICIO ))"
-  avisar_telegram "✅" "deploy OK · \`$SHORT\` · $(( $(date +%s) - INICIO ))s"
+  registrar ok "$TOTAL"
+  avisar_telegram "✅ <b>${APP}</b> · deploy OK en $(fmt_dur $TOTAL)${TG_QUE}
+<i>${DESGLOSE}</i>"
 else
   log "✗ $APP NO responde tras el deploy"
   if [ -n "$ANTERIOR" ] && [ -d "$ANTERIOR" ]; then
@@ -702,14 +806,19 @@ else
     activar "$ANTERIOR"
     if salud_ok; then
       log "✓ Rollback OK: producción restaurada"
-      avisar_telegram "⚠️" "deploy de \`$SHORT\` FALLÓ el health check · se volvió sola a $(basename "$ANTERIOR") · producción OK"
+      avisar_telegram "⚠️ <b>${APP}</b> · el deploy no pasó el health check${TG_QUE}
+Volvió sola a <code>$(basename "$ANTERIOR")</code> · producción OK
+<i>tardó $(fmt_dur $TOTAL) — el cambio NO está desplegado</i>"
     else
       log "🚨 Ni la release anterior responde — revisar a mano"
-      avisar_telegram "🚨" "deploy de \`$SHORT\` falló Y el rollback tampoco responde · REVISAR A MANO"
+      avisar_telegram "🚨 <b>${APP}</b> · CAÍDA — falló el deploy Y el rollback${TG_QUE}
+<i>revisar a mano ya</i>"
     fi
-    registrar fallo-salud "$(( $(date +%s) - INICIO ))"
+    registrar fallo-salud "$TOTAL"
   else
     log "🚨 No hay release anterior para volver"
+    avisar_telegram "🚨 <b>${APP}</b> · no arrancó y no hay release anterior${TG_QUE}
+<i>revisar a mano ya</i>"
   fi
   exit 1
 fi
