@@ -107,6 +107,26 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+
+      # LOS BINARIOS DE `sharp` PARA LINUX, QUE EL LOCKFILE NO TIENE.
+      #
+      # `sharp` distribuye su parte nativa como dependencias OPCIONALES por
+      # plataforma, y el lockfile se generó en una Mac ARM: adentro solo están
+      # `@img/sharp-darwin-arm64` y `@img/sharp-libvips-darwin-arm64`. `npm ci`
+      # instala exactamente lo que dice el lockfile, así que en un runner
+      # linux-x64 el binario no existe y sharp no carga.
+      #
+      # EL SÍNTOMA ENGAÑA: jest reporta "5 failed, 47 passed" y parece que hay
+      # tests rotos. No hay ninguno — son 396 de 396 en verde. Lo que falla es
+      # que cinco SUITES no llegan ni a arrancar porque el `import` revienta.
+      # Cinco correos de "Run failed" describiendo un problema que no existe en
+      # el código.
+      #
+      # `--no-save`: el lockfile no se toca. Cambiarlo obligaría a la mini a
+      # reinstalar el árbol entero para agregar un binario que allá no se usa.
+      - name: Binarios de sharp para linux-x64
+        run: npm install --no-save --os=linux --cpu=x64 --include=optional sharp
+
       # NODE_ENV=test: varios guards fail-closed de seguridad lanzan excepción si
       #   se creen en producción sin los secretos cargados.
       # --maxWorkers=2: el runner tiene 4 núcleos y jest por defecto levanta
