@@ -636,6 +636,10 @@ pid_build=$!
   done
 ) &
 pid_vigia=$!
+# `disown`: al matar al vigía, bash imprime un "Terminated: 15" con el cuerpo
+# entero del subshell. En un deploy corrido a mano eso tapa el resultado con
+# quince líneas de ruido que parecen un error y no lo son.
+disown "$pid_vigia" 2>/dev/null || true
 
 wait "$pid_build"
 rc_build=$?
