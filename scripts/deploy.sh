@@ -648,6 +648,40 @@ inicio_build=$(date +%s)
 (
   cd "$DEST" || exit 1
   [ -n "${NODE_OPTIONS_BUILD:-}" ] && export NODE_OPTIONS="$NODE_OPTIONS_BUILD"
+
+  # LAS `NEXT_PUBLIC_*` SE EXPORTAN AL ENTORNO DEL BUILD, no alcanza con que el
+  # archivo esté (incidente 15/08/2026).
+  #
+  # Que Next CARGUE `.env.local` no pone las variables en el `process.env` de
+  # todos los procesos: Next 14 compila en workers aparte —`webpack-build/impl.js`
+  # en el stack— y lo que corra ahí, como el hook `webpack()` de `next.config.js`,
+  # ve un entorno sin ellas. Medido: `loadEnvConfig` sobre la misma carpeta
+  # devolvía la variable, y el guard de Portal en el hook decía que faltaba. Las
+  # dos cosas eran ciertas, en procesos distintos.
+  #
+  # SOLO LAS PÚBLICAS, y no el archivo entero: son las que Next inlinea en el
+  # bundle del navegador, o sea públicas por definición. Los secretos siguen
+  # llegando por donde llegaban — no hay razón para pasearlos por el entorno de
+  # un proceso de compilación.
+  #
+  # Se parsea sin `source` ni `eval`: un valor con backticks o `$(...)` en un
+  # archivo de configuración no puede volverse ejecución de comandos.
+  if [ -f "$DEST/.env.local" ]; then
+    publicas=0
+    while IFS= read -r linea; do
+      case "$linea" in
+        NEXT_PUBLIC_*=*)
+          clave=${linea%%=*}
+          valor=${linea#*=}
+          valor=${valor%\"}; valor=${valor#\"}
+          valor=${valor%\'}; valor=${valor#\'}
+          export "$clave=$valor"
+          publicas=$((publicas + 1))
+          ;;
+      esac
+    done < "$DEST/.env.local"
+    [ "$publicas" -gt 0 ] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] $publicas NEXT_PUBLIC_* exportadas al entorno del build"
+  fi
   # SIN `nice`, y la razón es empírica: se probó y el build de Portal pasó de
   # 3m15s a colgarse 38 minutos quemando un núcleo sin producir un archivo. No
   # quedó demostrado que `nice` fuera la causa —pudo ser el árbol de dependencias
