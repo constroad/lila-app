@@ -594,3 +594,76 @@ conozca, no con lo que ya está.
       servicio todavía no existe, decirlo y dar los pasos, no disparar un rollback
       contra una release anterior que no existe.
 
+### 24. Un build sin memoria no parece un error: parece que está trabajando
+
+**Qué pasó (14/08/2026).** El build de Portal, que por la mañana tardaba 3m15s,
+se quedó **38 minutos** al 92% de CPU sin escribir un solo archivo nuevo en
+`.next` —congelado en 1.303 MB y 2.039 archivos, verificado con dos mediciones
+separadas por 45 s—. Proceso vivo, CPU alta, log sin errores.
+
+**La causa.** V8 llegó al techo de heap (3.072 MB) y entró en espiral de GC:
+recolectar, liberar unos MB, volver a llenarse, recolectar. El log lo dice al
+final, cuando se rinde: `Scavenge 2971.4 → 2969.0 MB`. Dos megas recuperados por
+ciclo. Nunca iba a terminar.
+
+**Por qué engaña tanto.** Todos los indicadores de "está funcionando" dan
+positivo: el proceso responde, consume CPU, no hay excepción. El único indicador
+que dice la verdad es el que nadie mira: **si el trabajo AVANZA**. Mirar el
+tamaño de la salida dos veces separadas por 30 s desmiente en un minuto lo que
+horas de leer logs no aclara.
+
+**Me mandó a investigar lo que no era.** Con el síntoma "el build se cuelga" y
+dos cambios recientes en el script —`nice` y clonar `node_modules`— la conclusión
+natural fue que uno de los dos tenía la culpa. Ninguno la tenía. El código
+simplemente había crecido ese día y ya no entraba en el techo.
+
+**Qué se hizo.**
+- Techo de heap de Portal a 4.096 (medido: pico real 2.746 MB, build en 164 s).
+- **TECHO DE TIEMPO para el build**, que es el arreglo importante: subir el heap
+  se volverá a quedar corto con el próximo crecimiento del código. Si el build se
+  pasa de 12 min —4x el más lento medido— se mata. Y si el log contiene `heap out
+  of memory`, el mensaje lo dice explícitamente.
+
+**Checklist**
+- [ ] Ante un proceso "colgado" con CPU alta: medir si la SALIDA crece, no si el
+      proceso vive.
+- [ ] Todo build automatizado con techo de tiempo. Sin él, la única forma de
+      enterarse es que un humano mire.
+- [ ] El techo de heap no es "cuánta memoria usa": es dónde V8 deja de intentar.
+      Ponerlo apenas por encima del pico garantiza que el próximo commit lo rompa.
+
+### 25. Medir un costo en aislamiento es medir otra cosa
+
+**Qué pasó (14/08/2026).** Se movió el portón de tests de GitHub a la Mac mini
+con un argumento que parecía sólido: *"los 630 tests de lila tardan 21 s acá,
+contra los 9 minutos que GitHub tardaba sólo en `npm ci`"*. Los 21 s eran reales
+—medidos, no estimados—.
+
+**Por qué el argumento era falso.** Esos 21 s se midieron con la máquina ociosa.
+En un deploy real la máquina está además compilando y **sirviendo a los usuarios**.
+Medidos ahí: **366 s**, y Portal quedó tan lento que la gente lo reportó. El
+número correcto nunca fue "cuánto tarda" sino "a quién se lo saca".
+
+**La forma general.** En una máquina compartida con producción, el costo de una
+tarea no es su duración: es su duración multiplicada por lo que degrada mientras
+corre. Una medición en reposo no puede ver ese factor, y por eso siempre da la
+respuesta cómoda.
+
+**Qué se hizo.** Los tests volvieron al Action, en un job **paralelo que no
+bloquea** el deploy —bloquear ya había dejado a producción sin poder desplegar por
+un exit code espurio de jest—. En la mini quedó sólo lo que no se puede hacer en
+otro lado: el build, que cuesta 2 s en lila.
+
+**Y en el camino, lo que sí valía la pena mirar.** El desglose del deploy de 31
+minutos: 840 s esperando el candado, 432 s de `npm ci` **con el lockfile idéntico
+al de la release anterior**, 366 s de tests, y 2 s de build. Reusar
+`node_modules` con `cp -Rc` (clonefile de APFS, copy-on-write) bajó los 432 s a
+7 s en lila. El desperdicio grande estaba en el paso que nadie sospechaba, no en
+el que se estaba discutiendo.
+
+**Checklist**
+- [ ] Medir el costo de una tarea CON el sistema en su estado normal, no en reposo.
+- [ ] Antes de optimizar el paso sospechoso, medir TODOS los pasos. El caro suele
+      ser otro.
+- [ ] Reinstalar dependencias idénticas es desperdicio puro: comparar el lockfile.
+
