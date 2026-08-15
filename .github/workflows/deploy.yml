@@ -63,6 +63,15 @@ jobs:
       - run: npm ci
       # NODE_ENV=test explícito: varios guards fail-closed de seguridad lanzan
       # excepción si se creen en producción sin los secretos cargados.
-      - run: npm test
+      # --maxWorkers=2: el runner tiene 4 núcleos y jest por defecto levanta
+      #   ncpu-1 workers; con happy-dom eso los mata y jest sale 1 aunque los
+      #   tests pasen. Medido: local (8 núcleos) pasa en 28 s con exit 0; el
+      #   mismo comando en el runner fallaba a los 2m10s.
+      # --forceExit: happy-dom deja handles abiertos (los "Cannot log after tests
+      #   are done"). Sin esto jest se cuelga al final y sale 1 con TODO en verde,
+      #   que fue exactamente lo que bloqueó deploys de producción.
+      # NODE_ENV=test: varios guards fail-closed lanzan excepción si se creen en
+      #   producción sin los secretos cargados.
+      - run: npm test -- --ci --maxWorkers=2 --forceExit
         env:
           NODE_ENV: test
