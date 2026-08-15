@@ -1,6 +1,6 @@
 ---
-name: portal-pitfalls
-description: Checklist de bugs RECURRENTES de correctness en lila-app (backend del producto Portal; no perf, no UI). Usar SIEMPRE al construir URLs ABSOLUTAS de archivos que devuelve lila (`pdfUrlAbsolute`/`previewUrlAbsolute`/`/files/…`), queries/caches multi-tenant por `companyId`, render de fechas date-only en informes/PDF, o merges/seed de `schemaData`/`defaultData` de documentos. También al depurar: "localhost refused to connect en Portal", "veo/escribo data de otra empresa", "la fecha muestra un día antes en el PDF", "se borraron los textos por defecto del informe". Complementa (no reemplaza) portal-security (seguridad) y portal-scalability (perf). Ref: `../Portal/specs/*` + `specs/architecture-as-is.md`.
+name: lila-pitfalls
+description: Checklist de bugs RECURRENTES de correctness en lila-app (backend del producto Portal; no perf, no UI). Usar SIEMPRE al construir URLs ABSOLUTAS de archivos que devuelve lila (`pdfUrlAbsolute`/`previewUrlAbsolute`/`/files/…`), queries/caches multi-tenant por `companyId`, render de fechas date-only en informes/PDF, o merges/seed de `schemaData`/`defaultData` de documentos. También al depurar: "localhost refused to connect en Portal", "veo/escribo data de otra empresa", "la fecha muestra un día antes en el PDF", "se borraron los textos por defecto del informe". Complementa (no reemplaza) lila-security (seguridad) y lila-scalability (perf). En este repo TIENE PRIORIDAD sobre la global `constroad-pitfalls`: acá están los casos concretos de este backend. Ref: `../Portal/specs/*` + `specs/architecture-as-is.md`.
 
 ---
 
@@ -30,7 +30,7 @@ host es `localhost:3001`, y si se **persiste** en `media.url`/`report`, en prod 
 ## 2. Cross-tenant en queries y caches server-side
 
 **Causa:** un query o un cache module-level sin `companyId` sirve/pisa data de
-otra empresa. Es correctness (además de seguridad — ver portal-security).
+otra empresa. Es correctness (además de seguridad — ver lila-security).
 
 - **Regla:** TODA query pasa por scope de `companyId` (del token verificado por
   `requireTenant`, nunca del cliente). Todo cache server-side lleva `companyId` en
@@ -67,8 +67,8 @@ pisa el default poblado → informe sin sus textos.
 
 - **No re-derivar helpers.** URL de archivo → `LILA_PUBLIC_BASE_URL`; fecha date-only
   → string-slice; scope → `companyId` del token.
-- **Perf es OTRO dominio** (Puppeteer, event loop, queries) → portal-scalability.
-  **Seguridad** (auth, SSRF, secretos) → portal-security. Esta skill es solo correctness.
+- **Perf es OTRO dominio** (Puppeteer, event loop, queries) → lila-scalability.
+  **Seguridad** (auth, SSRF, secretos) → lila-security. Esta skill es solo correctness.
 - **Al arreglar un bug de esta clase:** buscar el mismo patrón en módulos gemelos y
   arreglarlos en el mismo paso; test si el helper es puro.
 - **Done:** build + lint + tests del área. José commitea.

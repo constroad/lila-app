@@ -1,6 +1,6 @@
 ---
-name: portal-scalability
-description: Reglas canónicas de PERFORMANCE y ESCALABILIDAD de lila-app (backend Express/TS ESM en la Mac mini, no serverless). Usar SIEMPRE al escribir/revisar queries Mongoose (repos, `src/**`), generación de PDF con Puppeteer, el pipeline de medios/inliner, handlers de WhatsApp/Baileys, llamadas al LLM (Anthropic), alertas externas (Telegram/WhatsApp), o el JobExecutor de crons. También al depurar síntomas: "cold-start 40s", "PDF timeout / cuelga con muchas fotos", "el bot no responde / event loop bloqueado", "query lenta", "compite con las sesiones de prod". Complementa (no reemplaza) portal-security (seguridad) y — si aplica — portal-pitfalls (correctness). Ref completa: `/projects/PERFORMANCE-SCALABILITY.SPEC.md` + `CLAUDE.md` §Performance.
+name: lila-scalability
+description: Reglas canónicas de PERFORMANCE y ESCALABILIDAD de lila-app (backend Express/TS ESM en la Mac mini, no serverless). Usar SIEMPRE al escribir/revisar queries Mongoose (repos, `src/**`), generación de PDF con Puppeteer, el pipeline de medios/inliner, handlers de WhatsApp/Baileys, llamadas al LLM (Anthropic), alertas externas (Telegram/WhatsApp), o el JobExecutor de crons. También al depurar síntomas: "cold-start 40s", "PDF timeout / cuelga con muchas fotos", "el bot no responde / event loop bloqueado", "query lenta", "compite con las sesiones de prod". Complementa (no reemplaza) lila-security (seguridad) y — si aplica — lila-pitfalls (correctness). En este repo TIENE PRIORIDAD sobre las globales `constroad-performance` y `constroad-scalability`: acá no hay serverless ni facturación por invocación, el recurso escaso es una máquina de 8 GB compartida con producción. Ref completa: `/projects/PERFORMANCE-SCALABILITY.SPEC.md` + `CLAUDE.md` §Performance.
 
 ---
 
@@ -9,6 +9,12 @@ description: Reglas canónicas de PERFORMANCE y ESCALABILIDAD de lila-app (backe
 Lado backend del incidente jul-2026 (75% de GB-Hrs de Vercel en Portal). lila NO
 es serverless: es un **proceso Node de larga vida en la Mac mini** con Atlas
 compartido con Portal. Ref completa: `/projects/PERFORMANCE-SCALABILITY.SPEC.md`.
+
+> **Frontera con las skills globales.** Acá manda esta, no `constroad-performance`
+> ni `constroad-scalability`. Las globales razonan sobre coste por invocación; en
+> lila no hay invocaciones que facturar — hay **un proceso** y una máquina de 8 GB
+> compartida con producción, así que lo que se paga es el event loop y la memoria
+> de los demás.
 
 ## 0. El modelo de coste acá es distinto (interiorizar)
 
@@ -27,7 +33,7 @@ camino de un webhook de WhatsApp o de un request HTTP.
   scripts de sync-indexes. `.explain()` ante dudas.
 - **Queries muertas:** al auditar, buscar `await`s cuyo resultado nadie lee.
 - **Multi-tenant:** todo query y todo cache server-side llevan `companyId` en scope/key
-  (también es correctness/seguridad — ver portal-security).
+  (también es correctness/seguridad — ver lila-security).
 
 ## 2. Puppeteer / PDF
 
@@ -65,7 +71,7 @@ camino de un webhook de WhatsApp o de un request HTTP.
 
 - En dev, **`CRONJOBS_ENABLED=false`** (no doble-ejecutar los que ya corre prod). El
   JobExecutor es el que llama a los `/api/cron` de Portal (con `x-cron-secret` — ver
-  portal-security), a la frecuencia mínima necesaria.
+  lila-security), a la frecuencia mínima necesaria.
 
 ## 7. Modo auditoría
 
