@@ -384,7 +384,16 @@ log "Instalando dependencias…"
 if [ -n "${TEST_CMD:-}" ]; then
   log "Corriendo tests…"
   inicio_tests=$(date +%s)
-  ( cd "$DEST" && eval "$TEST_CMD" ) >> "$LOG" 2>&1
+  # NODE_ENV=test EXPORTADO, y es la lección #19 mordiendo por segunda vez: este
+  # script hereda NODE_ENV=production del plist de Torre. Sin pisarlo, los tests
+  # se creen producción y los guards fail-closed de seguridad —los que exigen
+  # LILA_APP_JWT_SECRET, NEXTAUTH_SECRET…— lanzan excepción en vez de usar el
+  # valor de desarrollo. Medido: 1.258 tests de Portal "fallando" por eso, con el
+  # código perfectamente sano.
+  #
+  # Va EXPORTADO dentro del subshell y no como prefijo de `eval`, por lo mismo que
+  # NODE_OPTIONS más abajo: `VAR=x eval "..."` no se la pasa al comando de adentro.
+  ( cd "$DEST" && export NODE_ENV=test && eval "$TEST_CMD" ) >> "$LOG" 2>&1
   rc_tests=$?
   if [ $rc_tests -ne 0 ]; then
     registrar fallo-tests "$(( $(date +%s) - INICIO ))"
