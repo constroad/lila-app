@@ -100,13 +100,32 @@ jobs:
     # Techo propio. El default de GitHub son 360 minutos, y ese default fue el que
     # convirtió un jest colgado en un deploy de madrugada.
     timeout-minutes: 15
+    env:
+      # NO BAJAR CHROMIUM ACÁ.
+      #
+      # `puppeteer@21` se trae un Chromium entero en su postinstall —unos 170 MB—
+      # y la caché de `setup-node` no lo cubre: vive en `~/.cache/puppeteer`, no en
+      # la de npm. Medido: `npm ci` imprimía su última línea a los 9 s y después se
+      # quedaba MUDO 15 minutos hasta que el techo lo mataba. Tres runs seguidos.
+      #
+      # Ningún test lo necesita: no hay un solo `.test.ts` que importe puppeteer ni
+      # que llame a `launch()`. En producción sí hace falta —los PDF salen de ahí—
+      # así que esto va sólo en el job de tests, nunca en el `.npmrc` del repo.
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+
+      # `--foreground-scripts`: si algún postinstall vuelve a colgarse, el log dice
+      # CUÁL. Sin esto npm se queda callado y el diagnóstico es adivinanza.
+      # El techo por paso hace que falle en 6 min con el nombre del paso a la vista,
+      # en vez de comerse los 15 del job y aparecer como "cancelled".
+      - name: Instalar dependencias
+        timeout-minutes: 6
+        run: npm ci --no-audit --no-fund --foreground-scripts
 
       # LOS BINARIOS DE `sharp` PARA LINUX, QUE EL LOCKFILE NO TIENE.
       #
