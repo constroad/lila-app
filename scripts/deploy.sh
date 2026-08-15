@@ -42,9 +42,6 @@ case "$APP" in
     # "Cannot find package 'esbuild'" — que es devDependency y hace el build.
     # El peor tipo de bug: depende de quién lo invoca, no de lo que hace.
     INSTALL_CMD="npm ci --include=dev --no-audit --no-fund"
-    # MEDIDO: 630 tests en 21 s. Ese es todo el costo de tener portón de calidad
-    # en el entorno real, contra los 9+ minutos que tardaba GitHub solo en instalar.
-    TEST_CMD="npm test"
     COMPILE_CMD="npm run build"
     # Artefacto que PRUEBA que el build sirvió. Ver el bloque de verificación.
     ARTEFACTO=dist/index.js
@@ -67,8 +64,6 @@ case "$APP" in
     REPO_URL=git@github.com:constroad/Portal.git
     BRANCH=main
     INSTALL_CMD="npm ci --include=dev --no-audit --no-fund"
-    # MEDIDO: ~127 s. Más caro que lila pero sigue siendo una fracción del deploy.
-    TEST_CMD="npm test"
     COMPILE_CMD="npm run build"
     # BUILD_ID solo existe si `next build` llegó al final. `.next` a secas no
     # sirve: se crea al empezar y queda a medias si el build muere en el medio.
@@ -101,7 +96,6 @@ case "$APP" in
     REPO_URL=git@github.com:constroad/torre.git
     BRANCH=main
     INSTALL_CMD="npm ci --include=dev --no-audit --no-fund"
-    TEST_CMD="npm test"
     COMPILE_CMD="npm run build"
     ARTEFACTO=.next/BUILD_ID
     SERVICE=com.constroad.torre
@@ -140,7 +134,37 @@ GLOBAL_LOCK=/tmp/constroad-build.lock.d
 CONSERVAR=5
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
-fatal() { log "✗ $*"; exit 1; }
+
+# Aviso por Telegram del resultado del deploy.
+#
+# POR QUÉ IMPORTA MÁS EN LOS FALLOS: un deploy que sale bien se nota porque el
+# cambio aparece. Uno que falla NO se nota — el auto-rollback deja producción
+# sirviendo la versión anterior, sana y silenciosa, y el commit que creías
+# desplegado simplemente no está. Sin este aviso, esa diferencia se descubre
+# cuando alguien pregunta por qué su cambio no aparece.
+#
+# FIRE-AND-FORGET Y CON TIMEOUT: avisar es lo último que debe poder trabar o
+# tumbar un deploy. Si Telegram no responde, se pierde el mensaje y ya.
+avisar_telegram() {   # $1 = emoji/estado, $2 = detalle
+  local token chat env_file="$SHARED/.env"
+  [ -f "$env_file" ] || env_file="/Users/jose/deploys/lila/shared/.env"
+  [ -f "$env_file" ] || return 0
+  token=$(grep -m1 '^TELEGRAM_BOT_TOKEN=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
+  chat=$(grep -m1 '^TELEGRAM_ALERTS_CHAT_ID=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
+  [ -n "$token" ] && [ -n "$chat" ] || return 0
+  curl -s -o /dev/null --max-time 8 \
+    "https://api.telegram.org/bot${token}/sendMessage" \
+    --data-urlencode "chat_id=${chat}" \
+    --data-urlencode "text=${1} *${APP}* — ${2}" \
+    --data-urlencode "parse_mode=Markdown" 2>/dev/null || true
+}
+fatal() {
+  log "✗ $*"
+  # El aviso va en el fatal y no en cada punto de fallo: así ninguna causa nueva
+  # se queda sin avisar por olvido.
+  avisar_telegram "❌" "deploy abortado — ${1%%$'\n'*}"
+  exit 1
+}
 
 # Historial en JSONL, una línea por deploy (spec §5.5). Es lo que alimenta la
 # página de Deployments de Torre.
@@ -361,49 +385,49 @@ done
 LOCK_BUILD_TOMADO=1
 [ "$espera" -gt 0 ] && log "Turno tomado tras ${espera}s de espera"
 
-log "Instalando dependencias…"
-( cd "$DEST" && eval "$INSTALL_CMD" ) >> "$LOG" 2>&1 \
-  || fatal "Falló la instalación de dependencias"
-
-# PORTÓN DE TESTS — ACÁ, y el lugar importa por dos razones distintas.
+# DEPENDENCIAS: reusar si el lockfile no cambió.
 #
-# ANTES DE ENLAZAR LOS SECRETOS: en este punto la release todavía NO tiene su
-# `.env`, así que los tests no pueden leer credenciales de producción ni por
-# accidente. Correrlos después sería darles la URI de Mongo real a un montón de
-# código que nadie audita con esa lupa.
+# MEDIDO (14/08/2026): `npm ci` tardaba **432 s** en lila y más en Portal, para
+# llegar exactamente al mismo árbol de dependencias — los lockfiles entre releases
+# consecutivas eran IDÉNTICOS. Siete minutos de CPU y disco a full, compitiendo con
+# producción, para reproducir bit por bit lo que ya estaba al lado.
 #
-# ANTES DE COMPILAR: fallar acá cuesta segundos; fallar después cuesta también los
-# minutos del build. Portal compila en ~2 min y pica en 2,3 GB de memoria: no vale
-# la pena gastarlo en un commit cuyos tests ya sabemos que no pasan.
+# `cp -Rc` usa clonefile de APFS: copy-on-write real. Los mismos 515 MB en **7,4 s**
+# —58x más rápido— sin ocupar disco hasta que algo se modifique, y sin el riesgo de
+# los hardlinks: si el build escribe dentro de node_modules, la release anterior no
+# se entera.
 #
-# POR QUÉ EN LA MINI Y NO EN GITHUB (decisión del 14/08/2026): los 630 tests de
-# lila tardan **21 segundos acá**, contra los 9+ minutos que GitHub tardaba sólo en
-# instalar dependencias. Y corren en el mismo entorno que produccion, no en un
-# runner limpio sin las envs. El Action quedó reducido a lo único que aportaba de
-# verdad: disparar el deploy.
-if [ -n "${TEST_CMD:-}" ]; then
-  log "Corriendo tests…"
-  inicio_tests=$(date +%s)
-  # NODE_ENV=test EXPORTADO, y es la lección #19 mordiendo por segunda vez: este
-  # script hereda NODE_ENV=production del plist de Torre. Sin pisarlo, los tests
-  # se creen producción y los guards fail-closed de seguridad —los que exigen
-  # LILA_APP_JWT_SECRET, NEXTAUTH_SECRET…— lanzan excepción en vez de usar el
-  # valor de desarrollo. Medido: 1.258 tests de Portal "fallando" por eso, con el
-  # código perfectamente sano.
-  #
-  # Va EXPORTADO dentro del subshell y no como prefijo de `eval`, por lo mismo que
-  # NODE_OPTIONS más abajo: `VAR=x eval "..."` no se la pasa al comando de adentro.
-  ( cd "$DEST" && export NODE_ENV=test && eval "$TEST_CMD" ) >> "$LOG" 2>&1
-  rc_tests=$?
-  if [ $rc_tests -ne 0 ]; then
-    registrar fallo-tests "$(( $(date +%s) - INICIO ))"
-    # La release queda en disco para poder mirar qué falló, pero NO se activa:
-    # `current` sigue apuntando a la anterior y producción no se entera.
-    fatal "Tests fallaron (código $rc_tests) — la release NO se activa. Log: $LOG"
+# Se compara el lockfile y NO el package.json: el lockfile es el que determina el
+# árbol exacto. Dos package.json iguales con lockfiles distintos instalan cosas
+# distintas, y esa diferencia es justamente la que uno no quiere pasar por alto.
+PREVIA_NM=$(readlink "$CURRENT" 2>/dev/null)
+if [ -n "$PREVIA_NM" ] && [ -d "$PREVIA_NM/node_modules" ] \
+   && [ -f "$PREVIA_NM/package-lock.json" ] && [ -f "$DEST/package-lock.json" ] \
+   && cmp -s "$PREVIA_NM/package-lock.json" "$DEST/package-lock.json"; then
+  log "Lockfile idéntico a la release anterior — reusando node_modules…"
+  inicio_nm=$(date +%s)
+  if cp -Rc "$PREVIA_NM/node_modules" "$DEST/node_modules" 2>/dev/null; then
+    log "node_modules reusado en $(( $(date +%s) - inicio_nm ))s (clonefile, sin reinstalar)"
+  else
+    log "⚠️  El clonado falló; se reinstala"
+    ( cd "$DEST" && eval "$INSTALL_CMD" ) >> "$LOG" 2>&1 || fatal "Falló la instalación"
   fi
-  log "Tests OK · $(( $(date +%s) - inicio_tests ))s"
+else
+  log "Instalando dependencias…"
+  ( cd "$DEST" && eval "$INSTALL_CMD" ) >> "$LOG" 2>&1 \
+    || fatal "Falló la instalación de dependencias"
 fi
 
+# LOS TESTS NO CORREN ACÁ, Y ES UNA DECISIÓN CORREGIDA (14/08/2026).
+#
+# Estuvieron un rato en este script con el argumento de que eran "21 s contra los
+# 9 min de GitHub". El argumento medía lo que no era: esos 21 s se le roban a una
+# máquina de 8 GB que al mismo tiempo está SIRVIENDO a los usuarios. Medido en el
+# deploy real: los tests tardaron 366 s bajo contención, el `npm ci` 432 s, y
+# Portal quedó tan lento que la gente lo reportó.
+#
+# El build sí tiene que correr acá —es lo que se sirve— y cuesta 2 s. Todo lo demás
+# que se puede hacer en compute ajeno, se hace en compute ajeno.
 # Los archivos compartidos (secretos) viven FUERA de las releases y se enlazan.
 # Así rotar un secreto no obliga a rebuildear, y las releases no los duplican.
 for f in "${SHARED_FILES[@]}"; do
@@ -435,7 +459,10 @@ log "Compilando…"
 (
   cd "$DEST" || exit 1
   [ -n "${NODE_OPTIONS_BUILD:-}" ] && export NODE_OPTIONS="$NODE_OPTIONS_BUILD"
-  eval "$COMPILE_CMD"
+  # `nice` para que el build ceda CPU ante producción. Un deploy que hace lento el
+  # sitio es un deploy que la gente nota, y notar un deploy es exactamente lo que
+  # no debería pasar. Cuesta unos segundos más de build y los vale.
+  nice -n 10 bash -c "$COMPILE_CMD"
 ) >> "$LOG" 2>&1
 rc_build=$?
 
@@ -564,12 +591,19 @@ activar "$DEST"; rc=$?
 if salud_ok; then
   log "✓ Deploy OK — $APP responde en $HEALTH_URL"
   registrar ok "$(( $(date +%s) - INICIO ))"
+  avisar_telegram "✅" "deploy OK · \`$SHORT\` · $(( $(date +%s) - INICIO ))s"
 else
   log "✗ $APP NO responde tras el deploy"
   if [ -n "$ANTERIOR" ] && [ -d "$ANTERIOR" ]; then
     log "AUTO-ROLLBACK a $(basename "$ANTERIOR")"
     activar "$ANTERIOR"
-    salud_ok && log "✓ Rollback OK: producción restaurada" || log "🚨 Ni la release anterior responde — revisar a mano"
+    if salud_ok; then
+      log "✓ Rollback OK: producción restaurada"
+      avisar_telegram "⚠️" "deploy de \`$SHORT\` FALLÓ el health check · se volvió sola a $(basename "$ANTERIOR") · producción OK"
+    else
+      log "🚨 Ni la release anterior responde — revisar a mano"
+      avisar_telegram "🚨" "deploy de \`$SHORT\` falló Y el rollback tampoco responde · REVISAR A MANO"
+    fi
     registrar fallo-salud "$(( $(date +%s) - INICIO ))"
   else
     log "🚨 No hay release anterior para volver"

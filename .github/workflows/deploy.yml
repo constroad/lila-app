@@ -1,22 +1,20 @@
-# Dispara el deploy. NADA MÁS — y eso es deliberado.
+# Dos trabajos INDEPENDIENTES, y esa independencia es la decisión de fondo.
 #
-# POR QUÉ NO CORRE TESTS NI BUILD ACÁ (decisión del 14/08/2026, con números):
+# LOS TESTS CORREN ACÁ y no en la mini. Estuvieron un rato allá con el argumento
+# de que tardaban 21 s contra los 9 min de GitHub, y el argumento medía lo que no
+# era: esos segundos se le roban a una máquina de 8 GB que al mismo tiempo sirve a
+# los usuarios. En el deploy real tardaron 366 s bajo contención, y Portal quedó
+# tan lento que la gente lo reportó. Compute ajeno es gratis; el de producción no.
 #
-#   · El build era REDUNDANTE. Si el código no compila, la mini también falla al
-#     compilar y `current` no se mueve: producción ni se entera. Compilar dos
-#     veces, tirar una, y encima dejar que la copia desechable bloquee el deploy
-#     es al revés de como debería ser.
+# PERO NO BLOQUEAN EL DEPLOY (`desplegar` no lleva `needs`), y esto es a
+# conciencia. Ya pasó que un exit code espurio de jest —con los 6.580 tests en
+# verde— dejara a producción sin poder deployar. Contra eso, lo que de verdad
+# protege es lo que corre en la mini: si el build falla, `current` no se mueve; y
+# si la app no responde al reiniciar, hay auto-rollback. Un test rojo se ve acá y
+# se arregla; una CI trabada te deja sin poder desplegar un hotfix.
 #
-#   · Los tests son MÁS BARATOS Y MÁS FIELES en la mini. Los 630 de lila tardan
-#     21 s allá; acá GitHub tardaba 9+ minutos SÓLO en `npm ci` —dependencias
-#     pesadas, runner frío— y encima corría en un entorno que no es ni el de
-#     desarrollo ni el de producción, sin las envs.
-#
-#   · Y bloqueaba de verdad: con `needs: verificar`, cualquier hipo de la CI
-#     dejaba a producción sin poder deployar. Pasó.
-#
-# El portón de calidad vive ahora en `deploy.sh`: instala, **corre los tests**,
-# y si fallan la release no se activa. Ver el bloque "PORTÓN DE TESTS" ahí.
+# La primera línea de defensa sigue siendo la regla de CLAUDE.md: los tests pasan
+# localmente ANTES de commitear.
 name: Deploy
 
 on:
@@ -49,7 +47,22 @@ jobs:
             --data-raw "$BODY")
           echo "Torre respondió ${CODIGO}: $(cat /tmp/r.txt)"
           case "$CODIGO" in
-            202) echo "::notice::Deploy encolado — los tests y el build corren en la mini" ;;
+            202) echo "::notice::Deploy encolado en la mini" ;;
             409) echo "::warning::Ya había un deploy en curso" ;;
             *)   echo "::error::Torre rechazó el disparo"; exit 1 ;;
           esac
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # NODE_ENV=test explícito: varios guards fail-closed de seguridad lanzan
+      # excepción si se creen en producción sin los secretos cargados.
+      - run: npm test
+        env:
+          NODE_ENV: test
