@@ -75,7 +75,7 @@ jobs:
         if: failure()
         env:
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT: ${{ secrets.TELEGRAM_ALERTS_CHAT_ID }}
+          CHAT: ${{ secrets.TELEGRAM_DEPLOY_CHAT_ID || secrets.TELEGRAM_ALERTS_CHAT_ID }}
         run: |
           set -uo pipefail
           [ -n "${TOKEN:-}" ] && [ -n "${CHAT:-}" ] || exit 0
@@ -133,7 +133,7 @@ jobs:
         env:
           ESTADO: ${{ job.status }}
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT: ${{ secrets.TELEGRAM_ALERTS_CHAT_ID }}
+          CHAT: ${{ secrets.TELEGRAM_DEPLOY_CHAT_ID || secrets.TELEGRAM_ALERTS_CHAT_ID }}
         run: |
           set -uo pipefail
           [ "$ESTADO" = "success" ] && exit 0

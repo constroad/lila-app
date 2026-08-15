@@ -189,7 +189,19 @@ tg_credenciales() {
   [ -f "$env_file" ] || env_file="/Users/jose/deploys/lila/shared/.env"
   [ -f "$env_file" ] || return 1
   TG_TOKEN=$(grep -m1 '^TELEGRAM_BOT_TOKEN=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
-  TG_CHAT=$(grep -m1 '^TELEGRAM_ALERTS_CHAT_ID=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
+  # CANAL PROPIO PARA DEPLOYS Y CI ("Constroad builds").
+  #
+  # `TELEGRAM_ALERTS_CHAT_ID` lo comparten los backups horarios, el watchdog del
+  # túnel, la sonda externa y la verificación de backups: cosas que cuando hablan
+  # exigen mirar. Un aviso de deploy por cada push entierra eso en ruido rutinario,
+  # y un canal donde todo es rutina es un canal que se deja de leer.
+  #
+  # CON FALLBACK, a propósito: si la variable no está declarada se usa la de
+  # siempre. Nadie se queda sin aviso por no haber configurado el canal nuevo —
+  # que es justo el modo de falla silencioso que estas alertas existen para evitar.
+  TG_CHAT=$(grep -m1 '^TELEGRAM_DEPLOY_CHAT_ID=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
+  [ -n "$TG_CHAT" ] || \
+    TG_CHAT=$(grep -m1 '^TELEGRAM_ALERTS_CHAT_ID=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"\r')
   [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ]
 }
 
