@@ -1,6 +1,6 @@
 ---
 name: deploy-mini
-description: Invariantes de DESPLIEGUE y OPERACIÓN en la Mac mini (web Next, API Express, o cualquier app con build). Usar SIEMPRE al tocar `scripts/deploy.sh`, plists de launchd, workflows de GitHub Actions, el arranque de un servicio, o al dar de alta una app nueva. También al DIAGNOSTICAR: "el deploy tarda una eternidad", "el build se cuelga", "el servicio no levanta", "arranca a mano pero no como daemon", "el sitio quedó lento después de deployar", "la CI bloquea el deploy", "la página se rompió tras un deploy". Nace de un día completo de incidentes reales (14/08/2026) con 30 min de caída de producción. Ref: `specs/DEPLOY-MINI.spec.md` y lecciones #17-#25 de `specs/OBSERVABILITY-ALERTING.spec.md`.
+description: Invariantes de DESPLIEGUE y OPERACIÓN en la Mac mini (web Next, API Express, o cualquier app con build). Usar SIEMPRE al tocar `scripts/deploy.sh`, plists de launchd, workflows de GitHub Actions, el arranque de un servicio, o al dar de alta una app nueva. También al DIAGNOSTICAR: "el deploy tarda una eternidad", "el build se cuelga", "el servicio no levanta", "arranca a mano pero no como daemon", "el sitio quedó lento después de deployar", "la CI bloquea el deploy", "la página se rompió tras un deploy". Nace de un día completo de incidentes reales (14/08/2026) con 30 min de caída de producción. Ref: lecciones #17-#28 de `specs/OBSERVABILITY-ALERTING.spec.md`.
 ---
 
 # Despliegue en la Mac mini — invariantes
@@ -42,6 +42,13 @@ en verde, dejó producción sin poder desplegar. Lo que protege de verdad está 
 mini: build fallido no mueve `current`, y hay auto-rollback. Un test rojo se ve y
 se arregla; una CI trabada te deja sin hotfix.
 
+**Y "no bloquea" hay que verificarlo en los candados, no en el diseño.** Con
+`concurrency` a nivel de workflow el candado lo toma el run ENTERO, tests
+incluidos: un job colgado hasta el techo de 6 h de GitHub retrasó un deploy 4 h 28
+min y **descartó tres commits del medio sin avisar** —GitHub cancela todo lo
+pendiente menos lo último—. Va dentro del job que hay que serializar, y todo job
+lleva `timeout-minutes` (#27).
+
 **Nunca reinstales dependencias idénticas.** Comparar el hash del **lockfile** (no
 del `package.json`: el lockfile determina el árbol exacto). Medido: 432 s de `npm
 ci` para llegar bit por bit a lo mismo.
@@ -59,6 +66,14 @@ que no tenían nada que ver.
   enterarse es que un humano mire.
 - **El techo de heap no es "cuánta memoria usa"**: es dónde V8 deja de intentar.
   Ponerlo apenas por encima del pico garantiza que el próximo commit lo rompa.
+
+**Y el caso hermano, que es peor porque no deja rastro:** cuando el build *casi*
+entra, el sistema operativo tapa el faltante con swap y no falla — sale con 0, con
+el artefacto correcto, tardando 5×. Medido: el build de Portal pica en 2.746 MB y
+arranca con 2.204 MB libres; 146 s en aislamiento, **716 s** con otro deploy en
+paralelo. Ante un paso lento, **medilo en aislamiento antes de tocar nada**: separa
+"regresión" de "contención", que se arreglan al revés. Y compará el pico contra la
+memoria **libre**, no contra la total (#28).
 
 ## 4. Symlinks: donde Node te traiciona
 
@@ -121,6 +136,10 @@ que no tenían nada que ver.
 - **Antes de optimizar el paso sospechoso, medí TODOS los pasos.** El desglose del
   deploy de 31 min: 840 s de candado, 432 s de instalación innecesaria, 366 s de
   tests… y 2 s de build. El desperdicio estaba donde nadie miraba.
+- **Y medí el entorno, no solo el proceso.** Un servidor con apps de escritorio
+  abiertas —Chrome y Claude sostenían 1.915 MB contra los 316 MB de los tres
+  servicios juntos— tiene el 24 % de la máquina comprometido en algo que no
+  aparece en ningún panel de deploys.
 
 ## 9. Apps que NO corren en la mini (React Native, APKs)
 
@@ -134,7 +153,9 @@ servicio inexistente no responde — ruido que entrena a la gente a ignorar el p
 - [ ] ¿Verifico el artefacto, y que sea el que corre?
 - [ ] ¿El build tiene techo de tiempo y de memoria, medidos y con margen?
 - [ ] ¿Los tests corren fuera de la máquina de producción, con `NODE_ENV=test`?
-- [ ] ¿La CI puede bloquear un hotfix? (no debería)
+- [ ] ¿La CI puede bloquear un hotfix? (no debería — mirá los candados, no el diseño)
+- [ ] ¿Todo job del CI tiene `timeout-minutes`? (el default son 6 horas)
+- [ ] ¿El pico del build entra en la memoria LIBRE, no en la total?
 - [ ] ¿Se reinstalan dependencias idénticas?
 - [ ] ¿Config declarada y ausente falla diciéndolo?
 - [ ] ¿El deploy avisa su resultado, sobre todo cuando falla?

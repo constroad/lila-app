@@ -667,3 +667,147 @@ el que se estaba discutiendo.
       ser otro.
 - [ ] Reinstalar dependencias idénticas es desperdicio puro: comparar el lockfile.
 
+### 26. Un guard de "¿soy el punto de entrada?" compara rutas, y bajo un symlink nunca coinciden
+
+**Qué pasó (14/08/2026).** Se cambió el plist de lila para que corriera `tsx`
+directamente contra `deploys/lila/current/src/index.ts`. El proceso arrancó,
+`launchctl` lo reportó vivo, no hubo excepción, no hubo crash, no hubo una línea
+de error en ningún log. **Y el servidor HTTP nunca escuchó.** 30 minutos de
+producción caída.
+
+**La causa.** El final de `src/index.ts` decía:
+
+```ts
+if (import.meta.url === `file://${process.argv[1]}`) startServer();
+```
+
+Los dos lados nombran el mismo archivo y **nunca son iguales**:
+
+| | valor |
+|---|---|
+| `import.meta.url` | ruta **física**, con los symlinks ya resueltos → `…/releases/20260814-…/src/index.ts` |
+| `process.argv[1]` | el argumento **literal** que recibió el proceso → `…/current/src/index.ts` |
+
+Corriendo desde el árbol de git funcionaba —no hay symlink de por medio— y por eso
+sobrevivió meses. Debajo de `current` la comparación da `false` siempre, y el
+`if` hace lo peor que puede hacer un guard: **nada, en silencio**.
+
+**La forma general.** Toda pregunta del tipo "¿me están ejecutando a mí?" es una
+comparación de rutas, y una ruta tiene dos formas. Hay que comparar las
+**reales** (`fs.realpathSync` de los dos lados). Y un guard cuyo modo de falla es
+*no ejecutar* no deja rastro: no aparece en los logs porque el código que loguea
+es justamente el que no corrió.
+
+**El error de verificación, que fue mío.** Miré 6 segundos de salida, vi el
+arranque y lo di por bueno. La salida terminaba exactamente donde después se
+colgaba. **Ver que algo arranca no es ver que termina de arrancar**: lo que había
+que verificar era el puerto escuchando, no el proceso vivo.
+
+**Qué se hizo.** Comparación por `realpath` con fallback, y la verificación pasó
+a ser `curl` al health check, no `ps`.
+
+**Checklist**
+- [ ] Comparar rutas con `realpath` en los dos lados, nunca las cadenas crudas.
+- [ ] Probar el arranque **como lo va a invocar la máquina** (bajo el symlink, con
+      el entorno del daemon), no desde el árbol de trabajo (ver #19).
+- [ ] Verificar el puerto escuchando o el health check. "El proceso está vivo" no
+      es una verificación.
+- [ ] Desconfiar de todo `if` cuyo camino falso sea el silencio.
+
+### 27. Dos jobs no son independientes si comparten el candado
+
+**Qué pasó (15/08/2026, 03:07 AM).** Llegó un aviso de deploy de lila a las tres
+de la mañana. Nadie lo lanzó: era el push de las **22:39**, con 4 h 28 min de
+retraso.
+
+| hora | qué |
+|---|---|
+| 21:07:31 | push → deploy a las 21:07:41 ✓ |
+| 21:27 · 21:29 · 21:48 | tres pushes → **ningún deploy, jamás** |
+| 22:39:36 | push → nada |
+| **03:07:41** | se cumplen **6 h exactas** del run de las 21:07 |
+| 03:07:55 | Torre recibe el hook · 03:07:58 arranca el deploy |
+
+**La causa.** El `concurrency` estaba declarado a nivel de **workflow**, y ahí el
+candado lo toma el run entero — los dos jobs, `tests` incluido. Un run trabado en
+`tests` hasta el techo por defecto de GitHub (360 min) mantuvo el grupo tomado
+seis horas. Peor: GitHub **cancela todos los runs pendientes menos el más
+reciente**, así que los tres commits del medio no se desplegaron nunca y nadie se
+enteró.
+
+**Lo que lo vuelve una lección y no un bug.** El encabezado de ese mismo archivo
+decía, textual, que los tests no bloquean el deploy, y era verdad en lo explícito:
+`desplegar` no llevaba `needs`. Bloqueó igual, por la puerta de atrás. **Una
+independencia declarada en el diseño no sobrevive a un recurso compartido que no
+se nombró.**
+
+**Qué se hizo.** El `concurrency` bajó adentro del job `desplegar` —que es lo
+único que hay que serializar, porque dos deploys de la misma app se pisan el
+symlink— y cada job tiene techo propio: 15 min en `tests`, 5 en `desplegar`.
+Además la CI ahora avisa a Telegram si los tests fallan **o se cancelan**, que
+hace falta justamente porque no bloquean: el commit ya está en producción y la
+pestaña de Actions no la mira nadie.
+
+**Checklist**
+- [ ] `concurrency` al nivel de lo que de verdad hay que serializar. A nivel de
+      workflow serializa TODO el run.
+- [ ] `timeout-minutes` explícito en todo job. El default de 360 min convierte un
+      cuelgue en un incidente de seis horas.
+- [ ] Si un pipeline descarta trabajo pendiente (cancelación, coalescencia,
+      "solo el último"), tiene que **decirlo**. Un commit que nunca se desplegó y
+      no avisó es indistinguible de uno desplegado.
+- [ ] Cuando dos cosas "son independientes", enumerar qué comparten: candados,
+      cuotas, runners, el disco.
+
+### 28. Un build que casi entra en RAM no falla: se arrastra, y no deja rastro
+
+**Qué pasó (15/08/2026).** El build de Portal tardó **11 m 56 s**. Las tres noches
+anteriores, con el mismo lockfile y el mismo árbol de dependencias, tardaba entre
+140 y 158 s. Exit code 0, artefacto correcto, deploy exitoso.
+
+**La medición.** Se corrió el mismo SHA en un directorio aparte, sin tocar
+producción, muestreando memoria cada 15 s:
+
+```
+06:42:16  swap 1001 MB   libre 2204 MB   ← arranca
+06:42:31  swap 1001 MB   libre  339 MB
+06:44:16  swap 1365 MB   libre   74 MB
+06:44:31  swap 1571 MB   libre   57 MB   ← termina, 146 s
+```
+
+**146 s**: no había ninguna regresión. Pero el muestreo mostró lo otro: el build
+pica en ~2.746 MB y arranca con 2.204 MB libres. **No entra en RAM ni con la
+máquina en reposo** — la diferencia se paga en swap, +570 MB medidos. Con la
+máquina tranquila eso cuesta segundos; con otro deploy corriendo en paralelo, el
+mismo déficit estiró el build a 716 s. Cinco veces.
+
+**Por qué es invisible.** No es la #24. Ahí el heap no alcanzaba y V8 mataba el
+proceso dejando su rastro en el log (`Reached heap limit`). Acá el sistema
+operativo **tapa el faltante con swap** y nadie escribe nada en ningún lado: no
+hay error, no hay warning, no hay métrica. El único síntoma es un número más
+grande en un log que nadie mira.
+
+**El agravante que no era del deploy.** Las apps de escritorio de la mini —Chrome
+y Claude— sostenían **1.915 MB**. Los tres servicios juntos, 316 MB. En un
+servidor de 8 GB, dos apps de escritorio abiertas son el 24 % de la máquina, y no
+aparecen en ningún panel de deploys.
+
+**La forma general.** El techo de memoria no es lo que consume el proceso: es lo
+que hay **libre en el instante del pico**. Y a diferencia de la CPU —que reparte y
+todos van más lentos— la memoria que falta se cobra en I/O, que es dos órdenes de
+magnitud más caro. Un candado que serializa builds protege contra dos builds a la
+vez; no protege contra **uno solo que no entra**.
+
+**Qué se hizo.** El aviso de Telegram lleva desglose por fase, así un
+`build 11m 56s` al lado de un `build 2m 26s` se ve de un vistazo en el celular en
+vez de quedar enterrado en el log.
+
+**Checklist**
+- [ ] Ante un paso lento: medirlo **en aislamiento** antes de tocar nada. Separa
+      "regresión" de "contención", que se arreglan al revés.
+- [ ] Muestrear memoria libre y swap durante el pico, no solo la duración.
+- [ ] Comparar el pico del build contra la memoria **libre**, no contra la total.
+- [ ] Nada de apps de escritorio en una máquina que sirve producción.
+- [ ] Si un paso puede degradarse 5× sin fallar, su duración tiene que llegar a
+      donde alguien la lea.
+
