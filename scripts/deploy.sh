@@ -81,7 +81,16 @@ case "$APP" in
     #
     # Va EXPORTADA y no como prefijo: `VAR=x cmd1 && cmd2` solo se la pasa a cmd1,
     # así que llegaba al `npm ci` en vez del `npm run build`, que la necesita.
-    NODE_OPTIONS_BUILD="--max-old-space-size=3072"
+    # MEDIDO DOS VECES, y la segunda porque la primera quedó corta:
+    #   14/08 mañana → pico 2.260 MB, techo 3.072: alcanzaba.
+    #   14/08 noche  → pico >2.971 MB con el mismo techo: **OOM**. El código creció
+    #                  en el día (la alerta de coordinación, sus tests, su modelo).
+    #   Con 4.096 → build OK en 164 s, pico real 2.746 MB.
+    #
+    # El techo NO es "cuánta memoria usa": es el punto donde V8 deja de intentar y
+    # falla. Ponerlo apenas por encima del pico es pedir que el próximo commit lo
+    # rompa, y romperlo se ve como un cuelgue de 38 minutos, no como un error.
+    NODE_OPTIONS_BUILD="--max-old-space-size=4096"
     SERVICE=com.constroad.portal
     HEALTH_URL=http://127.0.0.1:3002/
     # Portal arranca en segundos: `next start` sirve apenas bindea.
@@ -430,7 +439,12 @@ fi
 # que se puede hacer en compute ajeno, se hace en compute ajeno.
 # Los archivos compartidos (secretos) viven FUERA de las releases y se enlazan.
 # Así rotar un secreto no obliga a rebuildear, y las releases no los duplican.
-for f in "${SHARED_FILES[@]}"; do
+# `${SHARED_FILES[@]+...}` y no `${SHARED_FILES[@]}` a secas: el bash 3.2 que trae
+# macOS trata un array VACÍO como variable no definida y con `set -u` aborta el
+# deploy con "unbound variable". Le pasaría a la primera app que no declare
+# archivos compartidos —un caso perfectamente válido— y el error no diría nada
+# sobre la causa.
+for f in ${SHARED_FILES[@]+"${SHARED_FILES[@]}"}; do
   if [ ! -f "$SHARED/$f" ]; then
     # Respaldo: tomarlo de la copia de trabajo. OJO — esto NO funciona cuando el
     # repo es un mirror (una app nueva bootstrapeada), porque un mirror no tiene
@@ -455,6 +469,22 @@ for f in "${SHARED_FILES[@]}"; do
   ln -sfn "$SHARED/$f" "$DEST/$f"
 done
 
+# TECHO DE TIEMPO PARA EL BUILD.
+#
+# EL CASO REAL (14/08/2026): el build de Portal se pasó de heap y V8 entró en
+# espiral de GC —recolectando sin avanzar, al 92% de CPU, sin escribir un solo
+# archivo nuevo en `.next`— durante **38 minutos**, hasta que alguien lo miró. No
+# estaba colgado en el sentido de bloqueado: estaba trabajando furiosamente en
+# nada, que es peor, porque parece progreso.
+#
+# El síntoma engaña: CPU alta, proceso vivo, log sin errores. Sin un techo, un
+# build así se come la máquina hasta que un humano intervenga.
+#
+# 12 min es ~4x el build más lento medido (164 s de Portal). Si se supera, casi
+# seguro es memoria: se dice en el mensaje para no volver a perder media hora
+# buscando en el lugar equivocado.
+BUILD_TIMEOUT=${BUILD_TIMEOUT:-720}
+
 log "Compilando…"
 (
   cd "$DEST" || exit 1
@@ -466,8 +496,32 @@ log "Compilando…"
   # sabe que funcionaba. Si el build vuelve a molestar a producción, la respuesta
   # correcta es acotar sus workers, no bajarle la prioridad al proceso entero.
   eval "$COMPILE_CMD"
-) >> "$LOG" 2>&1
+) >> "$LOG" 2>&1 &
+pid_build=$!
+
+# Vigía: mata el build si se pasa del techo. Se corre en segundo plano y se
+# autodestruye si el build termina antes.
+(
+  espera_b=0
+  while kill -0 "$pid_build" 2>/dev/null; do
+    sleep 10; espera_b=$((espera_b + 10))
+    if [ "$espera_b" -ge "$BUILD_TIMEOUT" ]; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⏱️  Build excedió ${BUILD_TIMEOUT}s — se aborta" >> "$LOG"
+      # Al grupo, no solo al padre: los workers de Next son los que consumen.
+      kill -9 -"$pid_build" 2>/dev/null || kill -9 "$pid_build" 2>/dev/null
+      break
+    fi
+  done
+) &
+pid_vigia=$!
+
+wait "$pid_build"
 rc_build=$?
+kill "$pid_vigia" 2>/dev/null
+
+if [ $rc_build -ne 0 ] && grep -q "heap out of memory" "$LOG" 2>/dev/null; then
+  log "⚠️  El build se quedó SIN MEMORIA. Subí NODE_OPTIONS_BUILD para esta app."
+fi
 
 # NO ALCANZA CON EL CÓDIGO DE SALIDA (incidente 2026-08-14): el build de Portal
 # crasheó por falta de memoria —stack trace de V8 en el log— y `npm run build`
