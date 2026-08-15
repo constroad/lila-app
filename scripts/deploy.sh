@@ -459,10 +459,13 @@ log "Compilando…"
 (
   cd "$DEST" || exit 1
   [ -n "${NODE_OPTIONS_BUILD:-}" ] && export NODE_OPTIONS="$NODE_OPTIONS_BUILD"
-  # `nice` para que el build ceda CPU ante producción. Un deploy que hace lento el
-  # sitio es un deploy que la gente nota, y notar un deploy es exactamente lo que
-  # no debería pasar. Cuesta unos segundos más de build y los vale.
-  nice -n 10 bash -c "$COMPILE_CMD"
+  # SIN `nice`, y la razón es empírica: se probó y el build de Portal pasó de
+  # 3m15s a colgarse 38 minutos quemando un núcleo sin producir un archivo. No
+  # quedó demostrado que `nice` fuera la causa —pudo ser el árbol de dependencias
+  # clonado— pero tampoco aportaba nada medible, y ante la duda gana lo que se
+  # sabe que funcionaba. Si el build vuelve a molestar a producción, la respuesta
+  # correcta es acotar sus workers, no bajarle la prioridad al proceso entero.
+  eval "$COMPILE_CMD"
 ) >> "$LOG" 2>&1
 rc_build=$?
 
