@@ -701,6 +701,62 @@ $(tg_escapar "$CAUSA_BUILD")
 fi
 log "Build OK · artefacto verificado: $ARTEFACTO"
 
+# ─── LAS `NEXT_PUBLIC_*` QUEDARON INLINEADAS, O EL DEPLOY NO SIGUE ───────────
+#
+# INCIDENTE 15/08/2026. Portal se desplegó con el `.env.local` enlazado y
+# legible, Next reportó `Environments: .env.local`, el build salió con 0, el
+# health check pasó y el deploy quedó verde. Y el bundle que se servía tenía
+# `env.NEXT_PUBLIC_LILA_SERVER_URL` SIN RESOLVER, cayendo a su default de
+# desarrollo `http://localhost:3001`.
+#
+# Consecuencia: las subidas de archivos van del navegador DIRECTO a lila, así que
+# cada usuario subía sus fotos a su propio equipo. Connection refused, sin error
+# en pantalla ni en los logs del servidor. Se descubrió porque a alguien le
+# faltaron dos fotos en WhatsApp.
+#
+# POR QUÉ NINGUNA VERIFICACIÓN ANTERIOR LO VIO: se comprueba el artefacto
+# (`.next/BUILD_ID` existe) y la salud (el proceso responde). Las dos daban
+# verde, porque el servidor estaba perfecto. Lo roto era lo que se COMPILA para
+# el navegador, y eso no lo miraba nadie.
+#
+# Misma lección de siempre —verificar lo que importa, no lo cómodo de medir—
+# aplicada a la capa que faltaba: un deploy verde que sirve un cliente roto es
+# peor que un deploy fallido.
+#
+# ⚠️ ESTE BLOQUE VA ANTES DE CONSERVAR LOS ASSETS DE RELEASES ANTERIORES, y el
+# orden no es casual: ese paso copia chunks viejos DENTRO de esta release. Si la
+# comprobación corriera después, un chunk de un build bueno de ayer haría pasar a
+# un build roto de hoy. Comprobado sobre la release del incidente: ya con los
+# assets copiados, esta misma verificación da verde en las tres variables.
+# Moverla abajo la vuelve decorativa.
+if [ -d "$DEST/.next/static" ] && [ -f "$DEST/.env.local" ]; then
+  faltantes=""
+  for var in $(grep -o '^NEXT_PUBLIC_[A-Z0-9_]*' "$DEST/.env.local" 2>/dev/null | sort -u); do
+    valor=$(grep -m1 "^${var}=" "$DEST/.env.local" | cut -d= -f2- | tr -d '"'"'"'\r')
+    [ -n "$valor" ] || continue
+    # Se busca el VALOR y no el nombre: si Next lo inlineó, el valor está en algún
+    # chunk. Si quedó el acceso `env.NOMBRE`, no se resolvió.
+    grep -rqF "$valor" "$DEST/.next/static" 2>/dev/null || faltantes="$faltantes $var"
+  done
+
+  if [ -n "$faltantes" ]; then
+    ACTIVA=$(readlink "$CURRENT" 2>/dev/null | xargs basename 2>/dev/null || echo 'sin release')
+    log "✗ BUILD INCOMPLETO: estas NEXT_PUBLIC_* no quedaron inlineadas:"
+    log "  $faltantes"
+    log "  Se resuelven al COMPILAR, no al arrancar. El servidor andaría igual y el"
+    log "  navegador caería a los defaults de desarrollo, sin un solo error visible."
+    log "  Producción NO se tocó (sigue en $ACTIVA)"
+    rm -rf "$DEST"
+    registrar fallo-build "$(( $(date +%s) - INICIO ))"
+    avisar_telegram "❌ <b>${APP}</b> · build incompleto${TG_QUE}
+No se inlinearon:$(tg_escapar "$faltantes")
+<i>el navegador caería a los defaults de desarrollo — producción intacta</i>"
+    exit 1
+  fi
+  log "Variables de cliente verificadas en el bundle"
+fi
+
+
 # Se suelta ACÁ y no al salir: lo que compite por memoria es el build, no el
 # health check. Retenerlo hasta el final bloquearía 240 s a las otras apps
 # —el timeout de lila— sin que nada lo justifique.
