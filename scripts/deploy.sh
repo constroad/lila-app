@@ -394,38 +394,77 @@ done
 LOCK_BUILD_TOMADO=1
 [ "$espera" -gt 0 ] && log "Turno tomado tras ${espera}s de espera"
 
-# DEPENDENCIAS: reusar si el lockfile no cambió.
+# DEPENDENCIAS: almacén compartido, indexado por hash del lockfile.
 #
-# MEDIDO (14/08/2026): `npm ci` tardaba **432 s** en lila y más en Portal, para
-# llegar exactamente al mismo árbol de dependencias — los lockfiles entre releases
-# consecutivas eran IDÉNTICOS. Siete minutos de CPU y disco a full, compitiendo con
-# producción, para reproducir bit por bit lo que ya estaba al lado.
+# EL PROBLEMA QUE RESUELVE. `npm ci` tardaba 432 s reinstalando un árbol idéntico
+# al de la release anterior. La primera solución fue clonar con `cp -Rc`
+# (copy-on-write de APFS): bajó a 7 s en torre… y a 337 s en Portal, porque
+# clonefile es POR ARCHIVO y Portal tiene 59.223 contra los 9.541 de torre. El
+# tamaño no manda; manda la cantidad.
 #
-# `cp -Rc` usa clonefile de APFS: copy-on-write real. Los mismos 515 MB en **7,4 s**
-# —58x más rápido— sin ocupar disco hasta que algo se modifique, y sin el riesgo de
-# los hardlinks: si el build escribe dentro de node_modules, la release anterior no
-# se entera.
+# LA SOLUCIÓN. Un solo árbol por lockfile en `<app>/nm-cache/<hash>`, y cada
+# release lo apunta con un symlink. Instalar deja de ser copiar: es crear un
+# enlace. Costo O(1) sin importar cuántos archivos tenga el árbol.
 #
-# Se compara el lockfile y NO el package.json: el lockfile es el que determina el
-# árbol exacto. Dos package.json iguales con lockfiles distintos instalan cosas
-# distintas, y esa diferencia es justamente la que uno no quiere pasar por alto.
-PREVIA_NM=$(readlink "$CURRENT" 2>/dev/null)
-if [ -n "$PREVIA_NM" ] && [ -d "$PREVIA_NM/node_modules" ] \
-   && [ -f "$PREVIA_NM/package-lock.json" ] && [ -f "$DEST/package-lock.json" ] \
-   && cmp -s "$PREVIA_NM/package-lock.json" "$DEST/package-lock.json"; then
-  log "Lockfile idéntico a la release anterior — reusando node_modules…"
-  inicio_nm=$(date +%s)
-  if cp -Rc "$PREVIA_NM/node_modules" "$DEST/node_modules" 2>/dev/null; then
-    log "node_modules reusado en $(( $(date +%s) - inicio_nm ))s (clonefile, sin reinstalar)"
-  else
-    log "⚠️  El clonado falló; se reinstala"
-    ( cd "$DEST" && eval "$INSTALL_CMD" ) >> "$LOG" 2>&1 || fatal "Falló la instalación"
-  fi
+# POR QUÉ EL HASH DEL LOCKFILE Y NO DEL package.json: el lockfile determina el
+# árbol EXACTO. Dos package.json iguales con lockfiles distintos instalan cosas
+# distintas, y esa es justamente la diferencia que no se puede pasar por alto.
+#
+# RIESGO ASUMIDO Y POR QUÉ SE ACEPTA: varias releases comparten el mismo árbol, así
+# que algo que escriba DENTRO de node_modules afecta a todas. Se acepta porque
+# node_modules es de lectura después de instalar —Next escribe su caché en
+# `.next/cache`, no ahí— y porque la alternativa era pagar 337 s por deploy. Si
+# algún día una herramienta escribe adentro, el síntoma sería releases viejas
+# cambiando solas: está anotado acá para no perder una tarde buscándolo.
+NM_CACHE="$BASE/nm-cache"
+mkdir -p "$NM_CACHE"
+
+if [ -f "$DEST/package-lock.json" ]; then
+  HASH_LOCK=$(shasum -a 256 "$DEST/package-lock.json" | cut -c1-16)
 else
-  log "Instalando dependencias…"
+  HASH_LOCK=""
+fi
+# EL DIRECTORIO TIENE QUE LLAMARSE `node_modules`, y no es cosmética: al seguir el
+# symlink Node resuelve la ruta REAL y desde ahí busca los paquetes hermanos
+# subiendo por directorios llamados `node_modules`. Con el almacén nombrado por el
+# hash, `next` quedaba en `<hash>/next` y buscaba a `styled-jsx` en
+# `<hash>/node_modules/…`, que no existe. Falla con "Cannot find module", que no
+# se parece en nada a "el symlink está mal armado".
+ARBOL="$NM_CACHE/$HASH_LOCK/node_modules"
+
+if [ -n "$HASH_LOCK" ] && [ -d "$ARBOL" ] && [ -f "$ARBOL/.completo" ]; then
+  # `.completo` es la marca de que la instalación terminó bien. Sin ella, un
+  # `npm ci` interrumpido a la mitad dejaría un árbol trunco que se reusaría para
+  # siempre — y el fallo aparecería mucho después, como un módulo que "falta".
+  rm -rf "$DEST/node_modules"
+  ln -sfn "$ARBOL" "$DEST/node_modules"
+  log "node_modules del almacén ($HASH_LOCK) — sin reinstalar"
+else
+  log "Lockfile nuevo ($HASH_LOCK) — instalando…"
+  inicio_nm=$(date +%s)
   ( cd "$DEST" && eval "$INSTALL_CMD" ) >> "$LOG" 2>&1 \
     || fatal "Falló la instalación de dependencias"
+
+  # Se mueve al almacén y se enlaza. `mv` dentro del mismo volumen es un rename:
+  # instantáneo y atómico, así que no hay ventana en la que el árbol esté a medias
+  # en su destino final.
+  if [ -n "$HASH_LOCK" ] && [ -d "$DEST/node_modules" ]; then
+    rm -rf "$NM_CACHE/$HASH_LOCK"
+    mkdir -p "$NM_CACHE/$HASH_LOCK"
+    mv "$DEST/node_modules" "$ARBOL" && touch "$ARBOL/.completo" \
+      && ln -sfn "$ARBOL" "$DEST/node_modules"
+  fi
+  log "Dependencias instaladas y guardadas en el almacén ($(( $(date +%s) - inicio_nm ))s)"
 fi
+
+# Poda: se conservan los 3 árboles más recientes. Cada uno pesa cientos de MB y
+# solo sirve mientras alguna release retenida lo apunte; guardarlos todos haría
+# crecer el disco con cada cambio de dependencias.
+ls -1dt "$NM_CACHE"/*/ 2>/dev/null | tail -n +4 | while read -r viejo; do
+  # No se borra el que está en uso ahora mismo.
+  [ "${viejo%/}" = "$NM_CACHE/$HASH_LOCK" ] && continue
+  rm -rf "$viejo" && log "Árbol de dependencias viejo eliminado: $(basename "${viejo%/}")"
+done
 
 # LOS TESTS NO CORREN ACÁ, Y ES UNA DECISIÓN CORREGIDA (14/08/2026).
 #
