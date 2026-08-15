@@ -127,24 +127,29 @@ jobs:
         timeout-minutes: 6
         run: npm ci --no-audit --no-fund --foreground-scripts
 
-      # LOS BINARIOS DE `sharp` PARA LINUX, QUE EL LOCKFILE NO TIENE.
+      # LOS BINARIOS NATIVOS PARA LINUX, QUE EL LOCKFILE NO TIENE.
       #
-      # `sharp` distribuye su parte nativa como dependencias OPCIONALES por
-      # plataforma, y el lockfile se generó en una Mac ARM: adentro solo están
-      # `@img/sharp-darwin-arm64` y `@img/sharp-libvips-darwin-arm64`. `npm ci`
-      # instala exactamente lo que dice el lockfile, así que en un runner
-      # linux-x64 el binario no existe y sharp no carga.
+      # Los paquetes con parte nativa publican un binario por plataforma como
+      # dependencia OPCIONAL, y npm graba en el lockfile sólo el de la máquina
+      # donde se instaló. Este lockfile nació en una Mac ARM, así que adentro hay
+      # `@img/sharp-darwin-arm64` y `@napi-rs/canvas-darwin-arm64` y nada más.
+      # `npm ci` instala exactamente lo que dice el lockfile —esa es su virtud y
+      # acá su trampa—, y en un runner linux-x64 el binario simplemente no está.
       #
-      # EL SÍNTOMA ENGAÑA: jest reporta "5 failed, 47 passed" y parece que hay
-      # tests rotos. No hay ninguno — son 396 de 396 en verde. Lo que falla es
-      # que cinco SUITES no llegan ni a arrancar porque el `import` revienta.
-      # Cinco correos de "Run failed" describiendo un problema que no existe en
-      # el código.
+      # EL SÍNTOMA ENGAÑA, y es lo que hace que valga la pena este comentario:
+      # jest reportó "5 failed, 47 passed" y parecía que había tests rotos. No
+      # había ninguno: 396 de 396 en verde. Lo que fallaba es que cinco SUITES no
+      # llegaban ni a arrancar porque el `import` reventaba. Cinco correos de
+      # "Run failed" describiendo un problema que no existe en el código.
       #
       # `--no-save`: el lockfile no se toca. Cambiarlo obligaría a la mini a
-      # reinstalar el árbol entero para agregar un binario que allá no se usa.
-      - name: Binarios de sharp para linux-x64
-        run: npm install --no-save --os=linux --cpu=x64 --include=optional sharp
+      # reinstalar el árbol entero por binarios que allá no se usan.
+      #
+      # Si mañana entra otro paquete nativo, el síntoma va a ser el mismo
+      # ("Cannot find native binding" / "Could not load … using the linux-x64
+      # runtime") y la respuesta es agregarlo a esta línea.
+      - name: Binarios nativos para linux-x64
+        run: npm install --no-save --os=linux --cpu=x64 --include=optional sharp @napi-rs/canvas
 
       # NODE_ENV=test: varios guards fail-closed de seguridad lanzan excepción si
       #   se creen en producción sin los secretos cargados.
