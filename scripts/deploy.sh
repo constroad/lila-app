@@ -480,10 +480,12 @@ done
 # El síntoma engaña: CPU alta, proceso vivo, log sin errores. Sin un techo, un
 # build así se come la máquina hasta que un humano intervenga.
 #
-# 12 min es ~4x el build más lento medido (164 s de Portal). Si se supera, casi
-# seguro es memoria: se dice en el mensaje para no volver a perder media hora
-# buscando en el lugar equivocado.
-BUILD_TIMEOUT=${BUILD_TIMEOUT:-720}
+# 30 min, y el número tiene historia. Se probó con 12 —4x el build de Portal
+# medido con la máquina libre (164 s)— y cortó un build sano: bajo contención real
+# —con otra app deployando y las tres sirviendo— Portal se pasa de 12 min sin estar
+# roto. El techo no está para acelerar nada: está para que un build en espiral de
+# GC muera en media hora en vez de girar hasta que alguien lo mire.
+BUILD_TIMEOUT=${BUILD_TIMEOUT:-1800}
 
 log "Compilando…"
 (
@@ -519,7 +521,12 @@ wait "$pid_build"
 rc_build=$?
 kill "$pid_vigia" 2>/dev/null
 
-if [ $rc_build -ne 0 ] && grep -q "heap out of memory" "$LOG" 2>/dev/null; then
+# SOLO EL TRAMO DE ESTE DEPLOY. El log es acumulativo, así que buscar en todo el
+# archivo encontraba el OOM de un deploy de hace una hora y reportaba "sin
+# memoria" un build que había fallado por otra cosa. Un diagnóstico automático que
+# se equivoca es peor que no darlo: manda a subir un techo que no era el problema.
+if [ $rc_build -ne 0 ] && \
+   awk -v r="$NOMBRE" '$0 ~ ("→ " r) {p=1} p' "$LOG" 2>/dev/null | grep -q "heap out of memory"; then
   log "⚠️  El build se quedó SIN MEMORIA. Subí NODE_OPTIONS_BUILD para esta app."
 fi
 
