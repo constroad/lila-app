@@ -380,14 +380,46 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 
 ## Configuracion (src/config/environment.ts)
 
+### El archivo se llama `.env`, y solo lleva secretos y URLs (16/08/2026)
+
+**Un solo nombre de archivo en las tres apps: `.env`.** Portal y Torre usaban
+`.env.local` y lila `.env`; Next carga los dos y **`.env.local` le gana**, así
+que tener ambos es una trampa silenciosa —un `.env.local` olvidado en una
+máquina pisa el bueno sin avisar—. Se eligió `.env` porque es el que ya usaba
+lila y porque es el que PIERDE la precedencia: un `.env.local` olvidado se nota
+enseguida en vez de ganar en silencio.
+
+**Regla: una variable de entorno es para un secreto o una URL.** Todo lo demás
+va como constante con default en este archivo. El `.env` de lila pasó de **34 a
+19 claves**; las 15 que se fueron declaraban exactamente el mismo valor que el
+default, o eran redundantes (`WHATSAPP_AUTO_RECONNECT=true` cuando el código
+evalúa `!== 'false'`; `NODE_ENV=production` cuando lo define el plist y dotenv
+no pisa lo que ya existe en el entorno).
+
+**Y el hallazgo de esa limpieza: dos defaults no eran el valor real de
+producción** — `DRIVE_MAX_FILE_SIZE_MB` decía 25 con 100 en producción, y
+`WHATSAPP_MAX_RECONNECT_ATTEMPTS` decía 0 con 3. Un default que no es el valor
+real obliga a declarar la variable en cada máquina para obtener el
+comportamiento de producción, y si alguien se olvida el fallo es silencioso.
+Ahora el default **es** el valor de producción.
+
+**Lo que NO puede ser constante**, aunque no sea secreto ni URL: lo que leen los
+scripts de shell con `grep` sobre el `.env` — `FILE_STORAGE_ROOT`, `LOG_DIR`,
+`PORT`, `TELEGRAM_BOT_TOKEN` y los tres `TELEGRAM_*_CHAT_ID`. Los backups, el
+watchdog del túnel y `deploy.sh` no ejecutan TypeScript.
+
+Y una excepción anotada: **`PDF_TEMP_DIR` se queda declarada porque su default
+NO coincide con producción** — apuntaría a `$FILE_STORAGE_ROOT/temp/pdf-preview`,
+que no existe en disco. Cambiarlo sería una migración, no una limpieza.
+
 | Variable | Default | Uso |
 |----------|---------|-----|
 | `PORT` | 3001 | HTTP port |
-| `NODE_ENV` | development | |
+| `NODE_ENV` | development | Lo define el plist en producción; **no va en el `.env`** |
 | `WHATSAPP_SESSION_DIR` | `./data/sessions` | Baileys creds |
-| `WHATSAPP_AUTO_RECONNECT` | true | |
+| `WHATSAPP_AUTO_RECONNECT` | true | `!== 'false'`: declararla en `true` es redundante |
 | `WHATSAPP_RESTORE_SESSIONS` | true solo en production | Restaura sesiones Mongo al arrancar |
-| `WHATSAPP_MAX_RECONNECT_ATTEMPTS` | 0 | 0 = unlimited |
+| `WHATSAPP_MAX_RECONNECT_ATTEMPTS` | **3** | Era 0 y producción corría con 3 |
 | `WHATSAPP_AI_ENABLED` | false | Listener Claude (deshabilitado) |
 | `WHATSAPP_AI_TEST_NUMBER` | 51949376824 | Solo whitelist en test (listener legacy, huérfano) |
 | `WHATSAPP_AGENT_ENABLED` | false | Kill-switch del agente conversacional F1 (`src/agent/*`); el gate por company vive en `bot_configs` |
@@ -405,7 +437,7 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 | `PDF_TEMP_DIR` | `./data/pdf-temp` o `{STORAGE_ROOT}/temp/pdf-preview` | |
 | `PDF_TEMP_PUBLIC_BASE_URL` | `/pdf-temp` | |
 | `FILE_STORAGE_ROOT` | `/mnt/constroad-storage` | Raiz multi-tenant |
-| `DRIVE_MAX_FILE_SIZE_MB` | 25 | |
+| `DRIVE_MAX_FILE_SIZE_MB` | **100** | Era 25 y producción corría con 100 |
 | `DRIVE_CACHE_DIR` | derivado | |
 | `VISION_PROVIDER` | - | `gemini` \| `anthropic` \| `openai-compatible`. Sin valor el OCR queda apagado |
 | `VISION_API_KEY` | - | Key del proveedor. **Vacía a propósito**: sin key, `/api/vision` responde 503 |
