@@ -54,7 +54,9 @@ export const config = {
     // kickee las sesiones productivas con código 440 al arrancar su instancia local.
     restoreSessions: process.env.WHATSAPP_RESTORE_SESSIONS === 'true' ||
       (process.env.NODE_ENV === 'production' && process.env.WHATSAPP_RESTORE_SESSIONS !== 'false'),
-    maxReconnectAttempts: parseInt(process.env.WHATSAPP_MAX_RECONNECT_ATTEMPTS || '0', 10),
+    // 3, que es con lo que corre producción. El default era 0 y había que
+      // declararlo en cada máquina para obtener el comportamiento real.
+      maxReconnectAttempts: parseInt(process.env.WHATSAPP_MAX_RECONNECT_ATTEMPTS || '3', 10),
     qrTimeout: 60000, // 60 segundos
     aiEnabled: process.env.WHATSAPP_AI_ENABLED === 'true',
     aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || '51949376824',
@@ -144,7 +146,9 @@ export const config = {
 
   // Multi-tenant storage (Fase 9)
   drive: {
-    maxFileSizeMb: parseInt(process.env.DRIVE_MAX_FILE_SIZE_MB || '25', 10),
+    // 100 MB es el valor con el que corre producción desde siempre; el default
+      // decía 25 y solo servía para que hubiera que declararlo en cada máquina.
+      maxFileSizeMb: parseInt(process.env.DRIVE_MAX_FILE_SIZE_MB || '100', 10),
     cacheDir: process.env.DRIVE_CACHE_DIR || defaultDriveCacheDir,
   },
 

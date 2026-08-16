@@ -58,14 +58,14 @@ var __privateWrapper = (obj, member, setter, getter) => ({
 // src/config/environment.ts
 import dotenv from "dotenv";
 import fs from "fs";
-import path from "path";
+import path2 from "path";
 import { fileURLToPath } from "url";
 var moduleDir, envPath, devEnvPath, nodeEnv, cronJobsEnabledOverride, cronJobsEnabled, trustProxyEnv, resolvedTrustProxy, storageRootEnv, storageRoot, defaultPdfTempDir, defaultDriveCacheDir, config, environment_default;
 var init_environment = __esm({
   "src/config/environment.ts"() {
-    moduleDir = path.dirname(fileURLToPath(import.meta.url));
-    envPath = path.join(moduleDir, "../../.env");
-    devEnvPath = path.join(moduleDir, "../../.env.development");
+    moduleDir = path2.dirname(fileURLToPath(import.meta.url));
+    envPath = path2.join(moduleDir, "../../.env");
+    devEnvPath = path2.join(moduleDir, "../../.env.development");
     dotenv.config({ path: envPath });
     if (process.env.NODE_ENV === "development" && fs.existsSync(devEnvPath)) {
       dotenv.config({ path: devEnvPath, override: true });
@@ -79,8 +79,8 @@ var init_environment = __esm({
     resolvedTrustProxy = trustProxyEnv === void 0 ? process.env.NODE_ENV === "production" ? 1 : false : trustProxyEnv === "true" ? true : trustProxyEnv === "false" ? false : Number.isNaN(Number(trustProxyEnv)) ? true : Number(trustProxyEnv);
     storageRootEnv = process.env.FILE_STORAGE_ROOT;
     storageRoot = storageRootEnv || "/mnt/constroad-storage";
-    defaultPdfTempDir = storageRootEnv ? path.join(storageRoot, "temp", "pdf-preview") : "./data/pdf-temp";
-    defaultDriveCacheDir = storageRootEnv ? path.join(storageRoot, "temp", "drive-cache") : "./data/drive-cache";
+    defaultPdfTempDir = storageRootEnv ? path2.join(storageRoot, "temp", "pdf-preview") : "./data/pdf-temp";
+    defaultDriveCacheDir = storageRootEnv ? path2.join(storageRoot, "temp", "drive-cache") : "./data/drive-cache";
     config = {
       port: parseInt(process.env.PORT || "3001", 10),
       nodeEnv,
@@ -93,11 +93,18 @@ var init_environment = __esm({
         // En development por defecto false: evita que un dev con el mismo Mongo de prod
         // kickee las sesiones productivas con código 440 al arrancar su instancia local.
         restoreSessions: process.env.WHATSAPP_RESTORE_SESSIONS === "true" || process.env.NODE_ENV === "production" && process.env.WHATSAPP_RESTORE_SESSIONS !== "false",
-        maxReconnectAttempts: parseInt(process.env.WHATSAPP_MAX_RECONNECT_ATTEMPTS || "0", 10),
+        // 3, que es con lo que corre producción. El default era 0 y había que
+        // declararlo en cada máquina para obtener el comportamiento real.
+        maxReconnectAttempts: parseInt(process.env.WHATSAPP_MAX_RECONNECT_ATTEMPTS || "3", 10),
         qrTimeout: 6e4,
         // 60 segundos
         aiEnabled: process.env.WHATSAPP_AI_ENABLED === "true",
         aiTestNumber: process.env.WHATSAPP_AI_TEST_NUMBER || "51949376824",
+        // Agente conversacional multi-vertical (WHATSAPP-AGENT-VERTICALS F1).
+        // Kill-switch GLOBAL del listener messages.upsert nuevo; el gate real por
+        // company vive en bot_configs (enabled + testNumbers). Default false:
+        // el deploy es inerte hasta encenderlo explícitamente.
+        agentEnabled: process.env.WHATSAPP_AGENT_ENABLED === "true",
         baileysLogLevel: process.env.WHATSAPP_BAILEYS_LOG_LEVEL || "fatal",
         // Lease process-level de sockets (candado anti doble-instancia / guerra 440).
         // Default habilitado; WHATSAPP_SOCKET_LEASE=false lo apaga (ej. entorno aislado
@@ -124,6 +131,17 @@ var init_environment = __esm({
       // Claude API
       anthropic: {
         apiKey: process.env.ANTHROPIC_API_KEY
+      },
+      /**
+       * Lectura de imágenes por LLM (Flota §11.3-11) — agnóstica al proveedor.
+       * SIN `VISION_API_KEY` la feature queda apagada y el endpoint responde 503: el
+       * flujo de tipear el peso a mano sigue igual. Ver docs/VISION-OCR-SETUP.md.
+       */
+      vision: {
+        provider: process.env.VISION_PROVIDER || "gemini",
+        apiKey: process.env.VISION_API_KEY || "",
+        model: process.env.VISION_MODEL || "",
+        baseUrl: process.env.VISION_BASE_URL || ""
       },
       telegram: {
         botToken: process.env.TELEGRAM_BOT_TOKEN || "",
@@ -155,7 +173,9 @@ var init_environment = __esm({
       },
       // Multi-tenant storage (Fase 9)
       drive: {
-        maxFileSizeMb: parseInt(process.env.DRIVE_MAX_FILE_SIZE_MB || "25", 10),
+        // 100 MB es el valor con el que corre producción desde siempre; el default
+        // decía 25 y solo servía para que hubiera que declararlo en cada máquina.
+        maxFileSizeMb: parseInt(process.env.DRIVE_MAX_FILE_SIZE_MB || "100", 10),
         cacheDir: process.env.DRIVE_CACHE_DIR || defaultDriveCacheDir
       },
       // Storage root for multi-tenant files
@@ -200,7 +220,7 @@ var init_environment = __esm({
 
 // src/utils/logger.ts
 import winston from "winston";
-import path2 from "path";
+import path3 from "path";
 var logDir, truncate, isAxiosErrorLike, summarizeAxiosError, safeStringify, logger, logger_default;
 var init_logger = __esm({
   "src/utils/logger.ts"() {
@@ -286,14 +306,14 @@ ${safeStringify(meta, 2)}` : ` ${safeStringify(meta)}` : "";
       defaultMeta: { service: "lila-app" },
       transports: [
         new winston.transports.File({
-          filename: path2.join(logDir, "error.log"),
+          filename: path3.join(logDir, "error.log"),
           level: "error",
           maxsize: 5242880,
           // 5MB
           maxFiles: 5
         }),
         new winston.transports.File({
-          filename: path2.join(logDir, "combined.log"),
+          filename: path3.join(logDir, "combined.log"),
           maxsize: 5242880,
           // 5MB
           maxFiles: 10
@@ -1090,9 +1110,9 @@ var require_jws = __commonJS({
 var require_decode = __commonJS({
   "node_modules/jsonwebtoken/decode.js"(exports, module) {
     var jws = require_jws();
-    module.exports = function(jwt8, options2) {
+    module.exports = function(jwt9, options2) {
       options2 = options2 || {};
-      var decoded = jws.decode(jwt8, options2);
+      var decoded = jws.decode(jwt9, options2);
       if (!decoded) {
         return null;
       }
@@ -4187,8 +4207,8 @@ var require_jsonwebtoken = __commonJS({
 });
 
 // src/storage/json.store.ts
-import fs2 from "fs-extra";
-import path3 from "path";
+import fs3 from "fs-extra";
+import path5 from "path";
 var JsonStore, json_store_default;
 var init_json_store = __esm({
   "src/storage/json.store.ts"() {
@@ -4220,11 +4240,11 @@ var init_json_store = __esm({
         return this.withLock(key, () => this.getUnlocked(key));
       }
       async getUnlocked(key) {
-        const filePath = path3.join(this.baseDir, `${key}.json`);
+        const filePath = path5.join(this.baseDir, `${key}.json`);
         const backupPath = `${filePath}.backup`;
         try {
-          if (await fs2.pathExists(filePath)) {
-            return await fs2.readJSON(filePath);
+          if (await fs3.pathExists(filePath)) {
+            return await fs3.readJSON(filePath);
           }
         } catch (error) {
           logger_default.warn(`Store ${key} corrupt, attempting recovery from backup`, {
@@ -4232,8 +4252,8 @@ var init_json_store = __esm({
           });
         }
         try {
-          if (await fs2.pathExists(backupPath)) {
-            const data = await fs2.readJSON(backupPath);
+          if (await fs3.pathExists(backupPath)) {
+            const data = await fs3.readJSON(backupPath);
             await this.atomicWrite(
               filePath,
               data,
@@ -4250,7 +4270,7 @@ var init_json_store = __esm({
       }
       async set(key, value) {
         return this.withLock(key, async () => {
-          const filePath = path3.join(this.baseDir, `${key}.json`);
+          const filePath = path5.join(this.baseDir, `${key}.json`);
           try {
             await this.atomicWrite(filePath, value, false);
             logger_default.debug(`Successfully wrote ${key} to store`);
@@ -4267,13 +4287,13 @@ var init_json_store = __esm({
       //    fs.move con overwrite, que hace remove+rename y deja un hueco).
       //  - backup best-effort: un fallo de backup no aborta la escritura.
       async atomicWrite(filePath, value, skipBackup) {
-        await fs2.ensureDir(path3.dirname(filePath));
+        await fs3.ensureDir(path5.dirname(filePath));
         const tempPath = `${filePath}.${process.pid}.${Date.now()}.${++this.tmpCounter}.tmp`;
         try {
-          await fs2.writeJSON(tempPath, value, { spaces: 2 });
-          if (!skipBackup && this.autoBackup && await fs2.pathExists(filePath)) {
+          await fs3.writeJSON(tempPath, value, { spaces: 2 });
+          if (!skipBackup && this.autoBackup && await fs3.pathExists(filePath)) {
             try {
-              await fs2.copy(filePath, `${filePath}.backup`, { overwrite: true });
+              await fs3.copy(filePath, `${filePath}.backup`, { overwrite: true });
             } catch (backupError) {
               logger_default.warn("Store backup failed (continuing)", {
                 filePath,
@@ -4281,18 +4301,18 @@ var init_json_store = __esm({
               });
             }
           }
-          await fs2.rename(tempPath, filePath);
+          await fs3.rename(tempPath, filePath);
         } catch (error) {
-          await fs2.remove(tempPath).catch(() => void 0);
+          await fs3.remove(tempPath).catch(() => void 0);
           throw error;
         }
       }
       async delete(key) {
         return this.withLock(key, async () => {
-          const filePath = path3.join(this.baseDir, `${key}.json`);
+          const filePath = path5.join(this.baseDir, `${key}.json`);
           try {
-            if (await fs2.pathExists(filePath)) {
-              await fs2.remove(filePath);
+            if (await fs3.pathExists(filePath)) {
+              await fs3.remove(filePath);
               logger_default.debug(`Successfully deleted ${key} from store`);
             }
           } catch (error) {
@@ -4303,7 +4323,7 @@ var init_json_store = __esm({
       }
       async getAllKeys() {
         try {
-          const files = await fs2.readdir(this.baseDir);
+          const files = await fs3.readdir(this.baseDir);
           return files.filter((f64) => f64.endsWith(".json")).map((f64) => f64.replace(".json", ""));
         } catch (error) {
           logger_default.error("Error reading keys from store:", error);
@@ -4312,7 +4332,7 @@ var init_json_store = __esm({
       }
       async clear() {
         try {
-          await fs2.emptyDir(this.baseDir);
+          await fs3.emptyDir(this.baseDir);
           logger_default.debug("Store cleared");
         } catch (error) {
           logger_default.error("Error clearing store:", error);
@@ -4320,8 +4340,8 @@ var init_json_store = __esm({
         }
       }
       async exists(key) {
-        const filePath = path3.join(this.baseDir, `${key}.json`);
-        return await fs2.pathExists(filePath);
+        const filePath = path5.join(this.baseDir, `${key}.json`);
+        return await fs3.pathExists(filePath);
       }
     };
     json_store_default = JsonStore;
@@ -4329,7 +4349,7 @@ var init_json_store = __esm({
 });
 
 // src/services/telegram-queue.ts
-import path4 from "path";
+import path6 from "path";
 import { randomUUID } from "crypto";
 var TELEGRAM_QUEUE_LIMITS, STORE_KEY, TelegramQueue, telegramQueueInstance, telegram_queue_default;
 var init_telegram_queue = __esm({
@@ -4345,7 +4365,7 @@ var init_telegram_queue = __esm({
     STORE_KEY = "queue";
     TelegramQueue = class {
       constructor() {
-        const baseDir = path4.join(config.whatsapp.sessionDir, "../telegram-alerts");
+        const baseDir = path6.join(config.whatsapp.sessionDir, "../telegram-alerts");
         this.store = new json_store_default({ baseDir, autoBackup: true });
       }
       async list() {
@@ -4948,8 +4968,8 @@ var init_esm_node = __esm({
 });
 
 // src/services/storage-path.service.ts
-import path5 from "path";
-import fs3 from "fs-extra";
+import path7 from "path";
+import fs4 from "fs-extra";
 var StoragePathService, storagePathService;
 var init_storage_path_service = __esm({
   "src/services/storage-path.service.ts"() {
@@ -4978,13 +4998,13 @@ var init_storage_path_service = __esm({
       }
       resolveWritableRoot(candidate) {
         try {
-          fs3.ensureDirSync(candidate);
+          fs4.ensureDirSync(candidate);
           return candidate;
         } catch (error) {
           if (config.nodeEnv !== "production") {
-            const fallback = path5.resolve(process.cwd(), "data", "storage");
+            const fallback = path7.resolve(process.cwd(), "data", "storage");
             try {
-              fs3.ensureDirSync(fallback);
+              fs4.ensureDirSync(fallback);
               logger_default.warn("Storage root not accessible. Falling back to local storage.", {
                 requested: candidate,
                 fallback,
@@ -5019,7 +5039,7 @@ var init_storage_path_service = __esm({
         if (!companyId || companyId.trim() === "") {
           throw new Error("companyId is required");
         }
-        return path5.join(this.root, "companies", companyId);
+        return path7.join(this.root, "companies", companyId);
       }
       /**
        * Obtiene la ruta de un módulo específico para una empresa
@@ -5030,9 +5050,9 @@ var init_storage_path_service = __esm({
        */
       getModulePath(companyId, module, subpath) {
         const root = this.getCompanyRoot(companyId);
-        const modulePath = path5.join(root, module);
+        const modulePath = path7.join(root, module);
         if (subpath) {
-          return path5.join(modulePath, subpath);
+          return path7.join(modulePath, subpath);
         }
         return modulePath;
       }
@@ -5047,16 +5067,16 @@ var init_storage_path_service = __esm({
           companyId,
           root,
           modules: {
-            orders: path5.join(root, "orders"),
-            dispatches: path5.join(root, "dispatches"),
-            clients: path5.join(root, "clients"),
-            certificates: path5.join(root, "certificates"),
-            reports: path5.join(root, "reports"),
-            media: path5.join(root, "media"),
-            projects: path5.join(root, "projects"),
-            expenses: path5.join(root, "expenses"),
-            services: path5.join(root, "services"),
-            temp: path5.join(root, "temp")
+            orders: path7.join(root, "orders"),
+            dispatches: path7.join(root, "dispatches"),
+            clients: path7.join(root, "clients"),
+            certificates: path7.join(root, "certificates"),
+            reports: path7.join(root, "reports"),
+            media: path7.join(root, "media"),
+            projects: path7.join(root, "projects"),
+            expenses: path7.join(root, "expenses"),
+            services: path7.join(root, "services"),
+            temp: path7.join(root, "temp")
           }
         };
       }
@@ -5068,8 +5088,8 @@ var init_storage_path_service = __esm({
        */
       resolvePath(companyId, relativePath) {
         const companyRoot = this.getCompanyRoot(companyId);
-        const normalized = path5.normalize(relativePath);
-        const resolved = path5.join(companyRoot, normalized);
+        const normalized = path7.normalize(relativePath);
+        const resolved = path7.join(companyRoot, normalized);
         return resolved;
       }
       // ==========================================================================
@@ -5085,8 +5105,8 @@ var init_storage_path_service = __esm({
       validateAccess(requestedPath, companyId) {
         try {
           const companyRoot = this.getCompanyRoot(companyId);
-          const normalizedRequested = path5.normalize(requestedPath);
-          const normalizedRoot = path5.normalize(companyRoot);
+          const normalizedRequested = path7.normalize(requestedPath);
+          const normalizedRoot = path7.normalize(companyRoot);
           const isWithinCompanyRoot = normalizedRequested.startsWith(normalizedRoot);
           if (!isWithinCompanyRoot) {
             logger_default.warn("Path validation failed: outside company root", {
@@ -5096,8 +5116,8 @@ var init_storage_path_service = __esm({
             });
             return false;
           }
-          const relative = path5.relative(normalizedRoot, normalizedRequested);
-          const hasTraversal = relative.startsWith("..") || path5.isAbsolute(relative);
+          const relative = path7.relative(normalizedRoot, normalizedRequested);
+          const hasTraversal = relative.startsWith("..") || path7.isAbsolute(relative);
           if (hasTraversal) {
             logger_default.warn("Path validation failed: traversal attempt detected", {
               companyId,
@@ -5132,10 +5152,10 @@ var init_storage_path_service = __esm({
         const structure = this.getCompanyStructure(companyId);
         logger_default.info(`Creating company storage structure for: ${companyId}`);
         try {
-          await fs3.ensureDir(structure.root);
+          await fs4.ensureDir(structure.root);
           const moduleCreations = this.standardModules.filter((m59) => m59.autoCreate).map(async (module) => {
-            const modulePath = path5.join(structure.root, module.name);
-            await fs3.ensureDir(modulePath);
+            const modulePath = path7.join(structure.root, module.name);
+            await fs4.ensureDir(modulePath);
             logger_default.debug(`Created module folder: ${module.name}`, { companyId });
           });
           await Promise.all(moduleCreations);
@@ -5153,7 +5173,7 @@ var init_storage_path_service = __esm({
        */
       async companyStructureExists(companyId) {
         const root = this.getCompanyRoot(companyId);
-        return fs3.pathExists(root);
+        return fs4.pathExists(root);
       }
       /**
        * Asegura que un directorio exista, creándolo si es necesario
@@ -5165,7 +5185,7 @@ var init_storage_path_service = __esm({
         if (!this.validateAccess(dirPath, companyId)) {
           throw new Error("Invalid path: outside company storage space");
         }
-        await fs3.ensureDir(dirPath);
+        await fs4.ensureDir(dirPath);
       }
       // ==========================================================================
       // UTILITIES
@@ -5177,19 +5197,19 @@ var init_storage_path_service = __esm({
        */
       async getStorageUsage(companyId) {
         const root = this.getCompanyRoot(companyId);
-        if (!await fs3.pathExists(root)) {
+        if (!await fs4.pathExists(root)) {
           return 0;
         }
         try {
           const calculateSize = async (dir) => {
-            const entries = await fs3.readdir(dir, { withFileTypes: true });
+            const entries = await fs4.readdir(dir, { withFileTypes: true });
             let totalSize = 0;
             for (const entry of entries) {
-              const fullPath = path5.join(dir, entry.name);
+              const fullPath = path7.join(dir, entry.name);
               if (entry.isDirectory()) {
                 totalSize += await calculateSize(fullPath);
               } else {
-                const stats = await fs3.stat(fullPath);
+                const stats = await fs4.stat(fullPath);
                 totalSize += stats.size;
               }
             }
@@ -5219,8 +5239,8 @@ var init_storage_path_service = __esm({
        */
       async cleanTempFiles(companyId) {
         const tempPath = this.getModulePath(companyId, "temp");
-        if (await fs3.pathExists(tempPath)) {
-          await fs3.emptyDir(tempPath);
+        if (await fs4.pathExists(tempPath)) {
+          await fs4.emptyDir(tempPath);
           logger_default.info(`Cleaned temp files for company: ${companyId}`);
         }
       }
@@ -5230,8 +5250,8 @@ var init_storage_path_service = __esm({
 });
 
 // src/services/whatsapp-media.utils.ts
-import fs4 from "fs-extra";
-import path6 from "path";
+import fs5 from "fs-extra";
+import path8 from "path";
 import axios from "axios";
 function detectMimeType(filename, fallback) {
   if (fallback) return fallback;
@@ -5296,12 +5316,12 @@ function normalizeRelativePath(input, companyId) {
   }
   raw = raw.replace(/\\/g, "/");
   const isUrlPath = raw.startsWith("/files/companies/") || raw.startsWith("/companies/");
-  if (path6.isAbsolute(raw) && !isUrlPath) {
+  if (path8.isAbsolute(raw) && !isUrlPath) {
     const companyRoot = storagePathService.getCompanyRoot(companyId);
-    const normalizedRoot = path6.normalize(companyRoot);
-    const normalizedRaw = path6.normalize(raw);
+    const normalizedRoot = path8.normalize(companyRoot);
+    const normalizedRaw = path8.normalize(raw);
     if (normalizedRaw.startsWith(normalizedRoot)) {
-      raw = path6.relative(normalizedRoot, normalizedRaw);
+      raw = path8.relative(normalizedRoot, normalizedRaw);
     } else {
       return null;
     }
@@ -5333,24 +5353,24 @@ async function resolveFileBuffer(params) {
     relativePath = normalizeRelativePath(fileUrl, companyId) || extractRelativePathFromUrl(fileUrl, companyId);
   }
   if (!relativePath) return null;
-  if (path6.isAbsolute(relativePath)) {
+  if (path8.isAbsolute(relativePath)) {
     throw new Error("filePath must be relative");
   }
   const resolved = storagePathService.resolvePath(companyId, relativePath);
   if (!storagePathService.validateAccess(resolved, companyId)) {
     throw new Error("Invalid filePath");
   }
-  const exists = await fs4.pathExists(resolved);
+  const exists = await fs5.pathExists(resolved);
   if (!exists) {
     throw new Error("File not found");
   }
-  const stat = await fs4.stat(resolved);
+  const stat = await fs5.stat(resolved);
   const MAX_WTSP_BYTES = 100 * 1024 * 1024;
   if (stat.size > MAX_WTSP_BYTES) {
     throw new Error("File too large for WhatsApp (max 100MB)");
   }
-  const buffer2 = await fs4.readFile(resolved);
-  const resolvedFileName = fileName || path6.basename(resolved);
+  const buffer2 = await fs5.readFile(resolved);
+  const resolvedFileName = fileName || path8.basename(resolved);
   const resolvedMimeType = detectMimeType(resolvedFileName, mimeType);
   return {
     buffer: buffer2,
@@ -5365,15 +5385,15 @@ async function downloadFileFromUrl(fileUrl, mimeType) {
   let extension = "bin";
   try {
     const urlPath = new URL(fileUrl).pathname;
-    const urlExt = path6.extname(urlPath).slice(1);
+    const urlExt = path8.extname(urlPath).slice(1);
     if (urlExt) extension = urlExt;
   } catch {
     if (detectedMimeType.startsWith("image/")) extension = detectedMimeType.split("/")[1];
     else if (detectedMimeType.startsWith("video/")) extension = detectedMimeType.split("/")[1];
   }
   const tempFileName = `${v4_default()}.${extension}`;
-  const tempFilePath = path6.join(config.uploads.directory, tempFileName);
-  const writer = fs4.createWriteStream(tempFilePath);
+  const tempFilePath = path8.join(config.uploads.directory, tempFileName);
+  const writer = fs5.createWriteStream(tempFilePath);
   response.data.pipe(writer);
   await new Promise((resolve2, reject) => {
     writer.on("finish", resolve2);
@@ -6434,8 +6454,8 @@ var whatsapp_direct_service_exports = {};
 __export(whatsapp_direct_service_exports, {
   WhatsAppDirectService: () => WhatsAppDirectService
 });
-import path7 from "path";
-import fs5 from "fs/promises";
+import path9 from "path";
+import fs6 from "fs/promises";
 var resolveUsageCompanyId, flushingOutbox, SEND_TIMEOUT_MS, sendWithTimeout, trackWhatsAppUsage, WhatsAppDirectService;
 var init_whatsapp_direct_service = __esm({
   "src/services/whatsapp-direct.service.ts"() {
@@ -6455,9 +6475,9 @@ var init_whatsapp_direct_service = __esm({
     flushingOutbox = /* @__PURE__ */ new Set();
     SEND_TIMEOUT_MS = 12e4;
     sendWithTimeout = async (label, sendPromise) => {
-      let timer;
+      let timer3;
       const timeout = new Promise((_58, reject) => {
-        timer = setTimeout(
+        timer3 = setTimeout(
           () => reject(new Error(`WhatsApp send timeout (${SEND_TIMEOUT_MS / 1e3}s): ${label}`)),
           SEND_TIMEOUT_MS
         );
@@ -6465,7 +6485,7 @@ var init_whatsapp_direct_service = __esm({
       try {
         return await Promise.race([sendPromise, timeout]);
       } finally {
-        clearTimeout(timer);
+        clearTimeout(timer3);
       }
     };
     trackWhatsAppUsage = async (sessionId, options2 = {}, context) => {
@@ -6625,14 +6645,14 @@ var init_whatsapp_direct_service = __esm({
           videoBuffer = resolved.buffer;
           resolvedMimeType = resolved.mimeType;
         } else if (sourceKind === "temp") {
-          const tempPath = path7.join(config.uploads.directory, options2.fileName);
-          videoBuffer = await fs5.readFile(tempPath);
+          const tempPath = path9.join(config.uploads.directory, options2.fileName);
+          videoBuffer = await fs6.readFile(tempPath);
           resolvedMimeType = detectMimeType(options2.fileName, options2.mimeType);
           shouldCleanup = true;
           cleanupPath = tempPath;
         } else if (sourceKind === "external") {
           const downloaded = await downloadFileFromUrl(options2.fileUrl, options2.mimeType);
-          videoBuffer = await fs5.readFile(downloaded.filePath);
+          videoBuffer = await fs6.readFile(downloaded.filePath);
           resolvedMimeType = downloaded.mimeType;
           shouldCleanup = true;
           cleanupPath = downloaded.filePath;
@@ -6656,7 +6676,7 @@ var init_whatsapp_direct_service = __esm({
           );
           await trackWhatsAppUsage(id, options2, "video");
           if (shouldCleanup && cleanupPath) {
-            await fs5.unlink(cleanupPath).catch(
+            await fs6.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
             );
           }
@@ -6740,14 +6760,14 @@ var init_whatsapp_direct_service = __esm({
           imageBuffer = resolved.buffer;
           resolvedMimeType = resolved.mimeType;
         } else if (sourceKind === "temp") {
-          const tempPath = path7.join(config.uploads.directory, options2.fileName);
-          imageBuffer = await fs5.readFile(tempPath);
+          const tempPath = path9.join(config.uploads.directory, options2.fileName);
+          imageBuffer = await fs6.readFile(tempPath);
           resolvedMimeType = detectMimeType(options2.fileName, options2.mimeType);
           shouldCleanup = true;
           cleanupPath = tempPath;
         } else if (sourceKind === "external") {
           const downloaded = await downloadFileFromUrl(options2.fileUrl, options2.mimeType);
-          imageBuffer = await fs5.readFile(downloaded.filePath);
+          imageBuffer = await fs6.readFile(downloaded.filePath);
           resolvedMimeType = downloaded.mimeType;
           shouldCleanup = true;
           cleanupPath = downloaded.filePath;
@@ -6769,7 +6789,7 @@ var init_whatsapp_direct_service = __esm({
           );
           await trackWhatsAppUsage(id, options2, "image");
           if (shouldCleanup && cleanupPath) {
-            await fs5.unlink(cleanupPath).catch(
+            await fs6.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
             );
           }
@@ -6854,15 +6874,15 @@ var init_whatsapp_direct_service = __esm({
           resolvedMimeType = resolved.mimeType;
           resolvedFileName = resolved.fileName;
         } else if (sourceKind === "temp") {
-          const tempPath = path7.join(config.uploads.directory, options2.fileName);
-          documentBuffer = await fs5.readFile(tempPath);
+          const tempPath = path9.join(config.uploads.directory, options2.fileName);
+          documentBuffer = await fs6.readFile(tempPath);
           resolvedMimeType = detectMimeType(options2.fileName, options2.mimeType);
           resolvedFileName = options2.fileName;
           shouldCleanup = true;
           cleanupPath = tempPath;
         } else if (sourceKind === "external") {
           const downloaded = await downloadFileFromUrl(options2.fileUrl, options2.mimeType);
-          documentBuffer = await fs5.readFile(downloaded.filePath);
+          documentBuffer = await fs6.readFile(downloaded.filePath);
           resolvedMimeType = downloaded.mimeType;
           resolvedFileName = downloaded.fileName;
           shouldCleanup = true;
@@ -6887,7 +6907,7 @@ var init_whatsapp_direct_service = __esm({
           );
           await trackWhatsAppUsage(id, options2, "document");
           if (shouldCleanup && cleanupPath) {
-            await fs5.unlink(cleanupPath).catch(
+            await fs6.unlink(cleanupPath).catch(
               (err) => console.error(`\u26A0\uFE0F Could not delete temp file ${cleanupPath}:`, err)
             );
           }
@@ -7061,7 +7081,7 @@ var init_whatsapp_direct_service = __esm({
 });
 
 // src/whatsapp/queue/outbox-queue.ts
-import path8 from "path";
+import path10 from "path";
 import { randomUUID as randomUUID2 } from "crypto";
 function isOutboxItemDroppable(item, nowMs) {
   if (item.attempts >= OUTBOX_MAX_ATTEMPTS) return true;
@@ -7089,7 +7109,7 @@ var init_outbox_queue = __esm({
     OUTBOX_MAX_ITEMS = 50;
     OutboxQueue = class {
       constructor() {
-        const baseDir = path8.join(config.whatsapp.sessionDir, "../outbox");
+        const baseDir = path10.join(config.whatsapp.sessionDir, "../outbox");
         this.store = new json_store_default({ baseDir, autoBackup: true });
       }
       async list(sessionPhone) {
@@ -7327,12 +7347,16 @@ function hasSocketLease() {
   if (!leaseEnabled()) return true;
   return holdingLease;
 }
+function setOnLeaseAcquiredLate(handler) {
+  onLeaseAcquiredLate = handler;
+}
 async function startSocketLeaseLoop() {
   if (!leaseEnabled()) {
     logger_default.warn("Socket lease DESHABILITADO por env (WHATSAPP_SOCKET_LEASE=false)");
     return true;
   }
   await heartbeat();
+  yaArrancado = true;
   if (!holdingLease) {
     logger_default.error(
       `\u{1F512} Otra instancia de lila-app posee el lease de sockets WhatsApp: este proceso queda PASIVO (sin sockets) y reintenta cada ${LEASE_HEARTBEAT_MS / 1e3}s. Failover autom\xE1tico si el holder muere.`
@@ -7365,7 +7389,7 @@ async function releaseSocketLease() {
     logger_default.warn(`No se pudo liberar el socket lease (expira solo en ${LEASE_TTL_MS / 1e3}s): ${String(err)}`);
   }
 }
-var COLLECTION3, LEASE_DOC_ID, LEASE_TTL_MS, LEASE_HEARTBEAT_MS, HOLDER_ID, holdingLease, heartbeatTimer, leaseEnabled, getLeaseCollection, isDuplicateKeyError, heartbeat;
+var COLLECTION3, LEASE_DOC_ID, LEASE_TTL_MS, LEASE_HEARTBEAT_MS, HOLDER_ID, holdingLease, heartbeatTimer, leaseEnabled, getLeaseCollection, isDuplicateKeyError, onLeaseAcquiredLate, yaArrancado, heartbeat;
 var init_instance_lease = __esm({
   "src/whatsapp/baileys/instance-lease.ts"() {
     init_sharedConnection();
@@ -7385,11 +7409,19 @@ var init_instance_lease = __esm({
       return conn.collection(COLLECTION3);
     };
     isDuplicateKeyError = (err) => typeof err === "object" && err !== null && err.code === 11e3;
+    onLeaseAcquiredLate = null;
+    yaArrancado = false;
     heartbeat = async () => {
       try {
         const acquired = await tryAcquireSocketLease();
         if (acquired && !holdingLease) {
           logger_default.info(`\u{1F513} Socket lease ADQUIRIDO por ${HOLDER_ID}`);
+          if (yaArrancado && onLeaseAcquiredLate) {
+            logger_default.info("\u{1F501} Lease ganado por failover \u2014 restaurando sesiones WhatsApp");
+            void Promise.resolve(onLeaseAcquiredLate()).catch(
+              (error) => logger_default.error(`Restore tras failover del lease fall\xF3: ${String(error)}`)
+            );
+          }
         }
         if (!acquired && holdingLease) {
           logger_default.error(
@@ -7411,19 +7443,464 @@ Otra instancia lo posee. Si no esperabas dos procesos, mata el duplicado.`
   }
 });
 
+// src/models/bot.model.ts
+import { Schema as Schema3 } from "mongoose";
+var BotConfigSchema, BotConversationSchema, MESSAGE_TTL_SECONDS, BotConversationMessageSchema;
+var init_bot_model = __esm({
+  "src/models/bot.model.ts"() {
+    BotConfigSchema = new Schema3(
+      {
+        companyId: { type: String, required: true },
+        vertical: {
+          type: String,
+          required: true,
+          enum: ["restaurant", "appointments", "transport"]
+        },
+        enabled: { type: Boolean, required: true, default: false },
+        channelProvider: {
+          type: String,
+          enum: ["baileys", "cloud-api"],
+          default: "baileys"
+        },
+        greeting: { type: String },
+        tone: { type: String, enum: ["cercano", "formal"] },
+        testNumbers: { type: [String], default: void 0 },
+        handoffPauseMinutes: { type: Number, default: 30 },
+        ownerNotifyTarget: { type: String }
+      },
+      { collection: "bot_configs", timestamps: true }
+    );
+    BotConfigSchema.index({ companyId: 1 }, { unique: true });
+    BotConversationSchema = new Schema3(
+      {
+        companyId: { type: String, required: true },
+        sessionPhone: { type: String, required: true },
+        customerJid: { type: String, required: true },
+        customerPhone: { type: String, required: true },
+        customerName: { type: String },
+        status: {
+          type: String,
+          enum: ["bot", "human", "closed"],
+          default: "bot"
+        },
+        pausedUntil: { type: Date },
+        lastMessageAt: { type: Date, required: true },
+        lastCustomerMessageAt: { type: Date, required: true },
+        messageCount: { type: Number, default: 0 },
+        monthKey: { type: String, required: true }
+      },
+      { collection: "bot_conversations", timestamps: true }
+    );
+    BotConversationSchema.index({ companyId: 1, customerJid: 1 }, { unique: true });
+    BotConversationSchema.index({ companyId: 1, lastMessageAt: -1 });
+    MESSAGE_TTL_SECONDS = 90 * 24 * 60 * 60;
+    BotConversationMessageSchema = new Schema3(
+      {
+        conversationId: { type: String, required: true },
+        companyId: { type: String, required: true },
+        role: {
+          type: String,
+          required: true,
+          enum: ["customer", "bot", "owner", "system"]
+        },
+        text: { type: String },
+        channelMessageId: { type: String }
+      },
+      { collection: "bot_conversation_messages", timestamps: { createdAt: true, updatedAt: false } }
+    );
+    BotConversationMessageSchema.index({ conversationId: 1, createdAt: 1 });
+    BotConversationMessageSchema.index(
+      { companyId: 1, channelMessageId: 1 },
+      { unique: true, sparse: true }
+    );
+    BotConversationMessageSchema.index({ createdAt: 1 }, { expireAfterSeconds: MESSAGE_TTL_SECONDS });
+  }
+});
+
+// src/database/bot.models.ts
+async function getBotConfigModel() {
+  if (botConfigModel) return botConfigModel;
+  const conn = await getSharedConnection();
+  botConfigModel = conn.models.BotConfig || conn.model("BotConfig", BotConfigSchema);
+  return botConfigModel;
+}
+async function getBotConversationModel() {
+  if (botConversationModel) return botConversationModel;
+  const conn = await getSharedConnection();
+  botConversationModel = conn.models.BotConversation || conn.model("BotConversation", BotConversationSchema);
+  return botConversationModel;
+}
+async function getBotConversationMessageModel() {
+  if (botConversationMessageModel) return botConversationMessageModel;
+  const conn = await getSharedConnection();
+  botConversationMessageModel = conn.models.BotConversationMessage || conn.model(
+    "BotConversationMessage",
+    BotConversationMessageSchema
+  );
+  return botConversationMessageModel;
+}
+var botConfigModel, botConversationModel, botConversationMessageModel;
+var init_bot_models = __esm({
+  "src/database/bot.models.ts"() {
+    init_sharedConnection();
+    init_bot_model();
+    botConfigModel = null;
+    botConversationModel = null;
+    botConversationMessageModel = null;
+  }
+});
+
+// src/utils/retry.ts
+function calculateTypingDelay(text) {
+  const wordsPerMinute = 40;
+  const words = text.split(" ").length;
+  const baseTime = words / wordsPerMinute * 60 * 1e3;
+  const variability = 0.2;
+  const delay2 = baseTime * (1 + (Math.random() - 0.5) * variability);
+  return Math.min(Math.max(delay2, 1e3), 8e3);
+}
+function delay(ms) {
+  return new Promise((resolve2) => setTimeout(resolve2, ms));
+}
+var init_retry = __esm({
+  "src/utils/retry.ts"() {
+    init_logger();
+  }
+});
+
+// src/agent/runtime/message-text.ts
+function unwrapContent(content) {
+  let current = content ?? null;
+  for (let depth = 0; depth < MAX_WRAPPER_DEPTH && current; depth += 1) {
+    const wrapped = current.ephemeralMessage?.message || current.viewOnceMessage?.message || current.viewOnceMessageV2?.message || current.viewOnceMessageV2Extension?.message;
+    if (!wrapped) break;
+    current = wrapped;
+  }
+  return current;
+}
+function extractInboundText(content) {
+  const unwrapped = unwrapContent(content);
+  if (!unwrapped) return "";
+  return unwrapped.conversation || unwrapped.extendedTextMessage?.text || unwrapped.imageMessage?.caption || unwrapped.videoMessage?.caption || unwrapped.documentMessage?.caption || "";
+}
+var MAX_WRAPPER_DEPTH;
+var init_message_text = __esm({
+  "src/agent/runtime/message-text.ts"() {
+    MAX_WRAPPER_DEPTH = 4;
+  }
+});
+
+// src/agent/runtime/inbound-router.ts
+function phoneFromJid(jid) {
+  return jid.split("@")[0].split(":")[0].replace(/\D/g, "");
+}
+function isGroupOrBroadcastJid(jid) {
+  return jid.endsWith("@g.us") || jid.includes("broadcast") || jid.endsWith("@newsletter");
+}
+function matchesAllowlist(phone, allowlist) {
+  if (!allowlist || allowlist.length === 0) return true;
+  const digits = phone.replace(/\D/g, "");
+  return allowlist.some((entry) => {
+    const entryDigits = entry.replace(/\D/g, "");
+    if (entryDigits.length < MIN_PHONE_MATCH_DIGITS || digits.length < MIN_PHONE_MATCH_DIGITS) {
+      return entryDigits === digits;
+    }
+    return digits.endsWith(entryDigits) || entryDigits.endsWith(digits);
+  });
+}
+function buildEchoReply(botConfig, inboundText) {
+  const greeting = botConfig.greeting?.trim() || "Hola";
+  const quoted = inboundText.length > ECHO_QUOTE_MAX_CHARS ? `${inboundText.slice(0, ECHO_QUOTE_MAX_CHARS - 3)}...` : inboundText;
+  return `${greeting} \u{1F44B} Soy el asistente virtual (en pruebas). Recib\xED tu mensaje: "${quoted}". Muy pronto voy a poder tomar tu pedido por aqu\xED.`;
+}
+async function routeInboundMessage(message, deps) {
+  if (message.fromMe) return "from-me";
+  if (isGroupOrBroadcastJid(message.remoteJid)) return "group";
+  if (!message.text.trim()) return "non-text";
+  const companyId = await deps.resolveCompanyIdBySender(message.sessionPhone);
+  if (!companyId) return "no-company";
+  const botConfig = await deps.getBotConfig(companyId);
+  if (!botConfig || !botConfig.enabled) return "bot-disabled";
+  const customerPhone = phoneFromJid(message.remoteJid);
+  if (!matchesAllowlist(customerPhone, botConfig.testNumbers)) return "not-allowlisted";
+  if (deps.isRateLimited(message.remoteJid, message.receivedAt.getTime())) {
+    return "rate-limited";
+  }
+  const inbound = await deps.saveInbound({
+    companyId,
+    sessionPhone: message.sessionPhone,
+    customerJid: message.remoteJid,
+    customerPhone,
+    customerName: message.pushName,
+    text: message.text,
+    channelMessageId: message.channelMessageId,
+    receivedAt: message.receivedAt
+  });
+  if (inbound.duplicated) return "duplicate";
+  const reply = buildEchoReply(botConfig, message.text);
+  await deps.simulateTyping(message.remoteJid, reply);
+  await deps.sendText(message.remoteJid, reply);
+  await deps.saveOutbound({
+    companyId,
+    conversationId: inbound.conversationId,
+    text: reply,
+    sentAt: new Date(message.receivedAt.getTime())
+  });
+  return "replied";
+}
+var ECHO_QUOTE_MAX_CHARS, MIN_PHONE_MATCH_DIGITS;
+var init_inbound_router = __esm({
+  "src/agent/runtime/inbound-router.ts"() {
+    ECHO_QUOTE_MAX_CHARS = 120;
+    MIN_PHONE_MATCH_DIGITS = 8;
+  }
+});
+
+// src/agent/runtime/jid-rate-limit.ts
+var JidRateLimiter;
+var init_jid_rate_limit = __esm({
+  "src/agent/runtime/jid-rate-limit.ts"() {
+    JidRateLimiter = class {
+      constructor(maxPerWindow = 8, windowMs = 6e4) {
+        this.maxPerWindow = maxPerWindow;
+        this.windowMs = windowMs;
+        this.hits = /* @__PURE__ */ new Map();
+      }
+      /** true = este mensaje excede el máximo por ventana y debe ignorarse. */
+      isLimited(jid, nowMs) {
+        const windowStart = nowMs - this.windowMs;
+        const recent = (this.hits.get(jid) ?? []).filter((ts) => ts > windowStart);
+        if (recent.length >= this.maxPerWindow) {
+          this.hits.set(jid, recent);
+          return true;
+        }
+        recent.push(nowMs);
+        this.hits.set(jid, recent);
+        return false;
+      }
+    };
+  }
+});
+
+// src/agent/runtime/conversation.store.ts
+function limaMonthKey(date) {
+  return new Date(date.getTime() - LIMA_UTC_OFFSET_MS).toISOString().slice(0, 7);
+}
+function isDuplicateKeyError2(error) {
+  return Boolean(error && typeof error === "object" && error.code === 11e3);
+}
+async function saveInboundMessage(entry) {
+  const conversationModel = await getBotConversationModel();
+  const conversation = await conversationModel.findOneAndUpdate(
+    { companyId: entry.companyId, customerJid: entry.customerJid },
+    {
+      $set: {
+        sessionPhone: entry.sessionPhone,
+        lastMessageAt: entry.receivedAt,
+        lastCustomerMessageAt: entry.receivedAt,
+        ...entry.customerName ? { customerName: entry.customerName } : {}
+      },
+      $inc: { messageCount: 1 },
+      $setOnInsert: {
+        customerPhone: entry.customerPhone,
+        status: "bot",
+        monthKey: limaMonthKey(entry.receivedAt)
+      }
+    },
+    { upsert: true, new: true }
+  ).lean();
+  const conversationId = String(conversation._id);
+  const messageModel = await getBotConversationMessageModel();
+  try {
+    await messageModel.create({
+      conversationId,
+      companyId: entry.companyId,
+      role: "customer",
+      text: entry.text,
+      ...entry.channelMessageId ? { channelMessageId: entry.channelMessageId } : {}
+    });
+  } catch (error) {
+    if (isDuplicateKeyError2(error)) {
+      return { duplicated: true, conversationId };
+    }
+    throw error;
+  }
+  return { duplicated: false, conversationId };
+}
+async function saveOutboundMessage(entry) {
+  const messageModel = await getBotConversationMessageModel();
+  await messageModel.create({
+    conversationId: entry.conversationId,
+    companyId: entry.companyId,
+    role: "bot",
+    text: entry.text
+  });
+  const conversationModel = await getBotConversationModel();
+  await conversationModel.updateOne(
+    { _id: entry.conversationId },
+    { $set: { lastMessageAt: entry.sentAt }, $inc: { messageCount: 1 } }
+  );
+}
+var LIMA_UTC_OFFSET_MS;
+var init_conversation_store = __esm({
+  "src/agent/runtime/conversation.store.ts"() {
+    init_bot_models();
+    LIMA_UTC_OFFSET_MS = 5 * 60 * 60 * 1e3;
+  }
+});
+
+// src/agent/runtime/agent-wiring.ts
+async function sendWithAgentTimeout(label, sendPromise) {
+  let timer3 = null;
+  const timeout = new Promise((_58, reject) => {
+    timer3 = setTimeout(
+      () => reject(new Error(`Agent send timeout (${AGENT_SEND_TIMEOUT_MS / 1e3}s): ${label}`)),
+      AGENT_SEND_TIMEOUT_MS
+    );
+  });
+  try {
+    return await Promise.race([sendPromise, timeout]);
+  } finally {
+    if (timer3) clearTimeout(timer3);
+  }
+}
+async function resolveSessionContext(sessionPhone) {
+  const cached2 = sessionContextCache.get(sessionPhone);
+  if (cached2 && Date.now() - cached2.cachedAt < CONFIG_CACHE_TTL_MS) {
+    return cached2;
+  }
+  let companyId = null;
+  let botConfig = null;
+  try {
+    const company = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
+    const rawId = company?._id;
+    companyId = rawId ? String(rawId) : null;
+    if (companyId) {
+      const configModel2 = await getBotConfigModel();
+      const stored = await configModel2.findOne({ companyId }).lean();
+      botConfig = stored ? {
+        enabled: Boolean(stored.enabled),
+        vertical: stored.vertical,
+        greeting: stored.greeting,
+        testNumbers: stored.testNumbers
+      } : null;
+    }
+  } catch (error) {
+    logger_default.warn(`Agent: no se pudo resolver contexto de ${sessionPhone}: ${String(error)}`);
+  }
+  const resolved = { companyId, botConfig, cachedAt: Date.now() };
+  sessionContextCache.set(sessionPhone, resolved);
+  return resolved;
+}
+function buildDeps(sessionPhone, sock) {
+  return {
+    resolveCompanyIdBySender: async () => (await resolveSessionContext(sessionPhone)).companyId,
+    getBotConfig: async () => (await resolveSessionContext(sessionPhone)).botConfig,
+    isRateLimited: (jid, nowMs) => rateLimiter.isLimited(jid, nowMs),
+    saveInbound: saveInboundMessage,
+    saveOutbound: saveOutboundMessage,
+    simulateTyping: async (toJid, text) => {
+      await sock.sendPresenceUpdate("composing", toJid).catch(() => void 0);
+      await delay(Math.min(calculateTypingDelay(text), MAX_TYPING_DELAY_MS));
+    },
+    sendText: async (toJid, text) => {
+      await sendWithAgentTimeout(`agent\u2192${toJid}`, sock.sendMessage(toJid, { text }));
+      await sock.sendPresenceUpdate("paused", toJid).catch(() => void 0);
+      const { companyId } = await resolveSessionContext(sessionPhone);
+      if (companyId) {
+        void quotaValidatorService.incrementWhatsAppUsage(companyId, 1).catch((error) => logger_default.warn(`Agent: fallo conteo de quota: ${String(error)}`));
+      }
+    }
+  };
+}
+async function handleAgentMessagesUpsert(sessionPhone, sock, upsert) {
+  if (!config.whatsapp.agentEnabled) return;
+  if (upsert?.type !== "notify") return;
+  for (const rawMessage of upsert.messages ?? []) {
+    const remoteJid = rawMessage?.key?.remoteJid;
+    if (!remoteJid) continue;
+    try {
+      const inbound = {
+        sessionPhone,
+        remoteJid,
+        fromMe: Boolean(rawMessage.key?.fromMe),
+        text: extractInboundText(rawMessage.message),
+        pushName: rawMessage.pushName ?? void 0,
+        channelMessageId: rawMessage.key?.id ?? void 0,
+        receivedAt: /* @__PURE__ */ new Date()
+      };
+      const outcome = await routeInboundMessage(inbound, buildDeps(sessionPhone, sock));
+      if (outcome === "replied") {
+        logger_default.info(`Agent: respondido a ${remoteJid} (sesi\xF3n ${sessionPhone})`);
+      } else if (outcome !== "bot-disabled" && outcome !== "from-me") {
+        logger_default.debug(`Agent: mensaje de ${remoteJid} \u2192 ${outcome}`);
+      }
+    } catch (error) {
+      logger_default.error(`Agent: error procesando mensaje de ${remoteJid}: ${String(error)}`);
+    }
+  }
+}
+var CONFIG_CACHE_TTL_MS, MAX_TYPING_DELAY_MS, AGENT_SEND_TIMEOUT_MS, rateLimiter, sessionContextCache;
+var init_agent_wiring = __esm({
+  "src/agent/runtime/agent-wiring.ts"() {
+    init_logger();
+    init_environment();
+    init_quota_validator_service();
+    init_bot_models();
+    init_retry();
+    init_message_text();
+    init_inbound_router();
+    init_jid_rate_limit();
+    init_conversation_store();
+    CONFIG_CACHE_TTL_MS = 6e4;
+    MAX_TYPING_DELAY_MS = 4e3;
+    AGENT_SEND_TIMEOUT_MS = 3e4;
+    rateLimiter = new JidRateLimiter(8, 6e4);
+    sessionContextCache = /* @__PURE__ */ new Map();
+  }
+});
+
 // src/whatsapp/baileys/sessions.simple.ts
+var sessions_simple_exports = {};
+__export(sessions_simple_exports, {
+  clearSession: () => clearSession,
+  disconnectSession: () => disconnectSession,
+  endSession: () => endSession,
+  getPairingCode: () => getPairingCode,
+  getQRCode: () => getQRCode,
+  getQRCodeGeneratedAt: () => getQRCodeGeneratedAt,
+  getSession: () => getSession,
+  getStore: () => getStore,
+  isPairingLoginInProgress: () => isPairingLoginInProgress,
+  isSessionParked: () => isSessionParked,
+  isSessionReady: () => isSessionReady,
+  isTransientStallCause: () => isTransientStallCause,
+  isWhatsAppSessionActive: () => isWhatsAppSessionActive,
+  listSessions: () => listSessions,
+  markQRRequested: () => markQRRequested,
+  reconnectDelayMs: () => reconnectDelayMs,
+  requestPairingCodeForSession: () => requestPairingCodeForSession,
+  restartSession: () => restartSession,
+  startSession: () => startSession,
+  stopLivenessSweep: () => stopLivenessSweep,
+  sweepDeadSessions: () => sweepDeadSessions
+});
 import {
   makeWASocket,
   Browsers,
   DisconnectReason,
   makeCacheableSignalKeyStore
 } from "@whiskeysockets/baileys";
-import path9 from "path";
-import fs6 from "fs-extra";
+import path11 from "path";
+import fs7 from "fs-extra";
 import pino from "pino";
 function clearQR(sessionId) {
   delete qrCodes[sessionId];
   delete qrTimestamps[sessionId];
+}
+function isSocketAlive(sock) {
+  const ws = sock?.ws;
+  return ws?.isOpen ?? true;
 }
 function markQRRequested(sessionId) {
   qrLastRequestedAt[sessionId] = Date.now();
@@ -7455,12 +7932,24 @@ function reconnectDelayMs(attempt) {
   const jitter = 0.8 + Math.random() * 0.4;
   return Math.round(capped * jitter);
 }
+function isTransientStallCause(cause) {
+  if (cause.code !== void 0 && TRANSIENT_STALL_CODES.has(cause.code)) return true;
+  return !!cause.message && TRANSIENT_ERROR_PATTERN.test(cause.message);
+}
+function summarizeStallCauses(causes) {
+  const tally = /* @__PURE__ */ new Map();
+  for (const cause of causes) {
+    const label = cause.code !== void 0 ? String(cause.code) : "timeout sin c\xF3digo";
+    tally.set(label, (tally.get(label) ?? 0) + 1);
+  }
+  return [...tally.entries()].map(([label, n43]) => `${label} \xD7${n43}`).join(", ");
+}
 function scheduleReconnect(sessionId, qrCb) {
   if (shuttingDown.has(sessionId)) return;
   if (reconnectTimers[sessionId]) return;
   const attempt = reconnectAttempts[sessionId] = (reconnectAttempts[sessionId] ?? 0) + 1;
-  const delay = reconnectDelayMs(attempt);
-  logger_default.info(`\u{1F501} Reconnect ${sessionId}: intento ${attempt} en ${delay}ms`);
+  const delay2 = reconnectDelayMs(attempt);
+  logger_default.info(`\u{1F501} Reconnect ${sessionId}: intento ${attempt} en ${delay2}ms`);
   if (attempt === 5) {
     sendTelegramAlert({
       dedupeKey: `session-persistent-down-${sessionId}`,
@@ -7479,31 +7968,93 @@ NO re-emparejes a\xFAn: suele recuperarse sola cuando WhatsApp deja de throttlea
       logger_default.error(`Reconnect ${sessionId} fall\xF3 (intento ${attempt}): ${String(error)}`);
       scheduleReconnect(sessionId, qrCb);
     }
-  }, delay);
+  }, delay2);
 }
 function parkSession(sessionId) {
   parkedSessions.add(sessionId);
   readyClients.set(sessionId, false);
   clearReconnectTimer(sessionId);
   const stalls = connectingStalls[sessionId] ?? 0;
+  const causes = stallCauses[sessionId] ?? [];
+  const transientCount = causes.filter(isTransientStallCause).length;
+  const externalCause = causes.length > 0 && transientCount * 2 >= causes.length;
+  const causeSummary = causes.length > 0 ? summarizeStallCauses(causes) : "sin causas registradas";
+  const now = Date.now();
+  for (const [id, at3] of recentParks) {
+    if (now - at3 > PARK_CORRELATION_WINDOW_MS) recentParks.delete(id);
+  }
+  recentParks.set(sessionId, now);
+  const correlated = [...recentParks.keys()];
+  const isCommonCause = correlated.length >= 2;
   logger_default.error(
-    `\u{1F17F}\uFE0F [${sessionId}] Sesi\xF3n APARCADA tras ${stalls} stalls de conexi\xF3n (el handshake nunca abri\xF3 con el backoff en el techo). Se detiene la reconexi\xF3n autom\xE1tica: requiere re-emparejar (QR) o un restart manual.`
+    `\u{1F17F}\uFE0F [${sessionId}] Sesi\xF3n APARCADA tras ${stalls} stalls de conexi\xF3n (causas: ${causeSummary}). Se detiene la reconexi\xF3n autom\xE1tica. Diagn\xF3stico: ${externalCause || isCommonCause ? "causa externa (throttle de login o red) \u2014 NO re-emparejar" : "posible desincronizaci\xF3n de credenciales \u2014 re-emparejar"}.`
   );
+  if (isCommonCause) {
+    const allCauses = correlated.flatMap((id) => stallCauses[id] ?? []);
+    const combinedSummary = allCauses.length > 0 ? summarizeStallCauses(allCauses) : "sin causas registradas";
+    sendTelegramAlert({
+      dedupeKey: "session-parked-multi",
+      message: `\u{1F17F}\uFE0F WhatsApp: ${correlated.length} sesiones APARCADAS en ${PARK_CORRELATION_WINDOW_MS / 6e4} min.
+Sesiones: ${correlated.join(", ")}
+Causas de cierre (todas): ${combinedSummary}
+
+Varias sesiones cayeron juntas \u21D2 la causa es COM\xDAN (red local, o WhatsApp throttleando el login desde esta IP). Las credenciales de cuentas independientes no se desincronizan a la vez.
+
+Acci\xF3n: NO re-emparejes. Verific\xE1 red/DNS y reinici\xE1 el proceso cuando ceda el throttle (el aparcado se limpia al reiniciar). Los mensajes pendientes est\xE1n a salvo en el outbox.`
+    }).catch(() => {
+    });
+    return;
+  }
   sendTelegramAlert({
     dedupeKey: `session-parked-${sessionId}`,
-    message: `\u{1F17F}\uFE0F WhatsApp sesi\xF3n ${sessionId} APARCADA.
-El socket no completa el login tras ${stalls} intentos con backoff m\xE1ximo \u2014 ya no es throttle transitorio: lo m\xE1s probable es que las credenciales est\xE9n desincronizadas.
+    message: externalCause ? `\u{1F17F}\uFE0F WhatsApp sesi\xF3n ${sessionId} APARCADA.
+El socket no complet\xF3 el login tras ${stalls} intentos (causas: ${causeSummary}).
+
+Esos c\xF3digos son de causa EXTERNA \u2014 WhatsApp rechazando el login o la red ca\xEDda \u2014 no de credenciales rotas.
+
+Acci\xF3n: NO re-emparejes. Verific\xE1 red/DNS y reinici\xE1 el proceso cuando ceda el throttle (el aparcado se limpia al reiniciar). Los mensajes pendientes est\xE1n a salvo en el outbox y saldr\xE1n al reconectar.` : `\u{1F17F}\uFE0F WhatsApp sesi\xF3n ${sessionId} APARCADA.
+El socket no completa el login tras ${stalls} intentos con backoff m\xE1ximo y sin c\xF3digo de cierre (causas: ${causeSummary}) \u2014 el patr\xF3n t\xEDpico de credenciales desincronizadas.
 
 Acci\xF3n: re-emparejar la sesi\xF3n (escanear QR) desde el Portal. Los mensajes pendientes est\xE1n a salvo en el outbox y saldr\xE1n al reconectar.`
   }).catch(() => {
   });
+}
+function sweepDeadSessions() {
+  let demoted = 0;
+  for (const [sessionId, ready] of readyClients) {
+    if (!ready || shuttingDown.has(sessionId) || parkedSessions.has(sessionId)) continue;
+    if (isSocketAlive(sessions[sessionId])) continue;
+    logger_default.warn(`\u{1F47B} [${sessionId}] Sesi\xF3n marcada lista con el websocket cerrado \u2014 degradando y reconectando`);
+    readyClients.set(sessionId, false);
+    demoted += 1;
+    scheduleReconnect(sessionId);
+  }
+  return demoted;
+}
+function startLivenessSweep() {
+  if (livenessTimer) return;
+  livenessTimer = setInterval(() => {
+    try {
+      sweepDeadSessions();
+    } catch (error) {
+      logger_default.warn(`Liveness sweep fall\xF3: ${String(error)}`);
+    }
+  }, LIVENESS_SWEEP_MS);
+  livenessTimer.unref?.();
+}
+function stopLivenessSweep() {
+  if (!livenessTimer) return;
+  clearInterval(livenessTimer);
+  livenessTimer = null;
 }
 function isSessionParked(sessionId) {
   return parkedSessions.has(sessionId);
 }
 function resetConnectingStalls(sessionId) {
   connectingStalls[sessionId] = 0;
+  delete stallCauses[sessionId];
   parkedSessions.delete(sessionId);
+  recentParks.delete(sessionId);
 }
 function getStore(sessionId) {
   const store3 = stores[sessionId];
@@ -7536,6 +8087,9 @@ function getQRCode(sessionId) {
 }
 function getQRCodeGeneratedAt(sessionId) {
   return qrTimestamps[sessionId];
+}
+function getPairingCode(sessionId) {
+  return pairingCodes[sessionId];
 }
 async function startSession(sessionId, qrCb) {
   if (config.nodeEnv === "production" && isLocalOnlySession(sessionId)) {
@@ -7606,18 +8160,25 @@ async function initSession(sessionId, qrCb) {
     // "expiraba" en pantalla a los 20s aunque seguía vigente 40s más.
     qrTimeout: 2e4
   });
+  const myEpoch = socketEpoch[sessionId] = (socketEpoch[sessionId] ?? 0) + 1;
   const store3 = makeInMemoryStore(sessionId);
   stores[sessionId] = store3;
   const storeLoaded = store3.load();
   sock.ev.on("creds.update", saveCreds);
+  sock.ev.on("messages.upsert", (upsert) => {
+    void handleAgentMessagesUpsert(sessionId, sock, upsert);
+  });
   let connectionSettled = false;
   let watchdogTimer = null;
   let everOpened = false;
   let sawQR = false;
   let stallCounted = false;
-  const registerConnectingStall = () => {
+  const registerConnectingStall = (cause) => {
     if (stallCounted) return connectingStalls[sessionId] ?? 0;
     stallCounted = true;
+    const causes = stallCauses[sessionId] ?? (stallCauses[sessionId] = []);
+    causes.push(cause);
+    if (causes.length > MAX_TRACKED_STALL_CAUSES) causes.shift();
     return connectingStalls[sessionId] = (connectingStalls[sessionId] ?? 0) + 1;
   };
   const startWatchdog = () => {
@@ -7645,7 +8206,7 @@ async function initSession(sessionId, qrCb) {
           scheduleReconnect(sessionId, qrCb);
           return;
         }
-        const stalls = registerConnectingStall();
+        const stalls = registerConnectingStall({ message: "connection-watchdog-timeout" });
         if (stalls >= MAX_CONNECTING_STALLS) {
           parkSession(sessionId);
         } else {
@@ -7683,6 +8244,17 @@ async function initSession(sessionId, qrCb) {
       if (qrCb) qrCb(qr);
     }
     if (connection === "open") {
+      if (socketEpoch[sessionId] !== myEpoch) {
+        logger_default.warn(
+          `\u{1F47B} [${sessionId}] Ignorando 'open' de un socket obsoleto (gen ${myEpoch}, vigente ${socketEpoch[sessionId]})`
+        );
+        return;
+      }
+      if (!isSocketAlive(sock)) {
+        logger_default.warn(`\u{1F47B} [${sessionId}] 'open' recibido pero el websocket ya no est\xE1 abierto \u2014 no se marca lista`);
+        scheduleReconnect(sessionId, qrCb);
+        return;
+      }
       await storeLoaded.catch(() => {
       });
       everOpened = true;
@@ -7708,6 +8280,12 @@ async function initSession(sessionId, qrCb) {
         await sock.sendPresenceUpdate("available");
       } catch (err) {
         logger_default.error(`Error setting presence for ${sessionId}:`, err);
+      }
+      if (!isSocketAlive(sock)) {
+        logger_default.warn(`\u{1F47B} [${sessionId}] El websocket muri\xF3 justo tras el 'open' \u2014 degradando y reconectando`);
+        readyClients.set(sessionId, false);
+        scheduleReconnect(sessionId, qrCb);
+        return;
       }
       try {
         await flushOutboxForSession(sessionId);
@@ -7762,7 +8340,7 @@ Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado pa
           return;
         }
         if (!everOpened) {
-          const stalls = registerConnectingStall();
+          const stalls = registerConnectingStall({ code, message: boom?.message });
           if (stalls >= MAX_CONNECTING_STALLS) {
             parkSession(sessionId);
             return;
@@ -7802,6 +8380,7 @@ Acci\xF3n: detener la instancia duplicada o usar un PORTAL_MONGO_URI separado pa
     store3.markDirty();
   });
   sessions[sessionId] = sock;
+  startLivenessSweep();
   return sock;
 }
 async function requestPairingCodeForSession(sessionId) {
@@ -7894,10 +8473,10 @@ async function clearSession(sessionId) {
     clearQR(sessionId);
     readyClients.delete(sessionId);
     logger_default.info(`\u2705 Memory cleaned for ${sessionId}`);
-    const sessionDir = path9.join(config.whatsapp.sessionDir, sessionId);
+    const sessionDir = path11.join(config.whatsapp.sessionDir, sessionId);
     try {
-      if (await fs6.pathExists(sessionDir)) {
-        await fs6.remove(sessionDir);
+      if (await fs7.pathExists(sessionDir)) {
+        await fs7.remove(sessionDir);
         logger_default.info(`\u2705 Deleted session directory: ${sessionDir}`);
       } else {
         logger_default.info(`Session directory already deleted: ${sessionDir}`);
@@ -7914,10 +8493,10 @@ async function clearSession(sessionId) {
     } catch (error) {
       logger_default.warn(`Failed to clear Mongo store for ${sessionId}:`, error);
     }
-    const backupDir = path9.join(config.whatsapp.sessionDir, "backups", sessionId);
+    const backupDir = path11.join(config.whatsapp.sessionDir, "backups", sessionId);
     try {
-      if (await fs6.pathExists(backupDir)) {
-        await fs6.remove(backupDir);
+      if (await fs7.pathExists(backupDir)) {
+        await fs7.remove(backupDir);
         logger_default.info(`\u2705 Deleted backup directory: ${backupDir}`);
       } else {
         logger_default.info(`Backup directory already deleted: ${backupDir}`);
@@ -7937,7 +8516,7 @@ async function clearSession(sessionId) {
     throw error;
   }
 }
-var sessions, stores, qrCodes, qrTimestamps, pairingCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, reconnectAttempts, CONNECTION_TIMEOUT_MS, PAIRING_LOGIN_TIMEOUT_MS, PAIRING_LOGIN_WINDOW_MS, recentlyPairedAt, qrLastRequestedAt, QR_CONSUMER_IDLE_MS, PAIRING_MODE_WAIT_MS, hasActiveQRConsumer, RECONNECT_BASE_DELAY_MS, RECONNECT_MAX_DELAY_MS, STALL_BACKOFF_FLOOR_ATTEMPT, consecutive440s, connectingStalls, parkedSessions, MAX_CONNECTING_STALLS, MSG_RETRY_CACHE_MAX, makeMsgRetryCache, clearStoreTimer, clearReconnectTimer;
+var sessions, stores, qrCodes, qrTimestamps, pairingCodes, readyClients, shuttingDown, storeTimers, startingPromises, reconnectTimers, socketEpoch, LIVENESS_SWEEP_MS, livenessTimer, reconnectAttempts, CONNECTION_TIMEOUT_MS, PAIRING_LOGIN_TIMEOUT_MS, PAIRING_LOGIN_WINDOW_MS, recentlyPairedAt, qrLastRequestedAt, QR_CONSUMER_IDLE_MS, PAIRING_MODE_WAIT_MS, hasActiveQRConsumer, RECONNECT_BASE_DELAY_MS, RECONNECT_MAX_DELAY_MS, STALL_BACKOFF_FLOOR_ATTEMPT, consecutive440s, connectingStalls, parkedSessions, MAX_CONNECTING_STALLS, stallCauses, MAX_TRACKED_STALL_CAUSES, TRANSIENT_STALL_CODES, TRANSIENT_ERROR_PATTERN, PARK_CORRELATION_WINDOW_MS, recentParks, MSG_RETRY_CACHE_MAX, makeMsgRetryCache, clearStoreTimer, clearReconnectTimer;
 var init_sessions_simple = __esm({
   "src/whatsapp/baileys/sessions.simple.ts"() {
     init_baileys_version();
@@ -7953,6 +8532,7 @@ var init_sessions_simple = __esm({
     init_telegram_alert_service();
     init_instance_lease();
     init_local_sessions();
+    init_agent_wiring();
     sessions = {};
     stores = {};
     qrCodes = {};
@@ -7963,6 +8543,9 @@ var init_sessions_simple = __esm({
     storeTimers = {};
     startingPromises = {};
     reconnectTimers = {};
+    socketEpoch = {};
+    LIVENESS_SWEEP_MS = Number(process.env.WHATSAPP_LIVENESS_SWEEP_MS) || 6e4;
+    livenessTimer = null;
     reconnectAttempts = {};
     CONNECTION_TIMEOUT_MS = 9e4;
     PAIRING_LOGIN_TIMEOUT_MS = 5 * 6e4;
@@ -7979,6 +8562,12 @@ var init_sessions_simple = __esm({
     connectingStalls = {};
     parkedSessions = /* @__PURE__ */ new Set();
     MAX_CONNECTING_STALLS = Number(process.env.WHATSAPP_MAX_CONNECTING_STALLS) || 12;
+    stallCauses = {};
+    MAX_TRACKED_STALL_CAUSES = MAX_CONNECTING_STALLS;
+    TRANSIENT_STALL_CODES = /* @__PURE__ */ new Set([405, 408, 428, 500, 503, 515]);
+    TRANSIENT_ERROR_PATTERN = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|ENETDOWN|EHOSTUNREACH|EPIPE|socket hang up/i;
+    PARK_CORRELATION_WINDOW_MS = 20 * 6e4;
+    recentParks = /* @__PURE__ */ new Map();
     MSG_RETRY_CACHE_MAX = 5e3;
     makeMsgRetryCache = () => {
       const entries = /* @__PURE__ */ new Map();
@@ -7998,16 +8587,16 @@ var init_sessions_simple = __esm({
       };
     };
     clearStoreTimer = (sessionId) => {
-      const timer = storeTimers[sessionId];
-      if (timer) {
-        clearInterval(timer);
+      const timer3 = storeTimers[sessionId];
+      if (timer3) {
+        clearInterval(timer3);
         delete storeTimers[sessionId];
       }
     };
     clearReconnectTimer = (sessionId) => {
-      const timer = reconnectTimers[sessionId];
-      if (timer) {
-        clearTimeout(timer);
+      const timer3 = reconnectTimers[sessionId];
+      if (timer3) {
+        clearTimeout(timer3);
         delete reconnectTimers[sessionId];
       }
     };
@@ -8015,11 +8604,11 @@ var init_sessions_simple = __esm({
 });
 
 // src/models/cronjob.model.ts
-import { Schema as Schema3 } from "mongoose";
+import { Schema as Schema4 } from "mongoose";
 var CronJobMessageSchema, CronJobApiConfigSchema, CronJobScheduleSchema, CronJobRetryPolicySchema, CronJobHistoryEntrySchema, CronJobMetadataSchema, CronJobSchema;
 var init_cronjob_model = __esm({
   "src/models/cronjob.model.ts"() {
-    CronJobMessageSchema = new Schema3(
+    CronJobMessageSchema = new Schema4(
       {
         sender: { type: String },
         chatId: { type: String, required: true },
@@ -8028,16 +8617,16 @@ var init_cronjob_model = __esm({
       },
       { _id: false }
     );
-    CronJobApiConfigSchema = new Schema3(
+    CronJobApiConfigSchema = new Schema4(
       {
         url: { type: String, required: true },
         method: { type: String, enum: ["GET", "POST", "PUT"], default: "GET" },
         headers: { type: Map, of: String },
-        body: Schema3.Types.Mixed
+        body: Schema4.Types.Mixed
       },
       { _id: false }
     );
-    CronJobScheduleSchema = new Schema3(
+    CronJobScheduleSchema = new Schema4(
       {
         cronExpression: { type: String, required: true },
         cronExpressions: [{ type: String }],
@@ -8047,7 +8636,7 @@ var init_cronjob_model = __esm({
       },
       { _id: false }
     );
-    CronJobRetryPolicySchema = new Schema3(
+    CronJobRetryPolicySchema = new Schema4(
       {
         maxRetries: { type: Number, default: 3 },
         backoffMultiplier: { type: Number, default: 2 },
@@ -8055,17 +8644,17 @@ var init_cronjob_model = __esm({
       },
       { _id: false }
     );
-    CronJobHistoryEntrySchema = new Schema3(
+    CronJobHistoryEntrySchema = new Schema4(
       {
         status: { type: String, enum: ["success", "error"], required: true },
         timestamp: { type: Date, required: true },
         duration: Number,
         error: String,
-        metadata: Schema3.Types.Mixed
+        metadata: Schema4.Types.Mixed
       },
       { _id: false }
     );
-    CronJobMetadataSchema = new Schema3(
+    CronJobMetadataSchema = new Schema4(
       {
         createdBy: String,
         updatedBy: String,
@@ -8077,7 +8666,7 @@ var init_cronjob_model = __esm({
       },
       { _id: false }
     );
-    CronJobSchema = new Schema3(
+    CronJobSchema = new Schema4(
       {
         companyId: {
           type: String,
@@ -8170,13 +8759,13 @@ var init_cronjob_model = __esm({
 });
 
 // src/models/gps-position.model.ts
-import { Schema as Schema4 } from "mongoose";
+import { Schema as Schema5 } from "mongoose";
 var GPS_POSITION_SOURCES, GPS_POSITION_TTL_DAYS, GpsPositionSchema;
 var init_gps_position_model = __esm({
   "src/models/gps-position.model.ts"() {
     GPS_POSITION_SOURCES = ["driver-app", "provider", "manual"];
     GPS_POSITION_TTL_DAYS = 90;
-    GpsPositionSchema = new Schema4(
+    GpsPositionSchema = new Schema5(
       {
         companyId: { type: String, required: true, immutable: true },
         plate: { type: String, required: true },
@@ -8210,7 +8799,7 @@ __export(models_exports, {
   getSharedModels: () => getSharedModels,
   getUsageMetricModel: () => getUsageMetricModel
 });
-import { Schema as Schema5 } from "mongoose";
+import { Schema as Schema6 } from "mongoose";
 async function getCronJobModel() {
   if (cronJobModel) {
     return cronJobModel;
@@ -8305,7 +8894,7 @@ var init_models = __esm({
     companyModel = null;
     configModel = null;
     usageMetricModel = null;
-    looseSchema = new Schema5({}, { strict: false });
+    looseSchema = new Schema6({}, { strict: false });
     orderModel = null;
     mediaModel = null;
     folderModel = null;
@@ -16203,27 +16792,27 @@ var require_process = __commonJS({
 var require_filesystem = __commonJS({
   "node_modules/detect-libc/lib/filesystem.js"(exports, module) {
     "use strict";
-    var fs35 = __require("fs");
+    var fs39 = __require("fs");
     var LDD_PATH = "/usr/bin/ldd";
     var SELF_PATH = "/proc/self/exe";
     var MAX_LENGTH = 2048;
-    var readFileSync = (path36) => {
-      const fd = fs35.openSync(path36, "r");
+    var readFileSync = (path41) => {
+      const fd = fs39.openSync(path41, "r");
       const buffer2 = Buffer.alloc(MAX_LENGTH);
-      const bytesRead = fs35.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
-      fs35.close(fd, () => {
+      const bytesRead = fs39.readSync(fd, buffer2, 0, MAX_LENGTH, 0);
+      fs39.close(fd, () => {
       });
       return buffer2.subarray(0, bytesRead);
     };
-    var readFile = (path36) => new Promise((resolve2, reject) => {
-      fs35.open(path36, "r", (err, fd) => {
+    var readFile = (path41) => new Promise((resolve2, reject) => {
+      fs39.open(path41, "r", (err, fd) => {
         if (err) {
           reject(err);
         } else {
           const buffer2 = Buffer.alloc(MAX_LENGTH);
-          fs35.read(fd, buffer2, 0, MAX_LENGTH, 0, (_58, bytesRead) => {
+          fs39.read(fd, buffer2, 0, MAX_LENGTH, 0, (_58, bytesRead) => {
             resolve2(buffer2.subarray(0, bytesRead));
-            fs35.close(fd, () => {
+            fs39.close(fd, () => {
             });
           });
         }
@@ -16335,11 +16924,11 @@ var require_detect_libc = __commonJS({
       }
       return null;
     };
-    var familyFromInterpreterPath = (path36) => {
-      if (path36) {
-        if (path36.includes("/ld-musl-")) {
+    var familyFromInterpreterPath = (path41) => {
+      if (path41) {
+        if (path41.includes("/ld-musl-")) {
           return MUSL;
-        } else if (path36.includes("/ld-linux-")) {
+        } else if (path41.includes("/ld-linux-")) {
           return GLIBC;
         }
       }
@@ -16386,8 +16975,8 @@ var require_detect_libc = __commonJS({
       cachedFamilyInterpreter = null;
       try {
         const selfContent = await readFile(SELF_PATH);
-        const path36 = interpreterPath(selfContent);
-        cachedFamilyInterpreter = familyFromInterpreterPath(path36);
+        const path41 = interpreterPath(selfContent);
+        cachedFamilyInterpreter = familyFromInterpreterPath(path41);
       } catch (e29) {
       }
       return cachedFamilyInterpreter;
@@ -16399,8 +16988,8 @@ var require_detect_libc = __commonJS({
       cachedFamilyInterpreter = null;
       try {
         const selfContent = readFileSync(SELF_PATH);
-        const path36 = interpreterPath(selfContent);
-        cachedFamilyInterpreter = familyFromInterpreterPath(path36);
+        const path41 = interpreterPath(selfContent);
+        cachedFamilyInterpreter = familyFromInterpreterPath(path41);
       } catch (e29) {
       }
       return cachedFamilyInterpreter;
@@ -16952,9 +17541,9 @@ var require_sharp = __commonJS({
     ];
     var sharp7;
     var errors = [];
-    for (const path36 of paths) {
+    for (const path41 of paths) {
       try {
-        sharp7 = __require(path36);
+        sharp7 = __require(path41);
         break;
       } catch (err) {
         errors.push(err);
@@ -16963,7 +17552,7 @@ var require_sharp = __commonJS({
     if (sharp7) {
       module.exports = sharp7;
     } else {
-      const [isLinux, isMacOs, isWindows] = ["linux", "darwin", "win32"].map((os3) => runtimePlatform.startsWith(os3));
+      const [isLinux, isMacOs, isWindows] = ["linux", "darwin", "win32"].map((os6) => runtimePlatform.startsWith(os6));
       const help = [`Could not load the "sharp" module using the ${runtimePlatform} runtime`];
       errors.forEach((err) => {
         if (err.code !== "MODULE_NOT_FOUND") {
@@ -16980,15 +17569,15 @@ var require_sharp = __commonJS({
           `    Requires ${expected}`
         );
       } else if (prebuiltPlatforms.includes(runtimePlatform)) {
-        const [os3, cpu] = runtimePlatform.split("-");
-        const libc = os3.endsWith("musl") ? " --libc=musl" : "";
+        const [os6, cpu2] = runtimePlatform.split("-");
+        const libc = os6.endsWith("musl") ? " --libc=musl" : "";
         help.push(
           "- Ensure optional dependencies can be installed:",
           "    npm install --include=optional sharp",
           "- Ensure your package manager supports multi-platform installation:",
           "    See https://sharp.pixelplumbing.com/install#cross-platform",
           "- Add platform-specific dependencies:",
-          `    npm install --os=${os3.replace("musl", "")}${libc} --cpu=${cpu} sharp`
+          `    npm install --os=${os6.replace("musl", "")}${libc} --cpu=${cpu2} sharp`
         );
       } else {
         help.push(
@@ -18359,15 +18948,15 @@ var require_route = __commonJS({
       };
     }
     function wrapConversion(toModel, graph) {
-      const path36 = [graph[toModel].parent, toModel];
+      const path41 = [graph[toModel].parent, toModel];
       let fn = conversions[graph[toModel].parent][toModel];
       let cur = graph[toModel].parent;
       while (graph[cur].parent) {
-        path36.unshift(graph[cur].parent);
+        path41.unshift(graph[cur].parent);
         fn = link(conversions[graph[cur].parent][cur], fn);
         cur = graph[cur].parent;
       }
-      fn.conversion = path36;
+      fn.conversion = path41;
       return fn;
     }
     module.exports = function(fromModel) {
@@ -20262,7 +20851,7 @@ var require_channel = __commonJS({
 var require_output = __commonJS({
   "node_modules/sharp/lib/output.js"(exports, module) {
     "use strict";
-    var path36 = __require("node:path");
+    var path41 = __require("node:path");
     var is = require_is();
     var sharp7 = require_sharp();
     var formats = /* @__PURE__ */ new Map([
@@ -20293,9 +20882,9 @@ var require_output = __commonJS({
       let err;
       if (!is.string(fileOut)) {
         err = new Error("Missing output file path");
-      } else if (is.string(this.options.input.file) && path36.resolve(this.options.input.file) === path36.resolve(fileOut)) {
+      } else if (is.string(this.options.input.file) && path41.resolve(this.options.input.file) === path41.resolve(fileOut)) {
         err = new Error("Cannot use same file for input and output");
-      } else if (jp2Regex.test(path36.extname(fileOut)) && !this.constructor.format.jp2k.output.file) {
+      } else if (jp2Regex.test(path41.extname(fileOut)) && !this.constructor.format.jp2k.output.file) {
         err = errJp2Save();
       }
       if (err) {
@@ -21610,7 +22199,7 @@ var require_has_flag = __commonJS({
 var require_supports_color = __commonJS({
   "node_modules/supports-color/index.js"(exports, module) {
     "use strict";
-    var os3 = __require("os");
+    var os6 = __require("os");
     var tty = __require("tty");
     var hasFlag = require_has_flag();
     var { env } = process;
@@ -21658,7 +22247,7 @@ var require_supports_color = __commonJS({
         return min;
       }
       if (process.platform === "win32") {
-        const osRelease = os3.release().split(".");
+        const osRelease = os6.release().split(".");
         if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
           return Number(osRelease[2]) >= 14931 ? 3 : 2;
         }
@@ -22404,8 +22993,8 @@ var require_FileKvStore = __commonJS({
     var promises_1 = __importDefault(__require("node:fs/promises"));
     var node_path_1 = __importDefault(__require("node:path"));
     var FileKvStore = class {
-      constructor(path36) {
-        this.directory = path36;
+      constructor(path41) {
+        this.directory = path41;
       }
       async get(key) {
         try {
@@ -22788,21 +23377,21 @@ var require_BaseHandler = __commonJS({
         return res.end();
       }
       generateUrl(req, id) {
-        const path36 = this.options.path === "/" ? "" : this.options.path;
+        const path41 = this.options.path === "/" ? "" : this.options.path;
         if (this.options.generateUrl) {
           const { proto: proto4, host: host2 } = this.extractHostAndProto(req);
           return this.options.generateUrl(req, {
             proto: proto4,
             host: host2,
-            path: path36,
+            path: path41,
             id
           });
         }
         if (this.options.relativeLocation) {
-          return `${path36}/${id}`;
+          return `${path41}/${id}`;
         }
         const { proto: proto3, host } = this.extractHostAndProto(req);
-        return `${proto3}://${host}${path36}/${id}`;
+        return `${proto3}://${host}${path41}/${id}`;
       }
       getFileIdFromRequest(req) {
         const match = reExtractFileID.exec(req.url);
@@ -22958,8 +23547,8 @@ var require_GetHandler = __commonJS({
           "application/ogg"
         ]);
       }
-      registerPath(path36, handler) {
-        this.paths.set(path36, handler);
+      registerPath(path41, handler) {
+        this.paths.set(path41, handler);
       }
       /**
        * Read data from the DataStore and send the stream.
@@ -23706,8 +24295,8 @@ var require_server = __commonJS({
           }
         });
       }
-      get(path36, handler) {
-        this.handlers.GET.registerPath(path36, handler);
+      get(path41, handler) {
+        this.handlers.GET.registerPath(path41, handler);
       }
       /**
        * Main server requestListener, invoked on every 'request' event.
@@ -24326,8 +24915,8 @@ var require_minimatch = __commonJS({
       return new Minimatch(pattern, options2).match(p64);
     };
     module.exports = minimatch;
-    var path36 = require_path();
-    minimatch.sep = path36.sep;
+    var path41 = require_path();
+    minimatch.sep = path41.sep;
     var GLOBSTAR = /* @__PURE__ */ Symbol("globstar **");
     minimatch.GLOBSTAR = GLOBSTAR;
     var expand = require_brace_expansion();
@@ -24933,8 +25522,8 @@ var require_minimatch = __commonJS({
         if (this.empty) return f64 === "";
         if (f64 === "/" && partial) return true;
         const options2 = this.options;
-        if (path36.sep !== "/") {
-          f64 = f64.split(path36.sep).join("/");
+        if (path41.sep !== "/") {
+          f64 = f64.split(path41.sep).join("/");
         }
         f64 = f64.split(slashSplit);
         this.debug(this.pattern, "split", f64);
@@ -24972,13 +25561,13 @@ var require_minimatch = __commonJS({
 var require_readdir_glob = __commonJS({
   "node_modules/readdir-glob/index.js"(exports, module) {
     module.exports = readdirGlob;
-    var fs35 = __require("fs");
+    var fs39 = __require("fs");
     var { EventEmitter: EventEmitter2 } = __require("events");
     var { Minimatch } = require_minimatch();
     var { resolve: resolve2 } = __require("path");
     function readdir(dir, strict) {
       return new Promise((resolve3, reject) => {
-        fs35.readdir(dir, { withFileTypes: true }, (err, files) => {
+        fs39.readdir(dir, { withFileTypes: true }, (err, files) => {
           if (err) {
             switch (err.code) {
               case "ENOTDIR":
@@ -25011,7 +25600,7 @@ var require_readdir_glob = __commonJS({
     }
     function stat(file, followSymlinks) {
       return new Promise((resolve3, reject) => {
-        const statFunc = followSymlinks ? fs35.stat : fs35.lstat;
+        const statFunc = followSymlinks ? fs39.stat : fs39.lstat;
         statFunc(file, (err, stats) => {
           if (err) {
             switch (err.code) {
@@ -25032,8 +25621,8 @@ var require_readdir_glob = __commonJS({
         });
       });
     }
-    async function* exploreWalkAsync(dir, path36, followSymlinks, useStat, shouldSkip, strict) {
-      let files = await readdir(path36 + dir, strict);
+    async function* exploreWalkAsync(dir, path41, followSymlinks, useStat, shouldSkip, strict) {
+      let files = await readdir(path41 + dir, strict);
       for (const file of files) {
         let name = file.name;
         if (name === void 0) {
@@ -25042,7 +25631,7 @@ var require_readdir_glob = __commonJS({
         }
         const filename = dir + "/" + name;
         const relative = filename.slice(1);
-        const absolute = path36 + "/" + relative;
+        const absolute = path41 + "/" + relative;
         let stats = null;
         if (useStat || followSymlinks) {
           stats = await stat(absolute, followSymlinks);
@@ -25056,15 +25645,15 @@ var require_readdir_glob = __commonJS({
         if (stats.isDirectory()) {
           if (!shouldSkip(relative)) {
             yield { relative, absolute, stats };
-            yield* exploreWalkAsync(filename, path36, followSymlinks, useStat, shouldSkip, false);
+            yield* exploreWalkAsync(filename, path41, followSymlinks, useStat, shouldSkip, false);
           }
         } else {
           yield { relative, absolute, stats };
         }
       }
     }
-    async function* explore(path36, followSymlinks, useStat, shouldSkip) {
-      yield* exploreWalkAsync("", path36, followSymlinks, useStat, shouldSkip, true);
+    async function* explore(path41, followSymlinks, useStat, shouldSkip) {
+      yield* exploreWalkAsync("", path41, followSymlinks, useStat, shouldSkip, true);
     }
     function readOptions(options2) {
       return {
@@ -26719,7 +27308,7 @@ var require_async = __commonJS({
         var fn = wrapAsync(asyncFn);
         return initialParams((args, callback) => {
           var timedOut = false;
-          var timer;
+          var timer3;
           function timeoutCallback() {
             var name = asyncFn.name || "anonymous";
             var error = new Error('Callback function "' + name + '" timed out.');
@@ -26733,10 +27322,10 @@ var require_async = __commonJS({
           args.push((...cbArgs) => {
             if (!timedOut) {
               callback(...cbArgs);
-              clearTimeout(timer);
+              clearTimeout(timer3);
             }
           });
-          timer = setTimeout(timeoutCallback, milliseconds);
+          timer3 = setTimeout(timeoutCallback, milliseconds);
           fn(...args);
         });
       }
@@ -27076,54 +27665,54 @@ var require_polyfills = __commonJS({
     }
     var chdir;
     module.exports = patch;
-    function patch(fs35) {
+    function patch(fs39) {
       if (constants.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
-        patchLchmod(fs35);
+        patchLchmod(fs39);
       }
-      if (!fs35.lutimes) {
-        patchLutimes(fs35);
+      if (!fs39.lutimes) {
+        patchLutimes(fs39);
       }
-      fs35.chown = chownFix(fs35.chown);
-      fs35.fchown = chownFix(fs35.fchown);
-      fs35.lchown = chownFix(fs35.lchown);
-      fs35.chmod = chmodFix(fs35.chmod);
-      fs35.fchmod = chmodFix(fs35.fchmod);
-      fs35.lchmod = chmodFix(fs35.lchmod);
-      fs35.chownSync = chownFixSync(fs35.chownSync);
-      fs35.fchownSync = chownFixSync(fs35.fchownSync);
-      fs35.lchownSync = chownFixSync(fs35.lchownSync);
-      fs35.chmodSync = chmodFixSync(fs35.chmodSync);
-      fs35.fchmodSync = chmodFixSync(fs35.fchmodSync);
-      fs35.lchmodSync = chmodFixSync(fs35.lchmodSync);
-      fs35.stat = statFix(fs35.stat);
-      fs35.fstat = statFix(fs35.fstat);
-      fs35.lstat = statFix(fs35.lstat);
-      fs35.statSync = statFixSync(fs35.statSync);
-      fs35.fstatSync = statFixSync(fs35.fstatSync);
-      fs35.lstatSync = statFixSync(fs35.lstatSync);
-      if (fs35.chmod && !fs35.lchmod) {
-        fs35.lchmod = function(path36, mode, cb) {
+      fs39.chown = chownFix(fs39.chown);
+      fs39.fchown = chownFix(fs39.fchown);
+      fs39.lchown = chownFix(fs39.lchown);
+      fs39.chmod = chmodFix(fs39.chmod);
+      fs39.fchmod = chmodFix(fs39.fchmod);
+      fs39.lchmod = chmodFix(fs39.lchmod);
+      fs39.chownSync = chownFixSync(fs39.chownSync);
+      fs39.fchownSync = chownFixSync(fs39.fchownSync);
+      fs39.lchownSync = chownFixSync(fs39.lchownSync);
+      fs39.chmodSync = chmodFixSync(fs39.chmodSync);
+      fs39.fchmodSync = chmodFixSync(fs39.fchmodSync);
+      fs39.lchmodSync = chmodFixSync(fs39.lchmodSync);
+      fs39.stat = statFix(fs39.stat);
+      fs39.fstat = statFix(fs39.fstat);
+      fs39.lstat = statFix(fs39.lstat);
+      fs39.statSync = statFixSync(fs39.statSync);
+      fs39.fstatSync = statFixSync(fs39.fstatSync);
+      fs39.lstatSync = statFixSync(fs39.lstatSync);
+      if (fs39.chmod && !fs39.lchmod) {
+        fs39.lchmod = function(path41, mode, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs35.lchmodSync = function() {
+        fs39.lchmodSync = function() {
         };
       }
-      if (fs35.chown && !fs35.lchown) {
-        fs35.lchown = function(path36, uid, gid, cb) {
+      if (fs39.chown && !fs39.lchown) {
+        fs39.lchown = function(path41, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs35.lchownSync = function() {
+        fs39.lchownSync = function() {
         };
       }
       if (platform === "win32") {
-        fs35.rename = typeof fs35.rename !== "function" ? fs35.rename : (function(fs$rename) {
+        fs39.rename = typeof fs39.rename !== "function" ? fs39.rename : (function(fs$rename) {
           function rename(from, to3, cb) {
             var start = Date.now();
             var backoff = 0;
             fs$rename(from, to3, function CB(er3) {
               if (er3 && (er3.code === "EACCES" || er3.code === "EPERM" || er3.code === "EBUSY") && Date.now() - start < 6e4) {
                 setTimeout(function() {
-                  fs35.stat(to3, function(stater, st2) {
+                  fs39.stat(to3, function(stater, st2) {
                     if (stater && stater.code === "ENOENT")
                       fs$rename(from, to3, CB);
                     else
@@ -27139,9 +27728,9 @@ var require_polyfills = __commonJS({
           }
           if (Object.setPrototypeOf) Object.setPrototypeOf(rename, fs$rename);
           return rename;
-        })(fs35.rename);
+        })(fs39.rename);
       }
-      fs35.read = typeof fs35.read !== "function" ? fs35.read : (function(fs$read) {
+      fs39.read = typeof fs39.read !== "function" ? fs39.read : (function(fs$read) {
         function read(fd, buffer2, offset, length, position, callback_) {
           var callback;
           if (callback_ && typeof callback_ === "function") {
@@ -27149,22 +27738,22 @@ var require_polyfills = __commonJS({
             callback = function(er3, _58, __) {
               if (er3 && er3.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
-                return fs$read.call(fs35, fd, buffer2, offset, length, position, callback);
+                return fs$read.call(fs39, fd, buffer2, offset, length, position, callback);
               }
               callback_.apply(this, arguments);
             };
           }
-          return fs$read.call(fs35, fd, buffer2, offset, length, position, callback);
+          return fs$read.call(fs39, fd, buffer2, offset, length, position, callback);
         }
         if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
         return read;
-      })(fs35.read);
-      fs35.readSync = typeof fs35.readSync !== "function" ? fs35.readSync : /* @__PURE__ */ (function(fs$readSync) {
+      })(fs39.read);
+      fs39.readSync = typeof fs39.readSync !== "function" ? fs39.readSync : /* @__PURE__ */ (function(fs$readSync) {
         return function(fd, buffer2, offset, length, position) {
           var eagCounter = 0;
           while (true) {
             try {
-              return fs$readSync.call(fs35, fd, buffer2, offset, length, position);
+              return fs$readSync.call(fs39, fd, buffer2, offset, length, position);
             } catch (er3) {
               if (er3.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
@@ -27174,11 +27763,11 @@ var require_polyfills = __commonJS({
             }
           }
         };
-      })(fs35.readSync);
-      function patchLchmod(fs36) {
-        fs36.lchmod = function(path36, mode, callback) {
-          fs36.open(
-            path36,
+      })(fs39.readSync);
+      function patchLchmod(fs40) {
+        fs40.lchmod = function(path41, mode, callback) {
+          fs40.open(
+            path41,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -27186,80 +27775,80 @@ var require_polyfills = __commonJS({
                 if (callback) callback(err);
                 return;
               }
-              fs36.fchmod(fd, mode, function(err2) {
-                fs36.close(fd, function(err22) {
+              fs40.fchmod(fd, mode, function(err2) {
+                fs40.close(fd, function(err22) {
                   if (callback) callback(err2 || err22);
                 });
               });
             }
           );
         };
-        fs36.lchmodSync = function(path36, mode) {
-          var fd = fs36.openSync(path36, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs40.lchmodSync = function(path41, mode) {
+          var fd = fs40.openSync(path41, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
-            ret = fs36.fchmodSync(fd, mode);
+            ret = fs40.fchmodSync(fd, mode);
             threw = false;
           } finally {
             if (threw) {
               try {
-                fs36.closeSync(fd);
+                fs40.closeSync(fd);
               } catch (er3) {
               }
             } else {
-              fs36.closeSync(fd);
+              fs40.closeSync(fd);
             }
           }
           return ret;
         };
       }
-      function patchLutimes(fs36) {
-        if (constants.hasOwnProperty("O_SYMLINK") && fs36.futimes) {
-          fs36.lutimes = function(path36, at3, mt6, cb) {
-            fs36.open(path36, constants.O_SYMLINK, function(er3, fd) {
+      function patchLutimes(fs40) {
+        if (constants.hasOwnProperty("O_SYMLINK") && fs40.futimes) {
+          fs40.lutimes = function(path41, at3, mt6, cb) {
+            fs40.open(path41, constants.O_SYMLINK, function(er3, fd) {
               if (er3) {
                 if (cb) cb(er3);
                 return;
               }
-              fs36.futimes(fd, at3, mt6, function(er4) {
-                fs36.close(fd, function(er22) {
+              fs40.futimes(fd, at3, mt6, function(er4) {
+                fs40.close(fd, function(er22) {
                   if (cb) cb(er4 || er22);
                 });
               });
             });
           };
-          fs36.lutimesSync = function(path36, at3, mt6) {
-            var fd = fs36.openSync(path36, constants.O_SYMLINK);
+          fs40.lutimesSync = function(path41, at3, mt6) {
+            var fd = fs40.openSync(path41, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
-              ret = fs36.futimesSync(fd, at3, mt6);
+              ret = fs40.futimesSync(fd, at3, mt6);
               threw = false;
             } finally {
               if (threw) {
                 try {
-                  fs36.closeSync(fd);
+                  fs40.closeSync(fd);
                 } catch (er3) {
                 }
               } else {
-                fs36.closeSync(fd);
+                fs40.closeSync(fd);
               }
             }
             return ret;
           };
-        } else if (fs36.futimes) {
-          fs36.lutimes = function(_a2, _b, _c, cb) {
+        } else if (fs40.futimes) {
+          fs40.lutimes = function(_a2, _b, _c, cb) {
             if (cb) process.nextTick(cb);
           };
-          fs36.lutimesSync = function() {
+          fs40.lutimesSync = function() {
           };
         }
       }
       function chmodFix(orig) {
         if (!orig) return orig;
         return function(target, mode, cb) {
-          return orig.call(fs35, target, mode, function(er3) {
+          return orig.call(fs39, target, mode, function(er3) {
             if (chownErOk(er3)) er3 = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -27269,7 +27858,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, mode) {
           try {
-            return orig.call(fs35, target, mode);
+            return orig.call(fs39, target, mode);
           } catch (er3) {
             if (!chownErOk(er3)) throw er3;
           }
@@ -27278,7 +27867,7 @@ var require_polyfills = __commonJS({
       function chownFix(orig) {
         if (!orig) return orig;
         return function(target, uid, gid, cb) {
-          return orig.call(fs35, target, uid, gid, function(er3) {
+          return orig.call(fs39, target, uid, gid, function(er3) {
             if (chownErOk(er3)) er3 = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -27288,7 +27877,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, uid, gid) {
           try {
-            return orig.call(fs35, target, uid, gid);
+            return orig.call(fs39, target, uid, gid);
           } catch (er3) {
             if (!chownErOk(er3)) throw er3;
           }
@@ -27308,13 +27897,13 @@ var require_polyfills = __commonJS({
             }
             if (cb) cb.apply(this, arguments);
           }
-          return options2 ? orig.call(fs35, target, options2, callback) : orig.call(fs35, target, callback);
+          return options2 ? orig.call(fs39, target, options2, callback) : orig.call(fs39, target, callback);
         };
       }
       function statFixSync(orig) {
         if (!orig) return orig;
         return function(target, options2) {
-          var stats = options2 ? orig.call(fs35, target, options2) : orig.call(fs35, target);
+          var stats = options2 ? orig.call(fs39, target, options2) : orig.call(fs39, target);
           if (stats) {
             if (stats.uid < 0) stats.uid += 4294967296;
             if (stats.gid < 0) stats.gid += 4294967296;
@@ -27343,16 +27932,16 @@ var require_legacy_streams = __commonJS({
   "node_modules/graceful-fs/legacy-streams.js"(exports, module) {
     var Stream2 = __require("stream").Stream;
     module.exports = legacy;
-    function legacy(fs35) {
+    function legacy(fs39) {
       return {
         ReadStream,
         WriteStream
       };
-      function ReadStream(path36, options2) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path36, options2);
+      function ReadStream(path41, options2) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path41, options2);
         Stream2.call(this);
         var self2 = this;
-        this.path = path36;
+        this.path = path41;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -27386,7 +27975,7 @@ var require_legacy_streams = __commonJS({
           });
           return;
         }
-        fs35.open(this.path, this.flags, this.mode, function(err, fd) {
+        fs39.open(this.path, this.flags, this.mode, function(err, fd) {
           if (err) {
             self2.emit("error", err);
             self2.readable = false;
@@ -27397,10 +27986,10 @@ var require_legacy_streams = __commonJS({
           self2._read();
         });
       }
-      function WriteStream(path36, options2) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path36, options2);
+      function WriteStream(path41, options2) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path41, options2);
         Stream2.call(this);
-        this.path = path36;
+        this.path = path41;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -27425,7 +28014,7 @@ var require_legacy_streams = __commonJS({
         this.busy = false;
         this._queue = [];
         if (this.fd === null) {
-          this._open = fs35.open;
+          this._open = fs39.open;
           this._queue.push([this._open, this.path, this.flags, this.mode, void 0]);
           this.flush();
         }
@@ -27460,7 +28049,7 @@ var require_clone = __commonJS({
 // node_modules/graceful-fs/graceful-fs.js
 var require_graceful_fs = __commonJS({
   "node_modules/graceful-fs/graceful-fs.js"(exports, module) {
-    var fs35 = __require("fs");
+    var fs39 = __require("fs");
     var polyfills = require_polyfills();
     var legacy = require_legacy_streams();
     var clone = require_clone();
@@ -27492,12 +28081,12 @@ var require_graceful_fs = __commonJS({
         m59 = "GFS4: " + m59.split(/\n/).join("\nGFS4: ");
         console.error(m59);
       };
-    if (!fs35[gracefulQueue]) {
+    if (!fs39[gracefulQueue]) {
       queue2 = global[gracefulQueue] || [];
-      publishQueue(fs35, queue2);
-      fs35.close = (function(fs$close) {
+      publishQueue(fs39, queue2);
+      fs39.close = (function(fs$close) {
         function close(fd, cb) {
-          return fs$close.call(fs35, fd, function(err) {
+          return fs$close.call(fs39, fd, function(err) {
             if (!err) {
               resetQueue();
             }
@@ -27509,48 +28098,48 @@ var require_graceful_fs = __commonJS({
           value: fs$close
         });
         return close;
-      })(fs35.close);
-      fs35.closeSync = (function(fs$closeSync) {
+      })(fs39.close);
+      fs39.closeSync = (function(fs$closeSync) {
         function closeSync(fd) {
-          fs$closeSync.apply(fs35, arguments);
+          fs$closeSync.apply(fs39, arguments);
           resetQueue();
         }
         Object.defineProperty(closeSync, previousSymbol, {
           value: fs$closeSync
         });
         return closeSync;
-      })(fs35.closeSync);
+      })(fs39.closeSync);
       if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) {
         process.on("exit", function() {
-          debug(fs35[gracefulQueue]);
-          __require("assert").equal(fs35[gracefulQueue].length, 0);
+          debug(fs39[gracefulQueue]);
+          __require("assert").equal(fs39[gracefulQueue].length, 0);
         });
       }
     }
     var queue2;
     if (!global[gracefulQueue]) {
-      publishQueue(global, fs35[gracefulQueue]);
+      publishQueue(global, fs39[gracefulQueue]);
     }
-    module.exports = patch(clone(fs35));
-    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs35.__patched) {
-      module.exports = patch(fs35);
-      fs35.__patched = true;
+    module.exports = patch(clone(fs39));
+    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs39.__patched) {
+      module.exports = patch(fs39);
+      fs39.__patched = true;
     }
-    function patch(fs36) {
-      polyfills(fs36);
-      fs36.gracefulify = patch;
-      fs36.createReadStream = createReadStream;
-      fs36.createWriteStream = createWriteStream;
-      var fs$readFile = fs36.readFile;
-      fs36.readFile = readFile;
-      function readFile(path36, options2, cb) {
+    function patch(fs40) {
+      polyfills(fs40);
+      fs40.gracefulify = patch;
+      fs40.createReadStream = createReadStream;
+      fs40.createWriteStream = createWriteStream;
+      var fs$readFile = fs40.readFile;
+      fs40.readFile = readFile;
+      function readFile(path41, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        return go$readFile(path36, options2, cb);
-        function go$readFile(path37, options3, cb2, startTime) {
-          return fs$readFile(path37, options3, function(err) {
+        return go$readFile(path41, options2, cb);
+        function go$readFile(path42, options3, cb2, startTime) {
+          return fs$readFile(path42, options3, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path37, options3, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path42, options3, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -27558,16 +28147,16 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$writeFile = fs36.writeFile;
-      fs36.writeFile = writeFile;
-      function writeFile(path36, data, options2, cb) {
+      var fs$writeFile = fs40.writeFile;
+      fs40.writeFile = writeFile;
+      function writeFile(path41, data, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        return go$writeFile(path36, data, options2, cb);
-        function go$writeFile(path37, data2, options3, cb2, startTime) {
-          return fs$writeFile(path37, data2, options3, function(err) {
+        return go$writeFile(path41, data, options2, cb);
+        function go$writeFile(path42, data2, options3, cb2, startTime) {
+          return fs$writeFile(path42, data2, options3, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path37, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path42, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -27575,17 +28164,17 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$appendFile = fs36.appendFile;
+      var fs$appendFile = fs40.appendFile;
       if (fs$appendFile)
-        fs36.appendFile = appendFile;
-      function appendFile(path36, data, options2, cb) {
+        fs40.appendFile = appendFile;
+      function appendFile(path41, data, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        return go$appendFile(path36, data, options2, cb);
-        function go$appendFile(path37, data2, options3, cb2, startTime) {
-          return fs$appendFile(path37, data2, options3, function(err) {
+        return go$appendFile(path41, data, options2, cb);
+        function go$appendFile(path42, data2, options3, cb2, startTime) {
+          return fs$appendFile(path42, data2, options3, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path37, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path42, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -27593,9 +28182,9 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$copyFile = fs36.copyFile;
+      var fs$copyFile = fs40.copyFile;
       if (fs$copyFile)
-        fs36.copyFile = copyFile;
+        fs40.copyFile = copyFile;
       function copyFile(src, dest, flags, cb) {
         if (typeof flags === "function") {
           cb = flags;
@@ -27613,34 +28202,34 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$readdir = fs36.readdir;
-      fs36.readdir = readdir;
+      var fs$readdir = fs40.readdir;
+      fs40.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir(path36, options2, cb) {
+      function readdir(path41, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path37, options3, cb2, startTime) {
-          return fs$readdir(path37, fs$readdirCallback(
-            path37,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path42, options3, cb2, startTime) {
+          return fs$readdir(path42, fs$readdirCallback(
+            path42,
             options3,
             cb2,
             startTime
           ));
-        } : function go$readdir2(path37, options3, cb2, startTime) {
-          return fs$readdir(path37, options3, fs$readdirCallback(
-            path37,
+        } : function go$readdir2(path42, options3, cb2, startTime) {
+          return fs$readdir(path42, options3, fs$readdirCallback(
+            path42,
             options3,
             cb2,
             startTime
           ));
         };
-        return go$readdir(path36, options2, cb);
-        function fs$readdirCallback(path37, options3, cb2, startTime) {
+        return go$readdir(path41, options2, cb);
+        function fs$readdirCallback(path42, options3, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path37, options3, cb2],
+                [path42, options3, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -27655,21 +28244,21 @@ var require_graceful_fs = __commonJS({
         }
       }
       if (process.version.substr(0, 4) === "v0.8") {
-        var legStreams = legacy(fs36);
+        var legStreams = legacy(fs40);
         ReadStream = legStreams.ReadStream;
         WriteStream = legStreams.WriteStream;
       }
-      var fs$ReadStream = fs36.ReadStream;
+      var fs$ReadStream = fs40.ReadStream;
       if (fs$ReadStream) {
         ReadStream.prototype = Object.create(fs$ReadStream.prototype);
         ReadStream.prototype.open = ReadStream$open;
       }
-      var fs$WriteStream = fs36.WriteStream;
+      var fs$WriteStream = fs40.WriteStream;
       if (fs$WriteStream) {
         WriteStream.prototype = Object.create(fs$WriteStream.prototype);
         WriteStream.prototype.open = WriteStream$open;
       }
-      Object.defineProperty(fs36, "ReadStream", {
+      Object.defineProperty(fs40, "ReadStream", {
         get: function() {
           return ReadStream;
         },
@@ -27679,7 +28268,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      Object.defineProperty(fs36, "WriteStream", {
+      Object.defineProperty(fs40, "WriteStream", {
         get: function() {
           return WriteStream;
         },
@@ -27690,7 +28279,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileReadStream = ReadStream;
-      Object.defineProperty(fs36, "FileReadStream", {
+      Object.defineProperty(fs40, "FileReadStream", {
         get: function() {
           return FileReadStream;
         },
@@ -27701,7 +28290,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileWriteStream = WriteStream;
-      Object.defineProperty(fs36, "FileWriteStream", {
+      Object.defineProperty(fs40, "FileWriteStream", {
         get: function() {
           return FileWriteStream;
         },
@@ -27711,7 +28300,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path36, options2) {
+      function ReadStream(path41, options2) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -27731,7 +28320,7 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function WriteStream(path36, options2) {
+      function WriteStream(path41, options2) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -27749,22 +28338,22 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function createReadStream(path36, options2) {
-        return new fs36.ReadStream(path36, options2);
+      function createReadStream(path41, options2) {
+        return new fs40.ReadStream(path41, options2);
       }
-      function createWriteStream(path36, options2) {
-        return new fs36.WriteStream(path36, options2);
+      function createWriteStream(path41, options2) {
+        return new fs40.WriteStream(path41, options2);
       }
-      var fs$open = fs36.open;
-      fs36.open = open;
-      function open(path36, flags, mode, cb) {
+      var fs$open = fs40.open;
+      fs40.open = open;
+      function open(path41, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path36, flags, mode, cb);
-        function go$open(path37, flags2, mode2, cb2, startTime) {
-          return fs$open(path37, flags2, mode2, function(err, fd) {
+        return go$open(path41, flags, mode, cb);
+        function go$open(path42, flags2, mode2, cb2, startTime) {
+          return fs$open(path42, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path37, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path42, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -27772,20 +28361,20 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      return fs36;
+      return fs40;
     }
     function enqueue(elem) {
       debug("ENQUEUE", elem[0].name, elem[1]);
-      fs35[gracefulQueue].push(elem);
+      fs39[gracefulQueue].push(elem);
       retry();
     }
     var retryTimer;
     function resetQueue() {
       var now = Date.now();
-      for (var i50 = 0; i50 < fs35[gracefulQueue].length; ++i50) {
-        if (fs35[gracefulQueue][i50].length > 2) {
-          fs35[gracefulQueue][i50][3] = now;
-          fs35[gracefulQueue][i50][4] = now;
+      for (var i50 = 0; i50 < fs39[gracefulQueue].length; ++i50) {
+        if (fs39[gracefulQueue][i50].length > 2) {
+          fs39[gracefulQueue][i50][3] = now;
+          fs39[gracefulQueue][i50][4] = now;
         }
       }
       retry();
@@ -27793,9 +28382,9 @@ var require_graceful_fs = __commonJS({
     function retry() {
       clearTimeout(retryTimer);
       retryTimer = void 0;
-      if (fs35[gracefulQueue].length === 0)
+      if (fs39[gracefulQueue].length === 0)
         return;
-      var elem = fs35[gracefulQueue].shift();
+      var elem = fs39[gracefulQueue].shift();
       var fn = elem[0];
       var args = elem[1];
       var err = elem[2];
@@ -27817,7 +28406,7 @@ var require_graceful_fs = __commonJS({
           debug("RETRY", fn.name, args);
           fn.apply(null, args.concat([startTime]));
         } else {
-          fs35[gracefulQueue].push(elem);
+          fs39[gracefulQueue].push(elem);
         }
       }
       if (retryTimer === void 0) {
@@ -28230,7 +28819,7 @@ var require_node2 = __commonJS({
 });
 
 // node_modules/lazystream/node_modules/readable-stream/lib/_stream_writable.js
-var require_stream_writable2 = __commonJS({
+var require_stream_writable = __commonJS({
   "node_modules/lazystream/node_modules/readable-stream/lib/_stream_writable.js"(exports, module) {
     "use strict";
     var pna = require_process_nextick_args();
@@ -28266,7 +28855,7 @@ var require_stream_writable2 = __commonJS({
     function nop() {
     }
     function WritableState(options2, stream) {
-      Duplex = Duplex || require_stream_duplex2();
+      Duplex = Duplex || require_stream_duplex();
       options2 = options2 || {};
       var isDuplex = stream instanceof Duplex;
       this.objectMode = !!options2.objectMode;
@@ -28340,7 +28929,7 @@ var require_stream_writable2 = __commonJS({
       };
     }
     function Writable(options2) {
-      Duplex = Duplex || require_stream_duplex2();
+      Duplex = Duplex || require_stream_duplex();
       if (!realHasInstance.call(Writable, this) && !(this instanceof Duplex)) {
         return new Writable(options2);
       }
@@ -28670,7 +29259,7 @@ var require_stream_writable2 = __commonJS({
 });
 
 // node_modules/lazystream/node_modules/readable-stream/lib/_stream_duplex.js
-var require_stream_duplex2 = __commonJS({
+var require_stream_duplex = __commonJS({
   "node_modules/lazystream/node_modules/readable-stream/lib/_stream_duplex.js"(exports, module) {
     "use strict";
     var pna = require_process_nextick_args();
@@ -28684,8 +29273,8 @@ var require_stream_duplex2 = __commonJS({
     module.exports = Duplex;
     var util2 = Object.create(require_util());
     util2.inherits = require_inherits();
-    var Readable = require_stream_readable2();
-    var Writable = require_stream_writable2();
+    var Readable = require_stream_readable();
+    var Writable = require_stream_writable();
     util2.inherits(Duplex, Readable);
     {
       keys = objectKeys(Writable.prototype);
@@ -28985,7 +29574,7 @@ var require_string_decoder = __commonJS({
 });
 
 // node_modules/lazystream/node_modules/readable-stream/lib/_stream_readable.js
-var require_stream_readable2 = __commonJS({
+var require_stream_readable = __commonJS({
   "node_modules/lazystream/node_modules/readable-stream/lib/_stream_readable.js"(exports, module) {
     "use strict";
     var pna = require_process_nextick_args();
@@ -29029,7 +29618,7 @@ var require_stream_readable2 = __commonJS({
       else emitter._events[event] = [fn, emitter._events[event]];
     }
     function ReadableState(options2, stream) {
-      Duplex = Duplex || require_stream_duplex2();
+      Duplex = Duplex || require_stream_duplex();
       options2 = options2 || {};
       var isDuplex = stream instanceof Duplex;
       this.objectMode = !!options2.objectMode;
@@ -29067,7 +29656,7 @@ var require_stream_readable2 = __commonJS({
       }
     }
     function Readable(options2) {
-      Duplex = Duplex || require_stream_duplex2();
+      Duplex = Duplex || require_stream_duplex();
       if (!(this instanceof Readable)) return new Readable(options2);
       this._readableState = new ReadableState(options2, this);
       this.readable = true;
@@ -29671,11 +30260,11 @@ var require_stream_readable2 = __commonJS({
 });
 
 // node_modules/lazystream/node_modules/readable-stream/lib/_stream_transform.js
-var require_stream_transform2 = __commonJS({
+var require_stream_transform = __commonJS({
   "node_modules/lazystream/node_modules/readable-stream/lib/_stream_transform.js"(exports, module) {
     "use strict";
     module.exports = Transform;
-    var Duplex = require_stream_duplex2();
+    var Duplex = require_stream_duplex();
     var util2 = Object.create(require_util());
     util2.inherits = require_inherits();
     util2.inherits(Transform, Duplex);
@@ -29771,11 +30360,11 @@ var require_stream_transform2 = __commonJS({
 });
 
 // node_modules/lazystream/node_modules/readable-stream/lib/_stream_passthrough.js
-var require_stream_passthrough2 = __commonJS({
+var require_stream_passthrough = __commonJS({
   "node_modules/lazystream/node_modules/readable-stream/lib/_stream_passthrough.js"(exports, module) {
     "use strict";
     module.exports = PassThrough;
-    var Transform = require_stream_transform2();
+    var Transform = require_stream_transform();
     var util2 = Object.create(require_util());
     util2.inherits = require_inherits();
     util2.inherits(PassThrough, Transform);
@@ -29803,13 +30392,13 @@ var require_readable = __commonJS({
       exports.PassThrough = Stream2.PassThrough;
       exports.Stream = Stream2;
     } else {
-      exports = module.exports = require_stream_readable2();
+      exports = module.exports = require_stream_readable();
       exports.Stream = Stream2 || exports;
       exports.Readable = exports;
-      exports.Writable = require_stream_writable2();
-      exports.Duplex = require_stream_duplex2();
-      exports.Transform = require_stream_transform2();
-      exports.PassThrough = require_stream_passthrough2();
+      exports.Writable = require_stream_writable();
+      exports.Duplex = require_stream_duplex();
+      exports.Transform = require_stream_transform();
+      exports.PassThrough = require_stream_passthrough();
     }
   }
 });
@@ -29869,22 +30458,22 @@ var require_lazystream = __commonJS({
 // node_modules/normalize-path/index.js
 var require_normalize_path = __commonJS({
   "node_modules/normalize-path/index.js"(exports, module) {
-    module.exports = function(path36, stripTrailing) {
-      if (typeof path36 !== "string") {
+    module.exports = function(path41, stripTrailing) {
+      if (typeof path41 !== "string") {
         throw new TypeError("expected path to be a string");
       }
-      if (path36 === "\\" || path36 === "/") return "/";
-      var len = path36.length;
-      if (len <= 1) return path36;
+      if (path41 === "\\" || path41 === "/") return "/";
+      var len = path41.length;
+      if (len <= 1) return path41;
       var prefix = "";
-      if (len > 4 && path36[3] === "\\") {
-        var ch = path36[2];
-        if ((ch === "?" || ch === ".") && path36.slice(0, 2) === "\\\\") {
-          path36 = path36.slice(2);
+      if (len > 4 && path41[3] === "\\") {
+        var ch = path41[2];
+        if ((ch === "?" || ch === ".") && path41.slice(0, 2) === "\\\\") {
+          path41 = path41.slice(2);
           prefix = "//";
         }
       }
-      var segs = path36.split(/[/\\]+/);
+      var segs = path41.split(/[/\\]+/);
       if (stripTrailing !== false && segs[segs.length - 1] === "") {
         segs.pop();
       }
@@ -38680,11 +39269,11 @@ var require_commonjs = __commonJS({
       return (f64) => f64.length === len && f64 !== "." && f64 !== "..";
     };
     var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-    var path36 = {
+    var path41 = {
       win32: { sep: "\\" },
       posix: { sep: "/" }
     };
-    exports.sep = defaultPlatform === "win32" ? path36.win32.sep : path36.posix.sep;
+    exports.sep = defaultPlatform === "win32" ? path41.win32.sep : path41.posix.sep;
     exports.minimatch.sep = exports.sep;
     exports.GLOBSTAR = /* @__PURE__ */ Symbol("globstar **");
     exports.minimatch.GLOBSTAR = exports.GLOBSTAR;
@@ -42077,13 +42666,13 @@ var require_commonjs4 = __commonJS({
       /**
        * Get the Path object referenced by the string path, resolved from this Path
        */
-      resolve(path36) {
+      resolve(path41) {
         var _a2;
-        if (!path36) {
+        if (!path41) {
           return this;
         }
-        const rootPath = this.getRootString(path36);
-        const dir = path36.substring(rootPath.length);
+        const rootPath = this.getRootString(path41);
+        const dir = path41.substring(rootPath.length);
         const dirParts = dir.split(this.splitSep);
         const result = rootPath ? __privateMethod(_a2 = this.getRoot(rootPath), _PathBase_instances, resolveParts_fn).call(_a2, dirParts) : __privateMethod(this, _PathBase_instances, resolveParts_fn).call(this, dirParts);
         return result;
@@ -42870,8 +43459,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path36) {
-        return node_path_1.win32.parse(path36).root;
+      getRootString(path41) {
+        return node_path_1.win32.parse(path41).root;
       }
       /**
        * @internal
@@ -42918,8 +43507,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path36) {
-        return path36.startsWith("/") ? "/" : "";
+      getRootString(path41) {
+        return path41.startsWith("/") ? "/" : "";
       }
       /**
        * @internal
@@ -42944,7 +43533,7 @@ var require_commonjs4 = __commonJS({
        *
        * @internal
        */
-      constructor(cwd = process.cwd(), pathImpl, sep, { nocase, childrenCacheSize = 16 * 1024, fs: fs35 = defaultFS } = {}) {
+      constructor(cwd = process.cwd(), pathImpl, sep, { nocase, childrenCacheSize = 16 * 1024, fs: fs39 = defaultFS } = {}) {
         /**
          * The root Path entry for the current working directory of this Scurry
          */
@@ -42971,7 +43560,7 @@ var require_commonjs4 = __commonJS({
          */
         __publicField(this, "nocase");
         __privateAdd(this, _fs2);
-        __privateSet(this, _fs2, fsFromOption(fs35));
+        __privateSet(this, _fs2, fsFromOption(fs39));
         if (cwd instanceof URL || cwd.startsWith("file://")) {
           cwd = (0, node_url_1.fileURLToPath)(cwd);
         }
@@ -43010,11 +43599,11 @@ var require_commonjs4 = __commonJS({
       /**
        * Get the depth of a provided path, string, or the cwd
        */
-      depth(path36 = this.cwd) {
-        if (typeof path36 === "string") {
-          path36 = this.cwd.resolve(path36);
+      depth(path41 = this.cwd) {
+        if (typeof path41 === "string") {
+          path41 = this.cwd.resolve(path41);
         }
-        return path36.depth();
+        return path41.depth();
       }
       /**
        * Return the cache of child entries.  Exposed so subclasses can create
@@ -43501,9 +44090,9 @@ var require_commonjs4 = __commonJS({
         process3();
         return results;
       }
-      chdir(path36 = this.cwd) {
+      chdir(path41 = this.cwd) {
         const oldCwd = this.cwd;
-        this.cwd = typeof path36 === "string" ? this.cwd.resolve(path36) : path36;
+        this.cwd = typeof path41 === "string" ? this.cwd.resolve(path41) : path41;
         this.cwd[setAsCwd](oldCwd);
       }
     };
@@ -43534,8 +44123,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      newRoot(fs35) {
-        return new PathWin32(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs35 });
+      newRoot(fs39) {
+        return new PathWin32(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs39 });
       }
       /**
        * Return true if the provided path string is an absolute path
@@ -43564,8 +44153,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      newRoot(fs35) {
-        return new PathPosix(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs35 });
+      newRoot(fs39) {
+        return new PathPosix(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs39 });
       }
       /**
        * Return true if the provided path string is an absolute path
@@ -43909,8 +44498,8 @@ var require_processor = __commonJS({
       }
       // match, absolute, ifdir
       entries() {
-        return [...this.store.entries()].map(([path36, n43]) => [
-          path36,
+        return [...this.store.entries()].map(([path41, n43]) => [
+          path41,
           !!(n43 & 2),
           !!(n43 & 1)
         ]);
@@ -44119,7 +44708,7 @@ var require_walker = __commonJS({
     var makeIgnore = (ignore, opts) => typeof ignore === "string" ? new ignore_js_1.Ignore([ignore], opts) : Array.isArray(ignore) ? new ignore_js_1.Ignore(ignore, opts) : ignore;
     var _onResume, _ignore, _sep, _GlobUtil_instances, ignored_fn, childrenIgnored_fn;
     var GlobUtil = class {
-      constructor(patterns, path36, opts) {
+      constructor(patterns, path41, opts) {
         __privateAdd(this, _GlobUtil_instances);
         __publicField(this, "path");
         __publicField(this, "patterns");
@@ -44134,7 +44723,7 @@ var require_walker = __commonJS({
         __publicField(this, "maxDepth");
         __publicField(this, "includeChildMatches");
         this.patterns = patterns;
-        this.path = path36;
+        this.path = path41;
         this.opts = opts;
         __privateSet(this, _sep, !opts.posix && opts.platform === "win32" ? "\\" : "/");
         this.includeChildMatches = opts.includeChildMatches !== false;
@@ -44368,16 +44957,16 @@ var require_walker = __commonJS({
     _ignore = new WeakMap();
     _sep = new WeakMap();
     _GlobUtil_instances = new WeakSet();
-    ignored_fn = function(path36) {
-      return this.seen.has(path36) || !!__privateGet(this, _ignore)?.ignored?.(path36);
+    ignored_fn = function(path41) {
+      return this.seen.has(path41) || !!__privateGet(this, _ignore)?.ignored?.(path41);
     };
-    childrenIgnored_fn = function(path36) {
-      return !!__privateGet(this, _ignore)?.childrenIgnored?.(path36);
+    childrenIgnored_fn = function(path41) {
+      return !!__privateGet(this, _ignore)?.childrenIgnored?.(path41);
     };
     exports.GlobUtil = GlobUtil;
     var GlobWalker = class extends GlobUtil {
-      constructor(patterns, path36, opts) {
-        super(patterns, path36, opts);
+      constructor(patterns, path41, opts) {
+        super(patterns, path41, opts);
         __publicField(this, "matches", /* @__PURE__ */ new Set());
       }
       matchEmit(e29) {
@@ -44415,8 +45004,8 @@ var require_walker = __commonJS({
     };
     exports.GlobWalker = GlobWalker;
     var GlobStream = class extends GlobUtil {
-      constructor(patterns, path36, opts) {
-        super(patterns, path36, opts);
+      constructor(patterns, path41, opts) {
+        super(patterns, path41, opts);
         __publicField(this, "results");
         this.results = new minipass_1.Minipass({
           signal: this.signal,
@@ -44772,8 +45361,8 @@ var require_commonjs5 = __commonJS({
 // node_modules/archiver-utils/file.js
 var require_file = __commonJS({
   "node_modules/archiver-utils/file.js"(exports, module) {
-    var fs35 = require_graceful_fs();
-    var path36 = __require("path");
+    var fs39 = require_graceful_fs();
+    var path41 = __require("path");
     var flatten = require_flatten();
     var difference = require_difference();
     var union = require_union();
@@ -44798,8 +45387,8 @@ var require_file = __commonJS({
       return result;
     };
     file.exists = function() {
-      var filepath = path36.join.apply(path36, arguments);
-      return fs35.existsSync(filepath);
+      var filepath = path41.join.apply(path41, arguments);
+      return fs39.existsSync(filepath);
     };
     file.expand = function(...args) {
       var options2 = isPlainObject6(args[0]) ? args.shift() : {};
@@ -44812,12 +45401,12 @@ var require_file = __commonJS({
       });
       if (options2.filter) {
         matches = matches.filter(function(filepath) {
-          filepath = path36.join(options2.cwd || "", filepath);
+          filepath = path41.join(options2.cwd || "", filepath);
           try {
             if (typeof options2.filter === "function") {
               return options2.filter(filepath);
             } else {
-              return fs35.statSync(filepath)[options2.filter]();
+              return fs39.statSync(filepath)[options2.filter]();
             }
           } catch (e29) {
             return false;
@@ -44829,7 +45418,7 @@ var require_file = __commonJS({
     file.expandMapping = function(patterns, destBase, options2) {
       options2 = Object.assign({
         rename: function(destBase2, destPath) {
-          return path36.join(destBase2 || "", destPath);
+          return path41.join(destBase2 || "", destPath);
         }
       }, options2);
       var files = [];
@@ -44837,14 +45426,14 @@ var require_file = __commonJS({
       file.expand(options2, patterns).forEach(function(src) {
         var destPath = src;
         if (options2.flatten) {
-          destPath = path36.basename(destPath);
+          destPath = path41.basename(destPath);
         }
         if (options2.ext) {
           destPath = destPath.replace(/(\.[^\/]*)?$/, options2.ext);
         }
         var dest = options2.rename(destBase, destPath, options2);
         if (options2.cwd) {
-          src = path36.join(options2.cwd, src);
+          src = path41.join(options2.cwd, src);
         }
         dest = dest.replace(pathSeparatorRe, "/");
         src = src.replace(pathSeparatorRe, "/");
@@ -44925,8 +45514,8 @@ var require_file = __commonJS({
 // node_modules/archiver-utils/index.js
 var require_archiver_utils = __commonJS({
   "node_modules/archiver-utils/index.js"(exports, module) {
-    var fs35 = require_graceful_fs();
-    var path36 = __require("path");
+    var fs39 = require_graceful_fs();
+    var path41 = __require("path");
     var isStream = require_is_stream();
     var lazystream = require_lazystream();
     var normalizePath2 = require_normalize_path();
@@ -44974,7 +45563,7 @@ var require_archiver_utils = __commonJS({
     };
     utils.lazyReadStream = function(filepath) {
       return new lazystream.Readable(function() {
-        return fs35.createReadStream(filepath);
+        return fs39.createReadStream(filepath);
       });
     };
     utils.normalizeInputSource = function(source) {
@@ -45002,7 +45591,7 @@ var require_archiver_utils = __commonJS({
         callback = base;
         base = dirpath;
       }
-      fs35.readdir(dirpath, function(err, list) {
+      fs39.readdir(dirpath, function(err, list) {
         var i50 = 0;
         var file;
         var filepath;
@@ -45014,11 +45603,11 @@ var require_archiver_utils = __commonJS({
           if (!file) {
             return callback(null, results);
           }
-          filepath = path36.join(dirpath, file);
-          fs35.stat(filepath, function(err2, stats) {
+          filepath = path41.join(dirpath, file);
+          fs39.stat(filepath, function(err2, stats) {
             results.push({
               path: filepath,
-              relative: path36.relative(base, filepath).replace(/\\/g, "/"),
+              relative: path41.relative(base, filepath).replace(/\\/g, "/"),
               stats
             });
             if (stats && stats.isDirectory()) {
@@ -45077,10 +45666,10 @@ var require_error = __commonJS({
 // node_modules/archiver/lib/core.js
 var require_core = __commonJS({
   "node_modules/archiver/lib/core.js"(exports, module) {
-    var fs35 = __require("fs");
+    var fs39 = __require("fs");
     var glob = require_readdir_glob();
     var async = require_async();
-    var path36 = __require("path");
+    var path41 = __require("path");
     var util2 = require_archiver_utils();
     var inherits2 = __require("util").inherits;
     var ArchiverError = require_error();
@@ -45141,7 +45730,7 @@ var require_core = __commonJS({
       data.sourcePath = filepath;
       task.data = data;
       this._entriesCount++;
-      if (data.stats && data.stats instanceof fs35.Stats) {
+      if (data.stats && data.stats instanceof fs39.Stats) {
         task = this._updateQueueTaskWithStats(task, data.stats);
         if (task) {
           if (data.stats.size) {
@@ -45312,7 +45901,7 @@ var require_core = __commonJS({
         callback();
         return;
       }
-      fs35.lstat(task.filepath, function(err, stats) {
+      fs39.lstat(task.filepath, function(err, stats) {
         if (this._state.aborted) {
           setImmediate(callback);
           return;
@@ -45355,10 +45944,10 @@ var require_core = __commonJS({
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else if (stats.isSymbolicLink() && this._moduleSupports("symlink")) {
-        var linkPath = fs35.readlinkSync(task.filepath);
-        var dirName = path36.dirname(task.filepath);
+        var linkPath = fs39.readlinkSync(task.filepath);
+        var dirName = path41.dirname(task.filepath);
         task.data.type = "symlink";
-        task.data.linkname = path36.relative(dirName, path36.resolve(dirName, linkPath));
+        task.data.linkname = path41.relative(dirName, path41.resolve(dirName, linkPath));
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else {
@@ -49521,9 +50110,179 @@ var require_archiver = __commonJS({
   }
 });
 
+// src/services/pdf-linearize.service.ts
+import fs2 from "fs-extra";
+import path4 from "path";
+import { spawn } from "child_process";
+import { createRequire } from "module";
+
+// src/services/pdf-linearize.helpers.ts
+import path from "path";
+var shouldLinearize = ({
+  fileName,
+  mimeType
+}) => {
+  if (String(mimeType ?? "").toLowerCase().includes("pdf")) return true;
+  return path.extname(String(fileName ?? "")).toLowerCase() === ".pdf";
+};
+var WASM_MAX_BYTES = 220 * 1024 * 1024;
+var resolveLinearizeEngine = ({
+  bytes,
+  nativeAvailable: nativeAvailable2
+}) => {
+  if (!bytes || bytes <= 0) return "skip";
+  if (bytes <= WASM_MAX_BYTES) return "wasm";
+  return nativeAvailable2 ? "native" : "skip";
+};
+var buildQpdfInstallHint = (platform = process.platform) => {
+  if (platform === "darwin") return "brew install qpdf";
+  if (platform === "linux") {
+    return "sudo apt-get update && sudo apt-get install -y qpdf   (Alpine: apk add qpdf)";
+  }
+  return "descargar desde https://qpdf.sourceforge.io";
+};
+
+// src/services/pdf-linearize.service.ts
+init_logger();
+var NATIVE_TIMEOUT_MS = 10 * 6e4;
+var QPDF_MAX_OK_CODE = 3;
+var nativeAvailable = null;
+var require2 = createRequire(import.meta.url);
+var modulePromise = null;
+var loadQpdf = async () => {
+  if (!modulePromise) {
+    modulePromise = (async () => {
+      try {
+        const factory = require2("@neslinesli93/qpdf-wasm");
+        const wasmPath = require2.resolve("@neslinesli93/qpdf-wasm/dist/qpdf.wasm");
+        const create = typeof factory === "function" ? factory : factory.default;
+        return await create({ locateFile: () => wasmPath });
+      } catch (error) {
+        logger_default.warn("[pdf-linearize] qpdf-wasm no disponible: los PDFs quedan sin linearizar", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return null;
+      }
+    })();
+  }
+  return modulePromise;
+};
+var runNativeQpdf = (args) => new Promise((resolve2, reject) => {
+  const proc = spawn("qpdf", args, { stdio: ["ignore", "ignore", "pipe"] });
+  let stderr = "";
+  const timer3 = setTimeout(() => {
+    proc.kill("SIGKILL");
+    reject(new Error(`qpdf nativo excedi\xF3 ${NATIVE_TIMEOUT_MS} ms`));
+  }, NATIVE_TIMEOUT_MS);
+  proc.stderr.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+  proc.on("error", (error) => {
+    clearTimeout(timer3);
+    reject(error);
+  });
+  proc.on("close", (code) => {
+    clearTimeout(timer3);
+    if (code !== null && code <= QPDF_MAX_OK_CODE) resolve2(code);
+    else reject(new Error(stderr || `qpdf nativo sali\xF3 con c\xF3digo ${code}`));
+  });
+});
+async function isNativeQpdfAvailable() {
+  if (nativeAvailable !== null) return nativeAvailable;
+  try {
+    await runNativeQpdf(["--version"]);
+    nativeAvailable = true;
+  } catch {
+    nativeAvailable = false;
+  }
+  return nativeAvailable;
+}
+async function isQpdfAvailable() {
+  return await loadQpdf() !== null;
+}
+async function linearizePdfInPlace(filePath, meta = {}) {
+  if (!shouldLinearize({ fileName: meta.fileName || filePath, mimeType: meta.mimeType })) {
+    return false;
+  }
+  const qpdf = await loadQpdf();
+  if (!qpdf) return false;
+  const tempPath = `${filePath}.linearizing`;
+  const virtualIn = `/in-${path4.basename(filePath)}`;
+  const virtualOut = `${virtualIn}.lin`;
+  try {
+    const stat = await fs2.stat(filePath);
+    const engine = resolveLinearizeEngine({
+      bytes: stat.size,
+      nativeAvailable: await isNativeQpdfAvailable()
+    });
+    if (engine === "skip") {
+      logger_default.warn("[pdf-linearize] PDF demasiado grande para el motor disponible", {
+        filePath,
+        bytes: stat.size,
+        limiteWasm: WASM_MAX_BYTES,
+        remedio: `instalar el binario qpdf para cubrir archivos grandes: ${buildQpdfInstallHint()}`
+      });
+      return false;
+    }
+    if (engine === "native") {
+      await runNativeQpdf(["--linearize", filePath, tempPath]);
+      const nativeStat = await fs2.stat(tempPath);
+      if (nativeStat.size <= 0) throw new Error("qpdf nativo produjo un archivo vac\xEDo");
+      await fs2.move(tempPath, filePath, { overwrite: true });
+      return true;
+    }
+    qpdf.FS.writeFile(virtualIn, await fs2.readFile(filePath));
+    const code = qpdf.callMain(["--linearize", virtualIn, virtualOut]);
+    if (code > QPDF_MAX_OK_CODE) throw new Error(`qpdf sali\xF3 con c\xF3digo ${code}`);
+    const output = qpdf.FS.readFile(virtualOut);
+    if (!output?.length) throw new Error("qpdf produjo un archivo vac\xEDo");
+    await fs2.writeFile(tempPath, Buffer.from(output));
+    await fs2.move(tempPath, filePath, { overwrite: true });
+    return true;
+  } catch (error) {
+    logger_default.warn("[pdf-linearize] No se pudo linearizar, se conserva el original", {
+      filePath,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    await fs2.remove(tempPath).catch(() => void 0);
+    return false;
+  } finally {
+    [virtualIn, virtualOut].forEach((name) => {
+      try {
+        qpdf.FS.unlink(name);
+      } catch {
+      }
+    });
+  }
+}
+async function logLinearizeCapabilities() {
+  const [wasm, native] = await Promise.all([isQpdfAvailable(), isNativeQpdfAvailable()]);
+  const wasmMb = Math.round(WASM_MAX_BYTES / (1024 * 1024));
+  if (wasm && native) {
+    logger_default.info(`\u{1F4C4} Linearizaci\xF3n de PDF: WASM + binario nativo (sin l\xEDmite pr\xE1ctico)`);
+    return;
+  }
+  if (wasm) {
+    logger_default.warn(
+      `\u{1F4C4} Linearizaci\xF3n de PDF: solo WASM. Los PDF de m\xE1s de ${wasmMb} MB quedar\xE1n SIN linearizar (el visitante espera la descarga completa para ver la p\xE1gina 1).
+   Para cubrirlos, instalar el binario qpdf en esta m\xE1quina:
+     ${buildQpdfInstallHint()}
+   Verificar con: qpdf --version   \xB7   luego reiniciar lila.
+   En un contenedor va en el Dockerfile (ej. RUN apt-get update && apt-get install -y qpdf).`
+    );
+    return;
+  }
+  logger_default.error(
+    "\u{1F4C4} Linearizaci\xF3n de PDF NO disponible: falta el paquete @neslinesli93/qpdf-wasm. Los PDF se guardan sin linearizar. Remedio: yarn install."
+  );
+}
+
 // src/utils/console-hijack.ts
 var originalConsoleLog = console.log;
 var originalConsoleError = console.error;
+var originalConsoleInfo = console.info;
+var originalConsoleWarn = console.warn;
+var originalConsoleDebug = console.debug;
 var signalDecryptErrorPatterns = [
   "Bad MAC",
   "Session error: Error: Bad MAC",
@@ -49599,14 +50358,21 @@ function hasSignalSessionObject(args) {
     return SIGNAL_OBJECT_KEYS.some((key) => key in arg);
   });
 }
-console.log = (...args) => {
-  const { sanitized, mutated } = sanitizeConsoleArgs(args);
-  const message = sanitized.join(" ");
-  if (hasSignalSessionObject(args) || message.includes("Closing open session in favor of") || message.includes("Closing session: SessionEntry") || message.includes("_chains:") || message.includes("registrationId:") || message.includes("currentRatchet:") || message.includes("indexInfo:") || message.includes("pendingPreKey:") || signalDecryptErrorPatterns.some((pattern) => message.includes(pattern))) {
-    return;
-  }
-  originalConsoleLog.apply(console, mutated ? sanitized : args);
-};
+function isSignalNoise(args, message) {
+  return hasSignalSessionObject(args) || message.includes("Closing open session in favor of") || message.includes("Closing session: SessionEntry") || message.includes("_chains:") || message.includes("registrationId:") || message.includes("currentRatchet:") || message.includes("indexInfo:") || message.includes("pendingPreKey:") || signalDecryptErrorPatterns.some((pattern) => message.includes(pattern));
+}
+function withSignalFilter(original) {
+  return (...args) => {
+    const { sanitized, mutated } = sanitizeConsoleArgs(args);
+    const message = sanitized.join(" ");
+    if (isSignalNoise(args, message)) return;
+    original.apply(console, mutated ? sanitized : args);
+  };
+}
+console.log = withSignalFilter(originalConsoleLog);
+console.info = withSignalFilter(originalConsoleInfo);
+console.warn = withSignalFilter(originalConsoleWarn);
+console.debug = withSignalFilter(originalConsoleDebug);
 console.error = (...args) => {
   const { sanitized, mutated } = sanitizeConsoleArgs(args);
   const payload = extractConsoleErrorPayload(mutated ? sanitized : args);
@@ -49731,8 +50497,8 @@ var HIGH_CONFIDENCE_PROBE_PATTERNS = [
   /\.procmailrc/i,
   /config\.inc\.php/i
 ];
-function isHighConfidenceProbe(path36) {
-  return HIGH_CONFIDENCE_PROBE_PATTERNS.some((pattern) => pattern.test(path36));
+function isHighConfidenceProbe(path41) {
+  return HIGH_CONFIDENCE_PROBE_PATTERNS.some((pattern) => pattern.test(path41));
 }
 var activity = /* @__PURE__ */ new Map();
 function getBucket(ip) {
@@ -49759,11 +50525,11 @@ function isBanned(ip) {
   const bucket = activity.get(ip);
   return !!bucket && bucket.bannedUntil > Date.now();
 }
-function recordSuspiciousRequest(ip, path36, userAgent) {
+function recordSuspiciousRequest(ip, path41, userAgent) {
   const bucket = getBucket(ip);
-  const weight = isHighConfidenceProbe(path36) ? ALERT_THRESHOLD : 1;
+  const weight = isHighConfidenceProbe(path41) ? ALERT_THRESHOLD : 1;
   bucket.count += weight;
-  if (bucket.paths.length < 5) bucket.paths.push(path36);
+  if (bucket.paths.length < 5) bucket.paths.push(path41);
   if (userAgent && bucket.userAgents.size < 3) bucket.userAgents.add(userAgent);
   if (bucket.count >= BAN_THRESHOLD) {
     bucket.bannedUntil = Date.now() + BAN_DURATION_MS;
@@ -49853,8 +50619,9 @@ function normalizeAlertPath(p64) {
 }
 function errorHandler(err, req, res, next) {
   const isCorsRejection = err.message === "Not allowed by CORS";
-  const statusCode = err.statusCode || (isCorsRejection ? HTTP_STATUS.FORBIDDEN : HTTP_STATUS.INTERNAL_ERROR);
-  const message = err.message || "Internal Server Error";
+  const isTruncatedUpload = err.message === "Unexpected end of form" || err.code === "ECONNABORTED";
+  const statusCode = err.statusCode || (isCorsRejection ? HTTP_STATUS.FORBIDDEN : isTruncatedUpload ? HTTP_STATUS.BAD_REQUEST : HTTP_STATUS.INTERNAL_ERROR);
+  const message = isTruncatedUpload ? "La subida lleg\xF3 incompleta: reintent\xE1 con mejor se\xF1al" : err.message || "Internal Server Error";
   logger_default.error("Error:", {
     statusCode,
     message,
@@ -49867,7 +50634,9 @@ function errorHandler(err, req, res, next) {
   if (isCorsRejection) {
     recordSuspiciousRequest(req.ip || "unknown", req.path, req.get("user-agent"));
   }
-  const shouldAlert = !isCorsRejection && (statusCode >= 500 || req.path.startsWith("/api/drive") || req.path.startsWith("/api/message"));
+  const shouldAlert = !isCorsRejection && // Una subida truncada es del lado del cliente: se responde 400 y se loguea,
+  // pero no se alerta. Alertar por esto es ruido que tapa lo que sí importa.
+  !isTruncatedUpload && (statusCode >= 500 || req.path.startsWith("/api/drive") || req.path.startsWith("/api/message"));
   if (shouldAlert) {
     const normalizedPath = normalizeAlertPath(req.path);
     const alertKey = `${statusCode}:${normalizedPath}:${message}`;
@@ -49938,15 +50707,15 @@ var QR_WAIT_MS = 6e3;
 async function waitForQRCode(phoneNumber, timeoutMs = 6e4, intervalMs = 300) {
   const start = Date.now();
   return new Promise((resolve2) => {
-    const timer = setInterval(() => {
+    const timer3 = setInterval(() => {
       const qr = getQRCode(phoneNumber);
       if (qr) {
-        clearInterval(timer);
+        clearInterval(timer3);
         resolve2(qr);
         return;
       }
       if (Date.now() - start >= timeoutMs) {
-        clearInterval(timer);
+        clearInterval(timer3);
         resolve2(void 0);
       }
     }, intervalMs);
@@ -50674,8 +51443,445 @@ router.delete(
 router.get("/", requireTenantOrApiKey, getAllSessions);
 var session_routes_default = router;
 
-// src/api/routes/jobs.routes.v2.ts
+// src/api/routes/admin-health.routes.ts
+init_logger();
 import { Router as Router2 } from "express";
+import { promises as fs8 } from "fs";
+import os3 from "os";
+import path12 from "path";
+import { execFile as execFile2 } from "child_process";
+import { promisify as promisify2 } from "util";
+
+// src/services/metrics-history.service.ts
+init_logger();
+import os2 from "os";
+import { execFile } from "child_process";
+import { promisify } from "util";
+var execFileAsync = promisify(execFile);
+var MAX_MUESTRAS = Number(process.env.METRICS_HISTORY_SIZE) || 120;
+var INTERVALO_MS = Number(process.env.METRICS_SAMPLE_MS) || 3e4;
+var historia = [];
+var timer = null;
+function cpuPct() {
+  const [c1] = os2.loadavg();
+  return Math.min(100, Math.round(c1 / os2.cpus().length * 100));
+}
+async function ramPct() {
+  try {
+    const { stdout } = await execFileAsync("/usr/bin/memory_pressure", [], { timeout: 4e3 });
+    const m59 = stdout.match(/System-wide memory free percentage:\s*(\d+)/);
+    if (m59) return 100 - Number(m59[1]);
+  } catch {
+  }
+  return Math.round((os2.totalmem() - os2.freemem()) / os2.totalmem() * 100);
+}
+async function muestrear() {
+  try {
+    const muestra = { t: Date.now(), cpu: cpuPct(), ram: await ramPct() };
+    historia.push(muestra);
+    while (historia.length > MAX_MUESTRAS) historia.shift();
+  } catch (error) {
+    logger_default.warn(`metrics-history: muestreo fall\xF3: ${String(error)}`);
+  }
+}
+function obtenerHistoria() {
+  return [...historia];
+}
+function startMetricsHistory() {
+  if (timer) return;
+  void muestrear();
+  timer = setInterval(() => void muestrear(), INTERVALO_MS);
+  timer.unref?.();
+  logger_default.info(
+    `\u{1F4C8} Historia de m\xE9tricas activa (${MAX_MUESTRAS} muestras cada ${INTERVALO_MS / 1e3}s)`
+  );
+}
+
+// src/api/routes/admin-health.routes.ts
+var execFileAsync2 = promisify2(execFile2);
+var router2 = Router2();
+var BACKUP_CONFIG_DIR = process.env.BACKUP_HEARTBEAT_DIR || path12.join(os3.homedir(), ".config", "constroad-backup");
+var BACKUP_VOLUME = process.env.BACKUP_VOLUME || "/Volumes/CONSTROAD-BACKUP";
+function basicAuth(req, res, next) {
+  const esperado = process.env.API_SECRET_KEY;
+  if (!esperado) {
+    res.status(404).json({ success: false, error: { message: "Not found", statusCode: 404 } });
+    return;
+  }
+  const header = req.headers.authorization || "";
+  if (header.startsWith("Basic ")) {
+    const [, pass] = Buffer.from(header.slice(6), "base64").toString().split(":");
+    if (pass === esperado) return next();
+  }
+  if (req.headers["x-api-key"] === esperado) return next();
+  res.setHeader("WWW-Authenticate", 'Basic realm="lila-app health"');
+  res.status(401).json({ success: false, error: { message: "Unauthorized", statusCode: 401 } });
+}
+async function edadHeartbeat(archivo) {
+  try {
+    const raw = await fs8.readFile(path12.join(BACKUP_CONFIG_DIR, archivo), "utf8");
+    const epoch = Number(raw.trim());
+    if (!Number.isFinite(epoch) || epoch <= 0) return -1;
+    return Math.floor(Date.now() / 1e3 - epoch);
+  } catch {
+    return -1;
+  }
+}
+function cpu() {
+  const [c1] = os3.loadavg();
+  return { carga1: Number(c1.toFixed(2)), nucleos: os3.cpus().length, pct: cpuPct() };
+}
+async function memoria() {
+  return { totalGB: Number((os3.totalmem() / 1024 ** 3).toFixed(1)), pct: await ramPct() };
+}
+async function disco(ruta) {
+  try {
+    const { stdout } = await execFileAsync2("/bin/df", ["-h", ruta], { timeout: 4e3 });
+    const cols = stdout.trim().split("\n").pop()?.split(/\s+/) || [];
+    if (cols.length < 5) return null;
+    return { total: cols[1], libre: cols[3], pct: Number(cols[4].replace("%", "")) };
+  } catch {
+    return null;
+  }
+}
+async function construirEstado() {
+  const [discoSistema, discoBackup, mem, medios, db, verificacion, recursos] = await Promise.all([
+    disco("/"),
+    disco(BACKUP_VOLUME),
+    memoria(),
+    edadHeartbeat("last-media-backup"),
+    edadHeartbeat("last-db-backup"),
+    edadHeartbeat("last-verify"),
+    edadHeartbeat("last-resources")
+  ]);
+  let sesiones = [];
+  try {
+    const s59 = await Promise.resolve().then(() => (init_sessions_simple(), sessions_simple_exports));
+    sesiones = s59.listSessions().map((id) => ({ id, lista: s59.isWhatsAppSessionActive(id) }));
+  } catch (error) {
+    logger_default.warn(`admin/health: no se pudo leer el estado de WhatsApp: ${String(error)}`);
+  }
+  return {
+    ahora: (/* @__PURE__ */ new Date()).toISOString(),
+    uptimeHoras: Number((os3.uptime() / 3600).toFixed(1)),
+    cpu: cpu(),
+    memoria: mem,
+    disco: { sistema: discoSistema, backup: discoBackup },
+    // Umbrales IGUALES a los del watchdog y el reporte diario, para que los tres
+    // no puedan contradecirse (lección #5 de OBSERVABILITY-ALERTING).
+    backups: {
+      medios: { segundos: medios, umbral: 25 * 3600 },
+      base: { segundos: db, umbral: 2 * 3600 },
+      verificacion: { segundos: verificacion, umbral: 8 * 24 * 3600 },
+      recursos: { segundos: recursos, umbral: 2 * 3600 },
+      offsite: { estado: "no aplica (sin copia en la nube, por decisi\xF3n)" }
+    },
+    whatsapp: sesiones,
+    historia: obtenerHistoria()
+  };
+}
+router2.get("/health.json", basicAuth, async (_req, res) => {
+  try {
+    res.json({ success: true, data: await construirEstado() });
+  } catch (error) {
+    logger_default.error("admin/health.json fall\xF3:", error);
+    res.status(500).json({ success: false, error: { message: "Error building health" } });
+  }
+});
+router2.get("/health", basicAuth, async (_req, res) => {
+  try {
+    const e29 = await construirEstado();
+    res.type("html").send(renderHtml(e29));
+  } catch (error) {
+    logger_default.error("admin/health fall\xF3:", error);
+    res.status(500).type("html").send("<h1>Error construyendo el estado</h1>");
+  }
+});
+var humano = (s59) => s59 < 0 ? "nunca" : s59 < 3600 ? `hace ${Math.floor(s59 / 60)} min` : s59 < 86400 ? `hace ${Math.floor(s59 / 3600)} h` : `hace ${Math.floor(s59 / 86400)} d`;
+var OK = { ico: "check_circle", txt: "Nominal", tono: "ok" };
+var ATENCION = { ico: "warning", txt: "Atenci\xF3n", tono: "warn" };
+var CRITICO = { ico: "error", txt: "Cr\xEDtico", tono: "bad" };
+var porEdad = (s59, umbral) => s59 < 0 || s59 > umbral ? CRITICO : s59 > umbral * 0.75 ? ATENCION : OK;
+var porPct = (p64, umbral) => p64 >= umbral ? CRITICO : p64 >= umbral - 15 ? ATENCION : OK;
+var esc = (v55) => v55.replace(/[<>&]/g, (c66) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c66] || c66);
+function areaChart(valores, id, color) {
+  const W45 = 300, H52 = 64;
+  if (valores.length < 2) {
+    return `<div class="chart-empty">acumulando datos\u2026</div>`;
+  }
+  const paso = W45 / (valores.length - 1);
+  const y65 = (v55) => H52 - Math.max(0, Math.min(100, v55)) / 100 * (H52 - 6) - 3;
+  const pts = valores.map((v55, i50) => `${(i50 * paso).toFixed(1)},${y65(v55).toFixed(1)}`);
+  return `<svg class="chart" viewBox="0 0 ${W45} ${H52}" preserveAspectRatio="none" aria-hidden="true">
+    <defs><linearGradient id="g-${id}" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity=".38"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="M0,${H52} L${pts.join(" L")} L${W45},${H52} Z" fill="url(#g-${id})"/>
+    <polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="2"
+      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+  </svg>`;
+}
+function renderHtml(e29) {
+  const b63 = e29.backups;
+  const stCpu = porPct(e29.cpu.pct, 85);
+  const stMem = porPct(e29.memoria.pct, 90);
+  const stDs = e29.disco.sistema ? porPct(e29.disco.sistema.pct, 85) : CRITICO;
+  const stDb = e29.disco.backup ? porPct(e29.disco.backup.pct, 85) : CRITICO;
+  const stM = porEdad(b63.medios.segundos, b63.medios.umbral);
+  const stB = porEdad(b63.base.segundos, b63.base.umbral);
+  const stV = porEdad(b63.verificacion.segundos, b63.verificacion.umbral);
+  const todos = [stCpu, stMem, stDs, stDb, stM, stB, stV];
+  const malos = todos.filter((x63) => x63.tono === "bad").length;
+  const avisos = todos.filter((x63) => x63.tono === "warn").length;
+  const global2 = malos ? CRITICO : avisos ? ATENCION : OK;
+  const globalTxt = malos ? `${malos} ${malos === 1 ? "problema" : "problemas"}` : avisos ? `${avisos} ${avisos === 1 ? "aviso" : "avisos"}` : "System Nominal";
+  const uptime = e29.uptimeHoras >= 24 ? `${Math.floor(e29.uptimeHoras / 24)}D ${Math.round(e29.uptimeHoras % 24)}H` : `${e29.uptimeHoras.toFixed(1)}H`;
+  const hCpu = e29.historia.map((m59) => m59.cpu);
+  const hRam = e29.historia.map((m59) => m59.ram);
+  const span = e29.historia.length > 1 ? `\xFAltimos ${Math.round((e29.historia[e29.historia.length - 1].t - e29.historia[0].t) / 6e4)} min` : "sin historia a\xFAn";
+  const nav = (ico, txt, href, activo = false) => `<a class="nav${activo ? " on" : ""}" href="${href}"><span class="ms">${ico}</span>${txt}</a>`;
+  const filaBackup = (ico, titulo, sub, st2) => `
+    <div class="row">
+      <div class="row-ico t-${st2.tono}"><span class="ms">${ico}</span></div>
+      <div class="row-txt"><div class="row-t">${esc(titulo)}</div><div class="row-s">${esc(sub)}</div></div>
+      <div class="row-tag t-${st2.tono}">${st2.txt}</div>
+    </div>`;
+  const sesiones = e29.whatsapp.length ? e29.whatsapp.map((s59) => `
+    <div class="row">
+      <div class="row-ico ${s59.lista ? "t-ok" : "t-bad"}"><span class="ms">smartphone</span></div>
+      <div class="row-txt"><div class="row-t">+${esc(s59.id)}</div>
+        <div class="row-s"><span class="dot ${s59.lista ? "t-ok" : "t-bad"}"></span>${s59.lista ? "activa" : "ca\xEDda"}</div></div>
+      <div class="row-tag ${s59.lista ? "t-ok" : "t-bad"}">${s59.lista ? "ONLINE" : "OFFLINE"}</div>
+    </div>`).join("") : '<div class="empty">Sin sesiones registradas</div>';
+  const online = e29.whatsapp.filter((s59) => s59.lista).length;
+  const mini = (etiqueta, valor, st2) => `
+    <div class="mini">
+      <div class="mini-k">${esc(etiqueta)}</div>
+      <div class="mini-v t-${st2.tono}">${esc(valor)}</div>
+    </div>`;
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>lila-app \xB7 monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b1326; --card:#171f33; --card2:#131b2e; --line:#2d3449; --bright:#31394d;
+  --ink:#dae2fd; --ink2:#bbc9cf; --ink3:#8e9bb3;
+  --accent:#4cd6ff; --ok:#10b981; --warn:#feb127; --bad:#ff6b6b;
+  --sw:212px;              /* ancho de la sidebar */
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,-apple-system,system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.ms{font-family:'Material Symbols Outlined';font-size:18px;line-height:1;font-variation-settings:'FILL' 0,'wght' 400}
+.t-ok{--c:var(--ok)} .t-warn{--c:var(--warn)} .t-bad{--c:var(--bad)}
+
+/* ---------- SIDEBAR: fija desde 900px, oculta en mobile ---------- */
+.side{position:fixed;inset:0 auto 0 0;width:var(--sw);background:var(--card2);
+  border-right:1px solid var(--line);padding:16px 12px;display:none;flex-direction:column;z-index:10}
+.brand{display:flex;align-items:center;gap:9px;padding:4px 6px 18px}
+.logo{width:32px;height:32px;border-radius:9px;background:var(--accent);color:#003543;
+  display:grid;place-items:center;flex:none}
+.logo .ms{font-size:20px;font-variation-settings:'FILL' 1}
+.bname{font-weight:700;letter-spacing:.05em;font-size:13.5px}
+.bsub{font-size:8.5px;letter-spacing:.13em;color:var(--ink3);text-transform:uppercase;margin-top:1px}
+.nav{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;
+  font-size:13px;color:var(--ink2);margin-bottom:2px}
+.nav:hover{background:var(--card)}
+.nav.on{background:var(--accent);color:#003543;font-weight:600}
+.sec{font-size:8.5px;letter-spacing:.15em;color:var(--ink3);text-transform:uppercase;
+  padding:16px 11px 7px}
+.side-foot{margin-top:auto;display:flex;align-items:center;gap:9px;padding:11px 8px 2px;
+  border-top:1px solid var(--line)}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#003543;
+  display:grid;place-items:center;flex:none}
+.avatar .ms{font-size:17px;font-variation-settings:'FILL' 1}
+
+/* ---------- MAIN ---------- */
+.main{padding:14px 16px 40px;max-width:1500px}
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.top-brand{display:flex;align-items:center;gap:9px}
+.chips{display:flex;gap:7px;margin-left:auto;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);
+  padding:5px 10px;border-radius:7px;font-size:11px;white-space:nowrap}
+.chip b{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+.chip .k{color:var(--ink3);text-transform:uppercase;letter-spacing:.07em;font-size:9px}
+
+h1{font-size:19px;font-weight:650;letter-spacing:-.01em;margin:0 0 14px;
+  display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.badge{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
+  border:1px solid var(--accent);border-radius:5px;padding:3px 7px;opacity:.85}
+h2{font-size:11px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink3);
+  margin:0 0 11px;display:flex;align-items:center;gap:8px}
+h2 .n{margin-left:auto;font-weight:500;letter-spacing:.04em}
+section{margin-bottom:22px;scroll-margin-top:14px}
+
+/* Estado global */
+.hero{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--line);
+  border-radius:13px;padding:15px 17px;margin-bottom:18px}
+.hero .ms{font-size:27px;color:var(--c)}
+.hero .h1t{font-size:19px;font-weight:650}
+.hero .h2t{font-size:11.5px;color:var(--ink3);margin-top:2px}
+
+/* Tarjetas grandes con gr\xE1fico */
+.charts{display:grid;grid-template-columns:1fr;gap:12px}
+.bigcard{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:15px 16px 10px}
+.bc-h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.bc-k{font-size:13px;font-weight:600}
+.bc-s{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-top:2px}
+.bc-v{font-size:31px;font-weight:700;letter-spacing:-.02em;color:var(--c);
+  font-variant-numeric:tabular-nums;line-height:1}
+.bc-u{font-size:13px;font-weight:600;color:var(--ink3)}
+.bar{height:4px;background:var(--bright);border-radius:2px;overflow:hidden;margin:12px 0 4px}
+.bar i{display:block;height:100%;border-radius:2px;background:var(--c)}
+.chart{width:100%;height:64px;display:block;margin-top:2px}
+.chart-empty{height:64px;display:grid;place-items:center;color:var(--ink3);font-size:11px}
+
+/* Mini-stats */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.mini{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px 13px}
+.mini-k{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.mini-v{font-size:19px;font-weight:700;margin-top:5px;color:var(--c);font-variant-numeric:tabular-nums}
+
+/* Listas */
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.row-ico{width:34px;height:34px;border-radius:9px;background:var(--card2);display:grid;
+  place-items:center;color:var(--c);flex:none}
+.row-txt{flex:1;min-width:0}
+.row-t{font-size:13.5px;font-weight:550}
+.row-s{font-size:11px;color:var(--ink3);margin-top:2px;display:flex;align-items:center;gap:6px;
+  font-variant-numeric:tabular-nums}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--c);flex:none}
+.row-tag{font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--c);
+  border:1px solid var(--c);border-radius:5px;padding:3px 7px;flex:none;opacity:.9}
+.empty{padding:15px;color:var(--ink3);font-size:12.5px}
+footer{text-align:center;color:var(--ink3);font-size:10px;margin-top:24px;
+  letter-spacing:.08em;text-transform:uppercase}
+
+/* ---------- TABLET: aparece la sidebar, 2 columnas de gr\xE1ficos ---------- */
+@media(min-width:900px){
+  .side{display:flex}
+  .main{margin-left:var(--sw);padding:18px 22px 44px}
+  .top-brand{display:none}          /* la marca ya est\xE1 en la sidebar */
+  .charts{grid-template-columns:1fr 1fr}
+}
+/* ---------- DESKTOP: columna derecha, como en el dise\xF1o ---------- */
+@media(min-width:1240px){
+  .cols{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+  .aside section:first-child{margin-top:0}
+}
+</style></head><body>
+
+<aside class="side">
+  <div class="brand">
+    <div class="logo"><span class="ms">monitoring</span></div>
+    <div><div class="bname">LILA-APP</div><div class="bsub">Mac mini \xB7 node 01</div></div>
+  </div>
+  ${nav("dashboard", "Overview", "#overview", true)}
+  ${nav("speed", "Rendimiento", "#rendimiento")}
+  ${nav("backup", "Backups", "#backups")}
+  ${nav("chat", "Sesiones WhatsApp", "#whatsapp")}
+  <div class="sec">Sistema</div>
+  ${nav("storage", "Almacenamiento", "#almacenamiento")}
+  <div class="side-foot">
+    <div class="avatar"><span class="ms">person</span></div>
+    <div><div style="font-size:12px;font-weight:600">Admin</div>
+      <div style="font-size:9.5px;color:var(--ink3)">Acceso root</div></div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="top">
+    <div class="top-brand">
+      <div class="logo"><span class="ms">monitoring</span></div>
+      <div><div class="bname">LILA-APP</div><div class="bsub">Mac mini \xB7 node 01</div></div>
+    </div>
+    <div class="chips">
+      <div class="chip"><span class="k">Uptime</span><b>${uptime}</b></div>
+      <div class="chip"><span class="k">CPU</span><b>${e29.cpu.pct}%</b></div>
+      <div class="chip"><span class="k">RAM</span><b>${e29.memoria.pct}%</b></div>
+    </div>
+  </div>
+
+  <h1 id="overview">Estado del sistema <span class="badge">telemetr\xEDa en vivo</span></h1>
+
+  <div class="hero t-${global2.tono}">
+    <span class="ms">${global2.ico}</span>
+    <div><div class="h1t">${globalTxt}</div>
+      <div class="h2t">${new Date(e29.ahora).toLocaleString("es-PE")}</div></div>
+  </div>
+
+  <div class="cols">
+    <div>
+      <section id="rendimiento">
+        <h2>Rendimiento <span class="n">${span}</span></h2>
+        <div class="charts">
+          <div class="bigcard t-${stCpu.tono}">
+            <div class="bc-h"><div><div class="bc-k">Uso de CPU</div>
+              <div class="bc-s">${e29.cpu.nucleos} n\xFAcleos \xB7 carga ${e29.cpu.carga1}</div></div>
+              <div class="bc-v">${e29.cpu.pct}<span class="bc-u">%</span></div></div>
+            <div class="bar"><i style="width:${Math.max(2, e29.cpu.pct)}%"></i></div>
+            ${areaChart(hCpu, "cpu", "#4cd6ff")}
+          </div>
+          <div class="bigcard t-${stMem.tono}">
+            <div class="bc-h"><div><div class="bc-k">Uso de memoria</div>
+              <div class="bc-s">${e29.memoria.totalGB} GB totales</div></div>
+              <div class="bc-v">${e29.memoria.pct}<span class="bc-u">%</span></div></div>
+            <div class="bar"><i style="width:${Math.max(2, e29.memoria.pct)}%"></i></div>
+            ${areaChart(hRam, "ram", "#feb127")}
+          </div>
+        </div>
+      </section>
+
+      <section id="almacenamiento">
+        <h2>Almacenamiento</h2>
+        <div class="grid">
+          ${e29.disco.sistema ? mini("Disco sistema", `${e29.disco.sistema.pct}%`, stDs) : mini("Disco sistema", "n/d", CRITICO)}
+          ${e29.disco.sistema ? mini("Libre sistema", e29.disco.sistema.libre, OK) : ""}
+          ${e29.disco.backup ? mini("Disco backup", `${e29.disco.backup.pct}%`, stDb) : mini("Disco backup", "OFF", CRITICO)}
+          ${e29.disco.backup ? mini("Libre backup", e29.disco.backup.libre, OK) : ""}
+        </div>
+      </section>
+
+      <section id="whatsapp">
+        <h2>Sesiones WhatsApp <span class="n">${online} online</span></h2>
+        <div class="card">${sesiones}</div>
+      </section>
+    </div>
+
+    <div class="aside">
+      <section id="backups">
+        <h2>Backups</h2>
+        <div class="card">
+          ${filaBackup("perm_media", "Medios", humano(b63.medios.segundos), stM)}
+          ${filaBackup("database", "Base de datos", humano(b63.base.segundos), stB)}
+          ${filaBackup("verified", "Verificaci\xF3n", humano(b63.verificacion.segundos), stV)}
+          <div class="row">
+            <div class="row-ico" style="color:var(--ink3)"><span class="ms">cloud_off</span></div>
+            <div class="row-txt"><div class="row-t">Copia en la nube</div>
+              <div class="row-s">sin copia offsite, por decisi\xF3n</div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer>se actualiza cada 30 s</footer>
+</main>
+<script>setTimeout(()=>location.reload(),30000)</script>
+</body></html>`;
+}
+var admin_health_routes_default = router2;
+
+// src/api/routes/jobs.routes.v2.ts
+import { Router as Router3 } from "express";
 
 // src/utils/validators.ts
 import Joi from "joi";
@@ -51859,19 +53065,20 @@ async function validateSender(req, res, next) {
 }
 
 // src/api/routes/jobs.routes.v2.ts
-var router2 = Router2();
+var router3 = Router3();
 var controller = new JobsControllerV2(scheduler_v2_instance_default);
-router2.post("/", jobsLimiter, validateCompany, validateSender, controller.createJob);
-router2.get("/", controller.listJobs);
-router2.get("/:id", controller.getJob);
-router2.patch("/:id", validateCompany, validateSender, controller.updateJob);
-router2.put("/:id", validateCompany, validateSender, controller.updateJob);
-router2.delete("/:id", controller.deleteJob);
-router2.post("/:id/run", controller.runJobNow);
-var jobs_routes_v2_default = router2;
+router3.use(requireTenantOrApiKey);
+router3.post("/", jobsLimiter, validateCompany, validateSender, controller.createJob);
+router3.get("/", controller.listJobs);
+router3.get("/:id", controller.getJob);
+router3.patch("/:id", validateCompany, validateSender, controller.updateJob);
+router3.put("/:id", validateCompany, validateSender, controller.updateJob);
+router3.delete("/:id", controller.deleteJob);
+router3.post("/:id/run", controller.runJobNow);
+var jobs_routes_v2_default = router3;
 
 // src/api/routes/message.routes.ts
-import { Router as Router3 } from "express";
+import { Router as Router4 } from "express";
 import multer from "multer";
 
 // src/api/controllers/message.controller.simple.ts
@@ -52102,52 +53309,52 @@ async function sendFile(req, res, next) {
 }
 
 // src/api/routes/message.routes.ts
-var router3 = Router3();
+var router4 = Router4();
 var upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 var messageAuth = requireTenantOrApiKey;
-router3.post(
+router4.post(
   "/:sessionPhone/text",
   messageAuth,
   requireSenderOwnership,
   sendTextMessage
 );
-router3.post(
+router4.post(
   "/:sessionPhone/image",
   messageAuth,
   requireSenderOwnership,
   upload.single("file"),
   sendImage
 );
-router3.post(
+router4.post(
   "/:sessionPhone/video",
   messageAuth,
   requireSenderOwnership,
   upload.single("file"),
   sendVideo
 );
-router3.post(
+router4.post(
   "/:sessionPhone/file",
   messageAuth,
   requireSenderOwnership,
   upload.single("file"),
   sendFile
 );
-var message_routes_default = router3;
+var message_routes_default = router4;
 
 // src/api/routes/pdf.routes.ts
-import { Router as Router4 } from "express";
+import { Router as Router5 } from "express";
 
 // src/pdf/generator.service.ts
 init_logger();
 init_environment();
 import puppeteer from "puppeteer";
 import Handlebars from "handlebars";
-import fs7 from "fs-extra";
-import path10 from "path";
-import os2 from "os";
+import fs9 from "fs-extra";
+import path13 from "path";
+import os4 from "os";
 import { randomUUID as randomUUID3 } from "crypto";
 
 // src/utils/concurrency.ts
@@ -52205,14 +53412,14 @@ function resolveChromeExecutable() {
   }
   candidates.push("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
   try {
-    const cacheRoot = path10.join(os2.homedir(), ".cache", "puppeteer", "chrome");
-    const builds = fs7.readdirSync(cacheRoot).map((name) => {
+    const cacheRoot = path13.join(os4.homedir(), ".cache", "puppeteer", "chrome");
+    const builds = fs9.readdirSync(cacheRoot).map((name) => {
       const major = Number((name.match(/mac_arm-(\d+)\./) || [])[1] || 0);
       return { name, major };
     }).filter((b63) => b63.major >= 130).sort((a49, b63) => b63.major - a49.major);
     for (const b63 of builds) {
       candidates.push(
-        path10.join(
+        path13.join(
           cacheRoot,
           b63.name,
           "chrome-mac-arm64",
@@ -52227,7 +53434,7 @@ function resolveChromeExecutable() {
   }
   for (const candidate of candidates) {
     try {
-      if (candidate && fs7.existsSync(candidate)) {
+      if (candidate && fs9.existsSync(candidate)) {
         return candidate;
       }
     } catch {
@@ -52251,8 +53458,8 @@ var PDFGenerator = class {
       }
       this.isInitializing = true;
       logger_default.info("Initializing PDF Generator...");
-      await fs7.ensureDir(this.templatesDir);
-      await fs7.ensureDir(this.uploadsDir);
+      await fs9.ensureDir(this.templatesDir);
+      await fs9.ensureDir(this.uploadsDir);
       const headlessEnv = process.env.PUPPETEER_HEADLESS;
       const headlessMode = headlessEnv === "true" ? true : headlessEnv === "false" ? false : "new";
       const executablePath = resolveChromeExecutable();
@@ -52363,7 +53570,7 @@ var PDFGenerator = class {
       const compiled = Handlebars.compile(template);
       const html = compiled(request.data);
       const filename = request.filename || `pdf-${randomUUID3()}.pdf`;
-      const filepath = path10.join(this.uploadsDir, filename);
+      const filepath = path13.join(this.uploadsDir, filename);
       return await renderLimiter.run(async () => {
         const page = await this.createPageWithRetry();
         try {
@@ -52381,6 +53588,7 @@ var PDFGenerator = class {
           await page.close().catch(() => {
           });
         }
+        await linearizePdfInPlace(filepath, { mimeType: "application/pdf" });
         logger_default.info(`PDF generated: ${filepath}`);
         return filepath;
       });
@@ -52392,8 +53600,8 @@ var PDFGenerator = class {
   async generateFromHtml(html, options2 = {}) {
     try {
       await this.ensureBrowser();
-      const filepath = options2.outputPath ? options2.outputPath : path10.join(this.uploadsDir, options2.filename || `pdf-${randomUUID3()}.pdf`);
-      await fs7.ensureDir(path10.dirname(filepath));
+      const filepath = options2.outputPath ? options2.outputPath : path13.join(this.uploadsDir, options2.filename || `pdf-${randomUUID3()}.pdf`);
+      await fs9.ensureDir(path13.dirname(filepath));
       const startedAt = Date.now();
       const htmlBytes = Buffer.byteLength(html);
       return await renderLimiter.run(async () => {
@@ -52415,6 +53623,7 @@ var PDFGenerator = class {
           await page.close().catch(() => {
           });
         }
+        await linearizePdfInPlace(filepath, { mimeType: "application/pdf" });
         logger_default.info(`PDF generated from HTML: ${filepath}`, {
           htmlBytes,
           durationMs: Date.now() - startedAt,
@@ -52468,9 +53677,9 @@ var PDFGenerator = class {
   }
   async createTemplate(id, name, htmlContent) {
     try {
-      const filepath = path10.join(this.templatesDir, `${id}.hbs`);
-      await fs7.ensureDir(path10.dirname(filepath));
-      await fs7.writeFile(filepath, htmlContent, "utf-8");
+      const filepath = path13.join(this.templatesDir, `${id}.hbs`);
+      await fs9.ensureDir(path13.dirname(filepath));
+      await fs9.writeFile(filepath, htmlContent, "utf-8");
       logger_default.info(`Created PDF template: ${id}`);
     } catch (error) {
       logger_default.error("Error creating PDF template:", error);
@@ -52479,11 +53688,11 @@ var PDFGenerator = class {
   }
   async loadTemplate(templateId) {
     try {
-      const filepath = path10.join(this.templatesDir, `${templateId}.hbs`);
-      if (!await fs7.pathExists(filepath)) {
+      const filepath = path13.join(this.templatesDir, `${templateId}.hbs`);
+      if (!await fs9.pathExists(filepath)) {
         throw new Error(`Template not found: ${templateId}`);
       }
-      return await fs7.readFile(filepath, "utf-8");
+      return await fs9.readFile(filepath, "utf-8");
     } catch (error) {
       logger_default.error("Error loading template:", error);
       throw error;
@@ -52491,7 +53700,7 @@ var PDFGenerator = class {
   }
   async listTemplates() {
     try {
-      const files = await fs7.readdir(this.templatesDir);
+      const files = await fs9.readdir(this.templatesDir);
       return files.filter((f64) => f64.endsWith(".hbs")).map((f64) => f64.replace(".hbs", ""));
     } catch (error) {
       logger_default.error("Error listing templates:", error);
@@ -52500,9 +53709,9 @@ var PDFGenerator = class {
   }
   async deleteTemplate(templateId) {
     try {
-      const filepath = path10.join(this.templatesDir, `${templateId}.hbs`);
-      if (await fs7.pathExists(filepath)) {
-        await fs7.remove(filepath);
+      const filepath = path13.join(this.templatesDir, `${templateId}.hbs`);
+      if (await fs9.pathExists(filepath)) {
+        await fs9.remove(filepath);
         logger_default.info(`Deleted template: ${templateId}`);
       }
     } catch (error) {
@@ -52594,16 +53803,16 @@ async function deleteTemplate(req, res, next) {
 }
 
 // src/api/controllers/pdf-vale.controller.ts
-import fs9 from "fs-extra";
-import path12 from "path";
+import fs11 from "fs-extra";
+import path15 from "path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { randomUUID as randomUUID4 } from "crypto";
 init_environment();
 
 // src/pdf/render.service.ts
 init_environment();
-import fs8 from "fs-extra";
-import path11 from "path";
+import fs10 from "fs-extra";
+import path14 from "path";
 import crypto4 from "crypto";
 import { createCanvas } from "@napi-rs/canvas";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -52619,7 +53828,7 @@ function resolveDriveCacheDir() {
   return config.drive?.cacheDir || "./data/drive-cache";
 }
 async function getPdfInfo(filePath) {
-  const buffer2 = await fs8.readFile(filePath);
+  const buffer2 = await fs10.readFile(filePath);
   const data = new Uint8Array(buffer2);
   const task = pdfjsLib.getDocument({ data, disableWorker: true });
   const pdf = await task.promise;
@@ -52628,16 +53837,16 @@ async function getPdfInfo(filePath) {
   };
 }
 async function renderPdfPageToPng(filePath, options2) {
-  const stat = await fs8.stat(filePath);
+  const stat = await fs10.stat(filePath);
   const scale = clampScale(options2.scale);
   const cacheKey = getCacheKey(filePath, stat, options2.page, scale);
-  const cacheDir = path11.resolve(resolveDriveCacheDir(), cacheKey);
-  const cacheFile = path11.join(cacheDir, `page-${options2.page}.png`);
-  if (await fs8.pathExists(cacheFile)) {
+  const cacheDir = path14.resolve(resolveDriveCacheDir(), cacheKey);
+  const cacheFile = path14.join(cacheDir, `page-${options2.page}.png`);
+  if (await fs10.pathExists(cacheFile)) {
     return { cacheFile, fromCache: true };
   }
-  await fs8.ensureDir(cacheDir);
-  const buffer2 = await fs8.readFile(filePath);
+  await fs10.ensureDir(cacheDir);
+  const buffer2 = await fs10.readFile(filePath);
   const data = new Uint8Array(buffer2);
   const task = pdfjsLib.getDocument({ data, disableWorker: true });
   const pdf = await task.promise;
@@ -52650,21 +53859,21 @@ async function renderPdfPageToPng(filePath, options2) {
   const ctx = canvas.getContext("2d");
   await page.render({ canvasContext: ctx, viewport }).promise;
   const pngBuffer = canvas.toBuffer("image/png");
-  await fs8.writeFile(cacheFile, pngBuffer);
+  await fs10.writeFile(cacheFile, pngBuffer);
   return { cacheFile, fromCache: false };
 }
 async function renderPdfPageToPngWithGrid(filePath, options2) {
-  const stat = await fs8.stat(filePath);
+  const stat = await fs10.stat(filePath);
   const scale = clampScale(options2.scale);
   const gridSize = options2.gridSize && options2.gridSize > 0 ? options2.gridSize : 50;
   const cacheKey = getCacheKey(filePath, stat, options2.page, scale) + `-g${gridSize}`;
-  const cacheDir = path11.resolve(resolveDriveCacheDir(), cacheKey);
-  const cacheFile = path11.join(cacheDir, `page-${options2.page}-grid.png`);
-  if (await fs8.pathExists(cacheFile)) {
+  const cacheDir = path14.resolve(resolveDriveCacheDir(), cacheKey);
+  const cacheFile = path14.join(cacheDir, `page-${options2.page}-grid.png`);
+  if (await fs10.pathExists(cacheFile)) {
     return { cacheFile, fromCache: true };
   }
-  await fs8.ensureDir(cacheDir);
-  const buffer2 = await fs8.readFile(filePath);
+  await fs10.ensureDir(cacheDir);
+  const buffer2 = await fs10.readFile(filePath);
   const data = new Uint8Array(buffer2);
   const task = pdfjsLib.getDocument({ data, disableWorker: true });
   const pdf = await task.promise;
@@ -52697,7 +53906,7 @@ async function renderPdfPageToPngWithGrid(filePath, options2) {
     ctx.fillText(String(coord), 2, y65 - 2);
   }
   const pngBuffer = canvas.toBuffer("image/png");
-  await fs8.writeFile(cacheFile, pngBuffer);
+  await fs10.writeFile(cacheFile, pngBuffer);
   return { cacheFile, fromCache: false };
 }
 
@@ -52819,13 +54028,13 @@ async function generateVale(req, res, next) {
         return next(error);
       }
     }
-    const templatePath = path12.join(config.pdf.templatesDir, template);
-    if (!await fs9.pathExists(templatePath)) {
+    const templatePath = path15.join(config.pdf.templatesDir, template);
+    if (!await fs11.pathExists(templatePath)) {
       const error = new Error("Template not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const bytes = await fs9.readFile(templatePath);
+    const bytes = await fs11.readFile(templatePath);
     const pdfDoc = await PDFDocument.load(bytes);
     const page = pdfDoc.getPages()[0];
     const { width, height } = page.getSize();
@@ -52836,13 +54045,13 @@ async function generateVale(req, res, next) {
     }
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const signaturePath = path12.join(
-      path12.dirname(config.pdf.templatesDir),
+    const signaturePath = path15.join(
+      path15.dirname(config.pdf.templatesDir),
       "signatures",
       "signature-dispatch-note.png"
     );
-    if (await fs9.pathExists(signaturePath)) {
-      const signatureBytes = await fs9.readFile(signaturePath);
+    if (await fs11.pathExists(signaturePath)) {
+      const signatureBytes = await fs11.readFile(signaturePath);
       const signatureImage = await pdfDoc.embedPng(signatureBytes);
       page.drawImage(signatureImage, {
         x: 120,
@@ -52882,13 +54091,14 @@ async function generateVale(req, res, next) {
         color: isVale ? rgb(0.8, 0, 0) : rgb(0, 0, 0)
       });
     });
-    await fs9.ensureDir(config.pdf.tempDir);
+    await fs11.ensureDir(config.pdf.tempDir);
     const valeNumber = fields.nroVale || randomUUID4().slice(0, 8);
     const safeVale = String(valeNumber).replace(/[^a-zA-Z0-9_-]+/g, "-");
     const filename = `vale-despacho-${safeVale}.pdf`;
-    const outputPath = path12.join(config.pdf.tempDir, filename);
+    const outputPath = path15.join(config.pdf.tempDir, filename);
     const pdfBytes = await pdfDoc.save();
-    await fs9.writeFile(outputPath, pdfBytes);
+    await fs11.writeFile(outputPath, pdfBytes);
+    await linearizePdfInPlace(outputPath, { mimeType: "application/pdf" });
     const publicUrl2 = `${config.pdf.tempPublicBaseUrl.replace(/\/+$/, "")}/${encodeURI(
       filename
     )}`;
@@ -52951,8 +54161,8 @@ async function previewValeTemplateGrid(req, res, next) {
     const page = parseInt(String(req.query.page || "1"), 10);
     const scale = parseFloat(String(req.query.scale || "1.5"));
     const gridSize = parseInt(String(req.query.grid || "50"), 10);
-    const templatePath = path12.join(config.pdf.templatesDir, template);
-    if (!await fs9.pathExists(templatePath)) {
+    const templatePath = path15.join(config.pdf.templatesDir, template);
+    if (!await fs11.pathExists(templatePath)) {
       const error = new Error("Template not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
@@ -52964,7 +54174,7 @@ async function previewValeTemplateGrid(req, res, next) {
     });
     res.setHeader("Cache-Control", "public, max-age=3600, immutable");
     res.setHeader("Content-Type", "image/png");
-    res.status(HTTP_STATUS.OK).sendFile(path12.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path15.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -52975,13 +54185,13 @@ async function previewValeTemplateGrid(req, res, next) {
 }
 
 // src/api/controllers/plant-dispatch-settlement-document.controller.ts
-import fs11 from "fs-extra";
+import fs13 from "fs-extra";
 
 // src/services/plant-dispatch-settlement-document.service.ts
 init_environment();
 init_models();
-import fs10 from "fs-extra";
-import path13 from "path";
+import fs12 from "fs-extra";
+import path16 from "path";
 var escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 var formatDate = (value) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
@@ -53076,9 +54286,9 @@ async function generatePlantSettlementPdf(params) {
     logoUrl: company.branding?.logoLight || company.branding?.logoDark,
     payload: params.payload
   });
-  await fs10.ensureDir(config.pdf.tempDir);
+  await fs12.ensureDir(config.pdf.tempDir);
   const fileName = `reporte-produccion-${Date.now()}.pdf`;
-  const filePath = path13.join(config.pdf.tempDir, fileName);
+  const filePath = path16.join(config.pdf.tempDir, fileName);
   await generator_service_default.generateFromHtml(html, {
     outputPath: filePath,
     format: "A4",
@@ -53098,7 +54308,7 @@ async function downloadPlantSettlementPdf(req, res, next) {
       payload
     });
     res.download(generated.filePath, generated.fileName, (error) => {
-      void fs11.remove(generated.filePath);
+      void fs13.remove(generated.filePath);
       if (error && !res.headersSent) next(error);
     });
   } catch (error) {
@@ -53166,25 +54376,25 @@ var heavyRateLimiter = rateLimit2({
 });
 
 // src/api/routes/pdf.routes.ts
-var router4 = Router4();
-router4.post("/generate", requireTenant, heavyRequestGuard, generatePDF);
-router4.post("/generate-vale", requireTenant, heavyRequestGuard, generateVale);
-router4.post("/plant-dispatch-settlement", requireTenant, heavyRequestGuard, downloadPlantSettlementPdf);
-router4.get("/templates/preview-grid", requireTenant, heavyRequestGuard, previewValeTemplateGrid);
-router4.post("/templates", requireTenant, createTemplate);
-router4.get("/templates", requireTenant, listTemplates);
-router4.delete("/templates/:templateId", requireTenant, deleteTemplate);
-var pdf_routes_default = router4;
+var router5 = Router5();
+router5.post("/generate", requireTenant, heavyRequestGuard, generatePDF);
+router5.post("/generate-vale", requireTenant, heavyRequestGuard, generateVale);
+router5.post("/plant-dispatch-settlement", requireTenant, heavyRequestGuard, downloadPlantSettlementPdf);
+router5.get("/templates/preview-grid", requireTenant, heavyRequestGuard, previewValeTemplateGrid);
+router5.post("/templates", requireTenant, createTemplate);
+router5.get("/templates", requireTenant, listTemplates);
+router5.delete("/templates/:templateId", requireTenant, deleteTemplate);
+var pdf_routes_default = router5;
 
 // src/api/routes/drive.routes.ts
-import { Router as Router5 } from "express";
+import { Router as Router6 } from "express";
 import multer2 from "multer";
-import fs18 from "fs-extra";
-import path21 from "path";
+import fs22 from "fs-extra";
+import path26 from "path";
 
 // src/api/controllers/drive.controller.ts
-import fs15 from "fs-extra";
-import path18 from "path";
+import fs17 from "fs-extra";
+import path21 from "path";
 init_storage_path_service();
 
 // src/middleware/quota.middleware.ts
@@ -53287,23 +54497,23 @@ init_logger();
 
 // src/services/thumbnail.service.ts
 var import_sharp = __toESM(require_lib(), 1);
-import fs12 from "fs-extra";
-import path14 from "path";
+import fs14 from "fs-extra";
+import path17 from "path";
 import crypto5 from "crypto";
-import { spawn } from "child_process";
+import { spawn as spawn2 } from "child_process";
 init_logger();
 
 // src/services/ffmpeg.service.ts
 init_logger();
 import { spawnSync } from "child_process";
-import { createRequire } from "module";
+import { createRequire as createRequire2 } from "module";
 var ffmpegAvailableCache = null;
 var ffmpegMissingLogged = false;
 var ffmpegCommandCache = null;
 var getFfmpegStaticPath = () => {
   try {
-    const require2 = createRequire(import.meta.url);
-    const resolved = require2("ffmpeg-static");
+    const require3 = createRequire2(import.meta.url);
+    const resolved = require3("ffmpeg-static");
     return typeof resolved === "string" && resolved.trim() ? resolved : null;
   } catch {
     return null;
@@ -53370,7 +54580,7 @@ var THUMBNAIL_MAX_PX = Number(process.env.THUMBNAIL_MAX_PX) || 640;
 var PDF_THUMBNAIL_MAX_PX = 1200;
 function resolveKind(mimeType, fileName) {
   const mime = (mimeType || "").toLowerCase();
-  const ext = path14.extname(fileName).toLowerCase();
+  const ext = path17.extname(fileName).toLowerCase();
   if (mime.startsWith("image/") && !mime.includes("svg") || [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)) {
     return "image";
   }
@@ -53386,31 +54596,31 @@ function sanitizeName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "file";
 }
 async function removePreviousThumbnails(outputDir, safeBase) {
-  const thumbDir = path14.join(outputDir, thumbDirName);
-  await fs12.ensureDir(thumbDir);
-  const entries = await fs12.readdir(thumbDir).catch(() => []);
+  const thumbDir = path17.join(outputDir, thumbDirName);
+  await fs14.ensureDir(thumbDir);
+  const entries = await fs14.readdir(thumbDir).catch(() => []);
   const prefix = `thumb_${safeBase}_`;
   await Promise.all(
-    entries.filter((entry) => entry.startsWith(prefix)).map((entry) => fs12.remove(path14.join(thumbDir, entry)).catch(() => {
+    entries.filter((entry) => entry.startsWith(prefix)).map((entry) => fs14.remove(path17.join(thumbDir, entry)).catch(() => {
     }))
   );
 }
 async function createThumbTargetPath(options2) {
-  const stat = await fs12.stat(options2.filePath);
-  const parsed = path14.parse(options2.fileName);
+  const stat = await fs14.stat(options2.filePath);
+  const parsed = path17.parse(options2.fileName);
   const safeBase = sanitizeName(parsed.name || "file");
   const hash = crypto5.createHash("sha1").update(`${options2.filePath}:${stat.size}:${stat.mtimeMs}`).digest("hex").slice(0, 10);
   const thumbName = `thumb_${safeBase}_${hash}.jpg`;
-  const thumbDir = path14.join(options2.outputDir, thumbDirName);
-  await fs12.ensureDir(thumbDir);
+  const thumbDir = path17.join(options2.outputDir, thumbDirName);
+  await fs14.ensureDir(thumbDir);
   await removePreviousThumbnails(options2.outputDir, safeBase);
-  const thumbPath = path14.join(thumbDir, thumbName);
+  const thumbPath = path17.join(thumbDir, thumbName);
   return { thumbName, thumbPath };
 }
 async function runFfmpeg(args) {
   const ffmpegCommand = getFfmpegCommand() || "ffmpeg";
   await new Promise((resolve2, reject) => {
-    const proc = spawn(ffmpegCommand, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const proc = spawn2(ffmpegCommand, args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     proc.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -53432,7 +54642,7 @@ async function generateImageThumbnail(options2, thumbPath) {
     fit: "inside",
     withoutEnlargement: true
   }).jpeg({ quality: 72, progressive: true, mozjpeg: true }).toBuffer();
-  await fs12.writeFile(thumbPath, buffer2);
+  await fs14.writeFile(thumbPath, buffer2);
 }
 async function generatePdfThumbnail(options2, thumbPath) {
   const { cacheFile } = await renderPdfPageToPng(options2.filePath, { page: 1, scale: 1.3 });
@@ -53440,7 +54650,7 @@ async function generatePdfThumbnail(options2, thumbPath) {
     fit: "inside",
     withoutEnlargement: true
   }).jpeg({ quality: 78, progressive: true, mozjpeg: true }).toBuffer();
-  await fs12.writeFile(thumbPath, buffer2);
+  await fs14.writeFile(thumbPath, buffer2);
 }
 async function generateVideoThumbnail(options2, thumbPath) {
   const args = [
@@ -53467,8 +54677,8 @@ function materializeThumbnailInBackground(originalAbsolutePath) {
   void materializeLimiter.run(
     () => generateThumbnailForFile({
       filePath: originalAbsolutePath,
-      fileName: path14.basename(originalAbsolutePath),
-      outputDir: path14.dirname(originalAbsolutePath)
+      fileName: path17.basename(originalAbsolutePath),
+      outputDir: path17.dirname(originalAbsolutePath)
     })
   ).then((result) => {
     if (result.status === "ready") {
@@ -53510,7 +54720,7 @@ async function generateThumbnailForFile(options2) {
     } else if (kind === "video") {
       await generateVideoThumbnail(options2, thumbPath);
     }
-    const stat = await fs12.stat(thumbPath);
+    const stat = await fs14.stat(thumbPath);
     return {
       status: "ready",
       thumbnailName: thumbName,
@@ -53533,27 +54743,27 @@ async function generateThumbnailForFile(options2) {
 
 // src/services/video-stream.service.ts
 init_logger();
-import fs13 from "fs-extra";
-import path15 from "path";
-import { spawn as spawn2 } from "child_process";
+import fs15 from "fs-extra";
+import path18 from "path";
+import { spawn as spawn3 } from "child_process";
 var FASTSTART_EXTENSIONS = /* @__PURE__ */ new Set([".mp4", ".m4v", ".mov"]);
 var isVideoByMimeOrExt = (mimeType, fileName) => {
   const mime = (mimeType || "").toLowerCase();
-  const ext = path15.extname(fileName).toLowerCase();
+  const ext = path18.extname(fileName).toLowerCase();
   if (mime.startsWith("video/")) return true;
   return [".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi", ".mpeg", ".mpg", ".3gp"].includes(ext);
 };
 var supportsFaststart = (fileName) => {
-  const ext = path15.extname(fileName).toLowerCase();
+  const ext = path18.extname(fileName).toLowerCase();
   return FASTSTART_EXTENSIONS.has(ext);
 };
 var runFfmpegWithTimeout = async (args, timeoutMs) => {
   const ffmpegCommand = getFfmpegCommand() || "ffmpeg";
   await new Promise((resolve2, reject) => {
-    const proc = spawn2(ffmpegCommand, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const proc = spawn3(ffmpegCommand, args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     let settled = false;
-    const timer = setTimeout(() => {
+    const timer3 = setTimeout(() => {
       if (settled) return;
       settled = true;
       try {
@@ -53568,13 +54778,13 @@ var runFfmpegWithTimeout = async (args, timeoutMs) => {
     proc.on("error", (error) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      clearTimeout(timer3);
       reject(error);
     });
     proc.on("close", (code) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      clearTimeout(timer3);
       if (code === 0) {
         resolve2();
         return;
@@ -53611,18 +54821,18 @@ async function optimizeVideoForProgressiveStreaming(options2) {
   }
   const timeoutMs = Number.isFinite(options2.timeoutMs) ? options2.timeoutMs : 18e4;
   try {
-    const sourceStat = await fs13.stat(options2.filePath);
-    const ext = path15.extname(options2.fileName).toLowerCase() || ".mp4";
-    const tempPath = path15.join(
-      path15.dirname(options2.filePath),
+    const sourceStat = await fs15.stat(options2.filePath);
+    const ext = path18.extname(options2.fileName).toLowerCase() || ".mp4";
+    const tempPath = path18.join(
+      path18.dirname(options2.filePath),
       `.tmp_faststart_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`
     );
     await runFfmpegWithTimeout(
       ["-y", "-i", options2.filePath, "-c", "copy", "-movflags", "+faststart", tempPath],
       timeoutMs
     );
-    const optimizedStat = await fs13.stat(tempPath);
-    await fs13.move(tempPath, options2.filePath, { overwrite: true });
+    const optimizedStat = await fs15.stat(tempPath);
+    await fs15.move(tempPath, options2.filePath, { overwrite: true });
     return {
       attempted: true,
       optimized: true,
@@ -53630,11 +54840,11 @@ async function optimizeVideoForProgressiveStreaming(options2) {
     };
   } catch (error) {
     if (typeof options2.filePath === "string") {
-      const ext = path15.extname(options2.fileName).toLowerCase() || ".mp4";
+      const ext = path18.extname(options2.fileName).toLowerCase() || ".mp4";
       const tempPrefix = `.tmp_faststart_`;
-      const dir = path15.dirname(options2.filePath);
-      const entries = await fs13.readdir(dir).catch(() => []);
-      const cleanupTasks = entries.filter((entry) => entry.startsWith(tempPrefix) && entry.endsWith(ext)).map((entry) => fs13.remove(path15.join(dir, entry)).catch(() => {
+      const dir = path18.dirname(options2.filePath);
+      const entries = await fs15.readdir(dir).catch(() => []);
+      const cleanupTasks = entries.filter((entry) => entry.startsWith(tempPrefix) && entry.endsWith(ext)).map((entry) => fs15.remove(path18.join(dir, entry)).catch(() => {
       }));
       await Promise.all(cleanupTasks);
     }
@@ -53655,17 +54865,17 @@ async function optimizeVideoForProgressiveStreaming(options2) {
 
 // src/services/storage-file-name.service.ts
 import crypto6 from "crypto";
-import path16 from "path";
+import path19 from "path";
 var MAX_SAFE_BASENAME_LENGTH = 80;
 function sanitizeStorageFileName(name) {
-  const parsed = path16.parse(name || "file");
+  const parsed = path19.parse(name || "file");
   const safeBase = parsed.name.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "").slice(0, MAX_SAFE_BASENAME_LENGTH) || "file";
   const safeExt = parsed.ext.replace(/[^a-zA-Z0-9.]/g, "").slice(0, 16).toLowerCase();
   return `${safeBase}${safeExt}`;
 }
 function buildUniqueStorageFileName(originalName, uniqueSeed) {
   const safeName = sanitizeStorageFileName(originalName);
-  const parsed = path16.parse(safeName);
+  const parsed = path19.parse(safeName);
   const hash = crypto6.createHash("sha1").update(`${uniqueSeed || crypto6.randomUUID()}:${originalName}:${Date.now()}`).digest("hex").slice(0, 10);
   return `${parsed.name}_${hash}${parsed.ext}`;
 }
@@ -53673,9 +54883,9 @@ function buildUniqueStorageFileName(originalName, uniqueSeed) {
 // src/services/media-ingest.service.ts
 var import_sharp2 = __toESM(require_lib(), 1);
 init_logger();
-import path17 from "path";
+import path20 from "path";
 import { randomUUID as randomUUID5 } from "crypto";
-import fs14 from "fs-extra";
+import fs16 from "fs-extra";
 var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp"]);
 var MEDIA_INGEST_MAX_PX = Number(process.env.MEDIA_INGEST_MAX_PX ?? 2560);
 var NORMALIZED_JPEG_QUALITY = 82;
@@ -53683,7 +54893,7 @@ var isNormalizableImage = (fileName, mimeType) => {
   const mime = (mimeType || "").toLowerCase();
   if (mime.includes("svg") || mime.includes("gif")) return false;
   if (mime.startsWith("image/")) return true;
-  return IMAGE_EXTENSIONS.has(path17.extname(fileName).toLowerCase());
+  return IMAGE_EXTENSIONS.has(path20.extname(fileName).toLowerCase());
 };
 async function normalizeImageInPlace(params) {
   const maxPx = params.maxPx ?? MEDIA_INGEST_MAX_PX;
@@ -53699,16 +54909,16 @@ async function normalizeImageInPlace(params) {
     if (!longestSide || longestSide <= maxPx) {
       return { normalized: false, sizeDeltaBytes: 0, reason: "within-limit" };
     }
-    const originalSize = (await fs14.stat(params.filePath)).size;
+    const originalSize = (await fs16.stat(params.filePath)).size;
     const hasAlpha = Boolean(metadata.hasAlpha);
     const pipeline = (0, import_sharp2.default)(params.filePath).rotate().resize(maxPx, maxPx, { fit: "inside", withoutEnlargement: true });
     const output = await (hasAlpha ? pipeline.png({ compressionLevel: 9 }) : pipeline.jpeg({ quality: NORMALIZED_JPEG_QUALITY, progressive: true, mozjpeg: true })).toBuffer();
-    const tmpPath = path17.join(
-      path17.dirname(params.filePath),
+    const tmpPath = path20.join(
+      path20.dirname(params.filePath),
       `.ingest-${randomUUID5()}.tmp`
     );
-    await fs14.writeFile(tmpPath, output);
-    await fs14.move(tmpPath, params.filePath, { overwrite: true });
+    await fs16.writeFile(tmpPath, output);
+    await fs16.move(tmpPath, params.filePath, { overwrite: true });
     const sizeDeltaBytes = output.length - originalSize;
     logger_default.info("[media-ingest] Imagen normalizada al techo de ingest", {
       fileName: params.fileName,
@@ -53733,7 +54943,7 @@ init_json_store();
 init_environment();
 var MAX_MIGRATION_COPY_ENTRIES = 500;
 var migrationJobStore = new json_store_default({
-  baseDir: path18.join(config.storage.root, "migration-jobs"),
+  baseDir: path21.join(config.storage.root, "migration-jobs"),
   autoBackup: false
 });
 var activeMigrationCopyJobs = /* @__PURE__ */ new Set();
@@ -53788,22 +54998,22 @@ async function listEntries(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs15.pathExists(resolved);
+    const exists = await fs17.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stat = await fs15.stat(resolved);
+    const stat = await fs17.stat(resolved);
     if (!stat.isDirectory()) {
       const error = new Error("Path is not a folder");
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const entries = (await fs15.readdir(resolved)).filter((name) => !name.startsWith("."));
+    const entries = (await fs17.readdir(resolved)).filter((name) => !name.startsWith("."));
     const results = await Promise.all(
       entries.map(async (name) => {
-        const entryStat = await fs15.stat(path18.join(resolved, name));
+        const entryStat = await fs17.stat(path21.join(resolved, name));
         const entry = toEntry(relativePath, name, entryStat, companyId);
         const result = { ...entry };
         if (entry.url) {
@@ -53848,19 +55058,19 @@ async function createFolder(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const parentExists = await fs15.pathExists(resolved);
+    const parentExists = await fs17.pathExists(resolved);
     if (!parentExists) {
       const error = new Error("Parent path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const target = path18.join(resolved, name);
+    const target = path21.join(resolved, name);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs15.ensureDir(target);
+    await fs17.ensureDir(target);
     const newPath = relativePath ? `${relativePath}/${name}` : name;
     res.status(HTTP_STATUS.CREATED).json({
       success: true,
@@ -53902,26 +55112,26 @@ async function uploadFile(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs15.ensureDir(resolved);
+    await fs17.ensureDir(resolved);
     const MAX_ORDERS_BYTES2 = 100 * 1024 * 1024;
     const MAX_DRIVE_BYTES3 = 2 * 1024 * 1024 * 1024;
     const isDriveRoot = relativePath.startsWith("drive");
     const maxAllowedBytes = isDriveRoot ? MAX_DRIVE_BYTES3 : MAX_ORDERS_BYTES2;
     if (file.size > maxAllowedBytes) {
-      await fs15.remove(file.path).catch(() => {
+      await fs17.remove(file.path).catch(() => {
       });
       const error = new Error("File too large");
       error.statusCode = HTTP_STATUS.REQUEST_TOO_LONG;
       return next(error);
     }
     const storageFileName = buildUniqueStorageFileName(file.originalname, file.path);
-    const target = path18.join(resolved, storageFileName);
+    const target = path21.join(resolved, storageFileName);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    await fs15.move(file.path, target, { overwrite: false });
+    await fs17.move(file.path, target, { overwrite: false });
     await incrementStorageUsage(companyId, file.size);
     const videoLike = isVideoFile(file.mimetype, storageFileName);
     let streamStatus = videoLike ? "ready" : "unsupported";
@@ -53959,6 +55169,7 @@ async function uploadFile(req, res, next) {
     const streamUrl = videoLike ? publicUrl2 : void 0;
     let thumbnailUrl;
     let thumbnailStatus = "pending";
+    await linearizePdfInPlace(target, { fileName: storageFileName, mimeType: file.mimetype });
     if (!skipVideoProcessing) {
       const thumbnailResult = await generateThumbnailForFile({
         filePath: target,
@@ -54024,16 +55235,16 @@ async function deleteEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs15.pathExists(resolved);
+    const exists = await fs17.pathExists(resolved);
     if (!exists) {
       const error = new Error("Path not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const stats = await fs15.stat(resolved);
+    const stats = await fs17.stat(resolved);
     const isFile = stats.isFile();
     const fileSize = isFile ? stats.size : 0;
-    await fs15.remove(resolved);
+    await fs17.remove(resolved);
     if (isFile && fileSize > 0) {
       await decrementStorageUsage(companyId, fileSize);
     }
@@ -54074,14 +55285,14 @@ async function moveEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const exists = await fs15.pathExists(fromResolved);
+    const exists = await fs17.pathExists(fromResolved);
     if (!exists) {
       const error = new Error("Source not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    await fs15.ensureDir(path18.dirname(toResolved));
-    await fs15.move(fromResolved, toResolved, { overwrite: false });
+    await fs17.ensureDir(path21.dirname(toResolved));
+    await fs17.move(fromResolved, toResolved, { overwrite: false });
     const publicUrl2 = `/files/companies/${companyId}/${to3}`;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -54149,31 +55360,31 @@ var copyCompanyFileEntry = async (params) => {
     error.statusCode = HTTP_STATUS.FORBIDDEN;
     throw error;
   }
-  const sourceExists = await fs15.pathExists(sourceResolved);
+  const sourceExists = await fs17.pathExists(sourceResolved);
   if (!sourceExists) {
     const error = new Error("Source not found");
     error.statusCode = HTTP_STATUS.NOT_FOUND;
     throw error;
   }
-  const sourceStats = await fs15.stat(sourceResolved);
+  const sourceStats = await fs17.stat(sourceResolved);
   if (!sourceStats.isFile()) {
     const error = new Error("Source must be a file");
     error.statusCode = HTTP_STATUS.BAD_REQUEST;
     throw error;
   }
   await storagePathService.ensureCompanyStructure(params.targetCompanyId);
-  await fs15.ensureDir(path18.dirname(targetResolved));
-  const targetExists = await fs15.pathExists(targetResolved);
+  await fs17.ensureDir(path21.dirname(targetResolved));
+  const targetExists = await fs17.pathExists(targetResolved);
   let createdTarget = false;
   if (targetExists) {
-    const targetStats = await fs15.stat(targetResolved);
+    const targetStats = await fs17.stat(targetResolved);
     if (targetStats.size !== sourceStats.size) {
       const error = new Error("Target already exists with different size");
       error.statusCode = HTTP_STATUS.CONFLICT;
       throw error;
     }
   } else {
-    await fs15.copy(sourceResolved, targetResolved, { overwrite: false });
+    await fs17.copy(sourceResolved, targetResolved, { overwrite: false });
     await incrementStorageUsage(params.targetCompanyId, sourceStats.size);
     createdTarget = true;
   }
@@ -54186,13 +55397,13 @@ var deleteCompanyFileEntry = async (params) => {
     error.statusCode = HTTP_STATUS.FORBIDDEN;
     throw error;
   }
-  const exists = await fs15.pathExists(resolved);
+  const exists = await fs17.pathExists(resolved);
   if (!exists) {
     return { deleted: false, size: 0 };
   }
-  const stats = await fs15.stat(resolved);
+  const stats = await fs17.stat(resolved);
   const fileSize = stats.isFile() ? stats.size : 0;
-  await fs15.remove(resolved);
+  await fs17.remove(resolved);
   if (fileSize > 0) {
     await decrementStorageUsage(params.companyId, fileSize);
   }
@@ -54482,9 +55693,9 @@ async function getInfo(req, res, next) {
       error.statusCode = HTTP_STATUS.FORBIDDEN;
       return next(error);
     }
-    const stat = await fs15.stat(resolved);
-    const name = path18.basename(resolved);
-    const parent = path18.dirname(targetPath).replace(/\\/g, "/");
+    const stat = await fs17.stat(resolved);
+    const name = path21.basename(resolved);
+    const parent = path21.dirname(targetPath).replace(/\\/g, "/");
     const base = parent === "." ? "" : parent;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -54506,8 +55717,8 @@ async function getInfo(req, res, next) {
 }
 
 // src/api/controllers/drive-pdf.controller.ts
-import fs16 from "fs-extra";
-import path19 from "path";
+import fs18 from "fs-extra";
+import path22 from "path";
 init_storage_path_service();
 function getPdfPathFromRequest(req) {
   const companyId = req.companyId;
@@ -54525,10 +55736,10 @@ function getPdfPathFromRequest(req) {
   return { resolved, normalized: pathParam };
 }
 function ensurePdfExtension(filePath) {
-  return path19.extname(filePath).toLowerCase() === ".pdf";
+  return path22.extname(filePath).toLowerCase() === ".pdf";
 }
 async function resolveExistingPdfPath(resolved, normalized, companyId) {
-  if (await fs16.pathExists(resolved)) {
+  if (await fs18.pathExists(resolved)) {
     return { resolved, normalized };
   }
   const candidates = [normalized.normalize("NFC"), normalized.normalize("NFD")].filter(
@@ -54536,7 +55747,7 @@ async function resolveExistingPdfPath(resolved, normalized, companyId) {
   );
   for (const candidate of candidates) {
     const altResolved = storagePathService.resolvePath(companyId, candidate);
-    if (await fs16.pathExists(altResolved)) {
+    if (await fs18.pathExists(altResolved)) {
       return { resolved: altResolved, normalized: candidate };
     }
   }
@@ -54561,7 +55772,7 @@ async function getPdfMetadata(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs16.pathExists(resolved);
+    const exists = await fs18.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -54604,7 +55815,7 @@ async function getPdfPageImage(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs16.pathExists(resolved);
+    const exists = await fs18.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -54615,7 +55826,7 @@ async function getPdfPageImage(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path19.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path22.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -54646,7 +55857,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
       error.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(error);
     }
-    const exists = await fs16.pathExists(resolved);
+    const exists = await fs18.pathExists(resolved);
     if (!exists) {
       const error = new Error("File not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -54661,7 +55872,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path19.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path22.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -54801,28 +56012,28 @@ var uploadRateLimiter = companyRateLimiter({
 var import_server = __toESM(require_dist2(), 1);
 var import_file_store = __toESM(require_dist3(), 1);
 init_environment();
-import fs17 from "fs-extra";
-import path20 from "path";
+import fs19 from "fs-extra";
+import path23 from "path";
 init_logger();
 init_storage_path_service();
 init_quota_validator_service();
 var MAX_ORDERS_BYTES = 100 * 1024 * 1024;
 var MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024;
-var TUS_STORAGE_DIR = path20.join(config.storage.root, "temp", "tus-uploads");
+var TUS_STORAGE_DIR = path23.join(config.storage.root, "temp", "tus-uploads");
 try {
-  fs17.ensureDirSync(TUS_STORAGE_DIR);
+  fs19.ensureDirSync(TUS_STORAGE_DIR);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path20.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
-    fs17.ensureDirSync(fallback);
+    const fallback = path23.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
+    fs19.ensureDirSync(fallback);
     logger_default.warn(`[tus] Failed to init storage dir at ${TUS_STORAGE_DIR}. Using fallback: ${fallback}`);
     TUS_STORAGE_DIR = fallback;
   } else {
     throw error;
   }
 }
-var TUS_META_DIR = path20.join(TUS_STORAGE_DIR, "metadata");
-fs17.ensureDirSync(TUS_META_DIR);
+var TUS_META_DIR = path23.join(TUS_STORAGE_DIR, "metadata");
+fs19.ensureDirSync(TUS_META_DIR);
 function isValidEntryName2(name) {
   if (!name) return false;
   if (name === "." || name === "..") return false;
@@ -54867,8 +56078,8 @@ function getUploadId(upload4) {
   return String(upload4?.id || "");
 }
 async function storeUploadInfo(info) {
-  const infoPath = path20.join(TUS_META_DIR, `${info.id}.json`);
-  await fs17.writeJson(infoPath, info, { spaces: 2 });
+  const infoPath = path23.join(TUS_META_DIR, `${info.id}.json`);
+  await fs19.writeJson(infoPath, info, { spaces: 2 });
 }
 async function finalizeUpload(upload4, req) {
   const headerMetadata = parseMetadata(req.headers["upload-metadata"]);
@@ -54897,13 +56108,13 @@ async function finalizeUpload(upload4, req) {
   if (!storagePathService.validateAccess(resolved, companyId)) {
     throw new Error("Access denied: invalid path");
   }
-  await fs17.ensureDir(resolved);
-  const target = path20.join(resolved, storageFileName);
+  await fs19.ensureDir(resolved);
+  const target = path23.join(resolved, storageFileName);
   if (!storagePathService.validateAccess(target, companyId)) {
     throw new Error("Access denied: invalid target path");
   }
-  const tempPath = path20.join(TUS_STORAGE_DIR, getUploadId(upload4));
-  await fs17.move(tempPath, target, { overwrite: false });
+  const tempPath = path23.join(TUS_STORAGE_DIR, getUploadId(upload4));
+  await fs19.move(tempPath, target, { overwrite: false });
   await incrementStorageUsage(companyId, uploadSize);
   const filePath = relativePath ? `${relativePath}/${storageFileName}` : storageFileName;
   const publicUrl2 = `/files/companies/${companyId}/${filePath}`;
@@ -54927,6 +56138,7 @@ async function finalizeUpload(upload4, req) {
       }
     }
   }
+  await linearizePdfInPlace(target, { fileName: storageFileName, mimeType: metadata.filetype });
   const thumbnailResult = await generateThumbnailForFile({
     filePath: target,
     fileName: storageFileName,
@@ -55061,15 +56273,15 @@ async function getTusUploadInfo(req, res, next) {
         error: { message: "Upload ID is required" }
       });
     }
-    const infoPath = path20.join(TUS_META_DIR, `${uploadId}.json`);
-    const exists = await fs17.pathExists(infoPath);
+    const infoPath = path23.join(TUS_META_DIR, `${uploadId}.json`);
+    const exists = await fs19.pathExists(infoPath);
     if (!exists) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         error: { message: "Upload info not found" }
       });
     }
-    const info = await fs17.readJson(infoPath);
+    const info = await fs19.readJson(infoPath);
     if (companyId && info.companyId && info.companyId !== companyId) {
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
@@ -55085,16 +56297,357 @@ async function getTusUploadInfo(req, res, next) {
   }
 }
 
+// src/api/controllers/drive-folder-export.controller.ts
+var import_jsonwebtoken4 = __toESM(require_jsonwebtoken(), 1);
+var import_archiver2 = __toESM(require_archiver(), 1);
+init_models();
+init_environment();
+import path25 from "path";
+import fs21 from "fs-extra";
+
+// src/services/order-export.service.ts
+var import_archiver = __toESM(require_archiver(), 1);
+init_models();
+init_storage_path_service();
+init_logger();
+import path24 from "path";
+import fs20 from "fs-extra";
+import { Types } from "mongoose";
+var EXPORT_TTL_HOURS = 24;
+var EXPORTS_MODULE = "temp";
+var EXPORTS_SUBDIR = "order-exports";
+var isValidObjectId = (value) => Types.ObjectId.isValid(value);
+var sanitizeName2 = (name) => name.replace(/[\\/:"*?<>|]+/g, "_").trim();
+var buildZipPath = (companyId, orderId) => storagePathService.resolvePath(
+  companyId,
+  path24.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`)
+);
+var resolveMediaAbsolutePath = (mediaUrl, companyId) => {
+  try {
+    const pathname = new URL(mediaUrl, "http://localhost").pathname;
+    const marker = `/files/companies/${companyId}/`;
+    if (!pathname.startsWith(marker)) return null;
+    const relative = decodeURIComponent(pathname.slice(marker.length));
+    const absolute = storagePathService.resolvePath(companyId, relative);
+    if (!storagePathService.validateAccess(absolute, companyId)) return null;
+    return absolute;
+  } catch {
+    return null;
+  }
+};
+var buildFolderPathResolver = (folders) => {
+  const folderById = new Map(
+    folders.map((folder) => [String(folder._id ?? ""), folder])
+  );
+  const resolve2 = (folderId, depth = 0) => {
+    if (!folderId || depth > 10) return "";
+    const folder = folderById.get(String(folderId));
+    if (!folder) return "";
+    const parentPath = resolve2(folder.parentId, depth + 1);
+    const current = sanitizeName2(String(folder.name ?? ""));
+    if (!current) return parentPath;
+    return parentPath ? `${parentPath}/${current}` : current;
+  };
+  return resolve2;
+};
+var nowIso = () => (/* @__PURE__ */ new Date()).toISOString();
+var setExportJob = async (orderId, exportJob) => {
+  const OrderModel = await getOrderModel();
+  await OrderModel.updateOne(
+    { _id: orderId },
+    exportJob ? { $set: { exportJob } } : { $unset: { exportJob: 1 } }
+  );
+};
+async function requestOrderExport(orderId) {
+  if (!isValidObjectId(orderId)) return { ok: false, code: "not_found" };
+  const OrderModel = await getOrderModel();
+  const order = await OrderModel.findById(orderId).lean();
+  if (!order || !order.companyId) return { ok: false, code: "not_found" };
+  const companyId = String(order.companyId);
+  const currentJob = order.exportJob;
+  if (currentJob && ["queued", "running"].includes(String(currentJob.status))) {
+    return { ok: false, code: "busy" };
+  }
+  const jobId = `${orderId}-${Date.now()}`;
+  await setExportJob(orderId, {
+    id: jobId,
+    status: "running",
+    progress: 0,
+    startedAt: nowIso()
+  });
+  try {
+    const [MediaModel, FolderModel] = await Promise.all([getMediaModel(), getFolderModel()]);
+    const [medias, folders] = await Promise.all([
+      MediaModel.find({ companyId, resourceId: orderId, status: "ACTIVE" }).lean(),
+      FolderModel.find({ companyId, resourceId: orderId, status: "ACTIVE" }).lean()
+    ]);
+    const resolveFolderPath = buildFolderPathResolver(folders);
+    const usedNames = /* @__PURE__ */ new Set();
+    const entries = [];
+    for (const media of medias) {
+      const mediaUrl = String(media.url ?? "");
+      if (!mediaUrl) continue;
+      const absolutePath = resolveMediaAbsolutePath(mediaUrl, companyId);
+      if (!absolutePath || !await fs20.pathExists(absolutePath)) {
+        logger_default.warn("[order-export] Media sin archivo local, se omite del ZIP", {
+          orderId,
+          mediaId: String(media._id ?? "")
+        });
+        continue;
+      }
+      const folderPath = resolveFolderPath(media.folderId) || sanitizeName2(String(media.type ?? ""));
+      const baseName = sanitizeName2(String(media.name ?? path24.basename(absolutePath)));
+      let entryName = folderPath ? `${folderPath}/${baseName}` : baseName;
+      let dedupe = 1;
+      while (usedNames.has(entryName)) {
+        const ext = path24.extname(baseName);
+        const stem = path24.basename(baseName, ext);
+        const candidate = `${stem} (${dedupe})${ext}`;
+        entryName = folderPath ? `${folderPath}/${candidate}` : candidate;
+        dedupe += 1;
+      }
+      usedNames.add(entryName);
+      entries.push({ absolutePath, entryName });
+    }
+    if (entries.length === 0) {
+      await setExportJob(orderId, {
+        id: jobId,
+        status: "error",
+        error: "El pedido no tiene archivos para exportar",
+        startedAt: nowIso(),
+        finishedAt: nowIso()
+      });
+      return { ok: false, code: "empty" };
+    }
+    const zipPath = buildZipPath(companyId, orderId);
+    await fs20.ensureDir(path24.dirname(zipPath));
+    await fs20.remove(zipPath);
+    const output = fs20.createWriteStream(zipPath);
+    const archive = (0, import_archiver.default)("zip", { zlib: { level: 6 } });
+    const archiveDone = new Promise((resolve2, reject) => {
+      output.on("close", () => resolve2());
+      archive.on("error", reject);
+      output.on("error", reject);
+    });
+    archive.pipe(output);
+    for (const entry of entries) {
+      archive.file(entry.absolutePath, { name: entry.entryName });
+    }
+    await archive.finalize();
+    await archiveDone;
+    const stat = await fs20.stat(zipPath);
+    const expiresAt = new Date(Date.now() + EXPORT_TTL_HOURS * 60 * 60 * 1e3).toISOString();
+    const obra = sanitizeName2(String(order.obra ?? "pedido"));
+    await setExportJob(orderId, {
+      id: jobId,
+      status: "done",
+      progress: 100,
+      filePath: path24.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`),
+      fileName: `${obra || "pedido"}-${orderId.slice(-6)}.zip`,
+      sizeBytes: stat.size,
+      finishedAt: nowIso(),
+      expiresAt
+    });
+    logger_default.info("[order-export] ZIP generado", {
+      orderId,
+      companyId,
+      files: entries.length,
+      sizeBytes: stat.size
+    });
+    return { ok: true };
+  } catch (error) {
+    logger_default.error("[order-export] Error generando ZIP", {
+      orderId,
+      error: String(error)
+    });
+    await setExportJob(orderId, {
+      id: jobId,
+      status: "error",
+      error: "No se pudo generar el ZIP",
+      startedAt: nowIso(),
+      finishedAt: nowIso()
+    }).catch(() => void 0);
+    return { ok: false, code: "empty" };
+  }
+}
+async function getOrderExportFile(orderId) {
+  if (!isValidObjectId(orderId)) return { ok: false, code: "not_found" };
+  const OrderModel = await getOrderModel();
+  const order = await OrderModel.findById(orderId).lean();
+  if (!order || !order.companyId) return { ok: false, code: "not_found" };
+  const job = order.exportJob;
+  if (!job || job.status !== "done" || !job.filePath) {
+    return { ok: false, code: "not_ready" };
+  }
+  const companyId = String(order.companyId);
+  const absolutePath = storagePathService.resolvePath(companyId, String(job.filePath));
+  if (!storagePathService.validateAccess(absolutePath, companyId)) {
+    return { ok: false, code: "not_ready" };
+  }
+  if (!await fs20.pathExists(absolutePath)) {
+    return { ok: false, code: "not_ready" };
+  }
+  return {
+    ok: true,
+    absolutePath,
+    fileName: String(job.fileName ?? `pedido-${orderId}.zip`)
+  };
+}
+async function deleteOrderExport(orderId) {
+  if (!isValidObjectId(orderId)) return { ok: false };
+  const OrderModel = await getOrderModel();
+  const order = await OrderModel.findById(orderId).lean();
+  if (!order || !order.companyId) return { ok: false };
+  const companyId = String(order.companyId);
+  const zipPath = buildZipPath(companyId, orderId);
+  if (storagePathService.validateAccess(zipPath, companyId)) {
+    await fs20.remove(zipPath).catch(() => void 0);
+  }
+  await setExportJob(orderId, null);
+  return { ok: true };
+}
+
+// src/services/drive-folder-export.helpers.ts
+var MAX_DEPTH = 20;
+var ZIP_COMPRESSION_LEVEL = 0;
+var sanitizeSegment = (name) => name.replace(/[\\/:"*?<>|]+/g, "_").trim() || "archivo";
+var collectFolderSubtree = (folders, rootFolderId) => {
+  const root = String(rootFolderId ?? "").trim();
+  const subtree = /* @__PURE__ */ new Set();
+  if (!root) return subtree;
+  if (!folders.some((folder) => String(folder._id ?? "") === root)) return subtree;
+  subtree.add(root);
+  for (let depth = 0; depth < MAX_DEPTH; depth += 1) {
+    let grew = false;
+    folders.forEach((folder) => {
+      const id = String(folder._id ?? "");
+      const parentId = String(folder.parentId ?? "");
+      if (!id || subtree.has(id) || !subtree.has(parentId)) return;
+      subtree.add(id);
+      grew = true;
+    });
+    if (!grew) break;
+  }
+  return subtree;
+};
+var buildRelativeEntryName = ({
+  folderPath,
+  rootPath,
+  fileName
+}) => {
+  const relative = folderPath === rootPath ? "" : folderPath.replace(`${rootPath}/`, "");
+  const safeName = sanitizeSegment(fileName);
+  return relative ? `${relative}/${safeName}` : safeName;
+};
+
+// src/api/controllers/drive-folder-export.controller.ts
+init_logger();
+var SCOPE = "drive-export";
+var verifyToken = (raw) => {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const decoded = import_jsonwebtoken4.default.verify(raw, config.security.jwtSecret);
+    if (decoded.scope !== SCOPE) return null;
+    if (!decoded.companyId || !decoded.resourceId || !decoded.folderId) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+};
+async function exportDriveFolder(req, res, next) {
+  const claims = verifyToken(req.query.token);
+  if (!claims) {
+    res.status(401).json({ message: "Enlace de descarga invalido o vencido" });
+    return;
+  }
+  const { companyId, resourceId, folderId } = claims;
+  try {
+    const [FolderModel, MediaModel] = await Promise.all([getFolderModel(), getMediaModel()]);
+    const [folders, medias] = await Promise.all([
+      FolderModel.find({ companyId, resourceId, status: "ACTIVE" }).lean(),
+      MediaModel.find({ companyId, resourceId, status: "ACTIVE" }).lean()
+    ]);
+    const subtree = collectFolderSubtree(folders, folderId);
+    if (subtree.size === 0) {
+      res.status(404).json({ message: "Carpeta no encontrada" });
+      return;
+    }
+    const resolveFolderPath = buildFolderPathResolver(folders);
+    const rootPath = resolveFolderPath(folderId);
+    const entries = await collectEntries({ medias, subtree, resolveFolderPath, rootPath, companyId });
+    if (entries.length === 0) {
+      res.status(404).json({ message: "La carpeta no tiene archivos para descargar" });
+      return;
+    }
+    const zipName = `${rootPath.split("/").pop() || "carpeta"}.zip`;
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(zipName)}"`);
+    res.setHeader("Cache-Control", "no-store");
+    const archive = (0, import_archiver2.default)("zip", { zlib: { level: ZIP_COMPRESSION_LEVEL } });
+    archive.on("error", (error) => {
+      logger_default.error("[drive-export] Error armando el ZIP", { companyId, folderId, error });
+      res.destroy();
+    });
+    res.on("close", () => {
+      if (!res.writableEnded) archive.abort();
+    });
+    archive.pipe(res);
+    entries.forEach((entry) => archive.file(entry.absolutePath, { name: entry.entryName }));
+    await archive.finalize();
+  } catch (error) {
+    next(error);
+  }
+}
+async function collectEntries({
+  medias,
+  subtree,
+  resolveFolderPath,
+  rootPath,
+  companyId
+}) {
+  const usedNames = /* @__PURE__ */ new Set();
+  const entries = [];
+  for (const media of medias) {
+    const mediaFolderId = String(media.folderId ?? "");
+    if (!subtree.has(mediaFolderId)) continue;
+    const mediaUrl = String(media.url ?? "");
+    if (!mediaUrl) continue;
+    const absolutePath = resolveMediaAbsolutePath(mediaUrl, companyId);
+    if (!absolutePath || !await fs21.pathExists(absolutePath)) {
+      logger_default.warn("[drive-export] Media sin archivo local, se omite", {
+        companyId,
+        mediaId: String(media._id ?? "")
+      });
+      continue;
+    }
+    const fileName = String(media.name ?? path25.basename(absolutePath));
+    let entryName = buildRelativeEntryName({
+      folderPath: resolveFolderPath(mediaFolderId),
+      rootPath,
+      fileName
+    });
+    let suffix = 2;
+    while (usedNames.has(entryName)) {
+      const parsed = path25.parse(entryName);
+      entryName = path25.join(parsed.dir, `${parsed.name} (${suffix})${parsed.ext}`);
+      suffix += 1;
+    }
+    usedNames.add(entryName);
+    entries.push({ absolutePath, entryName });
+  }
+  return entries;
+}
+
 // src/api/routes/drive.routes.ts
-var router5 = Router5();
+var router6 = Router6();
 var MAX_DRIVE_BYTES2 = 2 * 1024 * 1024 * 1024;
-var tempDir = path21.join(config.storage.root, "temp", "uploads");
+var tempDir = path26.join(config.storage.root, "temp", "uploads");
 try {
-  fs18.ensureDirSync(tempDir);
+  fs22.ensureDirSync(tempDir);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path21.join(process.cwd(), "data", "storage", "temp", "uploads");
-    fs18.ensureDirSync(fallback);
+    const fallback = path26.join(process.cwd(), "data", "storage", "temp", "uploads");
+    fs22.ensureDirSync(fallback);
     console.warn(
       `[drive] Failed to init temp dir at ${tempDir}. Using fallback: ${fallback}`
     );
@@ -55120,32 +56673,33 @@ var tusCreateRateLimiter = (req, res, next) => {
   }
   return next();
 };
-router5.get("/upload-tus/:id/info", requireTenant, getTusUploadInfo);
-router5.all("/upload-tus", requireTenant, tusCreateRateLimiter, tusMiddleware(tusServer));
-router5.all("/upload-tus/*", requireTenant, tusCreateRateLimiter, tusMiddleware(tusServer));
-router5.get("/list", requireTenant, listEntries);
-router5.get("/info", requireTenant, getInfo);
-router5.post("/folders", requireTenant, createFolder);
-router5.post("/files", requireTenant, uploadRateLimiter, upload2.single("file"), requireStorageQuota, uploadFile);
-router5.delete("/entry", requireTenant, deleteEntry);
-router5.patch("/move", requireTenant, moveEntry);
-router5.post("/admin/copy-company-entry", requireTenant, copyCompanyEntry);
-router5.post("/admin/copy-company-entries", requireTenant, copyCompanyEntries);
-router5.get("/admin/copy-company-entries/:jobId", requireTenant, getCopyCompanyEntriesJob);
-router5.post("/admin/delete-company-entries", requireTenant, deleteCompanyEntries);
-router5.get("/admin/delete-company-entries/:jobId", requireTenant, getDeleteCompanyEntriesJob);
-router5.get("/pdf/info", requireTenant, getPdfMetadata);
-router5.get("/pdf/page", requireTenant, getPdfPageImage);
-router5.get("/pdf/preview-grid", requireTenant, getPdfPagePreviewGrid);
-var drive_routes_default = router5;
+router6.get("/upload-tus/:id/info", requireTenant, getTusUploadInfo);
+router6.all("/upload-tus", requireTenant, tusCreateRateLimiter, tusMiddleware(tusServer));
+router6.all("/upload-tus/*", requireTenant, tusCreateRateLimiter, tusMiddleware(tusServer));
+router6.get("/folder-export", exportDriveFolder);
+router6.get("/list", requireTenant, listEntries);
+router6.get("/info", requireTenant, getInfo);
+router6.post("/folders", requireTenant, createFolder);
+router6.post("/files", requireTenant, uploadRateLimiter, upload2.single("file"), requireStorageQuota, uploadFile);
+router6.delete("/entry", requireTenant, deleteEntry);
+router6.patch("/move", requireTenant, moveEntry);
+router6.post("/admin/copy-company-entry", requireTenant, copyCompanyEntry);
+router6.post("/admin/copy-company-entries", requireTenant, copyCompanyEntries);
+router6.get("/admin/copy-company-entries/:jobId", requireTenant, getCopyCompanyEntriesJob);
+router6.post("/admin/delete-company-entries", requireTenant, deleteCompanyEntries);
+router6.get("/admin/delete-company-entries/:jobId", requireTenant, getDeleteCompanyEntriesJob);
+router6.get("/pdf/info", requireTenant, getPdfMetadata);
+router6.get("/pdf/page", requireTenant, getPdfPageImage);
+router6.get("/pdf/preview-grid", requireTenant, getPdfPagePreviewGrid);
+var drive_routes_default = router6;
 
 // src/api/routes/documents.routes.ts
-import { Router as Router6 } from "express";
+import { Router as Router7 } from "express";
 
 // src/api/controllers/documents.controller.ts
 init_logger();
-import fs25 from "fs-extra";
-import path24 from "path";
+import fs29 from "fs-extra";
+import path29 from "path";
 
 // src/schemas/documents/control-imprimacion.schema.ts
 var emptyMeasurementValues = () => ({
@@ -55231,7 +56785,11 @@ var controlImprimacionSchema = {
       id: "registroFotografico",
       type: "photoPanel",
       title: "Panel Fotografico",
-      pageBreakBefore: true,
+      // SIN salto forzado: el panel FLUYE detrás del control. Con pocas fotos
+      // el informe entra en una sola hoja; con muchas, el panel desborda solo y
+      // las firmas terminan al final, que es donde deben ir. Con el salto fijo,
+      // un informe SIN fotos abría igual una hoja invisible que se llevaba las
+      // firmas atrás (reporte de José, 12/08/2026).
       includeHeader: true,
       pageOrientation: "portrait",
       maxImages: 20,
@@ -55244,7 +56802,11 @@ var controlImprimacionSchema = {
       type: "signatures",
       title: "Firmas",
       signatureStyle: "line",
-      pageBreakBefore: true,
+      // SIN salto forzado: las firmas van pegadas al contenido que avalan. Con
+      // `pageBreakBefore` el informe terminaba en una hoja con SOLO el bloque de
+      // firmas y el resto en blanco — no es un documento presentable a un
+      // cliente (reporte de José, 12/08/2026). Si no entran al pie, la
+      // paginación las baja sola; el canvas además deja separarlas por informe.
       pageOrientation: "portrait",
       signatures: [
         { key: "responsable", label: "RESPONSABLE", sublabel: "Responsable", showCIP: true },
@@ -55677,8 +57239,8 @@ var metradoResumenSchema = {
   name: "Cuadro Resumen de Metrado",
   description: "Resumen de metrados ejecutados por partidas y periodos.",
   category: "Technical",
-  version: "1.0.0",
-  lastUpdated: "2026-02-10",
+  version: "1.1.0",
+  lastUpdated: "2026-07-30",
   orientation: "portrait",
   pageSize: "A4",
   margins: { top: 10, right: 10, bottom: 10, left: 10 },
@@ -55734,7 +57296,19 @@ var metradoResumenSchema = {
         { key: "unidad", label: "UNIDAD", type: "text", width: 80, align: "center", editable: true },
         { key: "metrado", label: "METRADO", type: "number", width: 90, align: "right", editable: true },
         { key: "precioUnitario", label: "P.U.", type: "currency", width: 90, align: "right", editable: true },
-        { key: "parcial", label: "PARCIAL", type: "currency", width: 100, align: "right", editable: true }
+        {
+          key: "parcial",
+          label: "PARCIAL",
+          type: "currency",
+          width: 100,
+          align: "right",
+          // Derivado: metrado x P.U. Si se tipeara aparte, el cuadro se
+          // contradeciria a si mismo. `computed: true` es OBLIGATORIO: sin el la
+          // formula es inerte y la celda se queda con lo guardado, en silencio.
+          computed: true,
+          formula: "round(num(row.metrado) * num(row.precioUnitario), 2)",
+          computedHint: "Se calcula solo: METRADO por P. UNITARIO."
+        }
       ]
     },
     {
@@ -55792,6 +57366,24 @@ var metradoResumenSchema = {
       revisadoPor: { nombre: "", cargo: "Supervisor", cip: "" }
     }
   },
+  // Los totales del resumen se DERIVAN de la tabla: nadie los suma a mano.
+  computedFields: [
+    {
+      key: "resumen.totalMetrado",
+      formula: "round(sum(metrado, 'metrado'), 2)",
+      dependencies: ["metrado"]
+    },
+    {
+      // `parcial` es una columna COMPUTADA: se persiste solo cuando alguien
+      // edita la tabla en el canvas (`commitTableRows`). Una fila escrita por el
+      // agregador, por un import o por la API queda con el `parcial` guardado, y
+      // sumar esa columna daba un total que no cuadraba con sus propias filas.
+      // Derivarlo de lo crudo lo hace cierto venga de donde venga la data.
+      key: "resumen.totalParcial",
+      formula: "round((data.metrado || []).reduce((total, fila) => total + num(fila.metrado) * num(fila.precioUnitario), 0), 2)",
+      dependencies: ["metrado"]
+    }
+  ],
   exportOptions: {
     docx: true,
     pdf: true,
@@ -56177,8 +57769,8 @@ var protocoloCalidadSchema = {
   name: "Protocolo de Control de Calidad",
   description: "Registro de ensayos y verificaciones de calidad.",
   category: "Quality",
-  version: "1.0.0",
-  lastUpdated: "2026-02-10",
+  version: "1.1.0",
+  lastUpdated: "2026-07-31",
   orientation: "portrait",
   pageSize: "A4",
   margins: { top: 10, right: 10, bottom: 10, left: 10 },
@@ -56240,13 +57832,32 @@ var protocoloCalidadSchema = {
           type: "select",
           width: 90,
           align: "center",
-          editable: true,
+          // El dictamen se DERIVA de comparar el resultado con la especificacion
+          // (>= 95, <= 5, 60-70, 95 +/- 2). La especificacion es texto libre: si
+          // no se puede interpretar -"no presenta segregacion"- la formula
+          // DEVUELVE LO TIPEADO. Nunca pisa el criterio del laboratorista, y el
+          // try/catch interno garantiza que ningun fallo vacie la celda.
+          computed: true,
+          formula: "(() => { try { const espec = String(row.especificacion || '').trim(); const crudo = String(row.resultado || '').replace(',', '.').trim(); const previo = row.cumple || ''; if (!espec || crudo === '' || !Number.isFinite(Number(crudo))) return previo; const valor = Number(crudo); const rango = espec.match(/^([\\d.]+)\\s*(?:-|a)\\s*([\\d.]+)$/i); if (rango) return valor >= Number(rango[1]) && valor <= Number(rango[2]) ? 'SI' : 'NO'; const mas = espec.match(/([\\d.]+)\\s*(?:\\u00b1|\\+\\/-)\\s*([\\d.]+)/); if (mas) return Math.abs(valor - Number(mas[1])) <= Number(mas[2]) ? 'SI' : 'NO'; const min = espec.match(/(?:>=|\\u2265|min\\.?)\\s*([\\d.]+)/i); if (min) return valor >= Number(min[1]) ? 'SI' : 'NO'; const max = espec.match(/(?:<=|\\u2264|m\\u00e1x\\.?|max\\.?)\\s*([\\d.]+)/i); if (max) return valor <= Number(max[1]) ? 'SI' : 'NO'; return previo; } catch (error) { return row.cumple || ''; } })()",
+          computedHint: "Se calcula solo comparando RESULTADO con ESPECIFICACION (>= 95, <= 5, 60-70, 95 +/- 2). Con una especificacion cualitativa respeta lo que escribas.",
           options: [
             { value: "SI", label: "SI" },
             { value: "NO", label: "NO" }
           ]
         },
         { key: "observacion", label: "OBSERVACION", type: "text", width: 180, align: "left", editable: true }
+      ]
+    },
+    {
+      id: "resumenCalidad",
+      type: "summary",
+      title: "Resumen de Conformidad",
+      gridColumns: 4,
+      fields: [
+        { key: "resumen.ensayos", label: "ENSAYOS", type: "number", span: 1 },
+        { key: "resumen.noConformes", label: "NO CONFORMES", type: "number", span: 1 },
+        { key: "resumen.conformidad", label: "% CONFORMIDAD", type: "number", span: 1 },
+        { key: "resumen.condiciones", label: "CONDICIONES (de 4)", type: "number", span: 1 }
       ]
     },
     {
@@ -56308,6 +57919,12 @@ var protocoloCalidadSchema = {
     ensayos: [
       { ensayo: "", metodo: "", resultado: "", especificacion: "", cumple: "SI", observacion: "" }
     ],
+    resumen: {
+      ensayos: 0,
+      noConformes: 0,
+      conformidad: 0,
+      condiciones: 0
+    },
     checklist: {
       muestrasRotuladas: false,
       equiposCalibrados: false,
@@ -56321,6 +57938,30 @@ var protocoloCalidadSchema = {
       aprobadoPor: { nombre: "", cargo: "Supervisor", cip: "" }
     }
   },
+  // Derivados de lo CRUDO: un protocolo con 12 ensayos obligaba a contar los
+  // "NO" a ojo para saber si el lote se rechaza.
+  computedFields: [
+    {
+      key: "resumen.ensayos",
+      formula: "(data.ensayos || []).filter((fila) => String(fila.ensayo || '').trim()).length",
+      dependencies: ["ensayos"]
+    },
+    {
+      key: "resumen.noConformes",
+      formula: "(data.ensayos || []).filter((fila) => String(fila.ensayo || '').trim() && String(fila.cumple || '') === 'NO').length",
+      dependencies: ["ensayos"]
+    },
+    {
+      key: "resumen.conformidad",
+      formula: "num(data.resumen.ensayos) > 0 ? round(((num(data.resumen.ensayos) - num(data.resumen.noConformes)) / num(data.resumen.ensayos)) * 100, 0) : 0",
+      dependencies: ["resumen.ensayos", "resumen.noConformes"]
+    },
+    {
+      key: "resumen.condiciones",
+      formula: "['muestrasRotuladas', 'equiposCalibrados', 'cadenaCustodia', 'registroCompleto'].filter((clave) => (data.checklist || {})[clave]).length",
+      dependencies: ["checklist"]
+    }
+  ],
   exportOptions: {
     docx: true,
     pdf: true,
@@ -56338,7 +57979,7 @@ var protocoloTopoSchema = {
   name: "Protocolo de Control Topografico",
   description: "Control topografico de obra y verificaciones de alineamiento y niveles.",
   category: "Technical",
-  version: "1.0.0",
+  version: "1.1.0",
   lastUpdated: "2026-02-10",
   orientation: "portrait",
   pageSize: "A4",
@@ -56381,7 +58022,10 @@ var protocoloTopoSchema = {
         { key: "topografia.equipo", label: "EQUIPO", type: "text", span: 4 },
         { key: "topografia.operador", label: "OPERADOR", type: "text", span: 4 },
         { key: "topografia.sistemaReferencia", label: "SISTEMA REF.", type: "text", span: 5 },
-        { key: "topografia.precision", label: "PRECISION", type: "text", span: 2 }
+        { key: "topografia.precision", label: "PRECISION", type: "text", span: 2 },
+        // Igual que TOP-CMP: sin tolerancia declarada el protocolo no dictamina.
+        { key: "topografia.toleranciaPlanimetrica", label: "TOL. PLANIM. (m)", type: "number", span: 3 },
+        { key: "topografia.toleranciaAltimetrica", label: "TOL. ALTIM. (m)", type: "number", span: 3 }
       ]
     },
     {
@@ -56395,9 +58039,48 @@ var protocoloTopoSchema = {
         { key: "punto", label: "PUNTO", type: "text", width: 90, align: "center", editable: true },
         { key: "este", label: "ESTE (m)", type: "number", width: 110, align: "right", editable: true },
         { key: "norte", label: "NORTE (m)", type: "number", width: 110, align: "right", editable: true },
-        { key: "cota", label: "COTA (m)", type: "number", width: 100, align: "right", editable: true },
-        { key: "error", label: "ERROR", type: "number", width: 80, align: "right", editable: true },
-        { key: "observacion", label: "OBSERVACION", type: "text", width: 180, align: "left", editable: true }
+        { key: "cota", label: "COTA (m)", type: "number", width: 95, align: "right", editable: true },
+        { key: "esteProyecto", label: "ESTE PROY.", type: "number", width: 105, align: "right", editable: true },
+        { key: "norteProyecto", label: "NORTE PROY.", type: "number", width: 105, align: "right", editable: true },
+        { key: "cotaProyecto", label: "COTA PROY.", type: "number", width: 100, align: "right", editable: true },
+        {
+          key: "error",
+          label: "ERROR (m)",
+          type: "number",
+          width: 85,
+          align: "right",
+          // Mismo criterio que TOP-CMP (es su hermano simple): el error de
+          // replanteo se DERIVA de comparar contra el punto de proyecto. Sin esa
+          // coordenada queda VACIO, no en cero.
+          computed: true,
+          formula: "num(row.esteProyecto) || num(row.norteProyecto) ? round(Math.sqrt(Math.pow(num(row.este) - num(row.esteProyecto), 2) + Math.pow(num(row.norte) - num(row.norteProyecto), 2)), 3) : ''",
+          computedHint: "Se calcula solo: distancia entre el punto medido y el de proyecto. Llena ESTE PROY. y NORTE PROY."
+        },
+        {
+          key: "cumple",
+          label: "CUMPLE",
+          type: "select",
+          width: 75,
+          align: "center",
+          computed: true,
+          formula: "num((data.topografia || {}).toleranciaPlanimetrica) > 0 && row.error !== '' ? (num(row.error) <= num((data.topografia || {}).toleranciaPlanimetrica) ? 'SI' : 'NO') : ''",
+          computedHint: "Se calcula solo: compara el ERROR con la TOL. PLANIM. declarada arriba.",
+          options: [
+            { value: "SI", label: "SI" },
+            { value: "NO", label: "NO" }
+          ]
+        },
+        {
+          key: "difCota",
+          label: "DIF. COTA (m)",
+          type: "number",
+          width: 100,
+          align: "right",
+          computed: true,
+          formula: "num(row.cotaProyecto) ? round(num(row.cota) - num(row.cotaProyecto), 3) : ''",
+          computedHint: "Se calcula solo: COTA menos COTA PROY."
+        },
+        { key: "observacion", label: "OBSERVACION", type: "text", width: 140, align: "left", editable: true }
       ]
     },
     {
@@ -56444,10 +58127,12 @@ var protocoloTopoSchema = {
       equipo: "",
       operador: "",
       sistemaReferencia: "",
-      precision: ""
+      precision: "",
+      toleranciaPlanimetrica: 0,
+      toleranciaAltimetrica: 0
     },
     puntosControl: [
-      { punto: "", este: 0, norte: 0, cota: 0, error: 0, observacion: "" }
+      { punto: "", este: 0, norte: 0, cota: 0, esteProyecto: 0, norteProyecto: 0, cotaProyecto: 0, error: "", cumple: "", difCota: "", observacion: "" }
     ],
     registroFotografico: { fotos: [] },
     observaciones: "",
@@ -56473,8 +58158,8 @@ var informeReclamoSchema = {
   name: "Informe Tecnico Reclamo Excedente",
   description: "Sustento tecnico de reclamos por metrados excedentes.",
   category: "Claims",
-  version: "1.0.0",
-  lastUpdated: "2026-02-10",
+  version: "1.1.0",
+  lastUpdated: "2026-07-30",
   orientation: "portrait",
   pageSize: "A4",
   margins: { top: 10, right: 10, bottom: 10, left: 10 },
@@ -56531,8 +58216,45 @@ var informeReclamoSchema = {
         { key: "unidad", label: "UNIDAD", type: "text", width: 80, align: "center", editable: true },
         { key: "metradoContrato", label: "METRADO CONTRATO", type: "number", width: 120, align: "right", editable: true },
         { key: "metradoEjecutado", label: "METRADO EJECUTADO", type: "number", width: 130, align: "right", editable: true },
-        { key: "excedente", label: "EXCEDENTE", type: "number", width: 100, align: "right", editable: true },
+        {
+          key: "excedente",
+          label: "EXCEDENTE",
+          type: "number",
+          width: 100,
+          align: "right",
+          // Derivado: ejecutado - contrato. Tipearlo aparte deja al reclamo
+          // contradiciendo a sus dos columnas vecinas. `computed: true` es
+          // OBLIGATORIO: sin el la formula es inerte EN SILENCIO.
+          // Con el ejecutado en cero (cuadro recien sembrado) la celda queda
+          // VACIA: mostrar "-16850" en cada fila pareceria una deuda.
+          computed: true,
+          formula: "num(row.metradoEjecutado) ? round(num(row.metradoEjecutado) - num(row.metradoContrato), 2) : ''",
+          computedHint: "Se calcula solo: METRADO EJECUTADO menos METRADO CONTRATO."
+        },
+        { key: "precioUnitario", label: "P. UNITARIO", type: "currency", width: 110, align: "right", editable: true },
+        {
+          key: "importe",
+          label: "IMPORTE EXCEDENTE",
+          type: "currency",
+          width: 130,
+          align: "right",
+          // Un reclamo sin monto no se puede cobrar. Solo el excedente POSITIVO
+          // genera importe: por un deficit no se factura nada.
+          computed: true,
+          formula: "num(row.excedente) > 0 ? round(num(row.excedente) * num(row.precioUnitario), 2) : ''",
+          computedHint: "Se calcula solo: EXCEDENTE por P. UNITARIO."
+        },
         { key: "observacion", label: "OBSERVACION", type: "text", width: 180, align: "left", editable: true }
+      ]
+    },
+    {
+      id: "resumenReclamo",
+      type: "summary",
+      title: "Resumen del Reclamo",
+      gridColumns: 4,
+      fields: [
+        { key: "resumen.montoReclamado", label: "MONTO RECLAMADO", type: "currency", span: 2 },
+        { key: "resumen.partidasAfectadas", label: "PARTIDAS AFECTADAS", type: "number", span: 2 }
       ]
     },
     {
@@ -56598,9 +58320,15 @@ var informeReclamoSchema = {
         metradoContrato: 0,
         metradoEjecutado: 0,
         excedente: 0,
+        precioUnitario: 0,
+        importe: 0,
         observacion: ""
       }
     ],
+    resumen: {
+      montoReclamado: 0,
+      partidasAfectadas: 0
+    },
     sustento: "",
     conclusiones: "",
     registroFotografico: { fotos: [] },
@@ -56609,6 +58337,22 @@ var informeReclamoSchema = {
       aprobadoPor: { nombre: "", cargo: "Jefe de Proyecto", cip: "" }
     }
   },
+  // El resumen se DERIVA de los datos crudos (ejecutado, contrato, P.U.), NO de
+  // la columna `importe`: esa se persiste solo cuando alguien edita la tabla en
+  // el canvas, asi que un `sum(metradoReclamo, 'importe')` daria cero sobre un
+  // cuadro sembrado por el agregador o cargado por la API.
+  computedFields: [
+    {
+      key: "resumen.montoReclamado",
+      formula: "round((data.metradoReclamo || []).reduce((total, fila) => total + Math.max(0, num(fila.metradoEjecutado) ? num(fila.metradoEjecutado) - num(fila.metradoContrato) : 0) * num(fila.precioUnitario), 0), 2)",
+      dependencies: ["metradoReclamo"]
+    },
+    {
+      key: "resumen.partidasAfectadas",
+      formula: "(data.metradoReclamo || []).filter((fila) => num(fila.metradoEjecutado) > num(fila.metradoContrato)).length",
+      dependencies: ["metradoReclamo"]
+    }
+  ],
   exportOptions: {
     docx: true,
     pdf: true,
@@ -56626,8 +58370,8 @@ var levantamientoObsSchema = {
   name: "Informe Levantamiento Observaciones",
   description: "Registro de observaciones y acciones correctivas ejecutadas.",
   category: "Quality",
-  version: "1.0.0",
-  lastUpdated: "2026-02-10",
+  version: "1.1.0",
+  lastUpdated: "2026-07-30",
   orientation: "portrait",
   pageSize: "A4",
   margins: { top: 10, right: 10, bottom: 10, left: 10 },
@@ -56678,24 +58422,67 @@ var levantamientoObsSchema = {
       minRows: 1,
       maxRows: 200,
       columns: [
-        { key: "codigo", label: "CODIGO", type: "text", width: 80, align: "center", editable: true },
-        { key: "descripcion", label: "DESCRIPCION", type: "text", width: 240, align: "left", editable: true },
-        { key: "ubicacion", label: "UBICACION", type: "text", width: 150, align: "left", editable: true },
-        { key: "accionCorrectiva", label: "ACCION CORRECTIVA", type: "text", width: 220, align: "left", editable: true },
+        {
+          key: "codigo",
+          label: "CODIGO",
+          type: "text",
+          width: 70,
+          align: "center",
+          // Correlativo del documento, no del que tipea: borrar una fila del
+          // medio dejaba huecos (OBS-01, OBS-03) y dos filas con el mismo codigo
+          // rompen la trazabilidad de la observacion.
+          computed: true,
+          formula: "'OBS-' + String(rows.length + 1).padStart(2, '0')",
+          computedHint: "Correlativo automatico: numera segun el orden de las filas."
+        },
+        { key: "descripcion", label: "DESCRIPCION", type: "text", width: 200, align: "left", editable: true },
+        { key: "ubicacion", label: "UBICACION", type: "text", width: 110, align: "left", editable: true },
+        { key: "responsable", label: "RESPONSABLE", type: "text", width: 110, align: "left", editable: true },
+        { key: "accionCorrectiva", label: "ACCION CORRECTIVA", type: "text", width: 180, align: "left", editable: true },
+        { key: "plazo", label: "PLAZO", type: "date", width: 90, align: "center", editable: true },
+        { key: "fechaLevantamiento", label: "FECHA LEVANT.", type: "date", width: 95, align: "center", editable: true },
         {
           key: "estado",
           label: "ESTADO",
           type: "select",
-          width: 110,
+          width: 95,
           align: "center",
-          editable: true,
+          // El estado se DERIVA de la evidencia, no de la voluntad: se tipeaba
+          // aparte y el papel podia decir LEVANTADO con la fecha en blanco, o
+          // PENDIENTE con la observacion ya cerrada. Ahora manda el dato.
+          computed: true,
+          formula: "row.fechaLevantamiento ? 'LEVANTADO' : (String(row.accionCorrectiva || '').trim() ? 'EN_PROCESO' : 'PENDIENTE')",
+          computedHint: "Se calcula solo: pon la FECHA LEVANT. para que pase a LEVANTADO (con solo la accion correctiva queda EN PROCESO).",
           options: [
             { value: "PENDIENTE", label: "PENDIENTE" },
             { value: "EN_PROCESO", label: "EN PROCESO" },
             { value: "LEVANTADO", label: "LEVANTADO" }
           ]
         },
-        { key: "fechaLevantamiento", label: "FECHA LEVANT.", type: "date", width: 120, align: "center", editable: true }
+        {
+          key: "diasAtraso",
+          label: "DIAS ATRASO",
+          type: "number",
+          width: 70,
+          align: "right",
+          // Contra la fecha DEL INFORME cuando sigue abierta, nunca contra "hoy":
+          // un documento firmado no puede cambiar de numeros al reimprimirse.
+          computed: true,
+          formula: "row.plazo ? Math.round((Date.parse(String(row.fechaLevantamiento || (data.control || {}).fecha || row.plazo)) - Date.parse(String(row.plazo))) / 86400000) : ''",
+          computedHint: "Se calcula solo: PLAZO contra la fecha de levantamiento (o la del informe si sigue abierta)."
+        }
+      ]
+    },
+    {
+      id: "resumenLevantamiento",
+      type: "summary",
+      title: "Resumen del Levantamiento",
+      gridColumns: 4,
+      fields: [
+        { key: "resumen.total", label: "OBSERVACIONES", type: "number", span: 1 },
+        { key: "resumen.levantadas", label: "LEVANTADAS", type: "number", span: 1 },
+        { key: "resumen.pendientes", label: "PENDIENTES", type: "number", span: 1 },
+        { key: "resumen.porcentaje", label: "% LEVANTAMIENTO", type: "number", span: 1 }
       ]
     },
     {
@@ -56752,11 +58539,20 @@ var levantamientoObsSchema = {
         codigo: "OBS-01",
         descripcion: "",
         ubicacion: "",
+        responsable: "",
         accionCorrectiva: "",
+        plazo: "",
+        fechaLevantamiento: "",
         estado: "PENDIENTE",
-        fechaLevantamiento: ""
+        diasAtraso: ""
       }
     ],
+    resumen: {
+      total: 0,
+      levantadas: 0,
+      pendientes: 0,
+      porcentaje: 0
+    },
     evidencias: { fotos: [] },
     observacionesGenerales: "",
     firmas: {
@@ -56764,6 +58560,30 @@ var levantamientoObsSchema = {
       aprobadoPor: { nombre: "", cargo: "Jefe de Proyecto", cip: "" }
     }
   },
+  // Las filas EN BLANCO no son observaciones: la tabla arranca con una y casi
+  // nadie la borra. Contarlas bajaria el % de levantamiento sin motivo.
+  computedFields: [
+    {
+      key: "resumen.total",
+      formula: "(data.observaciones || []).filter((obs) => String(obs.descripcion || '').trim()).length",
+      dependencies: ["observaciones"]
+    },
+    {
+      key: "resumen.levantadas",
+      formula: "(data.observaciones || []).filter((obs) => String(obs.descripcion || '').trim() && obs.fechaLevantamiento).length",
+      dependencies: ["observaciones"]
+    },
+    {
+      key: "resumen.pendientes",
+      formula: "num(data.resumen.total) - num(data.resumen.levantadas)",
+      dependencies: ["resumen.total", "resumen.levantadas"]
+    },
+    {
+      key: "resumen.porcentaje",
+      formula: "round((num(data.resumen.levantadas) / Math.max(1, num(data.resumen.total))) * 100, 0)",
+      dependencies: ["resumen.total", "resumen.levantadas"]
+    }
+  ],
   exportOptions: {
     docx: true,
     pdf: true,
@@ -57072,7 +58892,7 @@ var protocoloTopoCompletoSchema = {
   name: "Protocolo Topografia Completo",
   description: "Registro completo de control topografico con planimetria y altimetria.",
   category: "Technical",
-  version: "1.0.0",
+  version: "1.1.0",
   lastUpdated: "2026-02-10",
   orientation: "portrait",
   pageSize: "A4",
@@ -57115,7 +58935,14 @@ var protocoloTopoCompletoSchema = {
         { key: "topografia.equipo", label: "EQUIPO", type: "text", span: 4 },
         { key: "topografia.operador", label: "OPERADOR", type: "text", span: 4 },
         { key: "topografia.sistemaReferencia", label: "SISTEMA REF.", type: "text", span: 5 },
-        { key: "topografia.metodologia", label: "METODOLOGIA", type: "text", span: 4 }
+        { key: "topografia.metodologia", label: "METODOLOGIA", type: "text", span: 4 },
+        // El "completo" es SUPERSET del simple (TOP-PROT): la precision del equipo
+        // aplica a los dos protocolos, no tiene por que faltar aca.
+        { key: "topografia.precision", label: "PRECISION", type: "text", span: 2 },
+        // Las tolerancias del proyecto: SIN ellas el protocolo no puede
+        // dictaminar nada y el "SI" del resumen queda a criterio del que tipea.
+        { key: "topografia.toleranciaPlanimetrica", label: "TOL. PLANIM. (m)", type: "number", span: 3 },
+        { key: "topografia.toleranciaAltimetrica", label: "TOL. ALTIM. (m)", type: "number", span: 3 }
       ]
     },
     {
@@ -57128,8 +58955,38 @@ var protocoloTopoCompletoSchema = {
       columns: [
         { key: "punto", label: "PUNTO", type: "text", width: 90, align: "center", editable: true },
         { key: "este", label: "ESTE (m)", type: "number", width: 120, align: "right", editable: true },
-        { key: "norte", label: "NORTE (m)", type: "number", width: 120, align: "right", editable: true },
-        { key: "observacion", label: "OBSERVACION", type: "text", width: 200, align: "left", editable: true }
+        { key: "norte", label: "NORTE (m)", type: "number", width: 110, align: "right", editable: true },
+        { key: "esteProyecto", label: "ESTE PROY.", type: "number", width: 110, align: "right", editable: true },
+        { key: "norteProyecto", label: "NORTE PROY.", type: "number", width: 110, align: "right", editable: true },
+        {
+          key: "error",
+          label: "ERROR (m)",
+          type: "number",
+          width: 85,
+          align: "right",
+          // Error de replanteo = distancia entre el punto medido y el de
+          // proyecto. Se tipeaba a mano, asi que el "SI" que firma el supervisor
+          // no se podia auditar. Sin coordenada de proyecto queda VACIO: un cero
+          // ahi diria "replanteo perfecto" sobre un punto que nadie comparo.
+          computed: true,
+          formula: "num(row.esteProyecto) || num(row.norteProyecto) ? round(Math.sqrt(Math.pow(num(row.este) - num(row.esteProyecto), 2) + Math.pow(num(row.norte) - num(row.norteProyecto), 2)), 3) : ''",
+          computedHint: "Se calcula solo: distancia entre el punto medido y el de proyecto. Llena ESTE PROY. y NORTE PROY."
+        },
+        {
+          key: "cumple",
+          label: "CUMPLE",
+          type: "select",
+          width: 75,
+          align: "center",
+          computed: true,
+          formula: "num((data.topografia || {}).toleranciaPlanimetrica) > 0 && row.error !== '' ? (num(row.error) <= num((data.topografia || {}).toleranciaPlanimetrica) ? 'SI' : 'NO') : ''",
+          computedHint: "Se calcula solo: compara el ERROR con la TOL. PLANIM. declarada arriba.",
+          options: [
+            { value: "SI", label: "SI" },
+            { value: "NO", label: "NO" }
+          ]
+        },
+        { key: "observacion", label: "OBSERVACION", type: "text", width: 150, align: "left", editable: true }
       ]
     },
     {
@@ -57141,9 +58998,45 @@ var protocoloTopoCompletoSchema = {
       maxRows: 200,
       columns: [
         { key: "punto", label: "PUNTO", type: "text", width: 90, align: "center", editable: true },
-        { key: "cota", label: "COTA (m)", type: "number", width: 120, align: "right", editable: true },
-        { key: "diferencia", label: "DIFERENCIA", type: "number", width: 120, align: "right", editable: true },
-        { key: "observacion", label: "OBSERVACION", type: "text", width: 200, align: "left", editable: true }
+        { key: "cota", label: "COTA (m)", type: "number", width: 110, align: "right", editable: true },
+        { key: "cotaProyecto", label: "COTA PROY. (m)", type: "number", width: 120, align: "right", editable: true },
+        {
+          key: "diferencia",
+          label: "DIFERENCIA (m)",
+          type: "number",
+          width: 110,
+          align: "right",
+          computed: true,
+          formula: "num(row.cotaProyecto) ? round(num(row.cota) - num(row.cotaProyecto), 3) : ''",
+          computedHint: "Se calcula solo: COTA menos COTA PROY."
+        },
+        {
+          key: "cumple",
+          label: "CUMPLE",
+          type: "select",
+          width: 75,
+          align: "center",
+          // Valor ABSOLUTO: quedarse corto rompe la rasante igual que pasarse.
+          computed: true,
+          formula: "num((data.topografia || {}).toleranciaAltimetrica) > 0 && row.diferencia !== '' ? (Math.abs(num(row.diferencia)) <= num((data.topografia || {}).toleranciaAltimetrica) ? 'SI' : 'NO') : ''",
+          computedHint: "Se calcula solo: compara la DIFERENCIA (en valor absoluto) con la TOL. ALTIM.",
+          options: [
+            { value: "SI", label: "SI" },
+            { value: "NO", label: "NO" }
+          ]
+        },
+        { key: "observacion", label: "OBSERVACION", type: "text", width: 160, align: "left", editable: true }
+      ]
+    },
+    {
+      id: "resumenTopografico",
+      type: "summary",
+      title: "Resumen Topografico",
+      gridColumns: 3,
+      fields: [
+        { key: "resumen.puntos", label: "PUNTOS DE PLANIMETRIA", type: "number", span: 1 },
+        { key: "resumen.errorMaximo", label: "ERROR MAXIMO (m)", type: "number", span: 1 },
+        { key: "resumen.fueraTolerancia", label: "FUERA DE TOLERANCIA", type: "number", span: 1 }
       ]
     },
     {
@@ -57215,14 +59108,22 @@ var protocoloTopoCompletoSchema = {
       equipo: "",
       operador: "",
       sistemaReferencia: "",
-      metodologia: ""
+      metodologia: "",
+      precision: "",
+      toleranciaPlanimetrica: 0,
+      toleranciaAltimetrica: 0
     },
     planimetria: [
-      { punto: "", este: 0, norte: 0, observacion: "" }
+      { punto: "", este: 0, norte: 0, esteProyecto: 0, norteProyecto: 0, error: "", cumple: "", observacion: "" }
     ],
     altimetria: [
-      { punto: "", cota: 0, diferencia: 0, observacion: "" }
+      { punto: "", cota: 0, cotaProyecto: 0, diferencia: "", cumple: "", observacion: "" }
     ],
+    resumen: {
+      puntos: 0,
+      errorMaximo: 0,
+      fueraTolerancia: 0
+    },
     resumenControl: [
       { control: "", resultado: "", tolerancia: "", cumple: "SI" }
     ],
@@ -57233,6 +59134,25 @@ var protocoloTopoCompletoSchema = {
       aprobadoPor: { nombre: "", cargo: "Supervisor", cip: "" }
     }
   },
+  // Derivados de los datos CRUDOS (medido vs proyecto), no de las columnas
+  // computadas: esas se persisten solo si alguien edita la tabla en el canvas.
+  computedFields: [
+    {
+      key: "resumen.puntos",
+      formula: "(data.planimetria || []).filter((punto) => String(punto.punto || '').trim()).length",
+      dependencies: ["planimetria"]
+    },
+    {
+      key: "resumen.errorMaximo",
+      formula: "round((data.planimetria || []).reduce((peor, punto) => Math.max(peor, num(punto.esteProyecto) || num(punto.norteProyecto) ? Math.sqrt(Math.pow(num(punto.este) - num(punto.esteProyecto), 2) + Math.pow(num(punto.norte) - num(punto.norteProyecto), 2)) : 0), 0), 3)",
+      dependencies: ["planimetria"]
+    },
+    {
+      key: "resumen.fueraTolerancia",
+      formula: "(data.planimetria || []).filter((punto) => num((data.topografia || {}).toleranciaPlanimetrica) > 0 && (num(punto.esteProyecto) || num(punto.norteProyecto)) && Math.sqrt(Math.pow(num(punto.este) - num(punto.esteProyecto), 2) + Math.pow(num(punto.norte) - num(punto.norteProyecto), 2)) > num((data.topografia || {}).toleranciaPlanimetrica)).length + (data.altimetria || []).filter((punto) => num((data.topografia || {}).toleranciaAltimetrica) > 0 && num(punto.cotaProyecto) && Math.abs(num(punto.cota) - num(punto.cotaProyecto)) > num((data.topografia || {}).toleranciaAltimetrica)).length",
+      dependencies: ["planimetria", "altimetria"]
+    }
+  ],
   exportOptions: {
     docx: true,
     pdf: true,
@@ -57250,8 +59170,8 @@ var dossierObraSchema = {
   name: "Dossier de Obra Completo",
   description: "Compilacion de documentos clave de la obra.",
   category: "Compilation",
-  version: "1.0.0",
-  lastUpdated: "2026-02-10",
+  version: "1.2.0",
+  lastUpdated: "2026-07-30",
   orientation: "portrait",
   pageSize: "A4",
   margins: { top: 10, right: 10, bottom: 10, left: 10 },
@@ -57321,6 +59241,103 @@ var dossierObraSchema = {
         { key: "panelFotografico", label: "Panel fotografico", required: true }
       ]
     },
+    // D4 — Vigencias. El dolor #2 de la industria: rastrear a mano el vencimiento
+    // de cientos de certificados. Gated para no alterar los dossiers ya emitidos.
+    {
+      id: "certificados",
+      type: "dataTable",
+      title: "Certificados y Vigencias",
+      showIf: { field: "opciones.certificados", operator: "eq", value: true },
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 100,
+      columns: [
+        { key: "documento", label: "DOCUMENTO", type: "text", width: 200, align: "left", editable: true },
+        { key: "emisor", label: "EMISOR", type: "text", width: 140, align: "left", editable: true },
+        { key: "numero", label: "NUMERO", type: "text", width: 100, align: "center", editable: true },
+        { key: "emision", label: "EMISION", type: "date", width: 100, align: "center", editable: true },
+        { key: "vencimiento", label: "VENCIMIENTO", type: "date", width: 110, align: "center", editable: true }
+      ]
+    },
+    // D5 — Los bloques que la industria exige y el dossier no tenia. Todos gated:
+    // un dossier ya emitido no tiene los flags y `showIf` da false.
+    {
+      id: "planosAsBuilt",
+      type: "dataTable",
+      title: "Planos As-Built",
+      showIf: { field: "opciones.planos", operator: "eq", value: true },
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 200,
+      columns: [
+        { key: "item", label: "ITEM", type: "text", width: 50, align: "center", editable: true },
+        { key: "plano", label: "PLANO", type: "text", width: 220, align: "left", editable: true },
+        { key: "codigo", label: "CODIGO", type: "text", width: 100, align: "center", editable: true },
+        { key: "version", label: "VERSION", type: "text", width: 80, align: "center", editable: true },
+        { key: "fecha", label: "FECHA", type: "date", width: 100, align: "center", editable: true },
+        { key: "formato", label: "FORMATO", type: "text", width: 90, align: "center", editable: true }
+      ]
+    },
+    {
+      id: "garantias",
+      type: "dataTable",
+      title: "Garantias",
+      showIf: { field: "opciones.garantias", operator: "eq", value: true },
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 60,
+      columns: [
+        { key: "documento", label: "CONCEPTO", type: "text", width: 200, align: "left", editable: true },
+        { key: "emisor", label: "OTORGADA POR", type: "text", width: 140, align: "left", editable: true },
+        { key: "alcance", label: "ALCANCE", type: "text", width: 180, align: "left", editable: true },
+        { key: "emision", label: "INICIO", type: "date", width: 100, align: "center", editable: true },
+        { key: "vencimiento", label: "VENCE", type: "date", width: 100, align: "center", editable: true }
+      ]
+    },
+    {
+      id: "subcontratistas",
+      type: "dataTable",
+      title: "Relacion de Subcontratistas",
+      showIf: { field: "opciones.subcontratistas", operator: "eq", value: true },
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 60,
+      columns: [
+        { key: "razonSocial", label: "RAZON SOCIAL", type: "text", width: 200, align: "left", editable: true },
+        { key: "ruc", label: "RUC", type: "text", width: 100, align: "center", editable: true },
+        { key: "alcance", label: "ALCANCE DEL TRABAJO", type: "text", width: 200, align: "left", editable: true },
+        { key: "contacto", label: "CONTACTO", type: "text", width: 130, align: "left", editable: true },
+        { key: "sctrVence", label: "SCTR VENCE", type: "date", width: 100, align: "center", editable: true }
+      ]
+    },
+    {
+      id: "cierreSsoma",
+      type: "dataTable",
+      title: "Cierre de SSOMA",
+      showIf: { field: "opciones.ssoma", operator: "eq", value: true },
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 100,
+      columns: [
+        { key: "item", label: "ITEM", type: "text", width: 50, align: "center", editable: true },
+        { key: "descripcion", label: "INCIDENCIA / REQUISITO", type: "text", width: 260, align: "left", editable: true },
+        {
+          key: "estado",
+          label: "ESTADO",
+          type: "select",
+          width: 110,
+          align: "center",
+          editable: true,
+          options: [
+            { value: "CERRADO", label: "Cerrado" },
+            { value: "PENDIENTE", label: "Pendiente" },
+            { value: "NO_APLICA", label: "No aplica" }
+          ]
+        },
+        { key: "fecha", label: "FECHA CIERRE", type: "date", width: 105, align: "center", editable: true },
+        { key: "responsable", label: "RESPONSABLE", type: "text", width: 140, align: "left", editable: true }
+      ]
+    },
     {
       id: "registroFotografico",
       type: "photoPanel",
@@ -57370,6 +59387,22 @@ var dossierObraSchema = {
       actas: false,
       panelFotografico: false
     },
+    // D4: el flag enciende la seccion en los dossiers NUEVOS; los viejos no lo
+    // tienen y `showIf` da false, asi que su documento no cambia.
+    opciones: {
+      certificados: true,
+      planos: true,
+      garantias: true,
+      subcontratistas: true,
+      ssoma: true
+    },
+    planosAsBuilt: [{ item: "", plano: "", codigo: "", version: "", fecha: "", formato: "" }],
+    garantias: [{ documento: "", emisor: "", alcance: "", emision: "", vencimiento: "" }],
+    subcontratistas: [{ razonSocial: "", ruc: "", alcance: "", contacto: "", sctrVence: "" }],
+    cierreSsoma: [{ item: "", descripcion: "", estado: "", fecha: "", responsable: "" }],
+    certificados: [
+      { documento: "", emisor: "", numero: "", emision: "", vencimiento: "" }
+    ],
     registroFotografico: { fotos: [] },
     firmas: {
       elaboradoPor: { nombre: "", cargo: "Responsable del Dossier", cip: "" },
@@ -58457,7 +60490,11 @@ var cotizacionAsfaltoSchema = {
       showTitle: false,
       // tableStyle 'columns' + relleno hasta 12 filas + decimales fijos = PDF legacy.
       tableStyle: "columns",
-      minVisibleRows: 12,
+      // Relleno de la tabla a la MITAD (12 -> 6). Con 1 solo ítem, 12 filas
+      // vacías comían un tercio de la hoja y empujaban el cierre (firma + cuentas)
+      // a una segunda página (producción, COT-0000273). 6 alcanzan para que la
+      // tabla se lea "cerrada" sin gastar la hoja.
+      minVisibleRows: 6,
       dynamicRows: true,
       minRows: 1,
       columns: [
@@ -58698,7 +60735,11 @@ var cotizacionServicioSchema = {
       showTitle: false,
       // tableStyle 'columns' + agrupacion por fase (1 / 1.1 / 1.2…) + relleno = PDF legacy.
       tableStyle: "columns",
-      minVisibleRows: 20,
+      // Relleno de la tabla a la MITAD (20 -> 10). Con 1 solo ítem, 20 filas
+      // vacías comían un tercio de la hoja y empujaban el cierre (firma + cuentas)
+      // a una segunda página (producción, COT-0000273). 10 alcanzan para que la
+      // tabla se lea "cerrada" sin gastar la hoja.
+      minVisibleRows: 10,
       groupBy: { key: "phase", codeColumnKey: "itemCode" },
       dynamicRows: true,
       minRows: 1,
@@ -59143,8 +61184,18 @@ El inicio de los trabajos est\xE1 condicionado a que EL CLIENTE proporcione el a
 
 La conformidad del servicio ser\xE1 otorgada por EL CLIENTE en un plazo no mayor a 10 d\xEDas calendario contados desde la culminaci\xF3n de los trabajos, previa verificaci\xF3n del cumplimiento de las especificaciones t\xE9cnicas.
 
-En caso de incumplimiento del plazo por causas imputables a EL PROVEEDOR, se aplicar\xE1 una penalidad de 0.10% del monto del contrato por cada d\xEDa de retraso, hasta un m\xE1ximo del 10% del monto total.`;
-var CLAUSULA6_DEFAULT = `En lo no previsto en este contrato, en la Ley y su Reglamento, ser\xE1 de aplicaci\xF3n las disposiciones pertinentes del C\xF3digo Civil vigente y dem\xE1s normas concordantes del ordenamiento jur\xEDdico peruano.`;
+En caso de incumplimiento del plazo por causas imputables a EL PROVEEDOR, se aplicar\xE1 una penalidad de 0.10% del monto del contrato por cada d\xEDa de retraso, hasta un m\xE1ximo del 10% del monto total.
+
+RENDIMIENTO PACTADO. El plazo se calcula sobre los rendimientos acordados en el Anexo 2 (Cronograma de Ejecuci\xF3n). Esos rendimientos son la referencia contractual del avance: el cumplimiento del plazo se eval\xFAa contra ellos y no contra expectativas no pactadas.
+
+El cronograma asume frentes de trabajo continuos y disponibles. Si EL CLIENTE entrega frentes parciales, discontinuos o en menor cantidad que la prevista, o si el rendimiento se ve afectado por causas ajenas a EL PROVEEDOR, el plazo se ampliar\xE1 en la proporci\xF3n correspondiente conforme a la cl\xE1usula de ampliaciones de plazo.`;
+var CLAUSULA6_DEFAULT = `El presente contrato se rige por la voluntad de las partes expresada en este documento y sus anexos, y supletoriamente por el C\xF3digo Civil peruano, en particular las disposiciones del contrato de obra (art\xEDculos 1771 y siguientes) y de prestaci\xF3n de servicios.
+
+Este contrato es celebrado entre partes privadas: el r\xE9gimen de contrataciones p\xFAblicas (Ley N\xB0 32069 y su Reglamento) NO le resulta aplicable, salvo pacto expreso y por escrito de las partes cuando el servicio se ejecute como parte de un contrato principal celebrado con una Entidad, y \xFAnicamente respecto de las obligaciones t\xE9cnicas expresamente incorporadas por remisi\xF3n.
+
+Son tambi\xE9n aplicables las normas t\xE9cnicas y de seguridad vigentes, en particular la Norma G.050 Seguridad durante la construcci\xF3n del Reglamento Nacional de Edificaciones y la Norma T\xE9cnica CE.010 Pavimentos Urbanos.
+
+El presente contrato se celebra bajo el sistema de PRECIOS UNITARIOS: EL CLIENTE pagar\xE1 el metrado REALMENTE EJECUTADO y verificado, aplicando los precios unitarios pactados en el Anexo de partidas. Los mayores metrados ejecutados por indicaci\xF3n de EL CLIENTE o de la supervisi\xF3n se pagan al precio unitario pactado, sin necesidad de nueva negociaci\xF3n de precio.`;
 var CLAUSULA7_DEFAULT = `EL CLIENTE entrega a EL PROVEEDOR el acabado de la base cumpliendo con las especificaciones t\xE9cnicas del expediente junto con los certificados y ensayos de compactaci\xF3n previos a la imprimaci\xF3n asf\xE1ltica, siendo responsabilidad de EL CLIENTE las fallas de los niveles de terminaci\xF3n del terreno.
 
 Dar las garant\xEDas del caso para la buena ejecuci\xF3n de la obra, as\xED mismo todo pago sindical ser\xE1 cubierto por EL CLIENTE.
@@ -59157,21 +61208,66 @@ EL PROVEEDOR garantiza que la mezcla asf\xE1ltica en caliente llegar\xE1 al luga
 
 El espesor de la carpeta asf\xE1ltica ser\xE1 el definido en las partidas o especificaciones t\xE9cnicas contratadas y ser\xE1 controlado durante la colocaci\xF3n.
 
-Ni la suscripci\xF3n del Acta de Recepci\xF3n del servicio, ni el consentimiento de la liquidaci\xF3n del contrato de obra, enervan el derecho de EL CLIENTE a reclamar, posteriormente, por defectos o vicios ocultos, conforme al art\xEDculo 40 de la Ley de Contrataciones del Estado y el art\xEDculo 146 de su Reglamento. El plazo m\xE1ximo de responsabilidad de EL PROVEEDOR es de 7 A\xD1OS, contados a partir de la conformidad de la recepci\xF3n del Servicio, sin comprender fallas estructurales o de subbase ajenas a la prestaci\xF3n contratada.`;
-var CLAUSULA8_DEFAULT = `Cualquiera de las partes tiene el derecho a iniciar el arbitraje administrativo a fin de resolver las controversias que se presenten durante la etapa de ejecuci\xF3n contractual, conforme a los art\xEDculos 144, 170, 175 y 177 del Reglamento y el art\xEDculo 52 de la Ley.
+GARANT\xCDA Y PLAZO DE RESPONSABILIDAD. EL PROVEEDOR responde por los vicios de construcci\xF3n imputables a su prestaci\xF3n conforme al art\xEDculo 1784 del C\xF3digo Civil, esto es, dentro del plazo de CINCO (5) A\xD1OS contados desde la aceptaci\xF3n de la obra. Dicha responsabilidad NO comprende: (i) fallas de la subbase, base, terreno de fundaci\xF3n o niveles de terminaci\xF3n entregados por EL CLIENTE; (ii) defectos derivados de materiales, estudios, planos o especificaciones proporcionados por EL CLIENTE; (iii) da\xF1os por uso indebido, sobrecarga, falta de mantenimiento o intervenci\xF3n de terceros; ni (iv) desgaste natural.
 
-Facultativamente, cualquiera de las partes podr\xE1 someter a conciliaci\xF3n la referida controversia, conforme al art\xEDculo 214 del Reglamento de la Ley de Contrataciones del Estado, sin perjuicio de recurrir al arbitraje.
+Conforme al art\xEDculo 1783 del C\xF3digo Civil, EL CLIENTE deber\xE1 comunicar a EL PROVEEDOR las diversidades o los vicios de la obra dentro de los SESENTA (60) D\xCDAS siguientes a la recepci\xF3n, bajo sanci\xF3n de caducidad. La acci\xF3n correspondiente caduca al A\xD1O computado desde el d\xEDa siguiente de dicha comunicaci\xF3n.
 
-El laudo arbitral emitido es definitivo e inapelable, tiene el valor de cosa juzgada y se ejecuta como una sentencia.`;
+L\xCDMITE DE RESPONSABILIDAD. La responsabilidad total y acumulada de EL PROVEEDOR por cualquier concepto derivado de este contrato no exceder\xE1 el monto contractual efectivamente pagado. En ning\xFAn caso EL PROVEEDOR responder\xE1 por da\xF1os indirectos, lucro cesante, p\xE9rdida de producci\xF3n, penalidades que EL CLIENTE haya pactado con terceros, ni por da\xF1o moral, salvo dolo o culpa inexcusable acreditados.`;
+var CLAUSULA8_DEFAULT = `TRATO DIRECTO. Toda controversia derivada de la interpretaci\xF3n, ejecuci\xF3n o resoluci\xF3n de este contrato ser\xE1 resuelta primero en trato directo, en un plazo de DIEZ (10) D\xCDAS H\xC1BILES desde que una parte notifique a la otra por escrito. Este plazo NO suspende la obligaci\xF3n de pago de las valorizaciones no controvertidas.
+
+ARBITRAJE. De no llegarse a acuerdo, la controversia se someter\xE1 a arbitraje de derecho, institucional y con \xE1rbitro \xDANICO, administrado por el Centro de Arbitraje de la C\xE1mara de Comercio de Lima conforme a su Reglamento vigente. La sede del arbitraje es la ciudad de Lima, el idioma es el castellano y la ley aplicable es la peruana. El laudo es definitivo e inapelable, tiene valor de cosa juzgada y se ejecuta como una sentencia.
+
+Los costos del arbitraje ser\xE1n asumidos inicialmente por partes iguales y en definitiva por la parte vencida, conforme lo determine el laudo.
+
+COBRANZA. Las pretensiones de EL PROVEEDOR referidas exclusivamente al COBRO de valorizaciones o facturas no observadas dentro del plazo contractual podr\xE1n tramitarse, a su elecci\xF3n, en la v\xEDa judicial ante los jueces de Lima Cercado, sin necesidad de arbitraje previo. Un arbitraje NO es el camino para cobrar una factura que nadie objet\xF3.`;
 var CLAUSULA9_DEFAULT = `Las partes contratantes han declarado sus respectivos domicilios en la parte introductoria del presente contrato. Cualquier cambio de domicilio deber\xE1 ser comunicado por escrito a la otra parte con una anticipaci\xF3n m\xEDnima de 5 d\xEDas h\xE1biles.`;
+var CLAUSULA10_DEFAULT = `ALCANCE EXCLUIDO. Salvo pacto expreso y por escrito, NO forman parte del alcance de EL PROVEEDOR ni de su precio: (i) la ejecuci\xF3n, correcci\xF3n o saneamiento de la subbase, base y terreno de fundaci\xF3n, ni sus niveles de terminaci\xF3n; (ii) el retiro de desmonte, material excedente o interferencias preexistentes; (iii) desv\xEDos vehiculares, se\xF1alizaci\xF3n externa y control de tr\xE1nsito; (iv) licencias, permisos, autorizaciones municipales y servidumbres; (v) suministro de agua y energ\xEDa en obra; (vi) vigilancia y custodia fuera del horario de trabajo; (vii) pagos sindicales o cupos de cualquier naturaleza; y (viii) toda partida no listada en el Anexo de presupuesto.
+
+CONDICIONES PREVIAS. EL PROVEEDOR iniciar\xE1 los trabajos \xFAnicamente cuando EL CLIENTE haya cumplido las condiciones previas del cuadro siguiente. El plazo contractual empieza a correr desde el cumplimiento de la \xDALTIMA de ellas, y no antes.
+
+Si vencida la fecha prevista de inicio las condiciones previas no est\xE1n cumplidas por causa no imputable a EL PROVEEDOR, este tendr\xE1 derecho a: (a) la ampliaci\xF3n del plazo por el tiempo equivalente; (b) el reconocimiento de los costos de permanencia de equipos y personal conforme al tarifario de la cl\xE1usula siguiente; y (c) de superarse los treinta (30) d\xEDas calendario, a resolver el contrato sin penalidad, con pago de lo ejecutado y de la desmovilizaci\xF3n.`;
+var CLAUSULA11_DEFAULT = `REAJUSTE DE PRECIOS. Los precios unitarios se pactan a la fecha de suscripci\xF3n. Si durante la ejecuci\xF3n el precio de los insumos principales del servicio (asfalto, cemento, acero y/o combustible, seg\xFAn corresponda a las partidas contratadas) var\xEDa por encima del umbral porcentual indicado en el cuadro de esta cl\xE1usula, cualquiera de las partes podr\xE1 solicitar el reajuste de los precios unitarios a\xFAn no ejecutados.
+
+El reajuste se calcular\xE1 por f\xF3rmula polin\xF3mica aplicando el coeficiente K derivado de los \xCDndices Unificados de Precios de la Construcci\xF3n publicados por el INEI, tomando como mes base el indicado en el cuadro. A falta de acuerdo dentro de los diez (10) d\xEDas h\xE1biles de solicitado el reajuste, EL PROVEEDOR podr\xE1 suspender la ejecuci\xF3n de las partidas afectadas sin penalidad ni responsabilidad, con la consiguiente ampliaci\xF3n de plazo.
+
+TIEMPOS DE ESPERA (STAND-BY). El tiempo en que los equipos, unidades de transporte o cuadrillas de EL PROVEEDOR permanezcan inmovilizados en obra por causa imputable a EL CLIENTE \u2014frente no liberado, demora en la descarga, falta de aprobaci\xF3n, interferencia no retirada, corte de v\xEDa u otras\u2014 se facturar\xE1 conforme al tarifario de esta cl\xE1usula, computado a partir del tiempo de tolerancia all\xED indicado.
+
+El registro del tiempo de espera se har\xE1 mediante el vale, parte diario o registro digital de EL PROVEEDOR, que se tendr\xE1 por conforme si EL CLIENTE no lo observa por escrito dentro de las cuarenta y ocho (48) horas de comunicado.`;
+var CLAUSULA12_DEFAULT = `MORA DE EL CLIENTE. Vencido el plazo de pago sin que EL CLIENTE haya cancelado una factura no observada, incurrir\xE1 en mora autom\xE1tica, sin necesidad de intimaci\xF3n, devengando el inter\xE9s mensual indicado en el cuadro de esta cl\xE1usula sobre el monto impago.
+
+SUSPENSI\xD3N POR IMPAGO. Superado el plazo de suspensi\xF3n indicado en el cuadro desde el vencimiento de una factura no observada, EL PROVEEDOR podr\xE1 suspender la ejecuci\xF3n previa comunicaci\xF3n escrita, sin que ello constituya incumplimiento ni genere penalidad alguna a su cargo. La suspensi\xF3n otorga a EL PROVEEDOR ampliaci\xF3n de plazo por el per\xEDodo de suspensi\xF3n, m\xE1s el tiempo razonable de removilizaci\xF3n, y el derecho al reconocimiento de los costos de desmovilizaci\xF3n y removilizaci\xF3n.
+
+OBSERVACI\xD3N DE FACTURAS. EL CLIENTE deber\xE1 observar por escrito y de manera fundamentada cualquier valorizaci\xF3n o factura dentro de los cinco (5) d\xEDas h\xE1biles de recibida. Vencido ese plazo sin observaci\xF3n, la valorizaci\xF3n o factura se tendr\xE1 por CONFORME y exigible.
+
+RETENCIONES Y FONDO DE GARANT\xCDA. De pactarse retenci\xF3n, esta no exceder\xE1 el porcentaje indicado en el cuadro sobre cada valorizaci\xF3n y se liberar\xE1 \xEDntegramente dentro del plazo all\xED se\xF1alado, contado desde la conformidad del servicio. La retenci\xF3n no sustituye ni se acumula a otras garant\xEDas.
+
+R\xC9GIMEN TRIBUTARIO. Los precios no incluyen el IGV, que se facturar\xE1 conforme a ley. La operaci\xF3n est\xE1 sujeta al Sistema de Pago de Obligaciones Tributarias (detracci\xF3n) con la tasa indicada en el cuadro, seg\xFAn la clasificaci\xF3n que corresponda a la prestaci\xF3n. EL CLIENTE efectuar\xE1 el dep\xF3sito de la detracci\xF3n dentro del plazo legal; su omisi\xF3n no habilita a retener ni a diferir el pago del saldo.
+
+CESI\xD3N DE DERECHOS DE CR\xC9DITO. EL PROVEEDOR podr\xE1 ceder a terceros, total o parcialmente, sus derechos de cr\xE9dito derivados de este contrato (incluido el factoring), bastando la comunicaci\xF3n escrita a EL CLIENTE. EL CLIENTE no podr\xE1 negar la conformidad de la factura por esta causa. La cesi\xF3n de la POSICI\xD3N CONTRACTUAL s\xED requiere acuerdo escrito de ambas partes.`;
+var CLAUSULA14_DEFAULT = `INCORPORACION LIMITADA. EL PROVEEDOR ejecuta su prestaci\xF3n como SUBCONTRATISTA de EL CLIENTE, quien mantiene un contrato principal con la Entidad indicada en la modalidad del contrato. Se incorporan a este subcontrato \xDANICAMENTE las obligaciones T\xC9CNICAS del contrato principal que sean aplicables al alcance contratado \u2014especificaciones, normas de calidad, protocolos de ensayo y exigencias de seguridad\u2014 y siempre que hayan sido entregadas por escrito a EL PROVEEDOR ANTES de la suscripci\xF3n. Lo que no se entreg\xF3 no se incorpora.
+
+LO QUE NO SE INCORPORA. No se trasladan a EL PROVEEDOR, ni directa ni indirectamente: (i) las penalidades pactadas entre EL CLIENTE y la Entidad; (ii) el r\xE9gimen de responsabilidad de la contrataci\xF3n p\xFAblica, incluido el plazo de siete (7) a\xF1os \u2014rige el plazo de CINCO (5) A\xD1OS del art\xEDculo 1784 del C\xF3digo Civil pactado en este contrato\u2014; (iii) la cl\xE1usula de soluci\xF3n de controversias del contrato principal; (iv) las garant\xEDas, cartas fianza y retenciones exigidas a EL CLIENTE como contratista principal; ni (v) cualquier obligaci\xF3n del contrato principal no comunicada por escrito antes de la firma.
+
+EL PAGO NO DEPENDE DEL PAGO DE LA ENTIDAD. La obligaci\xF3n de EL CLIENTE de pagar las valorizaciones de EL PROVEEDOR es INDEPENDIENTE y AUT\xD3NOMA respecto de los pagos que la Entidad efect\xFAe a EL CLIENTE. No se pacta cl\xE1usula de pago condicionado (pay-when-paid ni pay-if-paid): el atraso o el impago de la Entidad no suspende, difiere ni extingue el derecho de EL PROVEEDOR a cobrar en los plazos de este contrato.
+
+INFORMACION Y COORDINACION. EL CLIENTE entregar\xE1 a EL PROVEEDOR, dentro de los cinco (5) d\xEDas h\xE1biles de suscrito el contrato, los anexos t\xE9cnicos del contrato principal aplicables al alcance, y le comunicar\xE1 por escrito toda orden, observaci\xF3n o requerimiento de la Entidad o de la supervisi\xF3n que afecte su prestaci\xF3n. La falta de traslado oportuno de una instrucci\xF3n no es imputable a EL PROVEEDOR.
+
+CAUSAS ATRIBUIBLES A LA ENTIDAD. Cuando el atraso, la paralizaci\xF3n o el mayor costo tengan origen en la Entidad o en la supervisi\xF3n, EL CLIENTE gestionar\xE1 ante ella el reconocimiento correspondiente y trasladar\xE1 a EL PROVEEDOR lo que obtenga, sin perjuicio de las ampliaciones de plazo y del reconocimiento de costos de permanencia previstos en este contrato, que operan de manera independiente.
+
+RESOLUCION DEL CONTRATO PRINCIPAL. Si el contrato principal se resuelve por causa no imputable a EL PROVEEDOR, este tendr\xE1 derecho al pago \xEDntegro de lo ejecutado y aprobado, de los materiales acopiados en obra y de los costos de desmovilizaci\xF3n, sin penalidad alguna a su cargo.`;
+var CLAUSULA13_DEFAULT = `CAUSALES. EL PROVEEDOR tiene derecho a la ampliaci\xF3n del plazo contractual, sin penalidad, cuando el atraso obedezca a: (i) incumplimiento de las condiciones previas o entrega tard\xEDa del frente de trabajo; (ii) base, subbase o terreno que no cumplan las especificaciones; (iii) demora de EL CLIENTE o de la supervisi\xF3n en aprobaciones, absoluciones de consulta o entrega de informaci\xF3n; (iv) atraso en los pagos a cargo de EL CLIENTE; (v) trabajos adicionales o mayores metrados ordenados por EL CLIENTE; (vi) condiciones clim\xE1ticas que impidan la ejecuci\xF3n conforme a las especificaciones t\xE9cnicas; (vii) paralizaciones dispuestas por autoridad, conflictos sociales o sindicales; y (viii) caso fortuito o fuerza mayor conforme al art\xEDculo 1315 del C\xF3digo Civil.
+
+PROCEDIMIENTO. EL PROVEEDOR comunicar\xE1 por escrito la causal dentro de los cinco (5) d\xEDas h\xE1biles de producida o conocida, indicando el plazo estimado. EL CLIENTE se pronunciar\xE1 dentro de los cinco (5) d\xEDas h\xE1biles siguientes; su SILENCIO se entender\xE1 como APROBACI\xD3N de la ampliaci\xF3n solicitada.
+
+EFECTOS. La ampliaci\xF3n de plazo por causa imputable a EL CLIENTE da derecho a EL PROVEEDOR al reconocimiento de los mayores gastos generales y costos de permanencia acreditados, conforme al tarifario de la cl\xE1usula de tiempos de espera.`;
 var contratoServicioSchema = {
   id: "contrato-servicio",
   code: "CONT-SRV",
   name: "Contrato de Servicio",
   description: "Contrato de colocaci\xF3n de mezclas asf\xE1lticas u otros servicios bajo el sistema de precios unitarios.",
   category: "Administrative",
-  version: "1.2.0",
-  lastUpdated: "2026-05-25",
+  version: "1.7.0",
+  lastUpdated: "2026-07-30",
   orientation: "portrait",
   pageSize: "A4",
   margins: { top: 20, right: 20, bottom: 20, left: 20 },
@@ -59245,6 +61341,20 @@ var contratoServicioSchema = {
       ]
     },
     {
+      // C4 — Trazabilidad con la cotizacion que origino el contrato. Los numeros
+      // salen de las partidas del servicio (`sourceQuoteNro`), no se tipean.
+      id: "cotizacionOrigen",
+      type: "simpleFields",
+      title: "ANEXO 1: Cotizacion de Origen",
+      showIf: { field: "opciones.cotizacion", operator: "eq", value: true },
+      gridColumns: 4,
+      fields: [
+        { key: "cotizacion.numeros", label: "COTIZACION N\xB0", type: "text", span: 4 },
+        { key: "cotizacion.fecha", label: "FECHA DE ACEPTACION", type: "date", span: 4 },
+        { key: "cotizacion.observacion", label: "OBSERVACION", type: "text", span: 4 }
+      ]
+    },
+    {
       id: "preciosUnitarios",
       type: "dataTable",
       title: "Precios Unitarios",
@@ -59281,6 +61391,45 @@ var contratoServicioSchema = {
       ]
     },
     {
+      // C5 — Anexo 5: cronograma de pagos y adelanto. El "Abono 01/02/03" de la
+      // clausula cuarta era prosa; aca es dato: hito, % y condicion de pago.
+      id: "cronogramaPagos",
+      type: "dataTable",
+      title: "ANEXO 5: Cronograma de Pagos",
+      showIf: { field: "opciones.cronogramaPagos", operator: "eq", value: true },
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 30,
+      columns: [
+        { key: "hito", label: "HITO", type: "text", width: 60, align: "center", editable: true },
+        { key: "descripcion", label: "CONDICION DE PAGO", type: "text", width: 280, align: "left", editable: true },
+        { key: "porcentaje", label: "% DEL MONTO", type: "number", width: 90, align: "right", editable: true },
+        {
+          key: "monto",
+          label: "MONTO (S/)",
+          type: "currency",
+          width: 110,
+          align: "right",
+          // Derivado del monto contractual: si el % y el monto se tipearan por
+          // separado, el cuadro terminaria contradiciendo a la clausula tercera.
+          computed: true,
+          formula: "round(num(monto.total) * num(row.porcentaje) / 100, 2)"
+        }
+      ]
+    },
+    {
+      id: "adelanto",
+      type: "simpleFields",
+      title: "Adelanto y Amortizacion",
+      showIf: { field: "opciones.cronogramaPagos", operator: "eq", value: true },
+      gridColumns: 4,
+      fields: [
+        { key: "adelanto.porcentaje", label: "ADELANTO (% del monto)", type: "number", span: 2 },
+        { key: "adelanto.amortizacionPct", label: "AMORTIZACION POR VALORIZACION (%)", type: "number", span: 2 },
+        { key: "adelanto.garantia", label: "GARANTIA DEL ADELANTO", type: "text", span: 4 }
+      ]
+    },
+    {
       id: "cuentasBancarias",
       type: "dataTable",
       title: "Cuentas Bancarias del Proveedor",
@@ -59310,6 +61459,39 @@ var contratoServicioSchema = {
       type: "richText",
       title: "Condiciones del Plazo"
     },
+    // C3 — Anexo 2: cronograma con RENDIMIENTO PACTADO. Sin rendimiento pactado no
+    // hay defensa de plazo: cualquier atraso se discute con la percepcion del
+    // cliente en vez de contra un numero acordado. Gated como las de C2 para no
+    // alterar los contratos ya emitidos.
+    {
+      id: "cronograma",
+      type: "dataTable",
+      title: "ANEXO 2: Cronograma de Ejecucion y Rendimiento Pactado",
+      showIf: { field: "opciones.cronograma", operator: "eq", value: true },
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 100,
+      columns: [
+        { key: "item", label: "ITEM", type: "text", width: 50, align: "center", editable: true },
+        { key: "partida", label: "PARTIDA / HITO", type: "text", width: 220, align: "left", editable: true },
+        { key: "unidad", label: "UND.", type: "text", width: 55, align: "center", editable: true },
+        { key: "metrado", label: "METRADO", type: "number", width: 80, align: "right", editable: true },
+        { key: "rendimiento", label: "RENDIM. (und/dia)", type: "number", width: 95, align: "right", editable: true },
+        {
+          key: "dias",
+          label: "DIAS",
+          type: "number",
+          width: 60,
+          align: "right",
+          // Derivado: metrado / rendimiento, redondeado hacia arriba. Se recalcula
+          // solo al cambiar cualquiera de los dos, asi el plazo no queda mintiendo.
+          computed: true,
+          formula: "num(row.rendimiento) > 0 ? Math.ceil(num(row.metrado) / num(row.rendimiento)) : 0"
+        },
+        { key: "inicio", label: "INICIO", type: "date", width: 95, align: "center", editable: true },
+        { key: "fin", label: "FIN", type: "date", width: 95, align: "center", editable: true }
+      ]
+    },
     {
       id: "clausula6Marco",
       type: "richText",
@@ -59329,6 +61511,140 @@ var contratoServicioSchema = {
       id: "clausula9Domicilios",
       type: "richText",
       title: "CLAUSULA NOVENA: VERACIDAD DE DOMICILIOS"
+    },
+    // C2 — Clausulas de proteccion (CONTRATO-SERVICIO.spec.md). Van DESPUES de la
+    // novena y no renumeran nada: los contratos ya emitidos conservan sus
+    // ordinales. Cada una esta gated por `opciones.*`; un contrato viejo no tiene
+    // esos flags, `showIf` evalua false y las clausulas NO le aparecen.
+    {
+      id: "clausula10Exclusiones",
+      type: "richText",
+      title: "CLAUSULA DECIMA: ALCANCE EXCLUIDO Y CONDICIONES PREVIAS",
+      showIf: { field: "opciones.exclusiones", operator: "eq", value: true }
+    },
+    {
+      id: "condicionesPrevias",
+      type: "dataTable",
+      title: "Condiciones Previas a cargo de EL CLIENTE",
+      showIf: { field: "opciones.exclusiones", operator: "eq", value: true },
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 30,
+      columns: [
+        { key: "item", label: "ITEM", type: "text", width: 55, align: "center", editable: true },
+        { key: "condicion", label: "CONDICION PREVIA", type: "text", width: 300, align: "left", editable: true },
+        { key: "responsable", label: "RESPONSABLE", type: "text", width: 120, align: "left", editable: true },
+        { key: "fecha", label: "FECHA LIMITE", type: "date", width: 110, align: "center", editable: true }
+      ]
+    },
+    {
+      id: "clausula11Ajustes",
+      type: "richText",
+      title: "CLAUSULA DECIMO PRIMERA: REAJUSTE DE PRECIOS Y TIEMPOS DE ESPERA",
+      showIf: { field: "opciones.ajustes", operator: "eq", value: true }
+    },
+    {
+      id: "reajuste",
+      type: "simpleFields",
+      title: "Parametros de Reajuste",
+      showIf: { field: "opciones.ajustes", operator: "eq", value: true },
+      gridColumns: 4,
+      fields: [
+        { key: "reajuste.umbralPct", label: "UMBRAL DE VARIACION (%)", type: "number", span: 4 },
+        { key: "reajuste.mesBase", label: "MES BASE", type: "text", span: 4 },
+        { key: "reajuste.indice", label: "INDICE APLICABLE", type: "text", span: 4 }
+      ]
+    },
+    {
+      id: "tarifarioEspera",
+      type: "dataTable",
+      title: "Tarifario de Tiempos de Espera (stand-by)",
+      showIf: { field: "opciones.ajustes", operator: "eq", value: true },
+      dynamicRows: true,
+      minRows: 1,
+      maxRows: 30,
+      columns: [
+        { key: "concepto", label: "CONCEPTO", type: "text", width: 260, align: "left", editable: true },
+        { key: "unidad", label: "UNIDAD", type: "text", width: 80, align: "center", editable: true },
+        { key: "tolerancia", label: "TOLERANCIA", type: "text", width: 100, align: "center", editable: true },
+        { key: "tarifa", label: "TARIFA (S/)", type: "currency", width: 110, align: "right", editable: true }
+      ]
+    },
+    {
+      id: "clausula12Pagos",
+      type: "richText",
+      title: "CLAUSULA DECIMO SEGUNDA: MORA, GARANTIAS, TRIBUTOS Y CESION DE CREDITOS",
+      showIf: { field: "opciones.pagosGarantias", operator: "eq", value: true }
+    },
+    {
+      id: "pagos",
+      type: "simpleFields",
+      title: "Parametros de Pago y Garantia",
+      showIf: { field: "opciones.pagosGarantias", operator: "eq", value: true },
+      gridColumns: 4,
+      fields: [
+        { key: "pagos.diasPago", label: "PLAZO DE PAGO (dias)", type: "number", span: 2 },
+        { key: "pagos.tasaMoraMensual", label: "INTERES MORATORIO (% mensual)", type: "number", span: 2 },
+        { key: "pagos.diasSuspension", label: "SUSPENSION POR IMPAGO (dias)", type: "number", span: 2 },
+        { key: "pagos.retencionPct", label: "RETENCION MAXIMA (%)", type: "number", span: 2 },
+        { key: "pagos.plazoLiberacionDias", label: "LIBERACION DE RETENCION (dias)", type: "number", span: 2 },
+        { key: "pagos.detraccionPct", label: "DETRACCION (%)", type: "number", span: 2 }
+      ]
+    },
+    {
+      id: "clausula13Ampliaciones",
+      type: "richText",
+      title: "CLAUSULA DECIMO TERCERA: AMPLIACIONES DE PLAZO",
+      showIf: { field: "opciones.ampliaciones", operator: "eq", value: true }
+    },
+    // C6 — Modo SUBCONTRATO (back-to-back asimetrico). El selector se ve siempre
+    // (en contratos nuevos); la clausula solo aparece si la modalidad es
+    // SUBCONTRATO, con el mismo mecanismo probado de ACT-CNF (VENTA/SERVICIO).
+    {
+      id: "modalidadContrato",
+      type: "simpleFields",
+      title: "Modalidad del Contrato",
+      showIf: { field: "opciones.modalidad", operator: "eq", value: true },
+      gridColumns: 4,
+      fields: [
+        {
+          key: "contrato.modalidad",
+          label: "MODALIDAD",
+          type: "select",
+          span: 2,
+          options: [
+            { value: "DIRECTO", label: "Contrato directo con el cliente" },
+            { value: "SUBCONTRATO", label: "Subcontrato (el cliente tiene un contrato principal)" }
+          ]
+        },
+        {
+          key: "contrato.entidad",
+          label: "ENTIDAD DEL CONTRATO PRINCIPAL",
+          type: "text",
+          span: 2,
+          showIf: { field: "contrato.modalidad", operator: "eq", value: "SUBCONTRATO" }
+        },
+        {
+          key: "contrato.numeroPrincipal",
+          label: "CONTRATO PRINCIPAL N\xB0",
+          type: "text",
+          span: 2,
+          showIf: { field: "contrato.modalidad", operator: "eq", value: "SUBCONTRATO" }
+        },
+        {
+          key: "contrato.obraPrincipal",
+          label: "OBRA DEL CONTRATO PRINCIPAL",
+          type: "text",
+          span: 2,
+          showIf: { field: "contrato.modalidad", operator: "eq", value: "SUBCONTRATO" }
+        }
+      ]
+    },
+    {
+      id: "clausula14Backtoback",
+      type: "richText",
+      title: "CLAUSULA DECIMO CUARTA: RELACION CON EL CONTRATO PRINCIPAL",
+      showIf: { field: "contrato.modalidad", operator: "eq", value: "SUBCONTRATO" }
     },
     {
       id: "cierre",
@@ -59420,6 +61736,70 @@ var contratoServicioSchema = {
     clausula7Responsabilidades: CLAUSULA7_DEFAULT,
     clausula8Arbitraje: CLAUSULA8_DEFAULT,
     clausula9Domicilios: CLAUSULA9_DEFAULT,
+    // C2: los flags encienden las clausulas de proteccion en los contratos NUEVOS.
+    // Un contrato viejo no los tiene, asi que su `showIf` da false y no le cambia
+    // ni una linea al documento ya emitido.
+    opciones: {
+      exclusiones: true,
+      ajustes: true,
+      pagosGarantias: true,
+      ampliaciones: true,
+      cronograma: true,
+      cotizacion: true,
+      cronogramaPagos: true,
+      modalidad: true
+    },
+    // C6: DIRECTO por defecto. La clausula back-to-back solo aparece si el usuario
+    // elige SUBCONTRATO (mismo mecanismo que VENTA/SERVICIO del acta).
+    contrato: { modalidad: "DIRECTO", entidad: "", numeroPrincipal: "", obraPrincipal: "" },
+    clausula14Backtoback: CLAUSULA14_DEFAULT,
+    // C4 — se llena desde `sourceQuoteNro` de las partidas del servicio.
+    cotizacion: { numeros: "", fecha: "", observacion: "" },
+    // C5 — Anexo 5. Los porcentajes reflejan el "Abono 01/02/03" de la clausula
+    // cuarta, ahora como dato: el monto de cada hito lo deriva la formula.
+    cronogramaPagos: [
+      { hito: "01", descripcion: "A la firma del contrato, previo a la movilizacion", porcentaje: 30, monto: 0 },
+      { hito: "02", descripcion: "A la mitad de ejecucion, previa valorizacion aprobada", porcentaje: 40, monto: 0 },
+      { hito: "03", descripcion: "A la conformidad del servicio", porcentaje: 30, monto: 0 }
+    ],
+    adelanto: { porcentaje: 30, amortizacionPct: 100, garantia: "No aplica" },
+    // C3 — Anexo 2. La fila semilla queda vacia: las filas reales las siembra el
+    // agregador desde las partidas del servicio (item/partida/unidad/metrado); el
+    // RENDIMIENTO lo pacta la empresa, no lo inventa el sistema.
+    cronograma: [
+      { item: "01", partida: "", unidad: "", metrado: 0, rendimiento: 0, dias: 0, inicio: "", fin: "" }
+    ],
+    clausula10Exclusiones: CLAUSULA10_DEFAULT,
+    condicionesPrevias: [
+      { item: "01", condicion: "Frente de trabajo liberado y accesible", responsable: "EL CLIENTE", fecha: "" },
+      { item: "02", condicion: "Base terminada con certificados de compactacion", responsable: "EL CLIENTE", fecha: "" },
+      { item: "03", condicion: "Area de acopio y estacionamiento de equipos", responsable: "EL CLIENTE", fecha: "" },
+      { item: "04", condicion: "Permisos, licencias y desvios vigentes", responsable: "EL CLIENTE", fecha: "" }
+    ],
+    clausula11Ajustes: CLAUSULA11_DEFAULT,
+    reajuste: {
+      umbralPct: 5,
+      mesBase: "",
+      indice: "Indices Unificados de Precios de la Construccion (INEI)"
+    },
+    tarifarioEspera: [
+      { concepto: "Camion / volquete en espera", unidad: "hora", tolerancia: "30 min", tarifa: 0 },
+      { concepto: "Equipo pesado en espera", unidad: "hora", tolerancia: "30 min", tarifa: 0 },
+      { concepto: "Cuadrilla en espera", unidad: "hora", tolerancia: "30 min", tarifa: 0 },
+      { concepto: "Desmovilizacion y removilizacion", unidad: "evento", tolerancia: "-", tarifa: 0 }
+    ],
+    clausula12Pagos: CLAUSULA12_DEFAULT,
+    pagos: {
+      diasPago: 15,
+      tasaMoraMensual: 1.5,
+      diasSuspension: 30,
+      retencionPct: 5,
+      plazoLiberacionDias: 30,
+      // Contratos de construccion = 4% (Anexo 3 del SPOT). Si la prestacion se
+      // clasifica como "demas servicios" la tasa es 12%: se cambia acá, no en prosa.
+      detraccionPct: 4
+    },
+    clausula13Ampliaciones: CLAUSULA13_DEFAULT,
     cierre: {
       ciudad: "Lima",
       fechaFirma: ""
@@ -65259,8 +67639,8 @@ var r38 = {};
 Xr(r38, { af_ZA: () => B58, ar: () => Y35, az: () => U39, base: () => Mi, cs_CZ: () => x61, da: () => le10, de: () => pr, de_AT: () => I40, de_CH: () => J42, dv: () => Q32, el: () => le9, en: () => ul, en_AU: () => be7, en_AU_ocker: () => P54, en_BORK: () => u60, en_CA: () => S41, en_GB: () => B46, en_GH: () => J39, en_HK: () => w42, en_IE: () => D49, en_IN: () => w43, en_NG: () => O41, en_US: () => A49, en_ZA: () => L39, eo: () => ro, es: () => ao3, es_MX: () => ia7, fa: () => wo, fi: () => A43, fr: () => Wi, fr_BE: () => I36, fr_CA: () => b32, fr_CH: () => _33, fr_LU: () => _34, fr_SN: () => _35, he: () => Z27, hr: () => C33, hu: () => U29, hy: () => j34, id_ID: () => F18, it: () => w21, ja: () => M24, ka_GE: () => H23, ko: () => G23, lv: () => $13, mk: () => S26, nb_NO: () => Z24, ne: () => j13, nl: () => an, nl_BE: () => j15, pl: () => ea3, pt_BR: () => W15, pt_PT: () => k17, ro: () => Mi2, ro_MD: () => j20, ru: () => ae4, sk: () => O8, sr_RS_latin: () => T7, sv: () => $5, th: () => E8, tr: () => V10, uk: () => S11, ur: () => yt, vi: () => U3, yo_NG: () => r3, zh_CN: () => Ke3, zh_TW: () => B5, zu_ZA: () => x5 });
 
 // src/services/random-data-generator.service.ts
-function setNestedValue(target, path36, value) {
-  const parts = path36.split(".");
+function setNestedValue(target, path41, value) {
+  const parts = path41.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -65362,7 +67742,7 @@ function generateRandomDataForSchema(schema) {
 
 // src/services/report-data-aggregator.service.ts
 init_sharedConnection();
-import mongoose6, { Schema as Schema6 } from "mongoose";
+import mongoose6, { Schema as Schema7 } from "mongoose";
 var modelCache = /* @__PURE__ */ new Map();
 var LIQUIDACION_IGV_FACTOR = 1.18;
 function asRecord(value) {
@@ -65373,7 +67753,7 @@ async function getFlexibleModel(modelName) {
     return modelCache.get(modelName);
   }
   const conn = await getSharedConnection();
-  const model = conn.models[modelName] || conn.model(modelName, new Schema6({}, { strict: false }));
+  const model = conn.models[modelName] || conn.model(modelName, new Schema7({}, { strict: false }));
   modelCache.set(modelName, model);
   return model;
 }
@@ -65418,6 +67798,7 @@ async function aggregateReportData(serviceId) {
   const FinancialMovement = await getFlexibleModel("FinancialMovement");
   const Media2 = await getFlexibleModel("Media");
   const ServiceManagementDriveItem = await getFlexibleModel("ServiceManagementDriveItem");
+  const ServiceManagementReport = await getFlexibleModel("ServiceManagementReport");
   const service = await ServiceManagement.findById(serviceId).lean();
   if (!service) {
     return {
@@ -65432,7 +67813,8 @@ async function aggregateReportData(serviceId) {
       financeEntries: [],
       financeMedia: [],
       serviceMedia: [],
-      orderMedia: []
+      orderMedia: [],
+      reports: []
     };
   }
   const orderIds = Array.isArray(service.orderIds) ? service.orderIds : [];
@@ -65461,6 +67843,7 @@ async function aggregateReportData(serviceId) {
   const serviceMedia = await ServiceManagementDriveItem.find({
     serviceManagementId: serviceId
   }).lean();
+  const reports = await ServiceManagementReport.find({ serviceManagementId: serviceId }).select({ type: 1, date: 1, status: 1, "schemaData.cuadroMetrado": 1 }).lean();
   return {
     service,
     client,
@@ -65473,8 +67856,24 @@ async function aggregateReportData(serviceId) {
     financeEntries,
     financeMedia,
     serviceMedia,
-    orderMedia: []
+    orderMedia: [],
+    reports
   };
+}
+function buildSustentoDesdeIaa(reports) {
+  const iaa = reports.filter((report) => String(report.type || "") === "IAA");
+  if (iaa.length === 0) return "";
+  const detalle = iaa.map((report) => {
+    const zonas = asRecord(report.schemaData).cuadroMetrado || [];
+    const area = zonas.reduce((total, zona) => total + toCurrencyAmount(zona.area), 0);
+    const fecha = toLimaDateOnly(report.date);
+    return `- Informe de area adicional${fecha ? ` del ${fecha}` : ""}: ${zonas.length} zona(s), ${area.toFixed(2)} m2 medidos.`;
+  });
+  return [
+    "Sustento en informes de area adicional del servicio:",
+    ...detalle,
+    "El metrado ejecutado de cada partida debe verificarse contra estos informes."
+  ].join("\n");
 }
 function toCurrencyAmount(value) {
   const numericValue = Number(value || 0);
@@ -65482,6 +67881,31 @@ function toCurrencyAmount(value) {
 }
 function addLiquidacionIgv(subtotal) {
   return Number((subtotal * LIQUIDACION_IGV_FACTOR).toFixed(2));
+}
+function toLimaDateOnly(value) {
+  const date = value instanceof Date ? value : new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(date);
+}
+function buildActividadesFromDispatches(dispatches) {
+  const byDay = /* @__PURE__ */ new Map();
+  dispatches.forEach((dispatch) => {
+    const fecha = toLimaDateOnly(dispatch.date);
+    if (!fecha) return;
+    const current = byDay.get(fecha) || { cantidad: 0, viajes: 0, obra: "" };
+    current.cantidad += toCurrencyAmount(dispatch.quantity);
+    current.viajes += 1;
+    current.obra = current.obra || String(dispatch.obra || dispatch.destino || "");
+    byDay.set(fecha, current);
+  });
+  return [...byDay.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([fecha, day]) => ({
+    fecha,
+    actividad: "Despacho y colocacion de mezcla asfaltica",
+    descripcion: `${day.viajes} viaje(s) despachado(s)`,
+    cantidad: Number(day.cantidad.toFixed(2)),
+    unidad: "m3",
+    ubicacion: day.obra
+  }));
 }
 function buildPartidaItemCode(partida, index) {
   return String(partida.itemCode || partida.item || index + 1);
@@ -65573,6 +67997,173 @@ function structureDataForReportType(reportType, rawData) {
   const orders = rawData.orders;
   const projectData = buildProjectData(service, orders, client, rawData.company);
   switch (reportType) {
+    // DOS-OBR (dossier de obra): siembra proyecto y resumen. El INDICE de
+    // documentos NO se siembra aca: lo compila Portal desde los informes reales
+    // del servicio (DOSSIER-OBRA.spec.md D1) porque el estado de cada informe
+    // -aprobado o borrador- vive en `servicemanagementreports`, no aca.
+    case "DOS-OBR":
+      return {
+        ...projectData,
+        resumen: {
+          periodo: "",
+          responsable: client?.name || "",
+          descripcion: service.projectName || service.description || ""
+        }
+      };
+    // ACT-CNF (acta de conformidad): el acta se creaba con contratista,
+    // subcontratista y monto VACIOS. Portal los rellena, pero recien cuando
+    // alguien ABRE el editor: un acta impresa sin abrirla salia sin las partes.
+    // No se duplica la regla: se mapean los MISMOS `projectData` que ya calcula
+    // `buildProjectData`, y el efecto de Portal solo rellena lo que siga vacio.
+    case "ACT-CNF": {
+      const partidas = Array.isArray(service.partidas) ? service.partidas : [];
+      const total = buildLiquidacionRows(partidas).reduce(
+        (sum, row) => sum + toCurrencyAmount(row.parcial),
+        0
+      );
+      return {
+        ...projectData,
+        contratista: {
+          razonSocial: projectData.proyecto.contratista,
+          ruc: client?.ruc || client?.taxId || "",
+          representante: client?.legalRepresentative || client?.representanteLegal || ""
+        },
+        subcontratista: {
+          razonSocial: projectData.proyecto.subcontratista,
+          ruc: projectData.proyecto.rucSubcontratista,
+          representanteLegal: ""
+        },
+        obra: { nombre: projectData.proyecto.obra, cui: projectData.proyecto.cui },
+        ...total > 0 ? { valorizacion: { presupuestoMatriz: "", monto: total } } : {}
+      };
+    }
+    // INF-ACT (informe de actividades): 200 filas a mano cuando el trabajo del dia
+    // ya esta en los DESPACHOS. Se agrupa por dia (no por viaje) y los equipos
+    // salen de las placas reales. Lo que no tenemos -personal, horas, avance- NO
+    // se inventa: queda vacio para que alguien lo ponga.
+    case "INF-ACT": {
+      const dispatches = rawData.dispatches || [];
+      const actividades = buildActividadesFromDispatches(dispatches);
+      if (actividades.length === 0) return { ...projectData };
+      const placas = Array.from(
+        new Set(
+          dispatches.map((dispatch) => String(dispatch.plate || "").trim()).filter(Boolean)
+        )
+      );
+      return {
+        ...projectData,
+        actividades,
+        periodo: {
+          inicio: actividades[0].fecha,
+          fin: actividades[actividades.length - 1].fecha,
+          turno: "",
+          responsable: ""
+        },
+        resumen: {
+          avance: 0,
+          personal: 0,
+          equipos: placas.join(", "),
+          horas: 0
+        }
+      };
+    }
+    // MET-RES (cuadro resumen de metrado): 300 filas a mano cuando el metrado ya
+    // vive en las partidas del servicio. Se siembra igual que el presupuesto del
+    // contrato; `parcial` y los totales los deriva el schema (formulas).
+    case "MET-RES": {
+      const partidas = Array.isArray(service.partidas) ? service.partidas : [];
+      const rows = buildLiquidacionRows(partidas);
+      if (rows.length === 0) return { ...projectData };
+      return {
+        ...projectData,
+        metrado: rows.map((row) => ({
+          item: row.item,
+          descripcion: row.descripcion,
+          unidad: row.unidad,
+          metrado: row.metrado,
+          precioUnitario: row.precioUnitario,
+          parcial: row.parcial
+        })),
+        resumen: {
+          totalMetrado: rows.reduce((sum, row) => sum + toCurrencyAmount(row.metrado), 0),
+          totalParcial: rows.reduce((sum, row) => sum + toCurrencyAmount(row.parcial), 0),
+          observaciones: ""
+        }
+      };
+    }
+    // REC-EXC (reclamo por excedente): el metrado de CONTRATO ya vive en las
+    // partidas del servicio; retipearlo es la forma mas facil de reclamar contra
+    // una cifra equivocada. El EJECUTADO se deja en cero a proposito: es el dato
+    // que sostiene el reclamo y nadie mas que el responsable lo conoce.
+    case "REC-EXC": {
+      const partidas = Array.isArray(service.partidas) ? service.partidas : [];
+      const rows = buildLiquidacionRows(partidas);
+      const sustentoIaa = buildSustentoDesdeIaa(rawData.reports || []);
+      if (rows.length === 0) {
+        return sustentoIaa ? { ...projectData, sustento: sustentoIaa } : { ...projectData };
+      }
+      return {
+        ...projectData,
+        ...sustentoIaa ? { sustento: sustentoIaa } : {},
+        reclamo: {
+          fecha: toLimaDateOnly(/* @__PURE__ */ new Date()),
+          solicitante: "",
+          contrato: "",
+          motivo: ""
+        },
+        metradoReclamo: rows.map((row) => ({
+          item: row.item,
+          descripcion: row.descripcion,
+          unidad: row.unidad,
+          metradoContrato: row.metrado,
+          metradoEjecutado: 0,
+          precioUnitario: row.precioUnitario,
+          observacion: ""
+        }))
+      };
+    }
+    // TOP-CMP / TOP-PROT: las lecturas nacen del equipo topografico; lo unico
+    // que se siembra es la fecha del levantamiento. El protocolo simple es el
+    // mismo caso que el completo, sin duplicar la rama.
+    case "TOP-PROT":
+    case "TOP-CMP":
+      return {
+        ...projectData,
+        topografia: {
+          fecha: toLimaDateOnly(/* @__PURE__ */ new Date()),
+          equipo: "",
+          operador: "",
+          sistemaReferencia: "",
+          metodologia: "",
+          precision: "",
+          toleranciaPlanimetrica: 0,
+          toleranciaAltimetrica: 0
+        }
+      };
+    // CAL-PROT: los ensayos los produce el laboratorio; se siembra la fecha del
+    // protocolo y nada mas.
+    case "CAL-PROT":
+      return {
+        ...projectData,
+        control: {
+          fecha: toLimaDateOnly(/* @__PURE__ */ new Date()),
+          laboratorio: "",
+          responsable: "",
+          norma: ""
+        }
+      };
+    // LEV-OBS: la observacion NACE en campo, asi que no hay nada que compilar.
+    // Lo unico que se siembra es la fecha del control, porque el cuadro la usa
+    // como referencia para los dias de atraso de lo que sigue abierto.
+    case "LEV-OBS":
+      return {
+        ...projectData,
+        control: {
+          fecha: toLimaDateOnly(/* @__PURE__ */ new Date()),
+          responsable: "",
+          area: ""
+        }
+      };
     case "PNL-FOT":
       return {
         ...projectData,
@@ -65747,6 +68338,11 @@ function structureDataForReportType(reportType, rawData) {
       const clientRepresentante = client?.legalRepresentative || client?.representanteLegal || "";
       const partidas = Array.isArray(service.partidas) ? service.partidas : [];
       const contractRows = buildLiquidacionRows(partidas);
+      const quoteNumbers = Array.from(
+        new Set(
+          partidas.map((partida) => String(partida.sourceQuoteNro ?? "").trim()).filter((numero) => numero && numero !== "0")
+        )
+      );
       const contractTotal = contractRows.reduce(
         (sum, row) => sum + toCurrencyAmount(row.parcial),
         0
@@ -65764,6 +68360,7 @@ function structureDataForReportType(reportType, rawData) {
           cui: service.cui || "",
           ubicacion: service.locationUrl || ""
         },
+        ...quoteNumbers.length > 0 ? { cotizacion: { numeros: quoteNumbers.join(", "), fecha: "", observacion: "" } } : {},
         ...contractRows.length > 0 ? {
           monto: { total: contractTotal },
           preciosUnitarios: contractRows.map((row) => ({
@@ -65779,6 +68376,20 @@ function structureDataForReportType(reportType, rawData) {
             metrado: row.metrado,
             precioUnit: row.precioUnitario,
             parcial: row.parcial
+          })),
+          // C3 — Anexo 2: el cronograma nace con las partidas y sus metrados.
+          // `rendimiento` y fechas van en cero/vacio A PROPOSITO: los pacta la
+          // empresa. Un rendimiento inventado seria peor que ninguno, porque
+          // es la referencia contra la que se mide el cumplimiento del plazo.
+          cronograma: contractRows.map((row) => ({
+            item: row.item,
+            partida: row.descripcion,
+            unidad: row.unidad,
+            metrado: row.metrado,
+            rendimiento: 0,
+            dias: 0,
+            inicio: "",
+            fin: ""
           }))
         } : {}
       };
@@ -65803,15 +68414,15 @@ function structureDataForReportType(reportType, rawData) {
 
 // src/models/service-report.model.ts
 init_sharedConnection();
-import { Schema as Schema7 } from "mongoose";
-var ServiceReportSchema = new Schema7(
+import { Schema as Schema8 } from "mongoose";
+var ServiceReportSchema = new Schema8(
   {
     serviceManagementId: { type: String, required: true },
     type: { type: String, required: true },
     status: { type: String, required: true, default: "draft" },
     title: { type: String, required: false },
     description: { type: String, required: false },
-    schemaData: { type: Schema7.Types.Mixed, required: false },
+    schemaData: { type: Schema8.Types.Mixed, required: false },
     generatedDocuments: {
       docxUrl: { type: String, required: false },
       pdfUrl: { type: String, required: false },
@@ -65821,11 +68432,11 @@ var ServiceReportSchema = new Schema7(
       annexPages: { type: Number, required: false }
     },
     draftData: {
-      schemaData: { type: Schema7.Types.Mixed, required: false },
-      schemaOverrides: { type: Schema7.Types.Mixed, required: false },
-      customSections: { type: [Schema7.Types.Mixed], required: false, default: [] },
-      annexes: { type: [Schema7.Types.Mixed], required: false, default: [] },
-      folioConfig: { type: Schema7.Types.Mixed, required: false },
+      schemaData: { type: Schema8.Types.Mixed, required: false },
+      schemaOverrides: { type: Schema8.Types.Mixed, required: false },
+      customSections: { type: [Schema8.Types.Mixed], required: false, default: [] },
+      annexes: { type: [Schema8.Types.Mixed], required: false, default: [] },
+      folioConfig: { type: Schema8.Types.Mixed, required: false },
       savedAt: { type: String, required: false },
       savedBy: { type: String, required: false }
     },
@@ -65834,14 +68445,14 @@ var ServiceReportSchema = new Schema7(
       lockedAt: { type: String, required: false },
       expiresAt: { type: String, required: false }
     },
-    auditLog: { type: [Schema7.Types.Mixed], required: false, default: [] },
-    attachments: { type: [Schema7.Types.Mixed], required: false, default: [] },
-    schemaOverrides: { type: Schema7.Types.Mixed, required: false },
-    customSections: { type: [Schema7.Types.Mixed], required: false, default: [] },
-    annexes: { type: [Schema7.Types.Mixed], required: false, default: [] },
-    folioConfig: { type: Schema7.Types.Mixed, required: false },
-    sections: { type: Schema7.Types.Mixed, required: false },
-    metrics: { type: Schema7.Types.Mixed, required: false },
+    auditLog: { type: [Schema8.Types.Mixed], required: false, default: [] },
+    attachments: { type: [Schema8.Types.Mixed], required: false, default: [] },
+    schemaOverrides: { type: Schema8.Types.Mixed, required: false },
+    customSections: { type: [Schema8.Types.Mixed], required: false, default: [] },
+    annexes: { type: [Schema8.Types.Mixed], required: false, default: [] },
+    folioConfig: { type: Schema8.Types.Mixed, required: false },
+    sections: { type: Schema8.Types.Mixed, required: false },
+    metrics: { type: Schema8.Types.Mixed, required: false },
     visibility: { type: Boolean, required: false, default: false }
   },
   { timestamps: true }
@@ -65863,8 +68474,8 @@ init_storage_path_service();
 // src/services/report-html-renderer.service.ts
 var import_sharp4 = __toESM(require_lib(), 1);
 init_storage_path_service();
-import fs19 from "fs-extra";
-import path22 from "path";
+import fs23 from "fs-extra";
+import path27 from "path";
 import axios3 from "axios";
 
 // src/services/image-compression.service.ts
@@ -68153,10 +70764,10 @@ ${signaturesHtml}`;
   }
   async resolveFileBuffer(filePath) {
     try {
-      if (path22.isAbsolute(filePath)) {
-        if (await fs19.pathExists(filePath)) {
-          const raw = await fs19.readFile(filePath);
-          return ImageCompressionService.processImage(raw, path22.basename(filePath));
+      if (path27.isAbsolute(filePath)) {
+        if (await fs23.pathExists(filePath)) {
+          const raw = await fs23.readFile(filePath);
+          return ImageCompressionService.processImage(raw, path27.basename(filePath));
         }
         return null;
       }
@@ -68164,9 +70775,9 @@ ${signaturesHtml}`;
         return null;
       }
       const resolved = this.resolveCompanyStoragePath(filePath);
-      if (resolved && await fs19.pathExists(resolved)) {
-        const raw = await fs19.readFile(resolved);
-        return ImageCompressionService.processImage(raw, path22.basename(resolved));
+      if (resolved && await fs23.pathExists(resolved)) {
+        const raw = await fs23.readFile(resolved);
+        return ImageCompressionService.processImage(raw, path27.basename(resolved));
       }
     } catch (error) {
       logger_default.warn("Failed to read photo file for PDF", { error: String(error), filePath });
@@ -68207,9 +70818,9 @@ ${signaturesHtml}`;
     try {
       const storagePath = this.resolveStoragePathFromUrl(urlCandidate);
       if (storagePath) {
-        if (await fs19.pathExists(storagePath)) {
-          const raw = await fs19.readFile(storagePath);
-          return ImageCompressionService.processImage(raw, path22.basename(storagePath));
+        if (await fs23.pathExists(storagePath)) {
+          const raw = await fs23.readFile(storagePath);
+          return ImageCompressionService.processImage(raw, path27.basename(storagePath));
         }
       }
     } catch (error) {
@@ -68224,7 +70835,7 @@ ${signaturesHtml}`;
         timeout: 1e4
       });
       const buffer2 = Buffer.from(response.data);
-      return ImageCompressionService.processImage(buffer2, path22.basename(urlCandidate));
+      return ImageCompressionService.processImage(buffer2, path27.basename(urlCandidate));
     } catch (error) {
       logger_default.warn("Failed to download image for PDF compression", {
         error: String(error),
@@ -68387,19 +70998,19 @@ init_storage_path_service();
 import axios4 from "axios";
 
 // src/services/thumbnail-request.service.ts
-import fs20 from "fs-extra";
-import path23 from "path";
+import fs24 from "fs-extra";
+import path28 from "path";
 var THUMB_DIR_NAME = ".thumbs";
 var THUMBNAIL_NAME_PATTERN = /^thumb_(.+)_[a-f0-9]{10}\.jpg$/i;
 var IMAGE_EXTENSIONS2 = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
-function sanitizeName2(name) {
+function sanitizeName3(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "file";
 }
 function normalizeRequestPath(requestPath) {
   if (!requestPath) return null;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path23.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
+    const normalized = path28.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
     if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
       return null;
     }
@@ -68409,7 +71020,7 @@ function normalizeRequestPath(requestPath) {
   }
 }
 function toAbsolutePath(root, relativePath) {
-  return path23.join(root, ...relativePath.split("/"));
+  return path28.join(root, ...relativePath.split("/"));
 }
 async function findOriginalForThumbnail(root, relativeThumbPath) {
   const segments = relativeThumbPath.split("/");
@@ -68422,12 +71033,12 @@ async function findOriginalForThumbnail(root, relativeThumbPath) {
   const parentSegments = segments.slice(0, thumbDirIndex);
   const parentDir = toAbsolutePath(root, parentSegments.join("/"));
   const safeBase = match[1];
-  const entries = await fs20.readdir(parentDir).catch(() => []);
+  const entries = await fs24.readdir(parentDir).catch(() => []);
   const candidates = await Promise.all(
-    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName2(path23.parse(entry).name || "file") === safeBase).map(async (entry) => {
-      const absolutePath = path23.join(parentDir, entry);
-      const stat = await fs20.stat(absolutePath).catch(() => null);
-      const ext = path23.extname(entry).toLowerCase();
+    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName3(path28.parse(entry).name || "file") === safeBase).map(async (entry) => {
+      const absolutePath = path28.join(parentDir, entry);
+      const stat = await fs24.stat(absolutePath).catch(() => null);
+      const ext = path28.extname(entry).toLowerCase();
       if (!stat?.isFile() || !IMAGE_EXTENSIONS2.has(ext)) {
         return null;
       }
@@ -68447,11 +71058,11 @@ async function findSiblingThumbForBase(root, relativeThumbPath) {
   if (!match?.[1]) return null;
   const thumbDir = toAbsolutePath(root, segments.slice(0, -1).join("/"));
   const prefix = `thumb_${match[1]}_`;
-  const entries = await fs20.readdir(thumbDir).catch(() => []);
+  const entries = await fs24.readdir(thumbDir).catch(() => []);
   const sibling = entries.find(
     (entry) => entry.startsWith(prefix) && THUMBNAIL_NAME_PATTERN.test(entry)
   );
-  return sibling ? path23.join(thumbDir, sibling) : null;
+  return sibling ? path28.join(thumbDir, sibling) : null;
 }
 async function resolveThumbnailRequestTarget(root, requestPath) {
   const relativePath = normalizeRequestPath(requestPath);
@@ -68459,7 +71070,7 @@ async function resolveThumbnailRequestTarget(root, requestPath) {
     return null;
   }
   const thumbPath = toAbsolutePath(root, relativePath);
-  if (await fs20.pathExists(thumbPath)) {
+  if (await fs24.pathExists(thumbPath)) {
     return {
       absolutePath: thumbPath,
       source: "thumbnail"
@@ -68483,7 +71094,7 @@ async function resolveThumbnailRequestTarget(root, requestPath) {
 }
 
 // src/services/canvas-html-image-inliner.service.ts
-import fs21 from "fs-extra";
+import fs25 from "fs-extra";
 var IMG_SRC_REGEX = /(<img\b[^>]*?\bsrc=)(["'])(.*?)\2/gi;
 var IMG_DOWNLOAD_TIMEOUT_MS = 3e4;
 var INLINE_CONCURRENCY = 4;
@@ -68515,12 +71126,12 @@ var resolveStorageRefFromUrl = (urlCandidate, companyId) => {
 };
 var readLocalImage = async (ref) => {
   try {
-    if (await fs21.pathExists(ref.absolutePath)) {
-      return await fs21.readFile(ref.absolutePath);
+    if (await fs25.pathExists(ref.absolutePath)) {
+      return await fs25.readFile(ref.absolutePath);
     }
     const target = await resolveThumbnailRequestTarget(ref.companyRoot, ref.relativePath);
     if (target) {
-      return await fs21.readFile(target.absolutePath);
+      return await fs25.readFile(target.absolutePath);
     }
   } catch (error) {
     logger_default.warn("canvasHtmlInliner: failed to read storage image", {
@@ -68727,7 +71338,7 @@ function buildEffectiveSchema(baseSchema, overrides, customSections) {
 // src/services/pdf-merger.service.ts
 init_storage_path_service();
 init_logger();
-import fs22 from "fs-extra";
+import fs26 from "fs-extra";
 import axios5 from "axios";
 import { PDFDocument as PDFDocument2 } from "pdf-lib";
 function resolveStoragePathFromUrl(url, companyId) {
@@ -68760,8 +71371,8 @@ async function resolveLetterheadBytes(letterhead, companyId) {
     return base64 ? Buffer.from(base64, "base64") : null;
   }
   const storagePath = resolveStoragePathFromUrl(url, companyId);
-  if (storagePath && await fs22.pathExists(storagePath)) {
-    return fs22.readFile(storagePath);
+  if (storagePath && await fs26.pathExists(storagePath)) {
+    return fs26.readFile(storagePath);
   }
   if (url.startsWith("http")) {
     const response = await axios5.get(url, {
@@ -68791,8 +71402,8 @@ async function resolveAnnexBytes(url, companyId) {
     return base64 ? Buffer.from(base64, "base64") : null;
   }
   const storagePath = resolveStoragePathFromUrl(trimmed, companyId);
-  if (storagePath && await fs22.pathExists(storagePath)) {
-    return fs22.readFile(storagePath);
+  if (storagePath && await fs26.pathExists(storagePath)) {
+    return fs26.readFile(storagePath);
   }
   if (trimmed.startsWith("http")) {
     try {
@@ -68825,12 +71436,12 @@ async function addImageAnnexPage(mergedPdf, bytes) {
 }
 var PDFMergerService = class {
   static async getPageCount(pdfPath) {
-    const bytes = await fs22.readFile(pdfPath);
+    const bytes = await fs26.readFile(pdfPath);
     const pdf = await PDFDocument2.load(bytes);
     return pdf.getPageCount();
   }
   static async mergePDFWithAnnexes(mainPdfPath, annexes, outputPath, companyId) {
-    const mainPdfBytes = await fs22.readFile(mainPdfPath);
+    const mainPdfBytes = await fs26.readFile(mainPdfPath);
     const mergedPdf = await PDFDocument2.load(mainPdfBytes);
     const mainPageCount = mergedPdf.getPageCount();
     let totalAnnexPages = 0;
@@ -68864,7 +71475,8 @@ var PDFMergerService = class {
       }
     }
     const mergedPdfBytes = await mergedPdf.save();
-    await fs22.writeFile(outputPath, mergedPdfBytes);
+    await fs26.writeFile(outputPath, mergedPdfBytes);
+    await linearizePdfInPlace(outputPath, { mimeType: "application/pdf" });
     return {
       totalPages: mergedPdf.getPageCount(),
       mainPages: mainPageCount,
@@ -68873,16 +71485,16 @@ var PDFMergerService = class {
   }
   static async applyLetterheadBackground(pdfPath, letterhead, outputPath, companyId) {
     if (!letterhead) {
-      if (pdfPath !== outputPath) await fs22.copyFile(pdfPath, outputPath);
+      if (pdfPath !== outputPath) await fs26.copyFile(pdfPath, outputPath);
       return;
     }
     try {
       const letterheadBytes = await resolveLetterheadBytes(letterhead, companyId);
       if (!letterheadBytes) {
-        if (pdfPath !== outputPath) await fs22.copyFile(pdfPath, outputPath);
+        if (pdfPath !== outputPath) await fs26.copyFile(pdfPath, outputPath);
         return;
       }
-      const sourcePdf = await PDFDocument2.load(await fs22.readFile(pdfPath));
+      const sourcePdf = await PDFDocument2.load(await fs26.readFile(pdfPath));
       const outputPdf = await PDFDocument2.create();
       const embeddedBackground = await this.embedBackground(outputPdf, letterheadBytes);
       for (const sourcePage of sourcePdf.getPages()) {
@@ -68892,13 +71504,14 @@ var PDFMergerService = class {
         this.drawBackground(outputPage, embeddedBackground, width, height);
         outputPage.drawPage(embeddedPage, { x: 0, y: 0, width, height });
       }
-      await fs22.writeFile(outputPath, await outputPdf.save());
+      await fs26.writeFile(outputPath, await outputPdf.save());
+      await linearizePdfInPlace(outputPath, { mimeType: "application/pdf" });
     } catch (error) {
       logger_default.warn("Letterhead background failed, copying original PDF", {
         error: String(error),
         letterheadId: letterhead.id
       });
-      if (pdfPath !== outputPath) await fs22.copyFile(pdfPath, outputPath);
+      if (pdfPath !== outputPath) await fs26.copyFile(pdfPath, outputPath);
     }
   }
   static async embedBackground(outputPdf, bytes) {
@@ -68920,17 +71533,17 @@ var PDFMergerService = class {
 };
 
 // src/services/folio-generator.service.ts
-import fs23 from "fs-extra";
+import fs27 from "fs-extra";
 import { PDFDocument as PDFDocument3, rgb as rgb2, StandardFonts as StandardFonts2 } from "pdf-lib";
 var FolioGeneratorService = class {
   static async addFolios(pdfPath, config2, outputPath, options2 = {}) {
     if (!config2.enabled) {
       if (pdfPath !== outputPath) {
-        await fs23.copyFile(pdfPath, outputPath);
+        await fs27.copyFile(pdfPath, outputPath);
       }
       return;
     }
-    const pdfBytes = await fs23.readFile(pdfPath);
+    const pdfBytes = await fs27.readFile(pdfPath);
     const pdfDoc = await PDFDocument3.load(pdfBytes);
     const font = await pdfDoc.embedFont(StandardFonts2.Helvetica);
     const fontSize = config2.fontSize || 10;
@@ -68962,7 +71575,8 @@ var FolioGeneratorService = class {
       });
     }
     const modifiedPdfBytes = await pdfDoc.save();
-    await fs23.writeFile(outputPath, modifiedPdfBytes);
+    await fs27.writeFile(outputPath, modifiedPdfBytes);
+    await linearizePdfInPlace(outputPath, { mimeType: "application/pdf" });
   }
   static formatFolio(template, current, total) {
     return template.replace("{current}", String(current)).replace("{total}", String(total));
@@ -69005,7 +71619,7 @@ init_environment();
 init_models();
 
 // src/services/pdf-to-docx.service.ts
-import fs24 from "fs-extra";
+import fs28 from "fs-extra";
 
 // node_modules/docx/build/index.mjs
 var __defProp2 = Object.defineProperty;
@@ -73213,7 +75827,7 @@ function requireUtil() {
       return Object.prototype.hasOwnProperty.call(obj, prop);
     }
     var kCustomPromisifiedSymbol = typeof Symbol !== "undefined" ? /* @__PURE__ */ Symbol("util.promisify.custom") : void 0;
-    exports.promisify = function promisify(original) {
+    exports.promisify = function promisify3(original) {
       if (typeof original !== "function")
         throw new TypeError('The "original" argument must be of type Function');
       if (kCustomPromisifiedSymbol && original[kCustomPromisifiedSymbol]) {
@@ -73837,7 +76451,7 @@ function requireBrowser() {
 }
 var _stream_writable;
 var hasRequired_stream_writable;
-function require_stream_writable() {
+function require_stream_writable2() {
   if (hasRequired_stream_writable)
     return _stream_writable;
   hasRequired_stream_writable = 1;
@@ -73873,7 +76487,7 @@ function require_stream_writable() {
   function nop() {
   }
   function WritableState(options2, stream, isDuplex) {
-    Duplex = Duplex || require_stream_duplex();
+    Duplex = Duplex || require_stream_duplex2();
     options2 = options2 || {};
     if (typeof isDuplex !== "boolean")
       isDuplex = stream instanceof Duplex;
@@ -73947,7 +76561,7 @@ function require_stream_writable() {
     };
   }
   function Writable(options2) {
-    Duplex = Duplex || require_stream_duplex();
+    Duplex = Duplex || require_stream_duplex2();
     var isDuplex = this instanceof Duplex;
     if (!isDuplex && !realHasInstance.call(Writable, this))
       return new Writable(options2);
@@ -74329,7 +76943,7 @@ function require_stream_writable() {
 }
 var _stream_duplex;
 var hasRequired_stream_duplex;
-function require_stream_duplex() {
+function require_stream_duplex2() {
   if (hasRequired_stream_duplex)
     return _stream_duplex;
   hasRequired_stream_duplex = 1;
@@ -74341,8 +76955,8 @@ function require_stream_duplex() {
     return keys2;
   };
   _stream_duplex = Duplex;
-  var Readable = require_stream_readable();
-  var Writable = require_stream_writable();
+  var Readable = require_stream_readable2();
+  var Writable = require_stream_writable2();
   inherits_browserExports(Duplex, Readable);
   {
     var keys = objectKeys(Writable.prototype);
@@ -75031,7 +77645,7 @@ function requireFromBrowser() {
 }
 var _stream_readable;
 var hasRequired_stream_readable;
-function require_stream_readable() {
+function require_stream_readable2() {
   if (hasRequired_stream_readable)
     return _stream_readable;
   hasRequired_stream_readable = 1;
@@ -75081,7 +77695,7 @@ function require_stream_readable() {
       emitter._events[event] = [fn, emitter._events[event]];
   }
   function ReadableState(options2, stream, isDuplex) {
-    Duplex = Duplex || require_stream_duplex();
+    Duplex = Duplex || require_stream_duplex2();
     options2 = options2 || {};
     if (typeof isDuplex !== "boolean")
       isDuplex = stream instanceof Duplex;
@@ -75119,7 +77733,7 @@ function require_stream_readable() {
     }
   }
   function Readable(options2) {
-    Duplex = Duplex || require_stream_duplex();
+    Duplex = Duplex || require_stream_duplex2();
     if (!(this instanceof Readable))
       return new Readable(options2);
     var isDuplex = this instanceof Duplex;
@@ -75824,13 +78438,13 @@ function require_stream_readable() {
 }
 var _stream_transform;
 var hasRequired_stream_transform;
-function require_stream_transform() {
+function require_stream_transform2() {
   if (hasRequired_stream_transform)
     return _stream_transform;
   hasRequired_stream_transform = 1;
   _stream_transform = Transform;
   var _require$codes = requireErrorsBrowser().codes, ERR_METHOD_NOT_IMPLEMENTED = _require$codes.ERR_METHOD_NOT_IMPLEMENTED, ERR_MULTIPLE_CALLBACK = _require$codes.ERR_MULTIPLE_CALLBACK, ERR_TRANSFORM_ALREADY_TRANSFORMING = _require$codes.ERR_TRANSFORM_ALREADY_TRANSFORMING, ERR_TRANSFORM_WITH_LENGTH_0 = _require$codes.ERR_TRANSFORM_WITH_LENGTH_0;
-  var Duplex = require_stream_duplex();
+  var Duplex = require_stream_duplex2();
   inherits_browserExports(Transform, Duplex);
   function afterTransform(er3, data) {
     var ts = this._transformState;
@@ -75929,12 +78543,12 @@ function require_stream_transform() {
 }
 var _stream_passthrough;
 var hasRequired_stream_passthrough;
-function require_stream_passthrough() {
+function require_stream_passthrough2() {
   if (hasRequired_stream_passthrough)
     return _stream_passthrough;
   hasRequired_stream_passthrough = 1;
   _stream_passthrough = PassThrough;
-  var Transform = require_stream_transform();
+  var Transform = require_stream_transform2();
   inherits_browserExports(PassThrough, Transform);
   function PassThrough(options2) {
     if (!(this instanceof PassThrough))
@@ -76048,11 +78662,11 @@ var streamBrowserify = Stream$1;
 var EE = eventsExports.EventEmitter;
 var inherits = inherits_browserExports;
 inherits(Stream$1, EE);
-Stream$1.Readable = require_stream_readable();
-Stream$1.Writable = require_stream_writable();
-Stream$1.Duplex = require_stream_duplex();
-Stream$1.Transform = require_stream_transform();
-Stream$1.PassThrough = require_stream_passthrough();
+Stream$1.Readable = require_stream_readable2();
+Stream$1.Writable = require_stream_writable2();
+Stream$1.Duplex = require_stream_duplex2();
+Stream$1.Transform = require_stream_transform2();
+Stream$1.PassThrough = require_stream_passthrough2();
 Stream$1.finished = requireEndOfStream();
 Stream$1.pipeline = requirePipeline();
 Stream$1.Stream = Stream$1;
@@ -83290,8 +85904,8 @@ var File = class {
     return this.fontWrapper;
   }
 };
-function commonjsRequire(path36) {
-  throw new Error('Could not dynamically require "' + path36 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
+function commonjsRequire(path41) {
+  throw new Error('Could not dynamically require "' + path41 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
 }
 var jszip_min = { exports: {} };
 (function(module, exports) {
@@ -85952,7 +88566,7 @@ function xml(input, options2) {
     };
   }
   var stream = options2.stream ? new Stream() : null, output = "", interrupted = false, indent = !options2.indent ? "" : options2.indent === true ? DEFAULT_INDENT : options2.indent, instant = true;
-  function delay(func) {
+  function delay2(func) {
     if (!instant) {
       func();
     } else {
@@ -85969,7 +88583,7 @@ function xml(input, options2) {
     }
     if (interrupt && interrupted) {
       var data = output;
-      delay(function() {
+      delay2(function() {
         stream.emit("data", data);
       });
       output = "";
@@ -85981,7 +88595,7 @@ function xml(input, options2) {
   function end() {
     if (stream) {
       var data = output;
-      delay(function() {
+      delay2(function() {
         stream.emit("data", data);
         stream.emit("end");
         stream.readable = false;
@@ -85997,7 +88611,7 @@ function xml(input, options2) {
     add({ "?xml": { _attr: attr } });
     output = output.replace("/>", "?>");
   }
-  delay(function() {
+  delay2(function() {
     instant = false;
   });
   if (options2.declaration) {
@@ -86732,13 +89346,13 @@ var formatter = new Formatter();
 var imageReplacer = new ImageReplacer();
 
 // src/services/pdf-to-docx.service.ts
-import { createRequire as createRequire2 } from "module";
+import { createRequire as createRequire3 } from "module";
 import { createCanvas as createCanvas2 } from "@napi-rs/canvas";
 async function convertPdfToDocx(pdfPath, outputPath, options2 = {}) {
   const scale = options2.scale ?? 1.8;
-  const pdfBuffer = await fs24.readFile(pdfPath);
+  const pdfBuffer = await fs28.readFile(pdfPath);
   const pdfData = Buffer.isBuffer(pdfBuffer) ? new Uint8Array(pdfBuffer.buffer, pdfBuffer.byteOffset, pdfBuffer.byteLength) : new Uint8Array(pdfBuffer);
-  const require2 = createRequire2(import.meta.url);
+  const require3 = createRequire3(import.meta.url);
   const candidates = [
     "pdfjs-dist/legacy/build/pdf.mjs",
     "pdfjs-dist/legacy/build/pdf.js",
@@ -86748,7 +89362,7 @@ async function convertPdfToDocx(pdfPath, outputPath, options2 = {}) {
   let pdfjsLib2 = null;
   for (const candidate of candidates) {
     try {
-      const resolved = require2.resolve(candidate);
+      const resolved = require3.resolve(candidate);
       pdfjsLib2 = await import(resolved);
       break;
     } catch {
@@ -86798,7 +89412,7 @@ async function convertPdfToDocx(pdfPath, outputPath, options2 = {}) {
     ]
   });
   const docxBuffer = await Packer.toBuffer(doc);
-  await fs24.writeFile(outputPath, docxBuffer);
+  await fs28.writeFile(outputPath, docxBuffer);
 }
 
 // src/api/controllers/documents.controller.ts
@@ -86816,14 +89430,14 @@ function resolveProto4(req) {
 var PUBLIC_BASE_URL = (process.env.LILA_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
 function buildAbsoluteUrl4(req, relativeUrl) {
   if (!relativeUrl) return relativeUrl;
-  const path36 = relativeUrl.startsWith("/") ? relativeUrl : `/${relativeUrl}`;
+  const path41 = relativeUrl.startsWith("/") ? relativeUrl : `/${relativeUrl}`;
   if (PUBLIC_BASE_URL) {
-    return `${PUBLIC_BASE_URL}${path36}`;
+    return `${PUBLIC_BASE_URL}${path41}`;
   }
   const host = req.get("x-forwarded-host") || req.get("host");
   if (!host) return relativeUrl;
   const proto3 = resolveProto4(req);
-  return `${proto3}://${host}${path36}`;
+  return `${proto3}://${host}${path41}`;
 }
 function isPlainObject2(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -86869,11 +89483,11 @@ function hasMeaningfulContractRows(value) {
 }
 function mergeContractAutofillData(currentData, serviceData) {
   const next = mergeDeep({}, currentData);
-  CONTRACT_AUTOFILL_PATHS.forEach((path36) => {
-    const currentValue = getNestedValue(next, path36);
-    const serviceValue = getNestedValue(serviceData, path36);
+  CONTRACT_AUTOFILL_PATHS.forEach((path41) => {
+    const currentValue = getNestedValue(next, path41);
+    const serviceValue = getNestedValue(serviceData, path41);
     if (isEmptyContractValue(currentValue) && !isEmptyContractValue(serviceValue)) {
-      setNestedValue2(next, path36, serviceValue);
+      setNestedValue2(next, path41, serviceValue);
     }
   });
   CONTRACT_TABLE_KEYS.forEach((key) => {
@@ -87010,8 +89624,8 @@ function roundValue(value, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round(num * factor) / factor;
 }
-function setNestedValue2(target, path36, value) {
-  const parts = path36.split(".");
+function setNestedValue2(target, path41, value) {
+  const parts = path41.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -87022,8 +89636,8 @@ function setNestedValue2(target, path36, value) {
   }
   current[parts[parts.length - 1]] = value;
 }
-function getNestedValue(target, path36) {
-  const parts = path36.split(".");
+function getNestedValue(target, path41) {
+  const parts = path41.split(".");
   let current = target;
   for (const key of parts) {
     if (!current || typeof current !== "object") return void 0;
@@ -87390,9 +90004,9 @@ async function generateDocument(req, res, next) {
     const reportsDir = storagePathService.getModulePath(
       companyId,
       "service",
-      path24.join("reports", report.serviceManagementId || "generic")
+      path29.join("reports", report.serviceManagementId || "generic")
     );
-    await fs25.ensureDir(reportsDir);
+    await fs29.ensureDir(reportsDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const baseFilename = `${report.type}-${timestamp}`;
     let docxUrl;
@@ -87406,7 +90020,7 @@ async function generateDocument(req, res, next) {
     let docxSizeBytes;
     if (generatePdf) {
       const pdfFilename = `${baseFilename}.pdf`;
-      const pdfPath = path24.join(reportsDir, pdfFilename);
+      const pdfPath = path29.join(reportsDir, pdfFilename);
       const pdfStarted = Date.now();
       const baseUrl = buildAbsoluteUrl4(req, "");
       const { html, source } = await resolveReportHtml({
@@ -87427,15 +90041,15 @@ async function generateDocument(req, res, next) {
       });
       const letterhead = getDocumentLetterhead(data);
       if (letterhead) {
-        const letterheadPath = path24.join(reportsDir, `${baseFilename}-letterhead.pdf`);
+        const letterheadPath = path29.join(reportsDir, `${baseFilename}-letterhead.pdf`);
         await PDFMergerService.applyLetterheadBackground(
           pdfPath,
           letterhead,
           letterheadPath,
           companyId
         );
-        await fs25.copyFile(letterheadPath, pdfPath);
-        await fs25.remove(letterheadPath);
+        await fs29.copyFile(letterheadPath, pdfPath);
+        await fs29.remove(letterheadPath);
       }
       pdfDuration = Date.now() - pdfStarted;
       let currentPdfPath = pdfPath;
@@ -87443,7 +90057,7 @@ async function generateDocument(req, res, next) {
       annexPages = 0;
       totalPages = mainPages;
       if (annexes.length > 0) {
-        const mergedPath = path24.join(reportsDir, `${baseFilename}-merged.pdf`);
+        const mergedPath = path29.join(reportsDir, `${baseFilename}-merged.pdf`);
         const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
           pdfPath,
           annexes,
@@ -87456,7 +90070,7 @@ async function generateDocument(req, res, next) {
         totalPages = mergeResult.totalPages;
       }
       if (folioConfig?.enabled) {
-        const folioPath = path24.join(reportsDir, `${baseFilename}-folio.pdf`);
+        const folioPath = path29.join(reportsDir, `${baseFilename}-folio.pdf`);
         const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
         await FolioGeneratorService.addFolios(
           currentPdfPath,
@@ -87467,35 +90081,35 @@ async function generateDocument(req, res, next) {
         currentPdfPath = folioPath;
       }
       if (currentPdfPath !== pdfPath) {
-        await fs25.copyFile(currentPdfPath, pdfPath);
-        await fs25.remove(currentPdfPath);
+        await fs29.copyFile(currentPdfPath, pdfPath);
+        await fs29.remove(currentPdfPath);
       }
-      pdfUrl = `/files/companies/${companyId}/${path24.posix.join(
+      pdfUrl = `/files/companies/${companyId}/${path29.posix.join(
         "service",
         "reports",
         report.serviceManagementId || "generic",
         pdfFilename
       )}`;
       try {
-        const stats = await fs25.stat(pdfPath);
+        const stats = await fs29.stat(pdfPath);
         pdfSizeBytes = stats.size;
       } catch (error) {
         logger_default.warn("Failed to read generated PDF size", { error: String(error), pdfPath });
       }
       if (generateDocx) {
         const docxFilename = `${baseFilename}.docx`;
-        const docxPath = path24.join(reportsDir, docxFilename);
+        const docxPath = path29.join(reportsDir, docxFilename);
         const docxStarted = Date.now();
         await convertPdfToDocx(pdfPath, docxPath);
         docxDuration = Date.now() - docxStarted;
-        docxUrl = `/files/companies/${companyId}/${path24.posix.join(
+        docxUrl = `/files/companies/${companyId}/${path29.posix.join(
           "service",
           "reports",
           report.serviceManagementId || "generic",
           docxFilename
         )}`;
         try {
-          const stats = await fs25.stat(docxPath);
+          const stats = await fs29.stat(docxPath);
           docxSizeBytes = stats.size;
         } catch (error) {
           logger_default.warn("Failed to read generated DOCX size", { error: String(error), docxPath });
@@ -87556,12 +90170,12 @@ async function previewFromPrintUrlOnly(req, res, startedAt) {
   const companyId = req.companyId;
   const fetched = await generator_service_default.fetchPrintedHtml(printUrl);
   const html = await inlineCanvasHtmlImages(fetched, companyId);
-  await fs25.ensureDir(config.pdf.tempDir);
+  await fs29.ensureDir(config.pdf.tempDir);
   const previewId = `print-url-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const previewFilename = `${previewId}.pdf`;
-  const previewPath = path24.join(config.pdf.tempDir, previewFilename);
+  const previewPath = path29.join(config.pdf.tempDir, previewFilename);
   if (process.env.PRINT_URL_DEBUG_HTML === "true") {
-    await fs25.writeFile(previewPath.replace(/\.pdf$/, ".html"), html).catch(() => void 0);
+    await fs29.writeFile(previewPath.replace(/\.pdf$/, ".html"), html).catch(() => void 0);
   }
   await generator_service_default.generateFromHtml(html, {
     outputPath: previewPath,
@@ -87569,8 +90183,8 @@ async function previewFromPrintUrlOnly(req, res, startedAt) {
     margin: { top: "0", right: "0", bottom: "0", left: "0" }
   });
   const totalPages = await PDFMergerService.getPageCount(previewPath);
-  const previewUrl = path24.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
-  const stat = await fs25.stat(previewPath);
+  const previewUrl = path29.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+  const stat = await fs29.stat(previewPath);
   logger_default.info("documents.preview.print_url_only.completed", {
     companyId,
     durationMs: Date.now() - startedAt,
@@ -87609,7 +90223,7 @@ async function previewDocument(req, res, next) {
     } = await resolveDocumentContext(req);
     const effectiveSchema = buildEffectiveSchema(schema, schemaOverrides, customSections);
     disableUnsupportedReportLetterhead(effectiveSchema, data);
-    await fs25.ensureDir(config.pdf.tempDir);
+    await fs29.ensureDir(config.pdf.tempDir);
     const baseUrl = buildAbsoluteUrl4(req, "");
     const { html, source } = await resolveReportHtml({
       canvasHtml: req.body?.html,
@@ -87621,7 +90235,7 @@ async function previewDocument(req, res, next) {
     });
     const previewId = `${report.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path24.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path29.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: effectiveSchema.pageSize || "A4",
@@ -87632,22 +90246,22 @@ async function previewDocument(req, res, next) {
     });
     const letterhead = getDocumentLetterhead(data);
     if (letterhead) {
-      const letterheadPath = path24.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
+      const letterheadPath = path29.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
       await PDFMergerService.applyLetterheadBackground(
         previewPath,
         letterhead,
         letterheadPath,
         companyId
       );
-      await fs25.copyFile(letterheadPath, previewPath);
-      await fs25.remove(letterheadPath);
+      await fs29.copyFile(letterheadPath, previewPath);
+      await fs29.remove(letterheadPath);
     }
     let currentPdfPath = previewPath;
     let mainPages = await PDFMergerService.getPageCount(previewPath);
     let annexPages = 0;
     let totalPages = mainPages;
     if (annexes.length > 0) {
-      const mergedPath = path24.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
+      const mergedPath = path29.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
       const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
         previewPath,
         annexes,
@@ -87660,7 +90274,7 @@ async function previewDocument(req, res, next) {
       totalPages = mergeResult.totalPages;
     }
     if (folioConfig?.enabled) {
-      const folioPath = path24.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
+      const folioPath = path29.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
       const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
       await FolioGeneratorService.addFolios(
         currentPdfPath,
@@ -87671,11 +90285,11 @@ async function previewDocument(req, res, next) {
       currentPdfPath = folioPath;
     }
     if (currentPdfPath !== previewPath) {
-      await fs25.copyFile(currentPdfPath, previewPath);
-      await fs25.remove(currentPdfPath);
+      await fs29.copyFile(currentPdfPath, previewPath);
+      await fs29.remove(currentPdfPath);
     }
-    const previewUrl = path24.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
-    const stat = await fs25.stat(previewPath);
+    const previewUrl = path29.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs29.stat(previewPath);
     logger_default.info("documents.preview.completed", {
       reportId: report?._id,
       type: report.type,
@@ -87753,8 +90367,8 @@ async function downloadDocument(req, res, next) {
 
 // src/api/controllers/quote-documents.controller.ts
 init_logger();
-import fs26 from "fs-extra";
-import path25 from "path";
+import fs30 from "fs-extra";
+import path30 from "path";
 init_environment();
 init_storage_path_service();
 
@@ -88972,10 +91586,10 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
   const startedAt = Date.now();
   try {
     const { payload, html, source } = await buildRenderContext(req);
-    await fs26.ensureDir(config.pdf.tempDir);
+    await fs30.ensureDir(config.pdf.tempDir);
     const previewId = `${previewPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path25.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path30.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -88998,8 +91612,8 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
       buildFolioOptions2(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
-    const stat = await fs26.stat(previewPath);
-    const previewUrl = path25.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs30.stat(previewPath);
+    const previewUrl = path30.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("quote_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -89029,16 +91643,16 @@ async function generateQuoteDocument(req, res, next, options2) {
       payload.quoteNumber || payload.schemaData?.header?.quoteNumber || payload.schemaData?.quoteNumber || "sin-numero"
     );
     const safeQuoteNumber = sanitizePathSegment(quoteNumberRaw);
-    const relativeDir = path25.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
+    const relativeDir = path30.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       "cotizaciones",
-      path25.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
+      path30.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
     );
-    await fs26.ensureDir(outputDir);
+    await fs30.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${options2.filenamePrefix}-${safeQuoteNumber}-${timestamp}.pdf`;
-    const outputPath = path25.join(outputDir, filename);
+    const outputPath = path30.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -89061,7 +91675,7 @@ async function generateQuoteDocument(req, res, next, options2) {
       buildFolioOptions2(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(outputPath);
-    const stat = await fs26.stat(outputPath);
+    const stat = await fs30.stat(outputPath);
     const pdfUrl = `/files/companies/${companyId}/${relativeDir}/${filename}`;
     logger_default.info("quote_documents.generate.completed", {
       companyId,
@@ -89108,8 +91722,8 @@ async function generateServiceQuoteDocument(req, res, next) {
 
 // src/api/controllers/purchase-order-documents.controller.ts
 init_logger();
-import fs27 from "fs-extra";
-import path26 from "path";
+import fs31 from "fs-extra";
+import path31 from "path";
 init_environment();
 init_storage_path_service();
 function resolveProto6(req) {
@@ -89784,10 +92398,10 @@ async function previewPurchaseOrder(req, res, next) {
   const startedAt = Date.now();
   try {
     const { payload, html } = await buildRenderContext2(req);
-    await fs27.ensureDir(config.pdf.tempDir);
+    await fs31.ensureDir(config.pdf.tempDir);
     const previewId = `ord-com-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path26.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path31.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -89808,8 +92422,8 @@ async function previewPurchaseOrder(req, res, next) {
       buildFolioOptions3(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
-    const stat = await fs27.stat(previewPath);
-    const previewUrl = path26.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const stat = await fs31.stat(previewPath);
+    const previewUrl = path31.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("purchase_order_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -89846,16 +92460,16 @@ async function generatePurchaseOrder(req, res, next) {
     ).toLowerCase() === "service";
     const moduleDir2 = isServiceOrder ? "ordenes-servicio" : "ordenes-compra";
     const filenamePrefix = isServiceOrder ? "orden-servicio" : "orden-compra";
-    const relativeDir = path26.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
+    const relativeDir = path31.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       moduleDir2,
       `nro-${safeOrderNumber}`
     );
-    await fs27.ensureDir(outputDir);
+    await fs31.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${filenamePrefix}-${safeOrderNumber}-${timestamp}.pdf`;
-    const outputPath = path26.join(outputDir, filename);
+    const outputPath = path31.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -89876,7 +92490,7 @@ async function generatePurchaseOrder(req, res, next) {
       buildFolioOptions3(payload.schemaData || {})
     );
     const totalPages = await PDFMergerService.getPageCount(outputPath);
-    const stat = await fs27.stat(outputPath);
+    const stat = await fs31.stat(outputPath);
     const pdfUrl = `/files/companies/${companyId}/${relativeDir}/${filename}`;
     logger_default.info("purchase_order_documents.generate.completed", {
       companyId,
@@ -89916,8 +92530,8 @@ init_logger();
 
 // src/services/dispatch-note-document.service.ts
 init_logger();
-import fs28 from "fs-extra";
-import path27 from "path";
+import fs32 from "fs-extra";
+import path32 from "path";
 import QRCode from "qrcode";
 init_environment();
 init_storage_path_service();
@@ -90104,6 +92718,18 @@ function renderDispatchNoteHtml(data, baseUrl, extras = {}) {
         .row-split .cell { flex: 1.4; min-width: 0; }
         .row-split .cell.tight { flex: none; }
         .row-split .cell .row-value { white-space: nowrap; -webkit-line-clamp: 1; }
+        .quality {
+          display: flex; gap: 2.5mm; align-items: flex-start;
+          margin-top: 2mm; padding: 2mm 2.5mm; border-radius: 1.5mm;
+          border: 0.3mm solid #cbd5e1; background: #f8fafc;
+        }
+        .quality.ok { border-color: #86efac; background: #f0fdf4; }
+        .quality.warn { border-color: #fcd34d; background: #fffbeb; }
+        .quality-label { font-size: 2.1mm; font-weight: 700; letter-spacing: 0.3mm; color: #64748b; padding-top: 0.3mm; }
+        .quality.ok .quality-label { color: #15803d; }
+        .quality.warn .quality-label { color: #b45309; }
+        .quality-title { font-size: 2.6mm; font-weight: 700; color: #0f172a; }
+        .quality-meta { font-size: 2.2mm; color: #475569; margin-top: 0.4mm; }
         .bottom {
           margin-top: auto;
           display: flex;
@@ -90206,6 +92832,19 @@ function renderDispatchNoteHtml(data, baseUrl, extras = {}) {
             <div class="row-value">${escapeHtml4(extraNote)}</div>
           </div>` : ""}
         </section>
+
+        ${dispatch.quality?.show ? `<section class="quality ${dispatch.quality.kind === "certificate" ? "ok" : "warn"}">
+          <div class="quality-label">${dispatch.quality.kind === "certificate" ? "CALIDAD" : "CONSTANCIA"}</div>
+          <div class="quality-body">
+            <div class="quality-title">${escapeHtml4(dispatch.quality.label || "")}</div>
+            ${dispatch.quality.kind === "certificate" ? `<div class="quality-meta">${[
+    dispatch.quality.husoKey ? `Huso ${escapeHtml4(dispatch.quality.husoKey)}` : "",
+    dispatch.quality.testDate ? `Ensayo ${escapeHtml4(dispatch.quality.testDate)}` : "",
+    dispatch.quality.validUntil ? `Vigente hasta ${escapeHtml4(dispatch.quality.validUntil)}` : "",
+    dispatch.quality.laboratory ? escapeHtml4(dispatch.quality.laboratory) : ""
+  ].filter(Boolean).join(" &middot; ")}</div>` : ""}
+          </div>
+        </section>` : ""}
 
         <section class="bottom">
           <div class="signature">
@@ -90320,10 +92959,10 @@ async function buildRenderContext3(params) {
 async function previewDispatchNoteDocument(params) {
   const startedAt = Date.now();
   const { html, companyId } = await buildRenderContext3(params);
-  await fs28.ensureDir(config.pdf.tempDir);
+  await fs32.ensureDir(config.pdf.tempDir);
   const previewId = `dispatch-note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const previewFilename = `${previewId}.pdf`;
-  const previewPath = path27.join(config.pdf.tempDir, previewFilename);
+  const previewPath = path32.join(config.pdf.tempDir, previewFilename);
   await generator_service_default.generateFromHtml(html, {
     outputPath: previewPath,
     format: "A4",
@@ -90335,8 +92974,8 @@ async function previewDispatchNoteDocument(params) {
       left: "0mm"
     }
   });
-  const stat = await fs28.stat(previewPath);
-  const previewUrl = path27.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+  const stat = await fs32.stat(previewPath);
+  const previewUrl = path32.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
   logger_default.info("dispatch_note_documents.preview.completed", {
     companyId,
     durationMs: Date.now() - startedAt,
@@ -90357,7 +92996,7 @@ async function generateDispatchNoteDocumentFile(params) {
     prePayload.orderNumber || prePayload.schemaData?.dispatch?.valeNumber || "sin-numero"
   );
   const safeDispatchNumber = sanitizePathSegment3(dispatchNumberRaw);
-  const relativeDir = path27.posix.join("vales", `nro-${safeDispatchNumber}`);
+  const relativeDir = path32.posix.join("vales", `nro-${safeDispatchNumber}`);
   const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
   const fileName = `vale-despacho-${safeDispatchNumber}-${timestamp}.pdf`;
   const { companyId, html } = await buildRenderContext3({
@@ -90367,8 +93006,8 @@ async function generateDispatchNoteDocumentFile(params) {
   });
   await storagePathService.ensureCompanyStructure(companyId);
   const outputDir = storagePathService.getModulePath(companyId, "dispatches", relativeDir);
-  await fs28.ensureDir(outputDir);
-  const outputPath = path27.join(outputDir, fileName);
+  await fs32.ensureDir(outputDir);
+  const outputPath = path32.join(outputDir, fileName);
   await generator_service_default.generateFromHtml(html, {
     outputPath,
     format: "A4",
@@ -90380,9 +93019,9 @@ async function generateDispatchNoteDocumentFile(params) {
       left: "0mm"
     }
   });
-  const stat = await fs28.stat(outputPath);
+  const stat = await fs32.stat(outputPath);
   const pdfUrl = `/files/companies/${companyId}/dispatches/${relativeDir}/${fileName}`;
-  const filePath = path27.posix.join("dispatches", relativeDir, fileName);
+  const filePath = path32.posix.join("dispatches", relativeDir, fileName);
   logger_default.info("dispatch_note_documents.generate.completed", {
     companyId,
     dispatchNumber: safeDispatchNumber,
@@ -90464,33 +93103,33 @@ async function generateDispatchNoteDocument(req, res, next) {
 }
 
 // src/api/routes/documents.routes.ts
-var router6 = Router6();
-router6.get("/schemas", getSchemas);
-router6.get("/schemas/:code", getSchema);
-router6.post("/generate", requireTenant, heavyRequestGuard, generateDocument);
-router6.post("/preview", requireTenant, heavyRequestGuard, previewDocument);
-router6.post("/quotes/asphalt/preview", requireTenant, heavyRequestGuard, previewAsphaltQuoteDocument);
-router6.post("/quotes/asphalt/generate", requireTenant, heavyRequestGuard, generateAsphaltQuoteDocument);
-router6.post("/quotes/service/preview", requireTenant, heavyRequestGuard, previewServiceQuoteDocument);
-router6.post("/quotes/service/generate", requireTenant, heavyRequestGuard, generateServiceQuoteDocument);
-router6.post("/purchase-orders/preview", requireTenant, heavyRequestGuard, previewPurchaseOrderDocument);
-router6.post("/purchase-orders/generate", requireTenant, heavyRequestGuard, generatePurchaseOrderDocument);
-router6.post("/dispatch-notes/preview", requireTenant, heavyRequestGuard, previewDispatchNoteDocument2);
-router6.post("/dispatch-notes/generate", requireTenant, heavyRequestGuard, generateDispatchNoteDocument);
-router6.get("/report-data/:serviceId/:type", optionalTenant, getReportData);
-router6.post("/sandbox/random-data", optionalTenant, generateRandomData);
-router6.get("/:id", getDocument2);
-router6.get("/:id/download", downloadDocument);
-var documents_routes_default = router6;
+var router7 = Router7();
+router7.get("/schemas", getSchemas);
+router7.get("/schemas/:code", getSchema);
+router7.post("/generate", requireTenant, heavyRequestGuard, generateDocument);
+router7.post("/preview", requireTenant, heavyRequestGuard, previewDocument);
+router7.post("/quotes/asphalt/preview", requireTenant, heavyRequestGuard, previewAsphaltQuoteDocument);
+router7.post("/quotes/asphalt/generate", requireTenant, heavyRequestGuard, generateAsphaltQuoteDocument);
+router7.post("/quotes/service/preview", requireTenant, heavyRequestGuard, previewServiceQuoteDocument);
+router7.post("/quotes/service/generate", requireTenant, heavyRequestGuard, generateServiceQuoteDocument);
+router7.post("/purchase-orders/preview", requireTenant, heavyRequestGuard, previewPurchaseOrderDocument);
+router7.post("/purchase-orders/generate", requireTenant, heavyRequestGuard, generatePurchaseOrderDocument);
+router7.post("/dispatch-notes/preview", requireTenant, heavyRequestGuard, previewDispatchNoteDocument2);
+router7.post("/dispatch-notes/generate", requireTenant, heavyRequestGuard, generateDispatchNoteDocument);
+router7.get("/report-data/:serviceId/:type", optionalTenant, getReportData);
+router7.post("/sandbox/random-data", optionalTenant, generateRandomData);
+router7.get("/:id", getDocument2);
+router7.get("/:id/download", downloadDocument);
+var documents_routes_default = router7;
 
 // src/api/routes/dispatch.routes.ts
-import { Router as Router7 } from "express";
+import { Router as Router8 } from "express";
 
 // src/api/controllers/dispatch.controller.ts
 init_logger();
 
 // src/services/dispatch-vale.service.ts
-var import_jsonwebtoken6 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken7 = __toESM(require_jsonwebtoken(), 1);
 init_logger();
 init_environment();
 init_models();
@@ -90498,12 +93137,12 @@ import axios8 from "axios";
 init_whatsapp_direct_service();
 
 // src/utils/driver-link.ts
-var import_jsonwebtoken4 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken5 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
-var SCOPE = "driver-location";
+var SCOPE2 = "driver-location";
 var DEFAULT_TTL = "12h";
 function signDriverToken(dispatchId, companyId, expiresIn = DEFAULT_TTL) {
-  return import_jsonwebtoken4.default.sign({ dispatchId, companyId, scope: SCOPE }, config.security.jwtSecret, {
+  return import_jsonwebtoken5.default.sign({ dispatchId, companyId, scope: SCOPE2 }, config.security.jwtSecret, {
     expiresIn
   });
 }
@@ -90534,15 +93173,15 @@ function computeLocationShareDelayMs(etaDurationSeconds) {
 init_json_store();
 init_logger();
 init_environment();
-import path29 from "path";
+import path34 from "path";
 import { randomUUID as randomUUID7 } from "crypto";
 import axios7 from "axios";
 
 // src/utils/portal-callback.ts
-var import_jsonwebtoken5 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken6 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 var buildPortalCallbackHeaders = (companyId, userId = "lila-callback") => ({
-  Authorization: `Bearer ${import_jsonwebtoken5.default.sign(
+  Authorization: `Bearer ${import_jsonwebtoken6.default.sign(
     { companyId, userId, role: "admin" },
     config.security.jwtSecret,
     { expiresIn: "15m" }
@@ -90555,7 +93194,7 @@ var buildPortalCallbackHeaders = (companyId, userId = "lila-callback") => ({
 init_json_store();
 init_logger();
 init_environment();
-import path28 from "path";
+import path33 from "path";
 import { randomUUID as randomUUID6 } from "crypto";
 import axios6 from "axios";
 var STORE_KEY2 = "queue";
@@ -90564,21 +93203,35 @@ var MAX_AGE_MS = 12 * 60 * 60 * 1e3;
 var DEFAULT_FLUSH_INTERVAL_MS2 = 60 * 1e3;
 var NO_ETA_FALLBACK_MS = 90 * 60 * 1e3;
 var MAX_DELAY_MS = MAX_AGE_MS - 60 * 1e3;
-var store = new json_store_default({
-  baseDir: path28.join(config.whatsapp.sessionDir, "../dispatch-autoclose"),
-  autoBackup: true
-});
+var store = null;
+function getStore2() {
+  if (!store) {
+    store = new json_store_default({
+      baseDir: path33.join(config.whatsapp.sessionDir, "../dispatch-autoclose"),
+      autoBackup: true
+    });
+  }
+  return store;
+}
 async function listQueue() {
-  const data = await store.get(STORE_KEY2);
+  const data = await getStore2().get(STORE_KEY2);
   return Array.isArray(data) ? data : [];
 }
 async function saveQueue(items) {
-  await store.set(STORE_KEY2, items);
+  await getStore2().set(STORE_KEY2, items);
 }
 function computeAutoCloseDelayMs(etaSeconds) {
   const eta = Number(etaSeconds);
   const raw = Number.isFinite(eta) && eta > 0 ? eta * 1e3 : NO_ETA_FALLBACK_MS;
   return Math.min(MAX_DELAY_MS, Math.max(0, Math.round(raw)));
+}
+async function hasScheduledAutoClose(dispatchId) {
+  try {
+    const queue2 = await listQueue();
+    return queue2.some((item) => item.dispatchId === dispatchId);
+  } catch {
+    return false;
+  }
 }
 async function scheduleDispatchAutoClose(params) {
   try {
@@ -90627,7 +93280,14 @@ async function postAutoClose(item) {
     return "done";
   } catch (error) {
     const status = axios6.isAxiosError(error) && error.response ? error.response.status : null;
-    if (status !== null && status >= 400 && status < 500) return "done";
+    if (status !== null && status >= 400 && status < 500) {
+      logger_default.warn("dispatch_autoclose.rejected", {
+        companyId: item.companyId,
+        dispatchId: item.dispatchId,
+        status
+      });
+      return "done";
+    }
     logger_default.warn("dispatch_autoclose.post_failed", {
       companyId: item.companyId,
       dispatchId: item.dispatchId,
@@ -90700,16 +93360,22 @@ var STORE_KEY3 = "queue";
 var MAX_ATTEMPTS2 = 3;
 var MAX_AGE_MS2 = 12 * 60 * 60 * 1e3;
 var DEFAULT_FLUSH_INTERVAL_MS3 = 60 * 1e3;
-var store2 = new json_store_default({
-  baseDir: path29.join(config.whatsapp.sessionDir, "../driver-reminders"),
-  autoBackup: true
-});
+var store2 = null;
+function getStore3() {
+  if (!store2) {
+    store2 = new json_store_default({
+      baseDir: path34.join(config.whatsapp.sessionDir, "../driver-reminders"),
+      autoBackup: true
+    });
+  }
+  return store2;
+}
 async function listQueue2() {
-  const data = await store2.get(STORE_KEY3);
+  const data = await getStore3().get(STORE_KEY3);
   return Array.isArray(data) ? data : [];
 }
 async function saveQueue2(items) {
-  await store2.set(STORE_KEY3, items);
+  await getStore3().set(STORE_KEY3, items);
 }
 async function fetchDispatchTracking(companyId, dispatchId) {
   try {
@@ -90783,13 +93449,24 @@ async function scheduleDriverFollowups(params) {
       kind: "arrival-reminder",
       delayMs: computeArrivalReminderDelayMs(eta)
     });
+  } catch (error) {
+    logger_default.error("driver_followups.schedule_failed", {
+      dispatchId: params.dispatchId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+async function scheduleDispatchArrivalAutoClose(params) {
+  try {
+    if (await hasScheduledAutoClose(params.dispatchId)) return;
+    const tracking = await fetchDispatchTracking(params.companyId, params.dispatchId);
     await scheduleDispatchAutoClose({
       companyId: params.companyId,
       dispatchId: params.dispatchId,
-      etaSeconds: eta
+      etaSeconds: tracking?.durationSeconds ?? null
     });
   } catch (error) {
-    logger_default.error("driver_followups.schedule_failed", {
+    logger_default.error("dispatch_autoclose.schedule_failed", {
       dispatchId: params.dispatchId,
       error: error instanceof Error ? error.message : String(error)
     });
@@ -90874,15 +93551,30 @@ init_whatsapp_phone();
 // src/services/dispatch-vale-payload.service.ts
 init_sharedConnection();
 init_models();
-import { Schema as Schema8, Types } from "mongoose";
-var looseSchema2 = new Schema8({}, { strict: false });
+import { Schema as Schema9, Types as Types2 } from "mongoose";
+
+// src/utils/client-facing-m3.ts
+function hasClientFacingM3(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+function resolveClientFacingM3(dispatch) {
+  const candidates = [
+    dispatch.placeholders?.m3Dispatched,
+    dispatch.quantity,
+    dispatch.planedQuantity
+  ];
+  return candidates.find((value) => hasClientFacingM3(value)) ?? 0;
+}
+
+// src/services/dispatch-vale-payload.service.ts
+var looseSchema2 = new Schema9({}, { strict: false });
 async function getPortalModel(name, collection) {
   const conn = await getSharedConnection();
   return conn.models[name] || conn.model(name, looseSchema2, collection);
 }
 function objectId(value) {
   const normalized = String(value || "").trim();
-  return Types.ObjectId.isValid(normalized) ? new Types.ObjectId(normalized) : null;
+  return Types2.ObjectId.isValid(normalized) ? new Types2.ObjectId(normalized) : null;
 }
 function cleanUrl(value) {
   return String(value || "").replace(/^"+|"+$/g, "").trim();
@@ -90999,7 +93691,7 @@ async function buildDispatchValePayloadFromPortal(params) {
   const hourToSave = dispatch.hour?.trim() || peruvianTime;
   const companyName = company?.name || "ConstRoad";
   const note = dispatch.note || "";
-  const quantity = dispatch.quantity || 0;
+  const quantity = resolveClientFacingM3(dispatch);
   const driverName = dispatch.driverName?.trim() || transport?.driverName?.trim() || "";
   const driverPhoneNumber = dispatch.driverPhoneNumber?.trim() || dispatch.phoneNumber?.trim() || "";
   return {
@@ -91032,8 +93724,8 @@ async function buildDispatchValePayloadFromPortal(params) {
 
 // src/models/dispatch-vale-run.model.ts
 init_sharedConnection();
-import mongoose8, { Schema as Schema9 } from "mongoose";
-var DispatchValeRunSchema = new Schema9(
+import mongoose8, { Schema as Schema10 } from "mongoose";
+var DispatchValeRunSchema = new Schema10(
   {
     companyId: { type: String, required: true, index: true },
     dispatchId: { type: String, required: true, index: true },
@@ -91108,7 +93800,7 @@ async function withTimeout(promise, timeoutMs, label) {
   }
 }
 function buildPortalCallbackToken(companyId) {
-  return import_jsonwebtoken6.default.sign(
+  return import_jsonwebtoken7.default.sign(
     {
       companyId,
       userId: "lila-dispatch-vale",
@@ -91417,6 +94109,7 @@ async function generateDispatchValeWorkflow(input) {
       fileError: "",
       locationError: ""
     };
+    await scheduleDispatchArrivalAutoClose({ companyId, dispatchId });
     if (!sendDriverPdf) {
       whatsapp.skippedReason = "sendDriverPdf disabled";
     } else if (!normalizedPhone) {
@@ -91678,8 +94371,8 @@ init_models();
 
 // src/models/dispatch-notification-flag.model.ts
 init_sharedConnection();
-import { Schema as Schema10 } from "mongoose";
-var dispatchNotificationFlagSchema = new Schema10(
+import { Schema as Schema11 } from "mongoose";
+var dispatchNotificationFlagSchema = new Schema11(
   {
     key: { type: String, required: true, unique: true },
     companyId: { type: String, required: true },
@@ -91949,12 +94642,23 @@ function buildOrderCompletionCaption(params) {
     `M3: ${formatQuantity3(params.totalM3)}`
   ].join("\n");
 }
+var MAX_SUMMARY_ROWS = 40;
 function buildOrderCompletionSummarySvg(params) {
   const rowHeight = 54;
   const headerTop = 260;
   const tableTop = 330;
-  const rows = params.rows.slice(0, 14);
-  const height = Math.max(760, tableTop + rowHeight * (rows.length + 1) + 120);
+  const ordered = [...params.rows].sort((left, right) => {
+    const leftUnit = Number(left.unitNumber) > 0 ? Number(left.unitNumber) : Number.MAX_SAFE_INTEGER;
+    const rightUnit = Number(right.unitNumber) > 0 ? Number(right.unitNumber) : Number.MAX_SAFE_INTEGER;
+    if (leftUnit !== rightUnit) return leftUnit - rightUnit;
+    return String(left.hour || "").localeCompare(String(right.hour || ""));
+  });
+  const rows = ordered.slice(0, MAX_SUMMARY_ROWS);
+  const hiddenRows = ordered.length - rows.length;
+  const height = Math.max(
+    760,
+    tableTop + rowHeight * (rows.length + (hiddenRows > 0 ? 2 : 1)) + 120
+  );
   const rowSvg = rows.map((row, index) => {
     const y65 = tableTop + rowHeight * (index + 1);
     return `
@@ -91967,6 +94671,10 @@ function buildOrderCompletionSummarySvg(params) {
         <text x="1095" y="${y65 + 34}" class="cell right">${escapeXml(formatQuantity3(row.quantity))}</text>
       `;
   }).join("");
+  const hiddenSvg = hiddenRows > 0 ? `
+        <rect x="32" y="${tableTop + rowHeight * (rows.length + 1)}" width="1136" height="${rowHeight}" fill="#fff7ed" />
+        <text x="72" y="${tableTop + rowHeight * (rows.length + 1) + 34}" class="cell">y ${hiddenRows} unidades mas en el detalle del pedido</text>
+      ` : "";
   return `
     <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="${height}" viewBox="0 0 1200 ${height}">
       <style>
@@ -92005,6 +94713,7 @@ function buildOrderCompletionSummarySvg(params) {
       <text x="830" y="${tableTop + 35}" class="head">NOTA</text>
       <text x="1095" y="${tableTop + 35}" class="head right">M3</text>
       ${rowSvg}
+      ${hiddenSvg}
     </svg>
   `;
 }
@@ -92178,7 +94887,14 @@ async function generateIppPdfUrl(reportPayload) {
   );
 }
 async function sendOrderCompletionSummary(params) {
-  if (!params.completion || params.targets.length === 0) return false;
+  if (!params.completion || params.targets.length === 0) {
+    logger_default.warn("dispatch_order_completion.skipped", {
+      companyId: params.companyId,
+      hasCompletion: Boolean(params.completion),
+      targets: params.targets.length
+    });
+    return false;
+  }
   const shouldSend = await claimNotificationFlag(
     `dispatch-order-completion:${params.companyId}:${params.completion.orderId || params.completion.rows.map((row) => row.plate).join("|")}`,
     params.companyId
@@ -92195,6 +94911,13 @@ async function sendOrderCompletionSummary(params) {
     });
     return false;
   }
+  logger_default.info("dispatch_order_completion.sending", {
+    companyId: params.companyId,
+    orderId: params.completion.orderId,
+    rows: params.completion.rows.length,
+    totalUnits: params.completion.totalUnits,
+    targets: params.targets.length
+  });
   const caption = buildOrderCompletionCaption({
     botLabel: params.botLabel,
     clientName: params.completion.clientName,
@@ -92265,7 +94988,7 @@ async function sendDispatchNotifications(params) {
   const driverLicense = toSafeText(input.driverLicense);
   const driverPhoneNumber = toSafeText(input.driverPhoneNumber);
   const obra = toSafeText(input.obra, "No especificada");
-  const dispatchOrdinal = Math.max(Number(input.dispatchedCount) || 0, 1);
+  const dispatchOrdinal = Number.isInteger(input.unitNumber) && Number(input.unitNumber) > 0 ? Number(input.unitNumber) : Math.max(Number(input.dispatchedCount) || 0, 1);
   const clientPendingCount = Math.max(Number(input.clientPendingCount) || 0, 0);
   const dispatchSent = await claimNotificationFlag(
     `dispatch-progress:${input.companyId}:${input.dispatchId}`,
@@ -92454,7 +95177,18 @@ async function processPostDispatch(input) {
     dispatchId: input.dispatchId,
     sender: input.sender || "(none)",
     pendingCount: input.pendingCount,
-    dispatchedCount: input.dispatchedCount
+    dispatchedCount: input.dispatchedCount,
+    unitNumber: input.unitNumber
+  });
+  await scheduleDispatchArrivalAutoClose({
+    companyId: input.companyId,
+    dispatchId: input.dispatchId
+  }).catch((error) => {
+    logger_default.warn("dispatch_autoclose.schedule_skipped", {
+      companyId: input.companyId,
+      dispatchId: input.dispatchId,
+      error: error instanceof Error ? error.message : String(error)
+    });
   });
   const context = await fetchDispatchContext(input);
   logger_default.info("dispatch_post_process.context", {
@@ -92497,6 +95231,7 @@ function normalizeOrderCompletion(value) {
     driverName: typeof row.driverName === "string" ? row.driverName : "",
     hour: typeof row.hour === "string" ? row.hour : "",
     note: typeof row.note === "string" ? row.note : "",
+    unitNumber: typeof row.unitNumber === "number" && Number.isInteger(row.unitNumber) ? row.unitNumber : void 0,
     plate: typeof row.plate === "string" ? row.plate : "",
     quantity: typeof row.quantity === "number" ? row.quantity : 0
   })) : [];
@@ -92549,6 +95284,7 @@ function validatePostProcessInput(body) {
       clientId: typeof payload.clientId === "string" ? payload.clientId : void 0,
       state: payload.state,
       note: typeof payload.note === "string" ? payload.note : void 0,
+      unitNumber: typeof payload.unitNumber === "number" && Number.isInteger(payload.unitNumber) ? payload.unitNumber : void 0,
       quantity: typeof payload.quantity === "number" ? payload.quantity : void 0,
       plate: typeof payload.plate === "string" ? payload.plate : void 0,
       driverName: typeof payload.driverName === "string" ? payload.driverName : void 0,
@@ -92597,30 +95333,30 @@ async function postProcess(req, res) {
 }
 
 // src/api/routes/dispatch.routes.ts
-var router7 = Router7();
-router7.post("/generate-vale", requireTenant, generateValeAndNotify);
-router7.post("/post-process", requireTenant, postProcess);
-var dispatch_routes_default = router7;
+var router8 = Router8();
+router8.post("/generate-vale", requireTenant, generateValeAndNotify);
+router8.post("/post-process", requireTenant, postProcess);
+var dispatch_routes_default = router8;
 
 // src/api/routes/public.routes.ts
-import { Router as Router8 } from "express";
+import { Router as Router9 } from "express";
 import multer3 from "multer";
-import fs30 from "fs-extra";
-import path31 from "path";
+import fs34 from "fs-extra";
+import path36 from "path";
 
 // src/api/controllers/public.controller.ts
-var import_jsonwebtoken7 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken8 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 init_models();
 import axios11 from "axios";
 import { randomUUID as randomUUID8 } from "crypto";
-import fs29 from "fs-extra";
-import path30 from "path";
+import fs33 from "fs-extra";
+import path35 from "path";
 
 // src/models/public-reception-idempotency.model.ts
 init_sharedConnection();
-import { Schema as Schema11 } from "mongoose";
-var publicReceptionIdempotencySchema = new Schema11(
+import { Schema as Schema12 } from "mongoose";
+var publicReceptionIdempotencySchema = new Schema12(
   {
     companyId: { type: String, required: true },
     clientMutationId: { type: String, required: true },
@@ -92650,7 +95386,7 @@ async function getPublicReceptionIdempotencyModel() {
   );
   return publicReceptionIdempotencyModel;
 }
-function isDuplicateKeyError2(error) {
+function isDuplicateKeyError3(error) {
   return typeof error === "object" && error !== null && error.code === 11e3;
 }
 async function claimPublicReceptionIdempotency(companyId, clientMutationId) {
@@ -92659,7 +95395,7 @@ async function claimPublicReceptionIdempotency(companyId, clientMutationId) {
     await model.create({ companyId, clientMutationId });
     return true;
   } catch (error) {
-    if (isDuplicateKeyError2(error)) return false;
+    if (isDuplicateKeyError3(error)) return false;
     throw error;
   }
 }
@@ -92698,7 +95434,7 @@ var parseNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
-var buildPortalCallbackToken2 = (companyId) => import_jsonwebtoken7.default.sign(
+var buildPortalCallbackToken2 = (companyId) => import_jsonwebtoken8.default.sign(
   {
     companyId,
     userId: "lila-public-reception",
@@ -92712,7 +95448,7 @@ var buildPortalHeaders = (companyId) => ({
   "Content-Type": "application/json",
   "x-company-id": companyId
 });
-var buildPortalUrl = (path36) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path36}`;
+var buildPortalUrl = (path41) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path41}`;
 var buildRequestPublicBaseUrl = (req) => {
   const forwardedProto = trimValue(req.headers["x-forwarded-proto"]).split(",")[0];
   const forwardedHost = trimValue(req.headers["x-forwarded-host"]).split(",")[0];
@@ -92763,6 +95499,11 @@ var parseReceptionInput = (req) => {
       purchaseOrderNumber: trimValue(req.body?.purchaseOrderNumber) || void 0,
       driver: trimValue(req.body?.driver),
       m3: parseNumber(req.body?.m3, 0),
+      // Chancadora: el over en banco y el suelto no son el mismo volumen
+      // (~25-30%). Este parser ENUMERA campos, así que sin estas dos líneas el
+      // dato llegaría del form y se perdería sin aviso.
+      esponjamientoPct: req.body?.esponjamientoPct !== void 0 && req.body?.esponjamientoPct !== "" ? parseNumber(req.body?.esponjamientoPct, 0) : void 0,
+      measuredState: req.body?.measuredState === "banco" || req.body?.measuredState === "suelto" ? req.body.measuredState : void 0,
       arriveDate: trimValue(req.body?.arriveDate) || void 0,
       files
     };
@@ -92823,7 +95564,7 @@ var parseReceptionInput = (req) => {
   throw new Error("kind is invalid");
 };
 var cleanupUploadedFiles = async (files) => {
-  await Promise.allSettled(files.map((file) => fs29.remove(file.path)));
+  await Promise.allSettled(files.map((file) => fs33.remove(file.path)));
 };
 var fetchPortalInputList = async (companyId, level) => {
   const response = await axios11.get(buildPortalUrl("/api/input"), {
@@ -92964,15 +95705,16 @@ var storeFileInLilaDrive = async (companyId, lilaPublicBaseUrl, resourceId, file
   const targetDir = storagePathService.resolvePath(companyId, relativeDir);
   await storagePathService.ensureDir(targetDir, companyId);
   const storageFileName = buildUniqueStorageFileName(file.originalName, file.path);
-  const targetPath = path30.join(targetDir, storageFileName);
+  const targetPath = path35.join(targetDir, storageFileName);
   if (!storagePathService.validateAccess(targetPath, companyId)) {
     throw new Error("Ruta de almacenamiento invalida");
   }
-  await fs29.copy(file.path, targetPath, { overwrite: false });
+  await fs33.copy(file.path, targetPath, { overwrite: false });
   await incrementStorageUsage(companyId, file.size);
   const publicUrl2 = `/files/companies/${companyId}/${relativeDir}/${storageFileName}`;
   let thumbnailUrl;
   let thumbnailStatus = "pending";
+  await linearizePdfInPlace(targetPath, { fileName: storageFileName, mimeType: file.mimeType });
   const thumbnailResult = await generateThumbnailForFile({
     filePath: targetPath,
     fileName: storageFileName,
@@ -93114,6 +95856,11 @@ var runInputReceptionWorkflow = async (input) => {
     const createdInput = await createPortalInput(input.companyId, {
       driver: input.driver,
       m3: input.m3 || 0,
+      // Cuarto lugar que enumera campos en esta cadena (form → lila parser →
+      // este reenvío → mapper del Portal). Omitirlo acá dejaba el dato vivo en
+      // lila y ausente en la base.
+      esponjamientoPct: input.esponjamientoPct,
+      measuredState: input.measuredState,
       level: input.materialLevel,
       materialId: input.materialId,
       locationId: input.locationId,
@@ -93539,9 +96286,9 @@ async function submitPublicFinancialMovement(req, res) {
 
 // src/api/routes/public.routes.ts
 init_environment();
-var router8 = Router8();
-var receptionUploadsDir = path31.join(config.storage.root, "temp", "public-receptions");
-fs30.ensureDirSync(receptionUploadsDir);
+var router9 = Router9();
+var receptionUploadsDir = path36.join(config.storage.root, "temp", "public-receptions");
+fs34.ensureDirSync(receptionUploadsDir);
 var sanitizeFileName = (value) => value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "upload";
 var upload3 = multer3({
   storage: multer3.diskStorage({
@@ -93558,18 +96305,18 @@ var upload3 = multer3({
     files: 6
   }
 });
-router8.get("/company-login", getCompanyLogin);
-router8.post("/receptions", requireTenant, upload3.array("files", 6), submitPublicReception);
-router8.post(
+router9.get("/company-login", getCompanyLogin);
+router9.post("/receptions", requireTenant, upload3.array("files", 6), submitPublicReception);
+router9.post(
   "/financial-movements",
   requireTenant,
   upload3.array("files", 4),
   submitPublicFinancialMovement
 );
-var public_routes_default = router8;
+var public_routes_default = router9;
 
 // src/api/routes/cron.routes.ts
-import { Router as Router9 } from "express";
+import { Router as Router10 } from "express";
 
 // src/services/weather-asphalt-forecast.service.ts
 var WEATHER_ASPHALT_FORECAST = {
@@ -93832,8 +96579,8 @@ async function generateWeatherAsphaltForecast(params = {}) {
 }
 
 // src/api/routes/cron.routes.ts
-var router9 = Router9();
-router9.get("/weather-asphalt-forecast", async (req, res, next) => {
+var router10 = Router10();
+router10.get("/weather-asphalt-forecast", async (req, res, next) => {
   try {
     const result = await generateWeatherAsphaltForecast({
       run: typeof req.query.run === "string" ? req.query.run : void 0
@@ -93846,10 +96593,10 @@ router9.get("/weather-asphalt-forecast", async (req, res, next) => {
     next(error);
   }
 });
-var cron_routes_default = router9;
+var cron_routes_default = router10;
 
 // src/api/routes/service-management-report.routes.ts
-import { Router as Router10 } from "express";
+import { Router as Router11 } from "express";
 
 // src/api/controllers/service-management-report.controller.ts
 init_logger();
@@ -94079,19 +96826,19 @@ function requireAdmin(req, _res, next) {
 }
 
 // src/api/routes/service-management-report.routes.ts
-var router10 = Router10();
-router10.get("/", listReports);
-router10.post("/", requireAdmin, createReport);
-router10.get("/:id", getReport);
-router10.put("/:id", requireAdmin, updateReport);
-router10.delete("/:id", requireAdmin, deleteReport);
-router10.post("/:id/lock", requireAdmin, acquireLock);
-router10.post("/:id/unlock", requireAdmin, releaseLock);
-router10.post("/:id/heartbeat", requireAdmin, heartbeatLock);
-var service_management_report_routes_default = router10;
+var router11 = Router11();
+router11.get("/", listReports);
+router11.post("/", requireAdmin, createReport);
+router11.get("/:id", getReport);
+router11.put("/:id", requireAdmin, updateReport);
+router11.delete("/:id", requireAdmin, deleteReport);
+router11.post("/:id/lock", requireAdmin, acquireLock);
+router11.post("/:id/unlock", requireAdmin, releaseLock);
+router11.post("/:id/heartbeat", requireAdmin, heartbeatLock);
+var service_management_report_routes_default = router11;
 
 // src/api/routes/service-migration.routes.ts
-import { Router as Router11 } from "express";
+import { Router as Router12 } from "express";
 
 // src/services/service-migration.service.ts
 init_sharedConnection();
@@ -94100,21 +96847,21 @@ init_logger();
 
 // src/services/service-migration.helpers.ts
 init_storage_path_service();
-import fs31 from "fs-extra";
-import path32 from "node:path";
+import fs35 from "fs-extra";
+import path37 from "node:path";
 import {
-  Schema as Schema12,
-  Types as Types2
+  Schema as Schema13,
+  Types as Types3
 } from "mongoose";
 var SERVICE_MIGRATION_WARNING = "El servicio destino tiene otro cliente. Verifica contratos y visibilidad.";
 var DRIVE_BLOCKER = "El servicio tiene v\xEDnculos al drive global. La migraci\xF3n entre empresas requiere revisi\xF3n manual.";
 var ORDER_LINKED_FILES_BLOCKER = "El servicio usa archivos ligados a pedidos, despacho o laboratorio. La migraci\xF3n entre empresas a\xFAn no remapea ese alcance.";
 var ORDER_SUBTREE_BLOCKER = "El servicio tiene pedidos con despachos, medias, certificados, kardex, consumos o links propios. La migraci\xF3n entre empresas a\xFAn no remapea ese sub\xE1rbol completo.";
 var REPORT_WARNING = "Revisa el pairing de pedidos antes de migrar reportes y m\xE9tricas.";
-var looseSchema3 = new Schema12({}, { strict: false });
+var looseSchema3 = new Schema13({}, { strict: false });
 var asText = (value) => String(value ?? "").trim();
 var normalizePath = (value) => value.replace(/\\/g, "/").replace(/^\/+/, "");
-var toMongoIdentifier = (value) => Types2.ObjectId.isValid(value) ? new Types2.ObjectId(value) : value;
+var toMongoIdentifier = (value) => Types3.ObjectId.isValid(value) ? new Types3.ObjectId(value) : value;
 var getDocumentId = (document2) => asText(document2?._id);
 var getPairingTarget = (pairings, kind, sourceId) => {
   const pairing = pairings.find((item) => item.kind === kind && item.sourceId === sourceId);
@@ -94401,12 +97148,12 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!storagePathService.validateAccess(targetAbsolute, targetCompanyId)) {
         throw new Error("Ruta f\xEDsica destino inv\xE1lida.");
       }
-      if (!await fs31.pathExists(sourceAbsolute)) {
+      if (!await fs35.pathExists(sourceAbsolute)) {
         throw new Error(`Archivo origen no existe: ${sourceRelative}`);
       }
-      const sourceStats = await fs31.stat(sourceAbsolute);
-      if (await fs31.pathExists(targetAbsolute)) {
-        const targetStats = await fs31.stat(targetAbsolute);
+      const sourceStats = await fs35.stat(sourceAbsolute);
+      if (await fs35.pathExists(targetAbsolute)) {
+        const targetStats = await fs35.stat(targetAbsolute);
         if (targetStats.size !== sourceStats.size) {
           throw new Error(`Archivo destino ya existe con otro tama\xF1o: ${targetRelative}`);
         }
@@ -94415,12 +97162,12 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!sourceStats.isFile()) {
         throw new Error(`Origen no es un archivo regular: ${sourceRelative}`);
       }
-      const targetDirectory = path32.dirname(targetAbsolute);
+      const targetDirectory = path37.dirname(targetAbsolute);
       if (!targetDirectory || targetDirectory === ".") {
         throw new Error(`Directorio destino inv\xE1lido: ${targetRelative}`);
       }
-      await fs31.ensureDir(targetDirectory);
-      await fs31.copy(sourceAbsolute, targetAbsolute);
+      await fs35.ensureDir(targetDirectory);
+      await fs35.copy(sourceAbsolute, targetAbsolute);
       createdPaths.push(targetAbsolute);
       if (sourceStats.isFile()) {
         await incrementStorageUsage(targetCompanyId, sourceStats.size);
@@ -94439,9 +97186,9 @@ var deleteSourceFiles = async (files, sourceCompanyId) => {
       const sourceRelative = cleanCompanyPath(sourceCompanyId, file.sourcePath);
       const sourceAbsolute = storagePathService.resolvePath(sourceCompanyId, sourceRelative);
       if (!storagePathService.validateAccess(sourceAbsolute, sourceCompanyId)) continue;
-      if (!await fs31.pathExists(sourceAbsolute)) continue;
-      const stats = await fs31.stat(sourceAbsolute);
-      await fs31.remove(sourceAbsolute);
+      if (!await fs35.pathExists(sourceAbsolute)) continue;
+      const stats = await fs35.stat(sourceAbsolute);
+      await fs35.remove(sourceAbsolute);
       if (stats.isFile()) {
         await decrementStorageUsage(sourceCompanyId, stats.size);
       }
@@ -94456,9 +97203,9 @@ var deleteSourceFiles = async (files, sourceCompanyId) => {
 var rollbackCopiedFiles = async (targetCompanyId, createdPaths) => {
   for (const targetAbsolute of createdPaths) {
     try {
-      if (!await fs31.pathExists(targetAbsolute)) continue;
-      const stats = await fs31.stat(targetAbsolute);
-      await fs31.remove(targetAbsolute);
+      if (!await fs35.pathExists(targetAbsolute)) continue;
+      const stats = await fs35.stat(targetAbsolute);
+      await fs35.remove(targetAbsolute);
       if (stats.isFile()) {
         await decrementStorageUsage(targetCompanyId, stats.size);
       }
@@ -95400,218 +98147,14 @@ async function createServiceMigration(req, res) {
 }
 
 // src/api/routes/service-migration.routes.ts
-var router11 = Router11();
-router11.post("/", requireTenant, createServiceMigration);
-var service_migration_routes_default = router11;
-
-// src/api/routes/exports.routes.ts
-import { Router as Router12 } from "express";
-
-// src/services/order-export.service.ts
-var import_archiver = __toESM(require_archiver(), 1);
-init_models();
-init_storage_path_service();
-init_logger();
-import path33 from "path";
-import fs32 from "fs-extra";
-import { Types as Types3 } from "mongoose";
-var EXPORT_TTL_HOURS = 24;
-var EXPORTS_MODULE = "temp";
-var EXPORTS_SUBDIR = "order-exports";
-var isValidObjectId = (value) => Types3.ObjectId.isValid(value);
-var sanitizeName3 = (name) => name.replace(/[\\/:"*?<>|]+/g, "_").trim();
-var buildZipPath = (companyId, orderId) => storagePathService.resolvePath(
-  companyId,
-  path33.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`)
-);
-var resolveMediaAbsolutePath = (mediaUrl, companyId) => {
-  try {
-    const pathname = new URL(mediaUrl, "http://localhost").pathname;
-    const marker = `/files/companies/${companyId}/`;
-    if (!pathname.startsWith(marker)) return null;
-    const relative = decodeURIComponent(pathname.slice(marker.length));
-    const absolute = storagePathService.resolvePath(companyId, relative);
-    if (!storagePathService.validateAccess(absolute, companyId)) return null;
-    return absolute;
-  } catch {
-    return null;
-  }
-};
-var buildFolderPathResolver = (folders) => {
-  const folderById = new Map(
-    folders.map((folder) => [String(folder._id ?? ""), folder])
-  );
-  const resolve2 = (folderId, depth = 0) => {
-    if (!folderId || depth > 10) return "";
-    const folder = folderById.get(String(folderId));
-    if (!folder) return "";
-    const parentPath = resolve2(folder.parentId, depth + 1);
-    const current = sanitizeName3(String(folder.name ?? ""));
-    if (!current) return parentPath;
-    return parentPath ? `${parentPath}/${current}` : current;
-  };
-  return resolve2;
-};
-var nowIso = () => (/* @__PURE__ */ new Date()).toISOString();
-var setExportJob = async (orderId, exportJob) => {
-  const OrderModel = await getOrderModel();
-  await OrderModel.updateOne(
-    { _id: orderId },
-    exportJob ? { $set: { exportJob } } : { $unset: { exportJob: 1 } }
-  );
-};
-async function requestOrderExport(orderId) {
-  if (!isValidObjectId(orderId)) return { ok: false, code: "not_found" };
-  const OrderModel = await getOrderModel();
-  const order = await OrderModel.findById(orderId).lean();
-  if (!order || !order.companyId) return { ok: false, code: "not_found" };
-  const companyId = String(order.companyId);
-  const currentJob = order.exportJob;
-  if (currentJob && ["queued", "running"].includes(String(currentJob.status))) {
-    return { ok: false, code: "busy" };
-  }
-  const jobId = `${orderId}-${Date.now()}`;
-  await setExportJob(orderId, {
-    id: jobId,
-    status: "running",
-    progress: 0,
-    startedAt: nowIso()
-  });
-  try {
-    const [MediaModel, FolderModel] = await Promise.all([getMediaModel(), getFolderModel()]);
-    const [medias, folders] = await Promise.all([
-      MediaModel.find({ companyId, resourceId: orderId, status: "ACTIVE" }).lean(),
-      FolderModel.find({ companyId, resourceId: orderId, status: "ACTIVE" }).lean()
-    ]);
-    const resolveFolderPath = buildFolderPathResolver(folders);
-    const usedNames = /* @__PURE__ */ new Set();
-    const entries = [];
-    for (const media of medias) {
-      const mediaUrl = String(media.url ?? "");
-      if (!mediaUrl) continue;
-      const absolutePath = resolveMediaAbsolutePath(mediaUrl, companyId);
-      if (!absolutePath || !await fs32.pathExists(absolutePath)) {
-        logger_default.warn("[order-export] Media sin archivo local, se omite del ZIP", {
-          orderId,
-          mediaId: String(media._id ?? "")
-        });
-        continue;
-      }
-      const folderPath = resolveFolderPath(media.folderId) || sanitizeName3(String(media.type ?? ""));
-      const baseName = sanitizeName3(String(media.name ?? path33.basename(absolutePath)));
-      let entryName = folderPath ? `${folderPath}/${baseName}` : baseName;
-      let dedupe = 1;
-      while (usedNames.has(entryName)) {
-        const ext = path33.extname(baseName);
-        const stem = path33.basename(baseName, ext);
-        const candidate = `${stem} (${dedupe})${ext}`;
-        entryName = folderPath ? `${folderPath}/${candidate}` : candidate;
-        dedupe += 1;
-      }
-      usedNames.add(entryName);
-      entries.push({ absolutePath, entryName });
-    }
-    if (entries.length === 0) {
-      await setExportJob(orderId, {
-        id: jobId,
-        status: "error",
-        error: "El pedido no tiene archivos para exportar",
-        startedAt: nowIso(),
-        finishedAt: nowIso()
-      });
-      return { ok: false, code: "empty" };
-    }
-    const zipPath = buildZipPath(companyId, orderId);
-    await fs32.ensureDir(path33.dirname(zipPath));
-    await fs32.remove(zipPath);
-    const output = fs32.createWriteStream(zipPath);
-    const archive = (0, import_archiver.default)("zip", { zlib: { level: 6 } });
-    const archiveDone = new Promise((resolve2, reject) => {
-      output.on("close", () => resolve2());
-      archive.on("error", reject);
-      output.on("error", reject);
-    });
-    archive.pipe(output);
-    for (const entry of entries) {
-      archive.file(entry.absolutePath, { name: entry.entryName });
-    }
-    await archive.finalize();
-    await archiveDone;
-    const stat = await fs32.stat(zipPath);
-    const expiresAt = new Date(Date.now() + EXPORT_TTL_HOURS * 60 * 60 * 1e3).toISOString();
-    const obra = sanitizeName3(String(order.obra ?? "pedido"));
-    await setExportJob(orderId, {
-      id: jobId,
-      status: "done",
-      progress: 100,
-      filePath: path33.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`),
-      fileName: `${obra || "pedido"}-${orderId.slice(-6)}.zip`,
-      sizeBytes: stat.size,
-      finishedAt: nowIso(),
-      expiresAt
-    });
-    logger_default.info("[order-export] ZIP generado", {
-      orderId,
-      companyId,
-      files: entries.length,
-      sizeBytes: stat.size
-    });
-    return { ok: true };
-  } catch (error) {
-    logger_default.error("[order-export] Error generando ZIP", {
-      orderId,
-      error: String(error)
-    });
-    await setExportJob(orderId, {
-      id: jobId,
-      status: "error",
-      error: "No se pudo generar el ZIP",
-      startedAt: nowIso(),
-      finishedAt: nowIso()
-    }).catch(() => void 0);
-    return { ok: false, code: "empty" };
-  }
-}
-async function getOrderExportFile(orderId) {
-  if (!isValidObjectId(orderId)) return { ok: false, code: "not_found" };
-  const OrderModel = await getOrderModel();
-  const order = await OrderModel.findById(orderId).lean();
-  if (!order || !order.companyId) return { ok: false, code: "not_found" };
-  const job = order.exportJob;
-  if (!job || job.status !== "done" || !job.filePath) {
-    return { ok: false, code: "not_ready" };
-  }
-  const companyId = String(order.companyId);
-  const absolutePath = storagePathService.resolvePath(companyId, String(job.filePath));
-  if (!storagePathService.validateAccess(absolutePath, companyId)) {
-    return { ok: false, code: "not_ready" };
-  }
-  if (!await fs32.pathExists(absolutePath)) {
-    return { ok: false, code: "not_ready" };
-  }
-  return {
-    ok: true,
-    absolutePath,
-    fileName: String(job.fileName ?? `pedido-${orderId}.zip`)
-  };
-}
-async function deleteOrderExport(orderId) {
-  if (!isValidObjectId(orderId)) return { ok: false };
-  const OrderModel = await getOrderModel();
-  const order = await OrderModel.findById(orderId).lean();
-  if (!order || !order.companyId) return { ok: false };
-  const companyId = String(order.companyId);
-  const zipPath = buildZipPath(companyId, orderId);
-  if (storagePathService.validateAccess(zipPath, companyId)) {
-    await fs32.remove(zipPath).catch(() => void 0);
-  }
-  await setExportJob(orderId, null);
-  return { ok: true };
-}
-
-// src/api/routes/exports.routes.ts
 var router12 = Router12();
-router12.post("/orders/:orderId/request", heavyRateLimiter, heavyRequestGuard, async (req, res, next) => {
+router12.post("/", requireTenant, createServiceMigration);
+var service_migration_routes_default = router12;
+
+// src/api/routes/exports.routes.ts
+import { Router as Router13 } from "express";
+var router13 = Router13();
+router13.post("/orders/:orderId/request", heavyRateLimiter, heavyRequestGuard, async (req, res, next) => {
   try {
     const result = await requestOrderExport(req.params.orderId);
     if (result.ok) {
@@ -95624,7 +98167,7 @@ router12.post("/orders/:orderId/request", heavyRateLimiter, heavyRequestGuard, a
     next(error);
   }
 });
-router12.get("/orders/:orderId/download", heavyRateLimiter, async (req, res, next) => {
+router13.get("/orders/:orderId/download", heavyRateLimiter, async (req, res, next) => {
   try {
     const result = await getOrderExportFile(req.params.orderId);
     if (!result.ok) {
@@ -95641,7 +98184,7 @@ router12.get("/orders/:orderId/download", heavyRateLimiter, async (req, res, nex
     next(error);
   }
 });
-router12.delete("/orders/:orderId", heavyRateLimiter, async (req, res, next) => {
+router13.delete("/orders/:orderId", heavyRateLimiter, async (req, res, next) => {
   try {
     const result = await deleteOrderExport(req.params.orderId);
     res.status(result.ok ? 200 : 404).json({ success: result.ok });
@@ -95649,15 +98192,15 @@ router12.delete("/orders/:orderId", heavyRateLimiter, async (req, res, next) => 
     next(error);
   }
 });
-var exports_routes_default = router12;
+var exports_routes_default = router13;
 
 // src/api/routes/academy.routes.ts
-import { Router as Router13 } from "express";
+import { Router as Router14 } from "express";
 
 // src/services/academy-transcode.service.ts
 init_logger();
-import fs33 from "fs-extra";
-import path34 from "path";
+import fs36 from "fs-extra";
+import path38 from "path";
 init_models();
 init_storage_path_service();
 var ACADEMY_COMPANY_ID = "academy";
@@ -95789,14 +98332,14 @@ async function transcodeAcademyTutorial(tutorialId) {
     return;
   }
   const sourceAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, sourceRel);
-  if (!await fs33.pathExists(sourceAbs)) {
+  if (!await fs36.pathExists(sourceAbs)) {
     await markError(tutorialId, "source-file-missing");
     return;
   }
-  const dirRel = path34.dirname(sourceRel);
-  const hdRel = path34.posix.join(dirRel, "hd.mp4");
-  const sdRel = path34.posix.join(dirRel, "sd.mp4");
-  const posterRel = path34.posix.join(dirRel, "poster.jpg");
+  const dirRel = path38.dirname(sourceRel);
+  const hdRel = path38.posix.join(dirRel, "hd.mp4");
+  const sdRel = path38.posix.join(dirRel, "sd.mp4");
+  const posterRel = path38.posix.join(dirRel, "poster.jpg");
   const hdAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, hdRel);
   const sdAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, sdRel);
   const posterAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, posterRel);
@@ -95808,7 +98351,7 @@ async function transcodeAcademyTutorial(tutorialId) {
       await runFfmpegWithTimeout(renditionArgs(sourceAbs, hdAbs, sdAbs, trim), RENDITION_TIMEOUT_MS);
       await runFfmpegWithTimeout(posterArgs(sourceAbs, posterAbs, trim), POSTER_TIMEOUT_MS);
     });
-    const [hdStat, sdStat] = await Promise.all([fs33.stat(hdAbs), fs33.stat(sdAbs)]);
+    const [hdStat, sdStat] = await Promise.all([fs36.stat(hdAbs), fs36.stat(sdAbs)]);
     await Tutorial.updateOne(
       { _id: tutorialId },
       {
@@ -95885,12 +98428,12 @@ async function triggerAcademyTranscode(req, res) {
 }
 
 // src/api/routes/academy.routes.ts
-var router13 = Router13();
-router13.post("/transcode", requireTenant, triggerAcademyTranscode);
-var academy_routes_default = router13;
+var router14 = Router14();
+router14.post("/transcode", requireTenant, triggerAcademyTranscode);
+var academy_routes_default = router14;
 
 // src/api/routes/gps.routes.ts
-import { Router as Router14 } from "express";
+import { Router as Router15 } from "express";
 
 // src/api/controllers/gps.controller.ts
 init_logger();
@@ -96151,10 +98694,319 @@ async function requireGpsToken(req, res, next) {
 }
 
 // src/api/routes/gps.routes.ts
-var router14 = Router14();
-router14.get("/check", requireGpsToken, checkGpsToken);
-router14.post("/positions", requireGpsToken, generousRateLimiter, ingestGpsPositions);
-var gps_routes_default = router14;
+var router15 = Router15();
+router15.get("/check", requireGpsToken, checkGpsToken);
+router15.post("/positions", requireGpsToken, generousRateLimiter, ingestGpsPositions);
+var gps_routes_default = router15;
+
+// src/api/routes/vision.routes.ts
+import { Router as Router16 } from "express";
+
+// src/api/controllers/vision.controller.ts
+init_logger();
+init_environment();
+
+// src/services/vision-ocr.service.ts
+var DEFAULT_MODELS = {
+  gemini: "gemini-2.5-flash-lite",
+  anthropic: "claude-sonnet-4-20250514",
+  "openai-compatible": "gpt-4o-mini"
+};
+var ANTHROPIC_VERSION = "2023-06-01";
+var MAX_OUTPUT_TOKENS = 700;
+var WEIGH_NOTE_PROMPT = [
+  "Transcribe TODO el texto visible de este ticket de balanza, l\xEDnea por l\xEDnea,",
+  "tal como aparece impreso. Conserva los n\xFAmeros exactamente como est\xE1n",
+  "(incluyendo comas y puntos) y las etiquetas en su idioma original.",
+  "No interpretes, no corrijas ni completes valores: si un d\xEDgito no se lee,",
+  "escribe un signo de interrogaci\xF3n en su lugar. No agregues comentarios."
+].join(" ");
+function resolveVisionProvider(env) {
+  const apiKey = String(env.apiKey ?? "").trim();
+  if (!apiKey) return null;
+  const provider = String(env.provider ?? "gemini").trim() || "gemini";
+  if (!(provider in DEFAULT_MODELS)) return null;
+  return {
+    provider,
+    model: String(env.model ?? "").trim() || DEFAULT_MODELS[provider],
+    apiKey,
+    baseUrl: env.baseUrl?.trim() || void 0
+  };
+}
+function buildVisionRequest(config2, image) {
+  if (config2.provider === "gemini") {
+    return {
+      // Gemini lleva la credencial en la query string (así lo define su API).
+      url: `https://generativelanguage.googleapis.com/v1beta/models/${config2.model}:generateContent?key=${encodeURIComponent(config2.apiKey)}`,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: WEIGH_NOTE_PROMPT },
+              { inline_data: { mime_type: image.mimeType, data: image.base64 } }
+            ]
+          }
+        ],
+        generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0 }
+      })
+    };
+  }
+  if (config2.provider === "anthropic") {
+    return {
+      url: "https://api.anthropic.com/v1/messages",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config2.apiKey,
+        "anthropic-version": ANTHROPIC_VERSION
+      },
+      body: JSON.stringify({
+        model: config2.model,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: image.mimeType, data: image.base64 }
+              },
+              { type: "text", text: WEIGH_NOTE_PROMPT }
+            ]
+          }
+        ]
+      })
+    };
+  }
+  const baseUrl = (config2.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "");
+  return {
+    url: `${baseUrl}/chat/completions`,
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config2.apiKey}` },
+    body: JSON.stringify({
+      model: config2.model,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      temperature: 0,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: WEIGH_NOTE_PROMPT },
+            {
+              type: "image_url",
+              image_url: { url: `data:${image.mimeType};base64,${image.base64}` }
+            }
+          ]
+        }
+      ]
+    })
+  };
+}
+function extractVisionText(provider, payload) {
+  const data = payload;
+  if (!data || typeof data !== "object") return null;
+  const raw = provider === "gemini" ? data.candidates?.[0]?.content?.parts?.[0]?.text : provider === "anthropic" ? data.content?.find?.((part) => part?.type === "text")?.text : data.choices?.[0]?.message?.content;
+  const text = typeof raw === "string" ? raw.trim() : "";
+  return text.length > 0 ? text : null;
+}
+
+// src/api/controllers/vision.controller.ts
+var MAX_IMAGES_PER_COMPANY_PER_DAY = 60;
+var MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+var REQUEST_TIMEOUT_MS = 25e3;
+var ALLOWED_MIME = /* @__PURE__ */ new Set(["image/jpeg", "image/png", "image/webp"]);
+var usage = /* @__PURE__ */ new Map();
+var todayKeyLima = () => new Date(Date.now() - 5 * 36e5).toISOString().slice(0, 10);
+var consumeQuota = (companyId) => {
+  const dateKey = todayKeyLima();
+  const current = usage.get(companyId);
+  if (!current || current.dateKey !== dateKey) {
+    usage.set(companyId, { dateKey, count: 1 });
+    return true;
+  }
+  if (current.count >= MAX_IMAGES_PER_COMPANY_PER_DAY) return false;
+  current.count += 1;
+  return true;
+};
+async function readWeighNote(req, res) {
+  const companyId = req.companyId;
+  if (!companyId) {
+    res.status(401).json({ ok: false, message: "No autorizado" });
+    return;
+  }
+  const provider = resolveVisionProvider({
+    provider: environment_default.vision?.provider,
+    apiKey: environment_default.vision?.apiKey,
+    model: environment_default.vision?.model,
+    baseUrl: environment_default.vision?.baseUrl
+  });
+  if (!provider) {
+    res.status(503).json({
+      ok: false,
+      code: "vision-not-configured",
+      message: "La lectura autom\xE1tica de tickets no est\xE1 configurada en este servidor"
+    });
+    return;
+  }
+  const { base64, mimeType } = req.body ?? {};
+  if (!base64 || typeof base64 !== "string") {
+    res.status(400).json({ ok: false, message: "Falta la imagen del ticket" });
+    return;
+  }
+  if (!ALLOWED_MIME.has(String(mimeType))) {
+    res.status(400).json({ ok: false, message: "Formato no soportado (usa JPG, PNG o WebP)" });
+    return;
+  }
+  if (base64.length * 3 / 4 > MAX_IMAGE_BYTES) {
+    res.status(413).json({ ok: false, message: "La foto es muy grande: reduce la calidad" });
+    return;
+  }
+  if (!consumeQuota(companyId)) {
+    res.status(429).json({
+      ok: false,
+      code: "vision-daily-cap",
+      message: `Se alcanz\xF3 el tope de ${MAX_IMAGES_PER_COMPANY_PER_DAY} lecturas del d\xEDa. Ingresa el peso a mano.`
+    });
+    return;
+  }
+  const request = buildVisionRequest(provider, { base64, mimeType: String(mimeType) });
+  const controller2 = new AbortController();
+  const timeout = setTimeout(() => controller2.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: request.body,
+      signal: controller2.signal
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      logger_default.warn("[vision] proveedor respondi\xF3 con error", {
+        companyId,
+        provider: provider.provider,
+        status: response.status
+      });
+      res.status(502).json({
+        ok: false,
+        code: "vision-provider-error",
+        message: "El lector no pudo procesar la foto. Ingresa el peso a mano."
+      });
+      return;
+    }
+    const text = extractVisionText(provider.provider, payload);
+    if (!text) {
+      res.status(422).json({
+        ok: false,
+        code: "vision-empty",
+        message: "No se pudo leer el ticket. Ingresa el peso a mano."
+      });
+      return;
+    }
+    res.status(200).json({ ok: true, text, provider: provider.provider, model: provider.model });
+  } catch (error) {
+    const aborted = error?.name === "AbortError";
+    logger_default.error("[vision] fallo al leer el ticket", {
+      companyId,
+      provider: provider.provider,
+      aborted
+    });
+    res.status(aborted ? 504 : 502).json({
+      ok: false,
+      message: "El lector no respondi\xF3. Ingresa el peso a mano."
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// src/api/routes/vision.routes.ts
+var router16 = Router16();
+router16.post("/weigh-note", requireTenant, strictRateLimiter, readWeighNote);
+var vision_routes_default = router16;
+
+// src/services/backup-watchdog.service.ts
+init_telegram_alert_service();
+init_logger();
+import fs37 from "fs/promises";
+import path39 from "path";
+import os5 from "os";
+var HEARTBEAT_DIR = process.env.BACKUP_HEARTBEAT_DIR || path39.join(os5.homedir(), ".config", "constroad-backup");
+var VIGILADOS = [
+  { nombre: "medios", archivo: "last-media-backup", maxHoras: 25 },
+  { nombre: "base de datos", archivo: "last-db-backup", maxHoras: 2 },
+  // La verificación semanal también se vigila: un backup que corre pero nunca
+  // se prueba es exactamente el escenario que 3-2-1-1-0 quiere evitar. 7 días
+  // + 1 de gracia.
+  { nombre: "verificaci\xF3n", archivo: "last-verify", maxHoras: 8 * 24 },
+  // Réplica offsite: si se detiene, las copias locales siguen pero se vuelve a
+  // estar expuesto a incendio/robo/ransomware sin saberlo. Solo se vigila si hay
+  // credenciales de B2 — el instalador omite el agente sin ellas.
+  {
+    nombre: "r\xE9plica offsite",
+    archivo: "last-offsite",
+    maxHoras: 25,
+    configurado: () => Boolean(process.env.B2_ACCOUNT_ID?.trim())
+  }
+];
+var CHECK_INTERVAL_MS = Number(process.env.BACKUP_WATCHDOG_INTERVAL_MS) || 60 * 60 * 1e3;
+var timer2 = null;
+async function horasDesdeUltimoBackup(archivo) {
+  try {
+    const raw = await fs37.readFile(path39.join(HEARTBEAT_DIR, archivo), "utf8");
+    const epoch = Number(raw.trim());
+    if (!Number.isFinite(epoch) || epoch <= 0) return null;
+    return (Date.now() - epoch * 1e3) / 36e5;
+  } catch {
+    return null;
+  }
+}
+async function checkBackupHeartbeats() {
+  const resultados = await Promise.all(
+    VIGILADOS.map(async (v55) => {
+      if (v55.configurado && !v55.configurado()) {
+        return { nombre: v55.nombre, horas: null, vencido: false, omitido: true };
+      }
+      const horas = await horasDesdeUltimoBackup(v55.archivo);
+      return { nombre: v55.nombre, horas, vencido: horas === null || horas > v55.maxHoras };
+    })
+  );
+  for (const [i50, r39] of resultados.entries()) {
+    if (!r39.vencido) continue;
+    const { maxHoras } = VIGILADOS[i50];
+    const detalle = r39.horas === null ? "NUNCA se registr\xF3 un backup exitoso" : `\xFAltimo backup hace ${r39.horas.toFixed(1)}h (m\xE1ximo tolerado: ${maxHoras}h)`;
+    logger_default.error(`\u{1F6A8} Backup de ${r39.nombre} vencido \u2014 ${detalle}`);
+    void sendTelegramAlert({
+      dedupeKey: `backup-stale-${r39.nombre}`,
+      message: `\u{1F6A8} BACKUP DE ${r39.nombre.toUpperCase()} DETENIDO
+
+${detalle}.
+
+No es que el backup haya fallado: es que dej\xF3 de ejecutarse. Causas t\xEDpicas: el SSD no est\xE1 conectado, o el agente launchd no est\xE1 instalado (pasa al migrar de m\xE1quina \u2014 el plist no viaja con el repo).
+
+Verificar:
+  launchctl list | grep constroad.backup
+  ls /Volumes/CONSTROAD-BACKUP
+
+Reinstalar agendado: scripts/install-backup-agent.sh`
+    }).catch(() => {
+    });
+  }
+  return resultados;
+}
+function startBackupWatchdog() {
+  if (timer2) return;
+  void checkBackupHeartbeats().catch(
+    (error) => logger_default.warn(`Backup watchdog: primera pasada fall\xF3: ${String(error)}`)
+  );
+  timer2 = setInterval(() => {
+    void checkBackupHeartbeats().catch(
+      (error) => logger_default.warn(`Backup watchdog fall\xF3: ${String(error)}`)
+    );
+  }, CHECK_INTERVAL_MS);
+  timer2.unref?.();
+  logger_default.info(
+    `\u{1F6E1}\uFE0F Backup watchdog activo (cada ${CHECK_INTERVAL_MS / 6e4} min; medios \u226425h, base \u22642h)`
+  );
+}
 
 // src/index.ts
 import swaggerUi from "swagger-ui-express";
@@ -98075,8 +100927,9 @@ var restoreAllSessions = async (options2 = {}) => {
 init_instance_lease();
 init_telegram_alert_service();
 import cron2 from "node-cron";
-import fs34 from "fs-extra";
-import path35 from "path";
+import fs38 from "fs-extra";
+import path40 from "path";
+import { fileURLToPath as fileURLToPath2 } from "url";
 var app = express();
 app.set("trust proxy", config.security.trustProxy);
 app.use(scannerGuard);
@@ -98133,7 +100986,7 @@ var shouldDisableStaticCaching = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path35.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
+    const normalized = path40.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
     return normalized.includes("/vale/");
   } catch {
     return false;
@@ -98142,7 +100995,7 @@ var shouldDisableStaticCaching = (requestPath) => {
 var isAcademyTutorialPath = (requestPath) => {
   if (!requestPath) return false;
   try {
-    const normalized = path35.posix.normalize(decodeURIComponent(requestPath).toLowerCase()).replace(/^\/+/, "/");
+    const normalized = path40.posix.normalize(decodeURIComponent(requestPath).toLowerCase()).replace(/^\/+/, "/");
     return normalized.includes("/academy/tutorials/");
   } catch {
     return false;
@@ -98164,7 +101017,7 @@ var isSafeThumbRequestPath = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path35.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
+    const normalized = path40.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
     return normalized.includes("/.thumbs/");
   } catch {
     return false;
@@ -98219,6 +101072,7 @@ app.get("/health", (req, res) => {
 app.get("/", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
+app.use("/admin", admin_health_routes_default);
 app.use("/api/sessions", session_routes_default);
 app.use("/api/session", session_routes_default);
 app.use("/api/jobs", jobs_routes_v2_default);
@@ -98234,6 +101088,7 @@ app.use("/api/service-migrations", service_migration_routes_default);
 app.use("/api/exports", exports_routes_default);
 app.use("/api/academy", academy_routes_default);
 app.use("/api/gps", gps_routes_default);
+app.use("/api/vision", vision_routes_default);
 var companiesRoot = `${config.storage.root}/companies`;
 var companiesStaticHeaders = (res) => {
   applyCompaniesStaticHeaders(res.req, res);
@@ -98324,13 +101179,14 @@ async function startServer() {
     } catch (error) {
       logger_default.warn("Quota Validator initialization failed, quota validation will be disabled:", error);
     }
-    await fs34.ensureDir(config.pdf.tempDir);
+    await fs38.ensureDir(config.pdf.tempDir);
     logger_default.info("\u{1F9FE} PDF temp directory configured", {
       tempDir: config.pdf.tempDir,
       publicBaseUrl: config.pdf.tempPublicBaseUrl
     });
     if (config.whatsapp.restoreSessions) {
       try {
+        setOnLeaseAcquiredLate(() => restoreAllSessions());
         const isSocketHolder = await startSocketLeaseLoop();
         if (isSocketHolder) {
           await restoreAllSessions();
@@ -98365,15 +101221,15 @@ async function startServer() {
     );
     const cleanupPdfTemp = async () => {
       try {
-        const entries = await fs34.readdir(config.pdf.tempDir);
+        const entries = await fs38.readdir(config.pdf.tempDir);
         const now = Date.now();
         const maxAgeMs = pdfTempMaxAgeHours * 60 * 60 * 1e3;
         const removals = entries.map(async (entry) => {
-          const fullPath = path35.join(config.pdf.tempDir, entry);
-          const stat = await fs34.stat(fullPath);
+          const fullPath = path40.join(config.pdf.tempDir, entry);
+          const stat = await fs38.stat(fullPath);
           if (!stat.isFile()) return;
           if (now - stat.mtimeMs > maxAgeMs) {
-            await fs34.remove(fullPath);
+            await fs38.remove(fullPath);
           }
         });
         await Promise.all(removals);
@@ -98387,6 +101243,8 @@ async function startServer() {
       await scheduler_v2_instance_default.initialize();
       cron2.schedule(pdfTempCleanupCron, cleanupPdfTemp);
       startAcademyTranscodeWatchdog();
+      startBackupWatchdog();
+      startMetricsHistory();
     } else {
       const isDevelopment = config.nodeEnv.trim().toLowerCase() === "development";
       const banner = [
@@ -98410,6 +101268,7 @@ async function startServer() {
       logger_default.info(`\u2705 Server running on port ${config.port}`);
       logger_default.info(`\u{1F4CA} Environment: ${config.nodeEnv}`);
       logger_default.info(`\u{1F4C1} WhatsApp sessions dir: ${config.whatsapp.sessionDir}`);
+      void logLinearizeCapabilities();
     });
     const stopTelegramQueueFlusher = startTelegramQueueFlusher();
     const stopDriverReminderFlusher = startDriverReminderFlusher();
@@ -98474,7 +101333,16 @@ async function startServer() {
     process.exit(1);
   }
 }
-if (import.meta.url === `file://${process.argv[1]}`) {
+var esEjecucionDirecta = (() => {
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  try {
+    return fs38.realpathSync(fileURLToPath2(import.meta.url)) === fs38.realpathSync(argv1);
+  } catch {
+    return import.meta.url === `file://${argv1}`;
+  }
+})();
+if (esEjecucionDirecta) {
   startServer();
 }
 var index_default = app;
