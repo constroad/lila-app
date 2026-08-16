@@ -20,6 +20,30 @@ name: Deploy
 on:
   push:
     branches: [main]
+    # NO DISPARA POR DOCUMENTACIÓN. Medido el 16/08/2026: un commit que tocaba
+    # solo dos `.md` costó **986 s de compilación** en Portal y produjo un bundle
+    # idéntico al anterior, porque no cambió un solo `.ts`.
+    #
+    # Acá duele más que en un CI normal: el build no corre en un runner ajeno,
+    # corre en la MISMA máquina de 8 GB que atiende WhatsApp, Portal y el
+    # storage, y el de Portal pide 4 GB de heap. Y peor que el gasto: ocupa el
+    # candado global de build, así que retrasa los deploys que sí importan — ese
+    # mismo día dejó el deploy de torre esperando turno.
+    #
+    # VERIFICADO ANTES DE PONERLO: ningún `.md` se importa ni se lee en runtime
+    # en los tres repos (0 imports), y las plantillas de lila son `.hbs`, `.pdf`
+    # y `.png`. Si alguna vez un `.md` pasa a ser leído por el código —un
+    # changelog que se renderiza, una plantilla— HAY QUE SACAR ESTA REGLA: el
+    # síntoma sería «cambié el archivo y no pasa nada».
+    #
+    # Un commit que toca un `.md` Y un `.ts` SÍ deploya: `paths-ignore` solo
+    # omite el run cuando TODOS los archivos del push encajan.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'specs/**'
+      - '.claude/**'
+      - '.agents/**'
   workflow_dispatch:
 
 # ⚠️ ACÁ NO VA `concurrency`, Y ESA AUSENCIA ES EL ARREGLO DE UN INCIDENTE.
