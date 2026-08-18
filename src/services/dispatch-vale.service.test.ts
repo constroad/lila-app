@@ -40,15 +40,6 @@ jest.mock('./whatsapp-direct.service.js', () => ({
 jest.mock('./telegram-alert.service.js', () => ({
   sendTelegramAlert: jest.fn().mockResolvedValue(true),
 }));
-// `public.controller` importa `pdf-linearize.service`, que usa `import.meta.url`
-// (valido en ESM, que es como corre lila). Este test vive en el proyecto CJS, y
-// ahi ese modulo ni siquiera PARSEA: rompia la suite entera al cargarla. Se
-// mockea igual que el resto de colaboradores del controller — linearizar un PDF
-// no es lo que este test verifica.
-jest.mock('./pdf-linearize.service.js', () => ({
-  linearizePdfInPlace: jest.fn().mockResolvedValue(undefined),
-}));
-
 jest.mock('./thumbnail.service.js', () => ({
   buildThumbnailRelativePath: jest.fn((filePath: string) => `.thumbs/thumb_${filePath}`),
   generateThumbnailForFile: jest.fn().mockResolvedValue({ sizeBytes: 100 }),

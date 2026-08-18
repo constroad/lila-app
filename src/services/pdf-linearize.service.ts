@@ -18,7 +18,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { spawn } from 'child_process';
-import { createRequire } from 'module';
+import type { QpdfModule } from './qpdf-wasm.loader.js';
 import {
   WASM_MAX_BYTES,
   buildQpdfInstallHint,
@@ -34,28 +34,22 @@ const QPDF_MAX_OK_CODE = 3;
 
 let nativeAvailable: boolean | null = null;
 
-const require = createRequire(import.meta.url);
-
-type QpdfModule = {
-  FS: {
-    writeFile: (path: string, data: Uint8Array) => void;
-    readFile: (path: string) => Uint8Array;
-    unlink: (path: string) => void;
-  };
-  callMain: (args: string[]) => number;
-};
-
 let modulePromise: Promise<QpdfModule | null> | null = null;
 
-/** Carga el WASM una sola vez por proceso. */
+/**
+ * Carga el WASM una sola vez por proceso.
+ *
+ * El `import` es DINÁMICO por diseño: `qpdf-wasm.loader` usa `import.meta`, que
+ * no parsea en CommonJS. Manteniéndolo fuera del grafo estático, este servicio
+ * se puede importar desde cualquier test sin mockearlo, y el loader solo se
+ * evalúa cuando de verdad hay un PDF que linearizar.
+ */
 const loadQpdf = async (): Promise<QpdfModule | null> => {
   if (!modulePromise) {
     modulePromise = (async () => {
       try {
-        const factory = require('@neslinesli93/qpdf-wasm');
-        const wasmPath = require.resolve('@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
-        const create = typeof factory === 'function' ? factory : factory.default;
-        return (await create({ locateFile: () => wasmPath })) as QpdfModule;
+        const { loadQpdfWasm } = await import('./qpdf-wasm.loader.js');
+        return await loadQpdfWasm();
       } catch (error) {
         logger.warn('[pdf-linearize] qpdf-wasm no disponible: los PDFs quedan sin linearizar', {
           error: error instanceof Error ? error.message : String(error),
