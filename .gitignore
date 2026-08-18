@@ -4,6 +4,13 @@ data/conversations
 data/drive-cache
 data/outbox
 data/telegram-alerts
+# Cola del cierre automático de despachos. Faltaba en esta lista y por eso se
+# versionaba: es estado de EJECUCIÓN, como sus hermanas de acá arriba. Subirla
+# lleva trabajos de QA a producción en el próximo deploy, ensucia el árbol en
+# cada corrida del job, y un `pull` puede pisar despachos pendientes de cierre.
+# `JsonStore` crea la carpeta sola (`fs.ensureDir`), así que no hace falta
+# dejar nada para que exista.
+data/dispatch-autoclose
 data/driver-reminders
 data/pdf-temp
 data/cronjobs.json
