@@ -143,8 +143,21 @@ export interface SectionSchema {
   defaultCollapsed?: boolean;
   visible?: boolean;
   headerConfig?: {
+    /**
+     * Layout del encabezado en el canvas de Portal.
+     * - `default`: caja de 3 celdas con bordes (registro de calidad).
+     * - `quoteIssuer`: emisor a la izquierda + caja de folio (PDF comercial).
+     * - `certificate`: membrete de CARTA — logo grande centrado, sin caja ni
+     *   panel de folio. Para documentos que una persona lleva afuera
+     *   (constancias), donde ese chrome los hace leer como informes internos.
+     */
+    variant?: 'default' | 'quoteIssuer' | 'certificate';
     logoUrl?: string;
     logoKey?: string;
+    /** `certificate`: lugar y fecha de emisión, a la izquierda del logo. La
+     *  fecha se edita como `date` (sigue siendo `YYYY-MM-DD`). */
+    placeKey?: string;
+    dateKey?: string;
     leftTextKey?: string;
     centerTitle?: string;
     centerTitleKey?: string;

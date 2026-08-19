@@ -3,6 +3,7 @@ import * as documentsController from '../controllers/documents.controller.js';
 import * as quoteDocumentsController from '../controllers/quote-documents.controller.js';
 import * as purchaseOrderDocumentsController from '../controllers/purchase-order-documents.controller.js';
 import * as dispatchNoteDocumentsController from '../controllers/dispatch-note-documents.controller.js';
+import * as workCertificateDocumentsController from '../controllers/work-certificate-documents.controller.js';
 import { optionalTenant, requireTenant } from '../../middleware/tenant.middleware.js';
 import { heavyRequestGuard } from '../middlewares/heavyLoad.js';
 
@@ -24,6 +25,7 @@ router.post('/purchase-orders/preview', requireTenant, heavyRequestGuard, purcha
 router.post('/purchase-orders/generate', requireTenant, heavyRequestGuard, purchaseOrderDocumentsController.generatePurchaseOrderDocument);
 router.post('/dispatch-notes/preview', requireTenant, heavyRequestGuard, dispatchNoteDocumentsController.previewDispatchNoteDocument);
 router.post('/dispatch-notes/generate', requireTenant, heavyRequestGuard, dispatchNoteDocumentsController.generateDispatchNoteDocument);
+router.post('/work-certificates/preview', requireTenant, heavyRequestGuard, workCertificateDocumentsController.previewWorkCertificateDocument);
 router.get('/report-data/:serviceId/:type', optionalTenant, documentsController.getReportData);
 router.post('/sandbox/random-data', optionalTenant, documentsController.generateRandomData);
 router.get('/:id', documentsController.getDocument);
