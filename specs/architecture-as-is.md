@@ -131,7 +131,7 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   false → inerte) + `bot_configs.enabled` por company + allowlist `testNumbers`.
   Grupos/broadcast siempre ignorados; idempotencia por `channelMessageId`; rate
   limit 8 msg/min por jid; typing humano cap 4 s; quota vía
-  `incrementWhatsAppUsage`. Spec: `/projects/WHATSAPP-AGENT-VERTICALS.spec.md`
+  `incrementWhatsAppUsage`. Spec: `specs/WHATSAPP-AGENT-VERTICALS.spec.md`
   (runbook piloto §9).
 - Una sesion por empresa, credenciales en `data/sessions/{companyPhone}` (volumen montado).
 - **Auth de rutas de sesion (`/api/sessions/*` state-changing):** middleware `requireTenantOrApiKey` (junio 2026) acepta JWT de tenant (Portal), API key `lk_fe_...` o, por compatibilidad, la API key global `x-api-key`. Antes exigian solo `x-api-key === API_SECRET_KEY`, lo que rompia el boton "Desconectar" de Portal (que firma JWT). Plan de deprecar el secreto global en `specs/SCALABILITY-MULTI-SESSION.spec.md` §4.4/§4.5.
