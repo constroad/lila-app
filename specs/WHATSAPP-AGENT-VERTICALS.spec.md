@@ -8,6 +8,7 @@
 > (canal WhatsApp, agente, tools, cron) corre en lila-app. Lo de Portal (panel del
 > dueño, F4/F5) se especifica acá y se referencia desde el repo de Portal.
 > **Documentos relacionados:**
+> - `specs/ideas-de-negocio/` (estudio de mercado, go-to-market, ideas descartadas)
 > - `specs/architecture-as-is.md` (runtime WhatsApp/Baileys, quotas, cron, PDF)
 > - `specs/SESSION-LEASE.spec.md` (lease prod/dev de sesiones)
 > - `specs/VISION-OCR-SETUP.spec.md` (adapter de visión agnóstico que reusa F5)
