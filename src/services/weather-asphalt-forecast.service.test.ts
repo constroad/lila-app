@@ -210,4 +210,86 @@ describe('weather-asphalt-forecast service', () => {
     expect(isRetriableWeatherStatus(400)).toBe(false);
     expect(isRetriableWeatherStatus(404)).toBe(false);
   });
+
+  /**
+   * Los horarios extra del cron son una RED DE RECUPERACIÓN, no reportes
+   * repetidos. Estos tres casos son el contrato completo.
+   */
+  describe('entrega única por día (con companyId)', () => {
+    const okFetcher = () =>
+      jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify(buildOpenMeteoPayload(60, 2.5)),
+      });
+
+    it('el primer horario del día entrega y se queda con el cupo', async () => {
+      const claim = jest.fn().mockResolvedValue(true);
+
+      const result = await generateWeatherAsphaltForecast({
+        run: '6am',
+        fetcher: okFetcher() as any,
+        notifyError: jest.fn(),
+        companyId: 'inframaq-iax',
+        claim,
+      });
+
+      expect(result.status).toBe('ok');
+      expect(result.message).toContain('REPORTE DE CLIMA');
+      expect(claim).toHaveBeenCalledWith(
+        expect.stringContaining('weather-forecast:inframaq-iax:'),
+        'inframaq-iax'
+      );
+    });
+
+    it('un horario posterior NO repite el reporte si ya se entregó', async () => {
+      // `false` = otro llamado ya se quedó con la clave del día.
+      const claim = jest.fn().mockResolvedValue(false);
+
+      const result = await generateWeatherAsphaltForecast({
+        run: '6am',
+        fetcher: okFetcher() as any,
+        notifyError: jest.fn(),
+        companyId: 'inframaq-iax',
+        claim,
+      });
+
+      expect(result.status).toBe('skipped');
+      expect(result.message).toBeNull();
+    });
+
+    /**
+     * EL CASO QUE DA SENTIDO A TODO (incidente 20/08/2026): si Open-Meteo está
+     * caída, ese intento NO puede gastar el cupo del día — si lo gastara, el
+     * horario de respaldo se encontraría la clave tomada y nunca entregaría
+     * nada. Reclamar antes de tener el dato sería exactamente ese bug.
+     */
+    it('un fallo NO consume el cupo: el horario de respaldo puede entregar', async () => {
+      const claim = jest.fn().mockResolvedValue(true);
+
+      const fallo = await generateWeatherAsphaltForecast({
+        run: '6am',
+        fetcher: jest
+          .fn()
+          .mockResolvedValue({ ok: false, status: 503, text: async () => '' }) as any,
+        notifyError: jest.fn().mockResolvedValue(true),
+        companyId: 'inframaq-iax',
+        claim,
+      });
+
+      expect(fallo.status).toBe('degraded');
+      expect(claim).not.toHaveBeenCalled();
+
+      // Más tarde, con Open-Meteo ya recuperada, el reporte sale igual.
+      const recuperado = await generateWeatherAsphaltForecast({
+        run: '6am',
+        fetcher: okFetcher() as any,
+        notifyError: jest.fn(),
+        companyId: 'inframaq-iax',
+        claim,
+      });
+
+      expect(recuperado.status).toBe('ok');
+      expect(recuperado.message).toContain('REPORTE DE CLIMA');
+    });
+  });
 });

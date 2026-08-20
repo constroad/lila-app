@@ -99,7 +99,13 @@ type ConstroadDay = {
 };
 
 export type WeatherForecastResult = {
-  status: 'ok' | 'degraded';
+  /**
+   * `ok`       — se obtuvo el pronóstico (haya o no riesgo de lluvia).
+   * `degraded` — Open-Meteo no respondió ni tras los reintentos. NO consume el
+   *              reclamo del día: el próximo horario del cron vuelve a intentar.
+   * `skipped`  — el reporte de hoy ya se entregó; este horario era de respaldo.
+   */
+  status: 'ok' | 'degraded' | 'skipped';
   hasRainRisk: boolean;
   message: string | null;
   mensaje: string | null;
@@ -337,6 +343,13 @@ export async function generateWeatherAsphaltForecast(params: {
   run?: string;
   fetcher?: FetchLike;
   notifyError?: NotifyError;
+  /**
+   * Con `companyId`, el reporte se entrega UNA sola vez por día: los horarios
+   * extra del cron pasan a ser reintentos de recuperación en vez de mensajes
+   * repetidos. Sin él (llamada suelta, tests) no se deduplica nada.
+   */
+  companyId?: string;
+  claim?: (key: string, companyId: string) => Promise<boolean>;
 } = {}): Promise<WeatherForecastResult> {
   const fetcher = params.fetcher || fetch;
   const notifyError =
@@ -358,6 +371,37 @@ export async function generateWeatherAsphaltForecast(params: {
     const constroadRiskyDays = collectConstroadRisk(results, reportDate.dateString);
     const forecastsWithRisk = collectDistrictRisk(results, reportDate.dateString);
     const message = buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate.date);
+
+    // EL RECLAMO VA ACÁ, DESPUÉS DE TENER EL DATO — no antes.
+    //
+    // Es lo que convierte los horarios extra del cron en una red de
+    // recuperación: si Open-Meteo estaba caída a las 08:00, ese intento NO
+    // consumió el reclamo del día, así que el de las 10:00 vuelve a intentar y
+    // entrega. Y al revés: si a las 08:00 salió bien, el de las 10:00 se
+    // encuentra el reclamo tomado y no repite el mismo reporte.
+    //
+    // Reclamar ANTES de tener el dato sería el bug clásico: un fallo se comería
+    // el cupo del día y el reintento nunca podría entregar nada.
+    if (params.companyId) {
+      // Import DINÁMICO, igual que `telegram-alert.service` acá abajo: este
+      // módulo se mantiene libre de dependencias que arrastren `config`
+      // (usa `import.meta` y rompe el runner CJS de los tests).
+      const claim =
+        params.claim ??
+        (async (key: string, companyId: string) => {
+          const { claimOnce } = await import('../utils/once-per-key.js');
+          return claimOnce(key, companyId);
+        });
+      const clave = `weather-forecast:${params.companyId}:${reportDate.dateString}`;
+      if (!(await claim(clave, params.companyId))) {
+        return {
+          status: 'skipped',
+          hasRainRisk: false,
+          message: null,
+          mensaje: null,
+        };
+      }
+    }
 
     return {
       status: 'ok',

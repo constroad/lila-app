@@ -5,8 +5,17 @@ const router = Router();
 
 router.get('/weather-asphalt-forecast', async (req, res, next) => {
   try {
+    // `x-company-id` lo manda el JobExecutor en cada corrida. Con él, el
+    // reporte se entrega una sola vez por día y los horarios extra del cron
+    // funcionan como reintentos de recuperación (ver el servicio).
+    const companyId =
+      typeof req.headers['x-company-id'] === 'string'
+        ? req.headers['x-company-id']
+        : undefined;
+
     const result = await generateWeatherAsphaltForecast({
       run: typeof req.query.run === 'string' ? req.query.run : undefined,
+      companyId,
     });
 
     // UN CRON QUE PIERDE SU REPORTE NO ES UN ÉXITO (20/08/2026).
