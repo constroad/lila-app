@@ -26,10 +26,21 @@ export function materializeRetryJob(job: ICronJob): ICronJob {
   return JSON.parse(JSON.stringify(job)) as ICronJob;
 }
 
+/** Quita un `www.` inicial: mismo sitio, dos hosts de string distinto. */
+const stripWww = (host: string): string => host.replace(/^www\./i, '');
+
 /**
  * ¿La URL apunta a un endpoint `/api/cron/*` de Portal? Se usa para inyectar el
  * header `x-cron-secret` SOLO hacia Portal (nunca a APIs de terceros: evita
  * filtrar el secreto compartido). Con `portalBaseUrl`, además exige el mismo host.
+ *
+ * `www.` se ignora al comparar (19/08/2026): el host del cron sale de qué
+ * dominio usó el admin al guardar (`req.headers.host` en Portal), y
+ * `PORTAL_BASE_URL` acá es un único valor fijo — antes de esto, cualquier cron
+ * guardado desde `www.constroad.com` fallaba esta comparación y viajaba SIN
+ * el secreto. El síntoma no era "no llega": el job de todos modos reportaba
+ * éxito de scheduling, y recién Portal lo rechazaba con 401 más adelante — 8
+ * de 11 alertas activas de 3 empresas estaban así, sin que nadie lo notara.
  */
 export function isPortalCronUrl(targetUrl: string, portalBaseUrl?: string): boolean {
   try {
@@ -37,7 +48,7 @@ export function isPortalCronUrl(targetUrl: string, portalBaseUrl?: string): bool
     if (!target.pathname.includes('/api/cron/')) return false;
     const portalBase = portalBaseUrl?.trim();
     if (!portalBase) return true;
-    return target.host === new URL(portalBase).host;
+    return stripWww(target.host) === stripWww(new URL(portalBase).host);
   } catch {
     return false;
   }

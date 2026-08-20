@@ -171,4 +171,17 @@ describe('isPortalCronUrl', () => {
     expect(isPortalCronUrl('https://constroad.com/api/cron/x')).toBe(true);
     expect(isPortalCronUrl('https://third-party.com/api/jobs/x')).toBe(false);
   });
+
+  /**
+   * Bug real (19/08/2026): un cron guardado desde `www.constroad.com` fallaba
+   * esta comparación (host !== host exacto) y viajaba SIN `x-cron-secret` —
+   * Portal lo rechazaba 401 más adelante, en silencio (el scheduling en sí
+   * "salía bien"). 8 de 11 alertas activas de 3 empresas estaban así.
+   */
+  it('ignora un www. de cualquiera de los dos lados — mismo sitio', () => {
+    expect(isPortalCronUrl('https://www.constroad.com/api/cron/kardex-check', PORTAL)).toBe(true);
+    expect(
+      isPortalCronUrl('https://constroad.com/api/cron/fluids-report', 'https://www.constroad.com')
+    ).toBe(true);
+  });
 });
