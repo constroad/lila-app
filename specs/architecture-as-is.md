@@ -1101,3 +1101,43 @@ sola. Y la alerta no se duplica: `sendTelegramAlert` ya deduplica 5 min por
 **Regla general:** si un handler de cron atrapa su propio fallo para alertar,
 tiene que devolver un status de error igual. Un `catch` que alerta y responde
 200 le está diciendo dos cosas contradictorias a dos sistemas distintos.
+
+### El reintento dentro de una corrida tiene techo: 30 s. Para el resto, los horarios.
+
+El reintento interno (3 intentos, ~5 s) está acotado por el `timeout: 30000`
+que el JobExecutor le pone a la llamada HTTP — cubre un blip de segundos, no
+una caída de diez minutos. Sin nada más, una caída sostenida a las 08:00 hacía
+perder el reporte **hasta el día siguiente**.
+
+La solución NO es alargar el reintento interno (choca contra los 30 s), sino
+convertir los horarios ya configurados del cron en una red de recuperación.
+`generateWeatherAsphaltForecast` recibe ahora `companyId` (del header
+`x-company-id` que manda el executor) y reclama una clave por día:
+`weather-forecast:<companyId>:<fecha>` vía `utils/once-per-key.ts`.
+
+**Lo esencial es CUÁNDO se reclama: después de tener el dato, nunca antes.**
+
+| corrida | Open-Meteo | resultado |
+| --- | --- | --- |
+| 08:00 | caída | `degraded` — **no** consume el cupo del día |
+| 10:00 | recuperada | `ok` — entrega el reporte y toma el cupo |
+| 08:00 | ok | `ok` — entrega y toma el cupo |
+| 10:00 | ok | `skipped` — no repite el mismo mensaje |
+
+Reclamar ANTES de tener el dato sería el bug clásico: un fallo se comería el
+cupo y el horario de respaldo nunca podría entregar nada. Hay un test dedicado
+exactamente a eso.
+
+Efecto secundario que también se cierra: con dos horarios configurados y riesgo
+de lluvia, antes se enviaba el MISMO reporte dos veces.
+
+**Regla general:** para un cron cuyo trabajo puede fallar por causas externas,
+"reintentar" a escala de minutos se implementa con horarios extra + un reclamo
+idempotente por período, no alargando el reintento dentro del request — que
+siempre va a chocar contra el timeout de quien lo llamó.
+
+`claimOnce`/`isClaimed` viven en `utils/once-per-key.ts` (salieron de
+`dispatch-notifications.service.ts` al aparecer el segundo consumidor). Se
+importan **dinámicamente** desde el servicio de clima: `once-per-key` arrastra
+`config/environment.ts`, que usa `import.meta` y rompe el runner CJS de los
+tests — mismo patrón que ya usaba ese archivo para `telegram-alert.service`.
