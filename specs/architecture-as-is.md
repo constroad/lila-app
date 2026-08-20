@@ -1057,3 +1057,47 @@ servicio anclado a una zona horaria específica tiene que anclarse a la MISMA
 zona, no a la del reloj de la máquina que lo ejecuta. Verificado corriendo
 `TZ=UTC npm test` localmente antes de dar por cerrado — es la forma barata de
 simular el runner sin esperar a que CI lo vuelva a agarrar.
+
+### Un solo intento contra una API pública = un blip cuesta el reporte del día
+
+**Incidente 20/08/2026, 08:00 Lima:** alerta de Telegram
+`Open-Meteo API error: 503`. Open-Meteo es una API pública y gratuita — un 503
+puntual es comportamiento esperable, no una avería. Pero
+`generateWeatherAsphaltForecast` hacía **un solo fetch**, así que ese blip
+momentáneo se llevó puesto el reporte de clima del día entero y despertó a
+todos a las 8am. Comprobado minutos después: la API respondía 200 normal.
+
+Ahora reintenta con backoff (3 intentos, 1.5s/3s) ante **5xx, 429, y errores de
+red/timeout**. Un 4xx que no sea 429 **no** se reintenta: ese es culpa nuestra
+(URL mal armada, parámetro inválido) y repetirlo tres veces solo demora el
+diagnóstico. `isRetriableWeatherStatus` está exportada y testeada.
+
+**Regla general:** cualquier llamada a un tercero desde un cron —sobre todo si
+es un servicio gratuito— necesita reintento ante fallo transitorio. Sin él, la
+disponibilidad del reporte es exactamente la disponibilidad instantánea del
+tercero en ESE segundo, y cada blip suyo se convierte en una alerta nuestra.
+
+### Un cron que perdió su reporte NO es un éxito
+
+El mismo incidente destapó una mentira de estado, la misma clase que
+`ARCHITECTURE-torre.as-is.md` §12: el servicio atrapaba el fallo, avisaba por
+Telegram y devolvía `status: 'degraded'` — pero la ruta respondía **200 igual**,
+así que el JobExecutor lo anotaba como `success`, con `failureCount: 0` y sin
+`lastError`.
+
+El resultado medido en Mongo es la definición del problema: para la MISMA
+corrida, la alerta de Telegram decía "falló" a las `08:00:02` y el historial del
+cronjob decía `08:00:03 success 3058ms`. El panel mostraba salud donde no la
+había, y el reintento del executor nunca se disparaba (solo reintenta ante
+no-2xx).
+
+Ahora la ruta responde **502** cuando `status === 'degraded'` (502 y no 500: el
+fallo es de un tercero, no nuestro). Se verificó antes de cambiarlo que **nada
+usa `failureCount` para auto-desactivar jobs** — solo se incrementa y se
+resetea— así que una caída sostenida de Open-Meteo no puede apagar el cron
+sola. Y la alerta no se duplica: `sendTelegramAlert` ya deduplica 5 min por
+`dedupeKey`.
+
+**Regla general:** si un handler de cron atrapa su propio fallo para alertar,
+tiene que devolver un status de error igual. Un `catch` que alerta y responde
+200 le está diciendo dos cosas contradictorias a dos sistemas distintos.
