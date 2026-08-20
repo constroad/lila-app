@@ -1,7 +1,26 @@
 export const WEATHER_ASPHALT_FORECAST = {
   fetchTimeoutMs: 25_000,
   timezone: 'America/Lima',
+  /**
+   * Reintentos ante fallo TRANSITORIO de Open-Meteo (20/08/2026: un 503 a las
+   * 08:00 se llevó puesto el reporte del día entero). Es una API pública y
+   * gratuita: un 503/429 puntual es esperable, no una avería. Con un solo
+   * intento, cada blip momentáneo = un día sin reporte + una alerta a las 8am.
+   */
+  maxAttempts: 3,
+  retryBaseDelayMs: 1_500,
 };
+
+/**
+ * ¿Vale la pena reintentar este fallo?
+ *
+ * 5xx y 429 son del lado del servidor y suelen durar segundos. Un 4xx (salvo
+ * 429) es culpa NUESTRA —URL mal armada, parámetro inválido— y reintentar solo
+ * gasta tiempo y esconde el error real detrás de tres intentos idénticos.
+ */
+export function isRetriableWeatherStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
 
 const LOCATIONS = [
   { name: 'Constroad', lat: -11.9894172, lon: -76.8789932 },
@@ -169,6 +188,46 @@ async function fetchWithTimeout(url: string, fetcher: FetchLike): Promise<Respon
   });
 }
 
+const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Trae el pronóstico reintentando los fallos transitorios (5xx/429 y errores de
+ * red/timeout). Devuelve el cuerpo ya leído; lanza si se agotan los intentos.
+ *
+ * El backoff es lineal y corto (1.5s, 3s): el cron corre a las 08:00 y nadie
+ * espera la respuesta, pero tampoco tiene sentido pelearse diez minutos con una
+ * API caída — si a los ~5 s no contesta, es una caída de verdad y ahí sí toca
+ * avisar.
+ */
+async function fetchForecastConReintentos(
+  url: string,
+  fetcher: FetchLike
+): Promise<string> {
+  const { maxAttempts, retryBaseDelayMs } = WEATHER_ASPHALT_FORECAST;
+  let ultimoError = new Error('Open-Meteo: sin intentos');
+
+  for (let intento = 1; intento <= maxAttempts; intento += 1) {
+    let esTransitorio = true;
+    try {
+      const response = await fetchWithTimeout(url, fetcher);
+      const responseText = await response.text();
+      if (response.ok) return responseText;
+
+      ultimoError = new Error(`Open-Meteo API error: ${response.status}`);
+      // Un 4xx que no sea 429 es culpa nuestra: no mejora reintentando.
+      esTransitorio = isRetriableWeatherStatus(response.status);
+    } catch (error) {
+      // Error de red, timeout o abort: siempre transitorio.
+      ultimoError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    if (!esTransitorio) break;
+    if (intento < maxAttempts) await esperar(retryBaseDelayMs * intento);
+  }
+
+  throw ultimoError;
+}
+
 function parseOpenMeteoResults(payload: string): OpenMeteoResponse[] {
   const results = JSON.parse(payload) as OpenMeteoResponse[];
   if (!Array.isArray(results) || results.length !== LOCATIONS.length) {
@@ -290,9 +349,10 @@ export async function generateWeatherAsphaltForecast(params: {
   const forecastDays = reportDate.is6amRun ? 3 : 4;
 
   try {
-    const response = await fetchWithTimeout(buildWeatherUrl(forecastDays), fetcher);
-    const responseText = await response.text();
-    if (!response.ok) throw new Error(`Open-Meteo API error: ${response.status}`);
+    const responseText = await fetchForecastConReintentos(
+      buildWeatherUrl(forecastDays),
+      fetcher
+    );
 
     const results = parseOpenMeteoResults(responseText);
     const constroadRiskyDays = collectConstroadRisk(results, reportDate.dateString);

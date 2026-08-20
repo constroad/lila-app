@@ -1,6 +1,8 @@
 import {
   generateWeatherAsphaltForecast,
   getCombinedRiskLevel,
+  isRetriableWeatherStatus,
+  WEATHER_ASPHALT_FORECAST,
 } from './weather-asphalt-forecast.service';
 
 /**
@@ -110,5 +112,102 @@ describe('weather-asphalt-forecast service', () => {
         dedupeKey: 'weather-asphalt-forecast',
       }),
     );
+  });
+
+  /**
+   * Incidente real (20/08/2026, 08:00): un 503 puntual de Open-Meteo -API
+   * pública y gratuita, un 503 es esperable- se llevó puesto el reporte del día
+   * entero y despertó a todos con una alerta. Con un solo intento, cada blip
+   * momentáneo cuesta un día sin reporte.
+   */
+  it('reintenta un 503 transitorio y entrega el reporte igual', async () => {
+    const notifyError = jest.fn();
+    const fetcher = jest
+      .fn()
+      // Primer intento: el 503 que disparó la alerta de producción.
+      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => '' })
+      // Segundo: Open-Meteo ya se recuperó.
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify(buildOpenMeteoPayload(60, 2.5)),
+      });
+
+    const result = await generateWeatherAsphaltForecast({
+      run: '6am',
+      fetcher: fetcher as any,
+      notifyError,
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe('ok');
+    expect(result.hasRainRisk).toBe(true);
+    // Lo importante: NO se alerta por un fallo del que se pudo recuperar solo.
+    expect(notifyError).not.toHaveBeenCalled();
+  });
+
+  it('reintenta un error de red y entrega el reporte igual', async () => {
+    const fetcher = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('ECONNRESET'))
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify(buildOpenMeteoPayload(60, 2.5)),
+      });
+
+    const result = await generateWeatherAsphaltForecast({
+      run: '6am',
+      fetcher: fetcher as any,
+      notifyError: jest.fn(),
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe('ok');
+  });
+
+  it('degrada tras agotar los reintentos si Open-Meteo sigue caída', async () => {
+    const notifyError = jest.fn().mockResolvedValue(true);
+    const fetcher = jest
+      .fn()
+      .mockResolvedValue({ ok: false, status: 503, text: async () => '' });
+
+    const result = await generateWeatherAsphaltForecast({
+      run: '6am',
+      fetcher: fetcher as any,
+      notifyError,
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(WEATHER_ASPHALT_FORECAST.maxAttempts);
+    expect(result.status).toBe('degraded');
+    expect(result.error).toContain('503');
+    // Una caída sostenida SÍ se avisa: es lo que el reintento no puede resolver.
+    expect(notifyError).toHaveBeenCalled();
+  });
+
+  /**
+   * Un 4xx (salvo 429) es culpa NUESTRA — URL mal armada, parámetro inválido.
+   * Reintentar tres veces lo mismo solo demora el diagnóstico.
+   */
+  it('NO reintenta un 400: el error es nuestro, no de Open-Meteo', async () => {
+    const fetcher = jest
+      .fn()
+      .mockResolvedValue({ ok: false, status: 400, text: async () => '' });
+
+    const result = await generateWeatherAsphaltForecast({
+      run: '6am',
+      fetcher: fetcher as any,
+      notifyError: jest.fn().mockResolvedValue(true),
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('degraded');
+    expect(result.error).toContain('400');
+  });
+
+  it('un 429 sí se reintenta (rate limit es transitorio)', () => {
+    expect(isRetriableWeatherStatus(429)).toBe(true);
+    expect(isRetriableWeatherStatus(503)).toBe(true);
+    expect(isRetriableWeatherStatus(500)).toBe(true);
+    expect(isRetriableWeatherStatus(400)).toBe(false);
+    expect(isRetriableWeatherStatus(404)).toBe(false);
   });
 });
