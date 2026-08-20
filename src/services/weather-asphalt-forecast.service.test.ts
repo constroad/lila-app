@@ -3,11 +3,26 @@ import {
   getCombinedRiskLevel,
 } from './weather-asphalt-forecast.service';
 
-/** Genera 3 fechas consecutivas empezando desde hoy en formato yyyy-mm-dd. */
+/**
+ * Genera 3 fechas consecutivas empezando desde "hoy en Lima" — MISMO anclaje
+ * que usa el servicio (`resolveReportDate`, `timeZone: 'America/Lima'`).
+ *
+ * Bug real (CI, 20/08/2026): la versión anterior usaba `now.getFullYear()` /
+ * `getMonth()` / `getDate()` — hora LOCAL de la máquina que corre el test — y
+ * las reinterpretaba como UTC. En un dev Mac en horario de Lima da lo mismo
+ * por coincidencia; en el runner de GitHub (UTC) NO: de 00:00 a 05:00 UTC el
+ * día en Lima todavía es el anterior, así que el test fabricaba un payload
+ * fechado "mañana" respecto de lo que el servicio consideraba "hoy" — el
+ * lookup por fecha no encontraba nada y `hasRainRisk` daba `false` siempre.
+ * Flakeaba ~5 de 24 horas, sin relación con el código que se estuviera
+ * probando ese día.
+ */
 function dailyDates(): string[] {
   const now = new Date();
+  const todayLima = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+  const [year, month, day] = todayLima.split('-').map(Number);
   return [0, 1, 2].map((offset) => {
-    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + offset, 12));
+    const d = new Date(Date.UTC(year, month - 1, day + offset, 12));
     return d.toISOString().slice(0, 10);
   });
 }
