@@ -1,7 +1,26 @@
 export const WEATHER_ASPHALT_FORECAST = {
   fetchTimeoutMs: 25_000,
   timezone: 'America/Lima',
+  /**
+   * Reintentos ante fallo TRANSITORIO de Open-Meteo (20/08/2026: un 503 a las
+   * 08:00 se llevó puesto el reporte del día entero). Es una API pública y
+   * gratuita: un 503/429 puntual es esperable, no una avería. Con un solo
+   * intento, cada blip momentáneo = un día sin reporte + una alerta a las 8am.
+   */
+  maxAttempts: 3,
+  retryBaseDelayMs: 1_500,
 };
+
+/**
+ * ¿Vale la pena reintentar este fallo?
+ *
+ * 5xx y 429 son del lado del servidor y suelen durar segundos. Un 4xx (salvo
+ * 429) es culpa NUESTRA —URL mal armada, parámetro inválido— y reintentar solo
+ * gasta tiempo y esconde el error real detrás de tres intentos idénticos.
+ */
+export function isRetriableWeatherStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
 
 const LOCATIONS = [
   { name: 'Constroad', lat: -11.9894172, lon: -76.8789932 },
@@ -80,7 +99,13 @@ type ConstroadDay = {
 };
 
 export type WeatherForecastResult = {
-  status: 'ok' | 'degraded';
+  /**
+   * `ok`       — se obtuvo el pronóstico (haya o no riesgo de lluvia).
+   * `degraded` — Open-Meteo no respondió ni tras los reintentos. NO consume el
+   *              reclamo del día: el próximo horario del cron vuelve a intentar.
+   * `skipped`  — el reporte de hoy ya se entregó; este horario era de respaldo.
+   */
+  status: 'ok' | 'degraded' | 'skipped';
   hasRainRisk: boolean;
   message: string | null;
   mensaje: string | null;
@@ -167,6 +192,46 @@ async function fetchWithTimeout(url: string, fetcher: FetchLike): Promise<Respon
     headers: { Accept: 'application/json', 'User-Agent': 'lila-app-cron/1.0' },
     signal: AbortSignal.timeout(WEATHER_ASPHALT_FORECAST.fetchTimeoutMs),
   });
+}
+
+const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Trae el pronóstico reintentando los fallos transitorios (5xx/429 y errores de
+ * red/timeout). Devuelve el cuerpo ya leído; lanza si se agotan los intentos.
+ *
+ * El backoff es lineal y corto (1.5s, 3s): el cron corre a las 08:00 y nadie
+ * espera la respuesta, pero tampoco tiene sentido pelearse diez minutos con una
+ * API caída — si a los ~5 s no contesta, es una caída de verdad y ahí sí toca
+ * avisar.
+ */
+async function fetchForecastConReintentos(
+  url: string,
+  fetcher: FetchLike
+): Promise<string> {
+  const { maxAttempts, retryBaseDelayMs } = WEATHER_ASPHALT_FORECAST;
+  let ultimoError = new Error('Open-Meteo: sin intentos');
+
+  for (let intento = 1; intento <= maxAttempts; intento += 1) {
+    let esTransitorio = true;
+    try {
+      const response = await fetchWithTimeout(url, fetcher);
+      const responseText = await response.text();
+      if (response.ok) return responseText;
+
+      ultimoError = new Error(`Open-Meteo API error: ${response.status}`);
+      // Un 4xx que no sea 429 es culpa nuestra: no mejora reintentando.
+      esTransitorio = isRetriableWeatherStatus(response.status);
+    } catch (error) {
+      // Error de red, timeout o abort: siempre transitorio.
+      ultimoError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    if (!esTransitorio) break;
+    if (intento < maxAttempts) await esperar(retryBaseDelayMs * intento);
+  }
+
+  throw ultimoError;
 }
 
 function parseOpenMeteoResults(payload: string): OpenMeteoResponse[] {
@@ -278,6 +343,13 @@ export async function generateWeatherAsphaltForecast(params: {
   run?: string;
   fetcher?: FetchLike;
   notifyError?: NotifyError;
+  /**
+   * Con `companyId`, el reporte se entrega UNA sola vez por día: los horarios
+   * extra del cron pasan a ser reintentos de recuperación en vez de mensajes
+   * repetidos. Sin él (llamada suelta, tests) no se deduplica nada.
+   */
+  companyId?: string;
+  claim?: (key: string, companyId: string) => Promise<boolean>;
 } = {}): Promise<WeatherForecastResult> {
   const fetcher = params.fetcher || fetch;
   const notifyError =
@@ -290,14 +362,46 @@ export async function generateWeatherAsphaltForecast(params: {
   const forecastDays = reportDate.is6amRun ? 3 : 4;
 
   try {
-    const response = await fetchWithTimeout(buildWeatherUrl(forecastDays), fetcher);
-    const responseText = await response.text();
-    if (!response.ok) throw new Error(`Open-Meteo API error: ${response.status}`);
+    const responseText = await fetchForecastConReintentos(
+      buildWeatherUrl(forecastDays),
+      fetcher
+    );
 
     const results = parseOpenMeteoResults(responseText);
     const constroadRiskyDays = collectConstroadRisk(results, reportDate.dateString);
     const forecastsWithRisk = collectDistrictRisk(results, reportDate.dateString);
     const message = buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate.date);
+
+    // EL RECLAMO VA ACÁ, DESPUÉS DE TENER EL DATO — no antes.
+    //
+    // Es lo que convierte los horarios extra del cron en una red de
+    // recuperación: si Open-Meteo estaba caída a las 08:00, ese intento NO
+    // consumió el reclamo del día, así que el de las 10:00 vuelve a intentar y
+    // entrega. Y al revés: si a las 08:00 salió bien, el de las 10:00 se
+    // encuentra el reclamo tomado y no repite el mismo reporte.
+    //
+    // Reclamar ANTES de tener el dato sería el bug clásico: un fallo se comería
+    // el cupo del día y el reintento nunca podría entregar nada.
+    if (params.companyId) {
+      // Import DINÁMICO, igual que `telegram-alert.service` acá abajo: este
+      // módulo se mantiene libre de dependencias que arrastren `config`
+      // (usa `import.meta` y rompe el runner CJS de los tests).
+      const claim =
+        params.claim ??
+        (async (key: string, companyId: string) => {
+          const { claimOnce } = await import('../utils/once-per-key.js');
+          return claimOnce(key, companyId);
+        });
+      const clave = `weather-forecast:${params.companyId}:${reportDate.dateString}`;
+      if (!(await claim(clave, params.companyId))) {
+        return {
+          status: 'skipped',
+          hasRainRisk: false,
+          message: null,
+          mensaje: null,
+        };
+      }
+    }
 
     return {
       status: 'ok',

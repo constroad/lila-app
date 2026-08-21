@@ -1000,3 +1000,144 @@ drive de una company.
 - **Sin compresión** (`ZIP_COMPRESSION_LEVEL = 0`): medido en producción, deflate
   sobre PDFs —ya comprimidos— ahorraba 12% y costaba 3.8x de tiempo
   (200 s contra 53 s para 11.7 MB).
+
+## Lecciones del 19-20/08/2026 — `isPortalCronUrl`, `returnMessage`, y un test que flakeaba por huso horario
+
+Contexto completo (lado Portal) en `Portal/specs/ARCHITECTURE-Portal.as-is.md`
+§"Lecciones del 18-19/08/2026 — alertas de WhatsApp". Acá lo que le tocaba a
+este repo.
+
+### `isPortalCronUrl` exigía IGUALDAD exacta de host — `www.` rompía el match
+
+`x-cron-secret` solo se adjunta si `isPortalCronUrl(targetUrl, PORTAL_BASE_URL)`
+da `true` — es la defensa contra filtrar el secreto compartido a un host que no
+sea Portal. La comparación era `target.host === new URL(portalBase).host`
+literal: un cron cuya URL se armó como `https://www.constroad.com/...`
+(host = `www.constroad.com`) contra `PORTAL_BASE_URL=https://constroad.com`
+(host = `constroad.com`) daba `false` — el secreto no viajaba, Portal
+rechazaba con 401, y **el JobExecutor lo reportaba como fallo del job, no
+como "faltó un header"**: el log decía `Request failed with status code 401`
+sin más contexto. Auditado contra Mongo: 8 de 11 `alerts.*` activos en 3
+empresas estaban armados así — el guardado desde el admin panel arma la URL
+con el host que trajo el REQUEST (`req.headers.host` en Portal), y nada
+canonicalizaba `www.` en ninguno de los dos lados.
+
+Ahora `isPortalCronUrl` ignora un `www.` inicial de CUALQUIERA de los dos
+hosts (target y `portalBaseUrl`) antes de comparar. Tests en
+`executor.service.test.ts` cubren el caso — incluido el original que rompía.
+
+### El JobExecutor tiene DOS caminos para enviar, y uno de los dos NO se usa en la práctica
+
+Un job `type: 'api'` puede: (a) dejar que el ENDPOINT de Portal mande el
+WhatsApp directamente, o (b) pedirle la respuesta con
+`x-cronjob-return-message: 1` / `?returnMessage=1` y mandarla el propio
+JobExecutor vía `executeBatchMessages`. Medido en logs de producción:
+**absolutamente todo tráfico real —tanto el disparo programado como
+`POST /jobs/:id/run` manual— llega con `returnMessage=1`.** El camino (a)
+existe en el código (`shouldUseApiResponseMessage`) pero no se observó ni una
+sola vez en producción. Cualquier feature que se agregue en Portal asumiendo
+el camino (a) —código que solo corre cuando el endpoint manda directo— es
+código muerto en la práctica. (Pasó de verdad: la imagen del reporte de
+fluidos vivía en ese branch y nunca se disparaba — ver el as-is de Portal.)
+
+### Test flaky por huso horario — "hoy" en Lima no es "hoy" en UTC de 00:00 a 05:00
+
+`weather-asphalt-forecast.service.test.ts` fabricaba su payload de fechas con
+`now.getFullYear()/getMonth()/getDate()` — hora LOCAL de la máquina que corre
+el test — reinterpretadas como UTC. El SERVICIO ancla "hoy" explícitamente a
+`America/Lima` (`resolveReportDate`). En un dev Mac en horario de Lima ambos
+coinciden por coincidencia; en el runner de GitHub Actions (UTC) no: de
+00:00 a 05:00 UTC el día en Lima todavía es el anterior, así que el test
+fabricaba un payload fechado "mañana" respecto de lo que el servicio
+consideraba "hoy" — el lookup por fecha no encontraba nada y `hasRainRisk`
+daba `false` siempre. Flakeaba ~5 de 24 horas, sin relación con qué se
+estuviera cambiando ese día — se manifestó en CI en un push que ni tocaba
+este archivo. **Regla:** un test que fabrica "hoy" para comparar contra un
+servicio anclado a una zona horaria específica tiene que anclarse a la MISMA
+zona, no a la del reloj de la máquina que lo ejecuta. Verificado corriendo
+`TZ=UTC npm test` localmente antes de dar por cerrado — es la forma barata de
+simular el runner sin esperar a que CI lo vuelva a agarrar.
+
+### Un solo intento contra una API pública = un blip cuesta el reporte del día
+
+**Incidente 20/08/2026, 08:00 Lima:** alerta de Telegram
+`Open-Meteo API error: 503`. Open-Meteo es una API pública y gratuita — un 503
+puntual es comportamiento esperable, no una avería. Pero
+`generateWeatherAsphaltForecast` hacía **un solo fetch**, así que ese blip
+momentáneo se llevó puesto el reporte de clima del día entero y despertó a
+todos a las 8am. Comprobado minutos después: la API respondía 200 normal.
+
+Ahora reintenta con backoff (3 intentos, 1.5s/3s) ante **5xx, 429, y errores de
+red/timeout**. Un 4xx que no sea 429 **no** se reintenta: ese es culpa nuestra
+(URL mal armada, parámetro inválido) y repetirlo tres veces solo demora el
+diagnóstico. `isRetriableWeatherStatus` está exportada y testeada.
+
+**Regla general:** cualquier llamada a un tercero desde un cron —sobre todo si
+es un servicio gratuito— necesita reintento ante fallo transitorio. Sin él, la
+disponibilidad del reporte es exactamente la disponibilidad instantánea del
+tercero en ESE segundo, y cada blip suyo se convierte en una alerta nuestra.
+
+### Un cron que perdió su reporte NO es un éxito
+
+El mismo incidente destapó una mentira de estado, la misma clase que
+`ARCHITECTURE-torre.as-is.md` §12: el servicio atrapaba el fallo, avisaba por
+Telegram y devolvía `status: 'degraded'` — pero la ruta respondía **200 igual**,
+así que el JobExecutor lo anotaba como `success`, con `failureCount: 0` y sin
+`lastError`.
+
+El resultado medido en Mongo es la definición del problema: para la MISMA
+corrida, la alerta de Telegram decía "falló" a las `08:00:02` y el historial del
+cronjob decía `08:00:03 success 3058ms`. El panel mostraba salud donde no la
+había, y el reintento del executor nunca se disparaba (solo reintenta ante
+no-2xx).
+
+Ahora la ruta responde **502** cuando `status === 'degraded'` (502 y no 500: el
+fallo es de un tercero, no nuestro). Se verificó antes de cambiarlo que **nada
+usa `failureCount` para auto-desactivar jobs** — solo se incrementa y se
+resetea— así que una caída sostenida de Open-Meteo no puede apagar el cron
+sola. Y la alerta no se duplica: `sendTelegramAlert` ya deduplica 5 min por
+`dedupeKey`.
+
+**Regla general:** si un handler de cron atrapa su propio fallo para alertar,
+tiene que devolver un status de error igual. Un `catch` que alerta y responde
+200 le está diciendo dos cosas contradictorias a dos sistemas distintos.
+
+### El reintento dentro de una corrida tiene techo: 30 s. Para el resto, los horarios.
+
+El reintento interno (3 intentos, ~5 s) está acotado por el `timeout: 30000`
+que el JobExecutor le pone a la llamada HTTP — cubre un blip de segundos, no
+una caída de diez minutos. Sin nada más, una caída sostenida a las 08:00 hacía
+perder el reporte **hasta el día siguiente**.
+
+La solución NO es alargar el reintento interno (choca contra los 30 s), sino
+convertir los horarios ya configurados del cron en una red de recuperación.
+`generateWeatherAsphaltForecast` recibe ahora `companyId` (del header
+`x-company-id` que manda el executor) y reclama una clave por día:
+`weather-forecast:<companyId>:<fecha>` vía `utils/once-per-key.ts`.
+
+**Lo esencial es CUÁNDO se reclama: después de tener el dato, nunca antes.**
+
+| corrida | Open-Meteo | resultado |
+| --- | --- | --- |
+| 08:00 | caída | `degraded` — **no** consume el cupo del día |
+| 10:00 | recuperada | `ok` — entrega el reporte y toma el cupo |
+| 08:00 | ok | `ok` — entrega y toma el cupo |
+| 10:00 | ok | `skipped` — no repite el mismo mensaje |
+
+Reclamar ANTES de tener el dato sería el bug clásico: un fallo se comería el
+cupo y el horario de respaldo nunca podría entregar nada. Hay un test dedicado
+exactamente a eso.
+
+Efecto secundario que también se cierra: con dos horarios configurados y riesgo
+de lluvia, antes se enviaba el MISMO reporte dos veces.
+
+**Regla general:** para un cron cuyo trabajo puede fallar por causas externas,
+"reintentar" a escala de minutos se implementa con horarios extra + un reclamo
+idempotente por período, no alargando el reintento dentro del request — que
+siempre va a chocar contra el timeout de quien lo llamó.
+
+`claimOnce`/`isClaimed` viven en `utils/once-per-key.ts` (salieron de
+`dispatch-notifications.service.ts` al aparecer el segundo consumidor). Se
+importan **dinámicamente** desde el servicio de clima: `once-per-key` arrastra
+`config/environment.ts`, que usa `import.meta` y rompe el runner CJS de los
+tests — mismo patrón que ya usaba ese archivo para `telegram-alert.service`.
