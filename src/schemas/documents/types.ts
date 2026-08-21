@@ -74,6 +74,19 @@ export interface ColumnSchema {
   visible?: boolean;
   sortable?: boolean;
   computed?: boolean;
+  /**
+   * Columna CALCULADA pero CORREGIBLE: se llena sola mientras la celda esté
+   * vacía y deja de recalcularse en cuanto alguien escribe algo.
+   *
+   * Existe porque `computed` suelda dos cosas —"calculalo" y "no lo toques"— y
+   * hay celdas donde el cálculo es una AYUDA, no una verdad del sistema: el
+   * tiempo de servicio de una constancia es correcto en meses, pero quien la
+   * firma a veces necesita decir "27 días" o "3 semanas".
+   *
+   * El costo: una vez tipeada, deja de seguir a las fechas. Por eso NO se usa
+   * donde el cálculo ES el dato (importes, dictámenes de conformidad).
+   */
+  editableComputed?: boolean;
   /** Por que esta celda no se puede tipear y que hay que llenar para moverla.
    *  Una columna derivada sin explicacion se lee como un campo roto. */
   computedHint?: string;

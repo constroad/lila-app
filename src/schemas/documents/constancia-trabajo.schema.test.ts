@@ -94,11 +94,13 @@ describe('constanciaTrabajoSchema (CONS-TRA)', () => {
       expect(columna('hasta')?.required).toBeFalsy();
     });
 
-    it('el tiempo del periodo es DERIVADO, con su pista', () => {
+    it('el tiempo se calcula solo PERO se puede corregir', () => {
+      // El calculo en meses es correcto; quien firma a veces necesita decir
+      // "27 dias". `computed` a secas dejaria la celda de solo lectura.
       const tiempo = columna('tiempo');
       expect(tiempo?.computed).toBe(true);
-      expect(tiempo?.editable).toBeFalsy();
-      expect(tiempo?.computedHint).toBeTruthy();
+      expect(tiempo?.editableComputed).toBe(true);
+      expect(tiempo?.computedHint).toContain('escribir encima');
     });
 
     it('cuenta meses de CALENDARIO, no milisegundos entre fechas', () => {

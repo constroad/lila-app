@@ -49,7 +49,7 @@ const antiguedadEntre = (ini: string, fin: string) => `(() => {
   const anios = Math.floor(meses / 12), resto = meses % 12;
   if (!anios && !resto) return 'menos de 1 mes';
   return [
-    anios ? anios + (anios === 1 ? ' anio' : ' anios') : '',
+    anios ? anios + (anios === 1 ? ' año' : ' años') : '',
     resto ? resto + (resto === 1 ? ' mes' : ' meses') : ''
   ].filter(Boolean).join(', ');
 })()`;
@@ -136,9 +136,13 @@ export const constanciaTrabajoSchema: DocumentSchema = {
           width: 120,
           align: 'center',
           computed: true,
+          // Calculada pero CORREGIBLE: el cálculo en meses es correcto, pero
+          // quien firma a veces necesita decir "27 dias" o "3 semanas". Se
+          // llena sola mientras este vacia y respeta lo que se escriba.
+          editableComputed: true,
           formula: FORMULA_TIEMPO,
           computedHint:
-            'Se calcula solo con DESDE y HASTA. Si dejas HASTA en blanco, el periodo cuenta hasta la fecha de la constancia.',
+            'Se calcula solo con DESDE y HASTA (si dejas HASTA en blanco, cuenta hasta la fecha de la constancia). Puedes escribir encima; a partir de ahi deja de recalcularse.',
         },
       ],
     },
