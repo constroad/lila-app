@@ -1058,6 +1058,39 @@ zona, no a la del reloj de la máquina que lo ejecuta. Verificado corriendo
 `TZ=UTC npm test` localmente antes de dar por cerrado — es la forma barata de
 simular el runner sin esperar a que CI lo vuelva a agarrar.
 
+### Dos campos que responden preguntas distintas, impresos como si fueran uno
+
+**Reportado el 30/08/2026** sobre el reporte de clima de Inframaq: cinco
+distritos seguidos decían `Prob. lluvia: 0% - (2 mm)`. Leído así es una
+contradicción y el reporte entero pierde credibilidad.
+
+**El dato estaba bien traído.** Verificado contra Open-Meteo ese mismo día
+(Barranco, 31/08): `precipitation_probability_max: 0` y `precipitation_sum: 2.0`
+son la respuesta real de la API, y el desglose horario lo explica — **16 horas
+seguidas de 0.1–0.2 mm/h**. Es garúa de invierno costeño.
+
+Los dos campos responden preguntas DIFERENTES: la probabilidad es *«¿habrá un
+evento de lluvia?»* (no) y el acumulado es *«¿cuánta agua cae?»* (2 mm). En la
+costa de Lima se contradicen a diario. **El número no estaba mal; la frase sí.**
+
+Ahora la línea la arma `describeRainLine(prob, mm)`, que nombra qué manda:
+`Garúa persistente: 2 mm acumulados (sin evento de lluvia — prob. 0%)` cuando la
+probabilidad es despreciable pero el acumulado no, y `Prob. lluvia: 64% — 1.2 mm
+acumulados` cuando sí hay evento. **La clasificación no cambió**: 2 mm en el día
+mojan la carpeta igual y siguen siendo `moderate_risk`. Lo que se agregó es el
+porqué.
+
+**Regla general:** cuando dos métricas de un tercero pueden discrepar
+legítimamente, el mensaje explica cuál manda. Pegarlas sin contexto convierte un
+dato correcto en un bug percibido, y la próxima vez nadie lee el reporte.
+
+De paso se cerró un fallo latente del mismo recorrido: `getMmBand`/`getProbBand`
+comparan con `<` y `<=`, así que un `undefined` (índice fuera de rango) caía en
+el último tramo de AMBAS bandas y producía un **«NO ASFALTAR - RIESGO ALTO» con
+«undefined%»**. Nunca se vio en producción porque Open-Meteo siempre devolvió el
+día completo. `readMetric` ahora omite el día sin dato: callar es correcto,
+inventar un riesgo no.
+
 ### Un solo intento contra una API pública = un blip cuesta el reporte del día
 
 **Incidente 20/08/2026, 08:00 Lima:** alerta de Telegram

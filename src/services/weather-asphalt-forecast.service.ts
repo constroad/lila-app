@@ -153,6 +153,48 @@ export function getCombinedRiskLevel(prob: number, mm: number): RiskLevel {
   return 'high_risk';
 }
 
+/** Formatea milímetros sin decimales de más: `2` y no `2.0`, `1.2` y no `1.20`. */
+function formatMm(mm: number): string {
+  return `${Math.round(mm * 10) / 10}`;
+}
+
+/**
+ * La línea de lluvia de un día, nombrando QUÉ dispara el riesgo.
+ *
+ * Open-Meteo responde dos preguntas distintas con dos campos:
+ * `precipitation_probability_max` es «¿habrá un evento de lluvia?» y
+ * `precipitation_sum` es «¿cuánta agua se acumula?». En la costa de Lima en
+ * invierno se contradicen a diario: la garúa deja milímetros durante horas sin
+ * llegar a contar como evento, así que la probabilidad se queda en 0% mientras
+ * el acumulado sube. Verificado el 30/08/2026: Barranco, 31/08 → prob. 0%,
+ * acumulado 2.0 mm, repartido en 16 horas seguidas de 0.1–0.2 mm/h.
+ *
+ * Antes se imprimían los dos números pegados —«Prob. lluvia: 0% - (2 mm)»—, lo
+ * que presenta como UN hecho lo que son DOS y se lee como un bot roto. El
+ * número no estaba mal; la frase sí.
+ */
+export function describeRainLine(prob: number, mm: number): string {
+  const esGarua = getProbBand(prob) === 'none' && getMmBand(mm) !== 'very_low';
+  if (esGarua) {
+    return `Garúa persistente: ${formatMm(mm)} mm acumulados (sin evento de lluvia — prob. ${prob}%)`;
+  }
+  return `Prob. lluvia: ${prob}% — ${formatMm(mm)} mm acumulados`;
+}
+
+/**
+ * Valor numérico utilizable, o `null` si el dato no vino.
+ *
+ * Sin esto un índice fuera de rango entregaba `undefined`, y como TODAS las
+ * comparaciones contra `undefined` son falsas, caía en el último tramo de las
+ * bandas: un dato AUSENTE se reportaba como «NO ASFALTAR - RIESGO ALTO» con
+ * «undefined%» en el texto. `Number(null)` es 0 y sí es finito, que es lo
+ * correcto para la probabilidad: sin señal de evento.
+ */
+function readMetric(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function getConstroadDecision(level: RiskLevel): string {
   if (level === 'high_risk') return 'NO APTO PARA PRODUCIR EN PLANTA';
   if (level === 'moderate_risk') return 'RIESGO MODERADO PARA PRODUCIR EN PLANTA';
@@ -254,7 +296,7 @@ function buildWeatherMessage(
     message += `Constroad (Planta de asfalto - ${ASPHALT_PLANT_LOCATION}):\n\n`;
     for (const day of constroadRiskyDays) {
       message += `  ${formatDate(day.date)}:\n`;
-      message += `    Prob. lluvia: ${day.prob}% - (${day.mm} mm)\n`;
+      message += `    ${describeRainLine(day.prob, day.mm)}\n`;
       message += `    ${day.decision}\n\n`;
     }
   }
@@ -267,14 +309,14 @@ function buildWeatherMessage(
       message += 'NO ASFALTAR - RIESGO ALTO:\n';
       for (const forecast of highRisk) {
         message += `  - ${forecast.name.toUpperCase()}:\n`;
-        message += `    Prob. lluvia: ${forecast.prob}% - (${forecast.mm} mm)\n\n`;
+        message += `    ${describeRainLine(forecast.prob, forecast.mm)}\n\n`;
       }
     }
     if (moderateRisk.length > 0) {
       message += 'RIESGO MODERADO:\n';
       for (const forecast of moderateRisk) {
         message += `  - ${forecast.name.toUpperCase()}:\n`;
-        message += `    Prob. lluvia: ${forecast.prob}% - (${forecast.mm} mm)\n\n`;
+        message += `    ${describeRainLine(forecast.prob, forecast.mm)}\n\n`;
       }
     }
   } else if (constroadRiskyDays.length > 0) {
@@ -294,8 +336,10 @@ function collectConstroadRisk(results: OpenMeteoResponse[], reportDateString: st
   const days: ConstroadDay[] = [];
   for (let offset = 0; offset < 3; offset++) {
     const idx = startIdx + offset;
-    const prob = daily.precipitation_probability_max[idx];
-    const mm = daily.precipitation_sum[idx];
+    const prob = readMetric(daily.precipitation_probability_max[idx]);
+    const mm = readMetric(daily.precipitation_sum[idx]);
+    // Sin dato no se opina: callar es correcto, inventar un riesgo no.
+    if (prob === null || mm === null) continue;
     const level = getCombinedRiskLevel(prob, mm);
     if (level === 'ok') continue;
     days.push({
@@ -319,8 +363,9 @@ function collectDistrictRisk(results: OpenMeteoResponse[], reportDateString: str
     const dayIndex = daily?.time?.indexOf(reportDateString) ?? -1;
     if (!daily || dayIndex < 0) continue;
 
-    const prob = daily.precipitation_probability_max[dayIndex];
-    const mm = daily.precipitation_sum[dayIndex];
+    const prob = readMetric(daily.precipitation_probability_max[dayIndex]);
+    const mm = readMetric(daily.precipitation_sum[dayIndex]);
+    if (prob === null || mm === null) continue;
     const level = getCombinedRiskLevel(prob, mm);
     if (level === 'ok') continue;
     forecasts.push({ name: LOCATIONS[index].name, prob, mm, level });

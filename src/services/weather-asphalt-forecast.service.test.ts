@@ -1,4 +1,5 @@
 import {
+  describeRainLine,
   generateWeatherAsphaltForecast,
   getCombinedRiskLevel,
   isRetriableWeatherStatus,
@@ -51,6 +52,92 @@ describe('weather-asphalt-forecast service', () => {
     expect(getCombinedRiskLevel(45, 0.2)).toBe('ok');
     expect(getCombinedRiskLevel(25, 0.8)).toBe('moderate_risk');
     expect(getCombinedRiskLevel(45, 1.2)).toBe('high_risk');
+  });
+
+  /**
+   * EL REPORTE DECÍA «Prob. lluvia: 0% - (2 mm)» Y SE LEÍA COMO UN BOT ROTO.
+   *
+   * El dato es REAL y está bien traído (verificado el 30/08/2026 contra
+   * Open-Meteo: Barranco, 31/08, `precipitation_probability_max: 0` y
+   * `precipitation_sum: 2.0`; el desglose horario son 16 horas seguidas de
+   * 0.1–0.2 mm/h). Lo que pasa es que los dos campos responden preguntas
+   * DISTINTAS: la probabilidad es «¿habrá un evento de lluvia?» y el acumulado
+   * es «¿cuánta agua cae?». En la costa de Lima en invierno se contradicen a
+   * diario, porque la garúa moja todo el día sin llegar a ser un evento.
+   *
+   * Imprimir los dos números pegados presenta como UN hecho lo que son DOS, y
+   * quema la confianza en todo el reporte. La línea tiene que nombrar qué manda.
+   */
+  describe('la línea de lluvia explica QUÉ manda', () => {
+    it('0% con acumulado real se nombra como garúa, no como una contradicción', () => {
+      const linea = describeRainLine(0, 2);
+      expect(linea).toContain('2 mm');
+      expect(linea.toLowerCase()).toContain('garúa');
+      // Lo que no puede volver a pasar: los dos números pegados sin explicación.
+      expect(linea).not.toContain('0% - (2 mm)');
+    });
+
+    it('con evento de lluvia de verdad se sigue mostrando la probabilidad', () => {
+      const linea = describeRainLine(64, 1.2);
+      expect(linea).toContain('64%');
+      expect(linea).toContain('1.2 mm');
+      expect(linea.toLowerCase()).not.toContain('garúa');
+    });
+
+    it('la garúa SIGUE contando como riesgo: moja la carpeta igual', () => {
+      // No se trata de silenciar el aviso — 2 mm en el día importan para
+      // asfaltar. Se trata de decir por qué está avisando.
+      expect(getCombinedRiskLevel(0, 2)).toBe('moderate_risk');
+    });
+
+    it('el mensaje del distrito usa la línea explicada', async () => {
+      const payload = buildOpenMeteoPayload(0, 0);
+      payload[1] = buildDailyPayload(0, 2);
+      const fetcher = jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify(payload),
+      });
+
+      const result = await generateWeatherAsphaltForecast({
+        run: '6am',
+        fetcher: fetcher as any,
+        notifyError: jest.fn(),
+      });
+
+      expect(result.message).toContain('ANCON');
+      expect(result.message).not.toContain('0% - (2 mm)');
+      expect(result.message?.toLowerCase()).toContain('garúa');
+    });
+  });
+
+  /**
+   * Un dato AUSENTE no puede convertirse en la peor alerta posible.
+   *
+   * `getMmBand(undefined)` caía en el último `else` y devolvía `high`, y
+   * `getProbBand(undefined)` también: un índice fuera de rango producía un
+   * «NO ASFALTAR - RIESGO ALTO» con «undefined%» en el texto. Nunca se vio en
+   * producción porque Open-Meteo siempre devolvió el día completo, pero es la
+   * clase de fallo que aparece el día que la API cambia.
+   */
+  it('un día sin dato se OMITE, no se reporta como riesgo alto', async () => {
+    const payload = buildOpenMeteoPayload(0, 0);
+    const roto = buildDailyPayload(0, 0);
+    // Las fechas siguen ahí, pero los arrays de valores llegan cortados.
+    roto.daily.precipitation_probability_max = [];
+    roto.daily.precipitation_sum = [];
+    payload[1] = roto;
+
+    const result = await generateWeatherAsphaltForecast({
+      run: '6am',
+      fetcher: jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify(payload),
+      }) as any,
+      notifyError: jest.fn(),
+    });
+
+    expect(result.message).toBeNull();
+    expect(result.hasRainRisk).toBe(false);
   });
 
   it('devuelve mensaje cuando hay riesgo de lluvia', async () => {
