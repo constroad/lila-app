@@ -533,7 +533,17 @@ Los umbrales también son los mismos que usan el watchdog y el reporte diario.
 Calla si todo está bien. Umbrales: CPU 85%, RAM 90%, disco 85%.
 
 ## Observabilidad
-- Winston logs estructurados en `logs/`.
+- Winston logs estructurados en `logs/`. **Todos los servicios de la mini
+  escriben con hora** (`YYYY-MM-DD HH:MM:SS`, zona `America/Lima`, mismo formato
+  en los seis) — Portal, torre, lilastore y auth lo ganaron el 31/08/2026, tras
+  una caída que no se pudo reconstruir porque sus logs no tenían ni una marca de
+  tiempo. Ver `OBSERVABILITY-ALERTING.spec.md` #30.
+- **El túnel de Cloudflare se vigila desde DOS lados**, y esa duplicación es la
+  lección #29: el watchdog local (`scripts/cloudflare-tunnel-watchdog.sh`)
+  detecta que la app cayó, y un probe en GitHub Actions
+  (`torre/.github/workflows/probe-publico.yml`, cada 5 min, compute ajeno)
+  detecta que **la mini quedó incomunicada** — lo único que el watchdog local no
+  puede avisar nunca, porque sin internet tampoco puede mandar el Telegram.
 - Console hijack global (`utils/console-hijack.ts`) sobre `log`/`info`/`warn`/`debug`/`error`:
   descarta el ruido de libsignal y redacta material criptográfico antes de que llegue al log
   (ver §Seguridad).

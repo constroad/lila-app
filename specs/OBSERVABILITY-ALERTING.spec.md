@@ -811,3 +811,144 @@ vez de quedar enterrado en el log.
 - [ ] Si un paso puede degradarse 5× sin fallar, su duración tiene que llegar a
       donde alguien la lea.
 
+
+---
+
+### 29. Un monitor que vive DENTRO de lo que vigila es ciego en el fallo que más importa
+
+**Qué pasó (31/08/2026).** La mini perdió la ruta de red durante ~3 minutos
+(11:14:31 → 11:16:37 UTC). Se cayó **todo lo que sale por el túnel** —
+constroad.com, lila, chat, lilastore, auth — y las apps además perdieron Mongo
+Atlas, así que tampoco podían trabajar hacia afuera:
+
+```
+11:14:31 ERR Failed to dial a quic connection error="... sendmsg: network is unreachable"
+06:14:55 ERROR [cron] tick de recordatorios falló: connection to ...:27017 timed out
+11:16:37 INF Registered tunnel connection ... location=scl04
+```
+
+Un usuario lo reportó por WhatsApp. **Nadie más se enteró.**
+
+**Lo desconcertante es que el monitoreo funcionó perfecto.** El watchdog de
+Cloudflare escribió, a las 06:16:20, exactamente lo que debía:
+
+```
+NO EVALUABLE: esta máquina no tiene internet; el túnel no es juzgable
+```
+
+Se negó a culpar al túnel —correcto, la lección #16 y los tres estados en
+acción— y por eso mismo **no mandó nada**. Pero aunque hubiera querido alertar,
+no habría podido: **Telegram también necesita internet**. El watchdog corre en
+la mini.
+
+**La regla.** Un monitor hospedado en la misma máquina que vigila puede detectar
+que la aplicación se cayó, pero **nunca** que la máquina quedó incomunicada — el
+único fallo en el que el aviso es la diferencia entre tres minutos y una mañana.
+Todo servicio expuesto necesita **un chequeo desde afuera de su propia máquina**.
+
+El nuestro es un workflow de GitHub Actions (`torre/.github/workflows/probe-publico.yml`),
+en compute ajeno, cada 5 minutos. Cuatro decisiones que valen para cualquier probe:
+
+- **El control es el canal de alerta.** Se prueba `api.telegram.org` para
+  distinguir «el sitio está roto» de «el runner no tiene internet». Que sea el
+  mismo canal por el que habría que avisar no es casualidad: si no responde, la
+  alerta no sale igual, así que callarse es lo honesto.
+- **Se avisa en la TRANSICIÓN, no en cada ciclo.** Sin eso, una caída de una hora
+  manda doce mensajes idénticos y la gente aprende a ignorar el canal — que es
+  cómo muere un sistema de alertas.
+- **Y se avisa al RECUPERARSE.** Es la mitad que casi siempre falta: sin ese
+  mensaje, el que recibió la alerta se queda mirando el teléfono.
+- **No reinicia nada.** launchd y el watchdog local ya tienen la recuperación; un
+  monitor que además actúa duplica esa lógica y se pelea con quien la tiene.
+
+**Limitación declarada:** el cron de GitHub es best-effort y se atrasa 5–15 min.
+Detecta caídas de minutos, no blips de segundos. Se acepta a conciencia — el
+agujero que había era una caída de tres minutos que no vio nadie.
+
+### 29-bis. El errno dice de qué clase es el fallo, y ahorra el diagnóstico equivocado
+
+`sendmsg: network is unreachable` (ENETUNREACH) es **el sistema operativo
+diciendo que no hay ruta**: la interfaz perdió su dirección. No es un timeout, no
+es Cloudflare, no es la app. Si hubiera sido un corte del ISP con el enlace
+arriba, el error habría sido un timeout (ETIMEDOUT), y eso apunta a otro lado.
+
+Leer el errno antes de abrir el código ahorra la hora que se pierde buscando en
+la aplicación un fallo que estaba tres capas más abajo.
+
+**Y el dato estructural que destapó el incidente:** producción corría sobre
+**Wi-Fi** (`en0` Ethernet inactivo, ruta por defecto en `en1`). Una
+desasociación de Wi-Fi produce ENETUNREACH exactamente así. La degradación venía
+de antes y sobrevivió a un reinicio completo de la máquina — 0 fallas de conexión
+del túnel el 29, **1262 el 30**, 638 en las primeras 11 h del 31 — o sea que no
+era la mini: era el camino de red.
+
+### 30. Un log sin hora es inútil justo en el único momento en que se lee
+
+Al reconstruir la caída, `lila` y `chat` se pudieron leer minuto a minuto —tienen
+logger propio— y `portal-err.log` **no tenía una sola marca de tiempo**. No hubo
+forma de saber qué hizo Portal durante el corte. Lo mismo torre, lilastore y
+auth, que solo repetía `constroad-auth escuchando en 127.0.0.1:4002` sin decir
+cuándo.
+
+Un log se escribe todos los días y se lee **una vez, durante una caída**,
+comparándolo contra otros logs y contra un reporte de WhatsApp con hora. Sin
+marca de tiempo, ese día no sirve para nada.
+
+- **La hora es la de la OBRA** (`America/Lima`), no UTC. Obligar a restar cinco
+  horas en medio de una caída es cómo se diagnostica mal.
+- **El formato tiene que ser el MISMO en todos los servicios** (`YYYY-MM-DD
+  HH:MM:SS`): así los logs se pegan y se ordenan como texto.
+- **Se envuelven TODOS los métodos de consola**, no solo `log`: `info`, `warn`,
+  `error` y `debug` son propiedades independientes y reasignar `log` no las toca.
+  Es la misma trampa que dejó pasar 1396 volcados con claves en claro en
+  lila-app.
+- **La marca va como argumento aparte, no concatenada al primero**: concatenarla
+  convierte un objeto en `[object Object]` y borra el detalle que se logueaba.
+- **Se instala como efecto del IMPORT.** En ESM los `import` se hoistean: un
+  `import { instalar }` seguido de `instalar()` corre **después** de que
+  cargaron los demás módulos, y todo lo que ellos loguean al cargarse sale sin
+  hora. Ver la #31.
+
+Se descartó hacerlo en el plist —pasar la salida por un `ts` en
+`ProgramArguments` cubriría hasta el banner del framework— porque mete un wrapper
+entre launchd y el proceso, exige `bootout`+`bootstrap` de los seis servicios, y
+cambia de quién es el exit code. **Un arreglo de observabilidad no puede
+arriesgar la supervisión de producción.**
+
+### 31. En ESM, «importalo primero» no alcanza: los imports se hoistean
+
+Se escribió el arreglo de la #30 en `constroad-auth` así:
+
+```ts
+import { instalarTimestampDeLogs } from './log-timestamp.ts';
+instalarTimestampDeLogs();          // ← corre TARDE
+
+import express from 'express';
+import { base } from './db.ts';
+```
+
+Parece «primero de todo» y no lo es. ESM **evalúa todos los `import` antes que
+cualquier línea del cuerpo del módulo**, así que `express`, `config` y `db` ya
+cargaron —y ya loguearon— cuando se ejecuta esa llamada.
+
+El arreglo es que la instalación sea un **efecto del import**, y que el import
+vaya primero y a secas:
+
+```ts
+import './log-timestamp.ts';   // se instala al cargarse
+import express from 'express';
+```
+
+Vale para cualquier cosa que tenga que correr antes que todo: hijacks de consola,
+instrumentación, guards de entorno. **Si el orden es el arreglo, el orden tiene
+que estar en el sistema de módulos, no en el orden de las sentencias.**
+
+### Checklist de observabilidad de un servicio expuesto
+
+- [ ] ¿Hay un chequeo **desde fuera de su máquina**? (si no, un corte de red del
+      host es indetectable)
+- [ ] ¿El chequeo distingue «roto» de «no pude evaluar», y calla en el segundo?
+- [ ] ¿Alerta solo en la transición, y también al recuperarse?
+- [ ] ¿Los logs llevan hora, en la zona de la obra y en el mismo formato que los
+      demás servicios?
+- [ ] ¿Lo que tiene que correr primero se instala por import, no por llamada?
