@@ -943,6 +943,57 @@ Vale para cualquier cosa que tenga que correr antes que todo: hijacks de consola
 instrumentación, guards de entorno. **Si el orden es el arreglo, el orden tiene
 que estar en el sistema de módulos, no en el orden de las sentencias.**
 
+### 32. Un guard que rechaza tiene que decir QUÉ rechazó — y un fallback a un identificador de OTRO tenant es una fuga esperando sesión
+
+Llegó un Telegram: `LILA-APP ERROR · globofas-s8k · 409 · GROUP_NOT_IN_SESSION:
+el grupo no pertenece al número conectado`. Era el número **75** desde el 20/08:
+74 de globofas, todos en `/51903124919/text`, repartidos por todo el día (gente,
+no un cron). Nadie los había mirado porque todos decían lo mismo.
+
+**Lo que costó el diagnóstico:**
+
+- El 409 **no incluía el JID** rechazado: el guard lo tenía en la mano
+  (`to`) y devolvía un texto genérico. Y lila loguea `📤 Sending … to X` solo
+  DESPUÉS del guard, así que el destino rechazado no quedaba en ningún lado.
+- El llamador de Portal **se tragó el error** (`Promise.allSettled` +
+  `withTimeout`, o `void ….catch(() => {})`): ni una línea con proceso, tenant
+  o destino. El caso de esa mañana quedó inatribuible; el mecanismo se probó
+  con UN payload que otro flujo sí había logueado dos días antes
+  (`phone: 120363288945205546@g.us, companyId: globofas-s8k`).
+- Lo decisivo fue una tabla barata: **entregas exitosas por destino** desde el
+  número de globofas. Sus cuatro grupos configurados: 620/236/186/14. Los
+  grupos de CONSTROAD hardcodeados en Portal: **0**. No era "un grupo inválido":
+  era el grupo de **otra empresa**.
+
+**La causa:** Portal tenía los JID de los grupos de CONSTROAD en `consts.ts`
+(`GROUP_PLANT_CONSTROAD`, `GROUP_ADMINISTRACION_CONSTROAD`, …) y ~20 puntos los
+usaban como destino fijo, o como fallback (`cliente?.grupo ?? GROUP_ADMIN`),
+para **cualquier** empresa. Con globofas eso fueron 75 intentos de mandar sus
+tanques, despachos y documentos al WhatsApp de CONSTROAD desde el número de
+globofas. **El 409 fue la única defensa**: si ese número hubiera estado en el
+grupo, se habrían entregado.
+
+**Reglas:**
+
+- **Un 4xx de validación lleva el dato rechazado en el mensaje**
+  (`el grupo X no pertenece al número Y`). Es lo que llega al Telegram y a los
+  logs del llamador; sin eso, 75 alertas iguales no dicen nada.
+- **Best-effort no es mudo.** Quien traga un error de envío loguea proceso,
+  tenant y destino, aunque no lo propague.
+- **Un identificador de UN tenant (grupo, chat_id, email "de administración")
+  hardcodeado como default o fallback es una fuga entre tenants.** Sin
+  configuración del tenant, NO se envía a ningún otro lado: se avisa por el
+  canal de operaciones (Telegram) diciendo **qué proceso lo intentó, para qué
+  empresa, quién y qué campo falta**, con dedupe (6 h por empresa/grupo/proceso)
+  — y al usuario se le dice que no salió. Hecho el 03/09 en Portal
+  (`server/whatsapp/companyGroups.ts`, `POST /api/whatsapp/v2/send-to-group`) y
+  en lila (el Telegram de planta dice "sin grupo de planta configurado").
+- **Un test que grepea el repo** (`\d{10,}@g\.us` fuera de la allowlist) impide
+  que vuelva. Lo que un humano quitó 20 veces, lo vuelve a poner la 21.
+- **Contar entregas exitosas por destino** es el chequeo más barato para
+  separar "config rota" de "config de otro". Un destino con 0 entregas en todo
+  el log no es un destino de ese tenant.
+
 ### Checklist de observabilidad de un servicio expuesto
 
 - [ ] ¿Hay un chequeo **desde fuera de su máquina**? (si no, un corte de red del

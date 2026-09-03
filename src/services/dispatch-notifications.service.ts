@@ -174,6 +174,19 @@ export function buildClientCompleteMessage(botLabel: string, obra: string): stri
   return [`${botLabel}: `, '', '✅ Fin de producción!', `🛣️ Obra: ${obra}`].join('\n');
 }
 
+/**
+ * Cuando la empresa no tiene grupo de planta, el Telegram lo dice. Es la única
+ * pista de por qué el aviso no salió por WhatsApp: el fallback es Telegram y
+ * tiene que nombrar el grupo que falta (pedido el 03/09/2026, tras 75 envíos
+ * de globofas que apuntaban al grupo de planta de CONSTROAD hardcodeado en Portal).
+ */
+export const PLANT_GROUP_MISSING_NOTICE =
+  '⚠️ Sin grupo de planta configurado (whatsappConfig.plantGroupId): este aviso solo salió por Telegram. Configúralo en Admin > Empresa > WhatsApp.';
+
+export function withPlantGroupNotice(message: string, plantGroupId: string): string {
+  return plantGroupId ? message : `${PLANT_GROUP_MISSING_NOTICE}\n\n${message}`;
+}
+
 export function buildPlantEndMessage(botLabel: string): string {
   return [
     botLabel,
@@ -622,7 +635,7 @@ export async function sendPlantEndIfNotSent(
   _sender: string,
   botLabel: string,
   companyId: string,
-  _plantGroupId: string,
+  plantGroupId: string,
   plantEndTemplate?: string
 ) {
   const dayKey = new Date().toLocaleDateString('en-CA', {
@@ -648,15 +661,18 @@ export async function sendPlantEndIfNotSent(
     companyId,
     delayMs: PLANT_END_NOTIFICATION_DELAY_MS,
   });
+  // Si no hay grupo de planta, el Telegram lo dice: es la única pista de por qué
+  // el aviso no salió por WhatsApp.
+  const telegramMessage = withPlantGroupNotice(message, plantGroupId);
   const telegramScheduled = await schedulePlantTelegram(
-    message,
+    telegramMessage,
     `telegram:${notificationKey}`,
     PLANT_END_NOTIFICATION_DELAY_MS
   );
   setTimeout(() => {
     void (async () => {
       if (!telegramScheduled) {
-        await sendPlantTelegram(message);
+        await sendPlantTelegram(telegramMessage);
       }
       const currentDelivery = await resolveCurrentWhatsAppDelivery(companyId);
       if (currentDelivery.sender && currentDelivery.plantGroupId) {
@@ -721,7 +737,7 @@ export async function sendDispatchNotifications(params: NotificationParams) {
           input.pendingCount
         );
     logger.info('dispatch_notifications.telegram_sending', { companyId: input.companyId, dispatchId: input.dispatchId });
-    await sendPlantTelegram(plantProgressMsg);
+    await sendPlantTelegram(withPlantGroupNotice(plantProgressMsg, context.plantGroupId));
     logger.info('dispatch_notifications.telegram_sent', { companyId: input.companyId, dispatchId: input.dispatchId });
     if (hasWhatsAppSender && context.plantGroupId) {
       await sendToGroup(

@@ -41,8 +41,11 @@ function getGroupReachabilityError(sessionPhone: string, to: string): CustomErro
   } catch {
     return null; // ante duda, no bloquear
   }
+  // El JID y el número van EN el mensaje: es lo que llega al Telegram de
+  // errores y a los logs de Portal. El 03/09/2026 hubo 75 de estos sin poder
+  // decir a qué grupo apuntaban, y resultó ser el grupo de OTRA empresa.
   const error: CustomError = new Error(
-    'GROUP_NOT_IN_SESSION: el grupo no pertenece al número conectado. Reasigna el grupo.'
+    `GROUP_NOT_IN_SESSION: el grupo ${to} no pertenece al número conectado ${sessionPhone}. Reasigna el grupo.`
   );
   error.statusCode = HTTP_STATUS.CONFLICT;
   return error;

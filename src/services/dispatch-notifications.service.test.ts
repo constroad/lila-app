@@ -197,6 +197,28 @@ describe('dispatch-notifications.service', () => {
     );
   });
 
+  it('sin grupo de planta, el Telegram dice QUÉ falta: es el único fallback que hay', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput(),
+      context: { companyBotLabel: 'Bot', plantGroupId: '', adminGroupId: 'admin@g.us' },
+    });
+
+    expect(sendTelegramAlert).toHaveBeenCalledWith({
+      message: expect.stringContaining('Sin grupo de planta configurado (whatsappConfig.plantGroupId)'),
+    });
+  });
+
+  it('con grupo de planta, el Telegram no lleva el aviso de grupo faltante', async () => {
+    await notifications.sendDispatchNotifications({
+      input: buildTestInput(),
+      context: { companyBotLabel: 'Bot', plantGroupId: 'plant@g.us', adminGroupId: 'admin@g.us' },
+    });
+
+    const messages = sendTelegramAlert.mock.calls.map((call: [{ message: string }]) => call[0].message);
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages.some((m: string) => m.includes('Sin grupo de planta'))).toBe(false);
+  });
+
   it('sends Telegram progress without a WhatsApp sender', async () => {
     await notifications.sendDispatchNotifications({
       input: buildTestInput({ sender: '' }),
