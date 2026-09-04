@@ -243,6 +243,7 @@ export class ReportHtmlRenderer {
     body { font-family: Arial, sans-serif; font-size: 10px; color: #111; margin: 0; }
     h2 { margin: 0 0 8px 0; font-size: 14px; }
     table { width: 100%; border-collapse: collapse; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
     td, th { border: 1px solid #222; padding: 4px; vertical-align: middle; }
     .ctl-imp-page { width: 100%; }
     .page-break { break-before: page; page-break-before: always; }
