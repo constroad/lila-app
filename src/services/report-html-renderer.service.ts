@@ -15,6 +15,32 @@ import {
 
 const LIQUIDACION_IGV_RATE = 0.18;
 
+/**
+ * Título del control CTL-IMP por líquido — antes una sola plantilla ("...CON
+ * {LIGANTE}") con `|| 'MC-30'` como respaldo: con el ligante vacío (un tramo
+ * recién creado, antes de elegir) `'' || 'MC-30'` daba MC-30 aunque el resto
+ * del informe fuera Emulsión (José, 04/09/2026, globofast: dos tramos de
+ * riego de liga, uno mostraba "CON MC-30" en el PDF). El detalle del ligante
+ * ya se ve en "Datos de los materiales"; el título no necesita repetirlo.
+ *
+ * Réplica local del clasificador de Portal (imprimacionLiquidos.ts
+ * `resolverTipoLiquido`) — lila-app no puede importar ese módulo (repos
+ * separados, sin workspace compartido). Función PURA (no método de la
+ * clase) para poder testearla sin instanciar `ReportHtmlRenderer` entero.
+ */
+export const resolverTituloCtlImp = (ligante: unknown): string => {
+  const texto = String(ligante ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  if (texto.includes('mc30')) return 'IMPRIMACIÓN DE BASE GRANULAR';
+  if (texto.includes('emulsion') || texto.includes('riegodeliga')) return 'RIEGO DE LIGA';
+  // Sin ligante reconocido (vacío, o un nombre legacy fuera del catálogo):
+  // ninguno de los dos títulos fijos se adivina.
+  return 'RIEGO DE IMPRIMACIÓN';
+};
+
 interface HtmlRendererOptions {
   companyId?: string;
   baseUrl?: string;
@@ -1010,9 +1036,7 @@ ${signaturesHtml}`;
       </table>
       <table class="ctl-imp-title" style="margin-bottom:0;">
         <tr>
-          <td>CONTROL : IMPRIMACIÓN DE BASE GRANULAR CON ${this.escapeHtml(
-            String(control.material?.ligante || 'MC-30').toUpperCase()
-          )}</td>
+          <td>CONTROL : ${this.escapeHtml(resolverTituloCtlImp(control.material?.ligante))}</td>
         </tr>
       </table>
     `;
