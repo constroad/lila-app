@@ -85,11 +85,14 @@ export const controlImprimacionSchema: DocumentSchema = {
       id: 'registroFotografico',
       type: 'photoPanel',
       title: 'Panel Fotografico',
-      // SIN salto forzado: el panel FLUYE detrás del control. Con pocas fotos
-      // el informe entra en una sola hoja; con muchas, el panel desborda solo y
-      // las firmas terminan al final, que es donde deben ir. Con el salto fijo,
-      // un informe SIN fotos abría igual una hoja invisible que se llevaba las
-      // firmas atrás (reporte de José, 12/08/2026).
+      // Salto forzado, como en el resto de informes (CTL-PIS, acta de
+      // conformidad, etc.): el panel SIEMPRE abre hoja nueva, nunca comparte
+      // página con el bloque de un tramo (reporte de José, 07/09/2026). El
+      // riesgo original de esto (un informe SIN fotos abría igual una hoja en
+      // blanco que arrastraba a las firmas — 12/08/2026) ya no aplica: el
+      // planificador de páginas del canvas (`planPages`, Portal) ignora el
+      // salto de una sección sin contenido (`metric.height > 0`).
+      pageBreakBefore: true,
       includeHeader: true,
       pageOrientation: 'portrait',
       maxImages: 20,

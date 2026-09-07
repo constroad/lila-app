@@ -80,6 +80,19 @@ describe('controlImprimacionSchema renderer', () => {
   });
 });
 
+describe('controlImprimacionSchema pdf behavior', () => {
+  it('starts the photo panel on a new page, like every other report type', () => {
+    // CTL-IMP era la excepción: a diferencia de CTL-PIS, acta de conformidad,
+    // etc., su panel fotográfico no forzaba salto de página y podía terminar
+    // en la misma hoja que el bloque de un tramo (reporte de José, 07/09/2026).
+    const photoSection = controlImprimacionSchema.sections.find(
+      (section) => section.id === 'registroFotografico'
+    );
+
+    expect(photoSection?.pageBreakBefore).toBe(true);
+  });
+});
+
 describe('actaConformidadSchema pdf behavior', () => {
   it('starts photo panel and signatures on a new page', () => {
     const photoSection = actaConformidadSchema.sections.find(
