@@ -9,6 +9,20 @@ export const WEATHER_ASPHALT_FORECAST = {
    */
   maxAttempts: 3,
   retryBaseDelayMs: 1_500,
+  /**
+   * TOPE TOTAL de la operación, reintentos incluidos (07/09/2026).
+   *
+   * `fetchTimeoutMs` acota cada intento, no la suma: 25 s × 3 + backoff daba un
+   * peor caso de ~79 s. Quien nos llama —el proxy de Portal, y detrás el
+   * JobExecutor— corta MUCHO antes, así que ese margen no existía: solo servía
+   * para seguir trabajando para un cliente que ya se había ido. Con el tope, el
+   * último intento se recorta a lo que queda y la respuesta llega SIEMPRE dentro
+   * del presupuesto de arriba (20 < 25 del proxy < 28 de la ruta < 30 del
+   * executor).
+   */
+  totalBudgetMs: 20_000,
+  /** Menos que esto no alcanza ni para el saludo TLS: no se intenta de nuevo. */
+  minAttemptMs: 2_000,
 };
 
 /**
@@ -229,10 +243,14 @@ function buildWeatherUrl(forecastDays: number): string {
   return `${WEATHER_API_BASE}&forecast_days=${forecastDays}&latitude=${latitudeParam}&longitude=${longitudeParam}`;
 }
 
-async function fetchWithTimeout(url: string, fetcher: FetchLike): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  fetcher: FetchLike,
+  timeoutMs: number
+): Promise<Response> {
   return fetcher(url, {
     headers: { Accept: 'application/json', 'User-Agent': 'lila-app-cron/1.0' },
-    signal: AbortSignal.timeout(WEATHER_ASPHALT_FORECAST.fetchTimeoutMs),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
@@ -247,17 +265,27 @@ const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)
  * API caída — si a los ~5 s no contesta, es una caída de verdad y ahí sí toca
  * avisar.
  */
-async function fetchForecastConReintentos(
+export async function fetchForecastConReintentos(
   url: string,
-  fetcher: FetchLike
+  fetcher: FetchLike,
+  now: () => number = Date.now
 ): Promise<string> {
-  const { maxAttempts, retryBaseDelayMs } = WEATHER_ASPHALT_FORECAST;
+  const { maxAttempts, retryBaseDelayMs, fetchTimeoutMs, totalBudgetMs, minAttemptMs } =
+    WEATHER_ASPHALT_FORECAST;
+  const vence = now() + totalBudgetMs;
+  const queda = () => vence - now();
   let ultimoError = new Error('Open-Meteo: sin intentos');
 
   for (let intento = 1; intento <= maxAttempts; intento += 1) {
+    // Cada intento se recorta a lo que queda del presupuesto TOTAL: sin esto,
+    // tres intentos de 25 s seguían trabajando mucho después de que el proxy de
+    // Portal hubiera cortado y nadie estuviera escuchando (07/09/2026).
+    const disponible = Math.min(fetchTimeoutMs, queda());
+    if (disponible < minAttemptMs) break;
+
     let esTransitorio = true;
     try {
-      const response = await fetchWithTimeout(url, fetcher);
+      const response = await fetchWithTimeout(url, fetcher, disponible);
       const responseText = await response.text();
       if (response.ok) return responseText;
 
@@ -270,7 +298,11 @@ async function fetchForecastConReintentos(
     }
 
     if (!esTransitorio) break;
-    if (intento < maxAttempts) await esperar(retryBaseDelayMs * intento);
+    // Esperar el backoff solo tiene sentido si después queda tiempo para otro
+    // intento de verdad.
+    const espera = retryBaseDelayMs * intento;
+    if (intento >= maxAttempts || queda() - espera < minAttemptMs) break;
+    await esperar(espera);
   }
 
   throw ultimoError;
@@ -395,6 +427,11 @@ export async function generateWeatherAsphaltForecast(params: {
    */
   companyId?: string;
   claim?: (key: string, companyId: string) => Promise<boolean>;
+  /**
+   * `true` si quien pidió el reporte ya cortó la conexión. Un reporte que nadie
+   * va a recibir no debe consumir el cupo del día (07/09/2026).
+   */
+  callerGone?: () => boolean;
 } = {}): Promise<WeatherForecastResult> {
   const fetcher = params.fetcher || fetch;
   const notifyError =
@@ -427,7 +464,20 @@ export async function generateWeatherAsphaltForecast(params: {
     //
     // Reclamar ANTES de tener el dato sería el bug clásico: un fallo se comería
     // el cupo del día y el reintento nunca podría entregar nada.
-    if (params.companyId) {
+    //
+    // Dos casos MÁS en los que reclamar seria comerse el cupo a cambio de nada
+    // (07/09/2026):
+    //
+    // 1. No hay nada que avisar. El cupo existe para no repetir un mensaje, y no
+    //    hay mensaje: tomarlo solo impide que la corrida de las 10:00 avise de un
+    //    riesgo que aparecio despues.
+    // 2. Quien pidio el reporte ya se fue. Pasó de verdad: el proxy de Portal
+    //    abortaba a los 8 s, lila terminaba igual a los 10.2 s, tomaba el cupo y
+    //    devolvia el mensaje a un socket cerrado; el reintento encontraba el cupo
+    //    tomado y respondia "sin mensajes que enviar". Un dia con lluvia, ese
+    //    aviso no llegaba a nadie y el cronjob quedaba registrado como exitoso.
+    const nadieEscucha = params.callerGone?.() ?? false;
+    if (params.companyId && message && !nadieEscucha) {
       // Import DINÁMICO, igual que `telegram-alert.service` acá abajo: este
       // módulo se mantiene libre de dependencias que arrastren `config`
       // (usa `import.meta` y rompe el runner CJS de los tests).

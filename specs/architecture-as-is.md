@@ -496,6 +496,21 @@ que no existe en disco. Cambiarlo sería una migración, no una limpieza.
   historia de git solo hay ejemplos truncados en documentación (`<Buffer 05 ec 2c 8d ...>`), no
   claves completas. La exposición se limita al disco local y a copias/backups de `logs/`.
   **Regla:** al hijackear consola, envolver TODOS los métodos de escritura, nunca solo `log`.
+- **`/api/cron/*` con guard — hueco cerrado (2026-09-07):** `app.use('/api/cron', cronRoutes)`
+  estaba montado PELADO. Portal protege sus `/api/cron/*` desde el borde
+  (`cronAuth.edge.ts`, fail-closed) y devolvía 401 sin credenciales, pero el MISMO endpoint
+  servido acá y expuesto por el Funnel contestaba 200 a cualquiera:
+  `curl https://lila.constroad.com/api/cron/weather-asphalt-forecast` → `200 {"ok":true,…}`.
+  No era solo cómputo gratis contra una API pública con rate limit: la ruta lee la empresa de
+  **`x-company-id`** —un header del cliente, jamás una credencial— y con ella consume el CUPO
+  DIARIO del reporte de clima, así que un tercero podía quemarle el aviso de lluvia del día a
+  cualquier empresa dejando el cronjob registrado como exitoso. Ahora el mount lleva
+  `requireCronSecret` (`src/middleware/cron-secret.middleware.ts`): mismo `CRON_SECRET` y
+  misma semántica **fail-closed** que Portal, comparación `timingSafeEqual`. El proxy de
+  Portal (`api/cron/weather-asphalt-forecast`) reenvía el header aguas arriba. Cubierto por
+  `cron-secret.middleware.test.ts`. **Regla que lo generalizó:** un endpoint replicado
+  detrás de un proxy autenticado necesita su PROPIO guard — el proxy no es una frontera si el
+  origen también es público.
 
 ## Dashboard de salud `/admin/health` (✅ 2026-08-10)
 

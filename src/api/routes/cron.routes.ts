@@ -13,9 +13,19 @@ router.get('/weather-asphalt-forecast', async (req, res, next) => {
         ? req.headers['x-company-id']
         : undefined;
 
+    // ¿Se fue el que preguntó? El proxy de Portal aborta al vencer su plazo, y
+    // este handler sigue corriendo igual. Sin esto, el reporte se calculaba,
+    // consumía el cupo del día y se escribía en un socket cerrado: el reintento
+    // encontraba el cupo tomado y no entregaba nada (07/09/2026).
+    let clienteCortado = false;
+    res.on('close', () => {
+      if (!res.writableEnded) clienteCortado = true;
+    });
+
     const result = await generateWeatherAsphaltForecast({
       run: typeof req.query.run === 'string' ? req.query.run : undefined,
       companyId,
+      callerGone: () => clienteCortado,
     });
 
     // UN CRON QUE PIERDE SU REPORTE NO ES UN ÉXITO (20/08/2026).

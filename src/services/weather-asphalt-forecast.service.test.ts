@@ -1,5 +1,6 @@
 import {
   describeRainLine,
+  fetchForecastConReintentos,
   generateWeatherAsphaltForecast,
   getCombinedRiskLevel,
   isRetriableWeatherStatus,
@@ -378,5 +379,114 @@ describe('weather-asphalt-forecast service', () => {
       expect(recuperado.status).toBe('ok');
       expect(recuperado.message).toContain('REPORTE DE CLIMA');
     });
+  });
+});
+
+/**
+ * PRESUPUESTOS ANIDADOS (07/09/2026).
+ *
+ * El proxy de Portal cortaba a los 8 s; este servicio se daba 25 s POR INTENTO
+ * × 3 intentos (~79 s en el peor caso). El tramo del medio era el más corto, así
+ * que abortaba trabajo que acá abajo terminaba bien: 8 corridas caídas entre el
+ * 19/08 y el 07/09, cada una con su alerta de Telegram por un reporte que sí se
+ * había calculado.
+ */
+describe('el trabajo cabe en el presupuesto de quien llama', () => {
+  const payloadOk = () =>
+    JSON.stringify(
+      Array.from({ length: 41 }, () => ({
+        daily: {
+          time: dailyDates(),
+          temperature_2m_mean: [18, 18, 18],
+          precipitation_probability_max: [0, 0, 0],
+          precipitation_sum: [0, 0, 0],
+        },
+      })),
+    );
+
+  it('el tope total es MENOR que el del proxy que nos llama (25 s)', () => {
+    expect(WEATHER_ASPHALT_FORECAST.totalBudgetMs).toBeLessThan(25_000);
+    // Y el peor caso completo tiene que caber en ese tope, no excederlo 3×.
+    expect(WEATHER_ASPHALT_FORECAST.totalBudgetMs).toBeLessThanOrEqual(
+      WEATHER_ASPHALT_FORECAST.fetchTimeoutMs,
+    );
+  });
+
+  it('cada intento se recorta a lo que queda del presupuesto', async () => {
+    const señales: number[] = [];
+    let ahora = 0;
+    const reloj = () => ahora;
+    const fetcher = jest.fn(async (_url: string, init: any) => {
+      señales.push(init.signal.constructor === AbortSignal ? 1 : 0);
+      ahora += 9_000; // cada intento consume 9 s del presupuesto
+      return { ok: false, status: 503, text: async () => '' };
+    });
+
+    await expect(
+      fetchForecastConReintentos('https://x', fetcher as any, reloj),
+    ).rejects.toThrow(/503/);
+
+    // 20 s de tope: entran dos intentos (9 s + 1.5 s de espera + 9 s = 19.5 s);
+    // el tercero ya no cabe y no se lanza. Antes salían los 3, sin mirar el reloj.
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('con la API rápida sigue reintentando las 3 veces', async () => {
+    let ahora = 0;
+    const fetcher = jest.fn(async () => {
+      ahora += 100;
+      return { ok: false, status: 503, text: async () => '' };
+    });
+
+    await expect(
+      fetchForecastConReintentos('https://x', fetcher as any, () => ahora),
+    ).rejects.toThrow(/503/);
+
+    expect(fetcher).toHaveBeenCalledTimes(WEATHER_ASPHALT_FORECAST.maxAttempts);
+  });
+
+  /**
+   * EL CUPO DEL DÍA NO SE GASTA A CAMBIO DE NADA.
+   *
+   * Pasó de verdad el 07/09: Portal abortó a los 8 s, lila terminó igual a los
+   * 10.2 s, se quedó con el cupo y escribió el mensaje en un socket cerrado. El
+   * reintento encontró el cupo tomado y respondió "sin mensajes que enviar", con
+   * el cronjob registrado como exitoso. Un día con lluvia, ese aviso no llegaba.
+   */
+  it('si el que preguntó ya cortó, NO se consume el cupo del día', async () => {
+    const claim = jest.fn().mockResolvedValue(true);
+
+    const result = await generateWeatherAsphaltForecast({
+      run: '6am',
+      fetcher: jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify(buildOpenMeteoPayload(60, 2.5)),
+      }) as any,
+      notifyError: jest.fn(),
+      companyId: 'inframaq-iax',
+      claim,
+      callerGone: () => true,
+    });
+
+    expect(result.message).toContain('REPORTE DE CLIMA');
+    expect(claim).not.toHaveBeenCalled(); // el horario de respaldo podrá entregarlo
+  });
+
+  it('sin nada que avisar tampoco se consume el cupo', async () => {
+    const claim = jest.fn().mockResolvedValue(true);
+
+    const result = await generateWeatherAsphaltForecast({
+      run: '6am',
+      fetcher: jest.fn().mockResolvedValue({ ok: true, text: payloadOk }) as any,
+      notifyError: jest.fn(),
+      companyId: 'inframaq-iax',
+      claim,
+    });
+
+    expect(result.status).toBe('ok');
+    expect(result.message).toBeNull();
+    // Sin mensaje no hay nada que repetir: tomar el cupo solo impediría que la
+    // corrida de las 10:00 avise de un riesgo que apareció después.
+    expect(claim).not.toHaveBeenCalled();
   });
 });
