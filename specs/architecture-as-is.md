@@ -42,6 +42,22 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - Controller: `src/api/controllers/session.controller.simple.ts`.
 - Envio de mensajes: `src/api/controllers/message.controller.simple.ts`.
 - Servicio directo: `src/services/whatsapp-direct.service.ts`.
+- **Menciones (`@all`) — arregladas 07/09/2026, estaban rotas en TRES capas.** Un
+  "@all" en el cuerpo del mensaje es texto: para que notifique, el envío tiene que
+  llevar los JIDs en `mentions`. No llegaba a Baileys por tres motivos
+  independientes, y ninguno daba error: (1) `listGroups` leía `group.participant`
+  —singular, un campo que nadie escribe— mientras `populate-store-simple` guarda
+  `participants`, así que la lista salía SIEMPRE vacía; (2) `sendTextMessage` leía
+  solo `{ to, message }` del body, pese a que el validador ya aceptaba `mentions`;
+  y (3) `sendMessage` pasaba `options.mentions` al outbox pero enviaba
+  `sock.sendMessage(to, { text })` — las menciones van en el CONTENIDO del
+  mensaje, no en las send options. Hoy: el normalizador vive en
+  `src/utils/group-participants.ts` (módulo propio SIN imports, porque
+  `whatsapp-direct.service` arrastra `config` con `import.meta` y cualquier test
+  que lo importara reventaba al cargarse bajo CJS — pitfall §13), descarta lo que
+  no sea un JID (una lista a medias hace que Baileys mencione a medias sin avisar)
+  y se aplica en las tres capas. Lo consume el aviso de producción de Portal:
+  `../Portal/specs/PLANT-PRODUCTION-NOTICE.spec.md`.
 - **Guard de grupo (`getGroupReachabilityError`, 409 `GROUP_NOT_IN_SESSION`):** un destino
   `@g.us` que no está en los grupos de la sesión se rechaza antes de enviar (no bloquea si el
   store aún no tiene grupos). Desde el 03/09/2026 el mensaje **nombra el JID y el número**

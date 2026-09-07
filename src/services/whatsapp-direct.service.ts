@@ -43,6 +43,9 @@ import {
   proxyTextMessage,
   proxyMediaMessage,
 } from './whatsapp-proxy.service.js';
+import { normalizeGroupParticipants } from '../utils/group-participants.js';
+
+export { normalizeGroupParticipants };
 
 type WhatsAppUsageOptions = {
   companyId?: string;
@@ -195,9 +198,18 @@ export const WhatsAppDirectService = {
     try {
       const validTo = assertWhatsAppRecipient(routedTo);
       const sendOptions = getSendOptions(validTo);
+      // Las menciones van en el CONTENIDO del mensaje, no en las send options.
+      // `options.mentions` ya viajaba hasta acá y solo se usaba para la cola del
+      // outbox: el envío directo las tiraba, así que un "@all" en el texto se
+      // veía pero no notificaba a nadie (07/09/2026).
+      const mentions = normalizeGroupParticipants(options.mentions);
       const result = await sendWithTimeout(
         `text ${id}→${validTo}`,
-        sock.sendMessage(validTo, { text: message }, sendOptions)
+        sock.sendMessage(
+          validTo,
+          mentions.length > 0 ? { text: message, mentions } : { text: message },
+          sendOptions
+        )
       );
       await trackWhatsAppUsage(id, options, 'text');
       return result;
@@ -677,7 +689,13 @@ export const WhatsAppDirectService = {
       .map((group) => ({
         id: group.id,
         name: group.name,
-        participants: group.participant?.map((p) => p) || [],
+        // `participants`, en plural: es lo que escribe `populate-store-simple`.
+        // Leía `group.participant` (singular), un campo que nadie escribe, así
+        // que la lista salía SIEMPRE vacía — y con ella cualquier mención a los
+        // integrantes del grupo (07/09/2026).
+        participants: normalizeGroupParticipants(
+          (group as { participants?: unknown }).participants
+        ),
       }));
   },
 

@@ -7,7 +7,10 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js';
+import {
+  WhatsAppDirectService,
+  normalizeGroupParticipants,
+} from '../../services/whatsapp-direct.service.js';
 import logger from '../../utils/logger.js';
 import { HTTP_STATUS } from '../../config/constants.js';
 import { CustomError } from '../middlewares/errorHandler.js';
@@ -59,7 +62,7 @@ function getGroupReachabilityError(sessionPhone: string, to: string): CustomErro
 export async function sendTextMessage(req: Request, res: Response, next: NextFunction) {
   try {
     const { sessionPhone } = req.params;
-    const { to, message } = req.body;
+    const { to, message, mentions } = req.body;
 
     if (!to || !message) {
       const error: CustomError = new Error('to and message are required');
@@ -77,9 +80,14 @@ export async function sendTextMessage(req: Request, res: Response, next: NextFun
     // no necesita reintentar porque la entrega está garantizada por la cola.
     try {
       const normalizedMessage = await replaceLegacyBotLabelForCompanyId(req.companyId, message);
+      // `mentions`: JIDs a notificar dentro de un grupo. Sin esto, un "@all" en
+      // el cuerpo es TEXTO —se ve, no suena el teléfono de nadie—. El validador
+      // ya lo aceptaba en el body y el servicio ya lo soportaba; lo único que
+      // faltaba era leerlo acá (07/09/2026).
       const result = await WhatsAppDirectService.sendMessage(sessionPhone, to, normalizedMessage, {
         companyId: req.companyId,
         tenantId: req.tenantId,
+        mentions: normalizeGroupParticipants(mentions),
       });
 
       if ('queued' in result && result.queued) {
