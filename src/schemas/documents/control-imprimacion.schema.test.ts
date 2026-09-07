@@ -78,6 +78,29 @@ describe('controlImprimacionSchema renderer', () => {
     expect(html).not.toContain('Panel Fotografico');
     expect(html).not.toContain('<h2>Firmas</h2>');
   });
+
+  /**
+   * El PDF de Globofast (07/09/2026) traía dos tramos con "TRAMO :" en blanco.
+   * El PDF ya no lo deja así: usa el mismo rótulo por posición que la tarjeta
+   * de Tramos del celular (`ctlImpTramoCards.ts`, lado Portal).
+   */
+  it('sin nombre de tramo, no lo deja en blanco: usa un rótulo por posición', async () => {
+    const renderer = new ReportHtmlRenderer(controlImprimacionSchema, {
+      header: { fecha: '2026-09-07' },
+      general: { cliente: 'Consorcio Lomas', proyecto: 'pavimentacion' },
+      controles: [
+        { tramo: '', material: { ligante: 'Emulsión' } },
+        { tramo: '', material: { ligante: '' } },
+      ],
+      registroFotografico: { fotos: [] },
+      firmas: {},
+    });
+
+    const html = await renderer.render();
+
+    expect(html).toContain('Tramo 1');
+    expect(html).toContain('Tramo 2');
+  });
 });
 
 describe('controlImprimacionSchema pdf behavior', () => {

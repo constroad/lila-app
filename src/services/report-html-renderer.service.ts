@@ -217,7 +217,7 @@ export class ReportHtmlRenderer {
       pageSections.push(`
         <section class="ctl-imp-page${pageBreak}">
           ${headerHtml}
-          ${this.renderCtlImpMetadata(control)}
+          ${this.renderCtlImpMetadata(control, index)}
           ${this.renderCtlImpMaterials(control)}
           ${this.renderCtlImpRateTable(control)}
         </section>
@@ -1007,7 +1007,7 @@ ${signaturesHtml}`;
     };
   }
 
-  private renderCtlImpMetadata(control: Record<string, any>) {
+  private renderCtlImpMetadata(control: Record<string, any>, index: number) {
     const general = this.getValue('general') || {};
     const legacyProject = this.getValue('proyecto') || {};
     const fecha = this.formatValue(this.getValue('header.fecha'), 'date');
@@ -1031,7 +1031,7 @@ ${signaturesHtml}`;
         </tr>
         <tr>
           <td class="label">TRAMO</td>
-          <td colspan="3" class="value">: ${this.escapeHtml(String(control.tramo || ''))}</td>
+          <td colspan="3" class="value" style="font-weight:800;">: ${this.escapeHtml(String(control.tramo || '').trim() || `Tramo ${index + 1}`)}</td>
         </tr>
       </table>
       <table class="ctl-imp-title" style="margin-bottom:0;">
