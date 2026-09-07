@@ -29,6 +29,16 @@ riesgo; sí los endpoints de **cómputo/datos** con una credencial de tenant fil
   a header para authz.
 - Rutas nuevas montadas en `src/index.ts`: confirmar el guard (`requireTenant`/`requireAdmin`)
   antes de exponerlas. Nada de rutas de datos/cómputo sin auth.
+- **Un proxy autenticado NO es una frontera si el origen también es público (07/09/2026).**
+  `/api/cron/*` estaba protegido en Portal desde el borde (`cronAuth.edge.ts`, fail-closed) y
+  montado PELADO acá: el mismo endpoint devolvía 401 en `www.constroad.com` y **200** en
+  `lila.constroad.com`. Peor: la ruta leía la empresa de `x-company-id` —header del cliente,
+  §0— y con ella consumía el cupo diario del reporte de clima, así que un tercero le quemaba
+  el aviso a cualquier empresa dejando el cronjob como exitoso. Hoy el mount lleva
+  `requireCronSecret` (`src/middleware/cron-secret.middleware.ts`, mismo `CRON_SECRET` que
+  Portal, `timingSafeEqual`, fail-closed) y el proxy reenvía el header. **Al replicar un
+  endpoint detrás de un proxy, `curl` sin credenciales a LOS DOS hosts** — si solo se prueba
+  el de adelante, el de atrás queda abierto y nadie se entera.
 
 ## 2. SSRF (Puppeteer / fetch de URLs del cliente)
 
