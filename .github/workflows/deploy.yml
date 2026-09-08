@@ -88,7 +88,10 @@ jobs:
           echo "Torre respondió ${CODIGO}: $(cat /tmp/r.txt)"
           case "$CODIGO" in
             202) echo "::notice::Deploy encolado en la mini" ;;
-            409) echo "::warning::Ya había un deploy en curso" ;;
+            # 409 ya no es warning: Torre ENCOLA desde el 08/09/2026 y devuelve 202
+            # también con otro deploy en curso. Un 409 pasó a significar «algo está
+            # mal», y antes se traducía a un run VERDE con el commit sin desplegar.
+            409) echo "::error::Torre descartó el disparo (409) — este commit NO se desplegó"; exit 1 ;;
             *)   echo "::error::Torre rechazó el disparo"; exit 1 ;;
           esac
 
