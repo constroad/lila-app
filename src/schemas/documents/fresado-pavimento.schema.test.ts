@@ -29,7 +29,46 @@ const evaluar = (formula: string, contexto: Record<string, unknown>) => {
   return new Function('num', 'round', ...claves, `return (${formula});`)(num, round, ...valores);
 };
 
+/**
+ * Los tipos de seccion que el canvas de Portal sabe pintar.
+ *
+ * Vive ACA porque acá se decide qué secciones tiene el schema. Portal tiene su
+ * gemelo en `DocumentCanvasShadcn.fresado.test.tsx`; el import cruzado entre
+ * repos se probó y rompe CI (el runner solo clona un repo), así que la lista se
+ * repite a propósito y este test es el que avisa si el schema se sale de ella.
+ */
+const TIPOS_QUE_PORTAL_PINTA = [
+  'header',
+  'projectData',
+  'simpleFields',
+  'dataTable',
+  'checklist',
+  'richText',
+  'photoPanel',
+  'photoSection',
+  'signatures',
+  'summary',
+];
+
 describe('fresadoPavimentoSchema', () => {
+  it('no usa ningun tipo de seccion que el canvas no sepa pintar', () => {
+    // Un tipo desconocido no da error: pinta un hueco en el papel.
+    const desconocidos = fresadoPavimentoSchema.sections
+      .map((section) => section.type)
+      .filter((tipo) => !TIPOS_QUE_PORTAL_PINTA.includes(tipo));
+
+    expect(desconocidos).toEqual([]);
+  });
+
+  it('los titulos con la norma NO viven en `subtitle`: nadie lo pinta', () => {
+    // Se descubrio montando el canvas (08/09/2026): el subtitulo no llega al
+    // papel, y ahi estaban la tolerancia y la propiedad del material.
+    const titulos = fresadoPavimentoSchema.sections.map((section) => section.title || '').join(' | ');
+
+    expect(titulos).toContain('5 mm');
+    expect(titulos).toContain('propiedad de la entidad contratante');
+  });
+
   it('metadata y registro', () => {
     expect(fresadoPavimentoSchema.code).toBe('FRE-PAV');
     expect(getSchemaByCode('FRE-PAV')).toBe(fresadoPavimentoSchema);
