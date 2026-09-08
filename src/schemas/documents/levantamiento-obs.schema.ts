@@ -125,6 +125,24 @@ export const levantamientoObsSchema: DocumentSchema = {
       ]
     },
     {
+      /**
+       * EL MAPA VA APARTE, no dentro del panel fotografico.
+       *
+       * Estaba entrando como una foto mas con categoria MAPA, asi que el PDF lo
+       * mostraba bajo "Sin observacion", entre las fotos de obra (Jose,
+       * 08/09/2026, con el informe impreso). Es un plano de ubicacion, no una
+       * evidencia de una observacion.
+       */
+      id: 'mapaArea',
+      type: 'photoSection',
+      title: 'Ubicacion de las Observaciones',
+      maxImages: 2,
+      layout: '2x2',
+      showFecha: false,
+      showProgresiva: false,
+      categories: [{ key: 'MAPA', label: 'Mapa', maxPhotos: 2 }],
+    },
+    {
       id: 'evidencias',
       type: 'photoSection',
       title: 'Evidencias Fotograficas',
@@ -192,6 +210,7 @@ export const levantamientoObsSchema: DocumentSchema = {
       pendientes: 0,
       porcentaje: 0
     },
+    mapaArea: { fotos: [] },
     evidencias: { fotos: [] },
     observacionesGenerales: '',
     firmas: {

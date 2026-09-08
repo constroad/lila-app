@@ -209,9 +209,13 @@ describe('fresadoPavimentoSchema', () => {
       expect(evaluar(formula, { data: { resumen: { areaM2: 0, volumenM3: 0 } } })).toBe(0);
     });
 
-    it('la jornada se mide en m2, no en m2/hora', () => {
-      // José, 08/09/2026. El horómetro queda como registro del equipo.
+    it('la jornada se mide en m2: ni rendimiento por hora ni horometro', () => {
+      // José, 08/09/2026: el horometro no se usaba para nada mas, y un campo
+      // que nadie llena ensucia el parte.
       expect(campoComputado('resumen.rendimientoM2Hora')).toBeUndefined();
+
+      const campos = (seccion('equipo')?.fields || []).map((campo) => campo.key);
+      expect(campos.filter((clave) => /horometro|horas/i.test(clave))).toEqual([]);
     });
   });
 

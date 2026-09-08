@@ -126,18 +126,8 @@ export const fresadoPavimentoSchema: DocumentSchema = {
         { key: 'equipo.fresadora', label: 'FRESADORA', type: 'text', span: 5 },
         { key: 'equipo.anchoTambor', label: 'ANCHO DE TAMBOR (m)', type: 'number', span: 3 },
         { key: 'equipo.operador', label: 'OPERADOR', type: 'text', span: 4 },
-        { key: 'equipo.horometroInicio', label: 'HOROMETRO INICIO', type: 'number', span: 3 },
-        { key: 'equipo.horometroFin', label: 'HOROMETRO FIN', type: 'number', span: 3 },
-        {
-          key: 'equipo.horasEfectivas',
-          label: 'HORAS EFECTIVAS',
-          type: 'computed',
-          span: 3,
-          // Horometro final menos inicial. (`computedHint` es de las COLUMNAS
-          // de una tabla, no de un campo suelto: acá el label ya lo dice.)
-          formula:
-            'Math.max(0, round(num((data.equipo || {}).horometroFin) - num((data.equipo || {}).horometroInicio), 2))',
-        },
+        // SIN horometro (Jose, 08/09/2026): la jornada se mide en m2 y el dato
+        // no se usaba para nada mas. Un campo que nadie llena ensucia el parte.
         {
           key: 'equipo.controlProfundidad',
           label: 'CONTROL AUTOMATICO DE PROFUNDIDAD (435.03)',
@@ -400,14 +390,7 @@ export const fresadoPavimentoSchema: DocumentSchema = {
     header: { codigo: 'FRE-PAV-01', version: '01', pagina: '1 de 1' },
     proyecto: { obra: '', contratista: '', subcontratista: '', ubicacion: '' },
     control: { fecha: '', turno: 'DIURNO', responsable: '', frente: '', clima: '', superficieLimpia: false },
-    equipo: {
-      fresadora: '',
-      anchoTambor: '',
-      operador: '',
-      horometroInicio: '',
-      horometroFin: '',
-      controlProfundidad: false,
-    },
+    equipo: { fresadora: '', anchoTambor: '', operador: '', controlProfundidad: false },
     tramos: [],
     // Cada seccion de fotos lee de `data[<id de la seccion>].fotos`: el mapa
     // vive en `mapaArea`, no en `evidencias` (Portal, `resolvePhotoPath`).
