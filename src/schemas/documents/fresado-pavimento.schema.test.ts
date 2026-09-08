@@ -156,20 +156,23 @@ describe('fresadoPavimentoSchema', () => {
       );
     });
 
-    it('el rendimiento sale del HORÓMETRO, no de la jornada', () => {
-      const formula = String(campoComputado('resumen.rendimientoM2Hora')?.formula);
+    it('el espesor promedio se PONDERA por área', () => {
+      // 20 m2 a 10 cm + 400 m2 a 5 cm no son 7,5 cm: son 5,2. El promedio
+      // simple regalaría espesor en la valorización.
+      const formula = String(campoComputado('resumen.espesorPromedioCm')?.formula);
 
-      expect(
-        evaluar(formula, {
-          data: { resumen: { areaM2: 420 }, equipo: { horometroInicio: 10, horometroFin: 14 } },
-        })
-      ).toBe(105);
+      expect(evaluar(formula, { data: { resumen: { areaM2: 420, volumenM3: 22 } } })).toBe(5.2);
     });
 
-    it('sin horómetro no divide por cero', () => {
-      const formula = String(campoComputado('resumen.rendimientoM2Hora')?.formula);
+    it('sin área no divide por cero', () => {
+      const formula = String(campoComputado('resumen.espesorPromedioCm')?.formula);
 
-      expect(evaluar(formula, { data: { resumen: { areaM2: 420 }, equipo: {} } })).toBe(0);
+      expect(evaluar(formula, { data: { resumen: { areaM2: 0, volumenM3: 0 } } })).toBe(0);
+    });
+
+    it('la jornada se mide en m2, no en m2/hora', () => {
+      // José, 08/09/2026. El horómetro queda como registro del equipo.
+      expect(campoComputado('resumen.rendimientoM2Hora')).toBeUndefined();
     });
   });
 
@@ -198,6 +201,19 @@ describe('fresadoPavimentoSchema', () => {
         'DURANTE',
         'DESPUES',
       ]);
+    });
+
+    it('lo firman los TRES: quien ejecuta, quien supervisa y la entidad', () => {
+      const firmas = seccion('firmas')?.signatures || [];
+
+      expect(firmas.map((firma) => firma.key)).toEqual([
+        'elaboradoPor',
+        'conformidad',
+        'vistoBueno',
+      ]);
+      // El cliente firma la valorización, no cada parte diario: su V.B. acá es
+      // opcional.
+      expect(firmas[2]?.required).toBeFalsy();
     });
 
     it('el checklist de cierre exige lo que la norma exige', () => {

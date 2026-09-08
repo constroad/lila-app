@@ -229,7 +229,10 @@ export const fresadoPavimentoSchema: DocumentSchema = {
     {
       id: 'controlCotas',
       type: 'dataTable',
-      title: 'Control de Cotas de la Superficie Resultante (435.08)',
+      // El limite va en el TITULO y no en `subtitle`: ningun renderer pinta el
+      // subtitulo, asi que la tolerancia contra la que se firma quedaba
+      // invisible en el papel (visto al montar el canvas, 08/09/2026).
+      title: 'Control de Cotas de la Superficie Resultante — tolerancia hasta 5 mm (EG-2013 435.08)',
       subtitle: 'Tolerancia admitida respecto de las cotas del Proyecto: hasta 5 mm',
       dynamicRows: true,
       minRows: 1,
@@ -268,7 +271,8 @@ export const fresadoPavimentoSchema: DocumentSchema = {
     {
       id: 'rugosidad',
       type: 'dataTable',
-      title: 'Rugosidad IRI (435.08 b.2)',
+      title:
+        'Rugosidad IRI — solo si encima va carpeta o tratamiento; maximos 1,9 / 2,5 / 3,0 m/km (Tabla 435-01)',
       subtitle:
         'Solo si sobre la superficie fresada se construira tratamiento superficial, mortero asfaltico o carpeta. Maximos Tabla 435-01: 40% de hectometros 1,9 - 80% 2,5 - 100% 3,0 m/km',
       dynamicRows: true,
@@ -302,13 +306,13 @@ export const fresadoPavimentoSchema: DocumentSchema = {
         { key: 'resumen.tramos', label: 'TRAMOS', type: 'number', span: 1 },
         { key: 'resumen.areaM2', label: 'AREA FRESADA (m2)', type: 'number', span: 1 },
         { key: 'resumen.volumenM3', label: 'VOLUMEN RETIRADO (m3)', type: 'number', span: 1 },
-        { key: 'resumen.rendimientoM2Hora', label: 'RENDIMIENTO (m2/h)', type: 'number', span: 1 },
+        { key: 'resumen.espesorPromedioCm', label: 'ESPESOR PROMEDIO (cm)', type: 'number', span: 1 },
       ],
     },
     {
       id: 'materialRetirado',
       type: 'dataTable',
-      title: 'Material Fresado Retirado (RAP)',
+      title: 'Material Fresado Retirado (RAP) — propiedad de la entidad contratante (435.05)',
       subtitle:
         'El material extraido es propiedad de la entidad contratante y se acopia donde indique el Proyecto o el Supervisor (435.05)',
       dynamicRows: true,
@@ -380,8 +384,15 @@ export const fresadoPavimentoSchema: DocumentSchema = {
       type: 'signatures',
       title: 'Firmas',
       signatures: [
-        { key: 'elaboradoPor', label: 'ELABORADO POR', sublabel: 'Residente / Supervisor de Obra', required: true, showCIP: true },
-        { key: 'conformidad', label: 'CONFORMIDAD', sublabel: 'Supervision', required: true, showCIP: true },
+        /**
+         * TRES firmas, como el parte diario de cualquier obra vial: lo elabora
+         * quien ejecuta, lo conforma quien supervisa, y la entidad da el V.B.
+         * El cliente final NO firma cada parte -firma la valorizacion, que es
+         * donde se acumulan-, por eso la tercera es opcional.
+         */
+        { key: 'elaboradoPor', label: 'ELABORADO POR', sublabel: 'Residente / Jefe de Calidad', required: true, showCIP: true },
+        { key: 'conformidad', label: 'CONFORMIDAD', sublabel: 'Supervision de Obra', required: true, showCIP: true },
+        { key: 'vistoBueno', label: 'V.B.', sublabel: 'Entidad / Cliente', required: false, showCIP: true },
       ],
     },
   ],
@@ -401,12 +412,13 @@ export const fresadoPavimentoSchema: DocumentSchema = {
     controlCotas: [],
     rugosidad: [],
     materialRetirado: [],
-    resumen: { tramos: 0, areaM2: 0, volumenM3: 0, rendimientoM2Hora: 0 },
+    resumen: { tramos: 0, areaM2: 0, volumenM3: 0, espesorPromedioCm: 0 },
     evidencias: { fotos: [] },
     observaciones: '',
     firmas: {
       elaboradoPor: { nombre: '', cargo: 'Residente de Obra', cip: '' },
-      conformidad: { nombre: '', cargo: 'Supervision', cip: '' },
+      conformidad: { nombre: '', cargo: 'Supervision de Obra', cip: '' },
+      vistoBueno: { nombre: '', cargo: 'Entidad / Cliente', cip: '' },
     },
   },
   // Las filas EN BLANCO no son tramos: la tabla arranca con una y casi nadie la
@@ -430,12 +442,19 @@ export const fresadoPavimentoSchema: DocumentSchema = {
       dependencies: ['tramos'],
     },
     {
-      key: 'resumen.rendimientoM2Hora',
-      // Contra las horas de FRESADORA (horometro), no contra la jornada: es lo
-      // que permite discutir si el equipo rindio.
+      key: 'resumen.espesorPromedioCm',
+      /**
+       * PONDERADO POR AREA, no promedio de los espesores.
+       *
+       * Un tramo de 20 m2 a 10 cm y otro de 400 m2 a 5 cm no dan 7,5 cm de
+       * promedio: dan 5,2. El promedio simple regala espesor en la
+       * valorizacion. El rendimiento por hora salio del resumen: la jornada se
+       * mide en m2 (Jose, 08/09/2026) y el horometro queda como registro del
+       * equipo.
+       */
       formula:
-        'num((data.equipo || {}).horometroFin) > num((data.equipo || {}).horometroInicio) ? round(num(data.resumen.areaM2) / (num((data.equipo || {}).horometroFin) - num((data.equipo || {}).horometroInicio)), 1) : 0',
-      dependencies: ['resumen.areaM2', 'equipo'],
+        'num(data.resumen.areaM2) > 0 ? round(num(data.resumen.volumenM3) * 100 / num(data.resumen.areaM2), 1) : 0',
+      dependencies: ['resumen.areaM2', 'resumen.volumenM3'],
     },
   ],
   exportOptions: {
