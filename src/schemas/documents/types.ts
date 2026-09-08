@@ -207,6 +207,15 @@ export interface SectionSchema {
   /** Tasa de IGV del pie de totales (0 = solo TOTAL). Default 0.18. */
   igvRate?: number;
   reorderable?: boolean;
+  /**
+   * `dataTable`: si no hay ninguna fila con datos, la seccion NO se imprime.
+   *
+   * Para cuadros que solo aplican a veces —el control de cotas del fresado se
+   * llena cuando el trabajo corrige nivel, y la rugosidad solo si encima va una
+   * capa nueva—. Sin esto el papel salia con dos tablas vacias que hacian dudar
+   * de si faltaba llenarlas (Jose, 08/09/2026).
+   */
+  hideWhenEmpty?: boolean;
   /** `summary`: render como caja con bordes. */
   boxed?: boolean;
 

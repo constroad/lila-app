@@ -223,9 +223,13 @@ export const fresadoPavimentoSchema: DocumentSchema = {
       // subtitulo, asi que la tolerancia contra la que se firma quedaba
       // invisible en el papel (visto al montar el canvas, 08/09/2026).
       title: 'Control de Cotas de la Superficie Resultante — tolerancia hasta 5 mm (EG-2013 435.08)',
-      subtitle: 'Tolerancia admitida respecto de las cotas del Proyecto: hasta 5 mm',
+      subtitle:
+        'Solo cuando el fresado corrige nivel y la Supervision pide cotas. Si no aplica, no se llena y no se imprime.',
       dynamicRows: true,
-      minRows: 1,
+      // Opcional: la mayoria de las jornadas fresa a espesor, no a cota. Un
+      // cuadro vacio en el papel hace dudar de si faltaba llenarlo.
+      minRows: 0,
+      hideWhenEmpty: true,
       maxRows: 200,
       columns: [
         { key: 'tramo', label: 'TRAMO', type: 'text', width: 110, align: 'left', editable: true },
@@ -268,6 +272,7 @@ export const fresadoPavimentoSchema: DocumentSchema = {
       dynamicRows: true,
       minRows: 0,
       maxRows: 100,
+      hideWhenEmpty: true,
       columns: [
         { key: 'tramo', label: 'TRAMO', type: 'text', width: 110, align: 'left', editable: true },
         { key: 'carril', label: 'CARRIL', type: 'text', width: 70, align: 'center', editable: true },
@@ -310,6 +315,7 @@ export const fresadoPavimentoSchema: DocumentSchema = {
       maxRows: 100,
       showTotals: true,
       totalColumns: ['volumenM3'],
+      hideWhenEmpty: true,
       columns: [
         { key: 'volquete', label: 'VOLQUETE', type: 'text', width: 110, align: 'left', editable: true },
         { key: 'placa', label: 'PLACA', type: 'text', width: 80, align: 'center', editable: true },
