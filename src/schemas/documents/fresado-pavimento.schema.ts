@@ -409,6 +409,9 @@ export const fresadoPavimentoSchema: DocumentSchema = {
       controlProfundidad: false,
     },
     tramos: [],
+    // Cada seccion de fotos lee de `data[<id de la seccion>].fotos`: el mapa
+    // vive en `mapaArea`, no en `evidencias` (Portal, `resolvePhotoPath`).
+    mapaArea: { fotos: [] },
     controlCotas: [],
     rugosidad: [],
     materialRetirado: [],
