@@ -443,10 +443,14 @@ export const fresadoPavimentoSchema: DocumentSchema = {
        * valorizacion. El rendimiento por hora salio del resumen: la jornada se
        * mide en m2 (Jose, 08/09/2026) y el horometro queda como registro del
        * equipo.
+       *
+       * Y se pondera SOLO sobre el area MEDIDA: con la cinta se mide un tramo
+       * y no los cinco. Dividiendo por el area de la jornada completa, la
+       * unica medicion de 5 cm salia impresa como 0,7 cm.
        */
       formula:
-        'num(data.resumen.areaM2) > 0 ? round(num(data.resumen.volumenM3) * 100 / num(data.resumen.areaM2), 1) : 0',
-      dependencies: ['resumen.areaM2', 'resumen.volumenM3'],
+        `(data.tramos || []).filter((tramo) => String(tramo.calle || "").trim() && num(tramo.espesorMedidoCm) > 0).reduce((total, tramo) => total + Math.round(Math.max(0, num(tramo.progFinal) - num(tramo.progInicial)) * num(tramo.anchoM)), 0) > 0 ? round(num(data.resumen.volumenM3) * 100 / ((data.tramos || []).filter((tramo) => String(tramo.calle || "").trim() && num(tramo.espesorMedidoCm) > 0).reduce((total, tramo) => total + Math.round(Math.max(0, num(tramo.progFinal) - num(tramo.progInicial)) * num(tramo.anchoM)), 0)), 1) : 0`,
+      dependencies: ['tramos', 'resumen.volumenM3'],
     },
   ],
   exportOptions: {

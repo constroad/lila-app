@@ -199,14 +199,36 @@ describe('fresadoPavimentoSchema', () => {
       // 20 m2 a 10 cm + 400 m2 a 5 cm no son 7,5 cm: son 5,2. El promedio
       // simple regalaría espesor en la valorización.
       const formula = String(campoComputado('resumen.espesorPromedioCm')?.formula);
+      const medidos = [
+        { calle: 'A', progInicial: 0, progFinal: 10, anchoM: 2, espesorMedidoCm: 10 },
+        { calle: 'B', progInicial: 0, progFinal: 100, anchoM: 4, espesorMedidoCm: 5 },
+      ];
 
-      expect(evaluar(formula, { data: { resumen: { areaM2: 420, volumenM3: 22 } } })).toBe(5.2);
+      expect(
+        evaluar(formula, { data: { tramos: medidos, resumen: { areaM2: 420, volumenM3: 22 } } })
+      ).toBe(5.2);
     });
 
-    it('sin área no divide por cero', () => {
+    it('el tramo SIN medir no diluye el promedio', () => {
+      // Con la cinta se mide un tramo y no los cinco: dividir por el área de
+      // la jornada completa imprimía la medición de 5 cm como 0,7 cm.
+      const formula = String(campoComputado('resumen.espesorPromedioCm')?.formula);
+      const mezcla = [
+        { calle: 'A', progInicial: 0, progFinal: 100, anchoM: 4, espesorMedidoCm: 5 },
+        { calle: 'B', progInicial: 0, progFinal: 260, anchoM: 6 },
+      ];
+
+      expect(
+        evaluar(formula, { data: { tramos: mezcla, resumen: { areaM2: 1960, volumenM3: 20 } } })
+      ).toBe(5);
+    });
+
+    it('sin área medida no divide por cero', () => {
       const formula = String(campoComputado('resumen.espesorPromedioCm')?.formula);
 
-      expect(evaluar(formula, { data: { resumen: { areaM2: 0, volumenM3: 0 } } })).toBe(0);
+      expect(
+        evaluar(formula, { data: { tramos: [], resumen: { areaM2: 0, volumenM3: 0 } } })
+      ).toBe(0);
     });
 
     it('la jornada se mide en m2: ni rendimiento por hora ni horometro', () => {
