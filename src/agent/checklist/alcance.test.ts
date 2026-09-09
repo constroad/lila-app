@@ -8,6 +8,7 @@ import {
   resolverAlcance,
 } from './alcance';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants';
+import { normalizarTexto } from './checklist';
 
 /**
  * EL ALCANCE ES UNA LISTA BLANCA DE UNO.
@@ -57,6 +58,16 @@ describe('de dónde sale cada grupo', () => {
       throw new Error('sesión caída');
     });
     expect(resuelto.grupoEscuchado).toBe('');
+  });
+
+  /**
+   * El nombre real del grupo en WhatsApp es «INFRAMAQ admin» (verificado en el
+   * store de la sesión 51949376824). La constante dice «Inframaq Admin» y
+   * coincide porque la comparación normaliza — este test fija que eso siga
+   * siendo cierto, en vez de depender de la suerte.
+   */
+  it('la constante coincide con el nombre real del grupo, sin importar capitalización', () => {
+    expect(normalizarTexto(GRUPO_ESCUCHA_PILOTO)).toBe(normalizarTexto('INFRAMAQ admin'));
   });
 
   /** El destino es NUESTRO grupo de operaciones: constante, no config de tenant. */

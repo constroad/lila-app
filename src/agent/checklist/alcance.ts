@@ -12,14 +12,12 @@ import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
  *   NUESTRO grupo de operaciones, no el de una empresa — la misma excepción que
  *   ya estaba reconocida cuando se sacaron los JID de tenant del código.
  *
- * · El ESCUCHADO sale de `whatsappConfig.adminGroupId` de la empresa piloto, y
- *   NO de una constante. Ese sí es el grupo de un tenant, y el 03/09/2026 los
- *   JID de tenant clavados en el código produjeron 75 intentos de mandar datos
- *   de una empresa al WhatsApp de otra. Además, si inframaq cambia su grupo, el
- *   agente lo sigue solo.
+ * · El ESCUCHADO es una CONSTANTE (`GRUPO_ESCUCHA_PILOTO`), por el nombre del
+ *   grupo. No sale de `whatsappConfig.adminGroupId` porque ese campo apunta hoy
+ *   al grupo de PLANTA en inframaq — el detalle está en la constante.
  *
- * Lo único escrito acá es QUÉ EMPRESA está en el piloto, que es una decisión de
- * alcance de esta fase y no un dato de nadie. Se muda a la pantalla de
+ * Lo escrito acá es el ALCANCE del piloto: qué empresa y qué grupo se observan.
+ * Es una decisión de esta fase, no un dato de nadie, y se muda a la pantalla de
  * super-admin cuando exista.
  */
 
@@ -44,6 +42,12 @@ export const COMPANY_PILOTO = 'inframaq-iax';
  *
  * Se acepta el NOMBRE además del JID a propósito: un JID no se puede leer ni
  * verificar de un vistazo, y si el grupo se recrea el nombre sobrevive.
+ *
+ * VERIFICADO contra el store de la sesión 51949376824 (09/09/2026):
+ *   120363279615230332@g.us → «INFRAMAQ admin»   ← este
+ *   120363288945205546@g.us → «Inframaq Planta»  ← el que hoy está en adminGroupId
+ * La comparación normaliza mayúsculas y tildes, así que el nombre de acá no
+ * tiene que coincidir en capitalización con el de WhatsApp.
  */
 export const GRUPO_ESCUCHA_PILOTO = 'Inframaq Admin';
 
