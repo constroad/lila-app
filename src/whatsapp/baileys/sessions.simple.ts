@@ -31,6 +31,7 @@ import { hasSocketLease } from './instance-lease.js';
 import { isLocalOnlySession } from './local-sessions.js';
 import { handleAgentMessagesUpsert } from '../../agent/runtime/agent-wiring.js';
 import { findOutgoingMessage } from './outgoing-messages.js';
+import { observarParaChecklist } from '../../agent/checklist/observador.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -723,6 +724,12 @@ async function initSession(
   // comportamiento de sesiones/grupos queda EXACTAMENTE igual que hoy.
   sock.ev.on('messages.upsert', (upsert) => {
     void handleAgentMessagesUpsert(sessionId, sock, upsert);
+    // Observador del checklist (F1). Va APARTE del bot conversacional y no
+    // comparte su interruptor: aquel arranca con `if (!agentEnabled) return` y
+    // su router descarta todo grupo por diseño. Este solo MIRA un único grupo
+    // —el de la empresa piloto— y no responde nada; lo que sale al grupo de
+    // operaciones lo manda el detector. Nunca lanza.
+    void observarParaChecklist(sessionId, upsert);
   });
 
   // Watchdog: si el socket no llega a 'open' ni 'close' en CONNECTION_TIMEOUT_MS,

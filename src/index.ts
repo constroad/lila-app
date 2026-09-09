@@ -51,6 +51,7 @@ import { startTelegramQueueFlusher } from './services/telegram-alert.service.js'
 import { startDriverReminderFlusher } from './services/driver-arrival-reminder.service.js';
 import { startDispatchAutoCloseFlusher } from './services/dispatch-autoclose.service.js';
 import cron from 'node-cron';
+import { correrDeteccion } from './agent/checklist/detector.js';
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -492,6 +493,15 @@ async function startServer() {
       logger.info('Initializing Job Scheduler...');
       await jobScheduler.initialize();
       cron.schedule(pdfTempCleanupCron, cleanupPdfTemp);
+      // Detector del checklist de producción (F1, modo espejo). Cada 20 min:
+      // frecuente para no llegar tarde a un arranque, y espaciado porque lo
+      // único que hace es leer pedidos y comparar contra lo observado. El ruido
+      // no lo controla esta frecuencia sino el presupuesto de avisos.
+      cron.schedule('*/20 * * * *', () => {
+        void correrDeteccion().catch((error: unknown) => {
+          logger.warn(`[agente] la detección del checklist falló: ${String(error)}`);
+        });
+      });
       // Re-encola transcodes de academia atascados en `processing` (trigger
       // perdido o reinicio a mitad). Solo la instancia de jobs (dev comparte
       // Atlas: dos watchdogs procesarían el mismo doc en discos distintos).
