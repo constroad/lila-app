@@ -23,8 +23,33 @@ import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
  * super-admin cuando exista.
  */
 
-/** La empresa cuyo grupo de admin se escucha en la fase de espejo. */
+/** La empresa cuyo grupo se escucha en la fase de espejo. */
 export const COMPANY_PILOTO = 'inframaq-iax';
+
+/**
+ * EL GRUPO QUE SE ESCUCHA. Nombre exacto del grupo, o su JID (`…@g.us`).
+ *
+ * NO sale de `whatsappConfig.adminGroupId`, y el motivo es concreto: en inframaq
+ * ese campo apunta hoy al grupo de PLANTA (José, 09/09/2026, mirando la pantalla
+ * de configuración). Colgarse de él haría que el agente escuchara el grupo
+ * equivocado y, peor, que un cambio de configuración de otra persona moviera el
+ * alcance del agente sin que nadie lo note.
+ *
+ * Que sea una constante NO contradice la regla del 03/09. Aquella nació de un
+ * grupo de una empresa usado como DESTINO para cualquier otra: el daño era fuga
+ * entre tenants. Acá es el grupo que se OBSERVA en un piloto de una sola
+ * empresa, y lo que sale sigue yendo únicamente a nuestro grupo de operaciones.
+ * Si esta constante estuviera mal, el agente escucharía el grupo equivocado y
+ * reportaría a nuestro propio grupo — molesto, no peligroso.
+ *
+ * Se acepta el NOMBRE además del JID a propósito: un JID no se puede leer ni
+ * verificar de un vistazo, y si el grupo se recrea el nombre sobrevive.
+ */
+export const GRUPO_ESCUCHA_PILOTO = 'Inframaq Admin';
+
+/** ¿Es un JID de grupo y no un nombre? */
+export const esJidDeGrupo = (valor: string): boolean =>
+  String(valor || '').trim().endsWith('@g.us');
 
 /**
  * Interruptor de la fase. En código y no en `.env` a propósito: lo único que
@@ -77,18 +102,23 @@ export const destinoPermitido = (): string | null => {
 };
 
 /**
- * El alcance real, leyendo el grupo de admin de la empresa piloto.
+ * El alcance real. `resolverJid` traduce el nombre del grupo a su JID mirando
+ * los grupos de la sesión; si `GRUPO_ESCUCHA_PILOTO` ya es un JID, ni se llama.
  *
- * Sin `adminGroupId` configurado devuelve vacío y el agente no escucha nada: un
- * agente apagado es un estado correcto; uno que escucha «todo» porque falta un
- * dato, no lo es nunca.
+ * Ante cualquier problema devuelve vacío y el agente no escucha nada: un agente
+ * apagado es un estado correcto; uno que escucha «todo» porque falta un dato, no
+ * lo es nunca.
  */
 export const resolverAlcance = async (
-  buscarCompany: (companyId: string) => Promise<{ whatsappConfig?: { adminGroupId?: string } } | null>
+  resolverJid: (nombre: string) => Promise<string>
 ): Promise<AlcanceAgente> => {
   try {
-    const company = await buscarCompany(COMPANY_PILOTO);
-    return { grupoEscuchado: String(company?.whatsappConfig?.adminGroupId || '').trim() };
+    const configurado = String(GRUPO_ESCUCHA_PILOTO || '').trim();
+    if (!configurado) return { grupoEscuchado: '' };
+    if (esJidDeGrupo(configurado)) return { grupoEscuchado: configurado };
+
+    const jid = String(await resolverJid(configurado)).trim();
+    return { grupoEscuchado: esJidDeGrupo(jid) ? jid : '' };
   } catch {
     return { grupoEscuchado: '' };
   }

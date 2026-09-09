@@ -1,7 +1,9 @@
 import logger from '../../utils/logger.js';
 import { getCompanyModel } from '../../database/models.js';
+import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js';
 import { extractInboundText, type BaileysMessageContent } from '../runtime/message-text.js';
-import { debeEscuchar, resolverAlcance, type AlcanceAgente } from './alcance.js';
+import { COMPANY_PILOTO, debeEscuchar, resolverAlcance, type AlcanceAgente } from './alcance.js';
+import { normalizarTexto } from './checklist.js';
 import { recordarMensaje } from './almacen.js';
 
 /**
@@ -32,12 +34,7 @@ export const _resetAlcanceCache = (): void => void (alcanceCache = null);
 export const alcanceVigente = async (now = Date.now()): Promise<AlcanceAgente> => {
   if (alcanceCache && now - alcanceCache.at < ALCANCE_TTL_MS) return alcanceCache.alcance;
 
-  const alcance = await resolverAlcance(async (companyId) => {
-    const CompanyModel = await getCompanyModel();
-    return (await CompanyModel.findOne({ companyId }).lean()) as
-      | { whatsappConfig?: { adminGroupId?: string } }
-      | null;
-  });
+  const alcance = await resolverAlcance(jidPorNombre);
 
   alcanceCache = { alcance, at: now };
   return alcance;
@@ -111,4 +108,36 @@ export const observarParaChecklist = async (
       }`
     );
   }
+};
+
+/** El sender de la empresa piloto: es la sesión que ve sus grupos. */
+export const senderPiloto = async (): Promise<string> => {
+  const CompanyModel = await getCompanyModel();
+  const company = (await CompanyModel.findOne({ companyId: COMPANY_PILOTO }).lean()) as
+    | { whatsappConfig?: { sender?: string } }
+    | null;
+  return String(company?.whatsappConfig?.sender || '').trim();
+};
+
+/**
+ * Traduce el NOMBRE del grupo a su JID usando los grupos de la sesión.
+ *
+ * Si no lo encuentra, loguea los nombres disponibles: sin eso, un nombre mal
+ * escrito se ve igual que «no hay nada que avisar» y no habría forma de saber
+ * cuál de los dos está pasando.
+ */
+export const jidPorNombre = async (nombre: string): Promise<string> => {
+  const sender = await senderPiloto();
+  if (!sender) return '';
+
+  const grupos = WhatsAppDirectService.listGroups(sender) as Array<{ id?: string; name?: string }>;
+  const buscado = normalizarTexto(nombre);
+  const encontrado = grupos.find((g) => normalizarTexto(String(g?.name || '')) === buscado);
+  if (encontrado?.id) return String(encontrado.id);
+
+  logger.warn(
+    `[agente] no encontré el grupo "${nombre}" en la sesión ${sender}. Disponibles: ` +
+      grupos.map((g) => `"${g?.name}"`).join(', ')
+  );
+  return '';
 };

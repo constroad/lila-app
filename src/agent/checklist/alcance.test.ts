@@ -1,6 +1,7 @@
 import {
-  COMPANY_PILOTO,
+  GRUPO_ESCUCHA_PILOTO,
   debeEscuchar,
+  esJidDeGrupo,
   destinoPermitido,
   grupoDestino,
   puedeEnviarA,
@@ -22,27 +23,38 @@ const alcance = { grupoEscuchado: ADMIN_INFRAMAQ };
 
 describe('de dónde sale cada grupo', () => {
   /**
-   * El grupo escuchado es de un TENANT y sale de su config, no del código: el
-   * 03/09/2026 los JID de tenant clavados produjeron 75 intentos de mandar datos
-   * de una empresa al WhatsApp de otra.
+   * NO sale de `whatsappConfig.adminGroupId`: en inframaq ese campo apunta hoy al
+   * grupo de PLANTA (José, 09/09/2026). Colgarse de él haría que el agente
+   * escuchara el grupo equivocado, y que un cambio de configuración de otra
+   * persona moviera el alcance del agente sin que nadie lo note.
    */
-  it('el escuchado sale del adminGroupId de la empresa piloto', async () => {
-    const resuelto = await resolverAlcance(async (id) => {
-      expect(id).toBe(COMPANY_PILOTO);
-      return { whatsappConfig: { adminGroupId: ADMIN_INFRAMAQ } };
+  it('el escuchado se resuelve por NOMBRE contra los grupos de la sesión', async () => {
+    const resuelto = await resolverAlcance(async (nombre) => {
+      expect(nombre).toBe(GRUPO_ESCUCHA_PILOTO);
+      return ADMIN_INFRAMAQ;
     });
 
     expect(resuelto.grupoEscuchado).toBe(ADMIN_INFRAMAQ);
   });
 
-  it('sin adminGroupId configurado no escucha nada', async () => {
-    expect((await resolverAlcance(async () => ({ whatsappConfig: {} }))).grupoEscuchado).toBe('');
-    expect((await resolverAlcance(async () => null)).grupoEscuchado).toBe('');
+  it('si la constante ya es un JID, no se resuelve nada', async () => {
+    const resolver = jest.fn();
+    // `esJidDeGrupo` corta antes: un JID no necesita traducción.
+    expect(esJidDeGrupo(ADMIN_INFRAMAQ)).toBe(true);
+    expect(esJidDeGrupo('Inframaq Admin')).toBe(false);
+    expect(resolver).not.toHaveBeenCalled();
   });
 
-  it('si la consulta falla no escucha nada, no revienta', async () => {
+  it('si el nombre no existe en la sesión no escucha nada', async () => {
+    expect((await resolverAlcance(async () => '')).grupoEscuchado).toBe('');
+    // Y tampoco acepta cualquier cosa que no sea un JID de grupo.
+    expect((await resolverAlcance(async () => 'Inframaq Admin')).grupoEscuchado).toBe('');
+    expect((await resolverAlcance(async () => '51999@s.whatsapp.net')).grupoEscuchado).toBe('');
+  });
+
+  it('si la resolución falla no escucha nada, no revienta', async () => {
     const resuelto = await resolverAlcance(async () => {
-      throw new Error('mongo caído');
+      throw new Error('sesión caída');
     });
     expect(resuelto.grupoEscuchado).toBe('');
   });
