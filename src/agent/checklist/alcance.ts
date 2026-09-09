@@ -1,31 +1,46 @@
+import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
+
 /**
  * EL ALCANCE DEL AGENTE, y es una lista blanca de UNO.
  *
  * José, 09/09/2026: «solo y únicamente debe escuchar inframaq admin y responder
  * a errors tracking. Nada a ningún otro grupo o chat individual.»
  *
- * POR QUÉ SE ESCRIBE COMO CÓDIGO Y NO COMO CONFIG. Un agente que habla en un
- * grupo de trabajo se gana la desconfianza de una sola vez: basta un mensaje en
- * el grupo equivocado. Mientras esté en fase de espejo, la garantía no puede
- * depender de que alguien no toque un campo en una pantalla — tiene que ser una
- * constante, con tests, que falle en la dirección segura.
+ * DE DÓNDE SALE CADA GRUPO, que no es lo mismo para los dos:
  *
- * Los dos JID salen del entorno para no clavarlos en git, pero el DEFAULT es
- * vacío: sin configurar, el agente no escucha nada y no manda nada. Un agente
- * apagado es un estado correcto; uno que escucha "todo" no lo es nunca.
+ * · El DESTINO es `GROUP_ERRORS_TRACKING`, la constante que ya existe. Es
+ *   NUESTRO grupo de operaciones, no el de una empresa — la misma excepción que
+ *   ya estaba reconocida cuando se sacaron los JID de tenant del código.
+ *
+ * · El ESCUCHADO sale de `whatsappConfig.adminGroupId` de la empresa piloto, y
+ *   NO de una constante. Ese sí es el grupo de un tenant, y el 03/09/2026 los
+ *   JID de tenant clavados en el código produjeron 75 intentos de mandar datos
+ *   de una empresa al WhatsApp de otra. Además, si inframaq cambia su grupo, el
+ *   agente lo sigue solo.
+ *
+ * Lo único escrito acá es QUÉ EMPRESA está en el piloto, que es una decisión de
+ * alcance de esta fase y no un dato de nadie. Se muda a la pantalla de
+ * super-admin cuando exista.
  */
 
-/** Grupo que se ESCUCHA. Nada fuera de acá llega al agente. */
-export const grupoEscuchado = (): string =>
-  String(process.env.AGENTE_GRUPO_ESCUCHA || '').trim();
+/** La empresa cuyo grupo de admin se escucha en la fase de espejo. */
+export const COMPANY_PILOTO = 'inframaq-iax';
 
-/** Único destino de salida: el grupo de operaciones (error tracking). */
-export const grupoDestino = (): string =>
-  String(process.env.AGENTE_GRUPO_DESTINO || '').trim();
+/**
+ * Interruptor de la fase. En código y no en `.env` a propósito: lo único que
+ * hace este agente es escribir en el grupo de operaciones, así que apagarlo con
+ * un revert (3 min) es proporcional. Una variable de entorno «por las dudas» es
+ * deuda de configuración que después nadie sabe si está puesta.
+ */
+export const AGENTE_CHECKLIST_ACTIVO = true;
 
-/** El agente entero. Sin esto en `true`, nada de esto corre. */
-export const agenteChecklistHabilitado = (): boolean =>
-  String(process.env.AGENTE_CHECKLIST || '').trim().toLowerCase() === 'on';
+/** Único destino de salida: el grupo de operaciones. */
+export const grupoDestino = (): string => GROUP_ERRORS_TRACKING;
+
+export interface AlcanceAgente {
+  /** JID del grupo que se escucha, resuelto desde la empresa piloto. */
+  grupoEscuchado: string;
+}
 
 /**
  * ¿Este mensaje entra al agente?
@@ -33,9 +48,10 @@ export const agenteChecklistHabilitado = (): boolean =>
  * Es una IGUALDAD contra un único JID, no un `includes` ni un prefijo: cualquier
  * cosa más laxa es la puerta por la que se cuela otro grupo.
  */
-export const debeEscuchar = (jid: string): boolean => {
-  const escuchado = grupoEscuchado();
-  if (!escuchado || !agenteChecklistHabilitado()) return false;
+export const debeEscuchar = (jid: string, alcance: AlcanceAgente): boolean => {
+  if (!AGENTE_CHECKLIST_ACTIVO) return false;
+  const escuchado = String(alcance.grupoEscuchado || '').trim();
+  if (!escuchado) return false;
   return String(jid || '').trim() === escuchado;
 };
 
@@ -45,18 +61,35 @@ export const debeEscuchar = (jid: string): boolean => {
  * exactamente lo que José pidió que no pasara.
  */
 export const puedeEnviarA = (jid: string): boolean => {
-  const destino = grupoDestino();
+  if (!AGENTE_CHECKLIST_ACTIVO) return false;
   const pedido = String(jid || '').trim();
-  if (!destino || !agenteChecklistHabilitado()) return false;
   if (!pedido.endsWith('@g.us')) return false;
-  return pedido === destino;
+  return pedido === grupoDestino();
 };
 
 /**
- * El destino, o `null` si no se puede enviar. Se usa así —y no leyendo la env
- * directo— para que el guard sea imposible de saltear por olvido.
+ * El destino, o `null` si no se puede enviar. Se usa así —y no leyendo la
+ * constante directo— para que el guard sea imposible de saltear por olvido.
  */
 export const destinoPermitido = (): string | null => {
   const destino = grupoDestino();
   return puedeEnviarA(destino) ? destino : null;
+};
+
+/**
+ * El alcance real, leyendo el grupo de admin de la empresa piloto.
+ *
+ * Sin `adminGroupId` configurado devuelve vacío y el agente no escucha nada: un
+ * agente apagado es un estado correcto; uno que escucha «todo» porque falta un
+ * dato, no lo es nunca.
+ */
+export const resolverAlcance = async (
+  buscarCompany: (companyId: string) => Promise<{ whatsappConfig?: { adminGroupId?: string } } | null>
+): Promise<AlcanceAgente> => {
+  try {
+    const company = await buscarCompany(COMPANY_PILOTO);
+    return { grupoEscuchado: String(company?.whatsappConfig?.adminGroupId || '').trim() };
+  } catch {
+    return { grupoEscuchado: '' };
+  }
 };
