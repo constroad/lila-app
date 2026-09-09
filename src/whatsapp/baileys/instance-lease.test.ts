@@ -1,3 +1,4 @@
+import os from 'os';
 import { describe, it, expect, jest, beforeEach, beforeAll } from '@jest/globals';
 
 // Doc único del lease simulado en memoria con la semántica Mongo que usa el módulo:
@@ -38,6 +39,7 @@ const fakeCollection = {
       leaseDoc = null;
     }
   }),
+  findOne: jest.fn(async () => leaseDoc),
 };
 
 jest.unstable_mockModule('../../database/sharedConnection.js', () => ({
@@ -80,6 +82,7 @@ beforeEach(() => {
   fakeCollection.updateOne.mockClear();
   fakeCollection.insertOne.mockClear();
   fakeCollection.deleteOne.mockClear();
+  fakeCollection.findOne.mockClear();
   subject.__resetSocketLeaseForTests();
 });
 
@@ -144,11 +147,124 @@ describe('startSocketLeaseLoop / hasSocketLease', () => {
     );
   });
 
+  /**
+   * EL CASO DE UN DEPLOY, y era el que peor avisaba. Un SIGKILL no corre el
+   * release, así que el proceso nuevo encuentra el lease de un muerto y arranca
+   * pasivo. Antes eso mandaba «otra instancia viva lo posee, mata el duplicado»
+   * y no había nada que matar: el 09/09/2026 José salió a buscar un proceso
+   * fantasma mientras el sistema se arreglaba solo 90 segundos después.
+   */
+  it('lease huérfano del mismo host: queda pasivo pero NO alerta', async () => {
+    leaseDoc = {
+      _id: 'whatsapp-socket-owner',
+      holderId: `${os.hostname()}#999999#muerto`,
+      hostname: os.hostname(),
+      pid: 999999, // no existe
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+
+    const holder = await subject.startSocketLeaseLoop();
+
+    expect(holder).toBe(false);
+    expect(sendTelegramAlert).not.toHaveBeenCalled();
+  });
+
+  /** Un duplicado DE VERDAD sí tiene que sonar, y decir que hay que matarlo. */
+  it('holder vivo en el mismo host: alerta diciendo que hay un duplicado', async () => {
+    leaseDoc = {
+      _id: 'whatsapp-socket-owner',
+      holderId: `${os.hostname()}#${process.pid}#vivo`,
+      hostname: os.hostname(),
+      pid: process.pid, // este mismo proceso: garantizado vivo
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+
+    await subject.startSocketLeaseLoop();
+
+    expect(sendTelegramAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dedupeKey: 'socket-lease-passive',
+        message: expect.stringContaining('duplicado'),
+      })
+    );
+  });
+
+  /**
+   * Otro host: no se puede preguntar si vive. «No pude chequear» no es «está
+   * bien» — se avisa, pero sin afirmar que hay un duplicado.
+   */
+  it('holder en otro host: alerta admitiendo que no puede saber si vive', async () => {
+    leaseDoc = {
+      _id: 'whatsapp-socket-owner',
+      holderId: 'otra-maquina#1#abc',
+      hostname: 'otra-maquina',
+      pid: 1,
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+
+    await subject.startSocketLeaseLoop();
+
+    const enviado = sendTelegramAlert.mock.calls[0][0] as { message: string };
+    expect(enviado.message).toContain('OTRO host');
+    expect(enviado.message).not.toContain('Matalo');
+  });
+
   it('con el lease deshabilitado por env, hasSocketLease es true sin tocar Mongo', async () => {
     mutableConfig.whatsapp.socketLease = false;
 
     expect(subject.hasSocketLease()).toBe(true);
     expect(fakeCollection.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe('avisar también al recuperarse', () => {
+  /**
+   * LA REGLA QUE FALTABA (CLAUDE.md §Alertas): una alerta que cuenta la caída y
+   * se calla la vuelta deja al que la leyó buscando un fallo que ya no existe.
+   * Es lo que pasó el 09/09: llegó «arrancó SIN el lease», el failover lo tomó
+   * 90 s después, y nadie se enteró de eso último.
+   */
+  it('manda el ✅ cuando gana el lease después de haber avisado', async () => {
+    leaseDoc = {
+      _id: 'whatsapp-socket-owner',
+      holderId: 'otra-maquina#1#abc',
+      hostname: 'otra-maquina',
+      pid: 1,
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    await subject.startSocketLeaseLoop();
+    expect(sendTelegramAlert).toHaveBeenCalledTimes(1);
+
+    // El holder muere: su lease vence y este proceso lo toma en el heartbeat.
+    leaseDoc.expiresAt = new Date(Date.now() - 1);
+    await subject.tryAcquireSocketLease();
+    subject.__resetSocketLeaseForTests();
+
+    // Reproducción del failover completo: pasivo primero, holder después.
+    leaseDoc = {
+      _id: 'whatsapp-socket-owner',
+      holderId: 'otra-maquina#1#abc',
+      hostname: 'otra-maquina',
+      pid: 1,
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    sendTelegramAlert.mockClear();
+    await subject.startSocketLeaseLoop();
+    leaseDoc.expiresAt = new Date(Date.now() - 1);
+    await subject.__heartbeatParaTests();
+
+    expect(subject.hasSocketLease()).toBe(true);
+    expect(sendTelegramAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupeKey: 'socket-lease-recuperado' })
+    );
+  });
+
+  /** Un arranque limpio no manda un «✅ ya está» de algo que nunca se rompió. */
+  it('NO manda el ✅ si nunca hubo problema', async () => {
+    await subject.startSocketLeaseLoop();
+    await subject.__heartbeatParaTests();
+
+    expect(sendTelegramAlert).not.toHaveBeenCalled();
   });
 });
 

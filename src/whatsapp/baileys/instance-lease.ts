@@ -34,6 +34,12 @@ const HOLDER_ID = `${os.hostname()}#${process.pid}#${crypto.randomUUID().slice(0
 
 let holdingLease = false;
 let heartbeatTimer: NodeJS.Timeout | null = null;
+/**
+ * ¿Ya avisamos por Telegram de que este proceso NO tiene el lease? Gobierna el
+ * aviso de recuperación: solo se avisa la vuelta si se avisó la ida. Sin esto,
+ * cada reinicio limpio mandaría un «✅ ya está» de algo que nunca se rompió.
+ */
+let aviseDelProblema = false;
 
 const leaseEnabled = (): boolean => config.whatsapp.socketLease !== false;
 
@@ -41,7 +47,15 @@ type LeaseCollection = {
   updateOne: (filter: object, update: object) => Promise<{ matchedCount: number }>;
   insertOne: (doc: object) => Promise<unknown>;
   deleteOne: (filter: object) => Promise<unknown>;
+  findOne: (filter: object) => Promise<LeaseDoc | null>;
 };
+
+interface LeaseDoc {
+  holderId?: string;
+  hostname?: string;
+  pid?: number;
+  expiresAt?: Date;
+}
 
 const getLeaseCollection = async (): Promise<LeaseCollection> => {
   const conn = await getSharedConnection();
@@ -88,6 +102,58 @@ export async function tryAcquireSocketLease(): Promise<boolean> {
 }
 
 /**
+ * ¿POR QUÉ no pudimos tomar el lease? No es lo mismo un duplicado que un
+ * huérfano, y hasta ahora los dos avisaban igual.
+ *
+ * Un deploy mata el proceso con SIGKILL, que no corre el `releaseSocketLease`.
+ * El lease queda escrito hasta que vence el TTL (90 s), así que el proceso nuevo
+ * arranca pasivo, avisa «otra instancia viva lo posee, mata el duplicado» — y no
+ * hay ningún duplicado que matar. Pasó el 09/09/2026 a las 18:10: José salió a
+ * buscar un proceso fantasma mientras el sistema se arreglaba solo a las 18:12.
+ *
+ * Como el `holderId` trae hostname y PID, en el MISMO host se puede preguntar si
+ * ese proceso existe todavía. Eso separa los dos casos, que piden respuestas
+ * opuestas: al duplicado hay que matarlo, al huérfano hay que ignorarlo 90 s.
+ */
+type DiagnosticoHolder =
+  | { tipo: 'duplicado-vivo'; holderId: string }
+  | { tipo: 'huerfano'; holderId: string }
+  | { tipo: 'otro-host'; holderId: string }
+  | { tipo: 'sin-datos'; holderId: string };
+
+/**
+ * ¿Vive el proceso? La señal 0 no manda nada: solo consulta.
+ * `EPERM` significa que EXISTE pero es de otro usuario — vivo igual.
+ */
+const pidVivo = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as { code?: string }).code === 'EPERM';
+  }
+};
+
+const diagnosticarHolder = async (): Promise<DiagnosticoHolder> => {
+  try {
+    const col = await getLeaseCollection();
+    const doc = await col.findOne({ _id: LEASE_DOC_ID });
+    const holderId = String(doc?.holderId || '(desconocido)');
+
+    if (!doc?.pid || !doc?.hostname) return { tipo: 'sin-datos', holderId };
+    // Distinto host: desde acá no hay forma de preguntar. «No pude chequear» no
+    // es «está roto», y tampoco es «está bien»: se avisa diciendo justamente eso.
+    if (doc.hostname !== os.hostname()) return { tipo: 'otro-host', holderId };
+
+    return pidVivo(doc.pid)
+      ? { tipo: 'duplicado-vivo', holderId }
+      : { tipo: 'huerfano', holderId };
+  } catch {
+    return { tipo: 'sin-datos', holderId: '(no se pudo leer el lease)' };
+  }
+};
+
+/**
  * ¿Este proceso puede abrir sockets WhatsApp?
  * Con el lease deshabilitado por env (WHATSAPP_SOCKET_LEASE=false) siempre true.
  */
@@ -132,6 +198,18 @@ const heartbeat = async (): Promise<void> => {
           logger.error(`Restore tras failover del lease falló: ${String(error)}`)
         );
       }
+      // AVISAR AL RECUPERARSE, y solo si antes avisamos del problema. Una alerta
+      // que cuenta la caída y se calla la vuelta deja al que la leyó buscando un
+      // fallo que ya no existe — que es exactamente lo que pasó el 09/09.
+      if (aviseDelProblema) {
+        aviseDelProblema = false;
+        sendTelegramAlert({
+          dedupeKey: 'socket-lease-recuperado',
+          message:
+            `✅ lila-app ${HOLDER_ID} ya tiene el lease de sockets WhatsApp.\n\n` +
+            'Las sesiones se están restaurando. No hay nada que hacer.',
+        }).catch(() => {});
+      }
     }
     if (!acquired && holdingLease) {
       logger.error(
@@ -144,6 +222,7 @@ const heartbeat = async (): Promise<void> => {
           `⚠️ lila-app ${HOLDER_ID} perdió el lease de sockets WhatsApp.\n\n` +
           'Otra instancia lo posee. Si no esperabas dos procesos, mata el duplicado.',
       }).catch(() => {});
+      aviseDelProblema = true;
     }
     holdingLease = acquired;
   } catch (err) {
@@ -166,16 +245,39 @@ export async function startSocketLeaseLoop(): Promise<boolean> {
   // el restore — ver setOnLeaseAcquiredLate.
   yaArrancado = true;
   if (!holdingLease) {
-    logger.error(
-      '🔒 Otra instancia de lila-app posee el lease de sockets WhatsApp: este proceso queda PASIVO ' +
-        `(sin sockets) y reintenta cada ${LEASE_HEARTBEAT_MS / 1000}s. Failover automático si el holder muere.`
-    );
-    sendTelegramAlert({
-      dedupeKey: 'socket-lease-passive',
-      message:
-        `⚠️ lila-app ${HOLDER_ID} arrancó SIN el lease de sockets WhatsApp (otra instancia viva lo posee).\n\n` +
-        'Queda pasivo: no abre sesiones. Si no esperabas dos procesos, mata el duplicado.',
-    }).catch(() => {});
+    const diagnostico = await diagnosticarHolder();
+    const espera = `Reintenta cada ${LEASE_HEARTBEAT_MS / 1000}s; el lease vence en ${LEASE_TTL_MS / 1000}s como máximo.`;
+
+    // EL CASO NORMAL DE UN DEPLOY, y no merece despertar a nadie: el proceso
+    // anterior murió sin liberar y el lease es un papel sin dueño. Se resuelve
+    // solo al vencer el TTL y el failover restaura las sesiones. Queda en el log
+    // —para poder reconstruir qué pasó— pero sin Telegram.
+    if (diagnostico.tipo === 'huerfano') {
+      logger.warn(
+        `🔒 Lease HUÉRFANO de ${diagnostico.holderId}: ese proceso ya no existe en este host ` +
+          `(murió sin liberarlo, típico de un reinicio). Este proceso queda pasivo hasta tomarlo. ${espera}`
+      );
+    } else {
+      const detalle =
+        diagnostico.tipo === 'duplicado-vivo'
+          ? `El proceso ${diagnostico.holderId} está VIVO en este host: hay un duplicado real. Matalo.`
+          : diagnostico.tipo === 'otro-host'
+            ? `Lo tiene ${diagnostico.holderId}, en OTRO host: desde acá no puedo saber si sigue vivo.`
+            : `No pude leer quién lo tiene (${diagnostico.holderId}).`;
+
+      logger.error(
+        `🔒 Otra instancia posee el lease de sockets WhatsApp: este proceso queda PASIVO (sin sockets). ` +
+          `${detalle} ${espera}`
+      );
+      sendTelegramAlert({
+        dedupeKey: 'socket-lease-passive',
+        message:
+          `⚠️ lila-app ${HOLDER_ID} arrancó SIN el lease de sockets WhatsApp.\n\n` +
+          `${detalle}\n\n` +
+          `Queda pasivo: no abre sesiones. ${espera}`,
+      }).catch(() => {});
+      aviseDelProblema = true;
+    }
   }
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => void heartbeat(), LEASE_HEARTBEAT_MS);
@@ -201,6 +303,9 @@ export async function releaseSocketLease(): Promise<void> {
   }
 }
 
+/** Solo para tests: una vuelta del heartbeat, sin esperar los 30 s. */
+export const __heartbeatParaTests = (): Promise<void> => heartbeat();
+
 /** Solo para tests. */
 export function __resetSocketLeaseForTests(): void {
   if (heartbeatTimer) {
@@ -208,6 +313,7 @@ export function __resetSocketLeaseForTests(): void {
     heartbeatTimer = null;
   }
   holdingLease = false;
+  aviseDelProblema = false;
   onLeaseAcquiredLate = null;
   yaArrancado = false;
 }
