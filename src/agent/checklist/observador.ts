@@ -1,6 +1,5 @@
 import logger from '../../utils/logger.js';
 import { getCompanyModel } from '../../database/models.js';
-import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js';
 import { extractInboundText, type BaileysMessageContent } from '../runtime/message-text.js';
 import { COMPANY_PILOTO, debeEscuchar, resolverAlcance, type AlcanceAgente } from './alcance.js';
 import { normalizarTexto } from './checklist.js';
@@ -125,11 +124,21 @@ export const senderPiloto = async (): Promise<string> => {
  * Si no lo encuentra, loguea los nombres disponibles: sin eso, un nombre mal
  * escrito se ve igual que «no hay nada que avisar» y no habría forma de saber
  * cuál de los dos está pasando.
+ *
+ * `WhatsAppDirectService` se carga con un import DINÁMICO, y no es capricho:
+ * este módulo cuelga del grafo estático de `sessions.simple.ts`, y ese servicio
+ * arrastra `outbox-queue`. El test de sesiones mockea `outbox-queue` con dos
+ * exports; al aparecer un importador que usa un tercero, el link ESM falla y se
+ * lleva puesta la suite entera —62 tests— con un error de sintaxis en un archivo
+ * que el test ni nombra. Es el pitfall §13, y el mock por test es el parche: la
+ * cura es que el grafo estático no lo toque. Acá adentro se evalúa recién cuando
+ * de verdad hay que resolver un nombre.
  */
 export const jidPorNombre = async (nombre: string): Promise<string> => {
   const sender = await senderPiloto();
   if (!sender) return '';
 
+  const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
   const grupos = WhatsAppDirectService.listGroups(sender) as Array<{ id?: string; name?: string }>;
   const buscado = normalizarTexto(nombre);
   const encontrado = grupos.find((g) => normalizarTexto(String(g?.name || '')) === buscado);
