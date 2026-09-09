@@ -30,6 +30,7 @@ import { sendTelegramAlert } from '../../services/telegram-alert.service.js';
 import { hasSocketLease } from './instance-lease.js';
 import { isLocalOnlySession } from './local-sessions.js';
 import { handleAgentMessagesUpsert } from '../../agent/runtime/agent-wiring.js';
+import { findOutgoingMessage } from './outgoing-messages.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -662,6 +663,38 @@ async function initSession(
     // Portal muestra un countdown de 20s (QR_VALIDITY_MS); sin esto, el primer QR
     // "expiraba" en pantalla a los 20s aunque seguía vigente 40s más.
     qrTimeout: 20_000,
+    /**
+     * REENVÍO AUTOMÁTICO cuando el destinatario no pudo descifrar (09/09/2026).
+     *
+     * Choferes de globofas veían los vales y las ubicaciones como «Esperando
+     * este mensaje. Puede tardar un poco». Eso no es un fallo de envío —del lado
+     * nuestro salía 200 sin un error—: es que su teléfono no pudo DESCIFRARLO.
+     * WhatsApp lo resuelve solo pidiendo el reenvío (*retry receipt*), pero sin
+     * este callback Baileys no tiene de dónde sacar el mensaje original, el
+     * pedido se cae al vacío y el chofer queda con el placeholder PARA SIEMPRE.
+     *
+     * Devolver `undefined` es exactamente el comportamiento anterior, así que lo
+     * peor que puede pasar acá es no mejorar nada. Nunca lanza.
+     */
+    getMessage: async (key: { id?: string | null }) => {
+      try {
+        const recordado = findOutgoingMessage(sessionId, key?.id);
+        if (recordado) {
+          logger.info(`♻️ Reenviando mensaje que ${sessionId} no pudo entregar cifrado`, {
+            messageId: key?.id,
+          });
+          return recordado as never;
+        }
+        // Sin esto seguiríamos ciegos: el aviso de Baileys va a su propio logger,
+        // que corre en `fatal` y no escribe nada.
+        logger.warn(`⚠️ Pidieron reenviar un mensaje de ${sessionId} que ya no está en memoria`, {
+          messageId: key?.id,
+        });
+        return undefined as never;
+      } catch {
+        return undefined as never;
+      }
+    },
   });
 
   // Generación de ESTE socket. Cualquier socket creado después la incrementa, así que un

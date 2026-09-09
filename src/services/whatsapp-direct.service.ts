@@ -44,6 +44,7 @@ import {
   proxyMediaMessage,
 } from './whatsapp-proxy.service.js';
 import { normalizeGroupParticipants } from '../utils/group-participants.js';
+import { recordOutgoingMessage } from '../whatsapp/baileys/outgoing-messages.js';
 
 export { normalizeGroupParticipants };
 
@@ -69,7 +70,20 @@ const flushingOutbox = new Set<string>();
 // outbox duplicaría el mensaje — con socket sano nunca se llega a 120s.
 const SEND_TIMEOUT_MS = 120_000;
 
-const sendWithTimeout = async <T>(label: string, sendPromise: Promise<T>): Promise<T> => {
+/**
+ * Interruptor del recordatorio de salientes. Existe para poder APAGARLO sin
+ * revertir un commit: `WHATSAPP_MSG_RETRY_STORE=off` en el `.env` + reinicio del
+ * servicio, en vez de un rebuild de 4 minutos. Prendido por defecto.
+ */
+const retryStoreHabilitado = (): boolean =>
+  String(process.env.WHATSAPP_MSG_RETRY_STORE || '').trim().toLowerCase() !== 'off';
+
+const sendWithTimeout = async <T>(
+  label: string,
+  sendPromise: Promise<T>,
+  /** Sesión emisora. Sin ella no se recuerda nada (comportamiento previo). */
+  sessionId?: string
+): Promise<T> => {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
@@ -78,7 +92,22 @@ const sendWithTimeout = async <T>(label: string, sendPromise: Promise<T>): Promi
     );
   });
   try {
-    return await Promise.race([sendPromise, timeout]);
+    const resultado = await Promise.race([sendPromise, timeout]);
+
+    // ADITIVO Y A PRUEBA DE FALLOS. Se engancha acá —el único punto por el que
+    // pasan los cuatro tipos de envío— para no tocar la lógica de ninguno. Si
+    // esto fallara, el mensaje YA salió: `recordOutgoingMessage` no lanza nunca
+    // y el `catch` de abajo es el segundo cinturón (09/09/2026).
+    if (sessionId && retryStoreHabilitado()) {
+      try {
+        const enviado = resultado as { key?: { id?: string } | null; message?: unknown } | null;
+        recordOutgoingMessage(sessionId, enviado?.key?.id, enviado?.message);
+      } catch {
+        // Un fallo del recordatorio jamás puede afectar a un envío exitoso.
+      }
+    }
+
+    return resultado;
   } finally {
     clearTimeout(timer);
   }
@@ -209,7 +238,8 @@ export const WhatsAppDirectService = {
           validTo,
           mentions.length > 0 ? { text: message, mentions } : { text: message },
           sendOptions
-        )
+        ),
+        id
       );
       await trackWhatsAppUsage(id, options, 'text');
       return result;
@@ -349,7 +379,8 @@ export const WhatsAppDirectService = {
             ptv: false, // Not a video note
           },
           sendOptions
-        )
+        ),
+        id
       );
       await trackWhatsAppUsage(id, options, 'video');
 
@@ -492,7 +523,8 @@ export const WhatsAppDirectService = {
             mimetype: resolvedMimeType,
           },
           sendOptions
-        )
+        ),
+        id
       );
       await trackWhatsAppUsage(id, options, 'image');
 
@@ -641,7 +673,8 @@ export const WhatsAppDirectService = {
             caption: options.caption,
           },
           sendOptions
-        )
+        ),
+        id
       );
       await trackWhatsAppUsage(id, options, 'document');
 

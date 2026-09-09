@@ -42,6 +42,29 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - Controller: `src/api/controllers/session.controller.simple.ts`.
 - Envio de mensajes: `src/api/controllers/message.controller.simple.ts`.
 - Servicio directo: `src/services/whatsapp-direct.service.ts`.
+- **Reenvío cuando el destinatario no pudo descifrar (`getMessage`, 09/09/2026).**
+  Choferes de globofas veían los vales y las ubicaciones como «Esperando este
+  mensaje. Puede tardar un poco» o como eliminados. **No era un fallo de envío**:
+  del lado nuestro salía `200` sin un solo error en el log. Es que el teléfono del
+  chofer no pudo DESCIFRARLO —pasa con multi-dispositivo, reinstalaciones o
+  sesiones desincronizadas— y WhatsApp lo resuelve solo: el receptor manda un
+  *retry receipt* y el emisor re-cifra y reenvía. Ese reenvío **no funcionaba**
+  porque `makeWASocket` no recibía `getMessage`, el callback con el que Baileys
+  recupera el mensaje original — y el store de mensajes decía explícitamente
+  «`messages` se mantiene por compatibilidad de tipo pero NO se llena ni
+  persiste». Sin las dos cosas, el pedido de reenvío se caía al vacío y el chofer
+  quedaba con el placeholder **para siempre**.
+  Hoy: `whatsapp/baileys/outgoing-messages.ts` recuerda los salientes (TTL 1 h,
+  tope 300, desalojo del más viejo — la mini son 8 GB compartidos), se alimenta
+  desde `sendWithTimeout` (el ÚNICO punto por el que pasan los cuatro tipos de
+  envío, así que no se tocó la lógica de ninguno) y `getMessage` lo consulta.
+  `msgRetryCounterCache` ya existía y acota cuántas veces se reintenta el mismo
+  mensaje, así que no hay bucle de reenvíos.
+  **Y se dejó de estar ciego**: el logger de Baileys corre en `fatal`, así que su
+  aviso de «retry request, but message not found» nunca se escribía; ahora el
+  propio `getMessage` loguea con el logger de lila tanto el reenvío como el fallo.
+  **Rollback rápido**: `WHATSAPP_MSG_RETRY_STORE=off` en el `.env` + reiniciar el
+  servicio (segundos, sin rebuild). El revert del commit es el plan B.
 - **Menciones (`@all`) — arregladas 07/09/2026, estaban rotas en TRES capas.** Un
   "@all" en el cuerpo del mensaje es texto: para que notifique, el envío tiene que
   llevar los JIDs en `mentions`. No llegaba a Baileys por tres motivos
