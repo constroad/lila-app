@@ -13,6 +13,7 @@ import { aggregateReportData, structureDataForReportType } from '../../services/
 import { getServiceReportModel } from '../../models/service-report.model.js';
 import { storagePathService } from '../../services/storage-path.service.js';
 import { ReportHtmlRenderer } from '../../services/report-html-renderer.service.js';
+import { seedReportHeaderBranding } from '../../services/report-header-branding.service.js';
 import { inlineCanvasHtmlImages } from '../../services/canvas-html-image-inliner.service.js';
 import pdfGenerator from '../../pdf/generator.service.js';
 import { buildEffectiveSchema } from '../../services/schema-customization.service.js';
@@ -229,15 +230,26 @@ async function resolveReportHtml(input: {
     return { html, source: 'canvas' };
   }
   const printUrl = typeof input.printUrl === 'string' ? input.printUrl.trim() : '';
-  if (printUrl && isAllowedPrintUrl(printUrl)) {
-    try {
-      const fetched = await pdfGenerator.fetchPrintedHtml(printUrl);
-      const html = await inlineCanvasHtmlImages(fetched, input.companyId);
-      return { html, source: 'canvas' };
-    } catch (error) {
-      logger.warn('documents.print_url.fallback_renderer', {
-        error: String(error),
+  if (printUrl) {
+    if (isAllowedPrintUrl(printUrl)) {
+      try {
+        const fetched = await pdfGenerator.fetchPrintedHtml(printUrl);
+        const html = await inlineCanvasHtmlImages(fetched, input.companyId);
+        return { html, source: 'canvas' };
+      } catch (error) {
+        logger.warn('documents.print_url.fallback_renderer', {
+          error: String(error),
+          companyId: input.companyId,
+        });
+      }
+    } else {
+      // Caer al renderer por una URL rechazada era MUDO: el PDF salía con otro
+      // diseño y nadie sabía por que (el sintoma visible fue el encabezado sin
+      // logo, 09/09/2026). Un host mal configurado tiene que verse en el log.
+      logger.warn('documents.print_url.rejected', {
+        printUrl,
         companyId: input.companyId,
+        allowedHosts: process.env.PORTAL_PRINT_HOSTS || '(sin restriccion)',
       });
     }
   }
@@ -245,6 +257,10 @@ async function resolveReportHtml(input: {
   // sus <img> apuntan a fotos/membretes/logos por URL http de lila y Puppeteer
   // NO debe tocar la red durante setContent. Cubre los informes públicos
   // (field-reports, source:'renderer') que quedaban fuera del inliner.
+  // El renderer pinta `header.logoUrl` y nada mas: el schemaData de un parte de
+  // campo nunca la trae, asi que sin esto el encabezado sale SIN LOGO cada vez
+  // que el canvas no se pudo usar (Jose, 09/09/2026).
+  await seedReportHeaderBranding(input.data, input.companyId);
   const renderer = new ReportHtmlRenderer(input.effectiveSchema, input.data, {
     companyId: input.companyId,
     baseUrl: input.baseUrl,
