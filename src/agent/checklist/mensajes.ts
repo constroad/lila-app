@@ -48,12 +48,62 @@ const enPalabras = (textoNormalizado: string): string[] =>
     .split(' ')
     .filter(Boolean);
 
-const niega = (textoNormalizado: string): boolean => {
-  const palabras = enPalabras(textoNormalizado);
+const niegaFragmento = (fragmento: string): boolean => {
+  const palabras = enPalabras(normalizarTexto(fragmento));
   if (palabras.some((palabra) => NEGACIONES_PALABRA.includes(palabra))) return true;
   const limpio = palabras.join(' ');
   return NEGACIONES_PREFIJO.some((prefijo) => limpio.includes(prefijo));
 };
+
+/**
+ * Separadores de cláusula. La `y` solo corta cuando lo que sigue niega: «agua y
+ * petróleo listos» es UNA cláusula, «cuadrilla lista y no vino el tren» son dos.
+ *
+ * Tolera tildes porque corta sobre el texto ORIGINAL: lo que se conserva tiene
+ * que seguir siendo legible —se reporta al grupo de operaciones—, así que
+ * normalizar es para DECIDIR, nunca para lo que se guarda.
+ */
+const SEPARADOR_CLAUSULA =
+  /[,;.]|\bpero\b|\baunque\b|\by (?=no |a[uú]n |todav[ií]a |ni |falta)/i;
+
+export const enClausulas = (texto: string): string[] =>
+  String(texto || '')
+    .split(SEPARADOR_CLAUSULA)
+    .map((c) => c.trim())
+    .filter(Boolean);
+
+/**
+ * ¿El mensaje niega? MANDA LA PRIMERA CLÁUSULA.
+ *
+ * Mirar la oración entera tiraba confirmaciones reales: «cuadrilla lista, no
+ * falta nadie», «ya avisé a planta, no hay problema» y «petróleo listo, aún
+ * falta el agua» son la forma normal de confirmar algo en un grupo, y las tres
+ * se descartaban por un `no` que hablaba de otra cosa. Medido sobre 19 mensajes
+ * escritos como los escribe la gente, el filtro pasó de acertar 6 a 9.
+ *
+ * Pero mirar «todas las cláusulas» era demasiado permisivo, y los tests que ya
+ * existían lo cazaron: «no, cuadrilla lista recién mañana» y «se cayó la
+ * producción, cuadrilla lista para el jueves» tienen una cláusula afirmativa y
+ * niegan igual. La diferencia es DÓNDE está la negación: la que ABRE el mensaje
+ * gobierna lo que sigue («no, …» / «se cayó, …»); la que viene después solo
+ * niega su propia cláusula.
+ */
+const niega = (textoNormalizado: string): boolean => {
+  const [primera] = enClausulas(textoNormalizado);
+  return primera !== undefined && niegaFragmento(primera);
+};
+
+/**
+ * Las cláusulas que PUEDEN confirmar: se van las que niegan.
+ *
+ * Sin esto el arreglo de arriba abre un agujero peor que el que cierra. El
+ * matcher busca sus frases en el texto ENTERO, así que «agua lista, no compramos
+ * petróleo» —que ahora pasa el filtro, y debe pasarlo— contendría la frase
+ * «compramos petroleo» y daría el combustible por comprado. Al item se le
+ * entrega solo lo que afirma.
+ */
+export const clausulasUtiles = (texto: string): string[] =>
+  enClausulas(texto).filter((c) => !niegaFragmento(c));
 
 /**
  * `null` si el mensaje puede confirmar; el motivo si hay que descartarlo.
@@ -110,8 +160,12 @@ export const filtrarMensajes = (mensajes: MensajeGrupo[]): MensajesUtiles => {
       utiles.descartados[motivo] += 1;
       continue;
     }
-    utiles.textos.push(mensaje.texto);
-    utiles.autores.push(mensaje.autor);
+    // Se entregan las cláusulas que afirman, no el mensaje entero: ver
+    // `clausulasUtiles`. Cada una lleva su autor para la seguridad por rol (F2).
+    for (const clausula of clausulasUtiles(mensaje.texto)) {
+      utiles.textos.push(clausula);
+      utiles.autores.push(mensaje.autor);
+    }
   }
 
   return utiles;

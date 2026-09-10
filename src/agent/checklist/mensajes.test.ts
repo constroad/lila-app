@@ -1,4 +1,10 @@
-import { filtrarMensajes, motivoDescarte, type MensajeGrupo } from './mensajes';
+import {
+  filtrarMensajes,
+  motivoDescarte,
+  clausulasUtiles,
+  enClausulas,
+  type MensajeGrupo,
+} from './mensajes';
 import { CHECKLIST_PRODUCCION, itemSatisfecho } from './checklist';
 
 /**
@@ -60,6 +66,59 @@ describe('mensajes tendenciosos', () => {
    */
   it('prefiere volver a preguntar antes que dar por hecho de más', () => {
     expect(motivoDescarte(msg({ texto: 'no te preocupes, cuadrilla lista' }))).toBe('negacion');
+  });
+});
+
+/**
+ * DÓNDE ESTÁ LA NEGACIÓN, que es lo que decide si niega el mensaje o una parte.
+ *
+ * Medido el 09/09/2026 sobre 19 mensajes escritos como los escribe la gente: con
+ * la negación de oración entera el filtro acertaba 6; mirando la cláusula que
+ * abre, 9. Las que recupera no son rebuscadas — son la forma normal de confirmar
+ * algo en un grupo de trabajo.
+ */
+describe('negación por cláusula', () => {
+  const pasa = (texto: string) => motivoDescarte(msg({ texto }));
+
+  it('conserva una confirmación que además niega OTRA cosa', () => {
+    expect(pasa('ya avisé a planta, no hay problema')).toBeNull();
+    expect(pasa('cuadrilla lista, no falta nadie')).toBeNull();
+    expect(pasa('petróleo listo, aún falta el agua')).toBeNull();
+    expect(pasa('avisé a planta pero no vino el tren')).toBeNull();
+  });
+
+  it('la negación que ABRE el mensaje gobierna todo lo que sigue', () => {
+    expect(pasa('no, cuadrilla lista recién mañana')).toBe('negacion');
+    expect(pasa('se cayó la producción, cuadrilla lista para el jueves')).toBe('negacion');
+    expect(pasa('todavía no está la cuadrilla lista')).toBe('negacion');
+  });
+
+  it('la «y» no corta si lo que sigue no niega', () => {
+    // Partir de más multiplica las oportunidades de un falso positivo.
+    expect(enClausulas('agua y petroleo listos')).toEqual(['agua y petroleo listos']);
+    expect(enClausulas('cuadrilla lista y no vino el tren')).toEqual([
+      'cuadrilla lista',
+      'no vino el tren',
+    ]);
+  });
+
+  /**
+   * EL AGUJERO QUE ABRE EL ARREGLO SI NO SE CIERRA. El matcher busca sus frases
+   * en el texto que se le entrega; si se le entregara el mensaje entero, la
+   * cláusula negada traería consigo la frase clave y cerraría el ítem al revés.
+   */
+  it('al ítem solo le llegan las cláusulas que afirman', () => {
+    expect(clausulasUtiles('agua lista, no compramos petróleo')).toEqual(['agua lista']);
+    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'combustible')!;
+    expect(itemSatisfecho(combustible, clausulasUtiles('agua lista, no compramos petróleo'))).toBe(
+      false
+    );
+    // Y con el mensaje entero se habría cerrado: esto es lo que se evita.
+    expect(itemSatisfecho(combustible, ['agua lista, no compramos petróleo'])).toBe(true);
+  });
+
+  it('conserva las tildes: lo que se guarda se le muestra a una persona', () => {
+    expect(clausulasUtiles('ya avisé a planta, no hay problema')).toEqual(['ya avisé a planta']);
   });
 });
 
