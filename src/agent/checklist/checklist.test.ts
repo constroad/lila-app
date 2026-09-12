@@ -5,7 +5,7 @@ import {
   normalizarTexto,
   type ChecklistItem,
 } from './checklist';
-import { construirAvisoChecklist } from './aviso';
+import { construirAvisoChecklist, firmaAviso } from './aviso';
 
 /**
  * El checklist del día de producción.
@@ -20,6 +20,7 @@ const arranque = (hora: string, dia = '2026-09-10') =>
 
 const item = (over: Partial<ChecklistItem> = {}): ChecklistItem => ({
   id: 'x',
+  titulo: 'x',
   pregunta: '¿Ya?',
   domain: 'planta',
   phase: 'antes',
@@ -123,10 +124,12 @@ describe('qué se avisa y qué no', () => {
 
 describe('el aviso al grupo de operaciones', () => {
   const contexto = {
-    empresa: 'INFRAMAQ',
-    fecha: '2026-09-10',
+    empresa: 'Globofast',
+    fecha: '2026-09-13',
     horaArranque: '04:00',
-    grupoEscuchado: 'inframaq · admin',
+    cliente: 'Minera XYZ',
+    cubos: 91,
+    grupoEscuchado: 'INFRAMAQ admin',
   };
 
   /**
@@ -144,7 +147,13 @@ describe('el aviso al grupo de operaciones', () => {
     expect(construirAvisoChecklist(e, contexto)).toBeNull();
   });
 
-  it('el aviso dice qué falta, cuánto tiempo queda y que es un espejo', () => {
+  /**
+   * LO LEE UNA PERSONA EN EL CELULAR. La primera versión (12/09/2026) decía
+   * «[ESPEJO]», «globofas-s8k» y un JID de veinte dígitos; José: «no me dice
+   * mucho, no está formateado, todo desordenado». Este test fija lo que tiene
+   * que decir y, sobre todo, lo que NO puede decir.
+   */
+  it('dice de quién y cuándo es la producción, qué falta y desde cuándo', () => {
     const e = evaluarChecklist({
       items: CHECKLIST_PRODUCCION,
       arranqueMs: arranque('04:00'),
@@ -154,14 +163,46 @@ describe('el aviso al grupo de operaciones', () => {
 
     const aviso = construirAvisoChecklist(e, contexto)!;
 
-    expect(aviso).toContain('[ESPEJO]');
-    expect(aviso).toContain('INFRAMAQ · 2026-09-10 · inicio 04:00 (arranca en 4 h)');
-    expect(aviso).toContain('¿Ya está la cuadrilla y el tren?');
-    expect(aviso).toContain('¿Ya compraron petróleo y agua?');
-    // Lo confirmado no se vuelve a preguntar.
+    expect(aviso).toContain('⚠️ *Producción sin coordinar — Globofast*');
+    expect(aviso).toContain('domingo 13/09 a las 04:00 · Minera XYZ · 91 m³');
+    expect(aviso).toContain('Arranca en 4 h');
+    expect(aviso).toContain('Nadie confirmó en *INFRAMAQ admin*:');
+    // Cuadrilla vence 8 h antes y estamos a 4 h: lleva 4 h vencido.
+    expect(aviso).toContain('• ¿Ya está la cuadrilla y el tren? — _vencido hace 4 h_');
+    expect(aviso).toContain('• ¿Ya compraron petróleo y agua? — _vencido hace 2 h_');
+    // Lo confirmado no se vuelve a preguntar, y se nombra en palabras de obra.
     expect(aviso).not.toContain('¿Ya avisaron a planta');
-    expect(aviso).toContain('Ya confirmado: aviso-planta');
-    expect(aviso).toContain('No se envió a nadie más.');
+    expect(aviso).toContain('Ya confirmado: aviso a planta ✔');
+    expect(aviso).toContain('Esto es lo que le habría preguntado al grupo.');
+  });
+
+  it('no filtra identificadores del sistema', () => {
+    const e = evaluarChecklist({
+      items: CHECKLIST_PRODUCCION,
+      arranqueMs: arranque('04:00'),
+      ahoraMs: arranque('00:00'),
+      mensajes: [],
+    });
+
+    const aviso = construirAvisoChecklist(e, contexto)!;
+
+    for (const prohibido of ['[ESPEJO]', '@g.us', 'globofas-s8k', 'aviso-planta', 'Escuchando:']) {
+      expect(aviso).not.toContain(prohibido);
+    }
+  });
+
+  it('sin cliente ni cubos, la línea de detalle no deja huecos', () => {
+    const e = evaluarChecklist({
+      items: [item({ pregunta: '¿Ya?' })],
+      arranqueMs: arranque('04:00'),
+      ahoraMs: arranque('00:00'),
+      mensajes: [],
+    });
+
+    const aviso = construirAvisoChecklist(e, { ...contexto, cliente: undefined, cubos: undefined })!;
+
+    expect(aviso).toContain('domingo 13/09 a las 04:00\n');
+    expect(aviso).not.toContain('· \n');
   });
 
   it('si ya arrancó, lo dice en pasado', () => {
@@ -172,6 +213,44 @@ describe('el aviso al grupo de operaciones', () => {
       mensajes: [],
     });
 
-    expect(construirAvisoChecklist(e, contexto)).toContain('arrancó hace 1 h');
+    expect(construirAvisoChecklist(e, contexto)).toContain('Arrancó hace 1 h');
+  });
+});
+
+/**
+ * LA FIRMA NO ES EL TEXTO. El 12/09/2026 el mismo aviso salió a las 16:20 y a
+ * las 16:40 porque el texto lleva «arranca en 11 h 20 min» y cambia cada
+ * minuto: dos avisos iguales nunca eran «iguales». Lo que define un aviso es
+ * QUÉ falta para QUÉ pedido.
+ */
+describe('la firma del aviso', () => {
+  /** Evalúa a `horasAntes` horas del arranque. */
+  const evaluar = (horasAntes: number, mensajes: string[] = []) =>
+    evaluarChecklist({
+      items: CHECKLIST_PRODUCCION,
+      arranqueMs: arranque('04:00'),
+      ahoraMs: arranque('04:00') - horasAntes * 3_600_000,
+      mensajes,
+    });
+
+  it('no cambia con el paso del tiempo si falta lo mismo', () => {
+    // A 12 h y a 11 h 40: mismo pendiente (aviso a planta), distinto «arranca
+    // en». Antes eran dos avisos; ahora es uno.
+    expect(firmaAviso('p1', evaluar(12))).toBe(firmaAviso('p1', evaluar(11.67)));
+  });
+
+  it('cambia cuando vence otro ítem', () => {
+    // A 8 h también vence cuadrilla: hay algo nuevo que decir.
+    expect(firmaAviso('p1', evaluar(11.67))).not.toBe(firmaAviso('p1', evaluar(8)));
+  });
+
+  it('cambia cuando se confirma uno', () => {
+    expect(firmaAviso('p1', evaluar(8))).not.toBe(
+      firmaAviso('p1', evaluar(8, ['ya avisé a planta']))
+    );
+  });
+
+  it('es por pedido', () => {
+    expect(firmaAviso('p1', evaluar(12))).not.toBe(firmaAviso('p2', evaluar(12)));
   });
 });

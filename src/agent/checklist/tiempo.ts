@@ -32,3 +32,20 @@ export const instanteArranque = (fecha: string, hora: string): number | null => 
   const ms = new Date(`${fecha}T${hora}:00.000-05:00`).getTime();
   return Number.isFinite(ms) ? ms : null;
 };
+
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+/**
+ * «domingo 13/09» a partir de `YYYY-MM-DD`. Es lo que la gente lee: nadie en un
+ * grupo de obra piensa en «2026-09-13». Sin `Intl` a propósito: el día de la
+ * semana de una fecha de calendario no depende de la zona, y así no hay nada que
+ * pueda variar entre la máquina de desarrollo y la mini.
+ */
+export const fechaLegible = (fecha: string): string => {
+  const [y, m, d] = String(fecha || '').split('-').map(Number);
+  if (!y || !m || !d) return fecha;
+  const dia = DIAS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  const dd = String(d).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  return `${dia} ${dd}/${mm}`;
+};

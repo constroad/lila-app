@@ -1,7 +1,13 @@
 import logger from '../../utils/logger.js';
 import { getCompanyModel } from '../../database/models.js';
 import { extractInboundText, type BaileysMessageContent } from '../runtime/message-text.js';
-import { COMPANY_PILOTO, debeEscuchar, resolverAlcance, type AlcanceAgente } from './alcance.js';
+import {
+  COMPANY_PILOTO,
+  debeEscuchar,
+  resolverAlcance,
+  type AlcanceAgente,
+  type GrupoResuelto,
+} from './alcance.js';
 import { normalizarTexto } from './checklist.js';
 import { recordarMensaje } from './almacen.js';
 
@@ -134,19 +140,22 @@ export const senderPiloto = async (): Promise<string> => {
  * cura es que el grafo estático no lo toque. Acá adentro se evalúa recién cuando
  * de verdad hay que resolver un nombre.
  */
-export const jidPorNombre = async (nombre: string): Promise<string> => {
+export const jidPorNombre = async (nombre: string): Promise<GrupoResuelto> => {
+  const nada: GrupoResuelto = { jid: '', nombre: '' };
   const sender = await senderPiloto();
-  if (!sender) return '';
+  if (!sender) return nada;
 
   const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
   const grupos = WhatsAppDirectService.listGroups(sender) as Array<{ id?: string; name?: string }>;
   const buscado = normalizarTexto(nombre);
   const encontrado = grupos.find((g) => normalizarTexto(String(g?.name || '')) === buscado);
-  if (encontrado?.id) return String(encontrado.id);
+  // Se devuelve el nombre REAL del grupo, no el de la constante: es el que la
+  // gente ve en WhatsApp y el que se muestra en los avisos.
+  if (encontrado?.id) return { jid: String(encontrado.id), nombre: String(encontrado.name || nombre) };
 
   logger.warn(
     `[agente] no encontré el grupo "${nombre}" en la sesión ${sender}. Disponibles: ` +
       grupos.map((g) => `"${g?.name}"`).join(', ')
   );
-  return '';
+  return nada;
 };

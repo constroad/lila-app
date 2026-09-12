@@ -90,6 +90,13 @@ export const grupoDestino = (): string => GROUP_ERRORS_TRACKING;
 export interface AlcanceAgente {
   /** JID del grupo que se escucha, resuelto desde la empresa piloto. */
   grupoEscuchado: string;
+  /** Nombre del grupo tal como se ve en WhatsApp («INFRAMAQ admin»): para los avisos. */
+  nombreGrupo: string;
+}
+
+export interface GrupoResuelto {
+  jid: string;
+  nombre: string;
 }
 
 /**
@@ -135,16 +142,21 @@ export const destinoPermitido = (): string | null => {
  * lo es nunca.
  */
 export const resolverAlcance = async (
-  resolverJid: (nombre: string) => Promise<string>
+  resolverGrupo: (nombre: string) => Promise<GrupoResuelto | string>
 ): Promise<AlcanceAgente> => {
+  const vacio: AlcanceAgente = { grupoEscuchado: '', nombreGrupo: '' };
   try {
     const configurado = String(GRUPO_ESCUCHA_PILOTO || '').trim();
-    if (!configurado) return { grupoEscuchado: '' };
-    if (esJidDeGrupo(configurado)) return { grupoEscuchado: configurado };
+    if (!configurado) return vacio;
+    // Un JID no tiene nombre a mano: se muestra tal cual antes que inventar uno.
+    if (esJidDeGrupo(configurado)) return { grupoEscuchado: configurado, nombreGrupo: configurado };
 
-    const jid = String(await resolverJid(configurado)).trim();
-    return { grupoEscuchado: esJidDeGrupo(jid) ? jid : '' };
+    const resuelto = await resolverGrupo(configurado);
+    const jid = String(typeof resuelto === 'string' ? resuelto : resuelto?.jid || '').trim();
+    if (!esJidDeGrupo(jid)) return vacio;
+    const nombre = String(typeof resuelto === 'string' ? '' : resuelto?.nombre || '').trim();
+    return { grupoEscuchado: jid, nombreGrupo: nombre || configurado };
   } catch {
-    return { grupoEscuchado: '' };
+    return vacio;
   }
 };

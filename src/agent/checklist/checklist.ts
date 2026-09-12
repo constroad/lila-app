@@ -32,6 +32,8 @@ export type ChecklistDomain = 'planta' | 'obra';
 
 export interface ChecklistItem {
   id: string;
+  /** Cómo se lo nombra en dos palabras («aviso a planta»), para listas y resúmenes. */
+  titulo: string;
   /** Cómo se pregunta en el grupo. */
   pregunta: string;
   domain: ChecklistDomain;
@@ -53,6 +55,7 @@ export interface ChecklistItem {
 export const CHECKLIST_PRODUCCION: ChecklistItem[] = [
   {
     id: 'aviso-planta',
+    titulo: 'aviso a planta',
     pregunta: '¿Ya avisaron a planta que hay producción?',
     domain: 'planta',
     phase: 'antes',
@@ -61,6 +64,7 @@ export const CHECKLIST_PRODUCCION: ChecklistItem[] = [
   },
   {
     id: 'cuadrilla',
+    titulo: 'cuadrilla y tren',
     pregunta: '¿Ya está la cuadrilla y el tren?',
     domain: 'obra',
     phase: 'antes',
@@ -69,6 +73,7 @@ export const CHECKLIST_PRODUCCION: ChecklistItem[] = [
   },
   {
     id: 'combustible',
+    titulo: 'petróleo y agua',
     pregunta: '¿Ya compraron petróleo y agua?',
     domain: 'planta',
     phase: 'antes',

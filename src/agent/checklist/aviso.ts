@@ -1,36 +1,58 @@
-import type { EvaluacionChecklist } from './checklist.js';
+import type { EvaluacionChecklist, EstadoItem } from './checklist.js';
+import { fechaLegible } from './tiempo.js';
 
 /**
  * El texto del aviso que va al grupo de operaciones.
  *
- * MODO ESPEJO (fase 1). Todo esto sale al grupo de error-tracking, NUNCA al
- * grupo que escucha. La razón no es técnica: un agente que se equivoca delante
- * de la gente que trabaja pierde la confianza y lo silencian, y con eso se pierde
- * el proyecto entero. Primero se mide cuántas veces habría acertado; después se
- * le da voz.
+ * LO LEE UNA PERSONA EN EL CELULAR, y eso decide todo lo de abajo. La primera
+ * versión (12/09/2026) decía «[ESPEJO]», «globofas-s8k», un JID de veinte
+ * dígitos convertido en link, y un pie de dos renglones explicando qué era el
+ * modo espejo. José: «no me dice mucho, no está formateado, todo desordenado».
+ * Tenía razón: era un volcado de estado, no un mensaje.
  *
- * POR ESO EL AVISO DICE QUÉ HABRÍA HECHO, no lo que hizo: se lee como una
- * propuesta a revisar, no como una notificación ya enviada.
+ * Qué tiene que responder, en este orden y de un vistazo:
+ *   1. de quién y cuándo es la producción («Globofast, domingo 04:00, 91 m³»);
+ *   2. qué falta, en palabras de obra, y desde cuándo está vencido;
+ *   3. qué haría el agente con eso.
+ *
+ * Formato de WhatsApp: `*negrita*` y `_cursiva_`. Sin identificadores del
+ * sistema — ni slugs, ni JIDs, ni nombres de fase. El nombre de la empresa y el
+ * del grupo llegan resueltos; acá no se traduce nada.
+ *
+ * MODO ESPEJO (fase 1): todo esto sale al grupo de error-tracking, NUNCA al grupo
+ * que escucha. Un agente que se equivoca delante de la gente que trabaja pierde
+ * la confianza y lo silencian. Primero se mide cuántas veces habría acertado;
+ * después se le da voz. Por eso el aviso cierra diciendo qué HABRÍA hecho.
  */
 
-const horaLegible = (minutos: number): string => {
-  if (minutos < 0) return `hace ${horaLegible(-minutos)}`;
-  if (minutos < 60) return `${minutos} min`;
-  const h = Math.floor(minutos / 60);
-  const m = minutos % 60;
+const duracion = (minutos: number): string => {
+  const abs = Math.abs(minutos);
+  if (abs < 60) return `${abs} min`;
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 };
 
 export interface ContextoAviso {
-  /** Empresa dueña del día de producción, como se la nombra en el grupo. */
+  /** Nombre de la empresa como lo dice la gente («Globofast»), no el slug. */
   empresa: string;
   /** Día de producción `YYYY-MM-DD` (calendario peruano). */
   fecha: string;
   /** Hora de arranque `HH:mm`, tal como se declaró. */
   horaArranque: string;
-  /** Nombre del grupo que se está escuchando, para que se entienda de dónde sale. */
+  /** Cliente del pedido, si se sabe. */
+  cliente?: string;
+  /** Metros cúbicos del pedido, si se sabe. */
+  cubos?: number;
+  /** Nombre del grupo que se está escuchando («INFRAMAQ admin»), no su JID. */
   grupoEscuchado: string;
 }
+
+/** «vencido hace 40 min» — cuánto lleva sin confirmarse desde que dejó de haber tiempo. */
+const vencidoHace = (estado: EstadoItem): string => {
+  const minutos = estado.item.venceMinutosAntes - estado.minutosParaArranque;
+  return minutos <= 0 ? 'recién vencido' : `vencido hace ${duracion(minutos)}`;
+};
 
 /**
  * `null` cuando no hay nada vencido: **el silencio es la respuesta correcta**.
@@ -43,31 +65,46 @@ export const construirAvisoChecklist = (
   if (evaluacion.pendientes.length === 0) return null;
 
   const faltan = evaluacion.minutosParaArranque;
-  const cuando =
-    faltan >= 0
-      ? `arranca en ${horaLegible(faltan)}`
-      : `arrancó ${horaLegible(faltan)}`;
+  const cuando = faltan >= 0 ? `Arranca en ${duracion(faltan)}` : `Arrancó hace ${duracion(faltan)}`;
+
+  const detalle = [
+    `${fechaLegible(contexto.fecha)} a las ${contexto.horaArranque}`,
+    contexto.cliente?.trim(),
+    contexto.cubos ? `${contexto.cubos} m³` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const lineas = [
-    '🔎 [ESPEJO] Checklist de producción sin confirmar',
-    `Empresa: ${contexto.empresa} · ${contexto.fecha} · inicio ${contexto.horaArranque} (${cuando})`,
+    `⚠️ *Producción sin coordinar — ${contexto.empresa}*`,
+    detalle,
+    cuando,
     '',
-    'Sin confirmar en el grupo:',
-    ...evaluacion.pendientes.map((p) => `  ❔ ${p.item.pregunta}`),
+    `Nadie confirmó en *${contexto.grupoEscuchado}*:`,
+    ...evaluacion.pendientes.map((p) => `• ${p.item.pregunta} — _${vencidoHace(p)}_`),
   ];
 
   if (evaluacion.resueltos.length > 0) {
-    lineas.push(
-      '',
-      `Ya confirmado: ${evaluacion.resueltos.map((r) => r.item.id).join(', ')}`
-    );
+    lineas.push('', `Ya confirmado: ${evaluacion.resueltos.map((r) => r.item.titulo).join(', ')} ✔`);
   }
 
-  lineas.push(
-    '',
-    `Escuchando: ${contexto.grupoEscuchado}`,
-    'En modo espejo: esto se habría preguntado en el grupo. No se envió a nadie más.'
-  );
+  lineas.push('', 'Esto es lo que le habría preguntado al grupo. Por ahora solo te lo muestro acá.');
 
   return lineas.join('\n');
 };
+
+/**
+ * LA FIRMA DEL AVISO, para no repetirlo.
+ *
+ * NO es el hash del texto. El texto lleva «arranca en 11 h 20 min», que cambia
+ * cada minuto, así que dos avisos iguales nunca eran «iguales»: el 12/09 salió
+ * el mismo aviso a las 16:20 y a las 16:40, y habría seguido cada 20 minutos
+ * hasta agotar el tope diario. Lo que define un aviso es QUÉ falta para QUÉ
+ * pedido; solo cuando eso cambia —vence otro ítem, o se confirma uno— hay algo
+ * nuevo que decir.
+ */
+export const firmaAviso = (pedidoId: string, evaluacion: EvaluacionChecklist): string =>
+  `${pedidoId}|${evaluacion.pendientes
+    .map((p) => p.item.id)
+    .sort()
+    .join(',')}`;
