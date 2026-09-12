@@ -833,6 +833,15 @@ export function structureDataForReportType(reportType: string, rawData: Aggregat
           entregadoPor: client?.name || projectData.proyecto.contratista || '',
         },
       };
+    // SOL-IMP: la ENTIDAD que solicita es el cliente. La fecha tampoco se
+    // siembra aca, por lo mismo que RCP-CAM.
+    case 'SOL-IMP':
+      return {
+        ...projectData,
+        solicitud: {
+          entidad: client?.name || '',
+        },
+      };
     default:
       return {
         ...projectData,

@@ -209,7 +209,24 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - `POST /api/pdf/plant-dispatch-settlement` genera el reporte de producción por planta.
   Requiere JWT tenant, carga branding empresarial y entrega PDF con código, periodo,
   obras y totales acumulados.
-- Registry de schemas: `src/schemas/documents/registry.ts` (20+ codigos: VAL-SRV, ACT-CNF, CONT-SRV, LIQ-SRV, control-imprimacion, control-pista, informe-area-adicional, medidas IAA, etc.).
+- Registry de schemas: `src/schemas/documents/registry.ts` (26 codigos: VAL-SRV, ACT-CNF, CONT-SRV, LIQ-SRV, control-imprimacion, control-pista, informe-area-adicional, medidas IAA, etc.).
+- **SOL-IMP y APR-ADI (10/09/2026) son los dos unicos documentos que firma EL CLIENTE.**
+  `SOL-IMP` (`solicitud-imprimacion`) es la solicitud de imprimar con emulsion sobre base:
+  registra la DECISION de cambiar el material y NO trae ningun calculo de control — la
+  tasa real se mide despues en `CTL-IMP`, contra el material que este papel autorizo.
+  `APR-ADI` (`aprobacion-adicional`) aprueba el adicional y **referencia** su sustento por
+  tipo/numero/fecha en vez de repetirlo: el cuadro contratado vs ejecutado ya vive en
+  `REC-EXC` (`metradoContrato`/`metradoEjecutado`/`excedente`), y tipear el metrado dos
+  veces da dos papeles con numeros distintos. Ninguno se solapa con `VAL-SRV`, que cobra
+  lo ejecutado sin compararlo contra el contrato.
+- **El renderer NO evalua las formulas del schema: imprime lo guardado.** Los `computed`
+  de columna y los `computedFields` los aplica el CLIENTE (`applyComputedFields` del
+  canvas de Portal, o el motor puro `src/lib/documents/actasCliente.ts` para el flujo
+  movil). Un schema nuevo con derivados tiene que asegurarse de que alguien los persista,
+  o el papel sale con ceros creibles.
+- `report-data-aggregator.service.ts` siembra `solicitud.entidad` de `SOL-IMP` con el
+  cliente del servicio. La FECHA no se siembra desde el server en ningun tipo: seria
+  medianoche UTC = dia anterior en Peru; la pone Portal con la fecha de Lima.
 - El schema `INF-ACT` (Informe de Actividades Realizadas) usa `actividades` como tabla editable y `registroFotografico.fotos[]` como panel fotografico. Portal puede enviar cada foto/PDF con metadata `activityId`, `activityLabel`, `activityIndex` y `activitySourceId`; `report-html-renderer.service.ts` agrupa esa seccion por actividad y omite actividades sin fotos. Los PDFs/documentos del panel se renderizan como tiles enlazados dentro de la tabla fotografica. Las fechas `date` recibidas como `YYYY-MM-DD` se formatean preservando el dia de calendario, sin parsearlas como UTC para evitar desfases por timezone.
 - **Los schemas mandan sobre la paginación del PDF (12/08/2026).** `pageBreakBefore`
   en una seccion la hace ARRANCAR hoja propia, entre o no entre el resto. Dos bugs de
