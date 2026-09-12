@@ -21,8 +21,29 @@ import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
  * super-admin cuando exista.
  */
 
-/** La empresa cuyo grupo se escucha en la fase de espejo. */
+/**
+ * La empresa cuyo GRUPO se escucha y cuya SESIÓN manda: inframaq, que opera la
+ * planta. Es la dueña del grupo «INFRAMAQ admin» y del número 51949376824.
+ */
 export const COMPANY_PILOTO = 'inframaq-iax';
+
+/**
+ * LAS EMPRESAS CUYOS PEDIDOS SE VIGILAN, que NO es la misma lista.
+ *
+ * Esto se pagó el 12/09/2026: se habló todo el sábado en INFRAMAQ admin de una
+ * producción para el domingo a las 4 am, y el agente no dijo nada. El pedido
+ * existía, con su hora, pendiente — pero era de GLOBOFAS. El detector solo
+ * miraba pedidos de `COMPANY_PILOTO`, y así estaba ciego al caso exacto que
+ * motivó el proyecto. José lo había dicho el primer día: «el pedido se acaba de
+ * crear en globofast». Quien crea el pedido y quien opera la planta son empresas
+ * distintas, y el chat de coordinación vive en la del operador.
+ *
+ * Son las empresas que producen en la planta de inframaq. Constroad está porque
+ * su recordatorio de coordinación ya apunta al grupo de planta de inframaq.
+ * Se muda a la pantalla de super-admin cuando exista; lo correcto a largo plazo
+ * es derivarla del vínculo pedido → sede → proveedor de planta.
+ */
+export const EMPRESAS_CON_PEDIDOS = ['globofas-s8k', 'constroad', 'inframaq-iax'] as const;
 
 /**
  * EL GRUPO QUE SE ESCUCHA. Nombre exacto del grupo, o su JID (`…@g.us`).

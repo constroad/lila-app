@@ -2,9 +2,9 @@ import { createHash } from 'crypto';
 import logger from '../../utils/logger.js';
 import { getOrderModel } from '../../database/models.js';
 import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js';
-import { COMPANY_PILOTO, destinoPermitido } from './alcance.js';
+import { COMPANY_PILOTO, EMPRESAS_CON_PEDIDOS, destinoPermitido } from './alcance.js';
 import { alcanceVigente } from './observador.js';
-import { mensajesDesde } from './almacen.js';
+import { mensajesDesde, observados } from './almacen.js';
 import { filtrarMensajes } from './mensajes.js';
 import { CHECKLIST_PRODUCCION, evaluarChecklist } from './checklist.js';
 import { construirAvisoChecklist } from './aviso.js';
@@ -39,6 +39,8 @@ const hash = (texto: string) => createHash('sha1').update(texto).digest('hex');
 
 export interface PedidoConArranque {
   id: string;
+  /** De quién es el pedido. No es la empresa que escucha: ver `EMPRESAS_CON_PEDIDOS`. */
+  companyId: string;
   fecha: string;
   hora: string;
   arranqueMs: number;
@@ -46,7 +48,9 @@ export interface PedidoConArranque {
 }
 
 /**
- * Pedidos de la empresa piloto cuyo arranque está por venir (o acaba de pasar).
+ * Pedidos de las empresas que producen en la planta, con arranque por venir (o
+ * recién pasado). NO solo los de la empresa piloto: el 12/09 el pedido del
+ * domingo era de globofas y el detector, mirando inframaq, no vio nada.
  *
  * Solo los que tienen `horaInicio`: sin ella no se puede decir «faltan 4 h», y
  * un pedido viejo sin hora no debe generar avisos raros.
@@ -57,12 +61,12 @@ export const pedidosConArranque = async (ahoraMs: number): Promise<PedidoConArra
   const hasta = new Date(ahoraMs + 48 * 60 * 60 * 1000);
 
   const docs = (await OrderModel.find({
-    companyId: COMPANY_PILOTO,
+    companyId: { $in: [...EMPRESAS_CON_PEDIDOS] },
     fechaProgramacion: { $gte: desde, $lte: hasta },
     horaInicio: { $exists: true, $ne: '' },
     status: { $nin: ['eliminado', 'rechazado'] },
   })
-    .select('fechaProgramacion horaInicio createdAt')
+    .select('companyId fechaProgramacion horaInicio createdAt')
     .lean()) as Array<Record<string, unknown>>;
 
   const pedidos: PedidoConArranque[] = [];
@@ -76,6 +80,7 @@ export const pedidosConArranque = async (ahoraMs: number): Promise<PedidoConArra
 
     pedidos.push({
       id: String(doc._id),
+      companyId: String(doc.companyId || ''),
       fecha,
       hora,
       arranqueMs,
@@ -98,12 +103,20 @@ export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => 
 
   const pedidos = await pedidosConArranque(ahoraMs);
   let enviados = 0;
+  // UNA línea por corrida, siempre. Sin esto «¿está escuchando?» no se puede
+  // contestar: el 12/09 el agente llevaba 2 días sin loguear nada y no había
+  // forma de distinguir «no hay nada que avisar» de «no ve nada».
+  logger.info(
+    `[agente] detección: ${pedidos.length} pedido(s) con arranque, ` +
+      `${observados(alcance.grupoEscuchado)} mensaje(s) observados del grupo, ` +
+      `ventana ${pedidos.map((p) => `${p.companyId} ${p.fecha} ${p.hora}`).join(' | ') || '—'}`
+  );
 
   for (const pedido of pedidos) {
     // Solo interesa lo que se dijo DESDE que el pedido existe: un «cuadrilla
     // lista» anterior a que se cargara el pedido hablaba de otro día.
-    const observados = mensajesDesde(alcance.grupoEscuchado, pedido.creadoMs);
-    const utiles = filtrarMensajes(observados);
+    const delGrupo = mensajesDesde(alcance.grupoEscuchado, pedido.creadoMs);
+    const utiles = filtrarMensajes(delGrupo);
 
     const evaluacion = evaluarChecklist({
       items: CHECKLIST_PRODUCCION,
@@ -113,7 +126,7 @@ export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => 
     });
 
     const texto = construirAvisoChecklist(evaluacion, {
-      empresa: COMPANY_PILOTO,
+      empresa: pedido.companyId,
       fecha: pedido.fecha,
       horaArranque: pedido.hora,
       grupoEscuchado: alcance.grupoEscuchado,

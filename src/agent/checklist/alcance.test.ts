@@ -1,4 +1,6 @@
 import {
+  COMPANY_PILOTO,
+  EMPRESAS_CON_PEDIDOS,
   GRUPO_ESCUCHA_PILOTO,
   debeEscuchar,
   esJidDeGrupo,
@@ -68,6 +70,19 @@ describe('de dónde sale cada grupo', () => {
    */
   it('la constante coincide con el nombre real del grupo, sin importar capitalización', () => {
     expect(normalizarTexto(GRUPO_ESCUCHA_PILOTO)).toBe(normalizarTexto('INFRAMAQ admin'));
+  });
+
+  /**
+   * QUIÉN CREA EL PEDIDO ≠ QUIÉN OPERA LA PLANTA. El 12/09/2026 se habló todo el
+   * sábado de una producción para el domingo 4 am en INFRAMAQ admin y el agente
+   * calló: el pedido era de globofas y el detector solo miraba inframaq. Este
+   * test fija que la lista de pedidos vigilados incluya a quienes producen en la
+   * planta, no solo a la dueña del grupo.
+   */
+  it('vigila los pedidos de quienes producen en la planta, no solo de la dueña del grupo', () => {
+    expect(EMPRESAS_CON_PEDIDOS).toContain('globofas-s8k');
+    expect(EMPRESAS_CON_PEDIDOS).toContain('constroad');
+    expect(EMPRESAS_CON_PEDIDOS).toContain(COMPANY_PILOTO);
   });
 
   /** El destino es NUESTRO grupo de operaciones: constante, no config de tenant. */
