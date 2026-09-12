@@ -72,6 +72,14 @@ export const EMPRESAS_CON_PEDIDOS = ['globofas-s8k', 'constroad', 'inframaq-iax'
  */
 export const GRUPO_ESCUCHA_PILOTO = 'Inframaq Admin';
 
+/**
+ * EL GRUPO DE PLANTA, a donde va el AVISO de producción (José, 12/09/2026: «el
+ * mensaje de aviso debe llegar a inframaq planta pero la revisión de checklist
+ * debe llegar a inframaq admin»). Verificado en el store: 120363288945205546@g.us
+ * → «Inframaq Planta». Solo se le escribe con aprobación humana: ver `emisor`.
+ */
+export const GRUPO_PLANTA_PILOTO = 'Inframaq Planta';
+
 /** ¿Es un JID de grupo y no un nombre? */
 export const esJidDeGrupo = (valor: string): boolean =>
   String(valor || '').trim().endsWith('@g.us');
@@ -92,6 +100,9 @@ export interface AlcanceAgente {
   grupoEscuchado: string;
   /** Nombre del grupo tal como se ve en WhatsApp («INFRAMAQ admin»): para los avisos. */
   nombreGrupo: string;
+  /** JID del grupo de planta, destino del aviso de producción (con aprobación). */
+  grupoPlanta: string;
+  nombreGrupoPlanta: string;
 }
 
 export interface GrupoResuelto {
@@ -113,9 +124,14 @@ export const debeEscuchar = (jid: string, alcance: AlcanceAgente): boolean => {
 };
 
 /**
- * ¿Se puede mandar a este destino? Solo el grupo de operaciones, y solo si es un
- * grupo: un `@s.whatsapp.net` acá sería un mensaje a una persona, que es
- * exactamente lo que José pidió que no pasara.
+ * ¿Se puede mandar a este destino SIN que nadie lo apruebe? Solo el grupo de
+ * operaciones, y solo si es un grupo: un `@s.whatsapp.net` acá sería un mensaje
+ * a una persona, que es exactamente lo que José pidió que no pasara.
+ *
+ * Los grupos de la empresa (admin y planta) NO pasan por acá: a esos se les
+ * escribe únicamente con una aprobación humana, y el único lugar que lo hace es
+ * `emisor.enviarAprobado`. Dos niveles, y el segundo tiene una persona en el
+ * medio.
  */
 export const puedeEnviarA = (jid: string): boolean => {
   if (!AGENTE_CHECKLIST_ACTIVO) return false;
@@ -123,6 +139,14 @@ export const puedeEnviarA = (jid: string): boolean => {
   if (!pedido.endsWith('@g.us')) return false;
   return pedido === grupoDestino();
 };
+
+/**
+ * Los destinos que EXIGEN aprobación: los dos grupos de la empresa piloto. Es
+ * una lista cerrada derivada del alcance resuelto — no se puede aprobar un
+ * envío a un grupo que no sea uno de estos dos.
+ */
+export const destinosConAprobacion = (alcance: AlcanceAgente): string[] =>
+  [alcance.grupoEscuchado, alcance.grupoPlanta].filter((jid) => esJidDeGrupo(jid));
 
 /**
  * El destino, o `null` si no se puede enviar. Se usa así —y no leyendo la
@@ -144,18 +168,35 @@ export const destinoPermitido = (): string | null => {
 export const resolverAlcance = async (
   resolverGrupo: (nombre: string) => Promise<GrupoResuelto | string>
 ): Promise<AlcanceAgente> => {
-  const vacio: AlcanceAgente = { grupoEscuchado: '', nombreGrupo: '' };
-  try {
-    const configurado = String(GRUPO_ESCUCHA_PILOTO || '').trim();
-    if (!configurado) return vacio;
+  const vacio: AlcanceAgente = {
+    grupoEscuchado: '',
+    nombreGrupo: '',
+    grupoPlanta: '',
+    nombreGrupoPlanta: '',
+  };
+  const resolver = async (configurado: string): Promise<GrupoResuelto> => {
+    const nada = { jid: '', nombre: '' };
+    if (!configurado) return nada;
     // Un JID no tiene nombre a mano: se muestra tal cual antes que inventar uno.
-    if (esJidDeGrupo(configurado)) return { grupoEscuchado: configurado, nombreGrupo: configurado };
-
+    if (esJidDeGrupo(configurado)) return { jid: configurado, nombre: configurado };
     const resuelto = await resolverGrupo(configurado);
     const jid = String(typeof resuelto === 'string' ? resuelto : resuelto?.jid || '').trim();
-    if (!esJidDeGrupo(jid)) return vacio;
+    if (!esJidDeGrupo(jid)) return nada;
     const nombre = String(typeof resuelto === 'string' ? '' : resuelto?.nombre || '').trim();
-    return { grupoEscuchado: jid, nombreGrupo: nombre || configurado };
+    return { jid, nombre: nombre || configurado };
+  };
+  try {
+    const admin = await resolver(String(GRUPO_ESCUCHA_PILOTO || '').trim());
+    // Sin el grupo que se escucha no hay agente. Sin el de planta, sí: solo se
+    // pierde el aviso de producción, y el checklist sigue.
+    if (!admin.jid) return vacio;
+    const planta = await resolver(String(GRUPO_PLANTA_PILOTO || '').trim());
+    return {
+      grupoEscuchado: admin.jid,
+      nombreGrupo: admin.nombre,
+      grupoPlanta: planta.jid,
+      nombreGrupoPlanta: planta.nombre,
+    };
   } catch {
     return vacio;
   }

@@ -1,4 +1,4 @@
-import type { EvaluacionChecklist, EstadoItem } from './checklist.js';
+import type { EvaluacionChecklist, EstadoItem, ChecklistDomain } from './checklist.js';
 import { fechaLegible } from './tiempo.js';
 
 /**
@@ -48,11 +48,6 @@ export interface ContextoAviso {
   grupoEscuchado: string;
 }
 
-/** «vencido hace 40 min» — cuánto lleva sin confirmarse desde que dejó de haber tiempo. */
-const vencidoHace = (estado: EstadoItem): string => {
-  const minutos = estado.item.venceMinutosAntes - estado.minutosParaArranque;
-  return minutos <= 0 ? 'recién vencido' : `vencido hace ${duracion(minutos)}`;
-};
 
 /**
  * `null` cuando no hay nada vencido: **el silencio es la respuesta correcta**.
@@ -67,7 +62,30 @@ export const construirAvisoChecklist = (
   const faltan = evaluacion.minutosParaArranque;
   const cuando = faltan >= 0 ? `Arranca en ${duracion(faltan)}` : `Arrancó hace ${duracion(faltan)}`;
 
-  const detalle = [
+  const lineas = [
+    `📋 *Checklist de producción — ${contexto.empresa}*`,
+    detalleProduccion(contexto),
+    cuando,
+  ];
+
+  // Por dominio, porque lo lee gente distinta: planta primero, campo después.
+  const TITULO: Record<ChecklistDomain, string> = { planta: 'Planta', obra: 'Campo' };
+  for (const dominio of ['planta', 'obra'] as ChecklistDomain[]) {
+    const pendientes = evaluacion.pendientes.filter((p) => p.item.domain === dominio);
+    if (pendientes.length === 0) continue;
+    lineas.push('', `*${TITULO[dominio]}* — sin confirmar:`);
+    lineas.push(...pendientes.map((p) => `• ${p.item.pregunta}`));
+  }
+
+  if (evaluacion.resueltos.length > 0) {
+    lineas.push('', `Ya confirmado: ${evaluacion.resueltos.map((r) => r.item.titulo).join(', ')} ✔`);
+  }
+
+  return lineas.join('\n');
+};
+
+const detalleProduccion = (contexto: ContextoAviso): string =>
+  [
     `${fechaLegible(contexto.fecha)} a las ${contexto.horaArranque}`,
     contexto.cliente?.trim(),
     contexto.cubos ? `${contexto.cubos} m³` : undefined,
@@ -75,23 +93,30 @@ export const construirAvisoChecklist = (
     .filter(Boolean)
     .join(' · ');
 
-  const lineas = [
-    `⚠️ *Producción sin coordinar — ${contexto.empresa}*`,
-    detalle,
-    cuando,
+/**
+ * EL AVISO A PLANTA: que hay producción, de quién, cuándo y cuánto. Es el hecho
+ * que faltó el 07/09 —«nadie avisó a planta que había producción a las 4 am»—
+ * y va al grupo de planta, no al de administración (José, 12/09/2026).
+ */
+export const construirAvisoProduccion = (contexto: ContextoAviso): string =>
+  [
+    `📢 *Producción programada — ${contexto.empresa}*`,
+    detalleProduccion(contexto),
     '',
-    `Nadie confirmó en *${contexto.grupoEscuchado}*:`,
-    ...evaluacion.pendientes.map((p) => `• ${p.item.pregunta} — _${vencidoHace(p)}_`),
-  ];
+    'Por favor confirmar que planta está enterada y coordinada.',
+  ].join('\n');
 
-  if (evaluacion.resueltos.length > 0) {
-    lineas.push('', `Ya confirmado: ${evaluacion.resueltos.map((r) => r.item.titulo).join(', ')} ✔`);
-  }
-
-  lineas.push('', 'Esto es lo que le habría preguntado al grupo. Por ahora solo te lo muestro acá.');
-
-  return lineas.join('\n');
-};
+/**
+ * Cómo se ve una propuesta en el grupo de operaciones: el mensaje tal cual
+ * saldría, y arriba a dónde iría y cómo se aprueba. La persona ve EXACTAMENTE
+ * lo que se va a mandar; nada se reescribe entre el «1» y el envío.
+ */
+export const conPiePropuesta = (texto: string, nombreDestino: string): string =>
+  [
+    `📨 *Propuesta para «${nombreDestino}»* — respondé *1* para mandarlo, *3* para descartar`,
+    '',
+    texto,
+  ].join('\n');
 
 /**
  * LA FIRMA DEL AVISO, para no repetirlo.

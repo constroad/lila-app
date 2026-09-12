@@ -2,7 +2,9 @@ import {
   COMPANY_PILOTO,
   EMPRESAS_CON_PEDIDOS,
   GRUPO_ESCUCHA_PILOTO,
+  GRUPO_PLANTA_PILOTO,
   debeEscuchar,
+  destinosConAprobacion,
   esJidDeGrupo,
   destinoPermitido,
   grupoDestino,
@@ -21,8 +23,14 @@ import { normalizarTexto } from './checklist';
  * Un agente que habla en el grupo equivocado pierde la confianza de una sola vez.
  * Estos tests son la garantía de que eso no puede pasar por un descuido.
  */
-const ADMIN_INFRAMAQ = '120363288945205546@g.us';
-const alcance = { grupoEscuchado: ADMIN_INFRAMAQ };
+const ADMIN_INFRAMAQ = '120363279615230332@g.us';
+const PLANTA_INFRAMAQ = '120363288945205546@g.us';
+const alcance = {
+  grupoEscuchado: ADMIN_INFRAMAQ,
+  nombreGrupo: 'INFRAMAQ admin',
+  grupoPlanta: PLANTA_INFRAMAQ,
+  nombreGrupoPlanta: 'Inframaq Planta',
+};
 
 describe('de dónde sale cada grupo', () => {
   /**
@@ -31,13 +39,29 @@ describe('de dónde sale cada grupo', () => {
    * escuchara el grupo equivocado, y que un cambio de configuración de otra
    * persona moviera el alcance del agente sin que nadie lo note.
    */
-  it('el escuchado se resuelve por NOMBRE contra los grupos de la sesión', async () => {
+  it('el escuchado y el de planta se resuelven por NOMBRE contra los grupos de la sesión', async () => {
+    const pedidos: string[] = [];
     const resuelto = await resolverAlcance(async (nombre) => {
-      expect(nombre).toBe(GRUPO_ESCUCHA_PILOTO);
-      return ADMIN_INFRAMAQ;
+      pedidos.push(nombre);
+      if (nombre === GRUPO_ESCUCHA_PILOTO) return { jid: ADMIN_INFRAMAQ, nombre: 'INFRAMAQ admin' };
+      return { jid: PLANTA_INFRAMAQ, nombre: 'Inframaq Planta' };
     });
 
+    expect(pedidos).toEqual([GRUPO_ESCUCHA_PILOTO, GRUPO_PLANTA_PILOTO]);
     expect(resuelto.grupoEscuchado).toBe(ADMIN_INFRAMAQ);
+    // El nombre que se muestra es el REAL de WhatsApp, no el de la constante.
+    expect(resuelto.nombreGrupo).toBe('INFRAMAQ admin');
+    expect(resuelto.grupoPlanta).toBe(PLANTA_INFRAMAQ);
+    expect(resuelto.nombreGrupoPlanta).toBe('Inframaq Planta');
+  });
+
+  it('sin el grupo de planta el agente sigue: solo pierde el aviso de producción', async () => {
+    const resuelto = await resolverAlcance(async (nombre) =>
+      nombre === GRUPO_ESCUCHA_PILOTO ? { jid: ADMIN_INFRAMAQ, nombre: 'INFRAMAQ admin' } : ''
+    );
+
+    expect(resuelto.grupoEscuchado).toBe(ADMIN_INFRAMAQ);
+    expect(resuelto.grupoPlanta).toBe('');
   });
 
   it('si la constante ya es un JID, no se resuelve nada', async () => {
@@ -110,7 +134,7 @@ describe('escuchar', () => {
   });
 
   it('sin grupo resuelto no escucha ni al que sería el suyo', () => {
-    expect(debeEscuchar(ADMIN_INFRAMAQ, { grupoEscuchado: '' })).toBe(false);
+    expect(debeEscuchar(ADMIN_INFRAMAQ, { ...alcance, grupoEscuchado: '' })).toBe(false);
   });
 });
 
@@ -131,5 +155,16 @@ describe('enviar', () => {
   it('NO a una persona', () => {
     expect(puedeEnviarA('51999111222@s.whatsapp.net')).toBe(false);
     expect(puedeEnviarA('')).toBe(false);
+  });
+
+  /**
+   * EL SEGUNDO NIVEL. A los grupos de la empresa se llega solo con aprobación,
+   * y la lista de a cuáles es cerrada: los dos del alcance, nada más. Un «1» no
+   * puede convertir en destino a un grupo que no esté acá.
+   */
+  it('los destinos aprobables son exactamente los dos grupos de la empresa', () => {
+    expect(destinosConAprobacion(alcance)).toEqual([ADMIN_INFRAMAQ, PLANTA_INFRAMAQ]);
+    expect(destinosConAprobacion({ ...alcance, grupoPlanta: '' })).toEqual([ADMIN_INFRAMAQ]);
+    expect(destinosConAprobacion(alcance)).not.toContain(GROUP_ERRORS_TRACKING);
   });
 });

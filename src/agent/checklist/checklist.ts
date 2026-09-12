@@ -20,11 +20,11 @@
  * respuestas reales entiende, y recién ahí se decide si hace falta un modelo.
  * Medir primero, instalar después.
  *
- * PROVISIONAL A PROPÓSITO: los ítems viven acá, en código, y son tres. La UI de
- * super-admin en Portal para editarlos —con checklists por dominio (planta,
- * obra) y por fase (antes, durante, después)— es el paso siguiente. Escribirlos
- * acá primero deja ver el formato funcionando antes de construir la pantalla que
- * lo edita.
+ * PROVISIONAL A PROPÓSITO: los ítems viven acá, en código. Son los catorce que
+ * José dictó el 12/09/2026, en dos dominios (planta y campo). La UI de
+ * super-admin en Portal para editarlos es el paso siguiente. Escribirlos acá
+ * primero deja ver el formato funcionando antes de construir la pantalla que lo
+ * edita.
  */
 
 export type ChecklistPhase = 'antes' | 'durante' | 'despues';
@@ -48,39 +48,155 @@ export interface ChecklistItem {
 }
 
 /**
- * Los tres primeros, los que José nombró como «lo básico que se olvidan».
- * Vencen escalonados: lo que hay que comprar necesita más anticipación que un
- * aviso.
+ * EL CHECKLIST DE JOSÉ (12/09/2026), en sus palabras y en su orden. Dos dominios
+ * porque son dos grupos de gente distintos: lo de PLANTA lo revisa la
+ * administración de la planta; lo de CAMPO (obra), quien arma la cuadrilla.
+ *
+ * Todos vencen 12 h antes del arranque — la tarde anterior para una producción
+ * de madrugada. Es un valor PROVISIONAL: José no fijó vencimientos y esto es lo
+ * que hace que la revisión salga entera de una vez, como una lista, en vez de
+ * gotear una pregunta por hora. Cuando exista la UI se afina por ítem.
+ *
+ * Las frases de `seSatisfaceCon` son semillas: hoy las compara el matcher; el
+ * clasificador por embeddings (medido 17/19 el 12/09) usa las mismas como
+ * centroides. Escribirlas como habla la gente, no como habla el sistema.
  */
-export const CHECKLIST_PRODUCCION: ChecklistItem[] = [
+const VENCE_TARDE_ANTERIOR = 12 * 60;
+
+export const CHECKLIST_PLANTA: ChecklistItem[] = [
   {
-    id: 'aviso-planta',
-    titulo: 'aviso a planta',
-    pregunta: '¿Ya avisaron a planta que hay producción?',
+    id: 'agregados',
+    titulo: 'agregados',
+    pregunta: '¿Tenemos suficientes agregados?',
     domain: 'planta',
     phase: 'antes',
-    venceMinutosAntes: 12 * 60,
-    seSatisfaceCon: ['avise a planta', 'avisamos a planta', 'planta avisada', 'ya sabe planta'],
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['agregados suficientes', 'hay agregados', 'agregados listos', 'tenemos agregados', 'agregado suficiente'],
   },
   {
-    id: 'cuadrilla',
-    titulo: 'cuadrilla y tren',
-    pregunta: '¿Ya está la cuadrilla y el tren?',
-    domain: 'obra',
-    phase: 'antes',
-    venceMinutosAntes: 8 * 60,
-    seSatisfaceCon: ['cuadrilla lista', 'ya esta la cuadrilla', 'tren listo', 'cuadrilla confirmada'],
-  },
-  {
-    id: 'combustible',
-    titulo: 'petróleo y agua',
-    pregunta: '¿Ya compraron petróleo y agua?',
+    id: 'petroleo-planta',
+    titulo: 'petróleo de planta',
+    pregunta: '¿Hay combustible (petróleo) suficiente?',
     domain: 'planta',
     phase: 'antes',
-    venceMinutosAntes: 6 * 60,
-    seSatisfaceCon: ['compramos petroleo', 'ya hay petroleo', 'petroleo listo', 'ya compre el petroleo'],
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['hay petroleo', 'petroleo suficiente', 'petroleo listo', 'combustible suficiente', 'hay combustible', 'tenemos petroleo'],
+  },
+  {
+    id: 'gasohol',
+    titulo: 'gasohol',
+    pregunta: '¿Hay gasohol?',
+    domain: 'planta',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['hay gasohol', 'gasohol listo', 'tenemos gasohol', 'gasohol suficiente'],
+  },
+  {
+    id: 'operadores',
+    titulo: 'aviso a operadores',
+    pregunta: '¿Se avisó a los operadores?',
+    domain: 'planta',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['avise a los operadores', 'operadores avisados', 'avisamos a los operadores', 'los operadores ya saben', 'ya le avise al operador'],
+  },
+  {
+    id: 'riesgos',
+    titulo: 'mantenimiento o riesgos',
+    pregunta: '¿Hay algún mantenimiento pendiente o riesgo para esta producción?',
+    domain: 'planta',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['sin riesgos', 'no hay riesgo', 'sin mantenimiento pendiente', 'planta operativa', 'todo operativo', 'sin novedad en planta'],
+  },
+  {
+    id: 'clima',
+    titulo: 'clima',
+    pregunta: '¿Revisaron el clima? ¿Es viable asfaltar?',
+    domain: 'planta',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['clima ok', 'clima revisado', 'revisamos el clima', 'no hay lluvia', 'viable asfaltar', 'sin lluvia'],
   },
 ];
+
+export const CHECKLIST_CAMPO: ChecklistItem[] = [
+  {
+    id: 'cuadrilla',
+    titulo: 'cuadrilla',
+    pregunta: '¿Se programó a la cuadrilla?',
+    domain: 'obra',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['cuadrilla lista', 'cuadrilla programada', 'ya esta la cuadrilla', 'cuadrilla confirmada', 'programamos la cuadrilla'],
+  },
+  {
+    id: 'tren',
+    titulo: 'tren de asfalto',
+    pregunta: '¿Tenemos el tren de asfalto listo?',
+    domain: 'obra',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['tren listo', 'tren de asfalto listo', 'el tren ya esta', 'tren confirmado', 'tren en obra'],
+  },
+  {
+    id: 'imprimacion',
+    titulo: 'imprimación / riego de liga',
+    pregunta: 'Si hay imprimación o riego de liga: ¿el proveedor está asegurado?',
+    domain: 'obra',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['imprimacion asegurada', 'proveedor de imprimacion confirmado', 'riego de liga listo', 'no hay imprimacion', 'sin imprimacion', 'no lleva imprimacion'],
+  },
+  {
+    id: 'herramientas',
+    titulo: 'herramientas',
+    pregunta: '¿Qué herramientas se llevan? (plancha, chupetero, pisón)',
+    domain: 'obra',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['herramientas listas', 'plancha lista', 'llevamos plancha', 'herramientas cargadas', 'pison listo', 'chupetero listo'],
+  },
+  {
+    id: 'arena-o-aceite',
+    titulo: 'arena o aceite',
+    pregunta: '¿Compraron la arena para rociar, o se usará aceite?',
+    domain: 'obra',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['compramos la arena', 'arena lista', 'hay arena', 'usamos aceite', 'va con aceite', 'aceite listo'],
+  },
+  {
+    id: 'combustible-cuadrilla',
+    titulo: 'petróleo y gasolina de cuadrilla',
+    pregunta: '¿Compraron el petróleo para la cuadrilla y la gasolina para la plancha?',
+    domain: 'obra',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['compramos petroleo', 'petroleo comprado', 'gasolina lista', 'compramos la gasolina', 'petroleo y gasolina listos', 'ya compre el petroleo'],
+  },
+  {
+    id: 'agua-cuadrilla',
+    titulo: 'agua de cuadrilla',
+    pregunta: '¿Está lista el agua para la cuadrilla?',
+    domain: 'obra',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['agua lista', 'hay agua', 'compramos el agua', 'agua comprada', 'ya esta el agua'],
+  },
+  {
+    id: 'comidas',
+    titulo: 'comidas en campo',
+    pregunta: '¿Ya coordinaron las comidas en campo?',
+    domain: 'obra',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['comidas coordinadas', 'almuerzos coordinados', 'ya esta la comida', 'comida lista', 'coordinamos las comidas', 'almuerzo listo'],
+  },
+];
+
+/** Todo el checklist de un día de producción: planta y campo, en ese orden. */
+export const CHECKLIST_PRODUCCION: ChecklistItem[] = [...CHECKLIST_PLANTA, ...CHECKLIST_CAMPO];
 
 /** Sin tildes, sin mayúsculas y sin espacios de más: así se compara texto de chat. */
 export const normalizarTexto = (texto: string): string =>

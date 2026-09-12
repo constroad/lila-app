@@ -109,7 +109,7 @@ describe('negación por cláusula', () => {
    */
   it('al ítem solo le llegan las cláusulas que afirman', () => {
     expect(clausulasUtiles('agua lista, no compramos petróleo')).toEqual(['agua lista']);
-    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'combustible')!;
+    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'combustible-cuadrilla')!;
     expect(itemSatisfecho(combustible, clausulasUtiles('agua lista, no compramos petróleo'))).toBe(
       false
     );
@@ -142,7 +142,7 @@ describe('el filtro completo', () => {
    * — y el ítem sigue pendiente, que es lo correcto.
    */
   it('un hilo entero de preguntas y negaciones no cierra nada', () => {
-    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'combustible')!;
+    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'combustible-cuadrilla')!;
     const utiles = filtrarMensajes([
       msg({ texto: '¿Ya compraron petróleo y agua?', esPropio: true }),
       msg({ texto: 'petroleo listo?', autor: 'a@s.whatsapp.net' }),
@@ -153,7 +153,7 @@ describe('el filtro completo', () => {
   });
 
   it('y una confirmación limpia sí lo cierra', () => {
-    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'combustible')!;
+    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'petroleo-planta')!;
     const utiles = filtrarMensajes([msg({ texto: 'Petróleo listo jefe', autor: 'b@s.whatsapp.net' })]);
 
     expect(itemSatisfecho(combustible, utiles.textos)).toBe(true);

@@ -5,7 +5,7 @@ import {
   normalizarTexto,
   type ChecklistItem,
 } from './checklist';
-import { construirAvisoChecklist, firmaAviso } from './aviso';
+import { conPiePropuesta, construirAvisoChecklist, construirAvisoProduccion, firmaAviso } from './aviso';
 
 /**
  * El checklist del día de producción.
@@ -35,7 +35,7 @@ describe('reconocer una confirmación escrita en el grupo', () => {
   });
 
   it('da por resuelto lo que alguien confirmó, aunque lo diga dentro de una frase', () => {
-    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'combustible')!;
+    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'petroleo-planta')!;
 
     expect(itemSatisfecho(combustible, ['ok gente, ya hay petróleo en planta'])).toBe(true);
     expect(itemSatisfecho(combustible, ['mañana vemos lo del petróleo'])).toBe(false);
@@ -48,7 +48,7 @@ describe('reconocer una confirmación escrita en el grupo', () => {
    * decide si hace falta un modelo, en vez de suponerlo.
    */
   it('no entiende una confirmación parafraseada: eso es lo que hay que medir', () => {
-    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'combustible')!;
+    const combustible = CHECKLIST_PRODUCCION.find((i) => i.id === 'combustible-cuadrilla')!;
     expect(itemSatisfecho(combustible, ['ya mandé a Juan a cargar el tanque'])).toBe(false);
   });
 });
@@ -62,7 +62,7 @@ describe('qué se avisa y qué no', () => {
       mensajes: ['mañana tenemos que despachar 200 cubos', 'ok'],
     });
 
-    expect(e.pendientes.map((p) => p.item.id)).toContain('aviso-planta');
+    expect(e.pendientes.map((p) => p.item.id)).toContain('operadores');
     expect(e.minutosParaArranque).toBe(240);
   });
 
@@ -153,27 +153,43 @@ describe('el aviso al grupo de operaciones', () => {
    * mucho, no está formateado, todo desordenado». Este test fija lo que tiene
    * que decir y, sobre todo, lo que NO puede decir.
    */
-  it('dice de quién y cuándo es la producción, qué falta y desde cuándo', () => {
+  it('dice de quién y cuándo es la producción y qué falta, agrupado por quién lo revisa', () => {
     const e = evaluarChecklist({
       items: CHECKLIST_PRODUCCION,
       arranqueMs: arranque('04:00'),
       ahoraMs: arranque('00:00'),
-      mensajes: ['ya avisé a planta'],
+      mensajes: ['cuadrilla lista', 'hay gasohol'],
     });
 
     const aviso = construirAvisoChecklist(e, contexto)!;
 
-    expect(aviso).toContain('⚠️ *Producción sin coordinar — Globofast*');
+    expect(aviso).toContain('📋 *Checklist de producción — Globofast*');
     expect(aviso).toContain('domingo 13/09 a las 04:00 · Minera XYZ · 91 m³');
     expect(aviso).toContain('Arranca en 4 h');
-    expect(aviso).toContain('Nadie confirmó en *INFRAMAQ admin*:');
-    // Cuadrilla vence 8 h antes y estamos a 4 h: lleva 4 h vencido.
-    expect(aviso).toContain('• ¿Ya está la cuadrilla y el tren? — _vencido hace 4 h_');
-    expect(aviso).toContain('• ¿Ya compraron petróleo y agua? — _vencido hace 2 h_');
+    // Planta primero, campo después: lo lee gente distinta.
+    expect(aviso.indexOf('*Planta* — sin confirmar:')).toBeLessThan(aviso.indexOf('*Campo* — sin confirmar:'));
+    expect(aviso).toContain('• ¿Hay combustible (petróleo) suficiente?');
+    expect(aviso).toContain('• ¿Se programó a la cuadrilla?'.replace('• ¿Se programó a la cuadrilla?', '• ¿Tenemos el tren de asfalto listo?'));
     // Lo confirmado no se vuelve a preguntar, y se nombra en palabras de obra.
-    expect(aviso).not.toContain('¿Ya avisaron a planta');
-    expect(aviso).toContain('Ya confirmado: aviso a planta ✔');
-    expect(aviso).toContain('Esto es lo que le habría preguntado al grupo.');
+    expect(aviso).not.toContain('¿Se programó a la cuadrilla?');
+    expect(aviso).not.toContain('¿Hay gasohol?');
+    expect(aviso).toContain('Ya confirmado: gasohol, cuadrilla ✔');
+  });
+
+  it('el aviso a planta dice que hay producción, de quién, cuándo y cuánto', () => {
+    const aviso = construirAvisoProduccion(contexto);
+
+    expect(aviso).toContain('📢 *Producción programada — Globofast*');
+    expect(aviso).toContain('domingo 13/09 a las 04:00 · Minera XYZ · 91 m³');
+    expect(aviso).not.toContain('@g.us');
+  });
+
+  it('la propuesta muestra EXACTAMENTE el texto que saldría, y cómo aprobarlo', () => {
+    const texto = construirAvisoProduccion(contexto);
+    const propuesta = conPiePropuesta(texto, 'Inframaq Planta');
+
+    expect(propuesta).toContain('📨 *Propuesta para «Inframaq Planta»* — respondé *1* para mandarlo, *3* para descartar');
+    expect(propuesta.endsWith(texto)).toBe(true);
   });
 
   it('no filtra identificadores del sistema', () => {
@@ -186,7 +202,7 @@ describe('el aviso al grupo de operaciones', () => {
 
     const aviso = construirAvisoChecklist(e, contexto)!;
 
-    for (const prohibido of ['[ESPEJO]', '@g.us', 'globofas-s8k', 'aviso-planta', 'Escuchando:']) {
+    for (const prohibido of ['[ESPEJO]', '@g.us', 'globofas-s8k', 'petroleo-planta', 'Escuchando:']) {
       expect(aviso).not.toContain(prohibido);
     }
   });
@@ -239,15 +255,24 @@ describe('la firma del aviso', () => {
     expect(firmaAviso('p1', evaluar(12))).toBe(firmaAviso('p1', evaluar(11.67)));
   });
 
-  it('cambia cuando vence otro ítem', () => {
-    // A 8 h también vence cuadrilla: hay algo nuevo que decir.
-    expect(firmaAviso('p1', evaluar(11.67))).not.toBe(firmaAviso('p1', evaluar(8)));
+  it('cambia cuando se confirma uno', () => {
+    expect(firmaAviso('p1', evaluar(8))).not.toBe(firmaAviso('p1', evaluar(8, ['hay gasohol'])));
   });
 
-  it('cambia cuando se confirma uno', () => {
-    expect(firmaAviso('p1', evaluar(8))).not.toBe(
-      firmaAviso('p1', evaluar(8, ['ya avisé a planta']))
-    );
+  it('cambia cuando vence un ítem que antes tenía tiempo', () => {
+    const conTiempo = evaluarChecklist({
+      items: [item({ id: 'a', venceMinutosAntes: 12 * 60 }), item({ id: 'b', venceMinutosAntes: 6 * 60 })],
+      arranqueMs: arranque('04:00'),
+      ahoraMs: arranque('04:00') - 8 * 3_600_000,
+      mensajes: [],
+    });
+    const vencidos = evaluarChecklist({
+      items: [item({ id: 'a', venceMinutosAntes: 12 * 60 }), item({ id: 'b', venceMinutosAntes: 6 * 60 })],
+      arranqueMs: arranque('04:00'),
+      ahoraMs: arranque('04:00') - 5 * 3_600_000,
+      mensajes: [],
+    });
+    expect(firmaAviso('p1', conTiempo)).not.toBe(firmaAviso('p1', vencidos));
   });
 
   it('es por pedido', () => {

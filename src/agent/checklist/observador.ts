@@ -10,6 +10,9 @@ import {
 } from './alcance.js';
 import { normalizarTexto } from './checklist.js';
 import { recordarMensaje } from './almacen.js';
+import { decidir, esVoto } from './sugerencias.js';
+import { enviarAOperaciones, enviarAprobado } from './emisor.js';
+import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
 
 /**
  * El oído del agente: mira los mensajes del grupo piloto y NADA MÁS.
@@ -88,11 +91,21 @@ export const observarParaChecklist = async (
 
     for (const raw of upsert.messages ?? []) {
       const remoteJid = String(raw?.key?.remoteJid || '');
-      // EL GUARD, y es lo único que separa "escuchar un grupo" de "escuchar todo".
-      if (!debeEscuchar(remoteJid, alcance)) continue;
-
       const texto = extractInboundText(raw.message);
       if (!texto.trim()) continue;
+
+      // LAS APROBACIONES vienen del grupo de operaciones, y de una PERSONA: un
+      // «1» del propio bot no aprueba nada. Se atiende antes del guard de abajo
+      // porque es otro grupo, con otra función — no se «escucha» para hechos.
+      if (remoteJid === GROUP_ERRORS_TRACKING) {
+        if (!raw?.key?.fromMe && esVoto(texto)) {
+          await atenderVoto(texto, String(raw?.key?.participant || 'desconocido'), alcance);
+        }
+        continue;
+      }
+
+      // EL GUARD, y es lo único que separa "escuchar un grupo" de "escuchar todo".
+      if (!debeEscuchar(remoteJid, alcance)) continue;
 
       const ahora = Date.now();
       recordarMensaje(remoteJid, {
@@ -109,6 +122,40 @@ export const observarParaChecklist = async (
   } catch (error) {
     logger.warn(
       `[agente] no pude observar mensajes de ${sessionPhone}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+};
+
+/**
+ * Un «1» o un «3» en el grupo de operaciones decide la propuesta pendiente más
+ * reciente. Con «1» sale al grupo real por el emisor —que vuelve a verificar
+ * destino y estado— y se confirma en operaciones; con «3» solo se anota.
+ *
+ * Nunca lanza: cuelga del listener de Baileys.
+ */
+const atenderVoto = async (voto: string, quien: string, alcance: AlcanceAgente): Promise<void> => {
+  try {
+    const propuesta = decidir(voto, quien);
+    if (!propuesta) {
+      logger.info(`[agente] «${voto}» de ${quien} en operaciones, sin propuesta pendiente: se ignora`);
+      return;
+    }
+    if (propuesta.estado === 'descartada') {
+      logger.info(`[agente] propuesta ${propuesta.id} (${propuesta.tipo}) descartada por ${quien}`);
+      await enviarAOperaciones(`🗑 Descartado. No se mandó a «${propuesta.nombreDestino}».`);
+      return;
+    }
+    const enviada = await enviarAprobado(propuesta, alcance);
+    await enviarAOperaciones(
+      enviada
+        ? `✅ Enviado a «${propuesta.nombreDestino}».`
+        : `⛔ No se pudo mandar a «${propuesta.nombreDestino}»: revisá el log de lila.`
+    );
+  } catch (error) {
+    logger.warn(
+      `[agente] no pude atender el voto «${voto}» de ${quien}: ${
         error instanceof Error ? error.message : String(error)
       }`
     );

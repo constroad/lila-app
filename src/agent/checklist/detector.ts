@@ -1,12 +1,24 @@
 import logger from '../../utils/logger.js';
 import { getOrderModel } from '../../database/models.js';
-import { WhatsAppDirectService } from '../../services/whatsapp-direct.service.js';
-import { COMPANY_PILOTO, EMPRESAS_CON_PEDIDOS, destinoPermitido } from './alcance.js';
+import { EMPRESAS_CON_PEDIDOS, destinoPermitido } from './alcance.js';
 import { alcanceVigente } from './observador.js';
 import { mensajesDesde, observados } from './almacen.js';
 import { filtrarMensajes } from './mensajes.js';
 import { CHECKLIST_PRODUCCION, evaluarChecklist } from './checklist.js';
-import { construirAvisoChecklist, firmaAviso } from './aviso.js';
+import {
+  conPiePropuesta,
+  construirAvisoChecklist,
+  construirAvisoProduccion,
+  firmaAviso,
+} from './aviso.js';
+import { enviarAOperaciones } from './emisor.js';
+import {
+  _resetPropuestas,
+  pendientes,
+  proponer,
+  propuestasDelPedido,
+  yaPropuesta,
+} from './sugerencias.js';
 import { MAX_AVISOS_POR_DIA, diaPeruano, instanteArranque } from './tiempo.js';
 
 export { MAX_AVISOS_POR_DIA, diaPeruano, instanteArranque };
@@ -24,16 +36,11 @@ export { MAX_AVISOS_POR_DIA, diaPeruano, instanteArranque };
  * EN ESPEJO todo sale al grupo de operaciones y nada al grupo que escucha.
  */
 
-interface EstadoAviso {
-  /** Firma semántica del último aviso (ver `firmaAviso`), NO hash del texto. */
-  firma: string;
-  enviados: number;
-}
-
-const avisados = new Map<string, EstadoAviso>();
-
 /** Solo para tests. */
-export const _resetDetector = (): void => void avisados.clear();
+export const _resetDetector = (): void => {
+  _resetPropuestas();
+  nombresEmpresa.clear();
+};
 
 export interface PedidoConArranque {
   id: string;
@@ -94,74 +101,109 @@ export const pedidosConArranque = async (ahoraMs: number): Promise<PedidoConArra
 };
 
 /**
- * Una pasada del detector. Devuelve cuántos avisos mandó — 0 es el resultado
- * normal y esperable.
+ * Una pasada del detector. Devuelve cuántas PROPUESTAS nuevas publicó en el grupo
+ * de operaciones — 0 es el resultado normal y esperable.
+ *
+ * Por cada pedido con arranque hace dos cosas, cada una con su destino real:
+ *   1. el AVISO DE PRODUCCIÓN, para el grupo de PLANTA: una vez por pedido, en
+ *      cuanto el pedido aparece. Es el hecho que faltó el 07/09.
+ *   2. la REVISIÓN DEL CHECKLIST, para el grupo de ADMIN: cuando hay ítems
+ *      vencidos sin confirmar, y solo si cambió lo que falta.
+ *
+ * Ninguna sale sola: las dos se PROPONEN en el grupo de operaciones y salen al
+ * grupo real con el «1» de una persona (ver `sugerencias` y `emisor`).
  */
 export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => {
-  const destino = destinoPermitido();
-  if (!destino) return 0;
+  if (!destinoPermitido()) return 0;
 
   const alcance = await alcanceVigente(ahoraMs);
   if (!alcance.grupoEscuchado) return 0;
 
   const pedidos = await pedidosConArranque(ahoraMs);
-  let enviados = 0;
+  let propuestasNuevas = 0;
   // UNA línea por corrida, siempre. Sin esto «¿está escuchando?» no se puede
   // contestar: el 12/09 el agente llevaba 2 días sin loguear nada y no había
   // forma de distinguir «no hay nada que avisar» de «no ve nada».
   logger.info(
     `[agente] detección: ${pedidos.length} pedido(s) con arranque, ` +
       `${observados(alcance.grupoEscuchado)} mensaje(s) observados del grupo, ` +
+      `${pendientes(ahoraMs).length} propuesta(s) esperando respuesta, ` +
       `ventana ${pedidos.map((p) => `${p.companyId} ${p.fecha} ${p.hora}`).join(' | ') || '—'}`
   );
 
   for (const pedido of pedidos) {
-    // Solo interesa lo que se dijo DESDE que el pedido existe: un «cuadrilla
-    // lista» anterior a que se cargara el pedido hablaba de otro día.
-    const delGrupo = mensajesDesde(alcance.grupoEscuchado, pedido.creadoMs);
-    const utiles = filtrarMensajes(delGrupo);
-
-    const evaluacion = evaluarChecklist({
-      items: CHECKLIST_PRODUCCION,
-      arranqueMs: pedido.arranqueMs,
-      ahoraMs,
-      mensajes: utiles.textos,
-    });
-
-    const texto = construirAvisoChecklist(evaluacion, {
+    const contexto = {
       empresa: await nombreEmpresa(pedido.companyId),
       fecha: pedido.fecha,
       horaArranque: pedido.hora,
       cliente: pedido.cliente,
       cubos: pedido.cubos,
       grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado,
+    };
+
+    // 1) Aviso de producción → planta. Una sola vez por pedido.
+    if (alcance.grupoPlanta) {
+      const firma = `${pedido.id}|aviso-produccion`;
+      if (!yaPropuesta('aviso-planta', firma, ahoraMs)) {
+        const texto = construirAvisoProduccion(contexto);
+        const propuesta = proponer(
+          {
+            tipo: 'aviso-planta',
+            pedidoId: pedido.id,
+            firma,
+            destino: alcance.grupoPlanta,
+            nombreDestino: alcance.nombreGrupoPlanta || 'planta',
+            texto,
+          },
+          ahoraMs
+        );
+        await enviarAOperaciones(conPiePropuesta(texto, propuesta.nombreDestino));
+        propuestasNuevas += 1;
+        logger.info(`[agente] propuesta ${propuesta.id}: aviso de producción del pedido ${pedido.id} → «${propuesta.nombreDestino}»`);
+      }
+    }
+
+    // 2) Checklist → admin. Solo lo vencido, solo si cambió, con tope diario.
+    // Solo interesa lo que se dijo DESDE que el pedido existe: un «cuadrilla
+    // lista» anterior a que se cargara el pedido hablaba de otro día.
+    const delGrupo = mensajesDesde(alcance.grupoEscuchado, pedido.creadoMs);
+    const utiles = filtrarMensajes(delGrupo);
+    const evaluacion = evaluarChecklist({
+      items: CHECKLIST_PRODUCCION,
+      arranqueMs: pedido.arranqueMs,
+      ahoraMs,
+      mensajes: utiles.textos,
     });
+    const texto = construirAvisoChecklist(evaluacion, contexto);
     if (!texto) continue;
 
-    const clave = `${pedido.id}`;
-    const estado = avisados.get(clave) ?? { firma: '', enviados: 0 };
     const firma = firmaAviso(pedido.id, evaluacion);
-
-    // Nada nuevo que decir: callarse. Se compara QUÉ falta, no el texto — el
-    // texto lleva la cuenta regresiva y cambia cada minuto.
-    if (estado.firma === firma) continue;
-    if (estado.enviados >= MAX_AVISOS_POR_DIA) {
-      logger.info(`[agente] presupuesto agotado para el pedido ${pedido.id}, no se avisa más`);
+    if (yaPropuesta('checklist-admin', firma, ahoraMs)) continue;
+    if (propuestasDelPedido('checklist-admin', pedido.id) >= MAX_AVISOS_POR_DIA) {
+      logger.info(`[agente] presupuesto agotado para el pedido ${pedido.id}, no se propone más`);
       continue;
     }
 
-    await WhatsAppDirectService.sendMessage(await senderDelDestino(), destino, texto, {
-      companyId: COMPANY_PILOTO,
-    });
-    avisados.set(clave, { firma, enviados: estado.enviados + 1 });
-    enviados += 1;
+    const propuesta = proponer(
+      {
+        tipo: 'checklist-admin',
+        pedidoId: pedido.id,
+        firma,
+        destino: alcance.grupoEscuchado,
+        nombreDestino: alcance.nombreGrupo || 'admin',
+        texto,
+      },
+      ahoraMs
+    );
+    await enviarAOperaciones(conPiePropuesta(texto, propuesta.nombreDestino));
+    propuestasNuevas += 1;
     logger.info(
-      `[agente] aviso de checklist enviado (pedido ${pedido.id}, ${evaluacion.pendientes.length} pendientes, ` +
-        `descartados: ${JSON.stringify(utiles.descartados)})`
+      `[agente] propuesta ${propuesta.id}: checklist del pedido ${pedido.id} → «${propuesta.nombreDestino}» ` +
+        `(${evaluacion.pendientes.length} pendientes, descartados: ${JSON.stringify(utiles.descartados)})`
     );
   }
 
-  return enviados;
+  return propuestasNuevas;
 };
 
 const nombresEmpresa = new Map<string, string>();
@@ -185,18 +227,4 @@ const nombreEmpresa = async (companyId: string): Promise<string> => {
   } catch {
     return companyId;
   }
-};
-
-/**
- * La sesión que envía. El grupo de operaciones es alcanzable desde la sesión de
- * la empresa piloto —que es la que está en él—, y mandar desde otra devolvería
- * `GROUP_NOT_IN_SESSION` (409), el incidente del 03/09/2026.
- */
-const senderDelDestino = async (): Promise<string> => {
-  const { getCompanyModel } = await import('../../database/models.js');
-  const CompanyModel = await getCompanyModel();
-  const company = (await CompanyModel.findOne({ companyId: COMPANY_PILOTO }).lean()) as
-    | { whatsappConfig?: { sender?: string } }
-    | null;
-  return String(company?.whatsappConfig?.sender || '');
 };
