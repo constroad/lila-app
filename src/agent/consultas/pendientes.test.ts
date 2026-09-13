@@ -1,4 +1,5 @@
-import { VIGENCIA_PREGUNTA_MS, _resetPendientes, preguntar, responderPendiente, textoPregunta } from './pendientes';
+import { jest } from '@jest/globals';
+import { VIGENCIA_PREGUNTA_MS, _resetPendientes, nombraUnidad, preguntar, responderPendiente, textoPregunta } from './pendientes';
 
 /**
  * «¿Cuál de los dos?» → «2». La respuesta es de ESA persona, en ESE grupo, y
@@ -27,6 +28,31 @@ describe('preguntas pendientes', () => {
     expect(responderPendiente('jose', 'g', 'si', 1_000)).toBeNull();
     // Sigue pendiente para la respuesta correcta.
     expect(responderPendiente('jose', 'g', '1', 1_000)?.indice).toBe(0);
+  });
+
+  /**
+   * EL CASO DEL 13/09 13:50: el agente preguntó «¿qué unidad?», José contestó
+   * «La unidad 4», y el agente dijo «eso no lo puedo responder». La respuesta
+   * a una pregunta del agente completa la pregunta original.
+   */
+  it('una pregunta de unidad se contesta con «la unidad 4», una placa o «la última»', async () => {
+    const continuar = jest.fn(async (_i: number, texto?: string) => `respondí con ${texto}`);
+    preguntar({ quien: 'jose', grupo: 'g', opciones: [], tipo: 'unidad', continuar }, 0);
+
+    // Un mensaje que no nombra ninguna unidad no la consume.
+    expect(responderPendiente('jose', 'g', 'gracias', 1_000)).toBeNull();
+    const r = responderPendiente('jose', 'g', 'La unidad 4', 2_000);
+    expect(r?.texto).toBe('La unidad 4');
+    expect(await r?.pregunta.continuar(r.indice, r.texto)).toBe('respondí con La unidad 4');
+    // Ya se consumió.
+    expect(responderPendiente('jose', 'g', 'AML838', 3_000)).toBeNull();
+  });
+
+  it('nombraUnidad: número, placa u ordinal', () => {
+    expect(nombraUnidad('la unidad 4')).toBe(true);
+    expect(nombraUnidad('AML 838')).toBe(true);
+    expect(nombraUnidad('la última')).toBe(true);
+    expect(nombraUnidad('gracias')).toBe(false);
   });
 
   it('a los diez minutos vence', () => {

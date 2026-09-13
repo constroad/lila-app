@@ -192,11 +192,11 @@ export const observarParaChecklist = async (
               // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
               logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
             }
-            if (/^\s*\d{1,2}\s*$/.test(texto)) {
-              const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
-              if (!fue && esVoto(texto)) {
-                await atenderVoto({ voto: texto, citaMsgId: '', quien }, alcance);
-              }
+            // Cualquier mensaje puede ser la respuesta a algo que el agente
+            // preguntó («la unidad 4», «2», «AML838»): decide `pendientes`.
+            const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
+            if (!fue && /^\s*\d{1,2}\s*$/.test(texto) && esVoto(texto)) {
+              await atenderVoto({ voto: texto, citaMsgId: '', quien }, alcance);
             }
           })
           .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
@@ -222,8 +222,8 @@ export const observarParaChecklist = async (
               // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
               logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
             }
-            // Un «1» o «2» de alguien a quien el agente le acaba de preguntar.
-            if (/^\s*\d{1,2}\s*$/.test(texto)) await atenderEleccion(texto, quien, remoteJid, alcance);
+            // «La unidad 4», «2», «AML838»: la respuesta a algo que el agente preguntó.
+            await atenderEleccion(texto, quien, remoteJid, alcance);
           })
           .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
       }

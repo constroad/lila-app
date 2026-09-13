@@ -201,6 +201,8 @@ export interface Parametros {
   fecha?: string;
   /** «la semana», «esta semana», «los próximos días». */
   rango?: 'semana';
+  /** «la última (unidad)», «la primera», «la que acaba de salir». */
+  ordinal?: 'ultima' | 'primera';
 }
 
 const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
@@ -275,6 +277,12 @@ export const extraerParametros = (pregunta: string): Parametros => {
   const empresa = ALIAS_EMPRESA.find((e) => e.alias.some((a) => new RegExp(`\\b${a}\\b`).test(t)));
   const rango = /\b(semana|semanal|proximos dias|próximos días|estos dias|estos días)\b/.test(t) ? ('semana' as const) : undefined;
   const fecha = fechaDe(pregunta);
+  // «la última», «el último carro», «la que acaba de salir» / «la primera».
+  const ordinal = /\b(ultim[oa]|acaba de salir|recien salio|recién salió)\b/.test(t)
+    ? ('ultima' as const)
+    : /\bprimer[oa]?\b/.test(t)
+      ? ('primera' as const)
+      : undefined;
 
   return {
     day,
@@ -283,6 +291,7 @@ export const extraerParametros = (pregunta: string): Parametros => {
     unitNumber: unitNumber && unitNumber > 0 ? unitNumber : undefined,
     fecha,
     rango,
+    ordinal,
   };
 };
 

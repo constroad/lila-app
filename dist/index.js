@@ -8981,13 +8981,13 @@ var init_emisor = __esm({
       if (respuesta.archivos?.length) {
         const { resolveFileBuffer: resolveFileBuffer2 } = await Promise.resolve().then(() => (init_whatsapp_media_utils(), whatsapp_media_utils_exports));
         for (const a49 of respuesta.archivos) {
-          if (!EMPRESAS_CON_PEDIDOS.includes(a49.companyId)) {
+          if (!a49.buffer && !EMPRESAS_CON_PEDIDOS.includes(a49.companyId)) {
             logger_default.error(`[agente] archivo de ${a49.companyId}, fuera del piloto: no se manda`);
             continue;
           }
           const inicio = Date.now();
           try {
-            const leido = await resolveFileBuffer2({ companyId: a49.companyId, fileUrl: a49.url, mimeType: a49.mime, fileName: a49.nombre });
+            const leido = a49.buffer ? { buffer: a49.buffer, mimeType: a49.mime || "image/png", fileName: a49.nombre } : await resolveFileBuffer2({ companyId: a49.companyId, fileUrl: a49.url, mimeType: a49.mime, fileName: a49.nombre });
             if (!leido) throw new Error("no se pudo leer del storage");
             const mime = String(leido.mimeType || a49.mime || "").split(";")[0].trim() || void 0;
             const opciones = { buffer: leido.buffer, fileName: leido.fileName || a49.nombre, caption: a49.caption, mimeType: mime, companyId: COMPANY_PILOTO, queueOnFail: false };
@@ -9239,13 +9239,15 @@ var init_catalogo = __esm({
       const empresa = ALIAS_EMPRESA.find((e29) => e29.alias.some((a49) => new RegExp(`\\b${a49}\\b`).test(t44)));
       const rango = /\b(semana|semanal|proximos dias|próximos días|estos dias|estos días)\b/.test(t44) ? "semana" : void 0;
       const fecha = fechaDe(pregunta);
+      const ordinal = /\b(ultim[oa]|acaba de salir|recien salio|recién salió)\b/.test(t44) ? "ultima" : /\bprimer[oa]?\b/.test(t44) ? "primera" : void 0;
       return {
         day,
         plate,
         companyId: empresa?.companyId,
         unitNumber: unitNumber && unitNumber > 0 ? unitNumber : void 0,
         fecha,
-        rango
+        rango,
+        ordinal
       };
     };
     FUERA_DE_CATALOGO = [
@@ -9309,9 +9311,9 @@ var init_tiempo = __esm({
   "src/agent/checklist/tiempo.ts"() {
     OFFSET_LIMA_MS = 5 * 60 * 60 * 1e3;
     diaPeruano = (ms2) => new Date(ms2 - OFFSET_LIMA_MS).toISOString().slice(0, 10);
-    instanteArranque = (fecha, hora2) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora2)) return null;
-      const ms2 = (/* @__PURE__ */ new Date(`${fecha}T${hora2}:00.000-05:00`)).getTime();
+    instanteArranque = (fecha, hora3) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora3)) return null;
+      const ms2 = (/* @__PURE__ */ new Date(`${fecha}T${hora3}:00.000-05:00`)).getTime();
       return Number.isFinite(ms2) ? ms2 : null;
     };
     DIAS = ["domingo", "lunes", "martes", "mi\xE9rcoles", "jueves", "viernes", "s\xE1bado"];
@@ -9400,7 +9402,7 @@ var init_vista = __esm({
 });
 
 // src/agent/consultas/responder.ts
-var LIMITES, acotarArchivos, elegirPedido, etiquetaPedido, unidadPor, hora, unidades, unidad, sinPedidos, estimarFin, ESTADO_INFORME, textoInforme, AYUDA, responder, TIPOS_ALIAS;
+var LIMITES, acotarArchivos, elegirPedido, etiquetaPedido, unidadPor, identificaUnidad, hora, unidades, PREGUNTA_UNIDAD, describeUnidad, sinPedidos, estimarFin, ESTADO_INFORME, textoInforme, AYUDA, responder, TIPOS_ALIAS;
 var init_responder = __esm({
   "src/agent/consultas/responder.ts"() {
     init_catalogo();
@@ -9427,11 +9429,18 @@ var init_responder = __esm({
       const todas = vista.orders.flatMap((o37) => o37.units.map((u66) => ({ ...u66, pedido: o37 })));
       if (params.plate) return todas.find((u66) => normalizarPlaca(u66.plate) === params.plate);
       if (params.unitNumber) return todas.find((u66) => u66.unitNumber === params.unitNumber);
+      if (params.ordinal) {
+        const salidas = todas.filter((u66) => u66.departedAt).sort((a49, b63) => (a49.departedAt ?? 0) - (b63.departedAt ?? 0));
+        const lista = salidas.length ? salidas : [...todas].sort((a49, b63) => a49.unitNumber - b63.unitNumber);
+        return params.ordinal === "ultima" ? lista[lista.length - 1] : lista[0];
+      }
       return void 0;
     };
+    identificaUnidad = (params) => Boolean(params.plate || params.unitNumber || params.ordinal);
     hora = (ms2) => ms2 ? new Date(ms2).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", minute: "2-digit", hour12: false }) : "\u2014";
     unidades = (vista) => vista.orders.flatMap((o37) => o37.units.map((u66) => ({ ...u66, pedido: o37.cliente || o37.companyId })));
-    unidad = (vista, n43) => n43 ? unidades(vista).find((u66) => u66.unitNumber === n43) : void 0;
+    PREGUNTA_UNIDAD = "\xBFQu\xE9 unidad? Decime el n\xFAmero, la placa, o \xABla \xFAltima\xBB.";
+    describeUnidad = (params) => params.plate ? `la placa ${params.plate}` : params.unitNumber ? `la unidad ${params.unitNumber}` : params.ordinal === "ultima" ? "la \xFAltima unidad" : "la primera unidad";
     sinPedidos = (vista) => vista.orders.length === 0 ? `No hay pedidos para ${fechaLegible(vista.fecha)}.` : null;
     estimarFin = (salidasMs, unidadesRestantes, ahoraMs) => {
       const s59 = [...salidasMs].sort((a49, b63) => a49 - b63);
@@ -9515,31 +9524,31 @@ var init_responder = __esm({
           return partes.join("\n");
         }
         case "unit_departure": {
-          if (!params.unitNumber) return "\xBFQu\xE9 unidad? Decime el n\xFAmero, por ejemplo \xAB@lila a qu\xE9 hora sali\xF3 la 5\xBB.";
-          const u66 = unidad(vista, params.unitNumber);
-          if (!u66) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+          if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
+          const u66 = unidadPor(vista, params);
+          if (!u66) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
           if (u66.state === "despachado" && u66.departedAt) return `\u{1F69A} La *unidad ${u66.unitNumber}* (${u66.plate || "sin placa"}) sali\xF3 a las *${hora(u66.departedAt)}* con ${u66.quantity} m\xB3.`;
           if (u66.state === "progreso") return `La *unidad ${u66.unitNumber}* est\xE1 cargando; todav\xEDa no sali\xF3.`;
           return `La *unidad ${u66.unitNumber}* todav\xEDa no sali\xF3.`;
         }
         case "unit_driver": {
-          if (!params.unitNumber) return "\xBFQu\xE9 unidad? Decime el n\xFAmero, por ejemplo \xAB@lila qui\xE9n maneja la 5\xBB.";
-          const u66 = unidad(vista, params.unitNumber);
-          if (!u66) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+          if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
+          const u66 = unidadPor(vista, params);
+          if (!u66) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
           return `\u{1F464} La *unidad ${u66.unitNumber}* la maneja *${u66.driverName || "sin conductor asignado"}*, placa ${u66.plate || "sin placa"}.`;
         }
         case "unit_eta": {
-          if (!params.unitNumber) return "\xBFQu\xE9 unidad? Decime el n\xFAmero.";
-          const u66 = unidad(vista, params.unitNumber);
-          if (!u66) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+          if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
+          const u66 = unidadPor(vista, params);
+          if (!u66) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
           if (u66.arrivalAt) return `La *unidad ${u66.unitNumber}* ya lleg\xF3 a campo a las ${hora(u66.arrivalAt)}.`;
           if (u66.departedAt) return `La *unidad ${u66.unitNumber}* sali\xF3 a las ${hora(u66.departedAt)}. Todav\xEDa no calculo tiempos de llegada por ac\xE1.`;
           return `La *unidad ${u66.unitNumber}* todav\xEDa no sali\xF3.`;
         }
         case "unit_media": {
           const u66 = unidadPor(vista, params);
-          if (!params.plate && !params.unitNumber) return "\xBFDe qu\xE9 unidad? Decime la placa o el n\xFAmero, por ejemplo \xAB@lila fotos de la placa AZJ 910\xBB.";
-          if (!u66) return `No encuentro ${params.plate ? `la placa ${params.plate}` : `la unidad ${params.unitNumber}`} en los pedidos de ${dia}.`;
+          if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
+          if (!u66) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
           return `\u{1F4F7} *Unidad ${u66.unitNumber}* (${u66.plate || "sin placa"}) \u2014 ${u66.pedido.cliente || u66.pedido.companySlug}`;
         }
         case "order_link":
@@ -9715,7 +9724,7 @@ var init_archivos = __esm({
 });
 
 // src/agent/consultas/pendientes.ts
-var VIGENCIA_PREGUNTA_MS, pendientes2, clave, preguntar, responderPendiente, textoPregunta;
+var VIGENCIA_PREGUNTA_MS, pendientes2, clave, preguntar, nombraUnidad, responderPendiente, textoPregunta;
 var init_pendientes = __esm({
   "src/agent/consultas/pendientes.ts"() {
     VIGENCIA_PREGUNTA_MS = 10 * 6e4;
@@ -9723,6 +9732,10 @@ var init_pendientes = __esm({
     clave = (quien, grupo) => `${grupo}|${quien}`;
     preguntar = (p64, ahoraMs = Date.now()) => {
       pendientes2.set(clave(p64.quien, p64.grupo), { ...p64, creadaMs: ahoraMs });
+    };
+    nombraUnidad = (texto) => {
+      const t44 = String(texto || "").toLowerCase();
+      return /\b\d{1,2}\b/.test(t44) || /\b[a-z]{3}[\s-]?\d{3}\b/.test(t44) || /\b(ultim[oa]|primer[oa]?)\b/.test(t44);
     };
     responderPendiente = (quien, grupo, texto, ahoraMs = Date.now()) => {
       const k60 = clave(quien, grupo);
@@ -9732,10 +9745,15 @@ var init_pendientes = __esm({
         pendientes2.delete(k60);
         return null;
       }
+      if (p64.tipo === "unidad") {
+        if (!nombraUnidad(texto)) return null;
+        pendientes2.delete(k60);
+        return { pregunta: p64, indice: -1, texto: String(texto || "").trim() };
+      }
       const n43 = Number(String(texto || "").trim());
       if (!Number.isInteger(n43) || n43 < 1 || n43 > p64.opciones.length) return null;
       pendientes2.delete(k60);
-      return { pregunta: p64, indice: n43 - 1 };
+      return { pregunta: p64, indice: n43 - 1, texto: String(texto || "").trim() };
     };
     textoPregunta = (encabezado, opciones) => [encabezado, ...opciones.map((o37, i50) => `${i50 + 1}. ${o37}`), "", "Respond\xE9 con el n\xFAmero."].join("\n");
   }
@@ -10441,6 +10459,93 @@ var init_clima = __esm({
   }
 });
 
+// src/agent/consultas/imagen.ts
+var INK, INK_SOFT, HEADER_BG, ROW_ALT, LINE, ESTADO, WIDTH, PAD, HEADER, ORDER_HEADER, ROW, FOOT, escapeXml, hora2, recortar, filaUnidad, svgResumenDespachos, pngResumenDespachos;
+var init_imagen = __esm({
+  "src/agent/consultas/imagen.ts"() {
+    init_tiempo();
+    INK = "#17181c";
+    INK_SOFT = "#6b7280";
+    HEADER_BG = "#17181c";
+    ROW_ALT = "#f7f8fb";
+    LINE = "#e7e8ee";
+    ESTADO = { despachado: "#10b981", progreso: "#f59e0b", pendiente: "#9ca3af" };
+    WIDTH = 1080;
+    PAD = 32;
+    HEADER = 96;
+    ORDER_HEADER = 56;
+    ROW = 44;
+    FOOT = 28;
+    escapeXml = (v55) => String(v55).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    hora2 = (ms2) => ms2 ? new Date(ms2).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", minute: "2-digit", hour12: false }) : "\u2014";
+    recortar = (s59, max) => s59.length > max ? `${s59.slice(0, max - 1)}\u2026` : s59;
+    filaUnidad = (u66, y65, alterna) => {
+      const estado2 = u66.state === "despachado" ? u66.arrivalAt ? "lleg\xF3" : "en ruta" : u66.state === "progreso" ? "cargando" : "pendiente";
+      return `
+    ${alterna ? `<rect x="${PAD}" y="${y65}" width="${WIDTH - PAD * 2}" height="${ROW}" fill="${ROW_ALT}" />` : ""}
+    <text x="${PAD + 16}" y="${y65 + 28}" class="num">${u66.unitNumber}</text>
+    <text x="${PAD + 70}" y="${y65 + 28}" class="cell">${escapeXml(u66.plate || "sin placa")}</text>
+    <text x="${PAD + 200}" y="${y65 + 28}" class="cell">${escapeXml(recortar(u66.driverName || "sin conductor", 30))}</text>
+    <text x="${PAD + 560}" y="${y65 + 28}" class="cell" text-anchor="end">${u66.quantity} m\xB3</text>
+    <text x="${PAD + 650}" y="${y65 + 28}" class="cell" text-anchor="middle">${hora2(u66.departedAt)}</text>
+    <text x="${PAD + 760}" y="${y65 + 28}" class="cell" text-anchor="middle">${hora2(u66.arrivalAt)}</text>
+    <circle cx="${PAD + 850}" cy="${y65 + 22}" r="6" fill="${ESTADO[u66.state]}" />
+    <text x="${PAD + 866}" y="${y65 + 28}" class="estado">${estado2}</text>`;
+    };
+    svgResumenDespachos = (vista) => {
+      const alturaPedidos = vista.orders.reduce((h65, o37) => h65 + ORDER_HEADER + Math.max(o37.units.length, 1) * ROW + 16, 0);
+      const height = HEADER + alturaPedidos + FOOT;
+      const total = vista.orders.reduce((s59, o37) => s59 + o37.cantidadCubos, 0);
+      const van = vista.orders.reduce((s59, o37) => s59 + o37.m3Dispatched, 0);
+      let y65 = HEADER + 12;
+      const bloques = [];
+      for (const o37 of vista.orders) {
+        bloques.push(`
+      <text x="${PAD}" y="${y65 + 24}" class="order">${escapeXml(recortar(o37.cliente || o37.companySlug, 40))}</text>
+      <text x="${PAD}" y="${y65 + 44}" class="sub">${escapeXml(recortar(o37.obra || "sin obra", 60))} \xB7 ${o37.m3Dispatched} de ${o37.cantidadCubos} m\xB3 \xB7 ${o37.units.length} unidad(es)</text>
+      <line x1="${PAD}" y1="${y65 + ORDER_HEADER - 4}" x2="${WIDTH - PAD}" y2="${y65 + ORDER_HEADER - 4}" stroke="${LINE}" />
+      <text x="${PAD + 16}" y="${y65 + ORDER_HEADER + 14}" class="lbl">#</text>
+      <text x="${PAD + 70}" y="${y65 + ORDER_HEADER + 14}" class="lbl">PLACA</text>
+      <text x="${PAD + 200}" y="${y65 + ORDER_HEADER + 14}" class="lbl">CONDUCTOR</text>
+      <text x="${PAD + 560}" y="${y65 + ORDER_HEADER + 14}" class="lbl" text-anchor="end">M\xB3</text>
+      <text x="${PAD + 650}" y="${y65 + ORDER_HEADER + 14}" class="lbl" text-anchor="middle">SALIDA</text>
+      <text x="${PAD + 760}" y="${y65 + ORDER_HEADER + 14}" class="lbl" text-anchor="middle">LLEGADA</text>
+      <text x="${PAD + 850}" y="${y65 + ORDER_HEADER + 14}" class="lbl">ESTADO</text>`);
+        let yFila = y65 + ORDER_HEADER + 22;
+        o37.units.forEach((u66, i50) => {
+          bloques.push(filaUnidad(u66, yFila, i50 % 2 === 1));
+          yFila += ROW;
+        });
+        if (o37.units.length === 0) bloques.push(`<text x="${PAD + 16}" y="${yFila + 28}" class="cell">Sin unidades registradas</text>`);
+        y65 = yFila + 16;
+      }
+      return `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">
+      <style>
+        text { font-family: Arial, Helvetica, sans-serif; }
+        .title { font-size: 28px; font-weight: 800; fill: #ffffff; }
+        .subtitle { font-size: 15px; font-weight: 500; fill: #b9bdc7; }
+        .order { font-size: 19px; font-weight: 800; fill: ${INK}; }
+        .sub { font-size: 14px; font-weight: 500; fill: ${INK_SOFT}; }
+        .lbl { font-size: 11px; font-weight: 800; letter-spacing: 0.6px; fill: ${INK_SOFT}; }
+        .num { font-size: 16px; font-weight: 800; fill: ${INK}; }
+        .cell { font-size: 16px; font-weight: 600; fill: ${INK}; }
+        .estado { font-size: 13px; font-weight: 700; fill: ${INK_SOFT}; }
+      </style>
+      <rect width="${WIDTH}" height="${height}" fill="#ffffff" />
+      <rect width="${WIDTH}" height="${HEADER}" fill="${HEADER_BG}" />
+      <text x="${PAD}" y="42" class="title">Despachos \u2014 ${escapeXml(fechaLegible(vista.fecha))}</text>
+      <text x="${PAD}" y="68" class="subtitle">${van} de ${total} m\xB3 despachados \xB7 ${vista.orders.length} pedido(s)</text>
+      ${bloques.join("\n")}
+    </svg>`;
+    };
+    pngResumenDespachos = async (vista) => {
+      const { default: sharp7 } = await import("sharp");
+      return sharp7(Buffer.from(svgResumenDespachos(vista))).png().toBuffer();
+    };
+  }
+});
+
 // src/agent/checklist/semantica.ts
 var UMBRAL_SIMILITUD, MODELO, embedCargado, cargaFallida, cargarModelo, coseno, centroides, claveDe, centroideDe, clasificar, evaluarRevisionSemantica;
 var init_semantica = __esm({
@@ -10745,8 +10850,8 @@ var init_detector = __esm({
         const fechaDoc = doc.fechaProgramacion;
         if (!fechaDoc) continue;
         const fecha = diaPeruano(new Date(fechaDoc).getTime());
-        const hora2 = String(doc.horaInicio || "");
-        const arranqueMs = instanteArranque(fecha, hora2);
+        const hora3 = String(doc.horaInicio || "");
+        const arranqueMs = instanteArranque(fecha, hora3);
         if (arranqueMs === null) continue;
         const companyId = String(doc.companyId || "");
         pedidos.push({
@@ -10756,7 +10861,7 @@ var init_detector = __esm({
           // El alias es como lo llaman en el grupo; el nombre legal es el respaldo.
           cliente: String(doc.alias || doc.cliente || "").trim(),
           cubos: Number(doc.cantidadCubos) || 0,
-          hora: hora2,
+          hora: hora3,
           arranqueMs,
           creadoMs: doc.createdAt ? new Date(doc.createdAt).getTime() : arranqueMs - 24 * 36e5
         });
@@ -10898,6 +11003,7 @@ var init_consultas = __esm({
     init_pendientes();
     init_planta();
     init_clima();
+    init_imagen();
     init_catalogo();
     init_semantica();
     init_emisor();
@@ -10982,8 +11088,32 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         const horaLima = Number((/* @__PURE__ */ new Date()).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", hour12: false }).slice(0, 2));
         return { texto: textoClima(await pronosticoHorario(distrito, fecha), fecha === hoyLima() ? horaLima : -1) };
       }
+      if (clave2 === "dispatch_summary") {
+        if (vista.orders.length === 0) return { texto: responder(clave2, { vista, params }) };
+        try {
+          const png = await pngResumenDespachos(vista);
+          return {
+            texto: "",
+            archivos: [{ tipo: "image", url: "", nombre: `despachos-${fecha}.png`, fechaMs: Date.now(), mime: "image/png", companyId: "", buffer: png, caption: `\u{1F4CB} Despachos de ${fechaLegible(fecha)}` }]
+          };
+        } catch (error) {
+          logger_default.warn(`[agente] no pude armar la imagen del resumen: ${error instanceof Error ? error.message : String(error)}`);
+          return { texto: responder(clave2, { vista, params }) };
+        }
+      }
       if (clave2 === "order_link") return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
       if (clave2 === "guias_day") return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
+      const deUnidad = clave2 === "unit_media" || clave2 === "unit_departure" || clave2 === "unit_driver" || clave2 === "unit_eta";
+      if (deUnidad && !identificaUnidad(params)) {
+        preguntar({
+          quien,
+          grupo,
+          opciones: [],
+          tipo: "unidad",
+          continuar: (_i, texto) => armarRespuesta(clave2, `${pregunta} ${texto ?? ""}`, quien, grupo)
+        });
+        return { texto: PREGUNTA_UNIDAD };
+      }
       if (clave2 === "unit_media") {
         const encabezado = responder(clave2, { vista, params });
         return unidadPor(vista, params) ? respuestaMedia(vista, params, encabezado) : { texto: encabezado };
@@ -11030,8 +11160,8 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       const eleccion = responderPendiente(quien, grupo, texto);
       if (!eleccion) return false;
       try {
-        const respuesta = await eleccion.pregunta.continuar(eleccion.indice);
-        logger_default.info(`[agente] ${quien} eligi\xF3 \xAB${eleccion.pregunta.opciones[eleccion.indice]}\xBB`);
+        const respuesta = await eleccion.pregunta.continuar(eleccion.indice, eleccion.texto);
+        logger_default.info(`[agente] ${quien} contest\xF3 \xAB${eleccion.texto}\xBB a la pregunta pendiente`);
         await responderEnGrupo(grupo, respuesta, alcance);
       } catch (error) {
         logger_default.warn(`[agente] no pude continuar la consulta de ${quien}: ${error instanceof Error ? error.message : String(error)}`);
@@ -11133,11 +11263,9 @@ var init_observador = __esm({
               if (/lila/i.test(texto)) {
                 logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
-              if (/^\s*\d{1,2}\s*$/.test(texto)) {
-                const fue = await atenderEleccion2(texto, quien, remoteJid, alcance);
-                if (!fue && esVoto(texto)) {
-                  await atenderVoto({ voto: texto, citaMsgId: "", quien }, alcance);
-                }
+              const fue = await atenderEleccion2(texto, quien, remoteJid, alcance);
+              if (!fue && /^\s*\d{1,2}\s*$/.test(texto) && esVoto(texto)) {
+                await atenderVoto({ voto: texto, citaMsgId: "", quien }, alcance);
               }
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
             continue;
@@ -11154,7 +11282,7 @@ var init_observador = __esm({
               if (/lila/i.test(texto)) {
                 logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
-              if (/^\s*\d{1,2}\s*$/.test(texto)) await atenderEleccion2(texto, quien, remoteJid, alcance);
+              await atenderEleccion2(texto, quien, remoteJid, alcance);
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
           }
           const ahora = Date.now();
@@ -86217,9 +86345,9 @@ ${signaturesHtml}`;
       } else if (photo.filename) {
         lines.push(photo.filename);
       }
-      const hora2 = photo.hora || (section.showHora ? photo.fecha : void 0);
+      const hora3 = photo.hora || (section.showHora ? photo.fecha : void 0);
       const metaParts = [];
-      if (hora2) metaParts.push(`Hora: ${hora2}`);
+      if (hora3) metaParts.push(`Hora: ${hora3}`);
       if (photo.codigoMuestra) metaParts.push(`Muestra: ${photo.codigoMuestra}`);
       if (metaParts.length > 0) {
         lines.push(metaParts.join(" | "));
@@ -110188,7 +110316,7 @@ function toSafeText(value, fallback = "") {
   const text = String(value || "").trim();
   return text || fallback;
 }
-function escapeXml(value) {
+function escapeXml2(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 function formatDate3(value) {
@@ -110295,12 +110423,12 @@ function buildOrderCompletionSummarySvg(params) {
     const y65 = tableTop + rowHeight * (index + 1);
     return `
         <rect x="32" y="${y65}" width="1136" height="${rowHeight}" fill="${index % 2 === 0 ? "#ffffff" : "#f8fafc"}" />
-        <text x="72" y="${y65 + 34}" class="cell">${escapeXml(formatDate3(row.date || params.date))}</text>
-        <text x="240" y="${y65 + 34}" class="cell accent">${escapeXml(truncateText(row.plate, 12))}</text>
-        <text x="420" y="${y65 + 34}" class="cell">${escapeXml(truncateText(row.driverName, 28))}</text>
-        <text x="700" y="${y65 + 34}" class="cell">${escapeXml(row.hour || "-")}</text>
-        <text x="830" y="${y65 + 34}" class="cell">${escapeXml(truncateText(row.note, 18))}</text>
-        <text x="1095" y="${y65 + 34}" class="cell right">${escapeXml(formatQuantity3(row.quantity))}</text>
+        <text x="72" y="${y65 + 34}" class="cell">${escapeXml2(formatDate3(row.date || params.date))}</text>
+        <text x="240" y="${y65 + 34}" class="cell accent">${escapeXml2(truncateText(row.plate, 12))}</text>
+        <text x="420" y="${y65 + 34}" class="cell">${escapeXml2(truncateText(row.driverName, 28))}</text>
+        <text x="700" y="${y65 + 34}" class="cell">${escapeXml2(row.hour || "-")}</text>
+        <text x="830" y="${y65 + 34}" class="cell">${escapeXml2(truncateText(row.note, 18))}</text>
+        <text x="1095" y="${y65 + 34}" class="cell right">${escapeXml2(formatQuantity3(row.quantity))}</text>
       `;
   }).join("");
   const hiddenSvg = hiddenRows > 0 ? `
@@ -110320,17 +110448,17 @@ function buildOrderCompletionSummarySvg(params) {
         .right { text-anchor: end; }
       </style>
       <rect width="1200" height="${height}" fill="#f4f6fb" />
-      <text x="32" y="58" class="title">Hola, ${escapeXml(params.clientName || "Cliente")}</text>
-      <text x="32" y="94" class="subtitle">Resumen de tu pedido, ${escapeXml(params.obra || "Obra")}</text>
+      <text x="32" y="58" class="title">Hola, ${escapeXml2(params.clientName || "Cliente")}</text>
+      <text x="32" y="94" class="subtitle">Resumen de tu pedido, ${escapeXml2(params.obra || "Obra")}</text>
       <g>
         <rect x="32" y="135" width="260" height="142" rx="28" fill="#f7f8fc" stroke="#ffffff" stroke-width="2" />
-        <text x="162" y="198" class="metric" text-anchor="middle">${escapeXml(formatDate3(params.date))}</text>
+        <text x="162" y="198" class="metric" text-anchor="middle">${escapeXml2(formatDate3(params.date))}</text>
         <text x="162" y="246" class="metric-label" text-anchor="middle">Fecha</text>
         <rect x="320" y="135" width="260" height="142" rx="28" fill="#f7f8fc" stroke="#ffffff" stroke-width="2" />
-        <text x="450" y="198" class="metric" text-anchor="middle">${escapeXml(formatQuantity3(params.totalM3))}</text>
+        <text x="450" y="198" class="metric" text-anchor="middle">${escapeXml2(formatQuantity3(params.totalM3))}</text>
         <text x="450" y="246" class="metric-label" text-anchor="middle">M3</text>
         <rect x="608" y="135" width="260" height="142" rx="28" fill="#f7f8fc" stroke="#ffffff" stroke-width="2" />
-        <text x="738" y="198" class="metric" text-anchor="middle">${escapeXml(String(params.totalUnits))}</text>
+        <text x="738" y="198" class="metric" text-anchor="middle">${escapeXml2(String(params.totalUnits))}</text>
         <text x="738" y="246" class="metric-label" text-anchor="middle">Unidades</text>
         <rect x="896" y="135" width="260" height="142" rx="28" fill="#f7f8fc" stroke="#ffffff" stroke-width="2" />
         <text x="1026" y="214" class="metric" text-anchor="middle">\u2316</text>

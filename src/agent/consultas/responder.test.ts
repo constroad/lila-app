@@ -87,12 +87,26 @@ describe('responder', () => {
     expect(r).toContain('❔ Sin confirmar: gasohol, aviso a operadores.');
   });
 
+  /**
+   * EL CASO DEL 13/09 13:50: «a qué hora salió la última unidad despachada
+   * hoy» → el agente pidió un número. La última es la de salida más tardía.
+   */
+  it('«la última» es la de salida más tardía; «la primera», la más temprana', () => {
+    expect(unidadPor(vista, { ...hoy, ordinal: 'ultima' })?.unitNumber).toBe(3); // 06:26; la 4 está cargando, sin salida
+    expect(unidadPor(vista, { ...hoy, ordinal: 'primera' })?.unitNumber).toBe(1);
+    expect(responder('unit_departure', { vista, params: { ...hoy, ordinal: 'ultima' } })).toContain('*unidad 3* (ALC 812) salió a las *06:26*');
+  });
+
+  it('sin unidad, pregunta cuál (y acepta número, placa o «la última»)', () => {
+    expect(responder('unit_departure', { vista, params: hoy })).toBe('¿Qué unidad? Decime el número, la placa, o «la última».');
+  });
+
   it('media: la unidad se encuentra por placa o por número', () => {
     expect(unidadPor(vista, { ...hoy, plate: 'BBE942' })?.unitNumber).toBe(2);
     expect(unidadPor(vista, { ...hoy, unitNumber: 3 })?.plate).toBe('ALC 812');
     expect(unidadPor(vista, { ...hoy, plate: 'ZZZ999' })).toBeUndefined();
     expect(responder('unit_media', { vista, params: { ...hoy, plate: 'AZJ910' } })).toContain('*Unidad 1* (AZJ 910)');
-    expect(responder('unit_media', { vista, params: hoy })).toContain('¿De qué unidad?');
+    expect(responder('unit_media', { vista, params: hoy })).toContain('¿Qué unidad?');
   });
 
   /** El presupuesto por respuesta: fotos, videos y documentos por separado. */

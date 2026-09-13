@@ -14,6 +14,10 @@ export interface Archivo {
   mime: string;
   /** La empresa DUEÑA del archivo: el storage está aislado por empresa y hay que leerlo con la suya. */
   companyId: string;
+  /** Un archivo generado en memoria (una imagen renderizada): no se lee de ningún storage. */
+  buffer?: Buffer;
+  /** Texto que acompaña al archivo en WhatsApp. */
+  caption?: string;
 }
 
 type Doc = Record<string, unknown>;

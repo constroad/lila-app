@@ -169,6 +169,15 @@ describe('parámetros', () => {
     expect(sumarDias('2026-09-30', 1)).toBe('2026-10-01');
   });
 
+  /** «la última unidad despachada» no pide un número: se resuelve sola. */
+  it('entiende «la última» y «la primera»', () => {
+    expect(extraerParametros('a qué hora salió la última unidad despachada hoy').ordinal).toBe('ultima');
+    expect(extraerParametros('quién maneja el último carro').ordinal).toBe('ultima');
+    expect(extraerParametros('la que acaba de salir').ordinal).toBe('ultima');
+    expect(extraerParametros('a qué hora salió la primera').ordinal).toBe('primera');
+    expect(extraerParametros('a qué hora salió la 3').ordinal).toBeUndefined();
+  });
+
   it('«la semana» y «los próximos días» son un rango', () => {
     expect(extraerParametros('clima de la semana en ate').rango).toBe('semana');
     expect(extraerParametros('cómo estará el clima los próximos días').rango).toBe('semana');

@@ -40,13 +40,24 @@ export const elegirPedido = (
 export const etiquetaPedido = (o: PedidoDelDiaVista): string =>
   `${o.hora || '—'} — ${o.cliente || o.companySlug} · ${o.obra || 'sin obra'} · ${o.cantidadCubos} m³`;
 
-/** La unidad por placa o por número. */
+/** La unidad por placa, por número, o por orden («la última que salió», «la primera»). */
 export const unidadPor = (vista: VistaDelDia, params: Parametros) => {
   const todas = vista.orders.flatMap((o) => o.units.map((u) => ({ ...u, pedido: o })));
   if (params.plate) return todas.find((u) => normalizarPlaca(u.plate) === params.plate);
   if (params.unitNumber) return todas.find((u) => u.unitNumber === params.unitNumber);
+  if (params.ordinal) {
+    // «Última» y «primera» son por hora de SALIDA: es lo que la gente quiere
+    // saber («a qué hora salió la última»). Sin salidas, por número.
+    const salidas = todas.filter((u) => u.departedAt).sort((a, b) => (a.departedAt ?? 0) - (b.departedAt ?? 0));
+    const lista = salidas.length ? salidas : [...todas].sort((a, b) => a.unitNumber - b.unitNumber);
+    return params.ordinal === 'ultima' ? lista[lista.length - 1] : lista[0];
+  }
   return undefined;
 };
+
+/** ¿La pregunta identifica una unidad de alguna forma? */
+export const identificaUnidad = (params: Parametros): boolean =>
+  Boolean(params.plate || params.unitNumber || params.ordinal);
 
 /**
  * De una clave del catálogo y el read model a un texto. Puro: nada de acá toca
@@ -65,6 +76,17 @@ const unidades = (vista: VistaDelDia): Array<UnidadDelDia & { pedido: string }> 
   vista.orders.flatMap((o) => o.units.map((u) => ({ ...u, pedido: o.cliente || o.companyId })));
 
 const unidad = (vista: VistaDelDia, n?: number) => (n ? unidades(vista).find((u) => u.unitNumber === n) : undefined);
+
+/**
+ * Cuando falta la unidad se PREGUNTA, y la respuesta de la persona —«la 4»,
+ * «AML838», «la última»— completa la pregunta original: ver `pendientes` y el
+ * manejo en index.ts. José, 13/09: «le contesté 'la unidad 4' y me dijo que
+ * no lo puede responder». Un humano no olvida lo que acaba de preguntar.
+ */
+export const PREGUNTA_UNIDAD = '¿Qué unidad? Decime el número, la placa, o «la última».';
+
+const describeUnidad = (params: Parametros): string =>
+  params.plate ? `la placa ${params.plate}` : params.unitNumber ? `la unidad ${params.unitNumber}` : params.ordinal === 'ultima' ? 'la última unidad' : 'la primera unidad';
 
 const sinPedidos = (vista: VistaDelDia): string | null =>
   vista.orders.length === 0 ? `No hay pedidos para ${fechaLegible(vista.fecha)}.` : null;
@@ -183,26 +205,26 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
     }
 
     case 'unit_departure': {
-      if (!params.unitNumber) return '¿Qué unidad? Decime el número, por ejemplo «@lila a qué hora salió la 5».';
-      const u = unidad(vista, params.unitNumber);
-      if (!u) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+      if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
+      const u = unidadPor(vista, params);
+      if (!u) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
       if (u.state === 'despachado' && u.departedAt) return `🚚 La *unidad ${u.unitNumber}* (${u.plate || 'sin placa'}) salió a las *${hora(u.departedAt)}* con ${u.quantity} m³.`;
       if (u.state === 'progreso') return `La *unidad ${u.unitNumber}* está cargando; todavía no salió.`;
       return `La *unidad ${u.unitNumber}* todavía no salió.`;
     }
 
     case 'unit_driver': {
-      if (!params.unitNumber) return '¿Qué unidad? Decime el número, por ejemplo «@lila quién maneja la 5».';
-      const u = unidad(vista, params.unitNumber);
-      if (!u) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+      if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
+      const u = unidadPor(vista, params);
+      if (!u) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
       // Nombre y placa, nada más: teléfono y licencia no existen en la vista (spec §6.2).
       return `👤 La *unidad ${u.unitNumber}* la maneja *${u.driverName || 'sin conductor asignado'}*, placa ${u.plate || 'sin placa'}.`;
     }
 
     case 'unit_eta': {
-      if (!params.unitNumber) return '¿Qué unidad? Decime el número.';
-      const u = unidad(vista, params.unitNumber);
-      if (!u) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+      if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
+      const u = unidadPor(vista, params);
+      if (!u) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
       if (u.arrivalAt) return `La *unidad ${u.unitNumber}* ya llegó a campo a las ${hora(u.arrivalAt)}.`;
       if (u.departedAt) return `La *unidad ${u.unitNumber}* salió a las ${hora(u.departedAt)}. Todavía no calculo tiempos de llegada por acá.`;
       return `La *unidad ${u.unitNumber}* todavía no salió.`;
@@ -210,8 +232,8 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
 
     case 'unit_media': {
       const u = unidadPor(vista, params);
-      if (!params.plate && !params.unitNumber) return '¿De qué unidad? Decime la placa o el número, por ejemplo «@lila fotos de la placa AZJ 910».';
-      if (!u) return `No encuentro ${params.plate ? `la placa ${params.plate}` : `la unidad ${params.unitNumber}`} en los pedidos de ${dia}.`;
+      if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
+      if (!u) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
       // Los archivos los agrega quien tiene acceso a ellos (index.ts); acá solo el encabezado.
       return `📷 *Unidad ${u.unitNumber}* (${u.plate || 'sin placa'}) — ${u.pedido.cliente || u.pedido.companySlug}`;
     }

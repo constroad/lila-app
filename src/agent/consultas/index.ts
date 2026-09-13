@@ -1,11 +1,12 @@
 import logger from '../../utils/logger.js';
 import { CATALOGO, esConsulta, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { construirVista, type VistaDelDia } from './vista.js';
-import { acotarArchivos, elegirPedido, etiquetaPedido, responder, unidadPor, type Respuesta } from './responder.js';
+import { PREGUNTA_UNIDAD, acotarArchivos, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
 import { consumosDelDia, materiales, tanques, textoConsumos, textoMateriales, textoTanques } from './planta.js';
 import { distritoDe, diasHasta, pronosticoHorario, pronosticoSemanal, textoClima, textoClimaSemanal, textoFueraDeAlcance } from './clima.js';
+import { pngResumenDespachos } from './imagen.js';
 import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { responderEnGrupo } from '../checklist/emisor.js';
@@ -132,8 +133,36 @@ const armarRespuesta = async (
     return { texto: textoClima(await pronosticoHorario(distrito, fecha), fecha === hoyLima() ? horaLima : -1) };
   }
 
+  if (clave === 'dispatch_summary') {
+    if (vista.orders.length === 0) return { texto: responder(clave, { vista, params }) };
+    // En imagen (José, 13/09), y el texto de respaldo si la imagen no se pudiera armar.
+    try {
+      const png = await pngResumenDespachos(vista);
+      return {
+        texto: '',
+        archivos: [{ tipo: 'image', url: '', nombre: `despachos-${fecha}.png`, fechaMs: Date.now(), mime: 'image/png', companyId: '', buffer: png, caption: `📋 Despachos de ${fechaLegible(fecha)}` }],
+      };
+    } catch (error) {
+      logger.warn(`[agente] no pude armar la imagen del resumen: ${error instanceof Error ? error.message : String(error)}`);
+      return { texto: responder(clave, { vista, params }) };
+    }
+  }
+
   if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
   if (clave === 'guias_day') return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
+  // Las consultas de una unidad sin unidad: se PREGUNTA, y la respuesta de la
+  // persona («la 4», «AML838», «la última») completa esta misma consulta.
+  const deUnidad = clave === 'unit_media' || clave === 'unit_departure' || clave === 'unit_driver' || clave === 'unit_eta';
+  if (deUnidad && !identificaUnidad(params)) {
+    preguntar({
+      quien,
+      grupo,
+      opciones: [],
+      tipo: 'unidad',
+      continuar: (_i, texto) => armarRespuesta(clave, `${pregunta} ${texto ?? ''}`, quien, grupo),
+    });
+    return { texto: PREGUNTA_UNIDAD };
+  }
   if (clave === 'unit_media') {
     const encabezado = responder(clave, { vista, params });
     return unidadPor(vista, params) ? respuestaMedia(vista, params, encabezado) : { texto: encabezado };
@@ -202,8 +231,8 @@ export const atenderEleccion = async (
   const eleccion = responderPendiente(quien, grupo, texto);
   if (!eleccion) return false;
   try {
-    const respuesta = (await eleccion.pregunta.continuar(eleccion.indice)) as Respuesta;
-    logger.info(`[agente] ${quien} eligió «${eleccion.pregunta.opciones[eleccion.indice]}»`);
+    const respuesta = (await eleccion.pregunta.continuar(eleccion.indice, eleccion.texto)) as Respuesta;
+    logger.info(`[agente] ${quien} contestó «${eleccion.texto}» a la pregunta pendiente`);
     await responderEnGrupo(grupo, respuesta, alcance);
   } catch (error) {
     logger.warn(`[agente] no pude continuar la consulta de ${quien}: ${error instanceof Error ? error.message : String(error)}`);

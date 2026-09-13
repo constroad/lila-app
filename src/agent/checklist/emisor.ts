@@ -70,6 +70,8 @@ export interface ArchivoAEnviar {
   caption?: string;
   /** Dueña del archivo. Tiene que estar en `EMPRESAS_CON_PEDIDOS`. */
   companyId: string;
+  /** Generado en memoria (imagen renderizada): se manda tal cual. */
+  buffer?: Buffer;
 }
 
 /**
@@ -103,13 +105,15 @@ export const responderEnGrupo = async (
       // Solo empresas del piloto: es la lista cerrada de cuyos datos el agente
       // puede hablar en este grupo. (13/09: «File not found» por leerlo con la
       // empresa equivocada.)
-      if (!(EMPRESAS_CON_PEDIDOS as readonly string[]).includes(a.companyId)) {
+      if (!a.buffer && !(EMPRESAS_CON_PEDIDOS as readonly string[]).includes(a.companyId)) {
         logger.error(`[agente] archivo de ${a.companyId}, fuera del piloto: no se manda`);
         continue;
       }
       const inicio = Date.now();
       try {
-        const leido = await resolveFileBuffer({ companyId: a.companyId, fileUrl: a.url, mimeType: a.mime, fileName: a.nombre });
+        const leido = a.buffer
+          ? { buffer: a.buffer, mimeType: a.mime || 'image/png', fileName: a.nombre }
+          : await resolveFileBuffer({ companyId: a.companyId, fileUrl: a.url, mimeType: a.mime, fileName: a.nombre });
         if (!leido) throw new Error('no se pudo leer del storage');
         // El mime sin parámetros: «video/mp4;codecs=…» es lo que grabó el
         // navegador; WhatsApp quiere «video/mp4».
