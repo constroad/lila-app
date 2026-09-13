@@ -7063,7 +7063,7 @@ var init_whatsapp_direct_service = __esm({
         const sock = getSession(id);
         if (!sock) throw new Error("Session not found");
         const meta = await sock.groupMetadata(groupJid);
-        return (meta?.participants ?? []).filter((p64) => p64.admin === "admin" || p64.admin === "superadmin").map((p64) => String(p64.id));
+        return (meta?.participants ?? []).filter((p64) => p64.admin === "admin" || p64.admin === "superadmin").flatMap((p64) => [p64.id, p64.lid].filter((x63) => Boolean(x63)));
       },
       /**
        * Refresh groups from WhatsApp

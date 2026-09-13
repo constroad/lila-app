@@ -740,9 +740,13 @@ export const WhatsAppDirectService = {
     const sock = getSession(id);
     if (!sock) throw new Error('Session not found');
     const meta = await sock.groupMetadata(groupJid);
+    // Un participante puede venir como LID (`…@lid`) o como número
+    // (`…@s.whatsapp.net`) según el `addressingMode` del grupo, y a veces trae
+    // las dos. Se devuelven todas las formas que haya: quien compare contra
+    // esto no tiene que adivinar en cuál llega un mensaje.
     return (meta?.participants ?? [])
       .filter((p) => p.admin === 'admin' || p.admin === 'superadmin')
-      .map((p) => String(p.id));
+      .flatMap((p) => [p.id, (p as { lid?: string }).lid].filter((x): x is string => Boolean(x)));
   },
 
   /**
