@@ -8652,7 +8652,7 @@ var init_sugerencias = __esm({
 
 // src/agent/checklist/persistencia.ts
 import { Schema as Schema7 } from "mongoose";
-var mensajeSchema, propuestaSchema, mensajes, propuestas2, modelos, avisar, guardarMensaje, cargarMensajes, guardarPropuesta, cargarPropuestas;
+var mensajeSchema, propuestaSchema, configSchema, mensajes, propuestas2, config2, modelos, avisar, guardarMensaje, cargarMensajes, guardarPropuesta, cargarPropuestas, guardarConfig, cargarConfig;
 var init_persistencia = __esm({
   "src/agent/checklist/persistencia.ts"() {
     init_logger();
@@ -8691,14 +8691,20 @@ var init_persistencia = __esm({
       { collection: "agent_proposals", versionKey: false }
     );
     propuestaSchema.index({ creadoEn: 1 }, { expireAfterSeconds: 30 * 24 * 3600 });
+    configSchema = new Schema7(
+      { clave: { type: String, unique: true }, valor: Schema7.Types.Mixed, actualizadoEn: Date },
+      { collection: "agent_config", versionKey: false }
+    );
     mensajes = null;
     propuestas2 = null;
+    config2 = null;
     modelos = async () => {
-      if (mensajes && propuestas2) return { mensajes, propuestas: propuestas2 };
+      if (mensajes && propuestas2 && config2) return { mensajes, propuestas: propuestas2, config: config2 };
       const conn = await getSharedConnection();
       mensajes = conn.models.AgentMessage || conn.model("AgentMessage", mensajeSchema);
       propuestas2 = conn.models.AgentProposal || conn.model("AgentProposal", propuestaSchema);
-      return { mensajes, propuestas: propuestas2 };
+      config2 = conn.models.AgentConfig || conn.model("AgentConfig", configSchema);
+      return { mensajes, propuestas: propuestas2, config: config2 };
     };
     avisar = (que, error) => {
       logger_default.warn(`[agente] persistencia: ${que}: ${error instanceof Error ? error.message : String(error)}`);
@@ -8762,6 +8768,50 @@ var init_persistencia = __esm({
         return [];
       }
     };
+    guardarConfig = async (clave, valor) => {
+      try {
+        const { config: config3 } = await modelos();
+        await config3.updateOne({ clave }, { $set: { valor, actualizadoEn: /* @__PURE__ */ new Date() } }, { upsert: true });
+      } catch (error) {
+        avisar(`no pude guardar la config \xAB${clave}\xBB`, error);
+      }
+    };
+    cargarConfig = async (clave) => {
+      try {
+        const { config: config3 } = await modelos();
+        const doc = await config3.findOne({ clave }).lean();
+        return doc ? doc.valor : null;
+      } catch (error) {
+        avisar(`no pude cargar la config \xAB${clave}\xBB`, error);
+        return null;
+      }
+    };
+  }
+});
+
+// src/agent/checklist/interruptor.ts
+var estado, hidratarInterruptor, agenteApagado, comandoInterruptor, apagar, encender;
+var init_interruptor = __esm({
+  "src/agent/checklist/interruptor.ts"() {
+    estado = { apagado: false };
+    hidratarInterruptor = (guardado) => {
+      if (guardado && typeof guardado.apagado === "boolean") estado = { ...guardado };
+    };
+    agenteApagado = () => estado.apagado;
+    comandoInterruptor = (texto) => {
+      const t44 = String(texto || "").trim().toLowerCase().replace(/\s+/g, " ");
+      if (t44 === "!lila off") return "off";
+      if (t44 === "!lila on") return "on";
+      return null;
+    };
+    apagar = (por, ms = Date.now()) => {
+      estado = { apagado: true, por, ms };
+      return { ...estado };
+    };
+    encender = (por, ms = Date.now()) => {
+      estado = { apagado: false, por, ms };
+      return { ...estado };
+    };
   }
 });
 
@@ -8773,6 +8823,7 @@ var init_emisor = __esm({
     init_alcance();
     init_sugerencias();
     init_persistencia();
+    init_interruptor();
     sender = async () => {
       const { getCompanyModel: getCompanyModel2 } = await Promise.resolve().then(() => (init_models(), models_exports));
       const CompanyModel = await getCompanyModel2();
@@ -8803,6 +8854,10 @@ var init_emisor = __esm({
     };
     mandadas = /* @__PURE__ */ new Set();
     enviarAprobado = async (propuesta, alcance) => {
+      if (agenteApagado()) {
+        logger_default.warn(`[agente] la propuesta ${propuesta.id} est\xE1 aprobada pero el agente est\xE1 apagado: no se manda`);
+        return false;
+      }
       if (propuesta.estado !== "aprobada") {
         logger_default.warn(`[agente] se intent\xF3 mandar la propuesta ${propuesta.id} sin aprobaci\xF3n (${propuesta.estado})`);
         return false;
@@ -8857,7 +8912,7 @@ var init_aprobadores = __esm({
 });
 
 // src/agent/checklist/observador.ts
-var ALCANCE_TTL_MS, alcanceCache, alcanceVigente, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, hidratarAgente, senderPiloto, jidPorNombre;
+var ALCANCE_TTL_MS, alcanceCache, alcanceVigente, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, senderPiloto, jidPorNombre;
 var init_observador = __esm({
   "src/agent/checklist/observador.ts"() {
     init_logger();
@@ -8869,6 +8924,7 @@ var init_observador = __esm({
     init_sugerencias();
     init_emisor();
     init_aprobadores();
+    init_interruptor();
     init_persistencia();
     init_almacen();
     init_whatsapp_constants();
@@ -8900,6 +8956,11 @@ var init_observador = __esm({
           const texto = extractInboundText(raw.message);
           if (!texto.trim()) continue;
           if (remoteJid === GROUP_ERRORS_TRACKING) {
+            const comando = comandoInterruptor(texto);
+            if (!raw?.key?.fromMe && comando) {
+              await atenderInterruptor(comando, String(raw?.key?.participant || "desconocido"));
+              continue;
+            }
             if (!raw?.key?.fromMe && esVoto(texto)) {
               await atenderVoto(
                 { voto: texto, citaMsgId: citaDe(raw.message), quien: String(raw?.key?.participant || "desconocido") },
@@ -8963,15 +9024,37 @@ var init_observador = __esm({
         );
       }
     };
+    atenderInterruptor = async (comando, quien) => {
+      try {
+        if (!await esAprobador(quien)) {
+          logger_default.info(`[agente] \xAB!lila ${comando}\xBB de ${quien}, que no administra el grupo: se ignora`);
+          await enviarAOperaciones("\u{1F512} Solo un administrador de este grupo puede apagar o prender el agente.");
+          return;
+        }
+        const estado2 = comando === "off" ? apagar(quien) : encender(quien);
+        await guardarConfig("interruptor", estado2);
+        logger_default.warn(`[agente] interruptor: ${comando.toUpperCase()} por ${quien}`);
+        await enviarAOperaciones(
+          comando === "off" ? "\u23F8 Agente APAGADO. Sigue escuchando pero no propone ni manda nada. `!lila on` para prenderlo." : "\u25B6\uFE0F Agente PRENDIDO."
+        );
+      } catch (error) {
+        logger_default.warn(`[agente] no pude atender \xAB!lila ${comando}\xBB: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
     hidratarAgente = async (ahoraMs = Date.now()) => {
       try {
-        const [mensajes2, propuestas3] = await Promise.all([
+        const [mensajes2, propuestas3, interruptor] = await Promise.all([
           cargarMensajes(ahoraMs - VENTANA_MS),
-          cargarPropuestas(ahoraMs - 7 * 24 * 36e5)
+          cargarPropuestas(ahoraMs - 7 * 24 * 36e5),
+          cargarConfig("interruptor")
         ]);
         hidratarMensajes(mensajes2);
         hidratarPropuestas(propuestas3);
-        logger_default.info(`[agente] memoria rehidratada: ${mensajes2.length} mensaje(s), ${propuestas3.length} propuesta(s)`);
+        hidratarInterruptor(interruptor);
+        logger_default.info(
+          `[agente] memoria rehidratada: ${mensajes2.length} mensaje(s), ${propuestas3.length} propuesta(s), interruptor ${interruptor?.apagado ? "APAGADO" : "prendido"}`
+        );
+        void cargarAprobadores().catch(() => void 0);
       } catch (error) {
         logger_default.warn(`[agente] no pude rehidratar la memoria: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -12403,16 +12486,16 @@ var require_luxon = __commonJS({
       /**
        * @private
        */
-      constructor(config2) {
-        const accurate = config2.conversionAccuracy === "longterm" || false;
+      constructor(config3) {
+        const accurate = config3.conversionAccuracy === "longterm" || false;
         let matrix = accurate ? accurateMatrix : casualMatrix;
-        if (config2.matrix) {
-          matrix = config2.matrix;
+        if (config3.matrix) {
+          matrix = config3.matrix;
         }
-        this.values = config2.values;
-        this.loc = config2.loc || Locale.create();
+        this.values = config3.values;
+        this.loc = config3.loc || Locale.create();
         this.conversionAccuracy = accurate ? "longterm" : "casual";
-        this.invalid = config2.invalid || null;
+        this.invalid = config3.invalid || null;
         this.matrix = matrix;
         this.isLuxonDuration = true;
       }
@@ -13119,10 +13202,10 @@ var require_luxon = __commonJS({
       /**
        * @private
        */
-      constructor(config2) {
-        this.s = config2.start;
-        this.e = config2.end;
-        this.invalid = config2.invalid || null;
+      constructor(config3) {
+        this.s = config3.start;
+        this.e = config3.end;
+        this.invalid = config3.invalid || null;
         this.isLuxonInterval = true;
       }
       /**
@@ -14699,17 +14782,17 @@ var require_luxon = __commonJS({
       /**
        * @access private
        */
-      constructor(config2) {
-        const zone = config2.zone || Settings2.defaultZone;
-        let invalid = config2.invalid || (Number.isNaN(config2.ts) ? new Invalid("invalid input") : null) || (!zone.isValid ? unsupportedZone(zone) : null);
-        this.ts = isUndefined(config2.ts) ? Settings2.now() : config2.ts;
+      constructor(config3) {
+        const zone = config3.zone || Settings2.defaultZone;
+        let invalid = config3.invalid || (Number.isNaN(config3.ts) ? new Invalid("invalid input") : null) || (!zone.isValid ? unsupportedZone(zone) : null);
+        this.ts = isUndefined(config3.ts) ? Settings2.now() : config3.ts;
         let c66 = null, o37 = null;
         if (!invalid) {
-          const unchanged = config2.old && config2.old.ts === this.ts && config2.old.zone.equals(zone);
+          const unchanged = config3.old && config3.old.ts === this.ts && config3.old.zone.equals(zone);
           if (unchanged) {
-            [c66, o37] = [config2.old.c, config2.old.o];
+            [c66, o37] = [config3.old.c, config3.old.o];
           } else {
-            const ot4 = isNumber(config2.o) && !config2.old ? config2.o : zone.offset(this.ts);
+            const ot4 = isNumber(config3.o) && !config3.old ? config3.o : zone.offset(this.ts);
             c66 = tsToObj(this.ts, ot4);
             invalid = Number.isNaN(c66.year) ? new Invalid("invalid input") : null;
             c66 = invalid ? null : c66;
@@ -14717,7 +14800,7 @@ var require_luxon = __commonJS({
           }
         }
         this._zone = zone;
-        this.loc = config2.loc || Locale.create();
+        this.loc = config3.loc || Locale.create();
         this.invalid = invalid;
         this.weekData = null;
         this.localWeekData = null;
@@ -83205,17 +83288,17 @@ ${signaturesHtml}`;
   }
   async renderHeader(section) {
     if (section.headerConfig) {
-      const config2 = section.headerConfig;
+      const config3 = section.headerConfig;
       const hideLogo = shouldHideDocumentLogo(this.data);
-      const logoValue = hideLogo ? "" : config2.logoUrl || this.getValue(config2.logoKey || "");
-      const leftText = config2.leftTextKey ? this.getValue(config2.leftTextKey) : "";
+      const logoValue = hideLogo ? "" : config3.logoUrl || this.getValue(config3.logoKey || "");
+      const leftText = config3.leftTextKey ? this.getValue(config3.leftTextKey) : "";
       const logoSrc = logoValue ? await this.resolveImageSrc({ url: String(logoValue) }) : null;
-      const rightFields = config2.rightFields || [];
-      const centerTitle = config2.centerTitle || this.getValue(config2.centerTitleKey || "");
-      const centerSubtitle = config2.centerSubtitle || this.getValue(config2.centerSubtitleKey || "");
+      const rightFields = config3.rightFields || [];
+      const centerTitle = config3.centerTitle || this.getValue(config3.centerTitleKey || "");
+      const centerSubtitle = config3.centerSubtitle || this.getValue(config3.centerSubtitleKey || "");
       const centerLines = [
-        ...config2.centerLines || [],
-        ...(config2.centerLinesKeys || []).map((key) => this.getValue(key)).filter(Boolean)
+        ...config3.centerLines || [],
+        ...(config3.centerLinesKeys || []).map((key) => this.getValue(key)).filter(Boolean)
       ];
       if (this.schema.code === "ACT-CNF") {
         const computed = this.computeActaTitulo();
@@ -83231,7 +83314,7 @@ ${signaturesHtml}`;
         const value = this.getValue(field.key);
         return `<div><strong>${this.escapeHtml(field.label)}</strong>: ${this.escapeHtml(this.formatValue(value))}</div>`;
       }).join("");
-      const secondary = config2.secondaryRow;
+      const secondary = config3.secondaryRow;
       const secondaryLeft = secondary?.leftText || (secondary?.leftTextKey ? this.getValue(secondary.leftTextKey) : "");
       const secondaryCenter = secondary?.centerText || (secondary?.centerTextKey ? this.getValue(secondary.centerTextKey) : "");
       const secondaryRight = (secondary?.rightFields || []).map((field) => {
@@ -83281,10 +83364,10 @@ ${signaturesHtml}`;
     const fields = (() => {
       const baseFields = section.fields || [];
       if (this.schema.code !== "CTL-PIS" || section.id !== "resumenControl") return baseFields;
-      const config2 = this.getValue("controlPistaColumns") || {};
+      const config3 = this.getValue("controlPistaColumns") || {};
       const hiddenKeys = /* @__PURE__ */ new Set();
-      if (config2.hideTempRodilloLiso) hiddenKeys.add("resumenControl.tempRodilloLisoProm");
-      if (config2.hideTempRodilloNeumatico) hiddenKeys.add("resumenControl.tempRodilloNeumaticoProm");
+      if (config3.hideTempRodilloLiso) hiddenKeys.add("resumenControl.tempRodilloLisoProm");
+      if (config3.hideTempRodilloNeumatico) hiddenKeys.add("resumenControl.tempRodilloNeumaticoProm");
       return hiddenKeys.size > 0 ? baseFields.filter((field) => !hiddenKeys.has(field.key)) : baseFields;
     })();
     if (fields.length === 0) {
@@ -83383,11 +83466,11 @@ ${signaturesHtml}`;
     }
     const hiddenColumns = (() => {
       if (this.schema.code !== "CTL-PIS" || section.id !== "controlPista") return /* @__PURE__ */ new Set();
-      const config2 = this.getValue("controlPistaColumns") || {};
+      const config3 = this.getValue("controlPistaColumns") || {};
       const hidden = /* @__PURE__ */ new Set();
-      if (config2.hideHoraFinalColocacion) hidden.add("horaFinalColocacion");
-      if (config2.hideTempRodilloLiso) hidden.add("tempRodilloLiso");
-      if (config2.hideTempRodilloNeumatico) hidden.add("tempRodilloNeumatico");
+      if (config3.hideHoraFinalColocacion) hidden.add("horaFinalColocacion");
+      if (config3.hideTempRodilloLiso) hidden.add("tempRodilloLiso");
+      if (config3.hideTempRodilloNeumatico) hidden.add("tempRodilloNeumatico");
       return hidden;
     })();
     const displayColumns = hiddenColumns.size > 0 ? columns.filter((col) => !hiddenColumns.has(col.key)) : columns;
@@ -84904,8 +84987,8 @@ var PDFMergerService = class {
 import fs27 from "fs-extra";
 import { PDFDocument as PDFDocument3, rgb as rgb2, StandardFonts as StandardFonts2 } from "pdf-lib";
 var FolioGeneratorService = class {
-  static async addFolios(pdfPath, config2, outputPath, options2 = {}) {
-    if (!config2.enabled) {
+  static async addFolios(pdfPath, config3, outputPath, options2 = {}) {
+    if (!config3.enabled) {
       if (pdfPath !== outputPath) {
         await fs27.copyFile(pdfPath, outputPath);
       }
@@ -84914,7 +84997,7 @@ var FolioGeneratorService = class {
     const pdfBytes = await fs27.readFile(pdfPath);
     const pdfDoc = await PDFDocument3.load(pdfBytes);
     const font = await pdfDoc.embedFont(StandardFonts2.Helvetica);
-    const fontSize = config2.fontSize || 10;
+    const fontSize = config3.fontSize || 10;
     const pages = pdfDoc.getPages();
     const totalPages = pdfDoc.getPageCount();
     const limit = options2.limitPages ?? totalPages;
@@ -84922,11 +85005,11 @@ var FolioGeneratorService = class {
       if (i50 >= limit) break;
       const page = pages[i50];
       const { width, height } = page.getSize();
-      const current = config2.startNumber + i50;
-      const totalForText = config2.includeAnnexes ? totalPages : limit;
-      const folioText = this.formatFolio(config2.format, current, totalForText);
+      const current = config3.startNumber + i50;
+      const totalForText = config3.includeAnnexes ? totalPages : limit;
+      const folioText = this.formatFolio(config3.format, current, totalForText);
       const { x: x63, y: y65 } = this.calculatePosition(
-        config2.position,
+        config3.position,
         width,
         height,
         folioText,
@@ -89784,15 +89867,15 @@ function requireBrowser() {
   hasRequiredBrowser = 1;
   browser = deprecate;
   function deprecate(fn, msg) {
-    if (config2("noDeprecation")) {
+    if (config3("noDeprecation")) {
       return fn;
     }
     var warned = false;
     function deprecated() {
       if (!warned) {
-        if (config2("throwDeprecation")) {
+        if (config3("throwDeprecation")) {
           throw new Error(msg);
-        } else if (config2("traceDeprecation")) {
+        } else if (config3("traceDeprecation")) {
           console.trace(msg);
         } else {
           console.warn(msg);
@@ -89803,7 +89886,7 @@ function requireBrowser() {
     }
     return deprecated;
   }
-  function config2(name) {
+  function config3(name) {
     try {
       if (!commonjsGlobal.localStorage)
         return false;
@@ -108571,11 +108654,11 @@ async function updateMaintenanceM3Config(companyId, quantity) {
   }
   await Promise.all(
     configs.map(
-      (config2) => ConfigModel.updateOne(
-        { _id: config2._id, companyId },
+      (config3) => ConfigModel.updateOne(
+        { _id: config3._id, companyId },
         {
           $set: {
-            currentValue: toNumber2(config2.currentValue) + toNumber2(quantity)
+            currentValue: toNumber2(config3.currentValue) + toNumber2(quantity)
           }
         }
       )
@@ -112120,11 +112203,11 @@ async function resolveGpsIngestAuth(token) {
   const company = await Company.findOne({
     "fleetSettings.gpsWebhook.secretHash": expectedHash
   }).select("companyId fleetSettings.gpsWebhook").lean();
-  const config2 = company?.fleetSettings?.gpsWebhook;
-  if (!company?.companyId || !config2?.secretHash) return null;
-  if (config2.isActive === false) return null;
-  if (!timingSafeEqual3(expectedHash, String(config2.secretHash))) return null;
-  return { companyId: company.companyId, provider: config2.provider };
+  const config3 = company?.fleetSettings?.gpsWebhook;
+  if (!company?.companyId || !config3?.secretHash) return null;
+  if (config3.isActive === false) return null;
+  if (!timingSafeEqual3(expectedHash, String(config3.secretHash))) return null;
+  return { companyId: company.companyId, provider: config3.provider };
 }
 var resolveWriteErrorCode = (writeError) => {
   const flat = writeError;
@@ -112276,11 +112359,11 @@ function resolveVisionProvider(env) {
     baseUrl: env.baseUrl?.trim() || void 0
   };
 }
-function buildVisionRequest(config2, image) {
-  if (config2.provider === "gemini") {
+function buildVisionRequest(config3, image) {
+  if (config3.provider === "gemini") {
     return {
       // Gemini lleva la credencial en la query string (así lo define su API).
-      url: `https://generativelanguage.googleapis.com/v1beta/models/${config2.model}:generateContent?key=${encodeURIComponent(config2.apiKey)}`,
+      url: `https://generativelanguage.googleapis.com/v1beta/models/${config3.model}:generateContent?key=${encodeURIComponent(config3.apiKey)}`,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [
@@ -112295,16 +112378,16 @@ function buildVisionRequest(config2, image) {
       })
     };
   }
-  if (config2.provider === "anthropic") {
+  if (config3.provider === "anthropic") {
     return {
       url: "https://api.anthropic.com/v1/messages",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": config2.apiKey,
+        "x-api-key": config3.apiKey,
         "anthropic-version": ANTHROPIC_VERSION
       },
       body: JSON.stringify({
-        model: config2.model,
+        model: config3.model,
         max_tokens: MAX_OUTPUT_TOKENS,
         messages: [
           {
@@ -112321,12 +112404,12 @@ function buildVisionRequest(config2, image) {
       })
     };
   }
-  const baseUrl = (config2.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "");
+  const baseUrl = (config3.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "");
   return {
     url: `${baseUrl}/chat/completions`,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config2.apiKey}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config3.apiKey}` },
     body: JSON.stringify({
-      model: config2.model,
+      model: config3.model,
       max_tokens: MAX_OUTPUT_TOKENS,
       temperature: 0,
       messages: [
@@ -114750,6 +114833,7 @@ var momentoVigente = (dia, ahoraMs) => {
 };
 
 // src/agent/checklist/detector.ts
+init_interruptor();
 var nombresEmpresa = /* @__PURE__ */ new Map();
 var pedidosConArranque = async (ahoraMs) => {
   const OrderModel = await getOrderModel();
@@ -114787,6 +114871,10 @@ var pedidosConArranque = async (ahoraMs) => {
 var ultimaVersionDelDia = /* @__PURE__ */ new Map();
 var correrDeteccion = async (ahoraMs = Date.now()) => {
   if (!destinoPermitido()) return 0;
+  if (agenteApagado()) {
+    logger_default.info("[agente] apagado por interruptor: no se propone nada");
+    return 0;
+  }
   const alcance = await alcanceVigente(ahoraMs);
   if (!alcance.grupoEscuchado) return 0;
   for (const vencida of vencidasAhora(ahoraMs)) {

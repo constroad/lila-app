@@ -57,18 +57,25 @@ const propuestaSchema = new Schema(
 );
 propuestaSchema.index({ creadoEn: 1 }, { expireAfterSeconds: 30 * 24 * 3600 });
 
+const configSchema = new Schema(
+  { clave: { type: String, unique: true }, valor: Schema.Types.Mixed, actualizadoEn: Date },
+  { collection: 'agent_config', versionKey: false }
+);
+
 type Doc = Record<string, unknown>;
 let mensajes: Model<Doc> | null = null;
 let propuestas: Model<Doc> | null = null;
+let config: Model<Doc> | null = null;
 
-const modelos = async (): Promise<{ mensajes: Model<Doc>; propuestas: Model<Doc> }> => {
-  if (mensajes && propuestas) return { mensajes, propuestas };
+const modelos = async (): Promise<{ mensajes: Model<Doc>; propuestas: Model<Doc>; config: Model<Doc> }> => {
+  if (mensajes && propuestas && config) return { mensajes, propuestas, config };
   const conn = await getSharedConnection();
   mensajes =
     (conn.models.AgentMessage as Model<Doc>) || conn.model<Doc>('AgentMessage', mensajeSchema);
   propuestas =
     (conn.models.AgentProposal as Model<Doc>) || conn.model<Doc>('AgentProposal', propuestaSchema);
-  return { mensajes, propuestas };
+  config = (conn.models.AgentConfig as Model<Doc>) || conn.model<Doc>('AgentConfig', configSchema);
+  return { mensajes, propuestas, config };
 };
 
 const avisar = (que: string, error: unknown): void => {
@@ -137,5 +144,25 @@ export const cargarPropuestas = async (desdeMs: number): Promise<Propuesta[]> =>
   } catch (error) {
     avisar('no pude cargar propuestas', error);
     return [];
+  }
+};
+
+export const guardarConfig = async (clave: string, valor: unknown): Promise<void> => {
+  try {
+    const { config } = await modelos();
+    await config.updateOne({ clave }, { $set: { valor, actualizadoEn: new Date() } }, { upsert: true });
+  } catch (error) {
+    avisar(`no pude guardar la config «${clave}»`, error);
+  }
+};
+
+export const cargarConfig = async <T>(clave: string): Promise<T | null> => {
+  try {
+    const { config } = await modelos();
+    const doc = (await config.findOne({ clave }).lean()) as Doc | null;
+    return doc ? (doc.valor as T) : null;
+  } catch (error) {
+    avisar(`no pude cargar la config «${clave}»`, error);
+    return null;
   }
 };

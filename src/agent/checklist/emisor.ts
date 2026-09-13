@@ -2,6 +2,7 @@ import logger from '../../utils/logger.js';
 import { COMPANY_PILOTO, destinoPermitido, destinosConAprobacion, type AlcanceAgente } from './alcance.js';
 import { anotarMensaje, type Propuesta } from './sugerencias.js';
 import { guardarPropuesta } from './persistencia.js';
+import { agenteApagado } from './interruptor.js';
 
 /**
  * EL ÚNICO LUGAR QUE MANDA MENSAJES. Dos puertas, y solo dos:
@@ -72,6 +73,10 @@ export const enviarAprobado = async (
   propuesta: Propuesta,
   alcance: AlcanceAgente
 ): Promise<boolean> => {
+  if (agenteApagado()) {
+    logger.warn(`[agente] la propuesta ${propuesta.id} está aprobada pero el agente está apagado: no se manda`);
+    return false;
+  }
   if (propuesta.estado !== 'aprobada') {
     logger.warn(`[agente] se intentó mandar la propuesta ${propuesta.id} sin aprobación (${propuesta.estado})`);
     return false;

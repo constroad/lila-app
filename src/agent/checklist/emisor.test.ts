@@ -22,6 +22,8 @@ jest.unstable_mockModule('./persistencia.js', () => ({
   guardarMensaje: jest.fn(async () => undefined),
   cargarMensajes: jest.fn(async () => []),
   cargarPropuestas: jest.fn(async () => []),
+  guardarConfig: jest.fn(async () => undefined),
+  cargarConfig: jest.fn(async () => null),
 }));
 jest.unstable_mockModule('../../utils/logger.js', () => ({
   __esModule: true,
@@ -39,18 +41,22 @@ const alcance = {
 
 type Subject = typeof import('./emisor.js');
 type Sugerencias = typeof import('./sugerencias.js');
+type Interruptor = typeof import('./interruptor.js');
 let emisor: Subject;
 let sugerencias: Sugerencias;
+let interruptor: Interruptor;
 
 beforeAll(async () => {
   emisor = await import('./emisor.js');
   sugerencias = await import('./sugerencias.js');
+  interruptor = await import('./interruptor.js');
 });
 
 beforeEach(() => {
   sendMessage.mockClear();
   emisor._resetEmisor();
   sugerencias._resetPropuestas();
+  interruptor._resetInterruptor();
 });
 
 const propuesta = (over: Partial<Parameters<Sugerencias['proponer']>[0]> = {}) => {
@@ -119,6 +125,15 @@ describe('enviarAprobado', () => {
 
   it('una persona tampoco es destino', async () => {
     const aprobada = aprobar(propuesta({ destino: '51999111222@s.whatsapp.net', nombreDestino: 'alguien' }));
+
+    await expect(emisor.enviarAprobado(aprobada, alcance)).resolves.toBe(false);
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  /** Apagado por `!lila off`, ni una propuesta aprobada sale. */
+  it('con el agente apagado no manda ni lo aprobado', async () => {
+    const aprobada = aprobar(propuesta());
+    interruptor.apagar('jose');
 
     await expect(emisor.enviarAprobado(aprobada, alcance)).resolves.toBe(false);
     expect(sendMessage).not.toHaveBeenCalled();

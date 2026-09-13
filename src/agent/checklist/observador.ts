@@ -12,8 +12,9 @@ import { normalizarTexto } from './checklist.js';
 import { hidratarMensajes, recordarMensaje } from './almacen.js';
 import { decidir, esVoto, hidratarPropuestas, type MotivoRechazo } from './sugerencias.js';
 import { enviarAOperaciones, enviarAprobado } from './emisor.js';
-import { esAprobador } from './aprobadores.js';
-import { cargarMensajes, cargarPropuestas, guardarMensaje } from './persistencia.js';
+import { cargarAprobadores, esAprobador } from './aprobadores.js';
+import { apagar, comandoInterruptor, encender, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
+import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje } from './persistencia.js';
 import { VENTANA_MS } from './almacen.js';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
 
@@ -110,6 +111,11 @@ export const observarParaChecklist = async (
       // administra el grupo, no aprueba nada. Se atiende antes del guard de
       // abajo porque es otro grupo, con otra función — no se «escucha» para hechos.
       if (remoteJid === GROUP_ERRORS_TRACKING) {
+        const comando = comandoInterruptor(texto);
+        if (!raw?.key?.fromMe && comando) {
+          await atenderInterruptor(comando, String(raw?.key?.participant || 'desconocido'));
+          continue;
+        }
         if (!raw?.key?.fromMe && esVoto(texto)) {
           await atenderVoto(
             { voto: texto, citaMsgId: citaDe(raw.message), quien: String(raw?.key?.participant || 'desconocido') },
@@ -198,19 +204,51 @@ const atenderVoto = async (
 };
 
 /**
+ * `!lila off` / `!lila on`, de un administrador del grupo de operaciones. Se
+ * persiste: un deploy no prende lo que alguien apagó.
+ */
+const atenderInterruptor = async (comando: 'off' | 'on', quien: string): Promise<void> => {
+  try {
+    if (!(await esAprobador(quien))) {
+      logger.info(`[agente] «!lila ${comando}» de ${quien}, que no administra el grupo: se ignora`);
+      await enviarAOperaciones('🔒 Solo un administrador de este grupo puede apagar o prender el agente.');
+      return;
+    }
+    const estado = comando === 'off' ? apagar(quien) : encender(quien);
+    await guardarConfig('interruptor', estado);
+    logger.warn(`[agente] interruptor: ${comando.toUpperCase()} por ${quien}`);
+    await enviarAOperaciones(
+      comando === 'off'
+        ? '⏸ Agente APAGADO. Sigue escuchando pero no propone ni manda nada. `!lila on` para prenderlo.'
+        : '▶️ Agente PRENDIDO.'
+    );
+  } catch (error) {
+    logger.warn(`[agente] no pude atender «!lila ${comando}»: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
  * Al arrancar: la memoria vuelve de Mongo. Sin esto cada deploy dejaba al
  * agente amnésico (12/09/2026: cuatro deploys, cuatro veces todo de nuevo).
  * Nunca lanza.
  */
 export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
   try {
-    const [mensajes, propuestas] = await Promise.all([
+    const [mensajes, propuestas, interruptor] = await Promise.all([
       cargarMensajes(ahoraMs - VENTANA_MS),
       cargarPropuestas(ahoraMs - 7 * 24 * 3_600_000),
+      cargarConfig<EstadoInterruptor>('interruptor'),
     ]);
     hidratarMensajes(mensajes);
     hidratarPropuestas(propuestas);
-    logger.info(`[agente] memoria rehidratada: ${mensajes.length} mensaje(s), ${propuestas.length} propuesta(s)`);
+    hidratarInterruptor(interruptor);
+    logger.info(
+      `[agente] memoria rehidratada: ${mensajes.length} mensaje(s), ${propuestas.length} propuesta(s), ` +
+        `interruptor ${interruptor?.apagado ? 'APAGADO' : 'prendido'}`
+    );
+    // Los aprobadores se leen ya, para que la lista quede en el log antes del
+    // primer voto — y no descubrir en el peor momento que nadie es admin.
+    void cargarAprobadores().catch(() => undefined);
   } catch (error) {
     logger.warn(`[agente] no pude rehidratar la memoria: ${error instanceof Error ? error.message : String(error)}`);
   }

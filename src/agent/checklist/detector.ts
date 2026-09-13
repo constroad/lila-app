@@ -24,6 +24,7 @@ import {
 } from './sugerencias.js';
 import { agruparPorDia, firmaDia, momentoVigente, type DiaDePlanta, type PedidoDelDia } from './dia.js';
 import { diaPeruano, instanteArranque } from './tiempo.js';
+import { agenteApagado } from './interruptor.js';
 
 export { diaPeruano, instanteArranque };
 
@@ -102,6 +103,10 @@ const ultimaVersionDelDia = new Map<string, PedidoDelDia[]>();
  */
 export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => {
   if (!destinoPermitido()) return 0;
+  if (agenteApagado()) {
+    logger.info('[agente] apagado por interruptor: no se propone nada');
+    return 0;
+  }
 
   const alcance = await alcanceVigente(ahoraMs);
   if (!alcance.grupoEscuchado) return 0;
