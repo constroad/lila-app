@@ -41,6 +41,12 @@ export interface ChecklistItem {
   /** Minutos ANTES del arranque en los que deja de ser "todavía hay tiempo". */
   venceMinutosAntes: number;
   /**
+   * Lo que se pregunta en la ÚLTIMA LLAMADA (2 h antes) si sigue sin confirmar.
+   * A esa hora ya no se coordina una comida; sí importa que haya petróleo y que
+   * los operadores sepan. Lo demás, a esa altura, es ruido.
+   */
+  critico?: boolean;
+  /**
    * Frases que, dichas en el grupo, lo dan por resuelto. Se comparan sin tildes
    * ni mayúsculas. Es el reemplazo del modelo en la fase de espejo.
    */
@@ -66,6 +72,7 @@ const VENCE_TARDE_ANTERIOR = 12 * 60;
 export const CHECKLIST_PLANTA: ChecklistItem[] = [
   {
     id: 'agregados',
+    critico: true,
     titulo: 'agregados',
     pregunta: '¿Tenemos suficientes agregados?',
     domain: 'planta',
@@ -75,6 +82,7 @@ export const CHECKLIST_PLANTA: ChecklistItem[] = [
   },
   {
     id: 'petroleo-planta',
+    critico: true,
     titulo: 'petróleo de planta',
     pregunta: '¿Hay combustible (petróleo) suficiente?',
     domain: 'planta',
@@ -93,6 +101,7 @@ export const CHECKLIST_PLANTA: ChecklistItem[] = [
   },
   {
     id: 'operadores',
+    critico: true,
     titulo: 'aviso a operadores',
     pregunta: '¿Se avisó a los operadores?',
     domain: 'planta',
@@ -111,6 +120,7 @@ export const CHECKLIST_PLANTA: ChecklistItem[] = [
   },
   {
     id: 'clima',
+    critico: true,
     titulo: 'clima',
     pregunta: '¿Revisaron el clima? ¿Es viable asfaltar?',
     domain: 'planta',
@@ -272,4 +282,29 @@ export const evaluarChecklist = (params: {
     resueltos: estados.filter((e) => e.satisfecho),
     minutosParaArranque,
   };
+};
+
+export interface Revision {
+  /** Sin confirmar, en el orden del checklist. */
+  pendientes: ChecklistItem[];
+  resueltos: ChecklistItem[];
+}
+
+/**
+ * La revisión de un HORARIO (ver `dia.momentoVigente`): qué sigue sin confirmar,
+ * sin mirar vencimientos — el horario ya decidió que es momento de preguntar.
+ * En la última llamada solo lo crítico.
+ */
+export const evaluarRevision = (
+  items: ChecklistItem[],
+  mensajes: string[],
+  opciones: { soloCriticos?: boolean } = {}
+): Revision => {
+  const considerados = opciones.soloCriticos ? items.filter((i) => i.critico) : items;
+  const pendientes: ChecklistItem[] = [];
+  const resueltos: ChecklistItem[] = [];
+  for (const item of considerados) {
+    (itemSatisfecho(item, mensajes) ? resueltos : pendientes).push(item);
+  }
+  return { pendientes, resueltos };
 };

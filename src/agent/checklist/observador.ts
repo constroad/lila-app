@@ -9,9 +9,12 @@ import {
   type GrupoResuelto,
 } from './alcance.js';
 import { normalizarTexto } from './checklist.js';
-import { recordarMensaje } from './almacen.js';
-import { decidir, esVoto } from './sugerencias.js';
+import { hidratarMensajes, recordarMensaje } from './almacen.js';
+import { decidir, esVoto, hidratarPropuestas, type MotivoRechazo } from './sugerencias.js';
 import { enviarAOperaciones, enviarAprobado } from './emisor.js';
+import { esAprobador } from './aprobadores.js';
+import { cargarMensajes, cargarPropuestas, guardarMensaje } from './persistencia.js';
+import { VENTANA_MS } from './almacen.js';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
 
 /**
@@ -48,6 +51,10 @@ export const alcanceVigente = async (now = Date.now()): Promise<AlcanceAgente> =
   return alcance;
 };
 
+type ContenidoEntrante = BaileysMessageContent & {
+  extendedTextMessage?: { contextInfo?: { stanzaId?: string | null } | null } | null;
+};
+
 interface UpsertEvent {
   type?: string;
   messages?: Array<{
@@ -58,9 +65,13 @@ interface UpsertEvent {
       participant?: string | null;
     };
     messageTimestamp?: number | Long | null;
-    message?: BaileysMessageContent | null;
+    message?: ContenidoEntrante | null;
   }>;
 }
+
+/** El id del mensaje que este mensaje CITA (responder → aparece arriba). */
+const citaDe = (message: ContenidoEntrante | null | undefined): string =>
+  String(message?.extendedTextMessage?.contextInfo?.stanzaId || '');
 
 type Long = { toNumber(): number };
 
@@ -94,12 +105,16 @@ export const observarParaChecklist = async (
       const texto = extractInboundText(raw.message);
       if (!texto.trim()) continue;
 
-      // LAS APROBACIONES vienen del grupo de operaciones, y de una PERSONA: un
-      // «1» del propio bot no aprueba nada. Se atiende antes del guard de abajo
-      // porque es otro grupo, con otra función — no se «escucha» para hechos.
+      // LAS APROBACIONES vienen del grupo de operaciones, CITANDO la propuesta,
+      // y de un administrador: un «1» suelto, o del propio bot, o de quien no
+      // administra el grupo, no aprueba nada. Se atiende antes del guard de
+      // abajo porque es otro grupo, con otra función — no se «escucha» para hechos.
       if (remoteJid === GROUP_ERRORS_TRACKING) {
         if (!raw?.key?.fromMe && esVoto(texto)) {
-          await atenderVoto(texto, String(raw?.key?.participant || 'desconocido'), alcance);
+          await atenderVoto(
+            { voto: texto, citaMsgId: citaDe(raw.message), quien: String(raw?.key?.participant || 'desconocido') },
+            alcance
+          );
         }
         continue;
       }
@@ -108,7 +123,7 @@ export const observarParaChecklist = async (
       if (!debeEscuchar(remoteJid, alcance)) continue;
 
       const ahora = Date.now();
-      recordarMensaje(remoteJid, {
+      const mensaje = {
         texto,
         // En un grupo, quien escribió viene en `participant`; `remoteJid` es el
         // grupo. Se guarda para la seguridad por rol de F2 (spec §7.3).
@@ -117,7 +132,11 @@ export const observarParaChecklist = async (
         // Los mensajes de nuestra propia sesión no confirman nada: el agente no
         // se cierra a sí mismo los ítems que acaba de abrir.
         esPropio: Boolean(raw?.key?.fromMe),
-      });
+      };
+      recordarMensaje(remoteJid, mensaje);
+      // Y a Mongo, para que un deploy no lo borre. Fire-and-forget: nunca en el
+      // camino del listener.
+      void guardarMensaje(remoteJid, { ...mensaje, waId: String(raw?.key?.id || '') || undefined });
     }
   } catch (error) {
     logger.warn(
@@ -129,21 +148,37 @@ export const observarParaChecklist = async (
 };
 
 /**
- * Un «1» o un «3» en el grupo de operaciones decide la propuesta pendiente más
- * reciente. Con «1» sale al grupo real por el emisor —que vuelve a verificar
- * destino y estado— y se confirma en operaciones; con «3» solo se anota.
+ * Un «1» o un «3» que CITA una propuesta, de un administrador del grupo de
+ * operaciones, la decide. Con «1» sale al grupo real por el emisor —que vuelve
+ * a verificar destino y estado— y se confirma en operaciones; con «3» solo se
+ * anota. Todo lo que no cumpla eso se ignora y queda en el log con el motivo.
  *
  * Nunca lanza: cuelga del listener de Baileys.
  */
-const atenderVoto = async (voto: string, quien: string, alcance: AlcanceAgente): Promise<void> => {
+const atenderVoto = async (
+  args: { voto: string; citaMsgId: string; quien: string },
+  alcance: AlcanceAgente
+): Promise<void> => {
   try {
-    const propuesta = decidir(voto, quien);
-    if (!propuesta) {
-      logger.info(`[agente] «${voto}» de ${quien} en operaciones, sin propuesta pendiente: se ignora`);
+    const aprobador = await esAprobador(args.quien);
+    const resultado = decidir({ ...args, esAprobador: aprobador });
+    if (resultado.ok === false) {
+      const explicacion: Record<MotivoRechazo, string> = {
+        'sin-cita': 'sin citar ninguna propuesta: se ignora',
+        'cita-desconocida': 'citando un mensaje que no es una propuesta: se ignora',
+        'no-pendiente': 'sobre una propuesta ya decidida o vencida: se ignora',
+        'no-aprobador': 'de alguien que no administra el grupo: se ignora',
+        'no-es-voto': 'que no es un voto',
+      };
+      logger.info(`[agente] «${args.voto}» de ${args.quien} en operaciones, ${explicacion[resultado.motivo]}`);
+      if (resultado.motivo === 'no-aprobador') {
+        await enviarAOperaciones('🔒 Solo un administrador de este grupo puede aprobar o descartar.');
+      }
       return;
     }
+    const propuesta = resultado.propuesta;
     if (propuesta.estado === 'descartada') {
-      logger.info(`[agente] propuesta ${propuesta.id} (${propuesta.tipo}) descartada por ${quien}`);
+      logger.info(`[agente] propuesta ${propuesta.id} (${propuesta.tipo}) descartada por ${args.quien}`);
       await enviarAOperaciones(`🗑 Descartado. No se mandó a «${propuesta.nombreDestino}».`);
       return;
     }
@@ -155,10 +190,29 @@ const atenderVoto = async (voto: string, quien: string, alcance: AlcanceAgente):
     );
   } catch (error) {
     logger.warn(
-      `[agente] no pude atender el voto «${voto}» de ${quien}: ${
+      `[agente] no pude atender el voto «${args.voto}» de ${args.quien}: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
+  }
+};
+
+/**
+ * Al arrancar: la memoria vuelve de Mongo. Sin esto cada deploy dejaba al
+ * agente amnésico (12/09/2026: cuatro deploys, cuatro veces todo de nuevo).
+ * Nunca lanza.
+ */
+export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
+  try {
+    const [mensajes, propuestas] = await Promise.all([
+      cargarMensajes(ahoraMs - VENTANA_MS),
+      cargarPropuestas(ahoraMs - 7 * 24 * 3_600_000),
+    ]);
+    hidratarMensajes(mensajes);
+    hidratarPropuestas(propuestas);
+    logger.info(`[agente] memoria rehidratada: ${mensajes.length} mensaje(s), ${propuestas.length} propuesta(s)`);
+  } catch (error) {
+    logger.warn(`[agente] no pude rehidratar la memoria: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 

@@ -56,3 +56,12 @@ export const recordarMensaje = (grupo: string, mensaje: MensajeGrupo): void => {
  */
 export const mensajesDesde = (grupo: string, desdeMs: number): MensajeGrupo[] =>
   (porGrupo.get(String(grupo || '').trim()) ?? []).filter((m) => m.ts >= desdeMs);
+
+/** Rehidratación desde la persistencia al arrancar. Se suma a lo que haya, sin duplicar. */
+export const hidratarMensajes = (guardados: Array<{ grupo: string } & MensajeGrupo>): void => {
+  for (const g of guardados) {
+    const lista = porGrupo.get(g.grupo) ?? [];
+    const repetido = lista.some((m) => m.ts === g.ts && m.autor === g.autor && m.texto === g.texto);
+    if (!repetido) recordarMensaje(g.grupo, { texto: g.texto, autor: g.autor, ts: g.ts, esPropio: g.esPropio });
+  }
+};

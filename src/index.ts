@@ -52,6 +52,7 @@ import { startDriverReminderFlusher } from './services/driver-arrival-reminder.s
 import { startDispatchAutoCloseFlusher } from './services/dispatch-autoclose.service.js';
 import cron from 'node-cron';
 import { correrDeteccion } from './agent/checklist/detector.js';
+import { hidratarAgente } from './agent/checklist/observador.js';
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -493,10 +494,13 @@ async function startServer() {
       logger.info('Initializing Job Scheduler...');
       await jobScheduler.initialize();
       cron.schedule(pdfTempCleanupCron, cleanupPdfTemp);
-      // Detector del checklist de producción (F1, modo espejo). Cada 20 min:
-      // frecuente para no llegar tarde a un arranque, y espaciado porque lo
+      // La memoria del agente vuelve de Mongo ANTES de la primera detección:
+      // sin esto cada deploy lo dejaba amnésico y volvía a proponer todo.
+      await hidratarAgente();
+      // Detector del checklist de producción (modo sugerido). Cada 20 min:
+      // frecuente para no llegar tarde a un horario, y espaciado porque lo
       // único que hace es leer pedidos y comparar contra lo observado. El ruido
-      // no lo controla esta frecuencia sino el presupuesto de avisos.
+      // no lo controla esta frecuencia sino los horarios de `dia.ts`.
       cron.schedule('*/20 * * * *', () => {
         void correrDeteccion().catch((error: unknown) => {
           logger.warn(`[agente] la detección del checklist falló: ${String(error)}`);

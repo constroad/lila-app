@@ -733,6 +733,19 @@ export const WhatsAppDirectService = {
   },
 
   /**
+   * Los ADMINISTRADORES de un grupo, por JID. Lee los metadatos vivos del grupo
+   * (no el store): es lo que decide quién puede aprobar envíos del agente.
+   */
+  groupAdmins: async (id: string, groupJid: string): Promise<string[]> => {
+    const sock = getSession(id);
+    if (!sock) throw new Error('Session not found');
+    const meta = await sock.groupMetadata(groupJid);
+    return (meta?.participants ?? [])
+      .filter((p) => p.admin === 'admin' || p.admin === 'superadmin')
+      .map((p) => String(p.id));
+  },
+
+  /**
    * Refresh groups from WhatsApp
    */
   refreshGroups: async (id: string) => {

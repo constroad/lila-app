@@ -4,65 +4,57 @@ import { EMPRESAS_CON_PEDIDOS, destinoPermitido } from './alcance.js';
 import { alcanceVigente } from './observador.js';
 import { mensajesDesde, observados } from './almacen.js';
 import { filtrarMensajes } from './mensajes.js';
-import { CHECKLIST_PRODUCCION, evaluarChecklist } from './checklist.js';
+import { CHECKLIST_PRODUCCION, evaluarRevision } from './checklist.js';
 import {
   conPiePropuesta,
   construirAvisoChecklist,
   construirAvisoProduccion,
+  describirCambio,
   firmaAviso,
 } from './aviso.js';
-import { enviarAOperaciones } from './emisor.js';
+import { enviarAOperaciones, publicarPropuesta } from './emisor.js';
 import {
   _resetPropuestas,
   pendientes,
   proponer,
-  propuestasDelPedido,
+  vencidasAhora,
   yaPropuesta,
+  type Propuesta,
 } from './sugerencias.js';
-import { MAX_AVISOS_POR_DIA, diaPeruano, instanteArranque } from './tiempo.js';
+import { agruparPorDia, firmaDia, momentoVigente, type DiaDePlanta, type PedidoDelDia } from './dia.js';
+import { diaPeruano, instanteArranque } from './tiempo.js';
 
-export { MAX_AVISOS_POR_DIA, diaPeruano, instanteArranque };
+export { diaPeruano, instanteArranque };
 
 /**
- * El detector: junta los pedidos con su hora de arranque, lo que se dijo en el
- * grupo, y decide si hay algo que avisar.
+ * El detector: junta los pedidos en DÍAS DE PLANTA, mira lo que se dijo en el
+ * grupo, y decide qué proponer y cuándo.
  *
- * PRESUPUESTO DE RUIDO (spec §8). El modo de falla que mata este tipo de
- * proyecto no es equivocarse: es hablar de más. Por eso hay tres frenos:
- *   · solo se avisa lo VENCIDO (lo que aún tiene tiempo, no se pregunta);
- *   · no se repite un aviso idéntico (hash del texto);
- *   · tope de avisos por día de producción.
+ * POR DÍA, NO POR PEDIDO. Dos empresas el mismo día son un solo aviso a planta
+ * con el total, y un solo checklist. Ver `dia.ts`.
  *
- * EN ESPEJO todo sale al grupo de operaciones y nada al grupo que escucha.
+ * POR HORARIO, NO POR REGLA. El checklist sale a las 16:00 del día anterior;
+ * a las 20:00 vuelve solo con lo que falta; 2 h antes solo lo crítico. Fuera de
+ * eso, silencio. Ver `momentoVigente`.
+ *
+ * NADA SALE SOLO. Todo se propone en operaciones y sale con la aprobación de
+ * un administrador de ese grupo, por cita. Ver `sugerencias` y `emisor`.
  */
+
+const nombresEmpresa = new Map<string, string>();
 
 /** Solo para tests. */
 export const _resetDetector = (): void => {
   _resetPropuestas();
   nombresEmpresa.clear();
+  ultimaVersionDelDia.clear();
 };
-
-export interface PedidoConArranque {
-  id: string;
-  /** De quién es el pedido. No es la empresa que escucha: ver `EMPRESAS_CON_PEDIDOS`. */
-  companyId: string;
-  cliente: string;
-  cubos: number;
-  fecha: string;
-  hora: string;
-  arranqueMs: number;
-  creadoMs: number;
-}
 
 /**
  * Pedidos de las empresas que producen en la planta, con arranque por venir (o
- * recién pasado). NO solo los de la empresa piloto: el 12/09 el pedido del
- * domingo era de globofas y el detector, mirando inframaq, no vio nada.
- *
- * Solo los que tienen `horaInicio`: sin ella no se puede decir «faltan 4 h», y
- * un pedido viejo sin hora no debe generar avisos raros.
+ * recién pasado). Solo los que tienen `horaInicio`: sin ella no hay día.
  */
-export const pedidosConArranque = async (ahoraMs: number): Promise<PedidoConArranque[]> => {
+export const pedidosConArranque = async (ahoraMs: number): Promise<PedidoDelDia[]> => {
   const OrderModel = await getOrderModel();
   const desde = new Date(ahoraMs - 24 * 60 * 60 * 1000);
   const hasta = new Date(ahoraMs + 48 * 60 * 60 * 1000);
@@ -76,7 +68,7 @@ export const pedidosConArranque = async (ahoraMs: number): Promise<PedidoConArra
     .select('companyId cliente alias cantidadCubos fechaProgramacion horaInicio createdAt')
     .lean()) as Array<Record<string, unknown>>;
 
-  const pedidos: PedidoConArranque[] = [];
+  const pedidos: PedidoDelDia[] = [];
   for (const doc of docs) {
     const fechaDoc = doc.fechaProgramacion as Date | undefined;
     if (!fechaDoc) continue;
@@ -84,14 +76,15 @@ export const pedidosConArranque = async (ahoraMs: number): Promise<PedidoConArra
     const hora = String(doc.horaInicio || '');
     const arranqueMs = instanteArranque(fecha, hora);
     if (arranqueMs === null) continue;
+    const companyId = String(doc.companyId || '');
 
     pedidos.push({
       id: String(doc._id),
-      companyId: String(doc.companyId || ''),
+      companyId,
+      empresa: await nombreEmpresa(companyId),
       // El alias es como lo llaman en el grupo; el nombre legal es el respaldo.
       cliente: String(doc.alias || doc.cliente || '').trim(),
       cubos: Number(doc.cantidadCubos) || 0,
-      fecha,
       hora,
       arranqueMs,
       creadoMs: doc.createdAt ? new Date(doc.createdAt as Date).getTime() : arranqueMs - 24 * 3600_000,
@@ -100,18 +93,11 @@ export const pedidosConArranque = async (ahoraMs: number): Promise<PedidoConArra
   return pedidos;
 };
 
+/** La última versión del día que se le propuso a planta, para describir cambios. */
+const ultimaVersionDelDia = new Map<string, PedidoDelDia[]>();
+
 /**
- * Una pasada del detector. Devuelve cuántas PROPUESTAS nuevas publicó en el grupo
- * de operaciones — 0 es el resultado normal y esperable.
- *
- * Por cada pedido con arranque hace dos cosas, cada una con su destino real:
- *   1. el AVISO DE PRODUCCIÓN, para el grupo de PLANTA: una vez por pedido, en
- *      cuanto el pedido aparece. Es el hecho que faltó el 07/09.
- *   2. la REVISIÓN DEL CHECKLIST, para el grupo de ADMIN: cuando hay ítems
- *      vencidos sin confirmar, y solo si cambió lo que falta.
- *
- * Ninguna sale sola: las dos se PROPONEN en el grupo de operaciones y salen al
- * grupo real con el «1» de una persona (ver `sugerencias` y `emisor`).
+ * Una pasada. Devuelve cuántas propuestas nuevas publicó — 0 es lo normal.
  */
 export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => {
   if (!destinoPermitido()) return 0;
@@ -119,98 +105,122 @@ export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => 
   const alcance = await alcanceVigente(ahoraMs);
   if (!alcance.grupoEscuchado) return 0;
 
-  const pedidos = await pedidosConArranque(ahoraMs);
-  let propuestasNuevas = 0;
-  // UNA línea por corrida, siempre. Sin esto «¿está escuchando?» no se puede
-  // contestar: el 12/09 el agente llevaba 2 días sin loguear nada y no había
-  // forma de distinguir «no hay nada que avisar» de «no ve nada».
-  logger.info(
-    `[agente] detección: ${pedidos.length} pedido(s) con arranque, ` +
-      `${observados(alcance.grupoEscuchado)} mensaje(s) observados del grupo, ` +
-      `${pendientes(ahoraMs).length} propuesta(s) esperando respuesta, ` +
-      `ventana ${pedidos.map((p) => `${p.companyId} ${p.fecha} ${p.hora}`).join(' | ') || '—'}`
-  );
-
-  for (const pedido of pedidos) {
-    const contexto = {
-      empresa: await nombreEmpresa(pedido.companyId),
-      fecha: pedido.fecha,
-      horaArranque: pedido.hora,
-      cliente: pedido.cliente,
-      cubos: pedido.cubos,
-      grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado,
-    };
-
-    // 1) Aviso de producción → planta. Una sola vez por pedido.
-    if (alcance.grupoPlanta) {
-      const firma = `${pedido.id}|aviso-produccion`;
-      if (!yaPropuesta('aviso-planta', firma, ahoraMs)) {
-        const texto = construirAvisoProduccion(contexto);
-        const propuesta = proponer(
-          {
-            tipo: 'aviso-planta',
-            pedidoId: pedido.id,
-            firma,
-            destino: alcance.grupoPlanta,
-            nombreDestino: alcance.nombreGrupoPlanta || 'planta',
-            texto,
-          },
-          ahoraMs
-        );
-        await enviarAOperaciones(conPiePropuesta(texto, propuesta.nombreDestino));
-        propuestasNuevas += 1;
-        logger.info(`[agente] propuesta ${propuesta.id}: aviso de producción del pedido ${pedido.id} → «${propuesta.nombreDestino}»`);
-      }
-    }
-
-    // 2) Checklist → admin. Solo lo vencido, solo si cambió, con tope diario.
-    // Solo interesa lo que se dijo DESDE que el pedido existe: un «cuadrilla
-    // lista» anterior a que se cargara el pedido hablaba de otro día.
-    const delGrupo = mensajesDesde(alcance.grupoEscuchado, pedido.creadoMs);
-    const utiles = filtrarMensajes(delGrupo);
-    const evaluacion = evaluarChecklist({
-      items: CHECKLIST_PRODUCCION,
-      arranqueMs: pedido.arranqueMs,
-      ahoraMs,
-      mensajes: utiles.textos,
-    });
-    const texto = construirAvisoChecklist(evaluacion, contexto);
-    if (!texto) continue;
-
-    const firma = firmaAviso(pedido.id, evaluacion);
-    if (yaPropuesta('checklist-admin', firma, ahoraMs)) continue;
-    if (propuestasDelPedido('checklist-admin', pedido.id) >= MAX_AVISOS_POR_DIA) {
-      logger.info(`[agente] presupuesto agotado para el pedido ${pedido.id}, no se propone más`);
-      continue;
-    }
-
-    const propuesta = proponer(
-      {
-        tipo: 'checklist-admin',
-        pedidoId: pedido.id,
-        firma,
-        destino: alcance.grupoEscuchado,
-        nombreDestino: alcance.nombreGrupo || 'admin',
-        texto,
-      },
-      ahoraMs
-    );
-    await enviarAOperaciones(conPiePropuesta(texto, propuesta.nombreDestino));
-    propuestasNuevas += 1;
-    logger.info(
-      `[agente] propuesta ${propuesta.id}: checklist del pedido ${pedido.id} → «${propuesta.nombreDestino}» ` +
-        `(${evaluacion.pendientes.length} pendientes, descartados: ${JSON.stringify(utiles.descartados)})`
-    );
+  // Lo que venció sin respuesta se dice: si no, una propuesta ignorada se
+  // confunde con una aprobada.
+  for (const vencida of vencidasAhora(ahoraMs)) {
+    await enviarAOperaciones(`⌛ Venció sin respuesta la propuesta para «${vencida.nombreDestino}» (${vencida.tipo}). No se mandó.`);
   }
 
-  return propuestasNuevas;
+  const pedidos = await pedidosConArranque(ahoraMs);
+  const dias = agruparPorDia(pedidos);
+  let nuevas = 0;
+
+  // UNA línea por corrida, siempre: «¿está escuchando?» se contesta con un grep.
+  logger.info(
+    `[agente] detección: ${pedidos.length} pedido(s) en ${dias.length} día(s), ` +
+      `${observados(alcance.grupoEscuchado)} mensaje(s) observados del grupo, ` +
+      `${pendientes(ahoraMs).length} propuesta(s) esperando respuesta, ` +
+      `días ${dias.map((d) => `${d.fecha} (${d.pedidos.map((p) => `${p.hora} ${p.empresa} ${p.cubos}m³`).join(', ')})`).join(' | ') || '—'}`
+  );
+
+  for (const dia of dias) {
+    if (ahoraMs >= dia.arranqueMs + 60 * 60_000) continue; // arrancó hace más de 1 h: ya no se coordina, se produce
+    nuevas += await proponerAvisoDelDia(dia, alcance, ahoraMs);
+    nuevas += await proponerRevisionDelDia(dia, alcance, ahoraMs);
+  }
+
+  return nuevas;
 };
 
-const nombresEmpresa = new Map<string, string>();
+const proponerAvisoDelDia = async (
+  dia: DiaDePlanta,
+  alcance: Awaited<ReturnType<typeof alcanceVigente>>,
+  ahoraMs: number
+): Promise<number> => {
+  if (!alcance.grupoPlanta) return 0;
+  const firma = `${firmaDia(dia)}|aviso`;
+  if (yaPropuesta('aviso-planta', firma, ahoraMs)) return 0;
+
+  const anterior = ultimaVersionDelDia.get(dia.fecha);
+  const cambio = anterior ? describirCambio(anterior, dia.pedidos) : '';
+  const texto = construirAvisoProduccion(dia, { actualizacion: cambio || undefined });
+  const propuesta = proponer(
+    {
+      tipo: 'aviso-planta',
+      fecha: dia.fecha,
+      firma,
+      destino: alcance.grupoPlanta,
+      nombreDestino: alcance.nombreGrupoPlanta || 'planta',
+      texto,
+    },
+    ahoraMs
+  );
+  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino));
+  ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
+  logger.info(`[agente] propuesta ${propuesta.id}: ${cambio ? 'actualización' : 'aviso'} de producción ${dia.fecha} → «${propuesta.nombreDestino}»`);
+  return 1;
+};
+
+const proponerRevisionDelDia = async (
+  dia: DiaDePlanta,
+  alcance: Awaited<ReturnType<typeof alcanceVigente>>,
+  ahoraMs: number
+): Promise<number> => {
+  const momento = momentoVigente(dia, ahoraMs);
+  if (!momento) return 0;
+
+  // Solo interesa lo que se dijo DESDE que el día existe: un «cuadrilla lista»
+  // anterior a que se cargara el primer pedido hablaba de otro día.
+  const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
+  const utiles = filtrarMensajes(delGrupo);
+  const revision = evaluarRevision(CHECKLIST_PRODUCCION, utiles.textos, {
+    soloCriticos: momento === 'ultima-llamada',
+  });
+
+  const contexto = {
+    fecha: dia.fecha,
+    minutosParaArranque: Math.round((dia.arranqueMs - ahoraMs) / 60_000),
+    pedidos: dia.pedidos,
+    totalCubos: dia.totalCubos,
+    momento,
+    grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado,
+  };
+  const texto = construirAvisoChecklist(revision, contexto);
+  if (!texto) return 0;
+
+  const firma = firmaAviso(dia.fecha, momento, revision);
+  if (yaPropuesta('checklist-admin', firma, ahoraMs)) return 0;
+  // Un horario se propone UNA vez, aunque lo pendiente cambie después: lo que
+  // cambia lo recoge el siguiente horario. Es lo que evita el goteo.
+  if (yaPropuesta('checklist-admin', `${dia.fecha}|${momento}|`, ahoraMs)) return 0;
+
+  const propuesta: Propuesta = proponer(
+    {
+      tipo: 'checklist-admin',
+      fecha: dia.fecha,
+      firma,
+      destino: alcance.grupoEscuchado,
+      nombreDestino: alcance.nombreGrupo || 'admin',
+      texto,
+    },
+    ahoraMs
+  );
+  // Marca del horario, independiente de lo pendiente: ver arriba.
+  proponer(
+    { ...propuesta, firma: `${dia.fecha}|${momento}|`, texto: '', destino: '', nombreDestino: '' },
+    ahoraMs
+  ).estado = 'descartada';
+
+  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino));
+  logger.info(
+    `[agente] propuesta ${propuesta.id}: checklist ${momento} de ${dia.fecha} → «${propuesta.nombreDestino}» ` +
+      `(${revision.pendientes.length} pendientes, descartados: ${JSON.stringify(utiles.descartados)})`
+  );
+  return 1;
+};
 
 /**
- * «Globofast», no «globofas-s8k». Se lee de la empresa una vez y se recuerda: el
- * nombre no cambia y esto corre cada 20 minutos.
+ * «Globofast», no «globofas-s8k». Se lee de la empresa una vez y se recuerda.
  */
 const nombreEmpresa = async (companyId: string): Promise<string> => {
   const cacheado = nombresEmpresa.get(companyId);

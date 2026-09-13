@@ -1,16 +1,16 @@
 import logger from '../../utils/logger.js';
 import { COMPANY_PILOTO, destinoPermitido, destinosConAprobacion, type AlcanceAgente } from './alcance.js';
-import type { Propuesta } from './sugerencias.js';
+import { anotarMensaje, type Propuesta } from './sugerencias.js';
+import { guardarPropuesta } from './persistencia.js';
 
 /**
  * EL ÚNICO LUGAR QUE MANDA MENSAJES. Dos puertas, y solo dos:
  *
- *  · `enviarAOperaciones`: al grupo de error-tracking, sin aprobación. Es
- *    NUESTRO grupo; ahí el agente propone y se mide.
+ *  · `enviarAOperaciones` / `publicarPropuesta`: al grupo de error-tracking, sin
+ *    aprobación. Es NUESTRO grupo; ahí el agente propone y se mide.
  *  · `enviarAprobado`: a un grupo de la empresa, y SOLO con una propuesta que
- *    una persona aprobó («1») y cuyo destino está en la lista cerrada del
- *    alcance. No hay una tercera función. Si alguien necesita mandar a otro
- *    lado, tiene que pasar por acá, y acá no puede.
+ *    una persona aprobó y cuyo destino está en la lista cerrada del alcance. No
+ *    hay una tercera función.
  *
  * `WhatsAppDirectService` se carga con import dinámico: pitfall §13, este
  * módulo cuelga del grafo del observador, que cuelga de `sessions.simple.ts`.
@@ -25,11 +25,13 @@ const sender = async (): Promise<string> => {
   return String(company?.whatsappConfig?.sender || '');
 };
 
-const mandar = async (destino: string, texto: string): Promise<void> => {
+/** Manda y devuelve el id del mensaje de WhatsApp, si el envío fue directo. */
+const mandar = async (destino: string, texto: string): Promise<string | undefined> => {
   const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
-  await WhatsAppDirectService.sendMessage(await sender(), destino, texto, {
+  const resultado = (await WhatsAppDirectService.sendMessage(await sender(), destino, texto, {
     companyId: COMPANY_PILOTO,
-  });
+  })) as { key?: { id?: string | null }; queued?: boolean } | undefined;
+  return resultado?.key?.id || undefined;
 };
 
 export const enviarAOperaciones = async (texto: string): Promise<boolean> => {
@@ -40,18 +42,32 @@ export const enviarAOperaciones = async (texto: string): Promise<boolean> => {
 };
 
 /**
- * Manda una propuesta APROBADA a su destino real. Verifica las tres cosas que
- * la hacen legítima, y falla cerrado en cualquiera:
- *   1. la propuesta está en estado `aprobada` (una persona dijo «1»);
- *   2. su destino es uno de los dos grupos de la empresa, según el alcance
- *      resuelto AHORA —no según lo que decía la propuesta al crearse—;
- *   3. no se mandó ya (una aprobación se consume).
+ * Publica una propuesta en operaciones y le anota el id del mensaje: ese id es
+ * lo que una respuesta citada trae, y es lo único que puede aprobarla.
  */
+export const publicarPropuesta = async (propuesta: Propuesta, textoPublicado: string): Promise<boolean> => {
+  const destino = destinoPermitido();
+  if (!destino) return false;
+  const msgId = await mandar(destino, textoPublicado);
+  if (msgId) anotarMensaje(propuesta.id, msgId);
+  else logger.warn(`[agente] la propuesta ${propuesta.id} salió sin id de mensaje (¿encolada?): no se va a poder aprobar por cita`);
+  void guardarPropuesta(propuesta);
+  return true;
+};
+
 const mandadas = new Set<string>();
 
 /** Solo para tests. */
 export const _resetEmisor = (): void => mandadas.clear();
 
+/**
+ * Manda una propuesta APROBADA a su destino real. Verifica las tres cosas que
+ * la hacen legítima, y falla cerrado en cualquiera:
+ *   1. la propuesta está en estado `aprobada` (una persona con permiso lo dijo);
+ *   2. su destino es uno de los dos grupos de la empresa, según el alcance
+ *      resuelto AHORA —no según lo que decía la propuesta al crearse—;
+ *   3. no se mandó ya (una aprobación se consume).
+ */
 export const enviarAprobado = async (
   propuesta: Propuesta,
   alcance: AlcanceAgente
@@ -70,6 +86,7 @@ export const enviarAprobado = async (
   mandadas.add(propuesta.id);
 
   await mandar(propuesta.destino, propuesta.texto);
+  void guardarPropuesta(propuesta);
   logger.info(
     `[agente] propuesta ${propuesta.id} (${propuesta.tipo}) enviada a «${propuesta.nombreDestino}» ` +
       `con aprobación de ${propuesta.decididaPor}`

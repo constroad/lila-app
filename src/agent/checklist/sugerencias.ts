@@ -1,16 +1,21 @@
+import { randomUUID } from 'crypto';
+
 /**
- * Las PROPUESTAS que esperan una persona. Motor puro, sin imports.
+ * Las PROPUESTAS que esperan una persona. Motor puro (solo `crypto`, builtin).
  *
  * MODO SUGERIDO (spec §4.3): el agente no le escribe a la gente que trabaja por
  * su cuenta. Lo que quiere mandar lo publica en el grupo de operaciones como una
- * propuesta —«Respondé 1 para mandarlo, 3 para descartar»— y recién con el «1»
- * de una persona sale al grupo real. Klarna volvió a contratar humanos porque
- * un error delante de la gente se recuerda; acá la persona está en el medio
- * desde el primer día.
+ * propuesta y recién con la aprobación de una persona sale al grupo real.
  *
- * Cada propuesta lleva a dónde iría y qué diría. El «1» no elige el destino: el
- * destino ya está fijado en la propuesta y viene de la lista cerrada del
- * alcance. La persona aprueba o no; no redirige.
+ * CÓMO SE APRUEBA — POR CITA, NO POR UN «1» SUELTO. José, 13/09/2026: «estamos
+ * en un grupo. ¿Qué pasa si el contador escribe inmediatamente después de este
+ * mensaje?». Tenía razón: un «1» en un grupo no es de nadie. Ahora se aprueba
+ * RESPONDIENDO al mensaje de la propuesta (mantener presionado → Responder → 1):
+ * la respuesta trae el id del mensaje citado, y ese id es de UNA propuesta. Un
+ * «1» sin cita no aprueba nada, y un «1» citando otra cosa tampoco.
+ *
+ * Y APRUEBA QUIEN PUEDE: `decidir` recibe si quien responde es aprobador; eso lo
+ * decide el observador con los administradores del grupo de operaciones.
  */
 
 export type TipoPropuesta = 'aviso-planta' | 'checklist-admin';
@@ -19,8 +24,9 @@ export type EstadoPropuesta = 'pendiente' | 'aprobada' | 'descartada' | 'vencida
 export interface Propuesta {
   id: string;
   tipo: TipoPropuesta;
-  pedidoId: string;
-  /** Firma semántica (ver `firmaAviso`): para no volver a proponer lo mismo. */
+  /** Día de producción `YYYY-MM-DD` al que pertenece. */
+  fecha: string;
+  /** Firma semántica: para no volver a proponer lo mismo. */
   firma: string;
   /** JID del grupo real al que iría. */
   destino: string;
@@ -29,28 +35,37 @@ export interface Propuesta {
   texto: string;
   creadaMs: number;
   estado: EstadoPropuesta;
-  /** Quién la aprobó o descartó (JID del participante), para el registro. */
+  /** Id del mensaje de WhatsApp con la propuesta: la cita que la decide apunta acá. */
+  msgId?: string;
   decididaPor?: string;
   decididaMs?: number;
 }
 
 /** Una propuesta que nadie contesta en 6 h ya no se puede mandar: el momento pasó. */
 export const VIGENCIA_MS = 6 * 60 * 60 * 1000;
-const MAX_PROPUESTAS = 200;
+const MAX_PROPUESTAS = 500;
 
-const propuestas: Propuesta[] = [];
-let secuencia = 0;
+let propuestas: Propuesta[] = [];
 
 /** Solo para tests. */
 export const _resetPropuestas = (): void => {
-  propuestas.length = 0;
-  secuencia = 0;
+  propuestas = [];
 };
 
-const expirar = (ahoraMs: number): void => {
+/** Rehidratación desde la persistencia al arrancar. Reemplaza lo que haya. */
+export const hidratarPropuestas = (guardadas: Propuesta[]): void => {
+  propuestas = [...guardadas].sort((a, b) => a.creadaMs - b.creadaMs).slice(-MAX_PROPUESTAS);
+};
+
+const expirar = (ahoraMs: number): Propuesta[] => {
+  const vencidas: Propuesta[] = [];
   for (const p of propuestas) {
-    if (p.estado === 'pendiente' && ahoraMs - p.creadaMs > VIGENCIA_MS) p.estado = 'vencida';
+    if (p.estado === 'pendiente' && ahoraMs - p.creadaMs > VIGENCIA_MS) {
+      p.estado = 'vencida';
+      vencidas.push(p);
+    }
   }
+  return vencidas;
 };
 
 export const proponer = (
@@ -59,7 +74,7 @@ export const proponer = (
 ): Propuesta => {
   const propuesta: Propuesta = {
     ...datos,
-    id: String(++secuencia),
+    id: randomUUID().slice(0, 8),
     creadaMs: ahoraMs,
     estado: 'pendiente',
   };
@@ -68,19 +83,21 @@ export const proponer = (
   return propuesta;
 };
 
+/** Se llama cuando se sabe el id del mensaje de WhatsApp que lleva la propuesta. */
+export const anotarMensaje = (id: string, msgId: string): Propuesta | undefined => {
+  const p = propuestas.find((x) => x.id === id);
+  if (p) p.msgId = msgId;
+  return p;
+};
+
 /**
- * ¿Ya se propuso esto? Para no repetir la misma propuesta. Una VENCIDA no
- * cuenta: si nadie la contestó en 6 h y el hecho sigue faltando, se vuelve a
- * proponer — lo que se quiere evitar es el eco, no la insistencia justificada.
+ * ¿Ya se propuso esto? Una VENCIDA no cuenta: si nadie la contestó en 6 h y el
+ * hecho sigue faltando, se vuelve a proponer — lo que se evita es el eco.
  */
 export const yaPropuesta = (tipo: TipoPropuesta, firma: string, ahoraMs = Date.now()): boolean => {
   expirar(ahoraMs);
   return propuestas.some((p) => p.tipo === tipo && p.firma === firma && p.estado !== 'vencida');
 };
-
-/** Cuántas propuestas de este tipo se hicieron hoy para este pedido: el presupuesto de ruido. */
-export const propuestasDelPedido = (tipo: TipoPropuesta, pedidoId: string): number =>
-  propuestas.filter((p) => p.tipo === tipo && p.pedidoId === pedidoId).length;
 
 /** Las pendientes, de la más nueva a la más vieja. */
 export const pendientes = (ahoraMs = Date.now()): Propuesta[] => {
@@ -88,32 +105,44 @@ export const pendientes = (ahoraMs = Date.now()): Propuesta[] => {
   return propuestas.filter((p) => p.estado === 'pendiente').reverse();
 };
 
-/**
- * El «1» o el «3». Sin cita, aplica a la propuesta pendiente MÁS RECIENTE: en
- * el piloto hay un pedido a la vez y casi nunca más de una propuesta viva. Si
- * hubiera dos, se contesta la última y la anterior sigue esperando — se ve en
- * el grupo, no se pierde.
- *
- * Devuelve la propuesta decidida, o `null` si no había nada pendiente (un «1»
- * suelto en el grupo no es una aprobación de nada).
- */
-export const decidir = (
-  respuesta: string,
-  decididaPor: string,
-  ahoraMs = Date.now()
-): Propuesta | null => {
-  const voto = String(respuesta || '').trim();
-  if (voto !== '1' && voto !== '3') return null;
-  const [ultima] = pendientes(ahoraMs);
-  if (!ultima) return null;
-  ultima.estado = voto === '1' ? 'aprobada' : 'descartada';
-  ultima.decididaPor = decididaPor;
-  ultima.decididaMs = ahoraMs;
-  return ultima;
-};
+/** Las que vencieron en esta pasada, para avisar en operaciones. */
+export const vencidasAhora = (ahoraMs = Date.now()): Propuesta[] => expirar(ahoraMs);
 
-/** ¿Es una respuesta de decisión? Para que el observador sepa qué mirar. */
+export const porMensaje = (msgId: string): Propuesta | undefined =>
+  msgId ? propuestas.find((p) => p.msgId === msgId) : undefined;
+
+/** ¿Es una respuesta de decisión? */
 export const esVoto = (texto: string): boolean => {
   const t = String(texto || '').trim();
   return t === '1' || t === '3';
+};
+
+export type MotivoRechazo = 'sin-cita' | 'cita-desconocida' | 'no-pendiente' | 'no-aprobador' | 'no-es-voto';
+
+export type ResultadoDecision =
+  | { ok: true; propuesta: Propuesta }
+  | { ok: false; motivo: MotivoRechazo };
+
+/**
+ * Decide la propuesta CITADA. Sin cita no hay decisión: en un grupo, un «1» no
+ * es de nadie. Y sin permiso tampoco: aprueba quien administra el grupo de
+ * operaciones.
+ */
+export const decidir = (
+  args: { voto: string; citaMsgId?: string; quien: string; esAprobador: boolean },
+  ahoraMs = Date.now()
+): ResultadoDecision => {
+  const voto = String(args.voto || '').trim();
+  if (voto !== '1' && voto !== '3') return { ok: false, motivo: 'no-es-voto' };
+  if (!args.citaMsgId) return { ok: false, motivo: 'sin-cita' };
+  expirar(ahoraMs);
+  const propuesta = porMensaje(args.citaMsgId);
+  if (!propuesta) return { ok: false, motivo: 'cita-desconocida' };
+  if (propuesta.estado !== 'pendiente') return { ok: false, motivo: 'no-pendiente' };
+  if (!args.esAprobador) return { ok: false, motivo: 'no-aprobador' };
+
+  propuesta.estado = voto === '1' ? 'aprobada' : 'descartada';
+  propuesta.decididaPor = args.quien;
+  propuesta.decididaMs = ahoraMs;
+  return { ok: true, propuesta };
 };

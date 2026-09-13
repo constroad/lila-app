@@ -16,6 +16,13 @@ jest.unstable_mockModule('../../database/models.js', () => ({
     findOne: () => ({ lean: async () => ({ whatsappConfig: { sender: '51949376824' } }) }),
   }),
 }));
+jest.unstable_mockModule('./persistencia.js', () => ({
+  __esModule: true,
+  guardarPropuesta: jest.fn(async () => undefined),
+  guardarMensaje: jest.fn(async () => undefined),
+  cargarMensajes: jest.fn(async () => []),
+  cargarPropuestas: jest.fn(async () => []),
+}));
 jest.unstable_mockModule('../../utils/logger.js', () => ({
   __esModule: true,
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -46,11 +53,11 @@ beforeEach(() => {
   sugerencias._resetPropuestas();
 });
 
-const propuesta = (over: Partial<Parameters<Sugerencias['proponer']>[0]> = {}) =>
-  sugerencias.proponer(
+const propuesta = (over: Partial<Parameters<Sugerencias['proponer']>[0]> = {}) => {
+  const p = sugerencias.proponer(
     {
       tipo: 'aviso-planta',
-      pedidoId: 'p1',
+      fecha: '2026-09-13',
       firma: 'f',
       destino: PLANTA,
       nombreDestino: 'Inframaq Planta',
@@ -59,11 +66,25 @@ const propuesta = (over: Partial<Parameters<Sugerencias['proponer']>[0]> = {}) =
     },
     1_000
   );
+  sugerencias.anotarMensaje(p.id, `MSG-${p.id}`);
+  return p;
+};
+
+const admin = { quien: 'jose', esAprobador: true };
+const aprobar = (p: { id: string }) => {
+  const r = sugerencias.decidir({ voto: '1', citaMsgId: `MSG-${p.id}`, ...admin }, 2_000);
+  if (r.ok === false) throw new Error(r.motivo);
+  return r.propuesta;
+};
+const descartar = (p: { id: string }) => {
+  const r = sugerencias.decidir({ voto: '3', citaMsgId: `MSG-${p.id}`, ...admin }, 2_000);
+  if (r.ok === false) throw new Error(r.motivo);
+  return r.propuesta;
+};
 
 describe('enviarAprobado', () => {
   it('con «1» manda EXACTAMENTE el texto propuesto al destino propuesto', async () => {
-    propuesta();
-    const aprobada = sugerencias.decidir('1', 'jose', 2_000)!;
+    const aprobada = aprobar(propuesta());
 
     await expect(emisor.enviarAprobado(aprobada, alcance)).resolves.toBe(true);
     expect(sendMessage).toHaveBeenCalledTimes(1);
@@ -78,8 +99,7 @@ describe('enviarAprobado', () => {
   });
 
   it('descartada no manda', async () => {
-    propuesta();
-    const descartada = sugerencias.decidir('3', 'jose', 2_000)!;
+    const descartada = descartar(propuesta());
 
     await expect(emisor.enviarAprobado(descartada, alcance)).resolves.toBe(false);
     expect(sendMessage).not.toHaveBeenCalled();
@@ -91,24 +111,21 @@ describe('enviarAprobado', () => {
    * El «1» aprueba un texto, no abre una puerta.
    */
   it('un destino fuera de los dos grupos de la empresa NO se manda ni aprobado', async () => {
-    propuesta({ destino: '120363429917575505@g.us', nombreDestino: 'otro' });
-    const aprobada = sugerencias.decidir('1', 'jose', 2_000)!;
+    const aprobada = aprobar(propuesta({ destino: '120363429917575505@g.us', nombreDestino: 'otro' }));
 
     await expect(emisor.enviarAprobado(aprobada, alcance)).resolves.toBe(false);
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('una persona tampoco es destino', async () => {
-    propuesta({ destino: '51999111222@s.whatsapp.net', nombreDestino: 'alguien' });
-    const aprobada = sugerencias.decidir('1', 'jose', 2_000)!;
+    const aprobada = aprobar(propuesta({ destino: '51999111222@s.whatsapp.net', nombreDestino: 'alguien' }));
 
     await expect(emisor.enviarAprobado(aprobada, alcance)).resolves.toBe(false);
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('una aprobación se consume: no se manda dos veces', async () => {
-    propuesta();
-    const aprobada = sugerencias.decidir('1', 'jose', 2_000)!;
+    const aprobada = aprobar(propuesta());
 
     await emisor.enviarAprobado(aprobada, alcance);
     await expect(emisor.enviarAprobado(aprobada, alcance)).resolves.toBe(false);
@@ -119,6 +136,6 @@ describe('enviarAprobado', () => {
 describe('enviarAOperaciones', () => {
   it('va al grupo de operaciones, sin aprobación', async () => {
     await expect(emisor.enviarAOperaciones('propuesta')).resolves.toBe(true);
-    expect(sendMessage.mock.calls[0][1]).toBe('120363376500470254@g.us');
+    expect((sendMessage.mock.calls[0] as unknown[])[1]).toBe('120363376500470254@g.us');
   });
 });

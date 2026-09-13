@@ -1,4 +1,4 @@
-import type { EvaluacionChecklist, EstadoItem, ChecklistDomain } from './checklist.js';
+import type { ChecklistDomain, Revision } from './checklist.js';
 import { fechaLegible } from './tiempo.js';
 
 /**
@@ -33,78 +33,124 @@ const duracion = (minutos: number): string => {
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 };
 
-export interface ContextoAviso {
-  /** Nombre de la empresa como lo dice la gente («Globofast»), no el slug. */
-  empresa: string;
-  /** Día de producción `YYYY-MM-DD` (calendario peruano). */
-  fecha: string;
-  /** Hora de arranque `HH:mm`, tal como se declaró. */
-  horaArranque: string;
-  /** Cliente del pedido, si se sabe. */
-  cliente?: string;
-  /** Metros cúbicos del pedido, si se sabe. */
-  cubos?: number;
-  /** Nombre del grupo que se está escuchando («INFRAMAQ admin»), no su JID. */
-  grupoEscuchado: string;
-}
 
 
 /**
  * `null` cuando no hay nada vencido: **el silencio es la respuesta correcta**.
  * Un agente que avisa «todo en orden» tres veces al día enseña a ignorarlo.
  */
-export const construirAvisoChecklist = (
-  evaluacion: EvaluacionChecklist,
-  contexto: ContextoAviso
-): string | null => {
-  if (evaluacion.pendientes.length === 0) return null;
+export interface ContextoRevision {
+  fecha: string;
+  /** Primer arranque del día, para decir «arranca en…». */
+  minutosParaArranque: number;
+  /** Las empresas que producen ese día, para el encabezado. */
+  pedidos: PedidoParaAviso[];
+  totalCubos: number;
+  momento: 'inicial' | 'recordatorio' | 'ultima-llamada';
+  grupoEscuchado: string;
+}
 
-  const faltan = evaluacion.minutosParaArranque;
+const ENCABEZADO: Record<ContextoRevision['momento'], string> = {
+  inicial: '📋 *Checklist de producción*',
+  recordatorio: '⏰ *Recordatorio — sigue sin confirmar*',
+  'ultima-llamada': '🚨 *Última llamada — falta lo crítico*',
+};
+
+/**
+ * La revisión del checklist para el grupo de admin, agrupada por quién la
+ * revisa. `null` cuando no hay nada pendiente: **el silencio es la respuesta
+ * correcta**.
+ */
+export const construirAvisoChecklist = (
+  revision: Revision,
+  contexto: ContextoRevision
+): string | null => {
+  if (revision.pendientes.length === 0) return null;
+
+  const faltan = contexto.minutosParaArranque;
   const cuando = faltan >= 0 ? `Arranca en ${duracion(faltan)}` : `Arrancó hace ${duracion(faltan)}`;
+  const quienes = contexto.pedidos.map((p) => `${p.hora} ${p.empresa} ${p.cubos} m³`).join(' · ');
 
   const lineas = [
-    `📋 *Checklist de producción — ${contexto.empresa}*`,
-    detalleProduccion(contexto),
+    `${ENCABEZADO[contexto.momento]} — ${fechaLegible(contexto.fecha)}`,
+    quienes + (contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''),
     cuando,
   ];
 
   // Por dominio, porque lo lee gente distinta: planta primero, campo después.
   const TITULO: Record<ChecklistDomain, string> = { planta: 'Planta', obra: 'Campo' };
   for (const dominio of ['planta', 'obra'] as ChecklistDomain[]) {
-    const pendientes = evaluacion.pendientes.filter((p) => p.item.domain === dominio);
+    const pendientes = revision.pendientes.filter((i) => i.domain === dominio);
     if (pendientes.length === 0) continue;
     lineas.push('', `*${TITULO[dominio]}* — sin confirmar:`);
-    lineas.push(...pendientes.map((p) => `• ${p.item.pregunta}`));
+    lineas.push(...pendientes.map((i) => `• ${i.pregunta}`));
   }
 
-  if (evaluacion.resueltos.length > 0) {
-    lineas.push('', `Ya confirmado: ${evaluacion.resueltos.map((r) => r.item.titulo).join(', ')} ✔`);
+  if (revision.resueltos.length > 0) {
+    lineas.push('', `Ya confirmado: ${revision.resueltos.map((r) => r.titulo).join(', ')} ✔`);
   }
 
   return lineas.join('\n');
 };
 
-const detalleProduccion = (contexto: ContextoAviso): string =>
-  [
-    `${fechaLegible(contexto.fecha)} a las ${contexto.horaArranque}`,
-    contexto.cliente?.trim(),
-    contexto.cubos ? `${contexto.cubos} m³` : undefined,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+export interface PedidoParaAviso {
+  empresa: string;
+  hora: string;
+  cubos: number;
+  cliente?: string;
+}
 
 /**
- * EL AVISO A PLANTA: que hay producción, de quién, cuándo y cuánto. Es el hecho
- * que faltó el 07/09 —«nadie avisó a planta que había producción a las 4 am»—
- * y va al grupo de planta, no al de administración (José, 12/09/2026).
+ * EL AVISO A PLANTA, POR DÍA: que hay producción, de quiénes, a qué horas y
+ * cuánto en total. Es el hecho que faltó el 07/09 y va al grupo de planta.
+ *
+ * Con dos empresas el mismo día —Globofast a las 04:00, Constroad a las 07:00—
+ * la planta recibe UN mensaje con las dos y el total, no dos sueltos (José,
+ * 13/09/2026). Si el día cambia después, sale como ACTUALIZACIÓN diciendo qué
+ * cambió, no como un aviso nuevo que parezca otro día.
  */
-export const construirAvisoProduccion = (contexto: ContextoAviso): string =>
-  [
-    `📢 *Producción programada — ${contexto.empresa}*`,
-    detalleProduccion(contexto),
-    '',
-    'Por favor confirmar que planta está enterada y coordinada.',
-  ].join('\n');
+export const construirAvisoProduccion = (
+  dia: { fecha: string; pedidos: PedidoParaAviso[]; totalCubos: number },
+  opciones: { actualizacion?: string } = {}
+): string => {
+  const titulo = opciones.actualizacion
+    ? `🔁 *Producción de ${fechaLegible(dia.fecha)} — actualización*`
+    : `📢 *Producción programada — ${fechaLegible(dia.fecha)}*`;
+  const lineas = [titulo];
+  if (opciones.actualizacion) lineas.push(opciones.actualizacion);
+  lineas.push('');
+  for (const p of dia.pedidos) {
+    lineas.push(
+      `• ${p.hora} — *${p.empresa}*${p.cliente ? ` (${p.cliente})` : ''} · ${p.cubos} m³`
+    );
+  }
+  if (dia.pedidos.length > 1) lineas.push('', `Total del día: *${dia.totalCubos} m³*`);
+  lineas.push('', 'Por favor confirmar que planta está enterada y coordinada.');
+  return lineas.join('\n');
+};
+
+/**
+ * Qué cambió entre dos versiones del día, en palabras: «se suma Constroad
+ * 45 m³ a las 07:00», «se cae Globofast», «Globofast pasa de 04:00 a 05:00».
+ */
+export const describirCambio = (
+  antes: PedidoParaAviso[] & { id?: string }[],
+  ahora: PedidoParaAviso[] & { id?: string }[]
+): string => {
+  const porId = (lista: Array<PedidoParaAviso & { id?: string }>) =>
+    new Map(lista.map((p) => [p.id ?? `${p.empresa}|${p.hora}`, p]));
+  const a = porId(antes);
+  const b = porId(ahora);
+  const frases: string[] = [];
+  for (const [id, p] of b) {
+    const previo = a.get(id);
+    if (!previo) frases.push(`se suma *${p.empresa}* ${p.cubos} m³ a las ${p.hora}`);
+    else if (previo.hora !== p.hora) frases.push(`*${p.empresa}* pasa de ${previo.hora} a ${p.hora}`);
+    else if (previo.cubos !== p.cubos) frases.push(`*${p.empresa}* pasa de ${previo.cubos} a ${p.cubos} m³`);
+  }
+  for (const [id, p] of a) if (!b.has(id)) frases.push(`se cae *${p.empresa}* (${p.hora})`);
+  return frases.length ? `Cambio: ${frases.join('; ')}.` : '';
+};
 
 /**
  * Cómo se ve una propuesta en el grupo de operaciones: el mensaje tal cual
@@ -113,7 +159,9 @@ export const construirAvisoProduccion = (contexto: ContextoAviso): string =>
  */
 export const conPiePropuesta = (texto: string, nombreDestino: string): string =>
   [
-    `📨 *Propuesta para «${nombreDestino}»* — respondé *1* para mandarlo, *3* para descartar`,
+    `📨 *Propuesta para «${nombreDestino}»*`,
+    'Para mandarlo: mantené presionado este mensaje → *Responder* → *1*',
+    'Para descartar: igual, con *3*',
     '',
     texto,
   ].join('\n');
@@ -128,8 +176,12 @@ export const conPiePropuesta = (texto: string, nombreDestino: string): string =>
  * pedido; solo cuando eso cambia —vence otro ítem, o se confirma uno— hay algo
  * nuevo que decir.
  */
-export const firmaAviso = (pedidoId: string, evaluacion: EvaluacionChecklist): string =>
-  `${pedidoId}|${evaluacion.pendientes
-    .map((p) => p.item.id)
+export const firmaAviso = (
+  fecha: string,
+  momento: ContextoRevision['momento'],
+  revision: Revision
+): string =>
+  `${fecha}|${momento}|${revision.pendientes
+    .map((i) => i.id)
     .sort()
     .join(',')}`;
