@@ -115,8 +115,11 @@ export const AYUDA = [
   '• a qué hora salió la 3 · quién maneja la 4 · cuánto falta para que llegue la 2',
   '• muéstrame la foto y video de la unidad de placa AML838',
   '',
+  '*Clima*',
+  '• cómo está el clima en Lurigancho · va a llover mañana en Ate · hay riesgo de lluvia',
+  '',
   '*Pedidos y documentos*',
-  '• qué pedidos hay hoy / mañana',
+  '• qué pedidos hay hoy / mañana · resumen de despachos de hoy',
   '• generame el enlace del pedido de hoy de globofast',
   '• muéstrame las guías generadas para la producción de hoy',
   '• tenemos hecho el informe de imprimación, área adicional…',
@@ -217,8 +220,28 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
     case 'tank_levels':
     case 'production_consume':
     case 'aggregates_stock':
+    case 'weather':
       // Los resuelve index.ts con sus propias lecturas. Acá, solo si no hay pedidos.
       return vacio ?? '';
+
+    case 'dispatch_summary': {
+      // El resumen que el cliente ve en su enlace, pero acá, para la gente de
+      // planta: cada unidad con hora, placa, chofer, m³ y estado.
+      const bloques = vista.orders.map((o) => {
+        const lineas = [`🚛 *${o.cliente || o.companySlug}* · ${o.obra || 'sin obra'} · ${o.m3Dispatched} de ${o.cantidadCubos} m³ · ${o.units.length} unidad(es)`];
+        for (const u of o.units) {
+          const estado =
+            u.state === 'despachado'
+              ? `✅ salió ${hora(u.departedAt)}${u.arrivalAt ? `, llegó ${hora(u.arrivalAt)}` : ''}`
+              : u.state === 'progreso'
+                ? '🏭 cargando'
+                : '⏳ pendiente';
+          lineas.push(`${u.unitNumber}. ${u.plate || 'sin placa'} · ${u.driverName || 'sin conductor'} · ${u.quantity} m³ · ${estado}`);
+        }
+        return lineas.join('\n');
+      });
+      return [`📋 *Despachos de ${dia}*`, '', ...bloques].join('\n\n');
+    }
 
     case 'checklist_status': {
       const r = ctx.revision;

@@ -9129,7 +9129,7 @@ var init_catalogo = __esm({
       {
         id: "orders_day",
         seSatisfaceCon: ["que pedidos hay manana", "hay produccion manana", "que hay para hoy", "cuales son los pedidos de hoy", "que se produce manana"],
-        reglas: [["pedido"], ["produccion", "manana"], ["producci\xF3n", "ma\xF1ana"], ["hay", "manana"], ["hay", "ma\xF1ana"], ["hay", "hoy"]]
+        reglas: [["pedido"], ["produccion", "manana"], ["producci\xF3n", "ma\xF1ana"], ["que hay", "manana"], ["que hay", "ma\xF1ana"], ["que hay", "hoy"], ["que hay para"]]
       },
       {
         id: "checklist_status",
@@ -9150,6 +9150,16 @@ var init_catalogo = __esm({
         id: "aggregates_stock",
         seSatisfaceCon: ["cuanto agregado tengo en stock", "cuanta arena hay", "stock de piedra", "tenemos agregados en cancha"],
         reglas: [["agregado"], ["stock"], ["arena"], ["piedra"], ["cancha"]]
+      },
+      {
+        id: "weather",
+        seSatisfaceCon: ["como esta el clima", "como estara el clima manana en ate", "va a llover hoy", "hay riesgo de lluvia", "estara soleado", "pronostico para lurigancho"],
+        reglas: [["clima"], ["lluvia"], ["llover"], ["llueve"], ["lloviendo"], ["soleado"], ["nublado"], ["garua"], ["gar\xFAa"], ["pronostico"], ["pron\xF3stico"], ["tiempo", "hoy"], ["tiempo", "manana"], ["tiempo", "ma\xF1ana"], ["riesgo", "lluvia"], ["lluvia", "hoy"], ["lluvia", "manana"], ["lluvia", "ma\xF1ana"], ["clima", "hoy"], ["clima", "manana"], ["clima", "ma\xF1ana"]]
+      },
+      {
+        id: "dispatch_summary",
+        seSatisfaceCon: ["muestrame el resumen de despachos de hoy", "resumen del pedido de hoy", "listado de unidades de hoy", "como fueron los despachos", "detalle de los despachos"],
+        reglas: [["resumen"], ["listado", "unidad"], ["detalle", "despacho"], ["como fueron", "despacho"]]
       },
       {
         id: "help",
@@ -9411,8 +9421,11 @@ var init_responder = __esm({
       "\u2022 a qu\xE9 hora sali\xF3 la 3 \xB7 qui\xE9n maneja la 4 \xB7 cu\xE1nto falta para que llegue la 2",
       "\u2022 mu\xE9strame la foto y video de la unidad de placa AML838",
       "",
+      "*Clima*",
+      "\u2022 c\xF3mo est\xE1 el clima en Lurigancho \xB7 va a llover ma\xF1ana en Ate \xB7 hay riesgo de lluvia",
+      "",
       "*Pedidos y documentos*",
-      "\u2022 qu\xE9 pedidos hay hoy / ma\xF1ana",
+      "\u2022 qu\xE9 pedidos hay hoy / ma\xF1ana \xB7 resumen de despachos de hoy",
       "\u2022 generame el enlace del pedido de hoy de globofast",
       "\u2022 mu\xE9strame las gu\xEDas generadas para la producci\xF3n de hoy",
       "\u2022 tenemos hecho el informe de imprimaci\xF3n, \xE1rea adicional\u2026",
@@ -9499,7 +9512,19 @@ var init_responder = __esm({
         case "tank_levels":
         case "production_consume":
         case "aggregates_stock":
+        case "weather":
           return vacio ?? "";
+        case "dispatch_summary": {
+          const bloques = vista.orders.map((o37) => {
+            const lineas = [`\u{1F69B} *${o37.cliente || o37.companySlug}* \xB7 ${o37.obra || "sin obra"} \xB7 ${o37.m3Dispatched} de ${o37.cantidadCubos} m\xB3 \xB7 ${o37.units.length} unidad(es)`];
+            for (const u66 of o37.units) {
+              const estado2 = u66.state === "despachado" ? `\u2705 sali\xF3 ${hora(u66.departedAt)}${u66.arrivalAt ? `, lleg\xF3 ${hora(u66.arrivalAt)}` : ""}` : u66.state === "progreso" ? "\u{1F3ED} cargando" : "\u23F3 pendiente";
+              lineas.push(`${u66.unitNumber}. ${u66.plate || "sin placa"} \xB7 ${u66.driverName || "sin conductor"} \xB7 ${u66.quantity} m\xB3 \xB7 ${estado2}`);
+            }
+            return lineas.join("\n");
+          });
+          return [`\u{1F4CB} *Despachos de ${dia}*`, "", ...bloques].join("\n\n");
+        }
         case "checklist_status": {
           const r39 = ctx.revision;
           if (!r39) return `No tengo el checklist de ${dia} armado todav\xEDa.`;
@@ -9789,6 +9814,546 @@ var init_planta = __esm({
         bloques.push(lineas.join("\n"));
       }
       return bloques.join("\n\n");
+    };
+  }
+});
+
+// src/models/dispatch-notification-flag.model.ts
+import { Schema as Schema8 } from "mongoose";
+async function getDispatchNotificationFlagModel() {
+  if (dispatchNotificationFlagModel) {
+    return dispatchNotificationFlagModel;
+  }
+  const conn = await getSharedConnection();
+  dispatchNotificationFlagModel = conn.models.DispatchNotificationFlag || conn.model(
+    "DispatchNotificationFlag",
+    dispatchNotificationFlagSchema
+  );
+  return dispatchNotificationFlagModel;
+}
+var dispatchNotificationFlagSchema, dispatchNotificationFlagModel;
+var init_dispatch_notification_flag_model = __esm({
+  "src/models/dispatch-notification-flag.model.ts"() {
+    init_sharedConnection();
+    dispatchNotificationFlagSchema = new Schema8(
+      {
+        key: { type: String, required: true, unique: true },
+        companyId: { type: String, required: true },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+          expires: 60 * 60 * 48
+        }
+      },
+      {
+        collection: "dispatch_notification_flags"
+      }
+    );
+    dispatchNotificationFlagModel = null;
+  }
+});
+
+// src/utils/once-per-key.ts
+var once_per_key_exports = {};
+__export(once_per_key_exports, {
+  claimOnce: () => claimOnce,
+  isClaimed: () => isClaimed,
+  shouldBypassDedupe: () => shouldBypassDedupe
+});
+function shouldBypassDedupe(nodeEnv2 = config.nodeEnv) {
+  return nodeEnv2 === "development";
+}
+async function claimOnce(key, companyId) {
+  if (shouldBypassDedupe()) return true;
+  try {
+    const FlagModel = await getDispatchNotificationFlagModel();
+    const result = await FlagModel.updateOne(
+      { key },
+      { $setOnInsert: { key, companyId, createdAt: /* @__PURE__ */ new Date() } },
+      { upsert: true }
+    );
+    return result.upsertedCount > 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger_default.error(`[once-per-key] no se pudo reclamar "${key}": ${message}`);
+    return true;
+  }
+}
+async function isClaimed(key) {
+  if (shouldBypassDedupe()) return false;
+  try {
+    const FlagModel = await getDispatchNotificationFlagModel();
+    return Boolean(await FlagModel.exists({ key }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger_default.error(`[once-per-key] no se pudo consultar "${key}": ${message}`);
+    return false;
+  }
+}
+var init_once_per_key = __esm({
+  "src/utils/once-per-key.ts"() {
+    init_environment();
+    init_dispatch_notification_flag_model();
+    init_logger();
+  }
+});
+
+// src/services/weather-asphalt-forecast.service.ts
+function isRetriableWeatherStatus(status) {
+  return status === 429 || status >= 500;
+}
+function getProbBand(prob) {
+  if (prob <= 10) return "none";
+  if (prob <= 24) return "low";
+  if (prob <= 44) return "moderate";
+  return "high";
+}
+function getMmBand(mm) {
+  if (mm < MM_VERY_LOW_MAX) return "very_low";
+  if (mm < MM_LOW_MAX) return "low";
+  if (mm < MM_MODERATE_MAX) return "moderate";
+  return "high";
+}
+function getCombinedRiskLevel(prob, mm) {
+  const probBand = getProbBand(prob);
+  const mmBand = getMmBand(mm);
+  if (mmBand === "very_low") return "ok";
+  if (probBand === "none") return mmBand === "high" ? "moderate_risk" : "ok";
+  if (probBand === "low") {
+    if (mmBand === "moderate") return "moderate_risk";
+    if (mmBand === "high") return "high_risk";
+    return "ok";
+  }
+  if (probBand === "moderate") {
+    if (mmBand === "high") return "high_risk";
+    if (mmBand === "low" || mmBand === "moderate") return "moderate_risk";
+    return "ok";
+  }
+  return "high_risk";
+}
+function formatMm(mm) {
+  return `${Math.round(mm * 10) / 10}`;
+}
+function describeRainLine(prob, mm) {
+  const esGarua = getProbBand(prob) === "none" && getMmBand(mm) !== "very_low";
+  if (esGarua) {
+    return `Gar\xFAa persistente: ${formatMm(mm)} mm acumulados (sin evento de lluvia \u2014 prob. ${prob}%)`;
+  }
+  return `Prob. lluvia: ${prob}% \u2014 ${formatMm(mm)} mm acumulados`;
+}
+function readMetric(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+function getConstroadDecision(level) {
+  if (level === "high_risk") return "NO APTO PARA PRODUCIR EN PLANTA";
+  if (level === "moderate_risk") return "RIESGO MODERADO PARA PRODUCIR EN PLANTA";
+  return "APTO PARA PRODUCIR EN PLANTA";
+}
+function formatDate(date) {
+  const opts = { timeZone: WEATHER_ASPHALT_FORECAST.timezone };
+  const dayName = date.toLocaleDateString("es-PE", { ...opts, weekday: "long" });
+  const dayNumber = date.toLocaleDateString("es-PE", { ...opts, day: "numeric" });
+  const month = date.toLocaleDateString("es-PE", { ...opts, month: "long" });
+  return `${dayName.charAt(0).toUpperCase()}${dayName.slice(1)} ${dayNumber} ${month}`;
+}
+function resolveReportDate(run, now = /* @__PURE__ */ new Date()) {
+  const is6amRun = String(run || "").toLowerCase() === "6am" || String(run || "").toLowerCase() === "6";
+  const todayLima = now.toLocaleDateString("en-CA", {
+    timeZone: WEATHER_ASPHALT_FORECAST.timezone
+  });
+  const [year, month, day] = todayLima.split("-").map(Number);
+  const targetDate = new Date(Date.UTC(year, month - 1, day + (is6amRun ? 0 : 1), 12));
+  return {
+    is6amRun,
+    date: targetDate,
+    dateString: targetDate.toISOString().slice(0, 10)
+  };
+}
+function buildWeatherUrl(forecastDays) {
+  const latitudeParam = LOCATIONS.map((location) => location.lat).join(",");
+  const longitudeParam = LOCATIONS.map((location) => location.lon).join(",");
+  return `${WEATHER_API_BASE}&forecast_days=${forecastDays}&latitude=${latitudeParam}&longitude=${longitudeParam}`;
+}
+async function fetchWithTimeout(url, fetcher, timeoutMs) {
+  return fetcher(url, {
+    headers: { Accept: "application/json", "User-Agent": "lila-app-cron/1.0" },
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+}
+async function fetchForecastConReintentos(url, fetcher, now = Date.now) {
+  const { maxAttempts, retryBaseDelayMs, fetchTimeoutMs, totalBudgetMs, minAttemptMs } = WEATHER_ASPHALT_FORECAST;
+  const vence = now() + totalBudgetMs;
+  const queda = () => vence - now();
+  let ultimoError = new Error("Open-Meteo: sin intentos");
+  for (let intento = 1; intento <= maxAttempts; intento += 1) {
+    const disponible = Math.min(fetchTimeoutMs, queda());
+    if (disponible < minAttemptMs) break;
+    let esTransitorio = true;
+    try {
+      const response = await fetchWithTimeout(url, fetcher, disponible);
+      const responseText = await response.text();
+      if (response.ok) return responseText;
+      ultimoError = new Error(`Open-Meteo API error: ${response.status}`);
+      esTransitorio = isRetriableWeatherStatus(response.status);
+    } catch (error) {
+      ultimoError = error instanceof Error ? error : new Error(String(error));
+    }
+    if (!esTransitorio) break;
+    const espera = retryBaseDelayMs * intento;
+    if (intento >= maxAttempts || queda() - espera < minAttemptMs) break;
+    await esperar(espera);
+  }
+  throw ultimoError;
+}
+function parseOpenMeteoResults(payload) {
+  const results = JSON.parse(payload);
+  if (!Array.isArray(results) || results.length !== LOCATIONS.length) {
+    throw new Error(`Open-Meteo response length mismatch: ${results?.length ?? "none"}`);
+  }
+  return results;
+}
+function buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate) {
+  if (constroadRiskyDays.length === 0 && forecastsWithRisk.length === 0) return null;
+  let message = "REPORTE DE CLIMA\n\n";
+  if (constroadRiskyDays.length > 0) {
+    message += `Constroad (Planta de asfalto - ${ASPHALT_PLANT_LOCATION}):
+
+`;
+    for (const day of constroadRiskyDays) {
+      message += `  ${formatDate(day.date)}:
+`;
+      message += `    ${describeRainLine(day.prob, day.mm)}
+`;
+      message += `    ${day.decision}
+
+`;
+    }
+  }
+  if (forecastsWithRisk.length > 0) {
+    message += `Distritos no aptos o con precauci\xF3n para asfaltar (${formatDate(reportDate)}):
+
+`;
+    const highRisk = forecastsWithRisk.filter((forecast) => forecast.level === "high_risk");
+    const moderateRisk = forecastsWithRisk.filter((forecast) => forecast.level === "moderate_risk");
+    if (highRisk.length > 0) {
+      message += "NO ASFALTAR - RIESGO ALTO:\n";
+      for (const forecast of highRisk) {
+        message += `  - ${forecast.name.toUpperCase()}:
+`;
+        message += `    ${describeRainLine(forecast.prob, forecast.mm)}
+
+`;
+      }
+    }
+    if (moderateRisk.length > 0) {
+      message += "RIESGO MODERADO:\n";
+      for (const forecast of moderateRisk) {
+        message += `  - ${forecast.name.toUpperCase()}:
+`;
+        message += `    ${describeRainLine(forecast.prob, forecast.mm)}
+
+`;
+      }
+    }
+  } else if (constroadRiskyDays.length > 0) {
+    message += `Distritos no aptos para asfaltar (${formatDate(reportDate)}):
+`;
+    message += "  Ninguno detectado con los umbrales configurados.\n\n";
+  }
+  return message;
+}
+function collectConstroadRisk(results, reportDateString) {
+  const constroadIndex = LOCATIONS.findIndex((location) => location.name === "Constroad");
+  const daily = results[constroadIndex]?.daily;
+  const startIdx = daily?.time?.indexOf(reportDateString) ?? -1;
+  if (!daily || startIdx < 0 || daily.time.length < startIdx + 3) return [];
+  const days = [];
+  for (let offset = 0; offset < 3; offset++) {
+    const idx = startIdx + offset;
+    const prob = readMetric(daily.precipitation_probability_max[idx]);
+    const mm = readMetric(daily.precipitation_sum[idx]);
+    if (prob === null || mm === null) continue;
+    const level = getCombinedRiskLevel(prob, mm);
+    if (level === "ok") continue;
+    days.push({
+      date: /* @__PURE__ */ new Date(`${daily.time[idx]}T12:00:00Z`),
+      prob,
+      mm,
+      decision: getConstroadDecision(level),
+      level
+    });
+  }
+  return days;
+}
+function collectDistrictRisk(results, reportDateString) {
+  const constroadIndex = LOCATIONS.findIndex((location) => location.name === "Constroad");
+  const forecasts = [];
+  for (let index = 0; index < LOCATIONS.length; index++) {
+    if (index === constroadIndex) continue;
+    const daily = results[index]?.daily;
+    const dayIndex = daily?.time?.indexOf(reportDateString) ?? -1;
+    if (!daily || dayIndex < 0) continue;
+    const prob = readMetric(daily.precipitation_probability_max[dayIndex]);
+    const mm = readMetric(daily.precipitation_sum[dayIndex]);
+    if (prob === null || mm === null) continue;
+    const level = getCombinedRiskLevel(prob, mm);
+    if (level === "ok") continue;
+    forecasts.push({ name: LOCATIONS[index].name, prob, mm, level });
+  }
+  return forecasts;
+}
+function buildFailureAlert(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return [
+    "ALERTA: weather-asphalt-forecast fallo",
+    "Servicio: lila-app",
+    `Detalle: ${message}`,
+    `Fecha: ${(/* @__PURE__ */ new Date()).toISOString()}`
+  ].join("\n");
+}
+async function generateWeatherAsphaltForecast(params = {}) {
+  const fetcher = params.fetcher || fetch;
+  const notifyError = params.notifyError || (async (alertParams) => {
+    const { sendTelegramAlert: sendTelegramAlert2 } = await Promise.resolve().then(() => (init_telegram_alert_service(), telegram_alert_service_exports));
+    return sendTelegramAlert2(alertParams);
+  });
+  const reportDate = resolveReportDate(params.run);
+  const forecastDays = reportDate.is6amRun ? 3 : 4;
+  try {
+    const responseText = await fetchForecastConReintentos(
+      buildWeatherUrl(forecastDays),
+      fetcher
+    );
+    const results = parseOpenMeteoResults(responseText);
+    const constroadRiskyDays = collectConstroadRisk(results, reportDate.dateString);
+    const forecastsWithRisk = collectDistrictRisk(results, reportDate.dateString);
+    const message = buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate.date);
+    const nadieEscucha = params.callerGone?.() ?? false;
+    if (params.companyId && message && !nadieEscucha) {
+      const claim = params.claim ?? (async (key, companyId) => {
+        const { claimOnce: claimOnce2 } = await Promise.resolve().then(() => (init_once_per_key(), once_per_key_exports));
+        return claimOnce2(key, companyId);
+      });
+      const clave2 = `weather-forecast:${params.companyId}:${reportDate.dateString}`;
+      if (!await claim(clave2, params.companyId)) {
+        return {
+          status: "skipped",
+          hasRainRisk: false,
+          message: null,
+          mensaje: null
+        };
+      }
+    }
+    return {
+      status: "ok",
+      hasRainRisk: Boolean(message),
+      message,
+      mensaje: message
+    };
+  } catch (error) {
+    const telegramAlert = await notifyError({
+      dedupeKey: "weather-asphalt-forecast",
+      message: buildFailureAlert(error)
+    });
+    return {
+      status: "degraded",
+      hasRainRisk: false,
+      message: null,
+      mensaje: null,
+      telegramAlert,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+var WEATHER_ASPHALT_FORECAST, LOCATIONS, WEATHER_API_BASE, ASPHALT_PLANT_LOCATION, MM_VERY_LOW_MAX, MM_LOW_MAX, MM_MODERATE_MAX, esperar;
+var init_weather_asphalt_forecast_service = __esm({
+  "src/services/weather-asphalt-forecast.service.ts"() {
+    WEATHER_ASPHALT_FORECAST = {
+      fetchTimeoutMs: 25e3,
+      timezone: "America/Lima",
+      /**
+       * Reintentos ante fallo TRANSITORIO de Open-Meteo (20/08/2026: un 503 a las
+       * 08:00 se llevó puesto el reporte del día entero). Es una API pública y
+       * gratuita: un 503/429 puntual es esperable, no una avería. Con un solo
+       * intento, cada blip momentáneo = un día sin reporte + una alerta a las 8am.
+       */
+      maxAttempts: 3,
+      retryBaseDelayMs: 1500,
+      /**
+       * TOPE TOTAL de la operación, reintentos incluidos (07/09/2026).
+       *
+       * `fetchTimeoutMs` acota cada intento, no la suma: 25 s × 3 + backoff daba un
+       * peor caso de ~79 s. Quien nos llama —el proxy de Portal, y detrás el
+       * JobExecutor— corta MUCHO antes, así que ese margen no existía: solo servía
+       * para seguir trabajando para un cliente que ya se había ido. Con el tope, el
+       * último intento se recorta a lo que queda y la respuesta llega SIEMPRE dentro
+       * del presupuesto de arriba (20 < 25 del proxy < 28 de la ruta < 30 del
+       * executor).
+       */
+      totalBudgetMs: 2e4,
+      /** Menos que esto no alcanza ni para el saludo TLS: no se intenta de nuevo. */
+      minAttemptMs: 2e3
+    };
+    LOCATIONS = [
+      { name: "Constroad", lat: -11.9894172, lon: -76.8789932 },
+      { name: "Ancon", lat: -11.769, lon: -77.153 },
+      { name: "Ate", lat: -12.016, lon: -76.981 },
+      { name: "Barranco", lat: -12.147, lon: -77.021 },
+      { name: "Brena", lat: -12.062, lon: -77.041 },
+      { name: "Carabayllo", lat: -11.983, lon: -77.081 },
+      { name: "Chaclacayo", lat: -12.049, lon: -76.859 },
+      { name: "Chorrillos", lat: -12.168, lon: -77.026 },
+      { name: "Cieneguilla", lat: -12.116, lon: -76.822 },
+      { name: "Comas", lat: -11.999, lon: -77.06 },
+      { name: "El Agustino", lat: -12.053, lon: -77.033 },
+      { name: "Independencia", lat: -12.008, lon: -77.062 },
+      { name: "Jesus Maria", lat: -12.075, lon: -77.047 },
+      { name: "La Molina", lat: -12.083, lon: -76.926 },
+      { name: "La Victoria", lat: -12.06, lon: -77.017 },
+      { name: "Lima Cercado", lat: -12.046, lon: -77.03 },
+      { name: "Lince", lat: -12.082, lon: -77.021 },
+      { name: "Los Olivos", lat: -11.976, lon: -77.075 },
+      { name: "Lurigancho", lat: -12.016, lon: -76.916 },
+      { name: "Lurin", lat: -12.332, lon: -76.892 },
+      { name: "Magdalena del Mar", lat: -12.098, lon: -77.053 },
+      { name: "Miraflores", lat: -12.121, lon: -77.03 },
+      { name: "Pueblo Libre", lat: -12.1, lon: -77.061 },
+      { name: "Punta Hermosa", lat: -12.343, lon: -77.023 },
+      { name: "Punta Negra", lat: -12.398, lon: -76.946 },
+      { name: "Rimac", lat: -12.042, lon: -77.062 },
+      { name: "San Bartolo", lat: -12.467, lon: -76.78 },
+      { name: "San Borja", lat: -12.092, lon: -77.027 },
+      { name: "San Isidro", lat: -12.097, lon: -77.036 },
+      { name: "San Juan de Lurigancho", lat: -12.016, lon: -77.03 },
+      { name: "San Juan de Miraflores", lat: -12.092, lon: -76.979 },
+      { name: "San Luis", lat: -12.058, lon: -77.025 },
+      { name: "San Martin de Porres", lat: -12.034, lon: -77.055 },
+      { name: "San Miguel", lat: -12.071, lon: -77.093 },
+      { name: "Santa Anita", lat: -12.045, lon: -76.972 },
+      { name: "Santa Maria del Mar", lat: -12.371, lon: -77.019 },
+      { name: "Santa Rosa", lat: -12.119, lon: -77.011 },
+      { name: "Santiago de Surco", lat: -12.117, lon: -77.036 },
+      { name: "Surquillo", lat: -12.103, lon: -77.03 },
+      { name: "Villa El Salvador", lat: -12.174, lon: -76.977 },
+      { name: "Villa Maria del Triunfo", lat: -12.118, lon: -76.983 }
+    ];
+    WEATHER_API_BASE = "https://api.open-meteo.com/v1/forecast?daily=temperature_2m_mean,precipitation_probability_max,precipitation_sum&timezone=America/Lima";
+    ASPHALT_PLANT_LOCATION = "Distrito de Lurigancho-Chosica";
+    MM_VERY_LOW_MAX = 0.5;
+    MM_LOW_MAX = 1;
+    MM_MODERATE_MAX = 2;
+    esperar = (ms2) => new Promise((resolve2) => setTimeout(resolve2, ms2));
+  }
+});
+
+// src/agent/consultas/clima.ts
+var cielo, distritoDe, URL_BASE, pronosticoHorario, franjasDeRiesgo, hh, textoClima;
+var init_clima = __esm({
+  "src/agent/consultas/clima.ts"() {
+    init_logger();
+    init_weather_asphalt_forecast_service();
+    init_catalogo();
+    init_tiempo();
+    cielo = (codigo) => {
+      if (codigo === 0) return "despejado";
+      if (codigo <= 2) return "parcialmente nublado";
+      if (codigo === 3) return "nublado";
+      if (codigo === 45 || codigo === 48) return "con neblina";
+      if (codigo >= 51 && codigo <= 57) return "con llovizna";
+      if (codigo >= 61 && codigo <= 67) return "con lluvia";
+      if (codigo >= 80 && codigo <= 82) return "con chubascos";
+      if (codigo >= 95) return "con tormenta";
+      return "variable";
+    };
+    distritoDe = (pregunta) => {
+      const t44 = normalizar(pregunta);
+      const encontrado = LOCATIONS.slice(1).find((l57) => t44.includes(normalizar(l57.name)));
+      return encontrado ?? { ...LOCATIONS[0], name: "la planta" };
+    };
+    URL_BASE = "https://api.open-meteo.com/v1/forecast?hourly=precipitation_probability,precipitation,temperature_2m,weather_code&timezone=America%2FLima&forecast_days=2";
+    pronosticoHorario = async (distrito, fecha) => {
+      const controller2 = new AbortController();
+      const timer3 = setTimeout(() => controller2.abort(), WEATHER_ASPHALT_FORECAST.fetchTimeoutMs);
+      try {
+        const res = await fetch(`${URL_BASE}&latitude=${distrito.lat}&longitude=${distrito.lon}`, { signal: controller2.signal });
+        if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+        const data = await res.json();
+        const h65 = data.hourly;
+        if (!h65?.time) return null;
+        const horas = [];
+        h65.time.forEach((t44, i50) => {
+          if (!t44.startsWith(fecha)) return;
+          horas.push({
+            hora: Number(t44.slice(11, 13)),
+            probLluvia: Number(h65.precipitation_probability?.[i50] ?? 0) || 0,
+            mm: Number(h65.precipitation?.[i50] ?? 0) || 0,
+            temperatura: Number(h65.temperature_2m?.[i50] ?? 0) || 0,
+            codigo: Number(h65.weather_code?.[i50] ?? 0) || 0
+          });
+        });
+        return horas.length ? { fecha, distrito: distrito.name, horas } : null;
+      } catch (error) {
+        logger_default.warn(`[agente] clima: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      } finally {
+        clearTimeout(timer3);
+      }
+    };
+    franjasDeRiesgo = (horas) => {
+      const franjas = [];
+      let actual = null;
+      for (const h65 of horas) {
+        const riesgo = h65.probLluvia >= 30 || h65.mm >= 0.5;
+        if (riesgo) {
+          if (actual && actual.hasta === h65.hora - 1) {
+            actual.hasta = h65.hora;
+            actual.probMax = Math.max(actual.probMax, h65.probLluvia);
+            actual.mm += h65.mm;
+          } else {
+            actual = { desde: h65.hora, hasta: h65.hora, probMax: h65.probLluvia, mm: h65.mm };
+            franjas.push(actual);
+          }
+        } else {
+          actual = null;
+        }
+      }
+      return franjas;
+    };
+    hh = (h65) => `${String(h65).padStart(2, "0")}:00`;
+    textoClima = (p64, ahoraHora) => {
+      if (!p64) return "No pude consultar el pron\xF3stico ahora. Prob\xE1 de nuevo en un rato.";
+      const { horas } = p64;
+      const probMax = Math.max(...horas.map((h65) => h65.probLluvia));
+      const mmTotal = horas.reduce((s59, h65) => s59 + h65.mm, 0);
+      const temps = horas.map((h65) => h65.temperatura);
+      const tMin = Math.min(...temps);
+      const tMax = Math.max(...temps);
+      const deDia = horas.filter((h65) => h65.hora >= 7 && h65.hora <= 18);
+      const codigos = (deDia.length ? deDia : horas).map((h65) => h65.codigo);
+      const codigoTipico = codigos.sort((a49, b63) => codigos.filter((v55) => v55 === a49).length - codigos.filter((v55) => v55 === b63).length).pop() ?? 0;
+      const franjas = franjasDeRiesgo(horas);
+      const nivel = getCombinedRiskLevel(probMax, mmTotal);
+      const lineas = [
+        `\u{1F324} *Clima en ${p64.distrito} \u2014 ${fechaLegible(p64.fecha)}*`,
+        `Cielo ${cielo(codigoTipico)} \xB7 ${tMin.toFixed(0)} a ${tMax.toFixed(0)} \xB0C`
+      ];
+      if (franjas.length === 0) {
+        lineas.push(`Lluvia: sin riesgo en todo el d\xEDa (m\xE1x. ${probMax.toFixed(0)} %, ${mmTotal.toFixed(1)} mm).`);
+      } else {
+        lineas.push(`Lluvia: riesgo en ${franjas.length === 1 ? "esta franja" : "estas franjas"} \u2014`);
+        for (const f64 of franjas) {
+          const pasada = f64.hasta < ahoraHora ? " (ya pas\xF3)" : "";
+          lineas.push(`\u2022 ${hh(f64.desde)}\u2013${hh(f64.hasta + 1)}: hasta ${f64.probMax.toFixed(0)} %, ${f64.mm.toFixed(1)} mm${pasada}`);
+        }
+      }
+      const veredicto = {
+        ok: "\u2705 Apto para asfaltar.",
+        moderate_risk: "\u26A0\uFE0F Asfaltar con precauci\xF3n: hay riesgo de lluvia.",
+        high_risk: "\u26D4 No apto para asfaltar: riesgo alto de lluvia."
+      };
+      lineas.push(veredicto[nivel] ?? `Riesgo: ${nivel}.`);
+      return lineas.join("\n");
     };
   }
 });
@@ -10249,6 +10814,7 @@ var init_consultas = __esm({
     init_archivos();
     init_pendientes();
     init_planta();
+    init_clima();
     init_semantica();
     init_emisor();
     init_tiempo();
@@ -10325,6 +10891,10 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       if (clave2 === "tank_levels") return { texto: textoTanques(await tanques()) };
       if (clave2 === "production_consume") return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
       if (clave2 === "aggregates_stock") return { texto: textoMateriales(await materiales(await empresasDelPiloto())) };
+      if (clave2 === "weather") {
+        const horaLima = Number((/* @__PURE__ */ new Date()).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", hour12: false }).slice(0, 2));
+        return { texto: textoClima(await pronosticoHorario(distritoDe(pregunta), fecha), params.day === "today" ? horaLima : -1) };
+      }
       if (clave2 === "order_link") return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
       if (clave2 === "guias_day") return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
       if (clave2 === "unit_media") {
@@ -63839,86 +64409,6 @@ var require_archiver = __commonJS({
   }
 });
 
-// src/models/dispatch-notification-flag.model.ts
-import { Schema as Schema12 } from "mongoose";
-async function getDispatchNotificationFlagModel() {
-  if (dispatchNotificationFlagModel) {
-    return dispatchNotificationFlagModel;
-  }
-  const conn = await getSharedConnection();
-  dispatchNotificationFlagModel = conn.models.DispatchNotificationFlag || conn.model(
-    "DispatchNotificationFlag",
-    dispatchNotificationFlagSchema
-  );
-  return dispatchNotificationFlagModel;
-}
-var dispatchNotificationFlagSchema, dispatchNotificationFlagModel;
-var init_dispatch_notification_flag_model = __esm({
-  "src/models/dispatch-notification-flag.model.ts"() {
-    init_sharedConnection();
-    dispatchNotificationFlagSchema = new Schema12(
-      {
-        key: { type: String, required: true, unique: true },
-        companyId: { type: String, required: true },
-        createdAt: {
-          type: Date,
-          default: Date.now,
-          expires: 60 * 60 * 48
-        }
-      },
-      {
-        collection: "dispatch_notification_flags"
-      }
-    );
-    dispatchNotificationFlagModel = null;
-  }
-});
-
-// src/utils/once-per-key.ts
-var once_per_key_exports = {};
-__export(once_per_key_exports, {
-  claimOnce: () => claimOnce,
-  isClaimed: () => isClaimed,
-  shouldBypassDedupe: () => shouldBypassDedupe
-});
-function shouldBypassDedupe(nodeEnv2 = config.nodeEnv) {
-  return nodeEnv2 === "development";
-}
-async function claimOnce(key, companyId) {
-  if (shouldBypassDedupe()) return true;
-  try {
-    const FlagModel = await getDispatchNotificationFlagModel();
-    const result = await FlagModel.updateOne(
-      { key },
-      { $setOnInsert: { key, companyId, createdAt: /* @__PURE__ */ new Date() } },
-      { upsert: true }
-    );
-    return result.upsertedCount > 0;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger_default.error(`[once-per-key] no se pudo reclamar "${key}": ${message}`);
-    return true;
-  }
-}
-async function isClaimed(key) {
-  if (shouldBypassDedupe()) return false;
-  try {
-    const FlagModel = await getDispatchNotificationFlagModel();
-    return Boolean(await FlagModel.exists({ key }));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger_default.error(`[once-per-key] no se pudo consultar "${key}": ${message}`);
-    return false;
-  }
-}
-var init_once_per_key = __esm({
-  "src/utils/once-per-key.ts"() {
-    init_environment();
-    init_dispatch_notification_flag_model();
-    init_logger();
-  }
-});
-
 // src/services/pdf-linearize.service.ts
 import fs2 from "fs-extra";
 import path4 from "path";
@@ -68000,7 +68490,7 @@ init_models();
 import fs12 from "fs-extra";
 import path16 from "path";
 var escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-var formatDate = (value) => {
+var formatDate2 = (value) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
   return match ? `${match[3]}/${match[2]}/${match[1]}` : "-";
 };
@@ -68028,8 +68518,8 @@ var renderPlantSettlementHtml = (params) => {
     <tr>
       <td>${escapeHtml(group.projectName || "Sin obra")}</td>
       <td>${escapeHtml(group.clientName)}</td>
-      <td>${formatDate(group.orderDate)}</td>
-      <td>${formatDate(group.dueDate)}</td>
+      <td>${formatDate2(group.orderDate)}</td>
+      <td>${formatDate2(group.dueDate)}</td>
       <td>${group.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</td>
       <td class="number">${group.dispatchCount}</td>
       <td class="number">${group.unfinishedDispatchCount}</td>
@@ -68061,8 +68551,8 @@ var renderPlantSettlementHtml = (params) => {
     <div><h1>REPORTE DE PRODUCCI\xD3N POR PLANTA</h1>
       <div class="center"><strong>${escapeHtml(payload.plant.name)}</strong></div></div>
     <div class="meta"><strong>C\xF3digo:</strong> ${buildReportCode(params.companyId, payload)}<br>
-      <strong>Desde:</strong> ${formatDate(payload.period.startDate)}<br>
-      <strong>Hasta:</strong> ${formatDate(payload.period.endDate)}</div>
+      <strong>Desde:</strong> ${formatDate2(payload.period.startDate)}<br>
+      <strong>Hasta:</strong> ${formatDate2(payload.period.endDate)}</div>
   </header>
   <section class="summary">
     <div class="metric">M3 confirmados<strong>${formatM3(confirmedTotal)} m3</strong></div>
@@ -82689,7 +83179,7 @@ function generateRandomDataForSchema(schema) {
 
 // src/services/report-data-aggregator.service.ts
 init_sharedConnection();
-import mongoose6, { Schema as Schema8 } from "mongoose";
+import mongoose6, { Schema as Schema9 } from "mongoose";
 var modelCache = /* @__PURE__ */ new Map();
 var LIQUIDACION_IGV_FACTOR = 1.18;
 function asRecord(value) {
@@ -82700,7 +83190,7 @@ async function getFlexibleModel(modelName) {
     return modelCache.get(modelName);
   }
   const conn = await getSharedConnection();
-  const model = conn.models[modelName] || conn.model(modelName, new Schema8({}, { strict: false }));
+  const model = conn.models[modelName] || conn.model(modelName, new Schema9({}, { strict: false }));
   modelCache.set(modelName, model);
   return model;
 }
@@ -83370,15 +83860,15 @@ function structureDataForReportType(reportType, rawData) {
 
 // src/models/service-report.model.ts
 init_sharedConnection();
-import { Schema as Schema9 } from "mongoose";
-var ServiceReportSchema = new Schema9(
+import { Schema as Schema10 } from "mongoose";
+var ServiceReportSchema = new Schema10(
   {
     serviceManagementId: { type: String, required: true },
     type: { type: String, required: true },
     status: { type: String, required: true, default: "draft" },
     title: { type: String, required: false },
     description: { type: String, required: false },
-    schemaData: { type: Schema9.Types.Mixed, required: false },
+    schemaData: { type: Schema10.Types.Mixed, required: false },
     generatedDocuments: {
       docxUrl: { type: String, required: false },
       pdfUrl: { type: String, required: false },
@@ -83388,11 +83878,11 @@ var ServiceReportSchema = new Schema9(
       annexPages: { type: Number, required: false }
     },
     draftData: {
-      schemaData: { type: Schema9.Types.Mixed, required: false },
-      schemaOverrides: { type: Schema9.Types.Mixed, required: false },
-      customSections: { type: [Schema9.Types.Mixed], required: false, default: [] },
-      annexes: { type: [Schema9.Types.Mixed], required: false, default: [] },
-      folioConfig: { type: Schema9.Types.Mixed, required: false },
+      schemaData: { type: Schema10.Types.Mixed, required: false },
+      schemaOverrides: { type: Schema10.Types.Mixed, required: false },
+      customSections: { type: [Schema10.Types.Mixed], required: false, default: [] },
+      annexes: { type: [Schema10.Types.Mixed], required: false, default: [] },
+      folioConfig: { type: Schema10.Types.Mixed, required: false },
       savedAt: { type: String, required: false },
       savedBy: { type: String, required: false }
     },
@@ -83401,14 +83891,14 @@ var ServiceReportSchema = new Schema9(
       lockedAt: { type: String, required: false },
       expiresAt: { type: String, required: false }
     },
-    auditLog: { type: [Schema9.Types.Mixed], required: false, default: [] },
-    attachments: { type: [Schema9.Types.Mixed], required: false, default: [] },
-    schemaOverrides: { type: Schema9.Types.Mixed, required: false },
-    customSections: { type: [Schema9.Types.Mixed], required: false, default: [] },
-    annexes: { type: [Schema9.Types.Mixed], required: false, default: [] },
-    folioConfig: { type: Schema9.Types.Mixed, required: false },
-    sections: { type: Schema9.Types.Mixed, required: false },
-    metrics: { type: Schema9.Types.Mixed, required: false },
+    auditLog: { type: [Schema10.Types.Mixed], required: false, default: [] },
+    attachments: { type: [Schema10.Types.Mixed], required: false, default: [] },
+    schemaOverrides: { type: Schema10.Types.Mixed, required: false },
+    customSections: { type: [Schema10.Types.Mixed], required: false, default: [] },
+    annexes: { type: [Schema10.Types.Mixed], required: false, default: [] },
+    folioConfig: { type: Schema10.Types.Mixed, required: false },
+    sections: { type: Schema10.Types.Mixed, required: false },
+    metrics: { type: Schema10.Types.Mixed, required: false },
     visibility: { type: Boolean, required: false, default: false }
   },
   { timestamps: true }
@@ -108629,7 +109119,7 @@ init_whatsapp_phone();
 // src/services/dispatch-vale-payload.service.ts
 init_sharedConnection();
 init_models();
-import { Schema as Schema10, Types as Types2 } from "mongoose";
+import { Schema as Schema11, Types as Types2 } from "mongoose";
 
 // src/utils/client-facing-m3.ts
 function hasClientFacingM3(value) {
@@ -108645,7 +109135,7 @@ function resolveClientFacingM3(dispatch) {
 }
 
 // src/services/dispatch-vale-payload.service.ts
-var looseSchema2 = new Schema10({}, { strict: false });
+var looseSchema2 = new Schema11({}, { strict: false });
 async function getPortalModel(name, collection) {
   const conn = await getSharedConnection();
   return conn.models[name] || conn.model(name, looseSchema2, collection);
@@ -108802,8 +109292,8 @@ async function buildDispatchValePayloadFromPortal(params) {
 
 // src/models/dispatch-vale-run.model.ts
 init_sharedConnection();
-import mongoose8, { Schema as Schema11 } from "mongoose";
-var DispatchValeRunSchema = new Schema11(
+import mongoose8, { Schema as Schema12 } from "mongoose";
+var DispatchValeRunSchema = new Schema12(
   {
     companyId: { type: String, required: true, index: true },
     dispatchId: { type: String, required: true, index: true },
@@ -109614,7 +110104,7 @@ function toSafeText(value, fallback = "") {
 function escapeXml(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
-function formatDate2(value) {
+function formatDate3(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value || "-";
   return date.toLocaleDateString("es-PE", {
@@ -109718,7 +110208,7 @@ function buildOrderCompletionSummarySvg(params) {
     const y65 = tableTop + rowHeight * (index + 1);
     return `
         <rect x="32" y="${y65}" width="1136" height="${rowHeight}" fill="${index % 2 === 0 ? "#ffffff" : "#f8fafc"}" />
-        <text x="72" y="${y65 + 34}" class="cell">${escapeXml(formatDate2(row.date || params.date))}</text>
+        <text x="72" y="${y65 + 34}" class="cell">${escapeXml(formatDate3(row.date || params.date))}</text>
         <text x="240" y="${y65 + 34}" class="cell accent">${escapeXml(truncateText(row.plate, 12))}</text>
         <text x="420" y="${y65 + 34}" class="cell">${escapeXml(truncateText(row.driverName, 28))}</text>
         <text x="700" y="${y65 + 34}" class="cell">${escapeXml(row.hour || "-")}</text>
@@ -109747,7 +110237,7 @@ function buildOrderCompletionSummarySvg(params) {
       <text x="32" y="94" class="subtitle">Resumen de tu pedido, ${escapeXml(params.obra || "Obra")}</text>
       <g>
         <rect x="32" y="135" width="260" height="142" rx="28" fill="#f7f8fc" stroke="#ffffff" stroke-width="2" />
-        <text x="162" y="198" class="metric" text-anchor="middle">${escapeXml(formatDate2(params.date))}</text>
+        <text x="162" y="198" class="metric" text-anchor="middle">${escapeXml(formatDate3(params.date))}</text>
         <text x="162" y="246" class="metric-label" text-anchor="middle">Fecha</text>
         <rect x="320" y="135" width="260" height="142" rx="28" fill="#f7f8fc" stroke="#ffffff" stroke-width="2" />
         <text x="450" y="198" class="metric" text-anchor="middle">${escapeXml(formatQuantity3(params.totalM3))}</text>
@@ -111372,353 +111862,8 @@ router9.post(
 var public_routes_default = router9;
 
 // src/api/routes/cron.routes.ts
+init_weather_asphalt_forecast_service();
 import { Router as Router10 } from "express";
-
-// src/services/weather-asphalt-forecast.service.ts
-var WEATHER_ASPHALT_FORECAST = {
-  fetchTimeoutMs: 25e3,
-  timezone: "America/Lima",
-  /**
-   * Reintentos ante fallo TRANSITORIO de Open-Meteo (20/08/2026: un 503 a las
-   * 08:00 se llevó puesto el reporte del día entero). Es una API pública y
-   * gratuita: un 503/429 puntual es esperable, no una avería. Con un solo
-   * intento, cada blip momentáneo = un día sin reporte + una alerta a las 8am.
-   */
-  maxAttempts: 3,
-  retryBaseDelayMs: 1500,
-  /**
-   * TOPE TOTAL de la operación, reintentos incluidos (07/09/2026).
-   *
-   * `fetchTimeoutMs` acota cada intento, no la suma: 25 s × 3 + backoff daba un
-   * peor caso de ~79 s. Quien nos llama —el proxy de Portal, y detrás el
-   * JobExecutor— corta MUCHO antes, así que ese margen no existía: solo servía
-   * para seguir trabajando para un cliente que ya se había ido. Con el tope, el
-   * último intento se recorta a lo que queda y la respuesta llega SIEMPRE dentro
-   * del presupuesto de arriba (20 < 25 del proxy < 28 de la ruta < 30 del
-   * executor).
-   */
-  totalBudgetMs: 2e4,
-  /** Menos que esto no alcanza ni para el saludo TLS: no se intenta de nuevo. */
-  minAttemptMs: 2e3
-};
-function isRetriableWeatherStatus(status) {
-  return status === 429 || status >= 500;
-}
-var LOCATIONS = [
-  { name: "Constroad", lat: -11.9894172, lon: -76.8789932 },
-  { name: "Ancon", lat: -11.769, lon: -77.153 },
-  { name: "Ate", lat: -12.016, lon: -76.981 },
-  { name: "Barranco", lat: -12.147, lon: -77.021 },
-  { name: "Brena", lat: -12.062, lon: -77.041 },
-  { name: "Carabayllo", lat: -11.983, lon: -77.081 },
-  { name: "Chaclacayo", lat: -12.049, lon: -76.859 },
-  { name: "Chorrillos", lat: -12.168, lon: -77.026 },
-  { name: "Cieneguilla", lat: -12.116, lon: -76.822 },
-  { name: "Comas", lat: -11.999, lon: -77.06 },
-  { name: "El Agustino", lat: -12.053, lon: -77.033 },
-  { name: "Independencia", lat: -12.008, lon: -77.062 },
-  { name: "Jesus Maria", lat: -12.075, lon: -77.047 },
-  { name: "La Molina", lat: -12.083, lon: -76.926 },
-  { name: "La Victoria", lat: -12.06, lon: -77.017 },
-  { name: "Lima Cercado", lat: -12.046, lon: -77.03 },
-  { name: "Lince", lat: -12.082, lon: -77.021 },
-  { name: "Los Olivos", lat: -11.976, lon: -77.075 },
-  { name: "Lurigancho", lat: -12.016, lon: -76.916 },
-  { name: "Lurin", lat: -12.332, lon: -76.892 },
-  { name: "Magdalena del Mar", lat: -12.098, lon: -77.053 },
-  { name: "Miraflores", lat: -12.121, lon: -77.03 },
-  { name: "Pueblo Libre", lat: -12.1, lon: -77.061 },
-  { name: "Punta Hermosa", lat: -12.343, lon: -77.023 },
-  { name: "Punta Negra", lat: -12.398, lon: -76.946 },
-  { name: "Rimac", lat: -12.042, lon: -77.062 },
-  { name: "San Bartolo", lat: -12.467, lon: -76.78 },
-  { name: "San Borja", lat: -12.092, lon: -77.027 },
-  { name: "San Isidro", lat: -12.097, lon: -77.036 },
-  { name: "San Juan de Lurigancho", lat: -12.016, lon: -77.03 },
-  { name: "San Juan de Miraflores", lat: -12.092, lon: -76.979 },
-  { name: "San Luis", lat: -12.058, lon: -77.025 },
-  { name: "San Martin de Porres", lat: -12.034, lon: -77.055 },
-  { name: "San Miguel", lat: -12.071, lon: -77.093 },
-  { name: "Santa Anita", lat: -12.045, lon: -76.972 },
-  { name: "Santa Maria del Mar", lat: -12.371, lon: -77.019 },
-  { name: "Santa Rosa", lat: -12.119, lon: -77.011 },
-  { name: "Santiago de Surco", lat: -12.117, lon: -77.036 },
-  { name: "Surquillo", lat: -12.103, lon: -77.03 },
-  { name: "Villa El Salvador", lat: -12.174, lon: -76.977 },
-  { name: "Villa Maria del Triunfo", lat: -12.118, lon: -76.983 }
-];
-var WEATHER_API_BASE = "https://api.open-meteo.com/v1/forecast?daily=temperature_2m_mean,precipitation_probability_max,precipitation_sum&timezone=America/Lima";
-var ASPHALT_PLANT_LOCATION = "Distrito de Lurigancho-Chosica";
-var MM_VERY_LOW_MAX = 0.5;
-var MM_LOW_MAX = 1;
-var MM_MODERATE_MAX = 2;
-function getProbBand(prob) {
-  if (prob <= 10) return "none";
-  if (prob <= 24) return "low";
-  if (prob <= 44) return "moderate";
-  return "high";
-}
-function getMmBand(mm) {
-  if (mm < MM_VERY_LOW_MAX) return "very_low";
-  if (mm < MM_LOW_MAX) return "low";
-  if (mm < MM_MODERATE_MAX) return "moderate";
-  return "high";
-}
-function getCombinedRiskLevel(prob, mm) {
-  const probBand = getProbBand(prob);
-  const mmBand = getMmBand(mm);
-  if (mmBand === "very_low") return "ok";
-  if (probBand === "none") return mmBand === "high" ? "moderate_risk" : "ok";
-  if (probBand === "low") {
-    if (mmBand === "moderate") return "moderate_risk";
-    if (mmBand === "high") return "high_risk";
-    return "ok";
-  }
-  if (probBand === "moderate") {
-    if (mmBand === "high") return "high_risk";
-    if (mmBand === "low" || mmBand === "moderate") return "moderate_risk";
-    return "ok";
-  }
-  return "high_risk";
-}
-function formatMm(mm) {
-  return `${Math.round(mm * 10) / 10}`;
-}
-function describeRainLine(prob, mm) {
-  const esGarua = getProbBand(prob) === "none" && getMmBand(mm) !== "very_low";
-  if (esGarua) {
-    return `Gar\xFAa persistente: ${formatMm(mm)} mm acumulados (sin evento de lluvia \u2014 prob. ${prob}%)`;
-  }
-  return `Prob. lluvia: ${prob}% \u2014 ${formatMm(mm)} mm acumulados`;
-}
-function readMetric(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
-function getConstroadDecision(level) {
-  if (level === "high_risk") return "NO APTO PARA PRODUCIR EN PLANTA";
-  if (level === "moderate_risk") return "RIESGO MODERADO PARA PRODUCIR EN PLANTA";
-  return "APTO PARA PRODUCIR EN PLANTA";
-}
-function formatDate3(date) {
-  const opts = { timeZone: WEATHER_ASPHALT_FORECAST.timezone };
-  const dayName = date.toLocaleDateString("es-PE", { ...opts, weekday: "long" });
-  const dayNumber = date.toLocaleDateString("es-PE", { ...opts, day: "numeric" });
-  const month = date.toLocaleDateString("es-PE", { ...opts, month: "long" });
-  return `${dayName.charAt(0).toUpperCase()}${dayName.slice(1)} ${dayNumber} ${month}`;
-}
-function resolveReportDate(run, now = /* @__PURE__ */ new Date()) {
-  const is6amRun = String(run || "").toLowerCase() === "6am" || String(run || "").toLowerCase() === "6";
-  const todayLima = now.toLocaleDateString("en-CA", {
-    timeZone: WEATHER_ASPHALT_FORECAST.timezone
-  });
-  const [year, month, day] = todayLima.split("-").map(Number);
-  const targetDate = new Date(Date.UTC(year, month - 1, day + (is6amRun ? 0 : 1), 12));
-  return {
-    is6amRun,
-    date: targetDate,
-    dateString: targetDate.toISOString().slice(0, 10)
-  };
-}
-function buildWeatherUrl(forecastDays) {
-  const latitudeParam = LOCATIONS.map((location) => location.lat).join(",");
-  const longitudeParam = LOCATIONS.map((location) => location.lon).join(",");
-  return `${WEATHER_API_BASE}&forecast_days=${forecastDays}&latitude=${latitudeParam}&longitude=${longitudeParam}`;
-}
-async function fetchWithTimeout(url, fetcher, timeoutMs) {
-  return fetcher(url, {
-    headers: { Accept: "application/json", "User-Agent": "lila-app-cron/1.0" },
-    signal: AbortSignal.timeout(timeoutMs)
-  });
-}
-var esperar = (ms2) => new Promise((resolve2) => setTimeout(resolve2, ms2));
-async function fetchForecastConReintentos(url, fetcher, now = Date.now) {
-  const { maxAttempts, retryBaseDelayMs, fetchTimeoutMs, totalBudgetMs, minAttemptMs } = WEATHER_ASPHALT_FORECAST;
-  const vence = now() + totalBudgetMs;
-  const queda = () => vence - now();
-  let ultimoError = new Error("Open-Meteo: sin intentos");
-  for (let intento = 1; intento <= maxAttempts; intento += 1) {
-    const disponible = Math.min(fetchTimeoutMs, queda());
-    if (disponible < minAttemptMs) break;
-    let esTransitorio = true;
-    try {
-      const response = await fetchWithTimeout(url, fetcher, disponible);
-      const responseText = await response.text();
-      if (response.ok) return responseText;
-      ultimoError = new Error(`Open-Meteo API error: ${response.status}`);
-      esTransitorio = isRetriableWeatherStatus(response.status);
-    } catch (error) {
-      ultimoError = error instanceof Error ? error : new Error(String(error));
-    }
-    if (!esTransitorio) break;
-    const espera = retryBaseDelayMs * intento;
-    if (intento >= maxAttempts || queda() - espera < minAttemptMs) break;
-    await esperar(espera);
-  }
-  throw ultimoError;
-}
-function parseOpenMeteoResults(payload) {
-  const results = JSON.parse(payload);
-  if (!Array.isArray(results) || results.length !== LOCATIONS.length) {
-    throw new Error(`Open-Meteo response length mismatch: ${results?.length ?? "none"}`);
-  }
-  return results;
-}
-function buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate) {
-  if (constroadRiskyDays.length === 0 && forecastsWithRisk.length === 0) return null;
-  let message = "REPORTE DE CLIMA\n\n";
-  if (constroadRiskyDays.length > 0) {
-    message += `Constroad (Planta de asfalto - ${ASPHALT_PLANT_LOCATION}):
-
-`;
-    for (const day of constroadRiskyDays) {
-      message += `  ${formatDate3(day.date)}:
-`;
-      message += `    ${describeRainLine(day.prob, day.mm)}
-`;
-      message += `    ${day.decision}
-
-`;
-    }
-  }
-  if (forecastsWithRisk.length > 0) {
-    message += `Distritos no aptos o con precauci\xF3n para asfaltar (${formatDate3(reportDate)}):
-
-`;
-    const highRisk = forecastsWithRisk.filter((forecast) => forecast.level === "high_risk");
-    const moderateRisk = forecastsWithRisk.filter((forecast) => forecast.level === "moderate_risk");
-    if (highRisk.length > 0) {
-      message += "NO ASFALTAR - RIESGO ALTO:\n";
-      for (const forecast of highRisk) {
-        message += `  - ${forecast.name.toUpperCase()}:
-`;
-        message += `    ${describeRainLine(forecast.prob, forecast.mm)}
-
-`;
-      }
-    }
-    if (moderateRisk.length > 0) {
-      message += "RIESGO MODERADO:\n";
-      for (const forecast of moderateRisk) {
-        message += `  - ${forecast.name.toUpperCase()}:
-`;
-        message += `    ${describeRainLine(forecast.prob, forecast.mm)}
-
-`;
-      }
-    }
-  } else if (constroadRiskyDays.length > 0) {
-    message += `Distritos no aptos para asfaltar (${formatDate3(reportDate)}):
-`;
-    message += "  Ninguno detectado con los umbrales configurados.\n\n";
-  }
-  return message;
-}
-function collectConstroadRisk(results, reportDateString) {
-  const constroadIndex = LOCATIONS.findIndex((location) => location.name === "Constroad");
-  const daily = results[constroadIndex]?.daily;
-  const startIdx = daily?.time?.indexOf(reportDateString) ?? -1;
-  if (!daily || startIdx < 0 || daily.time.length < startIdx + 3) return [];
-  const days = [];
-  for (let offset = 0; offset < 3; offset++) {
-    const idx = startIdx + offset;
-    const prob = readMetric(daily.precipitation_probability_max[idx]);
-    const mm = readMetric(daily.precipitation_sum[idx]);
-    if (prob === null || mm === null) continue;
-    const level = getCombinedRiskLevel(prob, mm);
-    if (level === "ok") continue;
-    days.push({
-      date: /* @__PURE__ */ new Date(`${daily.time[idx]}T12:00:00Z`),
-      prob,
-      mm,
-      decision: getConstroadDecision(level),
-      level
-    });
-  }
-  return days;
-}
-function collectDistrictRisk(results, reportDateString) {
-  const constroadIndex = LOCATIONS.findIndex((location) => location.name === "Constroad");
-  const forecasts = [];
-  for (let index = 0; index < LOCATIONS.length; index++) {
-    if (index === constroadIndex) continue;
-    const daily = results[index]?.daily;
-    const dayIndex = daily?.time?.indexOf(reportDateString) ?? -1;
-    if (!daily || dayIndex < 0) continue;
-    const prob = readMetric(daily.precipitation_probability_max[dayIndex]);
-    const mm = readMetric(daily.precipitation_sum[dayIndex]);
-    if (prob === null || mm === null) continue;
-    const level = getCombinedRiskLevel(prob, mm);
-    if (level === "ok") continue;
-    forecasts.push({ name: LOCATIONS[index].name, prob, mm, level });
-  }
-  return forecasts;
-}
-function buildFailureAlert(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  return [
-    "ALERTA: weather-asphalt-forecast fallo",
-    "Servicio: lila-app",
-    `Detalle: ${message}`,
-    `Fecha: ${(/* @__PURE__ */ new Date()).toISOString()}`
-  ].join("\n");
-}
-async function generateWeatherAsphaltForecast(params = {}) {
-  const fetcher = params.fetcher || fetch;
-  const notifyError = params.notifyError || (async (alertParams) => {
-    const { sendTelegramAlert: sendTelegramAlert2 } = await Promise.resolve().then(() => (init_telegram_alert_service(), telegram_alert_service_exports));
-    return sendTelegramAlert2(alertParams);
-  });
-  const reportDate = resolveReportDate(params.run);
-  const forecastDays = reportDate.is6amRun ? 3 : 4;
-  try {
-    const responseText = await fetchForecastConReintentos(
-      buildWeatherUrl(forecastDays),
-      fetcher
-    );
-    const results = parseOpenMeteoResults(responseText);
-    const constroadRiskyDays = collectConstroadRisk(results, reportDate.dateString);
-    const forecastsWithRisk = collectDistrictRisk(results, reportDate.dateString);
-    const message = buildWeatherMessage(constroadRiskyDays, forecastsWithRisk, reportDate.date);
-    const nadieEscucha = params.callerGone?.() ?? false;
-    if (params.companyId && message && !nadieEscucha) {
-      const claim = params.claim ?? (async (key, companyId) => {
-        const { claimOnce: claimOnce2 } = await Promise.resolve().then(() => (init_once_per_key(), once_per_key_exports));
-        return claimOnce2(key, companyId);
-      });
-      const clave2 = `weather-forecast:${params.companyId}:${reportDate.dateString}`;
-      if (!await claim(clave2, params.companyId)) {
-        return {
-          status: "skipped",
-          hasRainRisk: false,
-          message: null,
-          mensaje: null
-        };
-      }
-    }
-    return {
-      status: "ok",
-      hasRainRisk: Boolean(message),
-      message,
-      mensaje: message
-    };
-  } catch (error) {
-    const telegramAlert = await notifyError({
-      dedupeKey: "weather-asphalt-forecast",
-      message: buildFailureAlert(error)
-    });
-    return {
-      status: "degraded",
-      hasRainRisk: false,
-      message: null,
-      mensaje: null,
-      telegramAlert,
-      error: error instanceof Error ? error.message : String(error)
-    };
-  }
-}
-
-// src/api/routes/cron.routes.ts
 var router10 = Router10();
 router10.get("/weather-asphalt-forecast", async (req, res, next) => {
   try {

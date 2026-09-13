@@ -5,6 +5,7 @@ import { acotarArchivos, elegirPedido, etiquetaPedido, responder, unidadPor, typ
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
 import { consumosDelDia, materiales, tanques, textoConsumos, textoMateriales, textoTanques } from './planta.js';
+import { distritoDe, pronosticoHorario, textoClima } from './clima.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { responderEnGrupo } from '../checklist/emisor.js';
 import { diaPeruano, fechaLegible } from '../checklist/tiempo.js';
@@ -121,6 +122,10 @@ const armarRespuesta = async (
   if (clave === 'tank_levels') return { texto: textoTanques(await tanques()) };
   if (clave === 'production_consume') return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
   if (clave === 'aggregates_stock') return { texto: textoMateriales(await materiales(await empresasDelPiloto())) };
+  if (clave === 'weather') {
+    const horaLima = Number(new Date().toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', hour12: false }).slice(0, 2));
+    return { texto: textoClima(await pronosticoHorario(distritoDe(pregunta), fecha), params.day === 'today' ? horaLima : -1) };
+  }
 
   if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
   if (clave === 'guias_day') return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);

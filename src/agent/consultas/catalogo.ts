@@ -30,6 +30,8 @@ export type ClaveConsulta =
   | 'tank_levels'
   | 'production_consume'
   | 'aggregates_stock'
+  | 'weather'
+  | 'dispatch_summary'
   | 'help';
 
 export interface EntradaCatalogo {
@@ -95,7 +97,7 @@ export const CATALOGO: EntradaCatalogo[] = [
   {
     id: 'orders_day',
     seSatisfaceCon: ['que pedidos hay manana', 'hay produccion manana', 'que hay para hoy', 'cuales son los pedidos de hoy', 'que se produce manana'],
-    reglas: [['pedido'], ['produccion', 'manana'], ['producción', 'mañana'], ['hay', 'manana'], ['hay', 'mañana'], ['hay', 'hoy']],
+    reglas: [['pedido'], ['produccion', 'manana'], ['producción', 'mañana'], ['que hay', 'manana'], ['que hay', 'mañana'], ['que hay', 'hoy'], ['que hay para']],
   },
   {
     id: 'checklist_status',
@@ -116,6 +118,16 @@ export const CATALOGO: EntradaCatalogo[] = [
     id: 'aggregates_stock',
     seSatisfaceCon: ['cuanto agregado tengo en stock', 'cuanta arena hay', 'stock de piedra', 'tenemos agregados en cancha'],
     reglas: [['agregado'], ['stock'], ['arena'], ['piedra'], ['cancha']],
+  },
+  {
+    id: 'weather',
+    seSatisfaceCon: ['como esta el clima', 'como estara el clima manana en ate', 'va a llover hoy', 'hay riesgo de lluvia', 'estara soleado', 'pronostico para lurigancho'],
+    reglas: [['clima'], ['lluvia'], ['llover'], ['llueve'], ['lloviendo'], ['soleado'], ['nublado'], ['garua'], ['garúa'], ['pronostico'], ['pronóstico'], ['tiempo', 'hoy'], ['tiempo', 'manana'], ['tiempo', 'mañana'], ['riesgo', 'lluvia'], ['lluvia', 'hoy'], ['lluvia', 'manana'], ['lluvia', 'mañana'], ['clima', 'hoy'], ['clima', 'manana'], ['clima', 'mañana']],
+  },
+  {
+    id: 'dispatch_summary',
+    seSatisfaceCon: ['muestrame el resumen de despachos de hoy', 'resumen del pedido de hoy', 'listado de unidades de hoy', 'como fueron los despachos', 'detalle de los despachos'],
+    reglas: [['resumen'], ['listado', 'unidad'], ['detalle', 'despacho'], ['como fueron', 'despacho']],
   },
   {
     id: 'help',

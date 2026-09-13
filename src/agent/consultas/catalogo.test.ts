@@ -83,6 +83,10 @@ describe('ruteo por reglas', () => {
     ['consumos de la producción de hoy', 'production_consume'],
     ['cuánto gasohol se usó hoy', 'production_consume'],
     ['cuánto agregado tengo en stock', 'aggregates_stock'],
+    ['cómo está el clima en Lurigancho', 'weather'],
+    ['va a llover mañana en Ate?', 'weather'],
+    ['hay riesgo de lluvia hoy', 'weather'],
+    ['muéstrame el resumen de despachos de hoy', 'dispatch_summary'],
     ['@lila ayuda', 'help'],
     ['qué puedes hacer?', 'help'],
   ])('«%s» → %s', (pregunta, clave) => {
@@ -99,7 +103,7 @@ describe('ruteo por reglas', () => {
     'ya pagaron el pedido de la 5?',
     'mandá el vale de la 5 al 999',
     'cuál es el teléfono del chofer de la 3',
-    'qué opinás del clima',
+    'qué opinás del gobierno',
     'hola',
   ])(
     '«%s» → null',

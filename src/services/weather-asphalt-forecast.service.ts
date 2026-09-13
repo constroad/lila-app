@@ -36,7 +36,7 @@ export function isRetriableWeatherStatus(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
-const LOCATIONS = [
+export const LOCATIONS = [
   { name: 'Constroad', lat: -11.9894172, lon: -76.8789932 },
   { name: 'Ancon', lat: -11.769, lon: -77.153 },
   { name: 'Ate', lat: -12.016, lon: -76.981 },
