@@ -8985,15 +8985,23 @@ var init_emisor = __esm({
             logger_default.error(`[agente] archivo de ${a49.companyId}, fuera del piloto: no se manda`);
             continue;
           }
+          const inicio = Date.now();
           try {
             const leido = await resolveFileBuffer2({ companyId: a49.companyId, fileUrl: a49.url, mimeType: a49.mime, fileName: a49.nombre });
             if (!leido) throw new Error("no se pudo leer del storage");
-            const opciones = { buffer: leido.buffer, fileName: leido.fileName || a49.nombre, caption: a49.caption, mimeType: leido.mimeType || a49.mime, companyId: COMPANY_PILOTO };
-            if (a49.tipo === "image") await WhatsAppDirectService2.sendImageFile(id, jid, opciones);
-            else if (a49.tipo === "video") await WhatsAppDirectService2.sendVideoFile(id, jid, opciones);
-            else await WhatsAppDirectService2.sendDocument(id, jid, opciones);
+            const mime = String(leido.mimeType || a49.mime || "").split(";")[0].trim() || void 0;
+            const opciones = { buffer: leido.buffer, fileName: leido.fileName || a49.nombre, caption: a49.caption, mimeType: mime, companyId: COMPANY_PILOTO, queueOnFail: false };
+            logger_default.info(`[agente] mandando ${a49.tipo} \xAB${a49.nombre}\xBB (${Math.round(leido.buffer.length / 1024)} KB, ${mime})`);
+            const envio = a49.tipo === "image" ? WhatsAppDirectService2.sendImageFile(id, jid, opciones) : a49.tipo === "video" ? WhatsAppDirectService2.sendVideoFile(id, jid, opciones) : WhatsAppDirectService2.sendDocument(id, jid, opciones);
+            const resultado = await Promise.race([
+              envio,
+              new Promise((_58, reject) => setTimeout(() => reject(new Error("l\xEDmite de 90 s del agente")), 9e4))
+            ]);
+            logger_default.info(
+              `[agente] ${a49.tipo} \xAB${a49.nombre}\xBB ${resultado?.queued ? "ENCOLADO (no sali\xF3)" : `enviado (id ${resultado?.key?.id ?? "?"})`} en ${((Date.now() - inicio) / 1e3).toFixed(1)} s`
+            );
           } catch (error) {
-            logger_default.warn(`[agente] no pude mandar \xAB${a49.nombre}\xBB: ${error instanceof Error ? error.message : String(error)}`);
+            logger_default.warn(`[agente] no pude mandar \xAB${a49.nombre}\xBB tras ${((Date.now() - inicio) / 1e3).toFixed(1)} s: ${error instanceof Error ? error.message : String(error)}`);
           }
         }
       }

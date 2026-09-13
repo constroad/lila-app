@@ -107,15 +107,33 @@ export const responderEnGrupo = async (
         logger.error(`[agente] archivo de ${a.companyId}, fuera del piloto: no se manda`);
         continue;
       }
+      const inicio = Date.now();
       try {
         const leido = await resolveFileBuffer({ companyId: a.companyId, fileUrl: a.url, mimeType: a.mime, fileName: a.nombre });
         if (!leido) throw new Error('no se pudo leer del storage');
-        const opciones = { buffer: leido.buffer, fileName: leido.fileName || a.nombre, caption: a.caption, mimeType: leido.mimeType || a.mime, companyId: COMPANY_PILOTO };
-        if (a.tipo === 'image') await WhatsAppDirectService.sendImageFile(id, jid, opciones);
-        else if (a.tipo === 'video') await WhatsAppDirectService.sendVideoFile(id, jid, opciones);
-        else await WhatsAppDirectService.sendDocument(id, jid, opciones);
+        // El mime sin parámetros: «video/mp4;codecs=…» es lo que grabó el
+        // navegador; WhatsApp quiere «video/mp4».
+        const mime = String(leido.mimeType || a.mime || '').split(';')[0].trim() || undefined;
+        const opciones = { buffer: leido.buffer, fileName: leido.fileName || a.nombre, caption: a.caption, mimeType: mime, companyId: COMPANY_PILOTO, queueOnFail: false };
+        logger.info(`[agente] mandando ${a.tipo} «${a.nombre}» (${Math.round(leido.buffer.length / 1024)} KB, ${mime})`);
+        // Límite propio por archivo: un video colgado no puede dejar «escribiendo…»
+        // para siempre ni frenar lo que viene después. Y deja rastro: el 13/09 un
+        // video no llegó y no había ni éxito ni error en el log.
+        const envio =
+          a.tipo === 'image'
+            ? WhatsAppDirectService.sendImageFile(id, jid, opciones)
+            : a.tipo === 'video'
+              ? WhatsAppDirectService.sendVideoFile(id, jid, opciones)
+              : WhatsAppDirectService.sendDocument(id, jid, opciones);
+        const resultado = (await Promise.race([
+          envio,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('límite de 90 s del agente')), 90_000)),
+        ])) as { key?: { id?: string | null }; queued?: boolean } | undefined;
+        logger.info(
+          `[agente] ${a.tipo} «${a.nombre}» ${resultado?.queued ? 'ENCOLADO (no salió)' : `enviado (id ${resultado?.key?.id ?? '?'})`} en ${((Date.now() - inicio) / 1000).toFixed(1)} s`
+        );
       } catch (error) {
-        logger.warn(`[agente] no pude mandar «${a.nombre}»: ${error instanceof Error ? error.message : String(error)}`);
+        logger.warn(`[agente] no pude mandar «${a.nombre}» tras ${((Date.now() - inicio) / 1000).toFixed(1)} s: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }
