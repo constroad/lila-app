@@ -16,6 +16,19 @@ describe('¿le hablan al agente?', () => {
     expect(esConsulta('@ConstRoad quién maneja la 3', '51949376824', ['188570740486215@lid'], ['188570740486215@lid'])).toBe(true);
   });
 
+  /**
+   * EL CASO EXACTO DEL 13/09 12:30: «@⁨lila muestramr las fotos…». WhatsApp
+   * envuelve la mención en marcas bidi invisibles (U+2068/U+2069). Sin
+   * sacarlas, «@lila» no coincide y el agente calla.
+   */
+  it('una mención con las marcas invisibles de WhatsApp se reconoce y se limpia', () => {
+    const conMarcas = '@\u2068lila\u2069 muestramr las fotos y videos de la unidad 4 de la produccion de hoy';
+    expect(esConsulta(conMarcas)).toBe(true);
+    expect(preguntaLimpia(conMarcas)).toBe('muestramr las fotos y videos de la unidad 4 de la produccion de hoy');
+    expect(rutearPorReglas(preguntaLimpia(conMarcas))).toBe('unit_media');
+    expect(extraerParametros(preguntaLimpia(conMarcas)).unitNumber).toBe(4);
+  });
+
   it('no con cualquier cosa que contenga «lila», ni una mención a otro', () => {
     expect(esConsulta('la lila está floreciendo')).toBe(false);
     expect(esConsulta('hablé con lila ayer')).toBe(false);

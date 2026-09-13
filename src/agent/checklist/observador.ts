@@ -184,8 +184,13 @@ export const observarParaChecklist = async (
         // Las consultas también se atienden acá: es nuestro grupo (José, 13/09).
         void import('../consultas/index.js')
           .then(async ({ esConsulta, atenderConsulta, atenderEleccion }) => {
-            if (esConsulta(texto, sessionPhone, mencionadosDe(raw.message), await jidsPropios(sessionPhone))) {
-              return atenderConsulta(texto, quien, remoteJid, alcance, sessionPhone);
+            const bot = await senderPilotoCacheado();
+            if (esConsulta(texto, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
+              return atenderConsulta(texto, quien, remoteJid, alcance, bot);
+            }
+            if (/lila/i.test(texto)) {
+              // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
+              logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
             }
             if (/^\s*\d{1,2}\s*$/.test(texto)) {
               const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
@@ -209,8 +214,13 @@ export const observarParaChecklist = async (
         const quien = String(raw?.key?.participant || 'alguien');
         void import('../consultas/index.js')
           .then(async ({ esConsulta, atenderConsulta, atenderEleccion }) => {
-            if (esConsulta(texto, sessionPhone, mencionadosDe(raw.message), await jidsPropios(sessionPhone))) {
-              return atenderConsulta(texto, quien, remoteJid, alcance, sessionPhone);
+            const bot = await senderPilotoCacheado();
+            if (esConsulta(texto, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
+              return atenderConsulta(texto, quien, remoteJid, alcance, bot);
+            }
+            if (/lila/i.test(texto)) {
+              // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
+              logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
             }
             // Un «1» o «2» de alguien a quien el agente le acaba de preguntar.
             if (/^\s*\d{1,2}\s*$/.test(texto)) await atenderEleccion(texto, quien, remoteJid, alcance);

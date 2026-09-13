@@ -9164,7 +9164,7 @@ var init_catalogo = __esm({
         reglas: [["informe"], ["certificado"], ["ipp"], ["imprimacion"], ["imprimaci\xF3n"], ["area adicional"], ["\xE1rea adicional"], ["acta"]]
       }
     ];
-    normalizar = (t44) => String(t44 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+    normalizar = (t44) => String(t44 || "").replace(/[\u2066-\u2069\u200e\u200f\u202a-\u202e]/g, "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
     esConsulta = (texto, numeroBot, mencionados = [], jidsBot = []) => {
       const t44 = normalizar(texto);
       if (/(^|\s)@lila\b/.test(t44)) return true;
@@ -10461,8 +10461,12 @@ var init_observador = __esm({
               continue;
             }
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2 }) => {
-              if (esConsulta2(texto, sessionPhone, mencionadosDe(raw.message), await jidsPropios(sessionPhone))) {
-                return atenderConsulta2(texto, quien, remoteJid, alcance, sessionPhone);
+              const bot = await senderPilotoCacheado();
+              if (esConsulta2(texto, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
+                return atenderConsulta2(texto, quien, remoteJid, alcance, bot);
+              }
+              if (/lila/i.test(texto)) {
+                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
               if (/^\s*\d{1,2}\s*$/.test(texto)) {
                 const fue = await atenderEleccion2(texto, quien, remoteJid, alcance);
@@ -10478,8 +10482,12 @@ var init_observador = __esm({
           if (!delBot) {
             const quien = String(raw?.key?.participant || "alguien");
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2 }) => {
-              if (esConsulta2(texto, sessionPhone, mencionadosDe(raw.message), await jidsPropios(sessionPhone))) {
-                return atenderConsulta2(texto, quien, remoteJid, alcance, sessionPhone);
+              const bot = await senderPilotoCacheado();
+              if (esConsulta2(texto, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
+                return atenderConsulta2(texto, quien, remoteJid, alcance, bot);
+              }
+              if (/lila/i.test(texto)) {
+                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
               if (/^\s*\d{1,2}\s*$/.test(texto)) await atenderEleccion2(texto, quien, remoteJid, alcance);
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));

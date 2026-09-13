@@ -141,6 +141,10 @@ export const CATALOGO: EntradaCatalogo[] = [
 
 export const normalizar = (t: string): string =>
   String(t || '')
+    // WhatsApp envuelve las menciones en marcas bidi invisibles (U+2068/U+2069)
+    // y a veces mete U+200E/U+200F: «@⁨lila⁩ …». Sin sacarlas, «@lila» no
+    // coincide con nada (13/09/2026, 12:30: una pregunta sin respuesta).
+    .replace(/[\u2066-\u2069\u200e\u200f\u202a-\u202e]/g, '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
