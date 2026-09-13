@@ -1,4 +1,4 @@
-import { responder } from './responder';
+import { acotarArchivos, elegirPedido, responder, unidadPor } from './responder';
 import type { VistaDelDia } from './vista';
 import { CHECKLIST_PRODUCCION } from '../checklist/checklist';
 
@@ -16,16 +16,17 @@ const vista: VistaDelDia = {
     {
       orderId: 'o1',
       companyId: 'globofas-s8k',
+      companySlug: 'globofast',
       cliente: 'FERNANDO COBEÑAS',
       obra: 'PROYECTOS VARIOS',
       cantidadCubos: 91,
       m3Dispatched: 75,
       hora: '04:00',
       units: [
-        { unitNumber: 1, plate: 'AZJ 910', driverName: 'HOOVER QUISPE MUÑOZ', state: 'despachado', quantity: 25, departedAt: lima('05:32'), picturesCount: 2 },
-        { unitNumber: 2, plate: 'BBE 942', driverName: 'LUCIO QUISPE DIAZ', state: 'despachado', quantity: 25, departedAt: lima('05:59'), picturesCount: 0 },
-        { unitNumber: 3, plate: 'ALC 812', driverName: 'PEDRO CANCHO MONTEZ', state: 'despachado', quantity: 25, departedAt: lima('06:26'), arrivalAt: lima('07:10'), picturesCount: 0 },
-        { unitNumber: 4, plate: 'XYZ 123', driverName: 'JUAN PEREZ', state: 'progreso', quantity: 16, picturesCount: 0 },
+        { dispatchId: 'd1', unitNumber: 1, plate: 'AZJ 910', driverName: 'HOOVER QUISPE MUÑOZ', state: 'despachado', quantity: 25, departedAt: lima('05:32'), picturesCount: 2 },
+        { dispatchId: 'd2', unitNumber: 2, plate: 'BBE 942', driverName: 'LUCIO QUISPE DIAZ', state: 'despachado', quantity: 25, departedAt: lima('05:59'), picturesCount: 0 },
+        { dispatchId: 'd3', unitNumber: 3, plate: 'ALC 812', driverName: 'PEDRO CANCHO MONTEZ', state: 'despachado', quantity: 25, departedAt: lima('06:26'), arrivalAt: lima('07:10'), picturesCount: 0 },
+        { dispatchId: 'd4', unitNumber: 4, plate: 'XYZ 123', driverName: 'JUAN PEREZ', state: 'progreso', quantity: 16, picturesCount: 0 },
       ],
     },
   ],
@@ -86,7 +87,31 @@ describe('responder', () => {
     expect(r).toContain('❔ Sin confirmar: gasohol, aviso a operadores.');
   });
 
-  it('fotos: cuenta, no manda', () => {
-    expect(responder('unit_photos', { vista, params: { ...hoy, unitNumber: 1 } })).toContain('tiene 2 foto(s)');
+  it('media: la unidad se encuentra por placa o por número', () => {
+    expect(unidadPor(vista, { ...hoy, plate: 'BBE942' })?.unitNumber).toBe(2);
+    expect(unidadPor(vista, { ...hoy, unitNumber: 3 })?.plate).toBe('ALC 812');
+    expect(unidadPor(vista, { ...hoy, plate: 'ZZZ999' })).toBeUndefined();
+    expect(responder('unit_media', { vista, params: { ...hoy, plate: 'AZJ910' } })).toContain('*Unidad 1* (AZJ 910)');
+    expect(responder('unit_media', { vista, params: hoy })).toContain('¿De qué unidad?');
+  });
+
+  /** El presupuesto por respuesta: fotos, videos y documentos por separado. */
+  it('los archivos se acotan por tipo, y se dice cuántos quedaron afuera', () => {
+    const muchos = [
+      ...Array.from({ length: 7 }, (_, i) => ({ tipo: 'image' as const, url: `i${i}`, nombre: `f${i}`, fechaMs: i, mime: 'image/jpeg' })),
+      ...Array.from({ length: 3 }, (_, i) => ({ tipo: 'video' as const, url: `v${i}`, nombre: `v${i}`, fechaMs: i, mime: 'video/mp4' })),
+    ];
+    const { enviar, omitidos } = acotarArchivos(muchos);
+    expect(enviar.filter((a) => a.tipo === 'image')).toHaveLength(5);
+    expect(enviar.filter((a) => a.tipo === 'video')).toHaveLength(2);
+    expect(omitidos).toBe(3);
+  });
+
+  it('elegir pedido: uno solo sigue; varios preguntan; la empresa nombrada filtra', () => {
+    expect(elegirPedido(vista, hoy).pedido?.orderId).toBe('o1');
+    const dos: VistaDelDia = { ...vista, orders: [vista.orders[0], { ...vista.orders[0], orderId: 'o2', companyId: 'constroad', companySlug: 'constroad', cliente: 'CARCELI' }] };
+    expect(elegirPedido(dos, hoy).pedido).toBeNull();
+    expect(elegirPedido(dos, hoy).candidatos).toHaveLength(2);
+    expect(elegirPedido(dos, { ...hoy, companyId: 'constroad' }).pedido?.orderId).toBe('o2');
   });
 });

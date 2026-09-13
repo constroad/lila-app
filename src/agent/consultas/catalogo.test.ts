@@ -1,4 +1,4 @@
-import { esConsulta, extraerParametros, preguntaLimpia, rutearPorReglas } from './catalogo';
+import { esConsulta, extraerParametros, normalizarPlaca, preguntaLimpia, rutearPorReglas } from './catalogo';
 
 /**
  * EL CATÁLOGO ES CERRADO Y EL RUTEO SE PUEDE LEER. Cada pregunta real de José
@@ -31,7 +31,12 @@ describe('ruteo por reglas', () => {
     ['ya salieron todos los volquetes?', 'plant_current_unit'],
     ['en qué carro va la colocación en campo', 'site_current_unit'],
     ['cuántos carros están en ruta', 'site_current_unit'],
-    ['muéstrame las fotos de campo de la unidad 5', 'unit_photos'],
+    ['muéstrame las fotos de campo de la unidad 5', 'unit_media'],
+    ['muéstrame la foto y video de la unidad de placa AZJ 910', 'unit_media'],
+    ['generame el enlace del pedido de hoy de globofast', 'order_link'],
+    ['pasame el link del cliente', 'order_link'],
+    ['muéstrame las guías generadas para la producción de hoy', 'guias_day'],
+    ['pasame los vales de hoy', 'guias_day'],
     ['cuántos m3 van', 'day_progress'],
     ['cuántos cubos faltan', 'day_progress'],
     ['cómo va la producción', 'day_progress'],
@@ -79,6 +84,19 @@ describe('parámetros', () => {
     ['ya salieron 25 m3', undefined],
   ])('«%s» → unidad %s', (pregunta, unidad) => {
     expect(extraerParametros(pregunta).unitNumber).toBe(unidad);
+  });
+
+  it('la placa se reconoce con y sin espacio o guion, y no se confunde con una unidad', () => {
+    expect(extraerParametros('fotos de la placa AZJ 910')).toMatchObject({ plate: 'AZJ910', unitNumber: undefined });
+    expect(extraerParametros('video de la aml838')).toMatchObject({ plate: 'AML838' });
+    expect(extraerParametros('la BBE-942 ya salió?')).toMatchObject({ plate: 'BBE942' });
+    expect(normalizarPlaca(' bbe 942 ')).toBe('BBE942');
+  });
+
+  it('la empresa nombrada se reconoce por cómo la llama la gente', () => {
+    expect(extraerParametros('el enlace del pedido de hoy de globofast').companyId).toBe('globofas-s8k');
+    expect(extraerParametros('las guías de constroad').companyId).toBe('constroad');
+    expect(extraerParametros('las guías de hoy').companyId).toBeUndefined();
   });
 
   it('hoy por defecto, mañana si lo dice', () => {

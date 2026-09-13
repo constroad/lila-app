@@ -1,19 +1,24 @@
 import logger from '../../utils/logger.js';
-import { CATALOGO, esConsulta, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, type ClaveConsulta } from './catalogo.js';
-import { construirVista } from './vista.js';
-import { responder } from './responder.js';
+import { CATALOGO, esConsulta, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
+import { construirVista, type VistaDelDia } from './vista.js';
+import { acotarArchivos, elegirPedido, etiquetaPedido, responder, unidadPor, type Respuesta } from './responder.js';
+import { enlaceDelPedido, guiasDelPedido, mediaDelDespacho } from './archivos.js';
+import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
-import { enviarAOperaciones } from '../checklist/emisor.js';
-import { diaPeruano } from '../checklist/tiempo.js';
+import { responderEnGrupo } from '../checklist/emisor.js';
+import { diaPeruano, fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
+import type { AlcanceAgente } from '../checklist/alcance.js';
 
 export { esConsulta };
 
 /**
- * Una pregunta `@lila …` del grupo que se escucha. EN ESPEJO (spec §4.2): la
- * respuesta va al grupo de operaciones citando quién preguntó y qué, no al
- * grupo donde se preguntó. Primero se mide cuántas veces acierta; después se
- * le da voz.
+ * Una pregunta `@lila …` del grupo que se escucha, respondida EN ESE GRUPO.
+ *
+ * Es de solo lectura sobre un read model whitelisted, así que no pasa por
+ * aprobación (ver `emisor.responderEnGrupo`). Cuando hay que elegir entre
+ * varios pedidos, el agente pregunta con opciones numeradas y espera la
+ * respuesta de esa persona en ese grupo (`pendientes.ts`).
  *
  * Nunca lanza: cuelga del listener.
  */
@@ -30,19 +35,129 @@ export const rutear = async (pregunta: string): Promise<ClaveConsulta | null> =>
   return mejor && mejor.similitud >= UMBRAL_RUTEO ? (mejor.itemId as ClaveConsulta) : null;
 };
 
-export const atenderConsulta = async (texto: string, quien: string, numeroBot?: string): Promise<void> => {
+/** Con un pedido elegido: el enlace del cliente, si existe. */
+const respuestaEnlace = async (vista: VistaDelDia, indice: number): Promise<Respuesta> => {
+  const o = vista.orders[indice];
+  const enlace = await enlaceDelPedido(o.companyId, o.orderId, o.companySlug);
+  if (!enlace) {
+    return {
+      texto: `El pedido de *${o.cliente || o.companySlug}* (${fechaLegible(vista.fecha)}) no tiene enlace generado. Se genera en Portal → Pedidos → «Enlace para el cliente».`,
+    };
+  }
+  const tabs = enlace.tabs.map((t) => ({ summary: 'resumen', production: 'producción', placement: 'colocación', reports: 'informes' })[t] ?? t);
+  return {
+    texto: [
+      `🔗 *Enlace del cliente — ${o.cliente || o.companySlug}* · ${fechaLegible(vista.fecha)}`,
+      `Muestra: ${tabs.join(', ') || 'sin pestañas'}`,
+      enlace.url,
+    ].join('\n'),
+  };
+};
+
+/** Con un pedido elegido: sus guías y vales. */
+const respuestaGuias = async (vista: VistaDelDia, indice: number): Promise<Respuesta> => {
+  const o = vista.orders[indice];
+  const archivos = await guiasDelPedido(o.companyId, o.orderId);
+  if (archivos.length === 0) return { texto: `No hay guías ni vales generados para *${o.cliente || o.companySlug}* (${fechaLegible(vista.fecha)}).` };
+  const { enviar, omitidos } = acotarArchivos(archivos);
+  return {
+    texto: `📄 *Guías y vales — ${o.cliente || o.companySlug}* · ${fechaLegible(vista.fecha)}: ${archivos.length} documento(s)${omitidos ? `, te mando ${enviar.length}; el resto está en Portal` : ''}.`,
+    archivos: enviar.map((a) => ({ ...a, caption: a.nombre })),
+  };
+};
+
+/** Fotos y videos de la unidad pedida. */
+const respuestaMedia = async (vista: VistaDelDia, params: Parametros, encabezado: string): Promise<Respuesta> => {
+  const u = unidadPor(vista, params);
+  if (!u) return { texto: encabezado };
+  const archivos = await mediaDelDespacho(u.pedido.companyId, u.pedido.orderId, u.dispatchId);
+  if (archivos.length === 0) return { texto: `${encabezado}\nNo tiene fotos ni videos registrados.` };
+  const { enviar, omitidos } = acotarArchivos(archivos);
+  const fotos = archivos.filter((a) => a.tipo === 'image').length;
+  const videos = archivos.filter((a) => a.tipo === 'video').length;
+  return {
+    texto: `${encabezado}\n${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, el resto está en Portal` : ''}.`,
+    archivos: enviar,
+  };
+};
+
+/**
+ * Para las consultas que necesitan UN pedido: si hay uno, sigue; si hay varios,
+ * pregunta y guarda la continuación; si no hay ninguno, lo dice.
+ */
+const conPedidoElegido = async (
+  vista: VistaDelDia,
+  params: Parametros,
+  quien: string,
+  grupo: string,
+  continuar: (vista: VistaDelDia, indice: number) => Promise<Respuesta>
+): Promise<Respuesta> => {
+  const { pedido, candidatos } = elegirPedido(vista, params);
+  if (candidatos.length === 0) return { texto: `No hay pedidos ${params.companyId ? 'de esa empresa ' : ''}para ${fechaLegible(vista.fecha)}.` };
+  if (pedido) return continuar(vista, vista.orders.indexOf(pedido));
+  const opciones = candidatos.map(etiquetaPedido);
+  preguntar({
+    quien,
+    grupo,
+    opciones,
+    continuar: (i) => continuar(vista, vista.orders.indexOf(candidatos[i])),
+  });
+  return { texto: textoPregunta(`Hay ${candidatos.length} producciones ${fechaLegible(vista.fecha)}. ¿Cuál?`, opciones) };
+};
+
+const armarRespuesta = async (
+  clave: ClaveConsulta | null,
+  pregunta: string,
+  quien: string,
+  grupo: string
+): Promise<Respuesta> => {
+  const params = extraerParametros(pregunta);
+  const fecha = diaPeruano(Date.now() + (params.day === 'tomorrow' ? 24 * 3_600_000 : 0));
+  const vista = await construirVista(fecha);
+
+  if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
+  if (clave === 'guias_day') return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
+  if (clave === 'unit_media') {
+    const encabezado = responder(clave, { vista, params });
+    return unidadPor(vista, params) ? respuestaMedia(vista, params, encabezado) : { texto: encabezado };
+  }
+  const revision = clave === 'checklist_status' ? await revisionDelDia(fecha) : null;
+  return { texto: responder(clave, { vista, params, revision }) };
+};
+
+export const atenderConsulta = async (
+  texto: string,
+  quien: string,
+  grupo: string,
+  alcance: AlcanceAgente,
+  numeroBot?: string
+): Promise<void> => {
   try {
     const pregunta = preguntaLimpia(texto, numeroBot);
     const clave = await rutear(pregunta);
-    const params = extraerParametros(pregunta);
-    const fecha = diaPeruano(Date.now() + (params.day === 'tomorrow' ? 24 * 3_600_000 : 0));
-    const vista = await construirVista(fecha);
-    const revision = clave === 'checklist_status' ? await revisionDelDia(fecha) : null;
-    const respuesta = responder(clave, { vista, params, revision });
-
-    logger.info(`[agente] consulta de ${quien}: «${pregunta}» → ${clave ?? 'none'} ${JSON.stringify(params)}`);
-    await enviarAOperaciones(`💬 *Pregunta en el grupo* (${quien.split('@')[0]}): «${pregunta}»\n\n${respuesta}`);
+    const respuesta = await armarRespuesta(clave, pregunta, quien, grupo);
+    logger.info(`[agente] consulta de ${quien}: «${pregunta}» → ${clave ?? 'none'}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
+    await responderEnGrupo(grupo, respuesta, alcance);
   } catch (error) {
     logger.warn(`[agente] no pude atender la consulta «${texto}»: ${error instanceof Error ? error.message : String(error)}`);
   }
+};
+
+/** Un número suelto de alguien con una pregunta pendiente: es su respuesta. */
+export const atenderEleccion = async (
+  texto: string,
+  quien: string,
+  grupo: string,
+  alcance: AlcanceAgente
+): Promise<boolean> => {
+  const eleccion = responderPendiente(quien, grupo, texto);
+  if (!eleccion) return false;
+  try {
+    const respuesta = (await eleccion.pregunta.continuar(eleccion.indice)) as Respuesta;
+    logger.info(`[agente] ${quien} eligió «${eleccion.pregunta.opciones[eleccion.indice]}»`);
+    await responderEnGrupo(grupo, respuesta, alcance);
+  } catch (error) {
+    logger.warn(`[agente] no pude continuar la consulta de ${quien}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return true;
 };

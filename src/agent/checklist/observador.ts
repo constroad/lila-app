@@ -12,7 +12,7 @@ import { normalizarTexto } from './checklist.js';
 import { hidratarMensajes, recordarMensaje } from './almacen.js';
 import { decidir, esVoto, hidratarPropuestas, type MotivoRechazo } from './sugerencias.js';
 import { enviarAOperaciones, enviarAprobado } from './emisor.js';
-import { cargarAprobadores, esAprobador } from './aprobadores.js';
+import { cargarAprobadores, esAdmin, esAprobador } from './aprobadores.js';
 import { apagar, comandoInterruptor, encender, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
 import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje } from './persistencia.js';
 import { VENTANA_MS } from './almacen.js';
@@ -132,12 +132,13 @@ export const observarParaChecklist = async (
       // observación. Import dinámico: las consultas arrastran el detector y el
       // detector arrastra este módulo (ciclo), y además el read model.
       if (!raw?.key?.fromMe) {
+        const quien = String(raw?.key?.participant || 'alguien');
         void import('../consultas/index.js')
-          .then(({ esConsulta, atenderConsulta }) =>
-            esConsulta(texto, sessionPhone)
-              ? atenderConsulta(texto, String(raw?.key?.participant || 'alguien'), sessionPhone)
-              : undefined
-          )
+          .then(async ({ esConsulta, atenderConsulta, atenderEleccion }) => {
+            if (esConsulta(texto, sessionPhone)) return atenderConsulta(texto, quien, remoteJid, alcance, sessionPhone);
+            // Un «1» o «2» de alguien a quien el agente le acaba de preguntar.
+            if (/^\s*\d{1,2}\s*$/.test(texto)) await atenderEleccion(texto, quien, remoteJid, alcance);
+          })
           .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
       }
 
@@ -186,12 +187,12 @@ const atenderVoto = async (
         'sin-cita': 'sin citar ninguna propuesta: se ignora',
         'cita-desconocida': 'citando un mensaje que no es una propuesta: se ignora',
         'no-pendiente': 'sobre una propuesta ya decidida o vencida: se ignora',
-        'no-aprobador': 'de alguien que no administra el grupo: se ignora',
+        'no-aprobador': 'de alguien que no está en el grupo de operaciones: se ignora',
         'no-es-voto': 'que no es un voto',
       };
       logger.info(`[agente] «${args.voto}» de ${args.quien} en operaciones, ${explicacion[resultado.motivo]}`);
       if (resultado.motivo === 'no-aprobador') {
-        await enviarAOperaciones('🔒 Solo un administrador de este grupo puede aprobar o descartar.');
+        await enviarAOperaciones('🔒 Solo quien está en este grupo puede aprobar o descartar.');
       }
       return;
     }
@@ -222,7 +223,7 @@ const atenderVoto = async (
  */
 const atenderInterruptor = async (comando: 'off' | 'on', quien: string): Promise<void> => {
   try {
-    if (!(await esAprobador(quien))) {
+    if (!(await esAdmin(quien))) {
       logger.info(`[agente] «!lila ${comando}» de ${quien}, que no administra el grupo: se ignora`);
       await enviarAOperaciones('🔒 Solo un administrador de este grupo puede apagar o prender el agente.');
       return;

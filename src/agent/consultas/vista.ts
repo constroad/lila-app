@@ -1,4 +1,4 @@
-import { getDispatchModel, getOrderModel } from '../../database/models.js';
+import { getCompanyModel, getDispatchModel, getOrderModel } from '../../database/models.js';
 import { EMPRESAS_CON_PEDIDOS } from '../checklist/alcance.js';
 import { diaPeruano, instanteArranque } from '../checklist/tiempo.js';
 
@@ -16,6 +16,7 @@ import { diaPeruano, instanteArranque } from '../checklist/tiempo.js';
  */
 
 export interface UnidadDelDia {
+  dispatchId: string;
   unitNumber: number;
   plate: string;
   driverName: string;
@@ -29,6 +30,8 @@ export interface UnidadDelDia {
 export interface PedidoDelDiaVista {
   orderId: string;
   companyId: string;
+  /** Para armar la URL pública: `/public/<slug>/…`. */
+  companySlug: string;
   cliente: string;
   obra: string;
   cantidadCubos: number;
@@ -46,8 +49,22 @@ export interface VistaDelDia {
 const CACHE_MS = 60_000;
 const cache = new Map<string, VistaDelDia>();
 
+let slugsCache: Map<string, string> | null = null;
+const slugsDeEmpresas = async (): Promise<Map<string, string>> => {
+  if (slugsCache) return slugsCache;
+  const CompanyModel = await getCompanyModel();
+  const docs = (await CompanyModel.find({ companyId: { $in: [...EMPRESAS_CON_PEDIDOS] } })
+    .select('companyId slug')
+    .lean()) as Array<{ companyId?: string; slug?: string }>;
+  slugsCache = new Map(docs.map((d) => [String(d.companyId), String(d.slug || d.companyId)]));
+  return slugsCache;
+};
+
 /** Solo para tests. */
-export const _resetVista = (): void => cache.clear();
+export const _resetVista = (): void => {
+  cache.clear();
+  slugsCache = null;
+};
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
 const ms = (v: unknown): number | undefined => {
@@ -62,6 +79,7 @@ export const construirVista = async (fecha: string, ahoraMs = Date.now()): Promi
 
   const OrderModel = await getOrderModel();
   const DispatchModel = await getDispatchModel();
+  const slugs = await slugsDeEmpresas();
 
   const inicio = instanteArranque(fecha, '00:00') ?? ahoraMs;
   const fin = inicio + 24 * 3_600_000;
@@ -91,6 +109,7 @@ export const construirVista = async (fecha: string, ahoraMs = Date.now()): Promi
       const units: UnidadDelDia[] = dispatches
         .filter((d) => String(d.orderId) === String(o._id))
         .map((d) => ({
+          dispatchId: String(d._id),
           unitNumber: num(d.unitNumber),
           plate: String(d.plate || '').trim(),
           driverName: String(d.driverName || '').trim(),
@@ -104,6 +123,7 @@ export const construirVista = async (fecha: string, ahoraMs = Date.now()): Promi
       return {
         orderId: String(o._id),
         companyId: String(o.companyId || ''),
+        companySlug: slugs.get(String(o.companyId || '')) || String(o.companyId || ''),
         cliente: String(o.alias || o.cliente || '').trim(),
         obra: String(o.obra || '').trim(),
         cantidadCubos: num(o.cantidadCubos),

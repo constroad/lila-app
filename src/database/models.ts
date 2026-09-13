@@ -79,6 +79,21 @@ export async function getDispatchModel(): Promise<Model<Record<string, unknown>>
   return dispatchModel;
 }
 
+let publicLinkModel: Model<Record<string, unknown>> | null = null;
+
+/** Enlaces públicos del Portal (loose, solo lectura): el link del cliente a un pedido. */
+export async function getPublicLinkModel(): Promise<Model<Record<string, unknown>>> {
+  if (publicLinkModel) {
+    return publicLinkModel;
+  }
+
+  const conn = await getSharedConnection();
+  publicLinkModel =
+    (conn.models.PublicLink as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('PublicLink', looseSchema, 'publiclinks');
+  return publicLinkModel;
+}
+
 /** Medias del Portal (loose, solo lectura): archivos de un pedido. */
 export async function getMediaModel(): Promise<Model<Record<string, unknown>>> {
   if (mediaModel) {

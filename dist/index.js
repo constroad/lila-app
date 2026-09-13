@@ -7059,11 +7059,27 @@ var init_whatsapp_direct_service = __esm({
        * Los ADMINISTRADORES de un grupo, por JID. Lee los metadatos vivos del grupo
        * (no el store): es lo que decide quién puede aprobar envíos del agente.
        */
-      groupAdmins: async (id, groupJid) => {
+      groupAdmins: async (id, groupJid) => (await WhatsAppDirectService.groupRoster(id, groupJid)).admins,
+      /**
+       * Los MIEMBROS y los ADMINISTRADORES de un grupo, por JID. Lee los metadatos
+       * vivos del grupo (no el store): es lo que decide quién puede aprobar envíos
+       * del agente (miembros) y quién puede apagarlo (admins).
+       *
+       * Un participante puede venir como LID (`…@lid`) o como número
+       * (`…@s.whatsapp.net`) según el `addressingMode` del grupo, y a veces trae
+       * las dos. Se devuelven todas las formas que haya: quien compare contra esto
+       * no tiene que adivinar en cuál llega un mensaje.
+       */
+      groupRoster: async (id, groupJid) => {
         const sock = getSession(id);
         if (!sock) throw new Error("Session not found");
         const meta = await sock.groupMetadata(groupJid);
-        return (meta?.participants ?? []).filter((p64) => p64.admin === "admin" || p64.admin === "superadmin").flatMap((p64) => [p64.id, p64.lid].filter((x63) => Boolean(x63)));
+        const formas = (p64) => [p64.id, p64.lid].filter((x63) => Boolean(x63));
+        const participantes = meta?.participants ?? [];
+        return {
+          admins: participantes.filter((p64) => p64.admin === "admin" || p64.admin === "superadmin").flatMap((p64) => formas(p64)),
+          miembros: participantes.flatMap((p64) => formas(p64))
+        };
       },
       /**
        * Refresh groups from WhatsApp
@@ -8216,6 +8232,7 @@ __export(models_exports, {
   getGpsPositionModel: () => getGpsPositionModel,
   getMediaModel: () => getMediaModel,
   getOrderModel: () => getOrderModel,
+  getPublicLinkModel: () => getPublicLinkModel,
   getSharedModels: () => getSharedModels,
   getUsageMetricModel: () => getUsageMetricModel
 });
@@ -8259,6 +8276,14 @@ async function getDispatchModel() {
   const conn = await getSharedConnection();
   dispatchModel = conn.models.Dispatch || conn.model("Dispatch", looseSchema, "dispatches");
   return dispatchModel;
+}
+async function getPublicLinkModel() {
+  if (publicLinkModel) {
+    return publicLinkModel;
+  }
+  const conn = await getSharedConnection();
+  publicLinkModel = conn.models.PublicLink || conn.model("PublicLink", looseSchema, "publiclinks");
+  return publicLinkModel;
 }
 async function getMediaModel() {
   if (mediaModel) {
@@ -8310,7 +8335,7 @@ async function getSharedModels() {
   ]);
   return { CronJobModel, CompanyModel, ConfigModel };
 }
-var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, academyTutorialModel, gpsPositionModel;
+var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, publicLinkModel, academyTutorialModel, gpsPositionModel;
 var init_models = __esm({
   "src/database/models.ts"() {
     init_sharedConnection();
@@ -8327,6 +8352,7 @@ var init_models = __esm({
     mediaModel = null;
     folderModel = null;
     dispatchModel = null;
+    publicLinkModel = null;
     academyTutorialModel = null;
     gpsPositionModel = null;
   }
@@ -8554,8 +8580,8 @@ var init_checklist = __esm({
     itemSatisfecho = (item, mensajes2) => {
       const dichos = mensajes2.map(normalizarTexto);
       return item.seSatisfaceCon.some((frase) => {
-        const clave = normalizarTexto(frase);
-        return dichos.some((dicho) => dicho.includes(clave));
+        const clave2 = normalizarTexto(frase);
+        return dichos.some((dicho) => dicho.includes(clave2));
       });
     };
   }
@@ -8778,21 +8804,21 @@ var init_persistencia = __esm({
         return [];
       }
     };
-    guardarConfig = async (clave, valor) => {
+    guardarConfig = async (clave2, valor) => {
       try {
         const { config: config3 } = await modelos();
-        await config3.updateOne({ clave }, { $set: { valor, actualizadoEn: /* @__PURE__ */ new Date() } }, { upsert: true });
+        await config3.updateOne({ clave: clave2 }, { $set: { valor, actualizadoEn: /* @__PURE__ */ new Date() } }, { upsert: true });
       } catch (error) {
-        avisar(`no pude guardar la config \xAB${clave}\xBB`, error);
+        avisar(`no pude guardar la config \xAB${clave2}\xBB`, error);
       }
     };
-    cargarConfig = async (clave) => {
+    cargarConfig = async (clave2) => {
       try {
         const { config: config3 } = await modelos();
-        const doc = await config3.findOne({ clave }).lean();
+        const doc = await config3.findOne({ clave: clave2 }).lean();
         return doc ? doc.valor : null;
       } catch (error) {
-        avisar(`no pude cargar la config \xAB${clave}\xBB`, error);
+        avisar(`no pude cargar la config \xAB${clave2}\xBB`, error);
         return null;
       }
     };
@@ -8826,7 +8852,7 @@ var init_interruptor = __esm({
 });
 
 // src/agent/checklist/emisor.ts
-var sender, mandar, enviarAOperaciones, publicarPropuesta, mandadas, enviarAprobado;
+var sender, mandar, enviarAOperaciones, publicarPropuesta, responderEnGrupo, mandadas, enviarAprobado;
 var init_emisor = __esm({
   "src/agent/checklist/emisor.ts"() {
     init_logger();
@@ -8862,6 +8888,30 @@ var init_emisor = __esm({
       void guardarPropuesta(propuesta);
       return true;
     };
+    responderEnGrupo = async (destino, respuesta, alcance) => {
+      if (agenteApagado()) return false;
+      const jid = String(destino || "").trim();
+      if (!jid || jid !== alcance.grupoEscuchado) {
+        logger_default.error(`[agente] se intent\xF3 responder en ${jid || "(vac\xEDo)"}, que no es el grupo escuchado. No se manda.`);
+        return false;
+      }
+      if (respuesta.texto?.trim()) await mandar(jid, respuesta.texto);
+      if (respuesta.archivos?.length) {
+        const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
+        const id = await sender();
+        for (const a49 of respuesta.archivos) {
+          const opciones = { fileUrl: a49.url, fileName: a49.nombre, caption: a49.caption, mimeType: a49.mime, companyId: COMPANY_PILOTO };
+          try {
+            if (a49.tipo === "image") await WhatsAppDirectService2.sendImageFile(id, jid, opciones);
+            else if (a49.tipo === "video") await WhatsAppDirectService2.sendVideoFile(id, jid, opciones);
+            else await WhatsAppDirectService2.sendDocument(id, jid, opciones);
+          } catch (error) {
+            logger_default.warn(`[agente] no pude mandar \xAB${a49.nombre}\xBB: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
+      return true;
+    };
     mandadas = /* @__PURE__ */ new Set();
     enviarAprobado = async (propuesta, alcance) => {
       if (agenteApagado()) {
@@ -8891,7 +8941,7 @@ var init_emisor = __esm({
 });
 
 // src/agent/checklist/aprobadores.ts
-var CACHE_MS, cache, sinDispositivo, cargarAprobadores, esAprobador;
+var CACHE_MS, cache, sinDispositivo, cargar, cargarAprobadores, esAprobador, esAdmin;
 var init_aprobadores = __esm({
   "src/agent/checklist/aprobadores.ts"() {
     init_logger();
@@ -8900,37 +8950,51 @@ var init_aprobadores = __esm({
     CACHE_MS = 10 * 6e4;
     cache = null;
     sinDispositivo = (jid) => String(jid || "").replace(/:\d+@/, "@");
-    cargarAprobadores = async (ahoraMs = Date.now()) => {
-      if (cache && ahoraMs - cache.at < CACHE_MS) return cache.admins;
+    cargar = async (ahoraMs = Date.now()) => {
+      if (cache && ahoraMs - cache.at < CACHE_MS) return cache;
       try {
         const { getCompanyModel: getCompanyModel2 } = await Promise.resolve().then(() => (init_models(), models_exports));
         const CompanyModel = await getCompanyModel2();
         const company = await CompanyModel.findOne({ companyId: COMPANY_PILOTO }).lean();
         const sender2 = String(company?.whatsappConfig?.sender || "");
         const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
-        const admins = await WhatsAppDirectService2.groupAdmins(sender2, GROUP_ERRORS_TRACKING);
-        cache = { admins: new Set(admins.map(sinDispositivo)), at: ahoraMs };
-        logger_default.info(`[agente] aprobadores (admins del grupo de operaciones): ${admins.join(", ") || "(ninguno)"}`);
-        return cache.admins;
+        const { admins, miembros } = await WhatsAppDirectService2.groupRoster(sender2, GROUP_ERRORS_TRACKING);
+        cache = { admins: new Set(admins.map(sinDispositivo)), miembros: new Set(miembros.map(sinDispositivo)), at: ahoraMs };
+        logger_default.info(
+          `[agente] grupo de operaciones: ${miembros.length} miembro(s) pueden aprobar; admins (pueden apagar): ${admins.join(", ") || "(ninguno)"}`
+        );
+        return cache;
       } catch (error) {
-        logger_default.warn(`[agente] no pude leer los admins del grupo de operaciones: ${error instanceof Error ? error.message : String(error)}`);
-        return cache?.admins ?? /* @__PURE__ */ new Set();
+        logger_default.warn(`[agente] no pude leer el grupo de operaciones: ${error instanceof Error ? error.message : String(error)}`);
+        return cache ?? { admins: /* @__PURE__ */ new Set(), miembros: /* @__PURE__ */ new Set() };
       }
     };
-    esAprobador = async (jid, ahoraMs = Date.now()) => (await cargarAprobadores(ahoraMs)).has(sinDispositivo(jid));
+    cargarAprobadores = async (ahoraMs = Date.now()) => (await cargar(ahoraMs)).miembros;
+    esAprobador = async (jid, ahoraMs = Date.now()) => (await cargar(ahoraMs)).miembros.has(sinDispositivo(jid));
+    esAdmin = async (jid, ahoraMs = Date.now()) => (await cargar(ahoraMs)).admins.has(sinDispositivo(jid));
   }
 });
 
 // src/agent/consultas/catalogo.ts
-var CATALOGO, normalizar, esConsulta, preguntaLimpia, extraerParametros, FUERA_DE_CATALOGO, fueraDeCatalogo, rutearPorReglas;
+var CATALOGO, normalizar, esConsulta, preguntaLimpia, ALIAS_EMPRESA, normalizarPlaca, extraerParametros, FUERA_DE_CATALOGO, fueraDeCatalogo, rutearPorReglas;
 var init_catalogo = __esm({
   "src/agent/consultas/catalogo.ts"() {
     CATALOGO = [
       {
-        id: "unit_photos",
-        seSatisfaceCon: ["muestrame las fotos de la unidad 5", "fotos de campo del carro 3", "hay fotos de la 2", "mandame las fotos de la colocacion"],
-        reglas: [["foto"]],
+        id: "unit_media",
+        seSatisfaceCon: ["muestrame la foto y el video de la unidad de placa abc 123", "fotos de campo del carro 3", "hay fotos de la 2", "mandame el video de la 4", "imagenes de la placa xyz 456"],
+        reglas: [["foto"], ["video"], ["imagen"]],
         pideUnidad: true
+      },
+      {
+        id: "order_link",
+        seSatisfaceCon: ["generame el enlace del pedido de hoy de globofast", "pasame el link del reporte del cliente", "enlace del pedido de manana", "link para el cliente"],
+        reglas: [["enlace"], ["link"], ["reporte", "cliente"]]
+      },
+      {
+        id: "guias_day",
+        seSatisfaceCon: ["muestrame las guias generadas para la produccion de hoy", "pasame los vales de hoy", "guias de remision del dia", "mandame las guias de la produccion"],
+        reglas: [["guia"], ["gu\xEDa"], ["vale"]]
       },
       {
         id: "unit_departure",
@@ -8953,7 +9017,7 @@ var init_catalogo = __esm({
       {
         id: "plant_current_unit",
         seSatisfaceCon: ["en que carro van los despachos en planta", "que unidad esta cargando", "cual esta en planta", "cuantos carros han salido de planta"],
-        reglas: [["planta"], ["cargando"], ["carguio"], ["cargu\xEDo"]]
+        reglas: [["planta"], ["cargando"], ["carguio"], ["cargu\xEDo"], ["salieron"], ["cuantos", "sal"], ["cu\xE1ntos", "sal"]]
       },
       {
         id: "site_current_unit",
@@ -8988,12 +9052,27 @@ var init_catalogo = __esm({
       return Boolean(numeroBot && t44.includes(`@${numeroBot}`));
     };
     preguntaLimpia = (texto, numeroBot) => normalizar(texto).replace(/@lila\b/g, "").replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, "g") : /$^/, "").replace(/\s+/g, " ").trim();
+    ALIAS_EMPRESA = [
+      { companyId: "globofas-s8k", alias: ["globofast", "globofas", "globo"] },
+      { companyId: "constroad", alias: ["constroad", "constroad sac"] },
+      { companyId: "inframaq-iax", alias: ["inframaq", "infra"] }
+    ];
+    normalizarPlaca = (placa) => String(placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
     extraerParametros = (pregunta) => {
       const t44 = normalizar(pregunta);
       const day = /\bmanana\b/.test(t44) ? "tomorrow" : "today";
-      const m59 = t44.match(/\b(?:la|el|unidad|carro|camion|volquete|placa|numero|n)\s*#?\s*(\d{1,2})\b/) ?? t44.match(/\b(\d{1,2})\b(?!\s*(?:m3|m³|cubos|metros|am|pm|h|hs|:))/);
+      const placa = t44.match(/\b([a-z]{3})[\s-]?(\d{3})\b/);
+      const plate = placa ? normalizarPlaca(`${placa[1]}${placa[2]}`) : void 0;
+      const sinPlaca = placa ? t44.replace(placa[0], " ") : t44;
+      const m59 = sinPlaca.match(/\b(?:la|el|unidad|carro|camion|volquete|numero|n)\s*#?\s*(\d{1,2})\b/) ?? sinPlaca.match(/\b(\d{1,2})\b(?!\s*(?:m3|m³|cubos|metros|am|pm|h|hs|:))/);
       const unitNumber = m59 ? Number(m59[1]) : void 0;
-      return { day, unitNumber: unitNumber && unitNumber > 0 ? unitNumber : void 0 };
+      const empresa = ALIAS_EMPRESA.find((e29) => e29.alias.some((a49) => new RegExp(`\\b${a49}\\b`).test(t44)));
+      return {
+        day,
+        plate,
+        companyId: empresa?.companyId,
+        unitNumber: unitNumber && unitNumber > 0 ? unitNumber : void 0
+      };
     };
     FUERA_DE_CATALOGO = [
       "precio",
@@ -9071,7 +9150,7 @@ var init_tiempo = __esm({
 });
 
 // src/agent/consultas/vista.ts
-var CACHE_MS2, cache2, num, ms, construirVista;
+var CACHE_MS2, cache2, slugsCache, slugsDeEmpresas, num, ms, construirVista;
 var init_vista = __esm({
   "src/agent/consultas/vista.ts"() {
     init_models();
@@ -9079,6 +9158,14 @@ var init_vista = __esm({
     init_tiempo();
     CACHE_MS2 = 6e4;
     cache2 = /* @__PURE__ */ new Map();
+    slugsCache = null;
+    slugsDeEmpresas = async () => {
+      if (slugsCache) return slugsCache;
+      const CompanyModel = await getCompanyModel();
+      const docs = await CompanyModel.find({ companyId: { $in: [...EMPRESAS_CON_PEDIDOS] } }).select("companyId slug").lean();
+      slugsCache = new Map(docs.map((d67) => [String(d67.companyId), String(d67.slug || d67.companyId)]));
+      return slugsCache;
+    };
     num = (v55) => typeof v55 === "number" && Number.isFinite(v55) ? v55 : Number(v55) || 0;
     ms = (v55) => {
       if (!v55) return void 0;
@@ -9090,6 +9177,7 @@ var init_vista = __esm({
       if (cacheada && ahoraMs - cacheada.computedAt < CACHE_MS2) return cacheada;
       const OrderModel = await getOrderModel();
       const DispatchModel = await getDispatchModel();
+      const slugs = await slugsDeEmpresas();
       const inicio = instanteArranque(fecha, "00:00") ?? ahoraMs;
       const fin = inicio + 24 * 36e5;
       const orders = await OrderModel.find({
@@ -9105,6 +9193,7 @@ var init_vista = __esm({
         computedAt: ahoraMs,
         orders: delDia.map((o37) => {
           const units = dispatches.filter((d67) => String(d67.orderId) === String(o37._id)).map((d67) => ({
+            dispatchId: String(d67._id),
             unitNumber: num(d67.unitNumber),
             plate: String(d67.plate || "").trim(),
             driverName: String(d67.driverName || "").trim(),
@@ -9117,6 +9206,7 @@ var init_vista = __esm({
           return {
             orderId: String(o37._id),
             companyId: String(o37.companyId || ""),
+            companySlug: slugs.get(String(o37.companyId || "")) || String(o37.companyId || ""),
             cliente: String(o37.alias || o37.cliente || "").trim(),
             obra: String(o37.obra || "").trim(),
             cantidadCubos: num(o37.cantidadCubos),
@@ -9133,21 +9223,46 @@ var init_vista = __esm({
 });
 
 // src/agent/consultas/responder.ts
-var hora, unidades, unidad, sinPedidos, responder;
+var LIMITES, acotarArchivos, elegirPedido, etiquetaPedido, unidadPor, hora, unidades, unidad, sinPedidos, responder;
 var init_responder = __esm({
   "src/agent/consultas/responder.ts"() {
+    init_catalogo();
     init_tiempo();
+    LIMITES = { imagenes: 5, videos: 2, documentos: 6 };
+    acotarArchivos = (archivos) => {
+      const enviar = [];
+      const cuenta = { image: 0, video: 0, document: 0 };
+      const tope = { image: LIMITES.imagenes, video: LIMITES.videos, document: LIMITES.documentos };
+      for (const a49 of archivos) {
+        if (cuenta[a49.tipo] < tope[a49.tipo]) {
+          enviar.push(a49);
+          cuenta[a49.tipo] += 1;
+        }
+      }
+      return { enviar, omitidos: archivos.length - enviar.length };
+    };
+    elegirPedido = (vista, params) => {
+      const candidatos = params.companyId ? vista.orders.filter((o37) => o37.companyId === params.companyId) : vista.orders;
+      return { pedido: candidatos.length === 1 ? candidatos[0] : null, candidatos };
+    };
+    etiquetaPedido = (o37) => `${o37.hora || "\u2014"} \u2014 ${o37.cliente || o37.companySlug} \xB7 ${o37.obra || "sin obra"} \xB7 ${o37.cantidadCubos} m\xB3`;
+    unidadPor = (vista, params) => {
+      const todas = vista.orders.flatMap((o37) => o37.units.map((u66) => ({ ...u66, pedido: o37 })));
+      if (params.plate) return todas.find((u66) => normalizarPlaca(u66.plate) === params.plate);
+      if (params.unitNumber) return todas.find((u66) => u66.unitNumber === params.unitNumber);
+      return void 0;
+    };
     hora = (ms2) => ms2 ? new Date(ms2).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", minute: "2-digit", hour12: false }) : "\u2014";
     unidades = (vista) => vista.orders.flatMap((o37) => o37.units.map((u66) => ({ ...u66, pedido: o37.cliente || o37.companyId })));
     unidad = (vista, n43) => n43 ? unidades(vista).find((u66) => u66.unitNumber === n43) : void 0;
     sinPedidos = (vista) => vista.orders.length === 0 ? `No hay pedidos para ${fechaLegible(vista.fecha)}.` : null;
-    responder = (clave, ctx) => {
+    responder = (clave2, ctx) => {
       const { vista, params } = ctx;
       const dia = fechaLegible(vista.fecha);
-      if (!clave) return "Eso no lo puedo responder. Puedo decirte: qu\xE9 carro est\xE1 en planta o en campo, cu\xE1ntos m\xB3 van, a qu\xE9 hora sali\xF3 una unidad, qui\xE9n la maneja, qu\xE9 pedidos hay, y c\xF3mo va el checklist.";
+      if (!clave2) return "Eso no lo puedo responder. Puedo decirte: qu\xE9 carro est\xE1 en planta o en campo, cu\xE1ntos m\xB3 van, a qu\xE9 hora sali\xF3 una unidad, qui\xE9n la maneja, qu\xE9 pedidos hay, y c\xF3mo va el checklist.";
       const vacio = sinPedidos(vista);
-      if (vacio && clave !== "orders_day") return vacio;
-      switch (clave) {
+      if (vacio && clave2 !== "orders_day") return vacio;
+      switch (clave2) {
         case "orders_day": {
           if (vacio) return vacio;
           const lineas = vista.orders.map(
@@ -9203,12 +9318,15 @@ var init_responder = __esm({
           if (u66.departedAt) return `La *unidad ${u66.unitNumber}* sali\xF3 a las ${hora(u66.departedAt)}. Todav\xEDa no calculo tiempos de llegada por ac\xE1.`;
           return `La *unidad ${u66.unitNumber}* todav\xEDa no sali\xF3.`;
         }
-        case "unit_photos": {
-          if (!params.unitNumber) return "\xBFDe qu\xE9 unidad? Decime el n\xFAmero.";
-          const u66 = unidad(vista, params.unitNumber);
-          if (!u66) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
-          return u66.picturesCount ? `\u{1F4F7} La *unidad ${u66.unitNumber}* tiene ${u66.picturesCount} foto(s) en Portal. Todav\xEDa no las mando por ac\xE1.` : `La *unidad ${u66.unitNumber}* no tiene fotos registradas.`;
+        case "unit_media": {
+          const u66 = unidadPor(vista, params);
+          if (!params.plate && !params.unitNumber) return "\xBFDe qu\xE9 unidad? Decime la placa o el n\xFAmero, por ejemplo \xAB@lila fotos de la placa AZJ 910\xBB.";
+          if (!u66) return `No encuentro ${params.plate ? `la placa ${params.plate}` : `la unidad ${params.unitNumber}`} en los pedidos de ${dia}.`;
+          return `\u{1F4F7} *Unidad ${u66.unitNumber}* (${u66.plate || "sin placa"}) \u2014 ${u66.pedido.cliente || u66.pedido.companySlug}`;
         }
+        case "order_link":
+        case "guias_day":
+          return vacio ?? "";
         case "checklist_status": {
           const r39 = ctx.revision;
           if (!r39) return `No tengo el checklist de ${dia} armado todav\xEDa.`;
@@ -9220,6 +9338,90 @@ var init_responder = __esm({
           return "Los informes y certificados todav\xEDa no los consulto por ac\xE1. Se ven en Portal.";
       }
     };
+  }
+});
+
+// src/agent/consultas/archivos.ts
+var aArchivo, mediaDelDespacho, guiasDelPedido, enlaceDelPedido;
+var init_archivos = __esm({
+  "src/agent/consultas/archivos.ts"() {
+    init_models();
+    aArchivo = (d67) => {
+      const mime = String(d67.mimeTye || d67.mimeType || "");
+      const url = String(d67.url || d67.metadata?.lilaAppUrl || "");
+      if (!url) return null;
+      const tipo = mime.startsWith("video/") ? "video" : mime.startsWith("image/") ? "image" : "document";
+      return {
+        tipo,
+        url,
+        nombre: String(d67.name || ""),
+        fechaMs: d67.date ? new Date(d67.date).getTime() : 0,
+        mime
+      };
+    };
+    mediaDelDespacho = async (companyId, orderId, dispatchId) => {
+      const Media2 = await getMediaModel();
+      const docs = await Media2.find({
+        companyId,
+        resourceId: orderId,
+        type: "DISPATCH_PICTURES",
+        "metadata.dispatchId": dispatchId
+      }).select("name mimeTye url metadata date").sort({ date: 1 }).lean();
+      return docs.map(aArchivo).filter((a49) => Boolean(a49));
+    };
+    guiasDelPedido = async (companyId, orderId) => {
+      const Media2 = await getMediaModel();
+      const docs = await Media2.find({ companyId, resourceId: orderId, type: { $in: ["GUIA", "VALE"] } }).select("name mimeTye url metadata date type").sort({ date: 1 }).lean();
+      return docs.map((d67) => {
+        const a49 = aArchivo(d67);
+        return a49 ? { ...a49, nombre: `${d67.type === "GUIA" ? "Gu\xEDa" : "Vale"} \xB7 ${a49.nombre}` } : null;
+      }).filter((a49) => Boolean(a49));
+    };
+    enlaceDelPedido = async (companyId, orderId, companySlug) => {
+      const PublicLink = await getPublicLinkModel();
+      const doc = await PublicLink.findOne({
+        companyId,
+        scope: "client-report",
+        resourceType: "order",
+        resourceId: orderId,
+        revokedAt: { $exists: false }
+      }).select("token permissions expiresAt").sort({ createdAt: -1 }).lean();
+      if (!doc?.token) return null;
+      const expira = doc.expiresAt ? new Date(doc.expiresAt).getTime() : 0;
+      if (expira && expira < Date.now()) return null;
+      const tabs = Object.entries(doc.permissions?.tabs || {}).filter(([, v55]) => v55).map(([k60]) => k60);
+      return {
+        url: `https://www.constroad.com/public/${companySlug}/client-report/order?token=${String(doc.token)}`,
+        tabs
+      };
+    };
+  }
+});
+
+// src/agent/consultas/pendientes.ts
+var VIGENCIA_PREGUNTA_MS, pendientes2, clave, preguntar, responderPendiente, textoPregunta;
+var init_pendientes = __esm({
+  "src/agent/consultas/pendientes.ts"() {
+    VIGENCIA_PREGUNTA_MS = 10 * 6e4;
+    pendientes2 = /* @__PURE__ */ new Map();
+    clave = (quien, grupo) => `${grupo}|${quien}`;
+    preguntar = (p64, ahoraMs = Date.now()) => {
+      pendientes2.set(clave(p64.quien, p64.grupo), { ...p64, creadaMs: ahoraMs });
+    };
+    responderPendiente = (quien, grupo, texto, ahoraMs = Date.now()) => {
+      const k60 = clave(quien, grupo);
+      const p64 = pendientes2.get(k60);
+      if (!p64) return null;
+      if (ahoraMs - p64.creadaMs > VIGENCIA_PREGUNTA_MS) {
+        pendientes2.delete(k60);
+        return null;
+      }
+      const n43 = Number(String(texto || "").trim());
+      if (!Number.isInteger(n43) || n43 < 1 || n43 > p64.opciones.length) return null;
+      pendientes2.delete(k60);
+      return { pregunta: p64, indice: n43 - 1 };
+    };
+    textoPregunta = (encabezado, opciones) => [encabezado, ...opciones.map((o37, i50) => `${i50 + 1}. ${o37}`), "", "Respond\xE9 con el n\xFAmero."].join("\n");
   }
 });
 
@@ -9263,8 +9465,8 @@ var init_semantica = __esm({
     centroides = /* @__PURE__ */ new Map();
     claveDe = (item) => `${item.id}|${item.seSatisfaceCon.join("|")}`;
     centroideDe = async (item, embed) => {
-      const clave = claveDe(item);
-      const cacheado = centroides.get(clave);
+      const clave2 = claveDe(item);
+      const cacheado = centroides.get(clave2);
       if (cacheado) return cacheado;
       const vectores = await embed(item.seSatisfaceCon);
       const dim = vectores[0]?.length ?? 0;
@@ -9272,7 +9474,7 @@ var init_semantica = __esm({
         { length: dim },
         (_58, i50) => vectores.reduce((s59, v55) => s59 + v55[i50], 0) / vectores.length
       );
-      centroides.set(clave, centroide);
+      centroides.set(clave2, centroide);
       return centroide;
     };
     clasificar = async (items, clausulas, embed) => {
@@ -9303,13 +9505,13 @@ var init_semantica = __esm({
       const negadas = opciones.negadas ?? [];
       const semanticas = embed ? await clasificar(considerados, clausulas, embed) : [];
       const porSemantica = new Set(semanticas.map((c66) => c66.itemId));
-      const pendientes2 = [];
+      const pendientes3 = [];
       const resueltos = [];
       for (const item of considerados) {
         const ok = itemSatisfecho(item, clausulas) || item.laNegacionConfirma && itemSatisfecho(item, negadas) || porSemantica.has(item.id);
-        (ok ? resueltos : pendientes2).push(item);
+        (ok ? resueltos : pendientes3).push(item);
       }
-      return { pendientes: pendientes2, resueltos, semanticas };
+      return { pendientes: pendientes3, resueltos, semanticas };
     };
   }
 });
@@ -9398,10 +9600,10 @@ var init_aviso = __esm({
       ];
       const TITULO = { planta: "Planta", obra: "Campo" };
       for (const dominio of ["planta", "obra"]) {
-        const pendientes2 = revision.pendientes.filter((i50) => i50.domain === dominio);
-        if (pendientes2.length === 0) continue;
+        const pendientes3 = revision.pendientes.filter((i50) => i50.domain === dominio);
+        if (pendientes3.length === 0) continue;
         lineas.push("", `*${TITULO[dominio]}* \u2014 sin confirmar:`);
-        lineas.push(...pendientes2.map((i50) => `\u2022 ${i50.pregunta}`));
+        lineas.push(...pendientes3.map((i50) => `\u2022 ${i50.pregunta}`));
       }
       if (revision.resueltos.length > 0) {
         lineas.push("", `Ya confirmado: ${revision.resueltos.map((r39) => r39.titulo).join(", ")} \u2714`);
@@ -9663,16 +9865,19 @@ var init_detector = __esm({
 var consultas_exports = {};
 __export(consultas_exports, {
   atenderConsulta: () => atenderConsulta,
+  atenderEleccion: () => atenderEleccion,
   esConsulta: () => esConsulta,
   rutear: () => rutear
 });
-var UMBRAL_RUTEO, rutear, atenderConsulta;
+var UMBRAL_RUTEO, rutear, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, armarRespuesta, atenderConsulta, atenderEleccion;
 var init_consultas = __esm({
   "src/agent/consultas/index.ts"() {
     init_logger();
     init_catalogo();
     init_vista();
     init_responder();
+    init_archivos();
+    init_pendientes();
     init_semantica();
     init_emisor();
     init_tiempo();
@@ -9687,22 +9892,96 @@ var init_consultas = __esm({
       const [mejor] = await clasificar(CATALOGO, [pregunta], embed);
       return mejor && mejor.similitud >= UMBRAL_RUTEO ? mejor.itemId : null;
     };
-    atenderConsulta = async (texto, quien, numeroBot) => {
+    respuestaEnlace = async (vista, indice) => {
+      const o37 = vista.orders[indice];
+      const enlace = await enlaceDelPedido(o37.companyId, o37.orderId, o37.companySlug);
+      if (!enlace) {
+        return {
+          texto: `El pedido de *${o37.cliente || o37.companySlug}* (${fechaLegible(vista.fecha)}) no tiene enlace generado. Se genera en Portal \u2192 Pedidos \u2192 \xABEnlace para el cliente\xBB.`
+        };
+      }
+      const tabs = enlace.tabs.map((t44) => ({ summary: "resumen", production: "producci\xF3n", placement: "colocaci\xF3n", reports: "informes" })[t44] ?? t44);
+      return {
+        texto: [
+          `\u{1F517} *Enlace del cliente \u2014 ${o37.cliente || o37.companySlug}* \xB7 ${fechaLegible(vista.fecha)}`,
+          `Muestra: ${tabs.join(", ") || "sin pesta\xF1as"}`,
+          enlace.url
+        ].join("\n")
+      };
+    };
+    respuestaGuias = async (vista, indice) => {
+      const o37 = vista.orders[indice];
+      const archivos = await guiasDelPedido(o37.companyId, o37.orderId);
+      if (archivos.length === 0) return { texto: `No hay gu\xEDas ni vales generados para *${o37.cliente || o37.companySlug}* (${fechaLegible(vista.fecha)}).` };
+      const { enviar, omitidos } = acotarArchivos(archivos);
+      return {
+        texto: `\u{1F4C4} *Gu\xEDas y vales \u2014 ${o37.cliente || o37.companySlug}* \xB7 ${fechaLegible(vista.fecha)}: ${archivos.length} documento(s)${omitidos ? `, te mando ${enviar.length}; el resto est\xE1 en Portal` : ""}.`,
+        archivos: enviar.map((a49) => ({ ...a49, caption: a49.nombre }))
+      };
+    };
+    respuestaMedia = async (vista, params, encabezado) => {
+      const u66 = unidadPor(vista, params);
+      if (!u66) return { texto: encabezado };
+      const archivos = await mediaDelDespacho(u66.pedido.companyId, u66.pedido.orderId, u66.dispatchId);
+      if (archivos.length === 0) return { texto: `${encabezado}
+No tiene fotos ni videos registrados.` };
+      const { enviar, omitidos } = acotarArchivos(archivos);
+      const fotos = archivos.filter((a49) => a49.tipo === "image").length;
+      const videos = archivos.filter((a49) => a49.tipo === "video").length;
+      return {
+        texto: `${encabezado}
+${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, el resto est\xE1 en Portal` : ""}.`,
+        archivos: enviar
+      };
+    };
+    conPedidoElegido = async (vista, params, quien, grupo, continuar) => {
+      const { pedido, candidatos } = elegirPedido(vista, params);
+      if (candidatos.length === 0) return { texto: `No hay pedidos ${params.companyId ? "de esa empresa " : ""}para ${fechaLegible(vista.fecha)}.` };
+      if (pedido) return continuar(vista, vista.orders.indexOf(pedido));
+      const opciones = candidatos.map(etiquetaPedido);
+      preguntar({
+        quien,
+        grupo,
+        opciones,
+        continuar: (i50) => continuar(vista, vista.orders.indexOf(candidatos[i50]))
+      });
+      return { texto: textoPregunta(`Hay ${candidatos.length} producciones ${fechaLegible(vista.fecha)}. \xBFCu\xE1l?`, opciones) };
+    };
+    armarRespuesta = async (clave2, pregunta, quien, grupo) => {
+      const params = extraerParametros(pregunta);
+      const fecha = diaPeruano(Date.now() + (params.day === "tomorrow" ? 24 * 36e5 : 0));
+      const vista = await construirVista(fecha);
+      if (clave2 === "order_link") return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
+      if (clave2 === "guias_day") return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
+      if (clave2 === "unit_media") {
+        const encabezado = responder(clave2, { vista, params });
+        return unidadPor(vista, params) ? respuestaMedia(vista, params, encabezado) : { texto: encabezado };
+      }
+      const revision = clave2 === "checklist_status" ? await revisionDelDia(fecha) : null;
+      return { texto: responder(clave2, { vista, params, revision }) };
+    };
+    atenderConsulta = async (texto, quien, grupo, alcance, numeroBot) => {
       try {
         const pregunta = preguntaLimpia(texto, numeroBot);
-        const clave = await rutear(pregunta);
-        const params = extraerParametros(pregunta);
-        const fecha = diaPeruano(Date.now() + (params.day === "tomorrow" ? 24 * 36e5 : 0));
-        const vista = await construirVista(fecha);
-        const revision = clave === "checklist_status" ? await revisionDelDia(fecha) : null;
-        const respuesta = responder(clave, { vista, params, revision });
-        logger_default.info(`[agente] consulta de ${quien}: \xAB${pregunta}\xBB \u2192 ${clave ?? "none"} ${JSON.stringify(params)}`);
-        await enviarAOperaciones(`\u{1F4AC} *Pregunta en el grupo* (${quien.split("@")[0]}): \xAB${pregunta}\xBB
-
-${respuesta}`);
+        const clave2 = await rutear(pregunta);
+        const respuesta = await armarRespuesta(clave2, pregunta, quien, grupo);
+        logger_default.info(`[agente] consulta de ${quien}: \xAB${pregunta}\xBB \u2192 ${clave2 ?? "none"}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
+        await responderEnGrupo(grupo, respuesta, alcance);
       } catch (error) {
         logger_default.warn(`[agente] no pude atender la consulta \xAB${texto}\xBB: ${error instanceof Error ? error.message : String(error)}`);
       }
+    };
+    atenderEleccion = async (texto, quien, grupo, alcance) => {
+      const eleccion = responderPendiente(quien, grupo, texto);
+      if (!eleccion) return false;
+      try {
+        const respuesta = await eleccion.pregunta.continuar(eleccion.indice);
+        logger_default.info(`[agente] ${quien} eligi\xF3 \xAB${eleccion.pregunta.opciones[eleccion.indice]}\xBB`);
+        await responderEnGrupo(grupo, respuesta, alcance);
+      } catch (error) {
+        logger_default.warn(`[agente] no pude continuar la consulta de ${quien}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return true;
     };
   }
 });
@@ -9767,9 +10046,11 @@ var init_observador = __esm({
           }
           if (!debeEscuchar(remoteJid, alcance)) continue;
           if (!raw?.key?.fromMe) {
-            void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(
-              ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2 }) => esConsulta2(texto, sessionPhone) ? atenderConsulta2(texto, String(raw?.key?.participant || "alguien"), sessionPhone) : void 0
-            ).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
+            const quien = String(raw?.key?.participant || "alguien");
+            void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2 }) => {
+              if (esConsulta2(texto, sessionPhone)) return atenderConsulta2(texto, quien, remoteJid, alcance, sessionPhone);
+              if (/^\s*\d{1,2}\s*$/.test(texto)) await atenderEleccion2(texto, quien, remoteJid, alcance);
+            }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
           }
           const ahora = Date.now();
           const mensaje = {
@@ -9800,12 +10081,12 @@ var init_observador = __esm({
             "sin-cita": "sin citar ninguna propuesta: se ignora",
             "cita-desconocida": "citando un mensaje que no es una propuesta: se ignora",
             "no-pendiente": "sobre una propuesta ya decidida o vencida: se ignora",
-            "no-aprobador": "de alguien que no administra el grupo: se ignora",
+            "no-aprobador": "de alguien que no est\xE1 en el grupo de operaciones: se ignora",
             "no-es-voto": "que no es un voto"
           };
           logger_default.info(`[agente] \xAB${args.voto}\xBB de ${args.quien} en operaciones, ${explicacion[resultado.motivo]}`);
           if (resultado.motivo === "no-aprobador") {
-            await enviarAOperaciones("\u{1F512} Solo un administrador de este grupo puede aprobar o descartar.");
+            await enviarAOperaciones("\u{1F512} Solo quien est\xE1 en este grupo puede aprobar o descartar.");
           }
           return;
         }
@@ -9827,7 +10108,7 @@ var init_observador = __esm({
     };
     atenderInterruptor = async (comando, quien) => {
       try {
-        if (!await esAprobador(quien)) {
+        if (!await esAdmin(quien)) {
           logger_default.info(`[agente] \xAB!lila ${comando}\xBB de ${quien}, que no administra el grupo: se ignora`);
           await enviarAOperaciones("\u{1F512} Solo un administrador de este grupo puede apagar o prender el agente.");
           return;
@@ -110945,8 +111226,8 @@ async function generateWeatherAsphaltForecast(params = {}) {
         const { claimOnce: claimOnce2 } = await Promise.resolve().then(() => (init_once_per_key(), once_per_key_exports));
         return claimOnce2(key, companyId);
       });
-      const clave = `weather-forecast:${params.companyId}:${reportDate.dateString}`;
-      if (!await claim(clave, params.companyId)) {
+      const clave2 = `weather-forecast:${params.companyId}:${reportDate.dateString}`;
+      if (!await claim(clave2, params.companyId)) {
         return {
           status: "skipped",
           hasRainRisk: false,

@@ -15,7 +15,9 @@
 export type ClaveConsulta =
   | 'plant_current_unit'
   | 'site_current_unit'
-  | 'unit_photos'
+  | 'unit_media'
+  | 'order_link'
+  | 'guias_day'
   | 'day_progress'
   | 'unit_departure'
   | 'unit_eta'
@@ -36,10 +38,20 @@ export interface EntradaCatalogo {
 
 export const CATALOGO: EntradaCatalogo[] = [
   {
-    id: 'unit_photos',
-    seSatisfaceCon: ['muestrame las fotos de la unidad 5', 'fotos de campo del carro 3', 'hay fotos de la 2', 'mandame las fotos de la colocacion'],
-    reglas: [['foto']],
+    id: 'unit_media',
+    seSatisfaceCon: ['muestrame la foto y el video de la unidad de placa abc 123', 'fotos de campo del carro 3', 'hay fotos de la 2', 'mandame el video de la 4', 'imagenes de la placa xyz 456'],
+    reglas: [['foto'], ['video'], ['imagen']],
     pideUnidad: true,
+  },
+  {
+    id: 'order_link',
+    seSatisfaceCon: ['generame el enlace del pedido de hoy de globofast', 'pasame el link del reporte del cliente', 'enlace del pedido de manana', 'link para el cliente'],
+    reglas: [['enlace'], ['link'], ['reporte', 'cliente']],
+  },
+  {
+    id: 'guias_day',
+    seSatisfaceCon: ['muestrame las guias generadas para la produccion de hoy', 'pasame los vales de hoy', 'guias de remision del dia', 'mandame las guias de la produccion'],
+    reglas: [['guia'], ['guía'], ['vale']],
   },
   {
     id: 'unit_departure',
@@ -116,8 +128,22 @@ export const preguntaLimpia = (texto: string, numeroBot?: string): string =>
 
 export interface Parametros {
   unitNumber?: number;
+  /** Placa normalizada: sin espacios ni guiones, en mayúsculas («AZJ910»). */
+  plate?: string;
+  /** Empresa nombrada en la pregunta, si alguna (por `companyId`). */
+  companyId?: string;
   day: 'today' | 'tomorrow';
 }
+
+/** Nombres con los que la gente llama a cada empresa. */
+export const ALIAS_EMPRESA: Array<{ companyId: string; alias: string[] }> = [
+  { companyId: 'globofas-s8k', alias: ['globofast', 'globofas', 'globo'] },
+  { companyId: 'constroad', alias: ['constroad', 'constroad sac'] },
+  { companyId: 'inframaq-iax', alias: ['inframaq', 'infra'] },
+];
+
+export const normalizarPlaca = (placa: string): string =>
+  String(placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 /**
  * «la 5», «unidad 5», «carro 5», «volquete #5», «el 12». Un número de dos
@@ -126,11 +152,27 @@ export interface Parametros {
 export const extraerParametros = (pregunta: string): Parametros => {
   const t = normalizar(pregunta);
   const day: Parametros['day'] = /\bmanana\b/.test(t) ? 'tomorrow' : 'today';
+
+  // Placa peruana: tres letras y tres números («AZJ 910», «AML838», «BBE-942»),
+  // con o sin la palabra «placa» adelante. Se extrae ANTES que la unidad para
+  // que «910» no se lea como unidad.
+  const placa = t.match(/\b([a-z]{3})[\s-]?(\d{3})\b/);
+  const plate = placa ? normalizarPlaca(`${placa[1]}${placa[2]}`) : undefined;
+  const sinPlaca = placa ? t.replace(placa[0], ' ') : t;
+
   const m =
-    t.match(/\b(?:la|el|unidad|carro|camion|volquete|placa|numero|n)\s*#?\s*(\d{1,2})\b/) ??
-    t.match(/\b(\d{1,2})\b(?!\s*(?:m3|m³|cubos|metros|am|pm|h|hs|:))/);
+    sinPlaca.match(/\b(?:la|el|unidad|carro|camion|volquete|numero|n)\s*#?\s*(\d{1,2})\b/) ??
+    sinPlaca.match(/\b(\d{1,2})\b(?!\s*(?:m3|m³|cubos|metros|am|pm|h|hs|:))/);
   const unitNumber = m ? Number(m[1]) : undefined;
-  return { day, unitNumber: unitNumber && unitNumber > 0 ? unitNumber : undefined };
+
+  const empresa = ALIAS_EMPRESA.find((e) => e.alias.some((a) => new RegExp(`\\b${a}\\b`).test(t)));
+
+  return {
+    day,
+    plate,
+    companyId: empresa?.companyId,
+    unitNumber: unitNumber && unitNumber > 0 ? unitNumber : undefined,
+  };
 };
 
 /**

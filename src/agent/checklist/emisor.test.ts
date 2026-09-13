@@ -6,9 +6,10 @@ import { jest } from '@jest/globals';
  * mandado ya. Si cualquiera falla, no sale nada y queda en el log.
  */
 const sendMessage = jest.fn(async () => undefined);
+const sendImageFile = jest.fn(async () => undefined);
 jest.unstable_mockModule('../../services/whatsapp-direct.service.js', () => ({
   __esModule: true,
-  WhatsAppDirectService: { sendMessage },
+  WhatsAppDirectService: { sendMessage, sendImageFile, sendVideoFile: jest.fn(async () => undefined), sendDocument: jest.fn(async () => undefined) },
 }));
 jest.unstable_mockModule('../../database/models.js', () => ({
   __esModule: true,
@@ -145,6 +146,36 @@ describe('enviarAprobado', () => {
     await emisor.enviarAprobado(aprobada, alcance);
     await expect(emisor.enviarAprobado(aprobada, alcance)).resolves.toBe(false);
     expect(sendMessage).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * LA TERCERA PUERTA: responder una consulta en el grupo que preguntó. Solo ese
+ * grupo, y solo lectura. Un JID distinto —otro grupo, una persona— no pasa.
+ */
+describe('responderEnGrupo', () => {
+  it('responde en el grupo escuchado, texto y archivos', async () => {
+    const ok = await emisor.responderEnGrupo(
+      ADMIN,
+      { texto: 'hola', archivos: [{ tipo: 'image', url: 'https://lila/x.jpg', nombre: 'x.jpg' }] },
+      alcance
+    );
+
+    expect(ok).toBe(true);
+    expect((sendMessage.mock.calls[0] as unknown[])[1]).toBe(ADMIN);
+    expect(sendImageFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('NO responde en otro grupo ni a una persona, aunque se lo pidan', async () => {
+    for (const destino of [PLANTA, '120363429917575505@g.us', '51999111222@s.whatsapp.net', '']) {
+      await expect(emisor.responderEnGrupo(destino, { texto: 'hola' }, alcance)).resolves.toBe(false);
+    }
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('apagado, tampoco responde', async () => {
+    interruptor.apagar('jose');
+    await expect(emisor.responderEnGrupo(ADMIN, { texto: 'hola' }, alcance)).resolves.toBe(false);
   });
 });
 

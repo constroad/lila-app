@@ -1,7 +1,52 @@
-import type { ClaveConsulta, Parametros } from './catalogo.js';
-import type { VistaDelDia, UnidadDelDia } from './vista.js';
+import { normalizarPlaca, type ClaveConsulta, type Parametros } from './catalogo.js';
+import type { VistaDelDia, UnidadDelDia, PedidoDelDiaVista } from './vista.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import type { Revision } from '../checklist/checklist.js';
+import type { Archivo } from './archivos.js';
+
+/** Una respuesta puede ser texto, texto + archivos, o una pregunta con opciones. */
+export interface Respuesta {
+  texto: string;
+  archivos?: Archivo[];
+  /** Si hay que preguntar antes: las opciones y qué hacer con la elegida. */
+  pregunta?: { opciones: string[]; continuar: (indice: number) => Promise<Respuesta> };
+}
+
+export const LIMITES = { imagenes: 5, videos: 2, documentos: 6 };
+
+/** Recorta al presupuesto por respuesta y dice cuántos quedaron afuera. */
+export const acotarArchivos = (archivos: Archivo[]): { enviar: Archivo[]; omitidos: number } => {
+  const enviar: Archivo[] = [];
+  const cuenta = { image: 0, video: 0, document: 0 };
+  const tope = { image: LIMITES.imagenes, video: LIMITES.videos, document: LIMITES.documentos };
+  for (const a of archivos) {
+    if (cuenta[a.tipo] < tope[a.tipo]) {
+      enviar.push(a);
+      cuenta[a.tipo] += 1;
+    }
+  }
+  return { enviar, omitidos: archivos.length - enviar.length };
+};
+
+/** El pedido de la pregunta: por empresa si la nombran; si hay varios, `null` y que pregunten. */
+export const elegirPedido = (
+  vista: VistaDelDia,
+  params: Parametros
+): { pedido: PedidoDelDiaVista | null; candidatos: PedidoDelDiaVista[] } => {
+  const candidatos = params.companyId ? vista.orders.filter((o) => o.companyId === params.companyId) : vista.orders;
+  return { pedido: candidatos.length === 1 ? candidatos[0] : null, candidatos };
+};
+
+export const etiquetaPedido = (o: PedidoDelDiaVista): string =>
+  `${o.hora || '—'} — ${o.cliente || o.companySlug} · ${o.obra || 'sin obra'} · ${o.cantidadCubos} m³`;
+
+/** La unidad por placa o por número. */
+export const unidadPor = (vista: VistaDelDia, params: Parametros) => {
+  const todas = vista.orders.flatMap((o) => o.units.map((u) => ({ ...u, pedido: o })));
+  if (params.plate) return todas.find((u) => normalizarPlaca(u.plate) === params.plate);
+  if (params.unitNumber) return todas.find((u) => u.unitNumber === params.unitNumber);
+  return undefined;
+};
 
 /**
  * De una clave del catálogo y el read model a un texto. Puro: nada de acá toca
@@ -104,14 +149,19 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       return `La *unidad ${u.unitNumber}* todavía no salió.`;
     }
 
-    case 'unit_photos': {
-      if (!params.unitNumber) return '¿De qué unidad? Decime el número.';
-      const u = unidad(vista, params.unitNumber);
-      if (!u) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
-      return u.picturesCount
-        ? `📷 La *unidad ${u.unitNumber}* tiene ${u.picturesCount} foto(s) en Portal. Todavía no las mando por acá.`
-        : `La *unidad ${u.unitNumber}* no tiene fotos registradas.`;
+    case 'unit_media': {
+      const u = unidadPor(vista, params);
+      if (!params.plate && !params.unitNumber) return '¿De qué unidad? Decime la placa o el número, por ejemplo «@lila fotos de la placa AZJ 910».';
+      if (!u) return `No encuentro ${params.plate ? `la placa ${params.plate}` : `la unidad ${params.unitNumber}`} en los pedidos de ${dia}.`;
+      // Los archivos los agrega quien tiene acceso a ellos (index.ts); acá solo el encabezado.
+      return `📷 *Unidad ${u.unitNumber}* (${u.plate || 'sin placa'}) — ${u.pedido.cliente || u.pedido.companySlug}`;
     }
+
+    case 'order_link':
+    case 'guias_day':
+      // Necesitan archivos o enlaces: los resuelve index.ts con la vista. Acá,
+      // solo si no hay pedidos.
+      return vacio ?? '';
 
     case 'checklist_status': {
       const r = ctx.revision;

@@ -736,17 +736,29 @@ export const WhatsAppDirectService = {
    * Los ADMINISTRADORES de un grupo, por JID. Lee los metadatos vivos del grupo
    * (no el store): es lo que decide quién puede aprobar envíos del agente.
    */
-  groupAdmins: async (id: string, groupJid: string): Promise<string[]> => {
+  groupAdmins: async (id: string, groupJid: string): Promise<string[]> =>
+    (await WhatsAppDirectService.groupRoster(id, groupJid)).admins,
+
+  /**
+   * Los MIEMBROS y los ADMINISTRADORES de un grupo, por JID. Lee los metadatos
+   * vivos del grupo (no el store): es lo que decide quién puede aprobar envíos
+   * del agente (miembros) y quién puede apagarlo (admins).
+   *
+   * Un participante puede venir como LID (`…@lid`) o como número
+   * (`…@s.whatsapp.net`) según el `addressingMode` del grupo, y a veces trae
+   * las dos. Se devuelven todas las formas que haya: quien compare contra esto
+   * no tiene que adivinar en cuál llega un mensaje.
+   */
+  groupRoster: async (id: string, groupJid: string): Promise<{ admins: string[]; miembros: string[] }> => {
     const sock = getSession(id);
     if (!sock) throw new Error('Session not found');
     const meta = await sock.groupMetadata(groupJid);
-    // Un participante puede venir como LID (`…@lid`) o como número
-    // (`…@s.whatsapp.net`) según el `addressingMode` del grupo, y a veces trae
-    // las dos. Se devuelven todas las formas que haya: quien compare contra
-    // esto no tiene que adivinar en cuál llega un mensaje.
-    return (meta?.participants ?? [])
-      .filter((p) => p.admin === 'admin' || p.admin === 'superadmin')
-      .flatMap((p) => [p.id, (p as { lid?: string }).lid].filter((x): x is string => Boolean(x)));
+    const formas = (p: { id: string; lid?: string }) => [p.id, p.lid].filter((x): x is string => Boolean(x));
+    const participantes = meta?.participants ?? [];
+    return {
+      admins: participantes.filter((p) => p.admin === 'admin' || p.admin === 'superadmin').flatMap((p) => formas(p as never)),
+      miembros: participantes.flatMap((p) => formas(p as never)),
+    };
   },
 
   /**
