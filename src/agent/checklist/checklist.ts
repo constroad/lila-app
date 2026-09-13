@@ -47,6 +47,14 @@ export interface ChecklistItem {
    */
   critico?: boolean;
   /**
+   * Para las preguntas cuya respuesta BUENA es un «no»: «¿hay algún riesgo?» →
+   * «no hay riesgos»; «¿hay imprimación?» → «no lleva». El filtro de negación
+   * descarta esas cláusulas para los demás ítems —con razón—, y a estos les
+   * llegan aparte. Sin esto, estos ítems no se podían confirmar nunca (visto en
+   * la mini el 13/09/2026).
+   */
+  laNegacionConfirma?: boolean;
+  /**
    * Frases que, dichas en el grupo, lo dan por resuelto. Se comparan sin tildes
    * ni mayúsculas. Es el reemplazo del modelo en la fase de espejo.
    */
@@ -107,16 +115,21 @@ export const CHECKLIST_PLANTA: ChecklistItem[] = [
     domain: 'planta',
     phase: 'antes',
     venceMinutosAntes: VENCE_TARDE_ANTERIOR,
-    seSatisfaceCon: ['avise a los operadores', 'operadores avisados', 'avisamos a los operadores', 'los operadores ya saben', 'ya le avise al operador'],
+    seSatisfaceCon: [
+      'avise a los operadores', 'operadores avisados', 'avisamos a los operadores', 'los operadores ya saben', 'ya le avise al operador',
+      // Avisar a planta ES avisar a sus operadores: así lo dice la gente.
+      'avise a planta', 'planta avisada', 'planta ya sabe', 'planta ya esta enterada', 'le dije a planta', 'coordine con planta',
+    ],
   },
   {
     id: 'riesgos',
+    laNegacionConfirma: true,
     titulo: 'mantenimiento o riesgos',
     pregunta: '¿Hay algún mantenimiento pendiente o riesgo para esta producción?',
     domain: 'planta',
     phase: 'antes',
     venceMinutosAntes: VENCE_TARDE_ANTERIOR,
-    seSatisfaceCon: ['sin riesgos', 'no hay riesgo', 'sin mantenimiento pendiente', 'planta operativa', 'todo operativo', 'sin novedad en planta'],
+    seSatisfaceCon: ['sin riesgos', 'no hay riesgos', 'no hay riesgo', 'ningun riesgo', 'sin mantenimiento pendiente', 'mantenimiento al dia', 'no hay mantenimiento pendiente', 'planta operativa'],
   },
   {
     id: 'clima',
@@ -138,7 +151,7 @@ export const CHECKLIST_CAMPO: ChecklistItem[] = [
     domain: 'obra',
     phase: 'antes',
     venceMinutosAntes: VENCE_TARDE_ANTERIOR,
-    seSatisfaceCon: ['cuadrilla lista', 'cuadrilla programada', 'ya esta la cuadrilla', 'cuadrilla confirmada', 'programamos la cuadrilla'],
+    seSatisfaceCon: ['cuadrilla lista', 'cuadrilla programada', 'ya esta la cuadrilla', 'cuadrilla confirmada', 'programamos la cuadrilla', 'ya tenemos gente', 'gente confirmada', 'tenemos personal para manana'],
   },
   {
     id: 'tren',
@@ -151,6 +164,7 @@ export const CHECKLIST_CAMPO: ChecklistItem[] = [
   },
   {
     id: 'imprimacion',
+    laNegacionConfirma: true,
     titulo: 'imprimación / riego de liga',
     pregunta: 'Si hay imprimación o riego de liga: ¿el proveedor está asegurado?',
     domain: 'obra',

@@ -134,6 +134,12 @@ export const motivoDescarte = (mensaje: MensajeGrupo): MotivoDescarte | null => 
 export interface MensajesUtiles {
   /** Textos que sí pueden cerrar un ítem. */
   textos: string[];
+  /**
+   * Cláusulas descartadas por NEGACIÓN, conservadas aparte: para los ítems cuya
+   * respuesta buena es un «no» (`laNegacionConfirma`). «No hay riesgos» no
+   * confirma la cuadrilla, pero sí cierra la pregunta por riesgos.
+   */
+  negadas: string[];
   /** Quién dijo cada uno, en el mismo orden. Sirve para el «lo confirmó X». */
   autores: string[];
   descartados: Record<MotivoDescarte, number>;
@@ -150,6 +156,7 @@ export interface MensajesUtiles {
 export const filtrarMensajes = (mensajes: MensajeGrupo[]): MensajesUtiles => {
   const utiles: MensajesUtiles = {
     textos: [],
+    negadas: [],
     autores: [],
     descartados: { propio: 0, vacio: 0, pregunta: 0, negacion: 0 },
   };
@@ -158,8 +165,12 @@ export const filtrarMensajes = (mensajes: MensajeGrupo[]): MensajesUtiles => {
     const motivo = motivoDescarte(mensaje);
     if (motivo) {
       utiles.descartados[motivo] += 1;
+      if (motivo === 'negacion') utiles.negadas.push(...enClausulas(mensaje.texto));
       continue;
     }
+    // Las cláusulas negadas de un mensaje que en conjunto afirma también van
+    // aparte: «cuadrilla lista, no hay riesgos» confirma dos cosas.
+    utiles.negadas.push(...enClausulas(mensaje.texto).filter((c) => niegaFragmento(c)));
     // Se entregan las cláusulas que afirman, no el mensaje entero: ver
     // `clausulasUtiles`. Cada una lleva su autor para la seguridad por rol (F2).
     for (const clausula of clausulasUtiles(mensaje.texto)) {

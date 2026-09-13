@@ -122,6 +122,39 @@ describe('negación por cláusula', () => {
   });
 });
 
+/**
+ * LAS PREGUNTAS CUYA RESPUESTA BUENA ES UN «NO». «¿Hay algún riesgo?» → «no hay
+ * riesgos». El filtro descarta esa cláusula para los demás ítems —con razón— y
+ * la conserva aparte para los que se confirman negando. Visto en la mini el
+ * 13/09/2026: `riesgos` e `imprimacion` no se podían confirmar nunca.
+ */
+describe('las cláusulas negadas se conservan aparte', () => {
+  it('un mensaje que niega entero va a `negadas`, no a `textos`', () => {
+    const r = filtrarMensajes([msg({ texto: 'no hay riesgos', autor: 'a@s.whatsapp.net' })]);
+
+    expect(r.textos).toEqual([]);
+    expect(r.negadas).toEqual(['no hay riesgos']);
+    expect(r.descartados.negacion).toBe(1);
+  });
+
+  it('un mensaje que afirma y niega reparte sus cláusulas', () => {
+    const r = filtrarMensajes([msg({ texto: 'cuadrilla lista, no hay riesgos', autor: 'a@s.whatsapp.net' })]);
+
+    expect(r.textos).toEqual(['cuadrilla lista']);
+    expect(r.negadas).toEqual(['no hay riesgos']);
+  });
+
+  it('con eso, riesgos se confirma con un «no» y la cuadrilla no', () => {
+    const riesgos = CHECKLIST_PRODUCCION.find((i) => i.id === 'riesgos')!;
+    const cuadrilla = CHECKLIST_PRODUCCION.find((i) => i.id === 'cuadrilla')!;
+    const r = filtrarMensajes([msg({ texto: 'no hay riesgos, no esta la cuadrilla', autor: 'a@s.whatsapp.net' })]);
+
+    expect(riesgos.laNegacionConfirma).toBe(true);
+    expect(itemSatisfecho(riesgos, r.negadas)).toBe(true);
+    expect(itemSatisfecho(cuadrilla, r.textos)).toBe(false);
+  });
+});
+
 describe('el filtro completo', () => {
   it('separa lo que sirve y cuenta por qué descartó el resto', () => {
     const resultado = filtrarMensajes([

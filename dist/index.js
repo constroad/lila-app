@@ -8428,16 +8428,30 @@ var init_checklist = __esm({
         domain: "planta",
         phase: "antes",
         venceMinutosAntes: VENCE_TARDE_ANTERIOR,
-        seSatisfaceCon: ["avise a los operadores", "operadores avisados", "avisamos a los operadores", "los operadores ya saben", "ya le avise al operador"]
+        seSatisfaceCon: [
+          "avise a los operadores",
+          "operadores avisados",
+          "avisamos a los operadores",
+          "los operadores ya saben",
+          "ya le avise al operador",
+          // Avisar a planta ES avisar a sus operadores: así lo dice la gente.
+          "avise a planta",
+          "planta avisada",
+          "planta ya sabe",
+          "planta ya esta enterada",
+          "le dije a planta",
+          "coordine con planta"
+        ]
       },
       {
         id: "riesgos",
+        laNegacionConfirma: true,
         titulo: "mantenimiento o riesgos",
         pregunta: "\xBFHay alg\xFAn mantenimiento pendiente o riesgo para esta producci\xF3n?",
         domain: "planta",
         phase: "antes",
         venceMinutosAntes: VENCE_TARDE_ANTERIOR,
-        seSatisfaceCon: ["sin riesgos", "no hay riesgo", "sin mantenimiento pendiente", "planta operativa", "todo operativo", "sin novedad en planta"]
+        seSatisfaceCon: ["sin riesgos", "no hay riesgos", "no hay riesgo", "ningun riesgo", "sin mantenimiento pendiente", "mantenimiento al dia", "no hay mantenimiento pendiente", "planta operativa"]
       },
       {
         id: "clima",
@@ -8458,7 +8472,7 @@ var init_checklist = __esm({
         domain: "obra",
         phase: "antes",
         venceMinutosAntes: VENCE_TARDE_ANTERIOR,
-        seSatisfaceCon: ["cuadrilla lista", "cuadrilla programada", "ya esta la cuadrilla", "cuadrilla confirmada", "programamos la cuadrilla"]
+        seSatisfaceCon: ["cuadrilla lista", "cuadrilla programada", "ya esta la cuadrilla", "cuadrilla confirmada", "programamos la cuadrilla", "ya tenemos gente", "gente confirmada", "tenemos personal para manana"]
       },
       {
         id: "tren",
@@ -8471,6 +8485,7 @@ var init_checklist = __esm({
       },
       {
         id: "imprimacion",
+        laNegacionConfirma: true,
         titulo: "imprimaci\xF3n / riego de liga",
         pregunta: "Si hay imprimaci\xF3n o riego de liga: \xBFel proveedor est\xE1 asegurado?",
         domain: "obra",
@@ -114493,6 +114508,7 @@ var motivoDescarte = (mensaje) => {
 var filtrarMensajes = (mensajes2) => {
   const utiles = {
     textos: [],
+    negadas: [],
     autores: [],
     descartados: { propio: 0, vacio: 0, pregunta: 0, negacion: 0 }
   };
@@ -114500,8 +114516,10 @@ var filtrarMensajes = (mensajes2) => {
     const motivo = motivoDescarte(mensaje);
     if (motivo) {
       utiles.descartados[motivo] += 1;
+      if (motivo === "negacion") utiles.negadas.push(...enClausulas(mensaje.texto));
       continue;
     }
+    utiles.negadas.push(...enClausulas(mensaje.texto).filter((c66) => niegaFragmento(c66)));
     for (const clausula of clausulasUtiles(mensaje.texto)) {
       utiles.textos.push(clausula);
       utiles.autores.push(mensaje.autor);
@@ -114587,12 +114605,13 @@ var clasificar = async (items, clausulas, embed) => {
 var evaluarRevisionSemantica = async (items, clausulas, opciones = {}) => {
   const considerados = opciones.soloCriticos ? items.filter((i50) => i50.critico) : items;
   const embed = opciones.embed === void 0 ? await cargarModelo() : opciones.embed;
+  const negadas = opciones.negadas ?? [];
   const semanticas = embed ? await clasificar(considerados, clausulas, embed) : [];
   const porSemantica = new Set(semanticas.map((c66) => c66.itemId));
   const pendientes2 = [];
   const resueltos = [];
   for (const item of considerados) {
-    const ok = itemSatisfecho(item, clausulas) || porSemantica.has(item.id);
+    const ok = itemSatisfecho(item, clausulas) || item.laNegacionConfirma && itemSatisfecho(item, negadas) || porSemantica.has(item.id);
     (ok ? resueltos : pendientes2).push(item);
   }
   return { pendientes: pendientes2, resueltos, semanticas };
@@ -114815,7 +114834,8 @@ var proponerRevisionDelDia = async (dia, alcance, ahoraMs) => {
   const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
   const utiles = filtrarMensajes(delGrupo);
   const revision = await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
-    soloCriticos: momento === "ultima-llamada"
+    soloCriticos: momento === "ultima-llamada",
+    negadas: utiles.negadas
   });
   const contexto = {
     fecha: dia.fecha,

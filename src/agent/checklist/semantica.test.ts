@@ -16,11 +16,11 @@ const embedFalso: Embed = async (textos) =>
     const v = [0, 0, 0, 0];
     const n = t.toLowerCase();
     if (n.includes('gasohol')) v[EJES.gasohol] = 1;
-    else if (n.includes('cuadrilla') || n.includes('gente')) v[EJES.cuadrilla] = 1;
+    else if (n.includes('cuadrilla') || n.includes('gente') || n.includes('personal')) v[EJES.cuadrilla] = 1;
     else if (n.includes('comida') || n.includes('almuerzo')) v[EJES.comidas] = 1;
     else v[3] = 1; // ruido: ortogonal a todo
     // Una paráfrasis «parecida pero no igual»: 0.9 en su eje, algo en el ruido.
-    if (n.includes('tenemos gente')) { v[EJES.cuadrilla] = 0.9; v[3] = 0.44; }
+    if (n.includes('la gente ya')) { v[EJES.cuadrilla] = 0.9; v[3] = 0.44; }
     return v;
   });
 
@@ -30,7 +30,7 @@ beforeEach(() => _resetSemantica());
 
 describe('clasificar', () => {
   it('cada cláusula va al ítem más cercano, si pasa el umbral', async () => {
-    const c = await clasificar([item('gasohol'), item('cuadrilla'), item('comidas')], ['ya tenemos gente para mañana', 'buenos días a todos'], embedFalso);
+    const c = await clasificar([item('gasohol'), item('cuadrilla'), item('comidas')], ['la gente ya está confirmada', 'buenos días a todos'], embedFalso);
 
     expect(c).toHaveLength(1);
     expect(c[0].itemId).toBe('cuadrilla');
@@ -55,11 +55,12 @@ describe('evaluarRevisionSemantica', () => {
   it('une lo literal con lo semántico', async () => {
     const r = await evaluarRevisionSemantica(
       [item('gasohol'), item('cuadrilla'), item('comidas')],
-      ['hay gasohol', 'ya tenemos gente para mañana'],
+      ['hay gasohol', 'la gente ya está confirmada'],
       { embed: embedFalso }
     );
 
-    // «hay gasohol» es semilla literal; «ya tenemos gente» solo lo entiende la semántica.
+    // «hay gasohol» es semilla literal; «la gente ya está confirmada» no es
+    // semilla de nada: solo lo entiende la semántica.
     expect(r.resueltos.map((i) => i.id).sort()).toEqual(['cuadrilla', 'gasohol']);
     expect(r.pendientes.map((i) => i.id)).toEqual(['comidas']);
     expect(r.semanticas.map((c) => c.itemId)).toContain('cuadrilla');
@@ -68,11 +69,28 @@ describe('evaluarRevisionSemantica', () => {
   it('sin modelo es exactamente el matcher literal', async () => {
     const r = await evaluarRevisionSemantica(
       [item('gasohol'), item('cuadrilla')],
-      ['hay gasohol', 'ya tenemos gente para mañana'],
+      ['hay gasohol', 'la gente ya está confirmada'],
       { embed: null }
     );
 
     expect(r.resueltos.map((i) => i.id)).toEqual(['gasohol']);
+    expect(r.pendientes.map((i) => i.id)).toEqual(['cuadrilla']);
+    expect(r.semanticas).toEqual([]);
+  });
+
+  it('una cláusula negada solo confirma, y solo literalmente, un ítem que se confirma negando', async () => {
+    // Un embed que a TODO le da el mismo vector: si las negadas pasaran por él,
+    // cerrarían cualquier cosa. No pasan.
+    const embedTodoIgual: Embed = async (textos) => textos.map(() => [1, 0]);
+    const r = await evaluarRevisionSemantica(
+      [item('riesgos'), item('cuadrilla')],
+      [],
+      { embed: embedTodoIgual, negadas: ['no hay riesgos', 'no esta la cuadrilla'] }
+    );
+
+    // «no hay riesgos» es semilla literal de riesgos → cierra. «no está la
+    // cuadrilla» no cierra cuadrilla: no es negable, y las negadas no van al modelo.
+    expect(r.resueltos.map((i) => i.id)).toEqual(['riesgos']);
     expect(r.pendientes.map((i) => i.id)).toEqual(['cuadrilla']);
     expect(r.semanticas).toEqual([]);
   });

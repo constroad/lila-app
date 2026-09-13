@@ -152,17 +152,27 @@ export const clasificar = async (
 export const evaluarRevisionSemantica = async (
   items: ChecklistItem[],
   clausulas: string[],
-  opciones: { soloCriticos?: boolean; embed?: Embed | null } = {}
+  opciones: { soloCriticos?: boolean; embed?: Embed | null; negadas?: string[] } = {}
 ): Promise<Revision & { semanticas: Coincidencia[] }> => {
   const considerados = opciones.soloCriticos ? items.filter((i) => i.critico) : items;
   const embed = opciones.embed === undefined ? await cargarModelo() : opciones.embed;
+  const negadas = opciones.negadas ?? [];
+
+  // Las cláusulas NEGADAS nunca pasan por el embedding: las negaciones
+  // comparten estructura («no hay…», «no lleva…») y el modelo las junta —
+  // medido en la mini el 13/09: «no avisé a planta» cayó a 0.88 de «no lleva
+  // imprimación». Para los ítems cuya respuesta buena es un «no», las negadas
+  // se comparan solo LITERALMENTE contra sus semillas, que son explícitas.
   const semanticas = embed ? await clasificar(considerados, clausulas, embed) : [];
   const porSemantica = new Set(semanticas.map((c) => c.itemId));
 
   const pendientes: ChecklistItem[] = [];
   const resueltos: ChecklistItem[] = [];
   for (const item of considerados) {
-    const ok = itemSatisfecho(item, clausulas) || porSemantica.has(item.id);
+    const ok =
+      itemSatisfecho(item, clausulas) ||
+      (item.laNegacionConfirma && itemSatisfecho(item, negadas)) ||
+      porSemantica.has(item.id);
     (ok ? resueltos : pendientes).push(item);
   }
   return { pendientes, resueltos, semanticas };

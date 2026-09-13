@@ -176,6 +176,7 @@ const proponerRevisionDelDia = async (
   const utiles = filtrarMensajes(delGrupo);
   const revision = await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
     soloCriticos: momento === 'ultima-llamada',
+    negadas: utiles.negadas,
   });
 
   const contexto = {
