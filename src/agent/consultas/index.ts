@@ -120,7 +120,7 @@ const armarRespuesta = async (
   // Lo de planta no depende de los pedidos del día: se contesta aunque no haya.
   if (clave === 'tank_levels') return { texto: textoTanques(await tanques()) };
   if (clave === 'production_consume') return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
-  if (clave === 'aggregates_stock') return { texto: textoMateriales(await materiales()) };
+  if (clave === 'aggregates_stock') return { texto: textoMateriales(await materiales(await empresasDelPiloto())) };
 
   if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
   if (clave === 'guias_day') return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
@@ -134,6 +134,15 @@ const armarRespuesta = async (
       ? await informesDeLaVista(vista, params, fecha)
       : null;
   return { texto: responder(clave, { vista, params: { ...params, pregunta } as Parametros, revision, informes }) };
+};
+
+/** Las empresas del piloto con su nombre, para etiquetar el stock. */
+const empresasDelPiloto = async (): Promise<Array<{ companyId: string; nombre: string }>> => {
+  const { getCompanyModel } = await import('../../database/models.js');
+  const { EMPRESAS_CON_PEDIDOS } = await import('../checklist/alcance.js');
+  const CompanyModel = await getCompanyModel();
+  const docs = (await CompanyModel.find({ companyId: { $in: [...EMPRESAS_CON_PEDIDOS] } }).select('companyId name').lean()) as Array<{ companyId?: string; name?: string }>;
+  return docs.map((d) => ({ companyId: String(d.companyId), nombre: String(d.name || d.companyId) }));
 };
 
 /** Informes del día de la empresa preguntada (o de todas las del día). */

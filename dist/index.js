@@ -8420,7 +8420,23 @@ var init_models = __esm({
 });
 
 // src/agent/checklist/alcance.ts
-var COMPANY_PILOTO, EMPRESAS_CON_PEDIDOS, GRUPO_ESCUCHA_PILOTO, GRUPO_PLANTA_PILOTO, esJidDeGrupo, AGENTE_ACTIVO, grupoDestino, debeEscuchar, puedeEnviarA, destinosConAprobacion, destinoPermitido, resolverAlcance;
+var alcance_exports = {};
+__export(alcance_exports, {
+  AGENTE_ACTIVO: () => AGENTE_ACTIVO,
+  AGENTE_CHECKLIST_ACTIVO: () => AGENTE_CHECKLIST_ACTIVO,
+  COMPANY_PILOTO: () => COMPANY_PILOTO,
+  EMPRESAS_CON_PEDIDOS: () => EMPRESAS_CON_PEDIDOS,
+  GRUPO_ESCUCHA_PILOTO: () => GRUPO_ESCUCHA_PILOTO,
+  GRUPO_PLANTA_PILOTO: () => GRUPO_PLANTA_PILOTO,
+  debeEscuchar: () => debeEscuchar,
+  destinoPermitido: () => destinoPermitido,
+  destinosConAprobacion: () => destinosConAprobacion,
+  esJidDeGrupo: () => esJidDeGrupo,
+  grupoDestino: () => grupoDestino,
+  puedeEnviarA: () => puedeEnviarA,
+  resolverAlcance: () => resolverAlcance
+});
+var COMPANY_PILOTO, EMPRESAS_CON_PEDIDOS, GRUPO_ESCUCHA_PILOTO, GRUPO_PLANTA_PILOTO, esJidDeGrupo, AGENTE_ACTIVO, AGENTE_CHECKLIST_ACTIVO, grupoDestino, debeEscuchar, puedeEnviarA, destinosConAprobacion, destinoPermitido, resolverAlcance;
 var init_alcance = __esm({
   "src/agent/checklist/alcance.ts"() {
     init_whatsapp_constants();
@@ -8430,6 +8446,7 @@ var init_alcance = __esm({
     GRUPO_PLANTA_PILOTO = "Inframaq Planta";
     esJidDeGrupo = (valor) => String(valor || "").trim().endsWith("@g.us");
     AGENTE_ACTIVO = true;
+    AGENTE_CHECKLIST_ACTIVO = AGENTE_ACTIVO;
     grupoDestino = () => GROUP_ERRORS_TRACKING;
     debeEscuchar = (jid, alcance) => {
       if (!AGENTE_ACTIVO) return false;
@@ -9657,7 +9674,7 @@ var init_pendientes = __esm({
 });
 
 // src/agent/consultas/planta.ts
-var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, materiales, textoMateriales;
+var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, ES_LIQUIDO, materiales, textoMateriales;
 var init_planta = __esm({
   "src/agent/consultas/planta.ts"() {
     init_models();
@@ -9665,28 +9682,37 @@ var init_planta = __esm({
     init_tiempo();
     num2 = (v55) => typeof v55 === "number" && Number.isFinite(v55) ? v55 : Number(v55) || 0;
     r1 = (n43) => (Math.round(n43 * 10) / 10).toLocaleString("es-PE");
-    CONTENIDO = { pen: "PEN (asfalto)", gasohol: "Gasohol", petroleum: "Petr\xF3leo", petroleo: "Petr\xF3leo" };
+    CONTENIDO = { pen: "pen", gasohol: "gasohol", petroleum: "petroleo", petroleo: "petroleo", thermal_oil: "otro", other: "otro" };
     tanques = async () => {
       const Tank = await getControlTankModel();
-      const docs = await Tank.find({ companyId: COMPANY_PILOTO, measurementEnabled: { $ne: false } }).select("name contentType volumeInStock volume levelCentimeter").lean();
-      return docs.map((d67) => ({
-        nombre: String(d67.name || ""),
-        contenido: CONTENIDO[String(d67.contentType || "").toLowerCase()] || String(d67.contentType || "otro"),
-        galones: num2(d67.volumeInStock),
-        capacidad: num2(d67.volume),
-        nivelCm: num2(d67.levelCentimeter)
-      })).sort((a49, b63) => a49.contenido.localeCompare(b63.contenido) || a49.nombre.localeCompare(b63.nombre));
+      const docs = await Tank.find({ companyId: COMPANY_PILOTO, includeInFluidsReport: { $ne: false } }).select("name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter").lean();
+      return docs.map((d67) => {
+        const disponibles = Math.max(num2(d67.volumeInStock) - num2(d67.valveDeadVolumeGallons), 0);
+        const glPorM3 = num2(d67.gallonsPerProductionM3);
+        return {
+          nombre: String(d67.name || "").toUpperCase().replace(/#/g, ""),
+          contenido: CONTENIDO[String(d67.contentType || "").toLowerCase()] || "otro",
+          galones: disponibles,
+          m3Producibles: glPorM3 > 0 ? disponibles / glPorM3 : 0,
+          nivelCm: num2(d67.levelCentimeter)
+        };
+      });
     };
     textoTanques = (lista) => {
-      if (lista.length === 0) return "No hay tanques con medici\xF3n registrada.";
-      const porContenido = /* @__PURE__ */ new Map();
-      for (const t44 of lista) porContenido.set(t44.contenido, [...porContenido.get(t44.contenido) ?? [], t44]);
-      const lineas = ["\u26FD *Tanques de planta* (galones disponibles)"];
-      for (const [contenido, ts] of porContenido) {
-        const total = ts.reduce((s59, t44) => s59 + t44.galones, 0);
-        lineas.push("", `*${contenido}* \u2014 ${r1(total)} gl`);
-        lineas.push(...ts.map((t44) => `\u2022 ${t44.nombre}: ${r1(t44.galones)} gl (${t44.nivelCm} cm, de ${r1(t44.capacidad)})`));
+      if (lista.length === 0) return "No hay tanques en el reporte de l\xEDquidos.";
+      const lineas = ["\u{1F4CB} *Tanques de planta \u2014 Inframaq*"];
+      const pen = lista.filter((t44) => t44.contenido === "pen" && t44.m3Producibles > 0);
+      for (const t44 of pen) lineas.push(`*- ${t44.nombre}:* ${t44.m3Producibles.toFixed(0)} m\xB3 prod. (${r1(t44.galones)} gl, ${t44.nivelCm} cm)`);
+      if (pen.length === 0) lineas.push("*- PEN:* 0 m\xB3 \u26A0\uFE0F SIN STOCK");
+      for (const t44 of lista.filter((t45) => t45.contenido === "petroleo" || t45.contenido === "otro")) {
+        const etiqueta = t44.nombre.includes("HIGHWAY") ? "HIGHWAY" : t44.nombre;
+        lineas.push(`*- ${etiqueta}:* ${t44.nivelCm} cm (${r1(t44.galones)} gl)${t44.nombre.includes("HIGHWAY") && t44.nivelCm < 40 ? " (\u26A0\uFE0F PEDIR PETR\xD3LEO)" : ""}`);
       }
+      const gasohol = lista.filter((t44) => t44.contenido === "gasohol").reduce((s59, t44) => s59 + t44.m3Producibles, 0);
+      const gasoholGl = lista.filter((t44) => t44.contenido === "gasohol").reduce((s59, t44) => s59 + t44.galones, 0);
+      lineas.push(
+        gasohol > 0 ? `*- GASOHOL:* ${gasohol.toFixed(0)} m\xB3 (${r1(gasoholGl)} gl)${gasohol < 50 ? " (\u26A0\uFE0F PEDIR GASOHOL)" : ""}` : "*- GASOHOL:* 0 m\xB3 (\u26A0\uFE0F SIN STOCK)"
+      );
       return lineas.join("\n");
     };
     consumosDelDia = async (fecha) => {
@@ -9723,18 +9749,38 @@ var init_planta = __esm({
       });
       return [`\u{1F6E2} *Consumos de ${fechaLegible(fecha)}*`, "", ...bloques].join("\n\n");
     };
-    materiales = async () => {
+    ES_LIQUIDO = /\b(pen|gasohol|petroleo|petróleo|diesel|asfalto)\b/i;
+    materiales = async (empresas) => {
       const Mat = await getMaterialModel();
-      const docs = await Mat.find({ companyId: COMPANY_PILOTO }).select("name quantity unit").sort({ name: 1 }).lean();
-      return docs.map((d67) => ({ nombre: String(d67.name || ""), cantidad: num2(d67.quantity), unidad: String(d67.unit || "") }));
+      const docs = await Mat.find({ companyId: { $in: empresas.map((e29) => e29.companyId) } }).select("companyId name quantity unit reorderPoint").sort({ name: 1 }).lean();
+      return docs.filter((d67) => !ES_LIQUIDO.test(String(d67.name || ""))).map((d67) => {
+        const reorden = num2(d67.reorderPoint);
+        return {
+          empresa: empresas.find((e29) => e29.companyId === String(d67.companyId))?.nombre || String(d67.companyId),
+          nombre: String(d67.name || "").trim().toUpperCase(),
+          cantidad: num2(d67.quantity),
+          unidad: String(d67.unit || "m\xB3").replace(/^m3$/i, "m\xB3"),
+          reponer: reorden > 0 && num2(d67.quantity) <= reorden
+        };
+      });
     };
     textoMateriales = (lista) => {
-      if (lista.length === 0) return "No hay materiales registrados para la planta.";
-      const lineas = ["\u{1FAA8} *Agregados en stock*", ...lista.map((m59) => `\u2022 ${m59.nombre}: ${r1(m59.cantidad)} ${m59.unidad}`)];
-      if (lista.every((m59) => m59.cantidad === 0)) {
-        lineas.push("", "\u26A0\uFE0F Todo figura en 0: el kardex de agregados no tiene movimientos registrados. Estos n\xFAmeros no reflejan el stock real.");
+      if (lista.length === 0) return "No hay stock de agregados registrado.";
+      const porEmpresa = /* @__PURE__ */ new Map();
+      for (const m59 of lista) porEmpresa.set(m59.empresa, [...porEmpresa.get(m59.empresa) ?? [], m59]);
+      const bloques = [];
+      for (const [empresa, ms2] of porEmpresa) {
+        const total = ms2.reduce((s59, m59) => s59 + m59.cantidad, 0);
+        const lineas = [`\u{1F4E6} *Stock de agregados \u2014 ${empresa}*`];
+        if (ms2.every((m59) => m59.cantidad === 0)) {
+          lineas.push("Todo figura en 0: el kardex no tiene movimientos registrados.");
+        } else {
+          lineas.push(...ms2.map((m59) => `*- ${m59.nombre}:* ${m59.cantidad.toLocaleString("es-PE", { maximumFractionDigits: 2 })} ${m59.unidad}${m59.reponer ? " (\u26A0\uFE0F REPONER)" : ""}`));
+          lineas.push(`*- Total:* ${total.toLocaleString("es-PE", { maximumFractionDigits: 2 })} m\xB3`);
+        }
+        bloques.push(lineas.join("\n"));
       }
-      return lineas.join("\n");
+      return bloques.join("\n\n");
     };
   }
 });
@@ -10185,7 +10231,7 @@ __export(consultas_exports, {
   esConsulta: () => esConsulta,
   rutear: () => rutear
 });
-var UMBRAL_RUTEO, rutear, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, armarRespuesta, informesDeLaVista, atenderConsulta, atenderEleccion;
+var UMBRAL_RUTEO, rutear, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, armarRespuesta, empresasDelPiloto, informesDeLaVista, atenderConsulta, atenderEleccion;
 var init_consultas = __esm({
   "src/agent/consultas/index.ts"() {
     init_logger();
@@ -10270,7 +10316,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       const vista = await construirVista(fecha);
       if (clave2 === "tank_levels") return { texto: textoTanques(await tanques()) };
       if (clave2 === "production_consume") return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
-      if (clave2 === "aggregates_stock") return { texto: textoMateriales(await materiales()) };
+      if (clave2 === "aggregates_stock") return { texto: textoMateriales(await materiales(await empresasDelPiloto())) };
       if (clave2 === "order_link") return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
       if (clave2 === "guias_day") return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
       if (clave2 === "unit_media") {
@@ -10280,6 +10326,13 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       const revision = clave2 === "checklist_status" ? await revisionDelDia(fecha) : null;
       const informes = clave2 === "reports_status" || clave2 === "site_finish" ? await informesDeLaVista(vista, params, fecha) : null;
       return { texto: responder(clave2, { vista, params: { ...params, pregunta }, revision, informes }) };
+    };
+    empresasDelPiloto = async () => {
+      const { getCompanyModel: getCompanyModel2 } = await Promise.resolve().then(() => (init_models(), models_exports));
+      const { EMPRESAS_CON_PEDIDOS: EMPRESAS_CON_PEDIDOS2 } = await Promise.resolve().then(() => (init_alcance(), alcance_exports));
+      const CompanyModel = await getCompanyModel2();
+      const docs = await CompanyModel.find({ companyId: { $in: [...EMPRESAS_CON_PEDIDOS2] } }).select("companyId name").lean();
+      return docs.map((d67) => ({ companyId: String(d67.companyId), nombre: String(d67.name || d67.companyId) }));
     };
     informesDeLaVista = async (vista, params, fecha) => {
       const pedidos = params.companyId ? vista.orders.filter((o37) => o37.companyId === params.companyId) : vista.orders;
@@ -10324,7 +10377,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
 });
 
 // src/agent/checklist/observador.ts
-var ALCANCE_TTL_MS, alcanceCache, alcanceVigente, mencionadosDe, vistos, yaVisto, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, jidsPropios, senderPiloto, jidPorNombre;
+var ALCANCE_TTL_MS, alcanceCache, alcanceVigente, esDelBot, senderCache, senderPilotoCacheado, mencionadosDe, vistos, yaVisto, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, jidsPropios, senderPiloto, jidPorNombre;
 var init_observador = __esm({
   "src/agent/checklist/observador.ts"() {
     init_logger();
@@ -10347,6 +10400,23 @@ var init_observador = __esm({
       const alcance = await resolverAlcance(jidPorNombre);
       alcanceCache = { alcance, at: now };
       return alcance;
+    };
+    esDelBot = async (raw, sessionPhone) => {
+      const sender2 = await senderPilotoCacheado();
+      if (!sender2) return Boolean(raw?.key?.fromMe);
+      if (raw?.key?.fromMe && sessionPhone === sender2) return true;
+      const autor = String(raw?.key?.participant || "").replace(/:\d+@/, "@");
+      if (!autor) return false;
+      if (autor === `${sender2}@s.whatsapp.net`) return true;
+      const propios = await jidsPropios(sender2);
+      return propios.includes(autor);
+    };
+    senderCache = null;
+    senderPilotoCacheado = async () => {
+      if (senderCache && Date.now() - senderCache.at < 5 * 6e4) return senderCache.valor;
+      const valor = await senderPiloto().catch(() => "");
+      senderCache = { valor, at: Date.now() };
+      return valor;
     };
     mencionadosDe = (message) => (message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []).map(String);
     vistos = /* @__PURE__ */ new Set();
@@ -10379,7 +10449,7 @@ var init_observador = __esm({
           if (!texto.trim()) continue;
           if (yaVisto(`${remoteJid}|${String(raw?.key?.id || "")}`)) continue;
           if (remoteJid === GROUP_ERRORS_TRACKING) {
-            if (raw?.key?.fromMe) continue;
+            if (await esDelBot(raw, sessionPhone)) continue;
             const quien = String(raw?.key?.participant || "desconocido");
             const comando = comandoInterruptor(texto);
             if (comando) {
@@ -10404,7 +10474,8 @@ var init_observador = __esm({
             continue;
           }
           if (!debeEscuchar(remoteJid, alcance)) continue;
-          if (!raw?.key?.fromMe) {
+          const delBot = await esDelBot(raw, sessionPhone);
+          if (!delBot) {
             const quien = String(raw?.key?.participant || "alguien");
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2 }) => {
               if (esConsulta2(texto, sessionPhone, mencionadosDe(raw.message), await jidsPropios(sessionPhone))) {
@@ -10420,9 +10491,9 @@ var init_observador = __esm({
             // grupo. Se guarda para la seguridad por rol de F2 (spec §7.3).
             autor: String(raw?.key?.participant || ""),
             ts: aMilisegundos(raw?.messageTimestamp, ahora),
-            // Los mensajes de nuestra propia sesión no confirman nada: el agente no
-            // se cierra a sí mismo los ítems que acaba de abrir.
-            esPropio: Boolean(raw?.key?.fromMe)
+            // Los mensajes del AGENTE no confirman nada: no se cierra a sí mismo los
+            // ítems que acaba de abrir. Y no es `fromMe`: ver `esDelBot`.
+            esPropio: delBot
           };
           recordarMensaje(remoteJid, mensaje);
           void guardarMensaje(remoteJid, { ...mensaje, waId: String(raw?.key?.id || "") || void 0 });

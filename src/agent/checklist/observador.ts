@@ -59,6 +59,39 @@ type ContenidoEntrante = BaileysMessageContent & {
   } | null;
 };
 
+/**
+ * ¿ESTE MENSAJE LO MANDÓ EL AGENTE? No es `key.fromMe`.
+ *
+ * `fromMe` significa «lo escribió el teléfono de ESTA sesión». Como hay dos
+ * sesiones en los grupos —inframaq, que es la que manda, y constroad, que es el
+ * teléfono de José—, un mensaje de José llega `fromMe: true` por la sesión de
+ * constroad. El 13/09 a las 12:03 eso lo descartó como «propio», la
+ * deduplicación por id lo marcó como visto, y la sesión de inframaq lo ignoró:
+ * dos preguntas sin respuesta. Propio es lo que escribió el NÚMERO DEL AGENTE,
+ * lo observe la sesión que lo observe.
+ */
+const esDelBot = async (
+  raw: { key?: { fromMe?: boolean | null; participant?: string | null } } | undefined,
+  sessionPhone: string
+): Promise<boolean> => {
+  const sender = await senderPilotoCacheado();
+  if (!sender) return Boolean(raw?.key?.fromMe);
+  if (raw?.key?.fromMe && sessionPhone === sender) return true;
+  const autor = String(raw?.key?.participant || '').replace(/:\d+@/, '@');
+  if (!autor) return false;
+  if (autor === `${sender}@s.whatsapp.net`) return true;
+  const propios = await jidsPropios(sender);
+  return propios.includes(autor);
+};
+
+let senderCache: { valor: string; at: number } | null = null;
+const senderPilotoCacheado = async (): Promise<string> => {
+  if (senderCache && Date.now() - senderCache.at < 5 * 60_000) return senderCache.valor;
+  const valor = await senderPiloto().catch(() => '');
+  senderCache = { valor, at: Date.now() };
+  return valor;
+};
+
 /** A quiénes menciona este mensaje (los JIDs detrás de los «@Nombre»). */
 const mencionadosDe = (message: ContenidoEntrante | null | undefined): string[] =>
   (message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []).map(String);
@@ -135,7 +168,7 @@ export const observarParaChecklist = async (
       // administra el grupo, no aprueba nada. Se atiende antes del guard de
       // abajo porque es otro grupo, con otra función — no se «escucha» para hechos.
       if (remoteJid === GROUP_ERRORS_TRACKING) {
-        if (raw?.key?.fromMe) continue;
+        if (await esDelBot(raw, sessionPhone)) continue;
         const quien = String(raw?.key?.participant || 'desconocido');
         const comando = comandoInterruptor(texto);
         if (comando) {
@@ -171,7 +204,8 @@ export const observarParaChecklist = async (
       // Una pregunta al agente («@lila …») se atiende aparte, sin bloquear la
       // observación. Import dinámico: las consultas arrastran el detector y el
       // detector arrastra este módulo (ciclo), y además el read model.
-      if (!raw?.key?.fromMe) {
+      const delBot = await esDelBot(raw, sessionPhone);
+      if (!delBot) {
         const quien = String(raw?.key?.participant || 'alguien');
         void import('../consultas/index.js')
           .then(async ({ esConsulta, atenderConsulta, atenderEleccion }) => {
@@ -191,9 +225,9 @@ export const observarParaChecklist = async (
         // grupo. Se guarda para la seguridad por rol de F2 (spec §7.3).
         autor: String(raw?.key?.participant || ''),
         ts: aMilisegundos(raw?.messageTimestamp, ahora),
-        // Los mensajes de nuestra propia sesión no confirman nada: el agente no
-        // se cierra a sí mismo los ítems que acaba de abrir.
-        esPropio: Boolean(raw?.key?.fromMe),
+        // Los mensajes del AGENTE no confirman nada: no se cierra a sí mismo los
+        // ítems que acaba de abrir. Y no es `fromMe`: ver `esDelBot`.
+        esPropio: delBot,
       };
       recordarMensaje(remoteJid, mensaje);
       // Y a Mongo, para que un deploy no lo borre. Fire-and-forget: nunca en el

@@ -14,40 +14,58 @@ const r1 = (n: number): string => (Math.round(n * 10) / 10).toLocaleString('es-P
 
 export interface Tanque {
   nombre: string;
-  contenido: string;
+  contenido: 'pen' | 'gasohol' | 'petroleo' | 'otro';
+  /** Galones disponibles para producir: el stock menos el volumen muerto de la válvula. */
   galones: number;
-  capacidad: number;
+  /** Lo que se puede PRODUCIR con eso, en m³ de mezcla. Solo PEN y gasohol. */
+  m3Producibles: number;
   nivelCm: number;
 }
 
-const CONTENIDO: Record<string, string> = { pen: 'PEN (asfalto)', gasohol: 'Gasohol', petroleum: 'Petróleo', petroleo: 'Petróleo' };
+const CONTENIDO: Record<string, Tanque['contenido']> = { pen: 'pen', gasohol: 'gasohol', petroleum: 'petroleo', petroleo: 'petroleo', thermal_oil: 'otro', other: 'otro' };
 
+/**
+ * Los tanques como los muestra el «Reporte de líquidos» del cron de Portal
+ * (`fluids-report`): misma fórmula, mismos umbrales, para que el agente y el
+ * reporte de las 10:00 no se contradigan. Verificado el 13/09/2026 contra el
+ * reporte real: PEN #1 23 m³, #2 12, #3 10, gasohol 403.
+ */
 export const tanques = async (): Promise<Tanque[]> => {
   const Tank = await getControlTankModel();
-  const docs = (await Tank.find({ companyId: COMPANY_PILOTO, measurementEnabled: { $ne: false } })
-    .select('name contentType volumeInStock volume levelCentimeter')
+  const docs = (await Tank.find({ companyId: COMPANY_PILOTO, includeInFluidsReport: { $ne: false } })
+    .select('name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter')
     .lean()) as Doc[];
-  return docs
-    .map((d) => ({
-      nombre: String(d.name || ''),
-      contenido: CONTENIDO[String(d.contentType || '').toLowerCase()] || String(d.contentType || 'otro'),
-      galones: num(d.volumeInStock),
-      capacidad: num(d.volume),
+  return docs.map((d) => {
+    const disponibles = Math.max(num(d.volumeInStock) - num(d.valveDeadVolumeGallons), 0);
+    const glPorM3 = num(d.gallonsPerProductionM3);
+    return {
+      nombre: String(d.name || '').toUpperCase().replace(/#/g, ''),
+      contenido: CONTENIDO[String(d.contentType || '').toLowerCase()] || 'otro',
+      galones: disponibles,
+      m3Producibles: glPorM3 > 0 ? disponibles / glPorM3 : 0,
       nivelCm: num(d.levelCentimeter),
-    }))
-    .sort((a, b) => a.contenido.localeCompare(b.contenido) || a.nombre.localeCompare(b.nombre));
+    };
+  });
 };
 
+/** El mismo texto que el reporte de las 10:00, más los galones para quien los pide. */
 export const textoTanques = (lista: Tanque[]): string => {
-  if (lista.length === 0) return 'No hay tanques con medición registrada.';
-  const porContenido = new Map<string, Tanque[]>();
-  for (const t of lista) porContenido.set(t.contenido, [...(porContenido.get(t.contenido) ?? []), t]);
-  const lineas = ['⛽ *Tanques de planta* (galones disponibles)'];
-  for (const [contenido, ts] of porContenido) {
-    const total = ts.reduce((s, t) => s + t.galones, 0);
-    lineas.push('', `*${contenido}* — ${r1(total)} gl`);
-    lineas.push(...ts.map((t) => `• ${t.nombre}: ${r1(t.galones)} gl (${t.nivelCm} cm, de ${r1(t.capacidad)})`));
+  if (lista.length === 0) return 'No hay tanques en el reporte de líquidos.';
+  const lineas = ['📋 *Tanques de planta — Inframaq*'];
+  const pen = lista.filter((t) => t.contenido === 'pen' && t.m3Producibles > 0);
+  for (const t of pen) lineas.push(`*- ${t.nombre}:* ${t.m3Producibles.toFixed(0)} m³ prod. (${r1(t.galones)} gl, ${t.nivelCm} cm)`);
+  if (pen.length === 0) lineas.push('*- PEN:* 0 m³ ⚠️ SIN STOCK');
+  for (const t of lista.filter((t) => t.contenido === 'petroleo' || t.contenido === 'otro')) {
+    const etiqueta = t.nombre.includes('HIGHWAY') ? 'HIGHWAY' : t.nombre;
+    lineas.push(`*- ${etiqueta}:* ${t.nivelCm} cm (${r1(t.galones)} gl)${t.nombre.includes('HIGHWAY') && t.nivelCm < 40 ? ' (⚠️ PEDIR PETRÓLEO)' : ''}`);
   }
+  const gasohol = lista.filter((t) => t.contenido === 'gasohol').reduce((s, t) => s + t.m3Producibles, 0);
+  const gasoholGl = lista.filter((t) => t.contenido === 'gasohol').reduce((s, t) => s + t.galones, 0);
+  lineas.push(
+    gasohol > 0
+      ? `*- GASOHOL:* ${gasohol.toFixed(0)} m³ (${r1(gasoholGl)} gl)${gasohol < 50 ? ' (⚠️ PEDIR GASOHOL)' : ''}`
+      : '*- GASOHOL:* 0 m³ (⚠️ SIN STOCK)'
+  );
   return lineas.join('\n');
 };
 
@@ -100,24 +118,59 @@ export const textoConsumos = (lista: ConsumoProduccion[], fecha: string): string
 };
 
 export interface Material {
+  empresa: string;
   nombre: string;
   cantidad: number;
   unidad: string;
+  /** `quantity <= reorderPoint`, igual que `needsRestock` del reporte de Portal. Sin punto, no se inventa. */
+  reponer: boolean;
 }
 
-export const materiales = async (): Promise<Material[]> => {
+const ES_LIQUIDO = /\b(pen|gasohol|petroleo|petróleo|diesel|asfalto)\b/i;
+
+/**
+ * El stock de agregados de las empresas del piloto que lo llevan. Inframaq no
+ * lo lleva (todo en 0, sin movimientos); Globofast sí, con puntos de reorden.
+ * Misma regla que el «Stock de agregados» del cron: REPONER si la cantidad
+ * está en o bajo el punto de reorden, y sin punto no se inventa un estado.
+ */
+export const materiales = async (empresas: Array<{ companyId: string; nombre: string }>): Promise<Material[]> => {
   const Mat = await getMaterialModel();
-  const docs = (await Mat.find({ companyId: COMPANY_PILOTO }).select('name quantity unit').sort({ name: 1 }).lean()) as Doc[];
-  return docs.map((d) => ({ nombre: String(d.name || ''), cantidad: num(d.quantity), unidad: String(d.unit || '') }));
+  const docs = (await Mat.find({ companyId: { $in: empresas.map((e) => e.companyId) } })
+    .select('companyId name quantity unit reorderPoint')
+    .sort({ name: 1 })
+    .lean()) as Doc[];
+  return docs
+    .filter((d) => !ES_LIQUIDO.test(String(d.name || '')))
+    .map((d) => {
+      const reorden = num(d.reorderPoint);
+      return {
+        empresa: empresas.find((e) => e.companyId === String(d.companyId))?.nombre || String(d.companyId),
+        nombre: String(d.name || '').trim().toUpperCase(),
+        cantidad: num(d.quantity),
+        unidad: String(d.unit || 'm³').replace(/^m3$/i, 'm³'),
+        reponer: reorden > 0 && num(d.quantity) <= reorden,
+      };
+    });
 };
 
 export const textoMateriales = (lista: Material[]): string => {
-  if (lista.length === 0) return 'No hay materiales registrados para la planta.';
-  const lineas = ['🪨 *Agregados en stock*', ...lista.map((m) => `• ${m.nombre}: ${r1(m.cantidad)} ${m.unidad}`)];
-  // La verdad antes que un número bonito: si todo está en cero, el kardex no se
-  // lleva, y decir «0 m³» como si fuera un dato sería peor que decir que no hay.
-  if (lista.every((m) => m.cantidad === 0)) {
-    lineas.push('', '⚠️ Todo figura en 0: el kardex de agregados no tiene movimientos registrados. Estos números no reflejan el stock real.');
+  if (lista.length === 0) return 'No hay stock de agregados registrado.';
+  const porEmpresa = new Map<string, Material[]>();
+  for (const m of lista) porEmpresa.set(m.empresa, [...(porEmpresa.get(m.empresa) ?? []), m]);
+  const bloques: string[] = [];
+  for (const [empresa, ms] of porEmpresa) {
+    const total = ms.reduce((s, m) => s + m.cantidad, 0);
+    const lineas = [`📦 *Stock de agregados — ${empresa}*`];
+    if (ms.every((m) => m.cantidad === 0)) {
+      // La verdad antes que un número bonito: todo en cero no es un stock, es un
+      // kardex que no se lleva.
+      lineas.push('Todo figura en 0: el kardex no tiene movimientos registrados.');
+    } else {
+      lineas.push(...ms.map((m) => `*- ${m.nombre}:* ${m.cantidad.toLocaleString('es-PE', { maximumFractionDigits: 2 })} ${m.unidad}${m.reponer ? ' (⚠️ REPONER)' : ''}`));
+      lineas.push(`*- Total:* ${total.toLocaleString('es-PE', { maximumFractionDigits: 2 })} m³`);
+    }
+    bloques.push(lineas.join('\n'));
   }
-  return lineas.join('\n');
+  return bloques.join('\n\n');
 };
