@@ -14,8 +14,8 @@ export interface PreguntaPendiente<T = unknown> {
   grupo: string;
   /** Opciones numeradas («¿cuál pedido?»), o vacío si lo que falta es una unidad. */
   opciones: string[];
-  /** `unidad`: se contesta con un número, una placa o «la última». */
-  tipo?: 'opciones' | 'unidad';
+  /** `unidad`: se contesta con un número, una placa o «la última». `confirmar`: con un «sí». */
+  tipo?: 'opciones' | 'unidad' | 'confirmar';
   /** Qué hacer con la opción elegida (índice base 0) o con el texto de la unidad. */
   continuar: (indice: number, texto?: string) => Promise<T>;
   creadaMs: number;
@@ -61,6 +61,14 @@ export const responderPendiente = (
     if (!nombraUnidad(texto)) return null;
     pendientes.delete(k);
     return { pregunta: p, indice: -1, texto: String(texto || '').trim() };
+  }
+  if (p.tipo === 'confirmar') {
+    const t = String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const si = /^(si|sí|dale|ok|okey|claro|exacto|eso|ya|1)\b/.test(t);
+    const no = /^(no|nada|otra|3)\b/.test(t);
+    if (!si && !no) return null;
+    pendientes.delete(k);
+    return si ? { pregunta: p, indice: 0, texto: t } : null;
   }
   const n = Number(String(texto || '').trim());
   if (!Number.isInteger(n) || n < 1 || n > p.opciones.length) return null;

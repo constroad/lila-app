@@ -48,10 +48,15 @@ const cielo = (codigo: number): string => {
 /** El distrito nombrado en la pregunta; sin nombre, la planta (Constroad). */
 export const distritoDe = (pregunta: string): { name: string; lat: number; lon: number } => {
   const t = normalizar(pregunta);
-  // Los distritos primero; «Constroad» (la planta) es el default, no un nombre
-  // que la gente escriba.
-  const encontrado = LOCATIONS.slice(1).find((l) => t.includes(normalizar(l.name)));
-  return encontrado ?? { ...LOCATIONS[0], name: 'la planta' };
+  // El distrito que aparece PRIMERO en el texto: en una continuación («¿y en
+  // Ate?» pegado a la pregunta anterior) el nuevo va adelante y manda.
+  // «Constroad» (la planta) es el default, no un nombre que la gente escriba.
+  let mejor: { l: (typeof LOCATIONS)[number]; pos: number } | null = null;
+  for (const l of LOCATIONS.slice(1)) {
+    const pos = t.indexOf(normalizar(l.name));
+    if (pos >= 0 && (!mejor || pos < mejor.pos)) mejor = { l, pos };
+  }
+  return mejor?.l ?? { ...LOCATIONS[0], name: 'la planta' };
 };
 
 const URL_BASE =

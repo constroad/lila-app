@@ -48,6 +48,19 @@ describe('preguntas pendientes', () => {
     expect(responderPendiente('jose', 'g', 'AML838', 3_000)).toBeNull();
   });
 
+  /** «¿Te referís a X?» — un «sí» confirma; un «no» la cierra sin hacer nada. */
+  it('una pregunta de confirmación se contesta con sí (o se descarta con no)', async () => {
+    const continuar = jest.fn(async () => 'hecho');
+    preguntar({ quien: 'jose', grupo: 'g', opciones: [], tipo: 'confirmar', continuar }, 0);
+    expect(responderPendiente('jose', 'g', 'mmm', 1_000)).toBeNull();
+    expect(responderPendiente('jose', 'g', 'Sí', 2_000)?.indice).toBe(0);
+    expect(responderPendiente('jose', 'g', 'sí', 3_000)).toBeNull(); // consumida
+
+    preguntar({ quien: 'jose', grupo: 'g', opciones: [], tipo: 'confirmar', continuar }, 0);
+    expect(responderPendiente('jose', 'g', 'no', 1_000)).toBeNull();
+    expect(responderPendiente('jose', 'g', 'sí', 2_000)).toBeNull(); // el «no» la cerró
+  });
+
   it('nombraUnidad: número, placa u ordinal', () => {
     expect(nombraUnidad('la unidad 4')).toBe(true);
     expect(nombraUnidad('AML 838')).toBe(true);

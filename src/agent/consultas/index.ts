@@ -4,6 +4,9 @@ import { construirVista, type VistaDelDia } from './vista.js';
 import { PREGUNTA_UNIDAD, acotarArchivos, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
+import { fusionar, pareceContinuacion, recordarConsulta, ultimaConsulta } from './contexto.js';
+import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
+import { ALIAS_EMPRESA } from './catalogo.js';
 import { consumosDelDia, materiales, tanques, textoConsumos, textoMateriales, textoTanques } from './planta.js';
 import { distritoDe, diasHasta, pronosticoHorario, pronosticoSemanal, textoClima, textoClimaSemanal, textoFueraDeAlcance } from './clima.js';
 import { pngResumenDespachos } from './imagen.js';
@@ -203,6 +206,64 @@ const informesDeLaVista = async (vista: VistaDelDia, params: Parametros, fecha: 
   });
 };
 
+/** Umbral para PROPONER («¿te referís a…?») cuando no alcanza para rutear. */
+const UMBRAL_SUGERENCIA = 0.72;
+
+const EJEMPLO: Partial<Record<ClaveConsulta, string>> = {
+  plant_current_unit: 'en qué carro van los despachos en planta',
+  site_current_unit: 'qué unidad está en campo',
+  unit_media: 'las fotos y videos de una unidad',
+  order_link: 'el enlace del pedido para el cliente',
+  guias_day: 'las guías y vales de hoy',
+  day_progress: 'cuántos m³ van',
+  unit_departure: 'a qué hora salió una unidad',
+  unit_eta: 'cuánto falta para que llegue una unidad',
+  unit_driver: 'quién maneja una unidad',
+  orders_day: 'qué pedidos hay',
+  checklist_status: 'cómo va el checklist',
+  reports_status: 'qué informes están hechos',
+  plant_finish: 'cuánto falta para terminar en planta',
+  site_finish: 'cuánto falta para terminar en campo',
+  tank_levels: 'cuántos galones hay en los tanques',
+  production_consume: 'los consumos de la producción',
+  aggregates_stock: 'el stock de agregados',
+  weather: 'el clima',
+  dispatch_summary: 'el resumen de despachos',
+  help: 'la ayuda',
+};
+
+/**
+ * Cuando no se entiende: ¿es una CONTINUACIÓN de lo último que preguntó esta
+ * persona? ¿O se parece bastante a algo del catálogo como para proponerlo?
+ * Lo general de la experiencia está acá, no en cada consulta.
+ */
+const sinRuta = async (pregunta: string, quien: string, grupo: string): Promise<{ clave: ClaveConsulta | null; pregunta: string; respuesta?: Respuesta }> => {
+  const ultima = ultimaConsulta(quien, grupo);
+  if (ultima && pareceContinuacion(pregunta)) {
+    // La misma pregunta con el dato nuevo, y sin el dato viejo del mismo tipo.
+    return {
+      clave: ultima.clave as ClaveConsulta,
+      pregunta: fusionar(pregunta, ultima.pregunta, LOCATIONS.map((l) => l.name), ALIAS_EMPRESA.flatMap((e) => e.alias)),
+    };
+  }
+  const embed = await cargarModelo();
+  if (embed) {
+    const [mejor] = await clasificar(CATALOGO, [pregunta], embed);
+    if (mejor && mejor.similitud >= UMBRAL_SUGERENCIA) {
+      const clave = mejor.itemId as ClaveConsulta;
+      preguntar({
+        quien,
+        grupo,
+        opciones: [],
+        tipo: 'confirmar',
+        continuar: async () => armarRespuesta(clave, pregunta, quien, grupo),
+      });
+      return { clave: null, pregunta, respuesta: { texto: `¿Te referís a ${EJEMPLO[clave] ?? clave}? Respondé *sí* y te lo paso.` } };
+    }
+  }
+  return { clave: null, pregunta };
+};
+
 export const atenderConsulta = async (
   texto: string,
   quien: string,
@@ -211,14 +272,33 @@ export const atenderConsulta = async (
   numeroBot?: string
 ): Promise<void> => {
   try {
-    const pregunta = preguntaLimpia(texto, numeroBot);
-    const clave = await rutear(pregunta);
-    const respuesta = await armarRespuesta(clave, pregunta, quien, grupo);
-    logger.info(`[agente] consulta de ${quien}: «${pregunta}» → ${clave ?? 'none'}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
+    let pregunta = preguntaLimpia(texto, numeroBot);
+    let clave = await rutear(pregunta);
+    let respuesta: Respuesta | undefined;
+    if (!clave) ({ clave, pregunta, respuesta } = await sinRuta(pregunta, quien, grupo));
+    respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo));
+    if (clave) recordarConsulta({ quien, grupo, clave, pregunta });
+    logger.info(`[agente] consulta de ${quien}: «${preguntaLimpia(texto, numeroBot)}» → ${clave ?? 'none'}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
     await responderEnGrupo(grupo, respuesta, alcance);
   } catch (error) {
     logger.warn(`[agente] no pude atender la consulta «${texto}»: ${error instanceof Error ? error.message : String(error)}`);
   }
+};
+
+/**
+ * Un mensaje SIN @lila de alguien que preguntó hace un momento: si parece una
+ * continuación, se atiende como tal. Es lo que hace que «¿y la 3?» funcione.
+ */
+export const atenderContinuacion = async (
+  texto: string,
+  quien: string,
+  grupo: string,
+  alcance: AlcanceAgente
+): Promise<boolean> => {
+  const ultima = ultimaConsulta(quien, grupo);
+  if (!ultima || !pareceContinuacion(texto)) return false;
+  await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance);
+  return true;
 };
 
 /** Un número suelto de alguien con una pregunta pendiente: es su respuesta. */

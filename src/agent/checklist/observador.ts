@@ -183,7 +183,7 @@ export const observarParaChecklist = async (
         }
         // Las consultas también se atienden acá: es nuestro grupo (José, 13/09).
         void import('../consultas/index.js')
-          .then(async ({ esConsulta, atenderConsulta, atenderEleccion }) => {
+          .then(async ({ esConsulta, atenderConsulta, atenderEleccion, atenderContinuacion }) => {
             const bot = await senderPilotoCacheado();
             if (esConsulta(texto, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
               return atenderConsulta(texto, quien, remoteJid, alcance, bot);
@@ -193,8 +193,9 @@ export const observarParaChecklist = async (
               logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
             }
             // Cualquier mensaje puede ser la respuesta a algo que el agente
-            // preguntó («la unidad 4», «2», «AML838»): decide `pendientes`.
-            const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
+            // preguntó («la unidad 4», «2», «sí»), o la continuación de lo que
+            // esa persona preguntó hace un momento («¿y la 3?»).
+            const fue = (await atenderEleccion(texto, quien, remoteJid, alcance)) || (await atenderContinuacion(texto, quien, remoteJid, alcance));
             if (!fue && /^\s*\d{1,2}\s*$/.test(texto) && esVoto(texto)) {
               await atenderVoto({ voto: texto, citaMsgId: '', quien }, alcance);
             }
@@ -213,7 +214,7 @@ export const observarParaChecklist = async (
       if (!delBot) {
         const quien = String(raw?.key?.participant || 'alguien');
         void import('../consultas/index.js')
-          .then(async ({ esConsulta, atenderConsulta, atenderEleccion }) => {
+          .then(async ({ esConsulta, atenderConsulta, atenderEleccion, atenderContinuacion }) => {
             const bot = await senderPilotoCacheado();
             if (esConsulta(texto, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
               return atenderConsulta(texto, quien, remoteJid, alcance, bot);
@@ -222,8 +223,9 @@ export const observarParaChecklist = async (
               // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
               logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
             }
-            // «La unidad 4», «2», «AML838»: la respuesta a algo que el agente preguntó.
-            await atenderEleccion(texto, quien, remoteJid, alcance);
+            // «La unidad 4», «2», «sí»: la respuesta a algo que el agente preguntó;
+            // «¿y la 3?»: la continuación de lo que esa persona preguntó recién.
+            (await atenderEleccion(texto, quien, remoteJid, alcance)) || (await atenderContinuacion(texto, quien, remoteJid, alcance));
           })
           .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
       }
