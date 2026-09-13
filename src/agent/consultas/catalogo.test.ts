@@ -6,16 +6,26 @@ import { esConsulta, extraerParametros, normalizarPlaca, preguntaLimpia, rutearP
  * catálogo tiene que caer en `null`, y nunca en otra entrada por parecido.
  */
 describe('¿le hablan al agente?', () => {
-  it('con @lila en cualquier parte, o mencionando al número del bot', () => {
+  it('con @lila en cualquier parte, «lila» al principio, o una mención al bot', () => {
     expect(esConsulta('@lila en qué carro va la 5')).toBe(true);
     expect(esConsulta('oye @Lila, cuántos m3 van?')).toBe(true);
+    expect(esConsulta('lila, quién maneja la 3')).toBe(true);
     expect(esConsulta('@51949376824 quién maneja la 3', '51949376824')).toBe(true);
+    // La mención llega como JID (número o LID) en contextInfo, no en el texto.
+    expect(esConsulta('@ConstRoad quién maneja la 3', '51949376824', ['51949376824@s.whatsapp.net'])).toBe(true);
+    expect(esConsulta('@ConstRoad quién maneja la 3', '51949376824', ['188570740486215@lid'], ['188570740486215@lid'])).toBe(true);
   });
 
-  it('no con cualquier cosa que contenga «lila»', () => {
+  it('no con cualquier cosa que contenga «lila», ni una mención a otro', () => {
     expect(esConsulta('la lila está floreciendo')).toBe(false);
-    expect(esConsulta('lila-app se cayó')).toBe(false);
+    expect(esConsulta('hablé con lila ayer')).toBe(false);
     expect(esConsulta('email@lila.com')).toBe(false);
+    expect(esConsulta('@Juan mirá esto', '51949376824', ['51999111222@s.whatsapp.net'])).toBe(false);
+  });
+
+  it('la pregunta queda limpia también con «lila» inicial y menciones', () => {
+    expect(preguntaLimpia('lila, quién maneja la 3')).toBe('quien maneja la 3');
+    expect(preguntaLimpia('@51949376824 quién maneja la 3', '51949376824')).toBe('quien maneja la 3');
   });
 
   it('la pregunta queda limpia para rutear', () => {
@@ -55,6 +65,11 @@ describe('ruteo por reglas', () => {
     ['a qué hora acabamos hoy en planta', 'plant_finish'],
     ['falta mucho para que termine la obra?', 'site_finish'],
     ['cómo vamos con la producción', 'day_progress'],
+    ['cuántos galones tenemos en los tanques', 'tank_levels'],
+    ['cuánto pen queda', 'tank_levels'],
+    ['consumos de la producción de hoy', 'production_consume'],
+    ['cuánto gasohol se usó hoy', 'production_consume'],
+    ['cuánto agregado tengo en stock', 'aggregates_stock'],
     ['@lila ayuda', 'help'],
     ['qué puedes hacer?', 'help'],
   ])('«%s» → %s', (pregunta, clave) => {

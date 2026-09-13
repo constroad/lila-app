@@ -736,6 +736,29 @@ export const WhatsAppDirectService = {
    * Los ADMINISTRADORES de un grupo, por JID. Lee los metadatos vivos del grupo
    * (no el store): es lo que decide quién puede aprobar envíos del agente.
    */
+  /**
+   * «Escribiendo…» en un chat, o dejar de hacerlo. Es lo que separa una
+   * respuesta que parece de una persona de una que aparece de golpe (José,
+   * 13/09/2026: «no sale escribiendo, responde directo, hay que humanizarlo»).
+   * Nunca lanza: la presencia es cosmética.
+   */
+  setTyping: async (id: string, to: string, composing: boolean): Promise<void> => {
+    try {
+      const sock = getSession(id);
+      if (!sock) return;
+      await sock.sendPresenceUpdate(composing ? 'composing' : 'paused', to);
+    } catch {
+      /* cosmético */
+    }
+  },
+
+  /** Los JIDs con los que esta sesión aparece en un grupo: el número y, si hay, el LID. */
+  selfJids: (id: string): string[] => {
+    const sock = getSession(id);
+    const user = sock?.user as { id?: string; lid?: string } | undefined;
+    return [user?.id, user?.lid].filter((x): x is string => Boolean(x)).map((j) => j.replace(/:\d+@/, '@'));
+  },
+
   groupAdmins: async (id: string, groupJid: string): Promise<string[]> =>
     (await WhatsAppDirectService.groupRoster(id, groupJid)).admins,
 

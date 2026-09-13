@@ -12,6 +12,8 @@ export interface Archivo {
   nombre: string;
   fechaMs: number;
   mime: string;
+  /** La empresa DUEÑA del archivo: el storage está aislado por empresa y hay que leerlo con la suya. */
+  companyId: string;
 }
 
 type Doc = Record<string, unknown>;
@@ -27,6 +29,7 @@ const aArchivo = (d: Doc): Archivo | null => {
     nombre: String(d.name || ''),
     fechaMs: d.date ? new Date(d.date as string).getTime() : 0,
     mime,
+    companyId: String(d.companyId || ''),
   };
 };
 
@@ -39,7 +42,7 @@ export const mediaDelDespacho = async (companyId: string, orderId: string, dispa
     type: 'DISPATCH_PICTURES',
     'metadata.dispatchId': dispatchId,
   })
-    .select('name mimeTye url metadata date')
+    .select('name mimeTye url metadata date companyId')
     .sort({ date: 1 })
     .lean()) as Doc[];
   return docs.map(aArchivo).filter((a): a is Archivo => Boolean(a));
@@ -49,7 +52,7 @@ export const mediaDelDespacho = async (companyId: string, orderId: string, dispa
 export const guiasDelPedido = async (companyId: string, orderId: string): Promise<Archivo[]> => {
   const Media = await getMediaModel();
   const docs = (await Media.find({ companyId, resourceId: orderId, type: { $in: ['GUIA', 'VALE'] } })
-    .select('name mimeTye url metadata date type')
+    .select('name mimeTye url metadata date type companyId')
     .sort({ date: 1 })
     .lean()) as Doc[];
   return docs

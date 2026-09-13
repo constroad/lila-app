@@ -27,6 +27,9 @@ export type ClaveConsulta =
   | 'reports_status'
   | 'plant_finish'
   | 'site_finish'
+  | 'tank_levels'
+  | 'production_consume'
+  | 'aggregates_stock'
   | 'help';
 
 export interface EntradaCatalogo {
@@ -100,6 +103,21 @@ export const CATALOGO: EntradaCatalogo[] = [
     reglas: [['checklist'], ['pendiente'], ['falta confirmar'], ['que falta']],
   },
   {
+    id: 'tank_levels',
+    seSatisfaceCon: ['cuantos galones tenemos en los tanques', 'como estan los tanques', 'cuanto pen queda', 'nivel de gasohol', 'cuanto petroleo hay en planta'],
+    reglas: [['galones'], ['tanque'], ['nivel'], ['queda', 'pen'], ['queda', 'gasohol'], ['queda', 'petroleo'], ['queda', 'petróleo'], ['hay', 'pen']],
+  },
+  {
+    id: 'production_consume',
+    seSatisfaceCon: ['cuanto consumio la produccion de hoy', 'consumos de la produccion', 'cuanto pen gastamos', 'consumo de gasohol de hoy', 'cuantos galones se usaron'],
+    reglas: [['consumo'], ['consumio'], ['consumió'], ['consumieron'], ['gastamos'], ['gasto', 'produccion'], ['se uso'], ['se usaron']],
+  },
+  {
+    id: 'aggregates_stock',
+    seSatisfaceCon: ['cuanto agregado tengo en stock', 'cuanta arena hay', 'stock de piedra', 'tenemos agregados en cancha'],
+    reglas: [['agregado'], ['stock'], ['arena'], ['piedra'], ['cancha']],
+  },
+  {
     id: 'help',
     seSatisfaceCon: ['ayuda', 'que puedes hacer', 'que sabes hacer', 'comandos', 'como te uso'],
     reglas: [['ayuda'], ['help'], ['que puedes hacer'], ['qué puedes hacer'], ['que sabes'], ['comandos']],
@@ -129,17 +147,29 @@ export const normalizar = (t: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-/** ¿Este mensaje le habla al agente? `@lila` en cualquier parte, o una mención al número del bot. */
-export const esConsulta = (texto: string, numeroBot?: string): boolean => {
+/**
+ * ¿Este mensaje le habla al agente? Tres formas (José, 13/09/2026: «necesito
+ * escribirle solo lila o @nrocontacto»):
+ *   · «@lila …» en cualquier parte;
+ *   · «lila …» al PRINCIPIO del mensaje (a mitad de frase «lila» puede ser otra cosa);
+ *   · una mención al contacto del bot — el número o el LID, según cómo la
+ *     mande el teléfono; `mencionados` son los JIDs de `contextInfo.mentionedJid`.
+ */
+export const esConsulta = (texto: string, numeroBot?: string, mencionados: string[] = [], jidsBot: string[] = []): boolean => {
   const t = normalizar(texto);
   if (/(^|\s)@lila\b/.test(t)) return true;
-  return Boolean(numeroBot && t.includes(`@${numeroBot}`));
+  if (/^lila\b/.test(t)) return true;
+  if (numeroBot && t.includes(`@${numeroBot}`)) return true;
+  const propios = new Set([...jidsBot, numeroBot ? `${numeroBot}@s.whatsapp.net` : ''].filter(Boolean).map((j) => j.replace(/:\d+@/, '@')));
+  return mencionados.some((m) => propios.has(String(m).replace(/:\d+@/, '@')));
 };
 
-/** La pregunta sin el `@lila` ni la mención. */
+/** La pregunta sin el «@lila», el «lila» inicial ni la mención. */
 export const preguntaLimpia = (texto: string, numeroBot?: string): string =>
   normalizar(texto)
     .replace(/@lila\b/g, '')
+    .replace(/^lila\b[,:]?/, '')
+    .replace(/@\d{6,}\b/g, '')
     .replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, 'g') : /$^/, '')
     .replace(/\s+/g, ' ')
     .trim();

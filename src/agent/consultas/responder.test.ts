@@ -98,8 +98,8 @@ describe('responder', () => {
   /** El presupuesto por respuesta: fotos, videos y documentos por separado. */
   it('los archivos se acotan por tipo, y se dice cuántos quedaron afuera', () => {
     const muchos = [
-      ...Array.from({ length: 7 }, (_, i) => ({ tipo: 'image' as const, url: `i${i}`, nombre: `f${i}`, fechaMs: i, mime: 'image/jpeg' })),
-      ...Array.from({ length: 3 }, (_, i) => ({ tipo: 'video' as const, url: `v${i}`, nombre: `v${i}`, fechaMs: i, mime: 'video/mp4' })),
+      ...Array.from({ length: 7 }, (_, i) => ({ tipo: 'image' as const, url: `i${i}`, nombre: `f${i}`, fechaMs: i, mime: 'image/jpeg', companyId: 'globofas-s8k' })),
+      ...Array.from({ length: 3 }, (_, i) => ({ tipo: 'video' as const, url: `v${i}`, nombre: `v${i}`, fechaMs: i, mime: 'video/mp4', companyId: 'globofas-s8k' })),
     ];
     const { enviar, omitidos } = acotarArchivos(muchos);
     expect(enviar.filter((a) => a.tipo === 'image')).toHaveLength(5);

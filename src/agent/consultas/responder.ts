@@ -111,6 +111,7 @@ export const AYUDA = [
   '• qué unidad está en campo / cuántos carros están en ruta',
   '• cuántos m³ van · cuánto falta para terminar la producción en planta',
   '• cuánto falta para terminar el control de pista',
+  '• cuántos galones tenemos en los tanques · consumos de la producción de hoy · cuánto agregado hay en stock',
   '• a qué hora salió la 3 · quién maneja la 4 · cuánto falta para que llegue la 2',
   '• muéstrame la foto y video de la unidad de placa AML838',
   '',
@@ -213,8 +214,10 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
 
     case 'order_link':
     case 'guias_day':
-      // Necesitan archivos o enlaces: los resuelve index.ts con la vista. Acá,
-      // solo si no hay pedidos.
+    case 'tank_levels':
+    case 'production_consume':
+    case 'aggregates_stock':
+      // Los resuelve index.ts con sus propias lecturas. Acá, solo si no hay pedidos.
       return vacio ?? '';
 
     case 'checklist_status': {

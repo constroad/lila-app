@@ -1568,9 +1568,9 @@ var require_semver = __commonJS({
         } else {
           this.prerelease = m59[4].split(".").map((id) => {
             if (/^[0-9]+$/.test(id)) {
-              const num2 = +id;
-              if (num2 >= 0 && num2 < MAX_SAFE_INTEGER) {
-                return num2;
+              const num3 = +id;
+              if (num3 >= 0 && num3 < MAX_SAFE_INTEGER) {
+                return num3;
               }
             }
             return id;
@@ -2956,10 +2956,10 @@ var require_intersects = __commonJS({
   "node_modules/semver/ranges/intersects.js"(exports, module) {
     "use strict";
     var Range = require_range();
-    var intersects = (r1, r210, options2) => {
-      r1 = new Range(r1, options2);
+    var intersects = (r110, r210, options2) => {
+      r110 = new Range(r110, options2);
       r210 = new Range(r210, options2);
-      return r1.intersects(r210, options2);
+      return r110.intersects(r210, options2);
     };
     module.exports = intersects;
   }
@@ -5269,6 +5269,13 @@ var init_storage_path_service = __esm({
 });
 
 // src/services/whatsapp-media.utils.ts
+var whatsapp_media_utils_exports = {};
+__export(whatsapp_media_utils_exports, {
+  detectMimeType: () => detectMimeType,
+  downloadFileFromUrl: () => downloadFileFromUrl,
+  getSendOptions: () => getSendOptions,
+  resolveFileBuffer: () => resolveFileBuffer
+});
 import fs5 from "fs-extra";
 import path8 from "path";
 import axios from "axios";
@@ -7059,6 +7066,26 @@ var init_whatsapp_direct_service = __esm({
        * Los ADMINISTRADORES de un grupo, por JID. Lee los metadatos vivos del grupo
        * (no el store): es lo que decide quién puede aprobar envíos del agente.
        */
+      /**
+       * «Escribiendo…» en un chat, o dejar de hacerlo. Es lo que separa una
+       * respuesta que parece de una persona de una que aparece de golpe (José,
+       * 13/09/2026: «no sale escribiendo, responde directo, hay que humanizarlo»).
+       * Nunca lanza: la presencia es cosmética.
+       */
+      setTyping: async (id, to3, composing) => {
+        try {
+          const sock = getSession(id);
+          if (!sock) return;
+          await sock.sendPresenceUpdate(composing ? "composing" : "paused", to3);
+        } catch {
+        }
+      },
+      /** Los JIDs con los que esta sesión aparece en un grupo: el número y, si hay, el LID. */
+      selfJids: (id) => {
+        const sock = getSession(id);
+        const user = sock?.user;
+        return [user?.id, user?.lid].filter((x63) => Boolean(x63)).map((j50) => j50.replace(/:\d+@/, "@"));
+      },
       groupAdmins: async (id, groupJid) => (await WhatsAppDirectService.groupRoster(id, groupJid)).admins,
       /**
        * Los MIEMBROS y los ADMINISTRADORES de un grupo, por JID. Lee los metadatos
@@ -8226,10 +8253,13 @@ __export(models_exports, {
   getAcademyTutorialModel: () => getAcademyTutorialModel,
   getCompanyModel: () => getCompanyModel,
   getConfigModel: () => getConfigModel,
+  getConsumeModel: () => getConsumeModel,
+  getControlTankModel: () => getControlTankModel,
   getCronJobModel: () => getCronJobModel,
   getDispatchModel: () => getDispatchModel,
   getFolderModel: () => getFolderModel,
   getGpsPositionModel: () => getGpsPositionModel,
+  getMaterialModel: () => getMaterialModel,
   getMediaModel: () => getMediaModel,
   getOrderModel: () => getOrderModel,
   getPublicLinkModel: () => getPublicLinkModel,
@@ -8294,6 +8324,24 @@ async function getServiceReportModel() {
   serviceReportModel = conn.models.ServiceManagementReport || conn.model("ServiceManagementReport", looseSchema, "servicemanagementreports");
   return serviceReportModel;
 }
+async function getControlTankModel() {
+  if (controlTankModel) return controlTankModel;
+  const conn = await getSharedConnection();
+  controlTankModel = conn.models.ControlTank || conn.model("ControlTank", looseSchema, "controltanks");
+  return controlTankModel;
+}
+async function getConsumeModel() {
+  if (consumeModel) return consumeModel;
+  const conn = await getSharedConnection();
+  consumeModel = conn.models.Consume || conn.model("Consume", looseSchema, "consumes");
+  return consumeModel;
+}
+async function getMaterialModel() {
+  if (materialModel) return materialModel;
+  const conn = await getSharedConnection();
+  materialModel = conn.models.Material || conn.model("Material", looseSchema, "materials");
+  return materialModel;
+}
 async function getMediaModel() {
   if (mediaModel) {
     return mediaModel;
@@ -8344,7 +8392,7 @@ async function getSharedModels() {
   ]);
   return { CronJobModel, CompanyModel, ConfigModel };
 }
-var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, publicLinkModel, serviceReportModel, academyTutorialModel, gpsPositionModel;
+var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, publicLinkModel, serviceReportModel, controlTankModel, consumeModel, materialModel, academyTutorialModel, gpsPositionModel;
 var init_models = __esm({
   "src/database/models.ts"() {
     init_sharedConnection();
@@ -8363,6 +8411,9 @@ var init_models = __esm({
     dispatchModel = null;
     publicLinkModel = null;
     serviceReportModel = null;
+    controlTankModel = null;
+    consumeModel = null;
+    materialModel = null;
     academyTutorialModel = null;
     gpsPositionModel = null;
   }
@@ -8905,13 +8956,22 @@ var init_emisor = __esm({
         logger_default.error(`[agente] se intent\xF3 responder en ${jid || "(vac\xEDo)"}, que no es un grupo donde se atienden consultas. No se manda.`);
         return false;
       }
+      const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
+      const id = await sender();
+      await WhatsAppDirectService2.setTyping(id, jid, true);
+      await new Promise((r39) => setTimeout(r39, Math.min(600 + (respuesta.texto?.length ?? 0) * 8, 2500)));
       if (respuesta.texto?.trim()) await mandar(jid, respuesta.texto);
       if (respuesta.archivos?.length) {
-        const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
-        const id = await sender();
+        const { resolveFileBuffer: resolveFileBuffer2 } = await Promise.resolve().then(() => (init_whatsapp_media_utils(), whatsapp_media_utils_exports));
         for (const a49 of respuesta.archivos) {
-          const opciones = { fileUrl: a49.url, fileName: a49.nombre, caption: a49.caption, mimeType: a49.mime, companyId: COMPANY_PILOTO };
+          if (!EMPRESAS_CON_PEDIDOS.includes(a49.companyId)) {
+            logger_default.error(`[agente] archivo de ${a49.companyId}, fuera del piloto: no se manda`);
+            continue;
+          }
           try {
+            const leido = await resolveFileBuffer2({ companyId: a49.companyId, fileUrl: a49.url, mimeType: a49.mime, fileName: a49.nombre });
+            if (!leido) throw new Error("no se pudo leer del storage");
+            const opciones = { buffer: leido.buffer, fileName: leido.fileName || a49.nombre, caption: a49.caption, mimeType: leido.mimeType || a49.mime, companyId: COMPANY_PILOTO };
             if (a49.tipo === "image") await WhatsAppDirectService2.sendImageFile(id, jid, opciones);
             else if (a49.tipo === "video") await WhatsAppDirectService2.sendVideoFile(id, jid, opciones);
             else await WhatsAppDirectService2.sendDocument(id, jid, opciones);
@@ -8920,6 +8980,7 @@ var init_emisor = __esm({
           }
         }
       }
+      await WhatsAppDirectService2.setTyping(id, jid, false);
       return true;
     };
     mandadas = /* @__PURE__ */ new Set();
@@ -9038,7 +9099,7 @@ var init_catalogo = __esm({
       {
         id: "day_progress",
         seSatisfaceCon: ["cuantos metros van", "cuantos m3 faltan", "como va la produccion", "cuanto se ha despachado hoy", "cuantos cubos van"],
-        reglas: [["m3"], ["m\xB3"], ["cubos"], ["metros"], ["faltan"], ["despachado"], ["avance"], ["como va la produccion"], ["c\xF3mo va la producci\xF3n"], ["como vamos"], ["c\xF3mo vamos"], ["como va"], ["c\xF3mo va"]]
+        reglas: [["m3"], ["m\xB3"], ["cubos"], ["metros"], ["faltan"], ["despachado"], ["avance"], ["como va la produccion"], ["c\xF3mo va la producci\xF3n"], ["como vamos", "produccion"], ["como vamos", "despacho"], ["como va", "despacho"], ["como va", "planta"]]
       },
       {
         id: "orders_day",
@@ -9049,6 +9110,21 @@ var init_catalogo = __esm({
         id: "checklist_status",
         seSatisfaceCon: ["como va el checklist", "que falta confirmar", "que esta pendiente del checklist", "estado del checklist"],
         reglas: [["checklist"], ["pendiente"], ["falta confirmar"], ["que falta"]]
+      },
+      {
+        id: "tank_levels",
+        seSatisfaceCon: ["cuantos galones tenemos en los tanques", "como estan los tanques", "cuanto pen queda", "nivel de gasohol", "cuanto petroleo hay en planta"],
+        reglas: [["galones"], ["tanque"], ["nivel"], ["queda", "pen"], ["queda", "gasohol"], ["queda", "petroleo"], ["queda", "petr\xF3leo"], ["hay", "pen"]]
+      },
+      {
+        id: "production_consume",
+        seSatisfaceCon: ["cuanto consumio la produccion de hoy", "consumos de la produccion", "cuanto pen gastamos", "consumo de gasohol de hoy", "cuantos galones se usaron"],
+        reglas: [["consumo"], ["consumio"], ["consumi\xF3"], ["consumieron"], ["gastamos"], ["gasto", "produccion"], ["se uso"], ["se usaron"]]
+      },
+      {
+        id: "aggregates_stock",
+        seSatisfaceCon: ["cuanto agregado tengo en stock", "cuanta arena hay", "stock de piedra", "tenemos agregados en cancha"],
+        reglas: [["agregado"], ["stock"], ["arena"], ["piedra"], ["cancha"]]
       },
       {
         id: "help",
@@ -9072,12 +9148,15 @@ var init_catalogo = __esm({
       }
     ];
     normalizar = (t44) => String(t44 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
-    esConsulta = (texto, numeroBot) => {
+    esConsulta = (texto, numeroBot, mencionados = [], jidsBot = []) => {
       const t44 = normalizar(texto);
       if (/(^|\s)@lila\b/.test(t44)) return true;
-      return Boolean(numeroBot && t44.includes(`@${numeroBot}`));
+      if (/^lila\b/.test(t44)) return true;
+      if (numeroBot && t44.includes(`@${numeroBot}`)) return true;
+      const propios = new Set([...jidsBot, numeroBot ? `${numeroBot}@s.whatsapp.net` : ""].filter(Boolean).map((j50) => j50.replace(/:\d+@/, "@")));
+      return mencionados.some((m59) => propios.has(String(m59).replace(/:\d+@/, "@")));
     };
-    preguntaLimpia = (texto, numeroBot) => normalizar(texto).replace(/@lila\b/g, "").replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, "g") : /$^/, "").replace(/\s+/g, " ").trim();
+    preguntaLimpia = (texto, numeroBot) => normalizar(texto).replace(/@lila\b/g, "").replace(/^lila\b[,:]?/, "").replace(/@\d{6,}\b/g, "").replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, "g") : /$^/, "").replace(/\s+/g, " ").trim();
     ALIAS_EMPRESA = [
       { companyId: "globofas-s8k", alias: ["globofast", "globofas", "globo"] },
       { companyId: "constroad", alias: ["constroad", "constroad sac"] },
@@ -9303,6 +9382,7 @@ var init_responder = __esm({
       "\u2022 qu\xE9 unidad est\xE1 en campo / cu\xE1ntos carros est\xE1n en ruta",
       "\u2022 cu\xE1ntos m\xB3 van \xB7 cu\xE1nto falta para terminar la producci\xF3n en planta",
       "\u2022 cu\xE1nto falta para terminar el control de pista",
+      "\u2022 cu\xE1ntos galones tenemos en los tanques \xB7 consumos de la producci\xF3n de hoy \xB7 cu\xE1nto agregado hay en stock",
       "\u2022 a qu\xE9 hora sali\xF3 la 3 \xB7 qui\xE9n maneja la 4 \xB7 cu\xE1nto falta para que llegue la 2",
       "\u2022 mu\xE9strame la foto y video de la unidad de placa AML838",
       "",
@@ -9391,6 +9471,9 @@ var init_responder = __esm({
         }
         case "order_link":
         case "guias_day":
+        case "tank_levels":
+        case "production_consume":
+        case "aggregates_stock":
           return vacio ?? "";
         case "checklist_status": {
           const r39 = ctx.revision;
@@ -9474,7 +9557,8 @@ var init_archivos = __esm({
         url,
         nombre: String(d67.name || ""),
         fechaMs: d67.date ? new Date(d67.date).getTime() : 0,
-        mime
+        mime,
+        companyId: String(d67.companyId || "")
       };
     };
     mediaDelDespacho = async (companyId, orderId, dispatchId) => {
@@ -9484,12 +9568,12 @@ var init_archivos = __esm({
         resourceId: orderId,
         type: "DISPATCH_PICTURES",
         "metadata.dispatchId": dispatchId
-      }).select("name mimeTye url metadata date").sort({ date: 1 }).lean();
+      }).select("name mimeTye url metadata date companyId").sort({ date: 1 }).lean();
       return docs.map(aArchivo).filter((a49) => Boolean(a49));
     };
     guiasDelPedido = async (companyId, orderId) => {
       const Media2 = await getMediaModel();
-      const docs = await Media2.find({ companyId, resourceId: orderId, type: { $in: ["GUIA", "VALE"] } }).select("name mimeTye url metadata date type").sort({ date: 1 }).lean();
+      const docs = await Media2.find({ companyId, resourceId: orderId, type: { $in: ["GUIA", "VALE"] } }).select("name mimeTye url metadata date type companyId").sort({ date: 1 }).lean();
       return docs.map((d67) => {
         const a49 = aArchivo(d67);
         return a49 ? { ...a49, nombre: `${d67.type === "GUIA" ? "Gu\xEDa" : "Vale"} \xB7 ${a49.nombre}` } : null;
@@ -9569,6 +9653,89 @@ var init_pendientes = __esm({
       return { pregunta: p64, indice: n43 - 1 };
     };
     textoPregunta = (encabezado, opciones) => [encabezado, ...opciones.map((o37, i50) => `${i50 + 1}. ${o37}`), "", "Respond\xE9 con el n\xFAmero."].join("\n");
+  }
+});
+
+// src/agent/consultas/planta.ts
+var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, materiales, textoMateriales;
+var init_planta = __esm({
+  "src/agent/consultas/planta.ts"() {
+    init_models();
+    init_alcance();
+    init_tiempo();
+    num2 = (v55) => typeof v55 === "number" && Number.isFinite(v55) ? v55 : Number(v55) || 0;
+    r1 = (n43) => (Math.round(n43 * 10) / 10).toLocaleString("es-PE");
+    CONTENIDO = { pen: "PEN (asfalto)", gasohol: "Gasohol", petroleum: "Petr\xF3leo", petroleo: "Petr\xF3leo" };
+    tanques = async () => {
+      const Tank = await getControlTankModel();
+      const docs = await Tank.find({ companyId: COMPANY_PILOTO, measurementEnabled: { $ne: false } }).select("name contentType volumeInStock volume levelCentimeter").lean();
+      return docs.map((d67) => ({
+        nombre: String(d67.name || ""),
+        contenido: CONTENIDO[String(d67.contentType || "").toLowerCase()] || String(d67.contentType || "otro"),
+        galones: num2(d67.volumeInStock),
+        capacidad: num2(d67.volume),
+        nivelCm: num2(d67.levelCentimeter)
+      })).sort((a49, b63) => a49.contenido.localeCompare(b63.contenido) || a49.nombre.localeCompare(b63.nombre));
+    };
+    textoTanques = (lista) => {
+      if (lista.length === 0) return "No hay tanques con medici\xF3n registrada.";
+      const porContenido = /* @__PURE__ */ new Map();
+      for (const t44 of lista) porContenido.set(t44.contenido, [...porContenido.get(t44.contenido) ?? [], t44]);
+      const lineas = ["\u26FD *Tanques de planta* (galones disponibles)"];
+      for (const [contenido, ts] of porContenido) {
+        const total = ts.reduce((s59, t44) => s59 + t44.galones, 0);
+        lineas.push("", `*${contenido}* \u2014 ${r1(total)} gl`);
+        lineas.push(...ts.map((t44) => `\u2022 ${t44.nombre}: ${r1(t44.galones)} gl (${t44.nivelCm} cm, de ${r1(t44.capacidad)})`));
+      }
+      return lineas.join("\n");
+    };
+    consumosDelDia = async (fecha) => {
+      const Consume = await getConsumeModel();
+      const inicio = /* @__PURE__ */ new Date(`${fecha}T00:00:00.000-05:00`);
+      const fin = new Date(inicio.getTime() + 24 * 36e5);
+      const docs = await Consume.find({
+        companyId: COMPANY_PILOTO,
+        $or: [{ date: { $gte: inicio, $lt: fin } }, { periodStart: { $gte: inicio, $lt: fin } }]
+      }).select("date orders computedM3 totalCubes measures").sort({ date: 1 }).lean();
+      return docs.map((d67) => {
+        const m310 = num2(d67.computedM3) || num2(d67.totalCubes);
+        const medidas = Array.isArray(d67.measures) ? d67.measures : [];
+        const porTanque = medidas.map((m59) => {
+          const galones = num2(m59.quantityConsumed);
+          return { tanque: String(m59.tank || ""), galones, glPorM3: m310 > 0 ? galones / m310 : 0 };
+        });
+        return {
+          fecha,
+          pedidos: (d67.orders ?? []).map((o37) => String(o37.orderClient || o37.orderName || "")).filter(Boolean),
+          m3: m310,
+          porTanque,
+          totalGalones: porTanque.reduce((s59, t44) => s59 + t44.galones, 0)
+        };
+      });
+    };
+    textoConsumos = (lista, fecha) => {
+      if (lista.length === 0) return `No hay consumo registrado para ${fechaLegible(fecha)}. Se registra en Portal \u2192 Consumos.`;
+      const bloques = lista.map((c66, i50) => {
+        const titulo = lista.length > 1 ? `*Consumo ${i50 + 1}* (${c66.pedidos.join(", ") || "sin pedido"})` : `*${c66.pedidos.join(", ") || "Producci\xF3n"}*`;
+        const lineas = [`${titulo} \u2014 ${r1(c66.m3)} m\xB3, ${r1(c66.totalGalones)} gl en total`];
+        lineas.push(...c66.porTanque.map((t44) => `\u2022 ${t44.tanque}: ${r1(t44.galones)} gl \xB7 ${(Math.round(t44.glPorM3 * 1e3) / 1e3).toLocaleString("es-PE")} gl/m\xB3`));
+        return lineas.join("\n");
+      });
+      return [`\u{1F6E2} *Consumos de ${fechaLegible(fecha)}*`, "", ...bloques].join("\n\n");
+    };
+    materiales = async () => {
+      const Mat = await getMaterialModel();
+      const docs = await Mat.find({ companyId: COMPANY_PILOTO }).select("name quantity unit").sort({ name: 1 }).lean();
+      return docs.map((d67) => ({ nombre: String(d67.name || ""), cantidad: num2(d67.quantity), unidad: String(d67.unit || "") }));
+    };
+    textoMateriales = (lista) => {
+      if (lista.length === 0) return "No hay materiales registrados para la planta.";
+      const lineas = ["\u{1FAA8} *Agregados en stock*", ...lista.map((m59) => `\u2022 ${m59.nombre}: ${r1(m59.cantidad)} ${m59.unidad}`)];
+      if (lista.every((m59) => m59.cantidad === 0)) {
+        lineas.push("", "\u26A0\uFE0F Todo figura en 0: el kardex de agregados no tiene movimientos registrados. Estos n\xFAmeros no reflejan el stock real.");
+      }
+      return lineas.join("\n");
+    };
   }
 });
 
@@ -10027,6 +10194,7 @@ var init_consultas = __esm({
     init_responder();
     init_archivos();
     init_pendientes();
+    init_planta();
     init_semantica();
     init_emisor();
     init_tiempo();
@@ -10100,6 +10268,9 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       const params = extraerParametros(pregunta);
       const fecha = diaPeruano(Date.now() + (params.day === "tomorrow" ? 24 * 36e5 : 0));
       const vista = await construirVista(fecha);
+      if (clave2 === "tank_levels") return { texto: textoTanques(await tanques()) };
+      if (clave2 === "production_consume") return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
+      if (clave2 === "aggregates_stock") return { texto: textoMateriales(await materiales()) };
       if (clave2 === "order_link") return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
       if (clave2 === "guias_day") return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
       if (clave2 === "unit_media") {
@@ -10153,7 +10324,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
 });
 
 // src/agent/checklist/observador.ts
-var ALCANCE_TTL_MS, alcanceCache, alcanceVigente, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, senderPiloto, jidPorNombre;
+var ALCANCE_TTL_MS, alcanceCache, alcanceVigente, mencionadosDe, vistos, yaVisto, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, jidsPropios, senderPiloto, jidPorNombre;
 var init_observador = __esm({
   "src/agent/checklist/observador.ts"() {
     init_logger();
@@ -10177,6 +10348,15 @@ var init_observador = __esm({
       alcanceCache = { alcance, at: now };
       return alcance;
     };
+    mencionadosDe = (message) => (message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []).map(String);
+    vistos = /* @__PURE__ */ new Set();
+    yaVisto = (id) => {
+      if (!id) return false;
+      if (vistos.has(id)) return true;
+      vistos.add(id);
+      if (vistos.size > 500) vistos.delete(vistos.values().next().value);
+      return false;
+    };
     citaDe = (message) => String(message?.extendedTextMessage?.contextInfo?.stanzaId || "");
     aMilisegundos = (ts, ahora) => {
       if (typeof ts === "number" && Number.isFinite(ts)) return ts * 1e3;
@@ -10197,6 +10377,7 @@ var init_observador = __esm({
           const remoteJid = String(raw?.key?.remoteJid || "");
           const texto = extractInboundText(raw.message);
           if (!texto.trim()) continue;
+          if (yaVisto(`${remoteJid}|${String(raw?.key?.id || "")}`)) continue;
           if (remoteJid === GROUP_ERRORS_TRACKING) {
             if (raw?.key?.fromMe) continue;
             const quien = String(raw?.key?.participant || "desconocido");
@@ -10210,7 +10391,9 @@ var init_observador = __esm({
               continue;
             }
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2 }) => {
-              if (esConsulta2(texto, sessionPhone)) return atenderConsulta2(texto, quien, remoteJid, alcance, sessionPhone);
+              if (esConsulta2(texto, sessionPhone, mencionadosDe(raw.message), await jidsPropios(sessionPhone))) {
+                return atenderConsulta2(texto, quien, remoteJid, alcance, sessionPhone);
+              }
               if (/^\s*\d{1,2}\s*$/.test(texto)) {
                 const fue = await atenderEleccion2(texto, quien, remoteJid, alcance);
                 if (!fue && esVoto(texto)) {
@@ -10224,7 +10407,9 @@ var init_observador = __esm({
           if (!raw?.key?.fromMe) {
             const quien = String(raw?.key?.participant || "alguien");
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2 }) => {
-              if (esConsulta2(texto, sessionPhone)) return atenderConsulta2(texto, quien, remoteJid, alcance, sessionPhone);
+              if (esConsulta2(texto, sessionPhone, mencionadosDe(raw.message), await jidsPropios(sessionPhone))) {
+                return atenderConsulta2(texto, quien, remoteJid, alcance, sessionPhone);
+              }
               if (/^\s*\d{1,2}\s*$/.test(texto)) await atenderEleccion2(texto, quien, remoteJid, alcance);
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
           }
@@ -10319,6 +10504,14 @@ var init_observador = __esm({
         void cargarAprobadores().catch(() => void 0);
       } catch (error) {
         logger_default.warn(`[agente] no pude rehidratar la memoria: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+    jidsPropios = async (sessionPhone) => {
+      try {
+        const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
+        return WhatsAppDirectService2.selfJids(sessionPhone);
+      } catch {
+        return [];
       }
     };
     senderPiloto = async () => {
@@ -13498,7 +13691,7 @@ var require_luxon = __commonJS({
       const [s60, yearStr, monthStr, weekStr, dayStr, hourStr, minuteStr, secondStr, millisecondsStr] = match2;
       const hasNegativePrefix = s60[0] === "-";
       const negativeSeconds = secondStr && secondStr[0] === "-";
-      const maybeNegate = (num2, force = false) => num2 !== void 0 && (force || num2 && hasNegativePrefix) ? -num2 : num2;
+      const maybeNegate = (num3, force = false) => num3 !== void 0 && (force || num3 && hasNegativePrefix) ? -num3 : num3;
       return [{
         years: maybeNegate(parseFloating(yearStr)),
         months: maybeNegate(parseFloating(monthStr)),
@@ -62405,9 +62598,9 @@ var require_headers = __commonJS({
       }
       return 0;
     }
-    function indexOf(block, num2, offset, end) {
+    function indexOf(block, num3, offset, end) {
       for (; offset < end; offset++) {
-        if (block[offset] === num2) return offset;
+        if (block[offset] === num3) return offset;
       }
       return end;
     }
@@ -62422,18 +62615,18 @@ var require_headers = __commonJS({
       if (val.length > n43) return SEVENS.slice(0, n43) + " ";
       return ZEROS.slice(0, n43 - val.length) + val + " ";
     }
-    function encodeSizeBin(num2, buf, off) {
+    function encodeSizeBin(num3, buf, off) {
       buf[off] = 128;
       for (let i50 = 11; i50 > 0; i50--) {
-        buf[off + i50] = num2 & 255;
-        num2 = Math.floor(num2 / 256);
+        buf[off + i50] = num3 & 255;
+        num3 = Math.floor(num3 / 256);
       }
     }
-    function encodeSize(num2, buf, off) {
-      if (num2.toString(8).length > 11) {
-        encodeSizeBin(num2, buf, off);
+    function encodeSize(num3, buf, off) {
+      if (num3.toString(8).length > 11) {
+        encodeSizeBin(num3, buf, off);
       } else {
-        b4a.write(buf, encodeOct(num2, 11), off);
+        b4a.write(buf, encodeOct(num3, 11), off);
       }
     }
     function parse256(buf) {
@@ -63431,9 +63624,9 @@ var require_dist4 = __commonJS({
         throw new Error("input must be buffer, number, or string, received " + typeof input);
       }
     }
-    function bufferizeInt(num2) {
+    function bufferizeInt(num3) {
       const tmp = ensureBuffer(4);
-      tmp.writeInt32BE(num2, 0);
+      tmp.writeInt32BE(num3, 0);
       return tmp;
     }
     function _crc32(buf, previous) {
@@ -83223,32 +83416,32 @@ var UNITS = ["", "UNO", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO
 var TEENS = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISEIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"];
 var TENS = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"];
 var HUNDREDS = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"];
-function toWords(num2) {
+function toWords(num3) {
   let words = "";
-  if (num2 >= 1e6) {
-    const m59 = Math.floor(num2 / 1e6);
+  if (num3 >= 1e6) {
+    const m59 = Math.floor(num3 / 1e6);
     words += m59 === 1 ? "UN MILL\xD3N " : toWords(m59) + " MILLONES ";
-    num2 %= 1e6;
+    num3 %= 1e6;
   }
-  if (num2 >= 1e3) {
-    words += toWords(Math.floor(num2 / 1e3)) + " MIL ";
-    num2 %= 1e3;
+  if (num3 >= 1e3) {
+    words += toWords(Math.floor(num3 / 1e3)) + " MIL ";
+    num3 %= 1e3;
   }
-  if (num2 >= 100) {
-    words += HUNDREDS[Math.floor(num2 / 100)] + " ";
-    num2 %= 100;
+  if (num3 >= 100) {
+    words += HUNDREDS[Math.floor(num3 / 100)] + " ";
+    num3 %= 100;
   }
-  if (num2 >= 30) {
-    words += TENS[Math.floor(num2 / 10)] + (num2 % 10 !== 0 ? " Y " : "");
-    num2 %= 10;
-  } else if (num2 >= 20) {
+  if (num3 >= 30) {
+    words += TENS[Math.floor(num3 / 10)] + (num3 % 10 !== 0 ? " Y " : "");
+    num3 %= 10;
+  } else if (num3 >= 20) {
     words += "VEINTI";
-    num2 %= 10;
-  } else if (num2 >= 10) {
-    words += TEENS[num2 - 10] + " ";
-    num2 = 0;
+    num3 %= 10;
+  } else if (num3 >= 10) {
+    words += TEENS[num3 - 10] + " ";
+    num3 = 0;
   }
-  if (num2 > 0) words += UNITS[num2] + " ";
+  if (num3 > 0) words += UNITS[num3] + " ";
   return words.trim();
 }
 function numberToWords(amount) {
@@ -84036,8 +84229,8 @@ ${signaturesHtml}`;
   }
   buildCtlImpLegacyControl() {
     const control = this.buildCtlImpEmptyControl();
-    const materiales = Array.isArray(this.data.materialesInsumos) ? this.data.materialesInsumos : [];
-    const firstMaterial = materiales[0] || {};
+    const materiales2 = Array.isArray(this.data.materialesInsumos) ? this.data.materialesInsumos : [];
+    const firstMaterial = materiales2[0] || {};
     const tasa = this.getValue("tasa") || {};
     const tasaRows = Array.isArray(this.data.tasaRegistroDatos) ? this.data.tasaRegistroDatos : [];
     const findRow = (key) => tasaRows.find((row) => String(row?.key || "") === key) || {};
@@ -84428,12 +84621,12 @@ ${signaturesHtml}`;
       [4, "IV"],
       [1, "I"]
     ];
-    let num2 = value;
+    let num3 = value;
     let out = "";
     for (const [n43, symbol] of roman) {
-      while (num2 >= n43) {
+      while (num3 >= n43) {
         out += symbol;
-        num2 -= n43;
+        num3 -= n43;
       }
     }
     return out || String(value);
@@ -85600,12 +85793,12 @@ ${signaturesHtml}`;
       return this.formatCurrency(value);
     }
     if (type === "number" || type === "percentage") {
-      const num2 = Number(value);
-      if (Number.isNaN(num2)) return String(value);
+      const num3 = Number(value);
+      if (Number.isNaN(num3)) return String(value);
       if (type === "percentage") {
-        return `${num2.toFixed(2)}%`;
+        return `${num3.toFixed(2)}%`;
       }
-      return num2.toLocaleString("es-PE");
+      return num3.toLocaleString("es-PE");
     }
     if (type === "date" || type === "datetime") {
       return this.formatDateValue(value, type);
@@ -85639,17 +85832,17 @@ ${signaturesHtml}`;
     return date.toLocaleDateString("es-PE", { timeZone: "America/Lima" });
   }
   formatCurrency(value) {
-    const num2 = Number(value);
-    if (Number.isNaN(num2)) return String(value);
+    const num3 = Number(value);
+    if (Number.isNaN(num3)) return String(value);
     try {
       return new Intl.NumberFormat("es-PE", {
         style: "currency",
         currency: "PEN",
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
-      }).format(num2);
+      }).format(num3);
     } catch {
-      return `S/ ${num2.toFixed(2)}`;
+      return `S/ ${num3.toFixed(2)}`;
     }
   }
   getValue(pathKey, source) {
@@ -87118,8 +87311,8 @@ function requireBase64Js() {
     }
     return arr;
   }
-  function tripletToBase64(num2) {
-    return lookup2[num2 >> 18 & 63] + lookup2[num2 >> 12 & 63] + lookup2[num2 >> 6 & 63] + lookup2[num2 & 63];
+  function tripletToBase64(num3) {
+    return lookup2[num3 >> 18 & 63] + lookup2[num3 >> 12 & 63] + lookup2[num3 >> 6 & 63] + lookup2[num3 & 63];
   }
   function encodeChunk(uint8, start, end) {
     var tmp;
@@ -94287,7 +94480,7 @@ Stream$1.prototype.pipe = function(dest, options2) {
     function parseEntity(parser) {
       var entity = parser.entity;
       var entityLC = entity.toLowerCase();
-      var num2;
+      var num3;
       var numStr = "";
       if (parser.ENTITIES[entity]) {
         return parser.ENTITIES[entity];
@@ -94299,20 +94492,20 @@ Stream$1.prototype.pipe = function(dest, options2) {
       if (entity.charAt(0) === "#") {
         if (entity.charAt(1) === "x") {
           entity = entity.slice(2);
-          num2 = parseInt(entity, 16);
-          numStr = num2.toString(16);
+          num3 = parseInt(entity, 16);
+          numStr = num3.toString(16);
         } else {
           entity = entity.slice(1);
-          num2 = parseInt(entity, 10);
-          numStr = num2.toString(10);
+          num3 = parseInt(entity, 10);
+          numStr = num3.toString(10);
         }
       }
       entity = entity.replace(/^0+/, "");
-      if (isNaN(num2) || numStr.toLowerCase() !== entity) {
+      if (isNaN(num3) || numStr.toLowerCase() !== entity) {
         strictFail(parser, "Invalid character entity");
         return "&" + parser.entity + ";";
       }
-      return String.fromCodePoint(num2);
+      return String.fromCodePoint(num3);
     }
     function beginWhiteSpace(parser, c66) {
       if (c66 === "<") {
@@ -104311,13 +104504,13 @@ function disableUnsupportedReportLetterhead(schema, data) {
   data.documentSettings.letterhead = null;
 }
 function toNumber(value) {
-  const num2 = Number(value);
-  return Number.isFinite(num2) ? num2 : 0;
+  const num3 = Number(value);
+  return Number.isFinite(num3) ? num3 : 0;
 }
 function toNumberOrNull(value) {
   if (value === null || value === void 0 || value === "") return null;
-  const num2 = Number(value);
-  return Number.isFinite(num2) ? num2 : null;
+  const num3 = Number(value);
+  return Number.isFinite(num3) ? num3 : null;
 }
 function resolveArrayInput(source, data) {
   if (Array.isArray(source)) return source;
@@ -104341,10 +104534,10 @@ function avgValues(source, key, data) {
   return nums.reduce((acc, value) => acc + value, 0) / nums.length;
 }
 function roundValue(value, decimals = 2) {
-  const num2 = Number(value);
-  if (!Number.isFinite(num2)) return 0;
+  const num3 = Number(value);
+  if (!Number.isFinite(num3)) return 0;
   const factor = 10 ** decimals;
-  return Math.round(num2 * factor) / factor;
+  return Math.round(num3 * factor) / factor;
 }
 function setNestedValue2(target, path42, value) {
   const parts = path42.split(".");
@@ -105166,17 +105359,17 @@ function escapeHtml2(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 function formatMoney(value) {
-  const num2 = Number(value || 0);
-  if (!Number.isFinite(num2)) return "0.00";
-  return num2.toLocaleString("en-US", {
+  const num3 = Number(value || 0);
+  if (!Number.isFinite(num3)) return "0.00";
+  return num3.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 }
 function formatQuantity(value) {
-  const num2 = Number(value || 0);
-  if (!Number.isFinite(num2)) return "0.000";
-  return num2.toLocaleString("en-US", {
+  const num3 = Number(value || 0);
+  if (!Number.isFinite(num3)) return "0.000";
+  return num3.toLocaleString("en-US", {
     minimumFractionDigits: 3,
     maximumFractionDigits: 3
   });
@@ -105188,12 +105381,12 @@ function formatQuoteFolio(value, prefix) {
   return `${prefix} - ${digits.padStart(7, "0")}`;
 }
 function formatCompactQuantity(value) {
-  const num2 = Number(value || 0);
-  if (!Number.isFinite(num2)) return "0";
-  if (Number.isInteger(num2)) {
-    return num2.toLocaleString("en-US");
+  const num3 = Number(value || 0);
+  if (!Number.isFinite(num3)) return "0";
+  if (Number.isInteger(num3)) {
+    return num3.toLocaleString("en-US");
   }
-  return num2.toLocaleString("en-US", {
+  return num3.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
   });
@@ -106499,20 +106692,20 @@ function escapeHtml3(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 function formatMoney2(value) {
-  const num2 = Number(value || 0);
-  if (!Number.isFinite(num2)) return "0.00";
-  return num2.toLocaleString("en-US", {
+  const num3 = Number(value || 0);
+  if (!Number.isFinite(num3)) return "0.00";
+  return num3.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 }
 function formatQuantity2(value) {
-  const num2 = Number(value || 0);
-  if (!Number.isFinite(num2)) return "0";
-  if (Number.isInteger(num2)) {
-    return num2.toLocaleString("en-US");
+  const num3 = Number(value || 0);
+  if (!Number.isFinite(num3)) return "0";
+  if (Number.isInteger(num3)) {
+    return num3.toLocaleString("en-US");
   }
-  return num2.toLocaleString("en-US", {
+  return num3.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 3
   });
@@ -107314,10 +107507,10 @@ function resolveImageUrl3(baseUrl, source) {
 function formatAmountLabel(value, fallback) {
   const raw = String(fallback ?? "").trim();
   if (raw) return raw;
-  const num2 = Number(value || 0);
-  if (!Number.isFinite(num2)) return "0";
-  if (Number.isInteger(num2)) return String(num2);
-  return num2.toFixed(2);
+  const num3 = Number(value || 0);
+  if (!Number.isFinite(num3)) return "0";
+  if (Number.isInteger(num3)) return String(num3);
+  return num3.toFixed(2);
 }
 function normalizeServiceLines(value) {
   if (!Array.isArray(value)) {

@@ -109,6 +109,40 @@ export async function getServiceReportModel(): Promise<Model<Record<string, unkn
   return serviceReportModel;
 }
 
+let controlTankModel: Model<Record<string, unknown>> | null = null;
+let consumeModel: Model<Record<string, unknown>> | null = null;
+let materialModel: Model<Record<string, unknown>> | null = null;
+
+/** Tanques de la planta (loose, solo lectura): PEN, gasohol, petróleo. */
+export async function getControlTankModel(): Promise<Model<Record<string, unknown>>> {
+  if (controlTankModel) return controlTankModel;
+  const conn = await getSharedConnection();
+  controlTankModel =
+    (conn.models.ControlTank as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('ControlTank', looseSchema, 'controltanks');
+  return controlTankModel;
+}
+
+/** Consumos de producción (loose, solo lectura): galones por tanque por producción. */
+export async function getConsumeModel(): Promise<Model<Record<string, unknown>>> {
+  if (consumeModel) return consumeModel;
+  const conn = await getSharedConnection();
+  consumeModel =
+    (conn.models.Consume as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Consume', looseSchema, 'consumes');
+  return consumeModel;
+}
+
+/** Materiales / agregados (loose, solo lectura): el stock del kardex. */
+export async function getMaterialModel(): Promise<Model<Record<string, unknown>>> {
+  if (materialModel) return materialModel;
+  const conn = await getSharedConnection();
+  materialModel =
+    (conn.models.Material as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Material', looseSchema, 'materials');
+  return materialModel;
+}
+
 /** Medias del Portal (loose, solo lectura): archivos de un pedido. */
 export async function getMediaModel(): Promise<Model<Record<string, unknown>>> {
   if (mediaModel) {

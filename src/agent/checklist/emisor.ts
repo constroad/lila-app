@@ -1,5 +1,5 @@
 import logger from '../../utils/logger.js';
-import { AGENTE_ACTIVO, COMPANY_PILOTO, destinoPermitido, destinosConAprobacion, grupoDestino, type AlcanceAgente } from './alcance.js';
+import { AGENTE_ACTIVO, COMPANY_PILOTO, EMPRESAS_CON_PEDIDOS, destinoPermitido, destinosConAprobacion, grupoDestino, type AlcanceAgente } from './alcance.js';
 import { anotarMensaje, type Propuesta } from './sugerencias.js';
 import { guardarPropuesta } from './persistencia.js';
 import { agenteApagado } from './interruptor.js';
@@ -68,6 +68,8 @@ export interface ArchivoAEnviar {
   nombre: string;
   mime?: string;
   caption?: string;
+  /** Dueña del archivo. Tiene que estar en `EMPRESAS_CON_PEDIDOS`. */
+  companyId: string;
 }
 
 /**
@@ -86,13 +88,29 @@ export const responderEnGrupo = async (
     logger.error(`[agente] se intentó responder en ${jid || '(vacío)'}, que no es un grupo donde se atienden consultas. No se manda.`);
     return false;
   }
+  const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
+  const id = await sender();
+  // «Escribiendo…» un momento antes de contestar. Lo justo para que parezca
+  // una persona y no un cañón; proporcional al largo de lo que va a decir.
+  await WhatsAppDirectService.setTyping(id, jid, true);
+  await new Promise((r) => setTimeout(r, Math.min(600 + (respuesta.texto?.length ?? 0) * 8, 2_500)));
   if (respuesta.texto?.trim()) await mandar(jid, respuesta.texto);
   if (respuesta.archivos?.length) {
-    const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
-    const id = await sender();
+    const { resolveFileBuffer } = await import('../../services/whatsapp-media.utils.js');
     for (const a of respuesta.archivos) {
-      const opciones = { fileUrl: a.url, fileName: a.nombre, caption: a.caption, mimeType: a.mime, companyId: COMPANY_PILOTO };
+      // El storage está aislado por empresa: el archivo se LEE con la empresa
+      // dueña (globofast, constroad…) y se MANDA desde la sesión de inframaq.
+      // Solo empresas del piloto: es la lista cerrada de cuyos datos el agente
+      // puede hablar en este grupo. (13/09: «File not found» por leerlo con la
+      // empresa equivocada.)
+      if (!(EMPRESAS_CON_PEDIDOS as readonly string[]).includes(a.companyId)) {
+        logger.error(`[agente] archivo de ${a.companyId}, fuera del piloto: no se manda`);
+        continue;
+      }
       try {
+        const leido = await resolveFileBuffer({ companyId: a.companyId, fileUrl: a.url, mimeType: a.mime, fileName: a.nombre });
+        if (!leido) throw new Error('no se pudo leer del storage');
+        const opciones = { buffer: leido.buffer, fileName: leido.fileName || a.nombre, caption: a.caption, mimeType: leido.mimeType || a.mime, companyId: COMPANY_PILOTO };
         if (a.tipo === 'image') await WhatsAppDirectService.sendImageFile(id, jid, opciones);
         else if (a.tipo === 'video') await WhatsAppDirectService.sendVideoFile(id, jid, opciones);
         else await WhatsAppDirectService.sendDocument(id, jid, opciones);
@@ -101,6 +119,7 @@ export const responderEnGrupo = async (
       }
     }
   }
+  await WhatsAppDirectService.setTyping(id, jid, false);
   return true;
 };
 

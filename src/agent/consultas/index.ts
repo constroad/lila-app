@@ -4,6 +4,7 @@ import { construirVista, type VistaDelDia } from './vista.js';
 import { acotarArchivos, elegirPedido, etiquetaPedido, responder, unidadPor, type Respuesta } from './responder.js';
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
+import { consumosDelDia, materiales, tanques, textoConsumos, textoMateriales, textoTanques } from './planta.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { responderEnGrupo } from '../checklist/emisor.js';
 import { diaPeruano, fechaLegible } from '../checklist/tiempo.js';
@@ -115,6 +116,11 @@ const armarRespuesta = async (
   const params = extraerParametros(pregunta);
   const fecha = diaPeruano(Date.now() + (params.day === 'tomorrow' ? 24 * 3_600_000 : 0));
   const vista = await construirVista(fecha);
+
+  // Lo de planta no depende de los pedidos del día: se contesta aunque no haya.
+  if (clave === 'tank_levels') return { texto: textoTanques(await tanques()) };
+  if (clave === 'production_consume') return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
+  if (clave === 'aggregates_stock') return { texto: textoMateriales(await materiales()) };
 
   if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
   if (clave === 'guias_day') return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);

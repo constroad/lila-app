@@ -9,13 +9,23 @@ const sendMessage = jest.fn(async () => undefined);
 const sendImageFile = jest.fn(async () => undefined);
 jest.unstable_mockModule('../../services/whatsapp-direct.service.js', () => ({
   __esModule: true,
-  WhatsAppDirectService: { sendMessage, sendImageFile, sendVideoFile: jest.fn(async () => undefined), sendDocument: jest.fn(async () => undefined) },
+  WhatsAppDirectService: {
+    sendMessage,
+    sendImageFile,
+    sendVideoFile: jest.fn(async () => undefined),
+    sendDocument: jest.fn(async () => undefined),
+    setTyping: jest.fn(async () => undefined),
+  },
 }));
 jest.unstable_mockModule('../../database/models.js', () => ({
   __esModule: true,
   getCompanyModel: async () => ({
     findOne: () => ({ lean: async () => ({ whatsappConfig: { sender: '51949376824' } }) }),
   }),
+}));
+jest.unstable_mockModule('../../services/whatsapp-media.utils.js', () => ({
+  __esModule: true,
+  resolveFileBuffer: jest.fn(async () => ({ buffer: Buffer.from('img'), mimeType: 'image/jpeg', fileName: 'x.jpg' })),
 }));
 jest.unstable_mockModule('./persistencia.js', () => ({
   __esModule: true,
@@ -157,7 +167,7 @@ describe('responderEnGrupo', () => {
   it('responde en el grupo escuchado, texto y archivos', async () => {
     const ok = await emisor.responderEnGrupo(
       ADMIN,
-      { texto: 'hola', archivos: [{ tipo: 'image', url: 'https://lila/x.jpg', nombre: 'x.jpg' }] },
+      { texto: 'hola', archivos: [{ tipo: 'image', url: 'https://lila/x.jpg', nombre: 'x.jpg', companyId: 'globofas-s8k' }] },
       alcance
     );
 

@@ -54,7 +54,28 @@ export const alcanceVigente = async (now = Date.now()): Promise<AlcanceAgente> =
 };
 
 type ContenidoEntrante = BaileysMessageContent & {
-  extendedTextMessage?: { contextInfo?: { stanzaId?: string | null } | null } | null;
+  extendedTextMessage?: {
+    contextInfo?: { stanzaId?: string | null; mentionedJid?: string[] | null } | null;
+  } | null;
+};
+
+/** A quiénes menciona este mensaje (los JIDs detrás de los «@Nombre»). */
+const mencionadosDe = (message: ContenidoEntrante | null | undefined): string[] =>
+  (message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []).map(String);
+
+/**
+ * EL MISMO MENSAJE NO SE PROCESA DOS VECES. El 13/09 cada pregunta se atendió
+ * dos veces (11:45:59 y 11:46:00): el mismo `messages.upsert` llega por más de
+ * un camino —dos sesiones en el grupo, o un reintento— y el id de WhatsApp es
+ * el mismo. Se recuerdan los últimos ids vistos; con 500 alcanza para horas.
+ */
+const vistos = new Set<string>();
+const yaVisto = (id: string): boolean => {
+  if (!id) return false;
+  if (vistos.has(id)) return true;
+  vistos.add(id);
+  if (vistos.size > 500) vistos.delete(vistos.values().next().value as string);
+  return false;
 };
 
 interface UpsertEvent {
@@ -107,6 +128,7 @@ export const observarParaChecklist = async (
       const remoteJid = String(raw?.key?.remoteJid || '');
       const texto = extractInboundText(raw.message);
       if (!texto.trim()) continue;
+      if (yaVisto(`${remoteJid}|${String(raw?.key?.id || '')}`)) continue;
 
       // LAS APROBACIONES vienen del grupo de operaciones, CITANDO la propuesta,
       // y de un administrador: un «1» suelto, o del propio bot, o de quien no
@@ -129,7 +151,9 @@ export const observarParaChecklist = async (
         // Las consultas también se atienden acá: es nuestro grupo (José, 13/09).
         void import('../consultas/index.js')
           .then(async ({ esConsulta, atenderConsulta, atenderEleccion }) => {
-            if (esConsulta(texto, sessionPhone)) return atenderConsulta(texto, quien, remoteJid, alcance, sessionPhone);
+            if (esConsulta(texto, sessionPhone, mencionadosDe(raw.message), await jidsPropios(sessionPhone))) {
+              return atenderConsulta(texto, quien, remoteJid, alcance, sessionPhone);
+            }
             if (/^\s*\d{1,2}\s*$/.test(texto)) {
               const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
               if (!fue && esVoto(texto)) {
@@ -151,7 +175,9 @@ export const observarParaChecklist = async (
         const quien = String(raw?.key?.participant || 'alguien');
         void import('../consultas/index.js')
           .then(async ({ esConsulta, atenderConsulta, atenderEleccion }) => {
-            if (esConsulta(texto, sessionPhone)) return atenderConsulta(texto, quien, remoteJid, alcance, sessionPhone);
+            if (esConsulta(texto, sessionPhone, mencionadosDe(raw.message), await jidsPropios(sessionPhone))) {
+              return atenderConsulta(texto, quien, remoteJid, alcance, sessionPhone);
+            }
             // Un «1» o «2» de alguien a quien el agente le acaba de preguntar.
             if (/^\s*\d{1,2}\s*$/.test(texto)) await atenderEleccion(texto, quien, remoteJid, alcance);
           })
@@ -285,6 +311,16 @@ export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
     void cargarAprobadores().catch(() => undefined);
   } catch (error) {
     logger.warn(`[agente] no pude rehidratar la memoria: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/** El número y el LID con los que la sesión aparece en los grupos, para reconocer una mención. */
+const jidsPropios = async (sessionPhone: string): Promise<string[]> => {
+  try {
+    const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
+    return WhatsAppDirectService.selfJids(sessionPhone);
+  } catch {
+    return [];
   }
 };
 
