@@ -4,7 +4,8 @@ import { EMPRESAS_CON_PEDIDOS, destinoPermitido } from './alcance.js';
 import { alcanceVigente } from './observador.js';
 import { mensajesDesde, observados } from './almacen.js';
 import { filtrarMensajes } from './mensajes.js';
-import { CHECKLIST_PRODUCCION, evaluarRevision } from './checklist.js';
+import { CHECKLIST_PRODUCCION } from './checklist.js';
+import { evaluarRevisionSemantica } from './semantica.js';
 import {
   conPiePropuesta,
   construirAvisoChecklist,
@@ -173,7 +174,7 @@ const proponerRevisionDelDia = async (
   // anterior a que se cargara el primer pedido hablaba de otro día.
   const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
   const utiles = filtrarMensajes(delGrupo);
-  const revision = evaluarRevision(CHECKLIST_PRODUCCION, utiles.textos, {
+  const revision = await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
     soloCriticos: momento === 'ultima-llamada',
   });
 
@@ -214,7 +215,8 @@ const proponerRevisionDelDia = async (
   await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino));
   logger.info(
     `[agente] propuesta ${propuesta.id}: checklist ${momento} de ${dia.fecha} → «${propuesta.nombreDestino}» ` +
-      `(${revision.pendientes.length} pendientes, descartados: ${JSON.stringify(utiles.descartados)})`
+      `(${revision.pendientes.length} pendientes, ${revision.semanticas.length} confirmación(es) entendidas por semántica, ` +
+      `descartados: ${JSON.stringify(utiles.descartados)})`
   );
   return 1;
 };
