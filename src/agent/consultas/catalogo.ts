@@ -197,7 +197,50 @@ export interface Parametros {
   /** Empresa nombrada en la pregunta, si alguna (por `companyId`). */
   companyId?: string;
   day: 'today' | 'tomorrow';
+  /** Una fecha concreta («el martes», «pasado mañana», «15 de septiembre», «15/09»), `YYYY-MM-DD` Lima. */
+  fecha?: string;
+  /** «la semana», «esta semana», «los próximos días». */
+  rango?: 'semana';
 }
+
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** El día de hoy en Lima, `YYYY-MM-DD`, y a partir de él sumar días. */
+export const hoyLima = (ahoraMs = Date.now()): string => new Date(ahoraMs - 5 * 3_600_000).toISOString().slice(0, 10);
+export const sumarDias = (fecha: string, dias: number): string => {
+  const [y, m, d] = fecha.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + dias)).toISOString().slice(0, 10);
+};
+
+/**
+ * La fecha que nombra la pregunta, si alguna. «el martes» es el PRÓXIMO martes
+ * (si hoy es martes, el de la semana que viene: nadie dice «el martes» por
+ * hoy). «15 de septiembre» y «15/09» son de este año, salvo que ya hayan pasado.
+ */
+export const fechaDe = (pregunta: string, ahoraMs = Date.now()): string | undefined => {
+  const t = normalizar(pregunta);
+  const hoy = hoyLima(ahoraMs);
+  if (/\bpasado manana\b/.test(t)) return sumarDias(hoy, 2);
+  const dm = t.match(/\b(\d{1,2})\s*(?:de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/) ?? t.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+  if (dm) {
+    const dia = Number(dm[1]);
+    const mes = /^\d+$/.test(dm[2]) ? Number(dm[2]) : MESES.indexOf(dm[2]) + 1 - (MESES.indexOf(dm[2]) >= 9 ? 1 : 0);
+    const anio = Number(hoy.slice(0, 4));
+    if (dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12) {
+      const candidata = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+      return candidata < hoy ? `${anio + 1}${candidata.slice(4)}` : candidata;
+    }
+  }
+  const dia = DIAS_SEMANA.findIndex((d) => new RegExp(`\\b(el |este |proximo |próximo )?${d}\\b`).test(t));
+  if (dia >= 0) {
+    const [y, m, d] = hoy.split('-').map(Number);
+    const hoyDia = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    const delta = ((dia - hoyDia + 7) % 7) || 7;
+    return sumarDias(hoy, delta);
+  }
+  return undefined;
+};
 
 /** Nombres con los que la gente llama a cada empresa. */
 export const ALIAS_EMPRESA: Array<{ companyId: string; alias: string[] }> = [
@@ -230,12 +273,16 @@ export const extraerParametros = (pregunta: string): Parametros => {
   const unitNumber = m ? Number(m[1]) : undefined;
 
   const empresa = ALIAS_EMPRESA.find((e) => e.alias.some((a) => new RegExp(`\\b${a}\\b`).test(t)));
+  const rango = /\b(semana|semanal|proximos dias|próximos días|estos dias|estos días)\b/.test(t) ? ('semana' as const) : undefined;
+  const fecha = fechaDe(pregunta);
 
   return {
     day,
     plate,
     companyId: empresa?.companyId,
     unitNumber: unitNumber && unitNumber > 0 ? unitNumber : undefined,
+    fecha,
+    rango,
   };
 };
 

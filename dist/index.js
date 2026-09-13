@@ -9073,7 +9073,7 @@ var init_aprobadores = __esm({
 });
 
 // src/agent/consultas/catalogo.ts
-var CATALOGO, normalizar, esConsulta, preguntaLimpia, ALIAS_EMPRESA, normalizarPlaca, extraerParametros, FUERA_DE_CATALOGO, fueraDeCatalogo, rutearPorReglas;
+var CATALOGO, normalizar, esConsulta, preguntaLimpia, DIAS_SEMANA, MESES, hoyLima, sumarDias, fechaDe, ALIAS_EMPRESA, normalizarPlaca, extraerParametros, FUERA_DE_CATALOGO, fueraDeCatalogo, rutearPorReglas;
 var init_catalogo = __esm({
   "src/agent/consultas/catalogo.ts"() {
     CATALOGO = [
@@ -9192,6 +9192,36 @@ var init_catalogo = __esm({
       return mencionados.some((m59) => propios.has(String(m59).replace(/:\d+@/, "@")));
     };
     preguntaLimpia = (texto, numeroBot) => normalizar(texto).replace(/@lila\b/g, "").replace(/^lila\b[,:]?/, "").replace(/@\d{6,}\b/g, "").replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, "g") : /$^/, "").replace(/\s+/g, " ").trim();
+    DIAS_SEMANA = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+    MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "setiembre", "octubre", "noviembre", "diciembre"];
+    hoyLima = (ahoraMs = Date.now()) => new Date(ahoraMs - 5 * 36e5).toISOString().slice(0, 10);
+    sumarDias = (fecha, dias) => {
+      const [y65, m59, d67] = fecha.split("-").map(Number);
+      return new Date(Date.UTC(y65, m59 - 1, d67 + dias)).toISOString().slice(0, 10);
+    };
+    fechaDe = (pregunta, ahoraMs = Date.now()) => {
+      const t44 = normalizar(pregunta);
+      const hoy = hoyLima(ahoraMs);
+      if (/\bpasado manana\b/.test(t44)) return sumarDias(hoy, 2);
+      const dm = t44.match(/\b(\d{1,2})\s*(?:de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/) ?? t44.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+      if (dm) {
+        const dia2 = Number(dm[1]);
+        const mes = /^\d+$/.test(dm[2]) ? Number(dm[2]) : MESES.indexOf(dm[2]) + 1 - (MESES.indexOf(dm[2]) >= 9 ? 1 : 0);
+        const anio = Number(hoy.slice(0, 4));
+        if (dia2 >= 1 && dia2 <= 31 && mes >= 1 && mes <= 12) {
+          const candidata = `${anio}-${String(mes).padStart(2, "0")}-${String(dia2).padStart(2, "0")}`;
+          return candidata < hoy ? `${anio + 1}${candidata.slice(4)}` : candidata;
+        }
+      }
+      const dia = DIAS_SEMANA.findIndex((d67) => new RegExp(`\\b(el |este |proximo |pr\xF3ximo )?${d67}\\b`).test(t44));
+      if (dia >= 0) {
+        const [y65, m59, d67] = hoy.split("-").map(Number);
+        const hoyDia = new Date(Date.UTC(y65, m59 - 1, d67)).getUTCDay();
+        const delta = (dia - hoyDia + 7) % 7 || 7;
+        return sumarDias(hoy, delta);
+      }
+      return void 0;
+    };
     ALIAS_EMPRESA = [
       { companyId: "globofas-s8k", alias: ["globofast", "globofas", "globo"] },
       { companyId: "constroad", alias: ["constroad", "constroad sac"] },
@@ -9207,11 +9237,15 @@ var init_catalogo = __esm({
       const m59 = sinPlaca.match(/\b(?:la|el|unidad|carro|camion|volquete|numero|n)\s*#?\s*(\d{1,2})\b/) ?? sinPlaca.match(/\b(\d{1,2})\b(?!\s*(?:m3|m³|cubos|metros|am|pm|h|hs|:))/);
       const unitNumber = m59 ? Number(m59[1]) : void 0;
       const empresa = ALIAS_EMPRESA.find((e29) => e29.alias.some((a49) => new RegExp(`\\b${a49}\\b`).test(t44)));
+      const rango = /\b(semana|semanal|proximos dias|próximos días|estos dias|estos días)\b/.test(t44) ? "semana" : void 0;
+      const fecha = fechaDe(pregunta);
       return {
         day,
         plate,
         companyId: empresa?.companyId,
-        unitNumber: unitNumber && unitNumber > 0 ? unitNumber : void 0
+        unitNumber: unitNumber && unitNumber > 0 ? unitNumber : void 0,
+        fecha,
+        rango
       };
     };
     FUERA_DE_CATALOGO = [
@@ -9422,7 +9456,8 @@ var init_responder = __esm({
       "\u2022 mu\xE9strame la foto y video de la unidad de placa AML838",
       "",
       "*Clima*",
-      "\u2022 c\xF3mo est\xE1 el clima en Lurigancho \xB7 va a llover ma\xF1ana en Ate \xB7 hay riesgo de lluvia",
+      "\u2022 c\xF3mo est\xE1 el clima en Lurigancho \xB7 va a llover el martes en Ate \xB7 clima de la semana en Comas",
+      "\u2022 hasta 16 d\xEDas adelante: \xABclima el 20 de septiembre\xBB",
       "",
       "*Pedidos y documentos*",
       "\u2022 qu\xE9 pedidos hay hoy / ma\xF1ana \xB7 resumen de despachos de hoy",
@@ -10248,7 +10283,7 @@ var init_weather_asphalt_forecast_service = __esm({
 });
 
 // src/agent/consultas/clima.ts
-var cielo, distritoDe, URL_BASE, pronosticoHorario, franjasDeRiesgo, hh, textoClima;
+var cielo, distritoDe, URL_BASE, MAX_DIAS, diasHasta, pedir, pronosticoHorario, pronosticoSemanal, ICONO, textoClimaSemanal, textoFueraDeAlcance, franjasDeRiesgo, hh, textoClima;
 var init_clima = __esm({
   "src/agent/consultas/clima.ts"() {
     init_logger();
@@ -10271,14 +10306,30 @@ var init_clima = __esm({
       const encontrado = LOCATIONS.slice(1).find((l57) => t44.includes(normalizar(l57.name)));
       return encontrado ?? { ...LOCATIONS[0], name: "la planta" };
     };
-    URL_BASE = "https://api.open-meteo.com/v1/forecast?hourly=precipitation_probability,precipitation,temperature_2m,weather_code&timezone=America%2FLima&forecast_days=2";
-    pronosticoHorario = async (distrito, fecha) => {
+    URL_BASE = "https://api.open-meteo.com/v1/forecast?hourly=precipitation_probability,precipitation,temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum&timezone=America%2FLima";
+    MAX_DIAS = 16;
+    diasHasta = (fecha, hoy) => {
+      const ms2 = (f64) => Date.UTC(Number(f64.slice(0, 4)), Number(f64.slice(5, 7)) - 1, Number(f64.slice(8, 10)));
+      const delta = Math.round((ms2(fecha) - ms2(hoy)) / 864e5);
+      if (delta < 0 || delta >= MAX_DIAS) return null;
+      return delta + 1;
+    };
+    pedir = async (distrito, dias) => {
       const controller2 = new AbortController();
       const timer3 = setTimeout(() => controller2.abort(), WEATHER_ASPHALT_FORECAST.fetchTimeoutMs);
       try {
-        const res = await fetch(`${URL_BASE}&latitude=${distrito.lat}&longitude=${distrito.lon}`, { signal: controller2.signal });
+        const res = await fetch(`${URL_BASE}&forecast_days=${dias}&latitude=${distrito.lat}&longitude=${distrito.lon}`, { signal: controller2.signal });
         if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
-        const data = await res.json();
+        return await res.json();
+      } finally {
+        clearTimeout(timer3);
+      }
+    };
+    pronosticoHorario = async (distrito, fecha, hoy = new Date(Date.now() - 5 * 36e5).toISOString().slice(0, 10)) => {
+      const dias = diasHasta(fecha, hoy);
+      if (dias === null) return null;
+      try {
+        const data = await pedir(distrito, dias);
         const h65 = data.hourly;
         if (!h65?.time) return null;
         const horas = [];
@@ -10296,10 +10347,42 @@ var init_clima = __esm({
       } catch (error) {
         logger_default.warn(`[agente] clima: ${error instanceof Error ? error.message : String(error)}`);
         return null;
-      } finally {
-        clearTimeout(timer3);
       }
     };
+    pronosticoSemanal = async (distrito) => {
+      try {
+        const data = await pedir(distrito, 7);
+        const d67 = data.daily;
+        if (!d67?.time) return null;
+        return {
+          distrito: distrito.name,
+          dias: d67.time.map((fecha, i50) => ({
+            fecha,
+            codigo: Number(d67.weather_code?.[i50] ?? 0) || 0,
+            tMin: Number(d67.temperature_2m_min?.[i50] ?? 0) || 0,
+            tMax: Number(d67.temperature_2m_max?.[i50] ?? 0) || 0,
+            probMax: Number(d67.precipitation_probability_max?.[i50] ?? 0) || 0,
+            mm: Number(d67.precipitation_sum?.[i50] ?? 0) || 0
+          }))
+        };
+      } catch (error) {
+        logger_default.warn(`[agente] clima semanal: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
+    };
+    ICONO = { ok: "\u2705", moderate_risk: "\u26A0\uFE0F", high_risk: "\u26D4" };
+    textoClimaSemanal = (p64) => {
+      if (!p64) return "No pude consultar el pron\xF3stico ahora. Prob\xE1 de nuevo en un rato.";
+      const lineas = [`\u{1F5D3} *Clima en ${p64.distrito} \u2014 pr\xF3ximos ${p64.dias.length} d\xEDas*`];
+      for (const d67 of p64.dias) {
+        const nivel = getCombinedRiskLevel(d67.probMax, d67.mm);
+        const lluvia = d67.probMax >= 30 || d67.mm >= 0.5 ? `lluvia ${d67.probMax.toFixed(0)} %, ${d67.mm.toFixed(1)} mm` : "sin lluvia";
+        lineas.push(`${ICONO[nivel] ?? "\u2022"} ${fechaLegible(d67.fecha)}: ${cielo(d67.codigo)}, ${d67.tMin.toFixed(0)}\u2013${d67.tMax.toFixed(0)} \xB0C, ${lluvia}`);
+      }
+      lineas.push("", "\u2705 apto \xB7 \u26A0\uFE0F con precauci\xF3n \xB7 \u26D4 no apto para asfaltar. Preguntame por un d\xEDa para ver las franjas horarias.");
+      return lineas.join("\n");
+    };
+    textoFueraDeAlcance = (fecha) => `Para ${fechaLegible(fecha)} todav\xEDa no hay pron\xF3stico: llego hasta ${MAX_DIAS} d\xEDas adelante.`;
     franjasDeRiesgo = (horas) => {
       const franjas = [];
       let actual = null;
@@ -10815,6 +10898,7 @@ var init_consultas = __esm({
     init_pendientes();
     init_planta();
     init_clima();
+    init_catalogo();
     init_semantica();
     init_emisor();
     init_tiempo();
@@ -10886,14 +10970,17 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
     };
     armarRespuesta = async (clave2, pregunta, quien, grupo) => {
       const params = extraerParametros(pregunta);
-      const fecha = diaPeruano(Date.now() + (params.day === "tomorrow" ? 24 * 36e5 : 0));
+      const fecha = params.fecha ?? (params.day === "tomorrow" ? sumarDias(hoyLima(), 1) : hoyLima());
       const vista = await construirVista(fecha);
       if (clave2 === "tank_levels") return { texto: textoTanques(await tanques()) };
       if (clave2 === "production_consume") return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
       if (clave2 === "aggregates_stock") return { texto: textoMateriales(await materiales(await empresasDelPiloto())) };
       if (clave2 === "weather") {
+        const distrito = distritoDe(pregunta);
+        if (params.rango === "semana") return { texto: textoClimaSemanal(await pronosticoSemanal(distrito)) };
+        if (diasHasta(fecha, hoyLima()) === null) return { texto: textoFueraDeAlcance(fecha) };
         const horaLima = Number((/* @__PURE__ */ new Date()).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", hour12: false }).slice(0, 2));
-        return { texto: textoClima(await pronosticoHorario(distritoDe(pregunta), fecha), params.day === "today" ? horaLima : -1) };
+        return { texto: textoClima(await pronosticoHorario(distrito, fecha), fecha === hoyLima() ? horaLima : -1) };
       }
       if (clave2 === "order_link") return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
       if (clave2 === "guias_day") return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);

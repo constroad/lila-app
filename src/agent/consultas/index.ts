@@ -5,10 +5,11 @@ import { acotarArchivos, elegirPedido, etiquetaPedido, responder, unidadPor, typ
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
 import { consumosDelDia, materiales, tanques, textoConsumos, textoMateriales, textoTanques } from './planta.js';
-import { distritoDe, pronosticoHorario, textoClima } from './clima.js';
+import { distritoDe, diasHasta, pronosticoHorario, pronosticoSemanal, textoClima, textoClimaSemanal, textoFueraDeAlcance } from './clima.js';
+import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { responderEnGrupo } from '../checklist/emisor.js';
-import { diaPeruano, fechaLegible } from '../checklist/tiempo.js';
+import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import type { AlcanceAgente } from '../checklist/alcance.js';
 
@@ -115,7 +116,8 @@ const armarRespuesta = async (
   grupo: string
 ): Promise<Respuesta> => {
   const params = extraerParametros(pregunta);
-  const fecha = diaPeruano(Date.now() + (params.day === 'tomorrow' ? 24 * 3_600_000 : 0));
+  // Una fecha nombrada («el martes», «15/09») manda; si no, hoy o mañana.
+  const fecha = params.fecha ?? (params.day === 'tomorrow' ? sumarDias(hoyLima(), 1) : hoyLima());
   const vista = await construirVista(fecha);
 
   // Lo de planta no depende de los pedidos del día: se contesta aunque no haya.
@@ -123,8 +125,11 @@ const armarRespuesta = async (
   if (clave === 'production_consume') return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
   if (clave === 'aggregates_stock') return { texto: textoMateriales(await materiales(await empresasDelPiloto())) };
   if (clave === 'weather') {
+    const distrito = distritoDe(pregunta);
+    if (params.rango === 'semana') return { texto: textoClimaSemanal(await pronosticoSemanal(distrito)) };
+    if (diasHasta(fecha, hoyLima()) === null) return { texto: textoFueraDeAlcance(fecha) };
     const horaLima = Number(new Date().toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', hour12: false }).slice(0, 2));
-    return { texto: textoClima(await pronosticoHorario(distritoDe(pregunta), fecha), params.day === 'today' ? horaLima : -1) };
+    return { texto: textoClima(await pronosticoHorario(distrito, fecha), fecha === hoyLima() ? horaLima : -1) };
   }
 
   if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);

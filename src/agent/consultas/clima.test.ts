@@ -1,4 +1,4 @@
-import { distritoDe, franjasDeRiesgo, textoClima, type Hora } from './clima';
+import { MAX_DIAS, diasHasta, distritoDe, franjasDeRiesgo, textoClima, textoClimaSemanal, textoFueraDeAlcance, type Hora } from './clima';
 
 /**
  * El clima, sin Open-Meteo: lo que se prueba es cómo se agrupan las horas con
@@ -50,5 +50,28 @@ describe('distrito', () => {
     expect(distritoDe('cómo está el clima en Ate').name).toBe('Ate');
     expect(distritoDe('va a llover en san juan de lurigancho').name.toLowerCase()).toContain('lurigancho');
     expect(distritoDe('va a llover hoy').name).toBe('la planta');
+  });
+});
+
+describe('semana y alcance', () => {
+  it('un renglón por día con su veredicto', () => {
+    const t = textoClimaSemanal({
+      distrito: 'Ate',
+      dias: [
+        { fecha: '2026-09-14', codigo: 3, tMin: 15, tMax: 24, probMax: 5, mm: 0 },
+        { fecha: '2026-09-15', codigo: 61, tMin: 16, tMax: 22, probMax: 70, mm: 6 },
+      ],
+    });
+    expect(t).toContain('🗓 *Clima en Ate — próximos 2 días*');
+    expect(t).toContain('✅ lunes 14/09: nublado, 15–24 °C, sin lluvia');
+    expect(t).toMatch(/(⚠️|⛔) martes 15\/09: con lluvia, 16–22 °C, lluvia 70 %, 6.0 mm/);
+  });
+
+  it('Open-Meteo llega a 16 días; más allá se dice, no se inventa', () => {
+    expect(diasHasta('2026-09-13', '2026-09-13')).toBe(1);
+    expect(diasHasta('2026-09-28', '2026-09-13')).toBe(16);
+    expect(diasHasta('2026-09-29', '2026-09-13')).toBeNull();
+    expect(diasHasta('2026-09-12', '2026-09-13')).toBeNull();
+    expect(textoFueraDeAlcance('2026-10-05')).toContain(`llego hasta ${MAX_DIAS} días`);
   });
 });

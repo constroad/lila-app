@@ -1,4 +1,4 @@
-import { esConsulta, extraerParametros, normalizarPlaca, preguntaLimpia, rutearPorReglas } from './catalogo';
+import { esConsulta, extraerParametros, fechaDe, normalizarPlaca, preguntaLimpia, rutearPorReglas, sumarDias } from './catalogo';
 
 /**
  * EL CATÁLOGO ES CERRADO Y EL RUTEO SE PUEDE LEER. Cada pregunta real de José
@@ -150,6 +150,29 @@ describe('parámetros', () => {
     expect(extraerParametros('el enlace del pedido de hoy de globofast').companyId).toBe('globofas-s8k');
     expect(extraerParametros('las guías de constroad').companyId).toBe('constroad');
     expect(extraerParametros('las guías de hoy').companyId).toBeUndefined();
+  });
+
+  /**
+   * FECHAS CON NOMBRE. «el martes» es el PRÓXIMO martes; «15 de septiembre» y
+   * «15/09» de este año salvo que ya hayan pasado; «pasado mañana» son dos días.
+   * Todo relativo a un «ahora» fijo: domingo 13/09/2026 a las 13:00 Lima.
+   */
+  it('entiende días de la semana, fechas y «pasado mañana»', () => {
+    const ahora = new Date('2026-09-13T18:00:00Z').getTime(); // domingo 13/09, 13:00 Lima
+    expect(fechaDe('va a llover el martes', ahora)).toBe('2026-09-15');
+    expect(fechaDe('clima el domingo', ahora)).toBe('2026-09-20'); // hoy es domingo: el próximo
+    expect(fechaDe('clima pasado mañana', ahora)).toBe('2026-09-15');
+    expect(fechaDe('clima el 20 de septiembre', ahora)).toBe('2026-09-20');
+    expect(fechaDe('clima el 20/09', ahora)).toBe('2026-09-20');
+    expect(fechaDe('clima el 5 de enero', ahora)).toBe('2027-01-05'); // ya pasó este año
+    expect(fechaDe('clima hoy', ahora)).toBeUndefined();
+    expect(sumarDias('2026-09-30', 1)).toBe('2026-10-01');
+  });
+
+  it('«la semana» y «los próximos días» son un rango', () => {
+    expect(extraerParametros('clima de la semana en ate').rango).toBe('semana');
+    expect(extraerParametros('cómo estará el clima los próximos días').rango).toBe('semana');
+    expect(extraerParametros('clima hoy').rango).toBeUndefined();
   });
 
   it('hoy por defecto, mañana si lo dice', () => {
