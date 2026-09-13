@@ -228,6 +228,20 @@ const proponerRevisionDelDia = async (
 };
 
 /**
+ * El estado del checklist de un día, para la consulta «¿cómo va el checklist?».
+ * Misma evaluación que usa el detector: mensajes del grupo desde que el día
+ * existe, filtrados, contra los catorce ítems. `null` si no hay pedidos.
+ */
+export const revisionDelDia = async (fecha: string, ahoraMs = Date.now()) => {
+  const alcance = await alcanceVigente(ahoraMs);
+  if (!alcance.grupoEscuchado) return null;
+  const dia = agruparPorDia(await pedidosConArranque(ahoraMs)).find((d) => d.fecha === fecha);
+  if (!dia) return null;
+  const utiles = filtrarMensajes(mensajesDesde(alcance.grupoEscuchado, dia.creadoMs));
+  return evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, { negadas: utiles.negadas });
+};
+
+/**
  * «Globofast», no «globofas-s8k». Se lee de la empresa una vez y se recuerda.
  */
 const nombreEmpresa = async (companyId: string): Promise<string> => {

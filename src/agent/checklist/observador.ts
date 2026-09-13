@@ -128,6 +128,19 @@ export const observarParaChecklist = async (
       // EL GUARD, y es lo único que separa "escuchar un grupo" de "escuchar todo".
       if (!debeEscuchar(remoteJid, alcance)) continue;
 
+      // Una pregunta al agente («@lila …») se atiende aparte, sin bloquear la
+      // observación. Import dinámico: las consultas arrastran el detector y el
+      // detector arrastra este módulo (ciclo), y además el read model.
+      if (!raw?.key?.fromMe) {
+        void import('../consultas/index.js')
+          .then(({ esConsulta, atenderConsulta }) =>
+            esConsulta(texto, sessionPhone)
+              ? atenderConsulta(texto, String(raw?.key?.participant || 'alguien'), sessionPhone)
+              : undefined
+          )
+          .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
+      }
+
       const ahora = Date.now();
       const mensaje = {
         texto,

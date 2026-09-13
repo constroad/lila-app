@@ -1282,41 +1282,41 @@ var require_ms = __commonJS({
           return void 0;
       }
     }
-    function fmtShort(ms) {
-      var msAbs = Math.abs(ms);
+    function fmtShort(ms2) {
+      var msAbs = Math.abs(ms2);
       if (msAbs >= d67) {
-        return Math.round(ms / d67) + "d";
+        return Math.round(ms2 / d67) + "d";
       }
       if (msAbs >= h65) {
-        return Math.round(ms / h65) + "h";
+        return Math.round(ms2 / h65) + "h";
       }
       if (msAbs >= m59) {
-        return Math.round(ms / m59) + "m";
+        return Math.round(ms2 / m59) + "m";
       }
       if (msAbs >= s59) {
-        return Math.round(ms / s59) + "s";
+        return Math.round(ms2 / s59) + "s";
       }
-      return ms + "ms";
+      return ms2 + "ms";
     }
-    function fmtLong(ms) {
-      var msAbs = Math.abs(ms);
+    function fmtLong(ms2) {
+      var msAbs = Math.abs(ms2);
       if (msAbs >= d67) {
-        return plural(ms, msAbs, d67, "day");
+        return plural(ms2, msAbs, d67, "day");
       }
       if (msAbs >= h65) {
-        return plural(ms, msAbs, h65, "hour");
+        return plural(ms2, msAbs, h65, "hour");
       }
       if (msAbs >= m59) {
-        return plural(ms, msAbs, m59, "minute");
+        return plural(ms2, msAbs, m59, "minute");
       }
       if (msAbs >= s59) {
-        return plural(ms, msAbs, s59, "second");
+        return plural(ms2, msAbs, s59, "second");
       }
-      return ms + " ms";
+      return ms2 + " ms";
     }
-    function plural(ms, msAbs, n43, name) {
+    function plural(ms2, msAbs, n43, name) {
       var isPlural = msAbs >= n43 * 1.5;
-      return Math.round(ms / n43) + " " + name + (isPlural ? "s" : "");
+      return Math.round(ms2 / n43) + " " + name + (isPlural ? "s" : "");
     }
   }
 });
@@ -1324,11 +1324,11 @@ var require_ms = __commonJS({
 // node_modules/jsonwebtoken/lib/timespan.js
 var require_timespan = __commonJS({
   "node_modules/jsonwebtoken/lib/timespan.js"(exports, module) {
-    var ms = require_ms();
+    var ms2 = require_ms();
     module.exports = function(time, iat) {
       var timestamp = iat || Math.floor(Date.now() / 1e3);
       if (typeof time === "string") {
-        var milliseconds = ms(time);
+        var milliseconds = ms2(time);
         if (typeof milliseconds === "undefined") {
           return;
         }
@@ -1568,9 +1568,9 @@ var require_semver = __commonJS({
         } else {
           this.prerelease = m59[4].split(".").map((id) => {
             if (/^[0-9]+$/.test(id)) {
-              const num = +id;
-              if (num >= 0 && num < MAX_SAFE_INTEGER) {
-                return num;
+              const num2 = +id;
+              if (num2 >= 0 && num2 < MAX_SAFE_INTEGER) {
+                return num2;
               }
             }
             return id;
@@ -2284,7 +2284,7 @@ var require_range = __commonJS({
       parseRange(range) {
         const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
         const memoKey = memoOpts + ":" + range;
-        const cached2 = cache2.get(memoKey);
+        const cached2 = cache3.get(memoKey);
         if (cached2) {
           return cached2;
         }
@@ -2318,7 +2318,7 @@ var require_range = __commonJS({
           rangeMap.delete("");
         }
         const result = [...rangeMap.values()];
-        cache2.set(memoKey, result);
+        cache3.set(memoKey, result);
         return result;
       }
       intersects(range, options2) {
@@ -2357,7 +2357,7 @@ var require_range = __commonJS({
     };
     module.exports = Range;
     var LRU = require_lrucache();
-    var cache2 = new LRU();
+    var cache3 = new LRU();
     var parseOptions = require_parse_options();
     var Comparator = require_comparator();
     var debug = require_debug();
@@ -7721,8 +7721,8 @@ function calculateTypingDelay(text) {
   const delay2 = baseTime * (1 + (Math.random() - 0.5) * variability);
   return Math.min(Math.max(delay2, 1e3), 8e3);
 }
-function delay(ms) {
-  return new Promise((resolve2) => setTimeout(resolve2, ms));
+function delay(ms2) {
+  return new Promise((resolve2) => setTimeout(resolve2, ms2));
 }
 var init_retry = __esm({
   "src/utils/retry.ts"() {
@@ -8211,6 +8211,7 @@ __export(models_exports, {
   getCompanyModel: () => getCompanyModel,
   getConfigModel: () => getConfigModel,
   getCronJobModel: () => getCronJobModel,
+  getDispatchModel: () => getDispatchModel,
   getFolderModel: () => getFolderModel,
   getGpsPositionModel: () => getGpsPositionModel,
   getMediaModel: () => getMediaModel,
@@ -8250,6 +8251,14 @@ async function getOrderModel() {
   const conn = await getSharedConnection();
   orderModel = conn.models.Order || conn.model("Order", looseSchema, "orders");
   return orderModel;
+}
+async function getDispatchModel() {
+  if (dispatchModel) {
+    return dispatchModel;
+  }
+  const conn = await getSharedConnection();
+  dispatchModel = conn.models.Dispatch || conn.model("Dispatch", looseSchema, "dispatches");
+  return dispatchModel;
 }
 async function getMediaModel() {
   if (mediaModel) {
@@ -8301,7 +8310,7 @@ async function getSharedModels() {
   ]);
   return { CronJobModel, CompanyModel, ConfigModel };
 }
-var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, academyTutorialModel, gpsPositionModel;
+var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, academyTutorialModel, gpsPositionModel;
 var init_models = __esm({
   "src/database/models.ts"() {
     init_sharedConnection();
@@ -8317,6 +8326,7 @@ var init_models = __esm({
     orderModel = null;
     mediaModel = null;
     folderModel = null;
+    dispatchModel = null;
     academyTutorialModel = null;
     gpsPositionModel = null;
   }
@@ -8804,12 +8814,12 @@ var init_interruptor = __esm({
       if (t44 === "!lila on") return "on";
       return null;
     };
-    apagar = (por, ms = Date.now()) => {
-      estado = { apagado: true, por, ms };
+    apagar = (por, ms2 = Date.now()) => {
+      estado = { apagado: true, por, ms: ms2 };
       return { ...estado };
     };
-    encender = (por, ms = Date.now()) => {
-      estado = { apagado: false, por, ms };
+    encender = (por, ms2 = Date.now()) => {
+      estado = { apagado: false, por, ms: ms2 };
       return { ...estado };
     };
   }
@@ -8911,6 +8921,792 @@ var init_aprobadores = __esm({
   }
 });
 
+// src/agent/consultas/catalogo.ts
+var CATALOGO, normalizar, esConsulta, preguntaLimpia, extraerParametros, FUERA_DE_CATALOGO, fueraDeCatalogo, rutearPorReglas;
+var init_catalogo = __esm({
+  "src/agent/consultas/catalogo.ts"() {
+    CATALOGO = [
+      {
+        id: "unit_photos",
+        seSatisfaceCon: ["muestrame las fotos de la unidad 5", "fotos de campo del carro 3", "hay fotos de la 2", "mandame las fotos de la colocacion"],
+        reglas: [["foto"]],
+        pideUnidad: true
+      },
+      {
+        id: "unit_departure",
+        seSatisfaceCon: ["a que hora salio la 5", "cuando salio el carro 3", "ya salio la unidad 2", "hora de salida de la 4"],
+        reglas: [["salio"], ["sali\xF3"], ["hora", "sal"]],
+        pideUnidad: true
+      },
+      {
+        id: "unit_eta",
+        seSatisfaceCon: ["cuanto falta para que llegue la 5", "a que hora llega el carro 3", "cuando llega la 2", "eta de la unidad 4"],
+        reglas: [["lleg"], ["eta"]],
+        pideUnidad: true
+      },
+      {
+        id: "unit_driver",
+        seSatisfaceCon: ["quien maneja la 5", "quien es el chofer del carro 3", "conductor de la unidad 2", "que placa tiene la 4"],
+        reglas: [["maneja"], ["chofer"], ["conductor"], ["placa"]],
+        pideUnidad: true
+      },
+      {
+        id: "plant_current_unit",
+        seSatisfaceCon: ["en que carro van los despachos en planta", "que unidad esta cargando", "cual esta en planta", "cuantos carros han salido de planta"],
+        reglas: [["planta"], ["cargando"], ["carguio"], ["cargu\xEDo"]]
+      },
+      {
+        id: "site_current_unit",
+        seSatisfaceCon: ["en que carro va la colocacion en campo", "que unidad esta en obra", "cual llego a campo", "cuantos carros estan en ruta"],
+        reglas: [["campo"], ["obra"], ["colocacion"], ["colocaci\xF3n"], ["ruta"], ["frente"]]
+      },
+      {
+        id: "day_progress",
+        seSatisfaceCon: ["cuantos metros van", "cuantos m3 faltan", "como va la produccion", "cuanto se ha despachado hoy", "cuantos cubos van"],
+        reglas: [["m3"], ["m\xB3"], ["cubos"], ["metros"], ["faltan"], ["despachado"], ["avance"], ["como va la produccion"], ["c\xF3mo va la producci\xF3n"]]
+      },
+      {
+        id: "orders_day",
+        seSatisfaceCon: ["que pedidos hay manana", "hay produccion manana", "que hay para hoy", "cuales son los pedidos de hoy", "que se produce manana"],
+        reglas: [["pedido"], ["produccion", "manana"], ["producci\xF3n", "ma\xF1ana"], ["hay", "manana"], ["hay", "ma\xF1ana"], ["hay", "hoy"]]
+      },
+      {
+        id: "checklist_status",
+        seSatisfaceCon: ["como va el checklist", "que falta confirmar", "que esta pendiente del checklist", "estado del checklist"],
+        reglas: [["checklist"], ["pendiente"], ["falta confirmar"], ["que falta"]]
+      },
+      {
+        id: "reports_status",
+        seSatisfaceCon: ["ya se generaron los informes", "estan los certificados", "falta algun informe", "ya esta el ipp"],
+        reglas: [["informe"], ["certificado"], ["ipp"]]
+      }
+    ];
+    normalizar = (t44) => String(t44 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+    esConsulta = (texto, numeroBot) => {
+      const t44 = normalizar(texto);
+      if (/(^|\s)@lila\b/.test(t44)) return true;
+      return Boolean(numeroBot && t44.includes(`@${numeroBot}`));
+    };
+    preguntaLimpia = (texto, numeroBot) => normalizar(texto).replace(/@lila\b/g, "").replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, "g") : /$^/, "").replace(/\s+/g, " ").trim();
+    extraerParametros = (pregunta) => {
+      const t44 = normalizar(pregunta);
+      const day = /\bmanana\b/.test(t44) ? "tomorrow" : "today";
+      const m59 = t44.match(/\b(?:la|el|unidad|carro|camion|volquete|placa|numero|n)\s*#?\s*(\d{1,2})\b/) ?? t44.match(/\b(\d{1,2})\b(?!\s*(?:m3|m³|cubos|metros|am|pm|h|hs|:))/);
+      const unitNumber = m59 ? Number(m59[1]) : void 0;
+      return { day, unitNumber: unitNumber && unitNumber > 0 ? unitNumber : void 0 };
+    };
+    FUERA_DE_CATALOGO = [
+      "precio",
+      "cuesta",
+      "cuestan",
+      "cobra",
+      "cobran",
+      "tarifa",
+      "costo",
+      "deuda",
+      "debe",
+      "deben",
+      "pago",
+      "pagos",
+      "pagaron",
+      "factura",
+      "cotizacion",
+      "cotizaci\xF3n",
+      "soles",
+      "dolares",
+      "d\xF3lares",
+      "manda",
+      "mand\xE1",
+      "envia",
+      "envi\xE1",
+      "reenvia",
+      "numero de",
+      "n\xFAmero de",
+      "telefono",
+      "tel\xE9fono",
+      "licencia",
+      "clave",
+      "contrasena",
+      "contrase\xF1a",
+      "prompt"
+    ];
+    fueraDeCatalogo = (pregunta) => {
+      const t44 = normalizar(pregunta);
+      return FUERA_DE_CATALOGO.some((palabra) => new RegExp(`\\b${normalizar(palabra)}\\b`).test(t44));
+    };
+    rutearPorReglas = (pregunta) => {
+      if (fueraDeCatalogo(pregunta)) return null;
+      const t44 = normalizar(pregunta);
+      for (const entrada of CATALOGO) {
+        if (entrada.reglas.some((grupo) => grupo.every((palabra) => t44.includes(normalizar(palabra))))) {
+          return entrada.id;
+        }
+      }
+      return null;
+    };
+  }
+});
+
+// src/agent/checklist/tiempo.ts
+var OFFSET_LIMA_MS, diaPeruano, instanteArranque, DIAS, fechaLegible;
+var init_tiempo = __esm({
+  "src/agent/checklist/tiempo.ts"() {
+    OFFSET_LIMA_MS = 5 * 60 * 60 * 1e3;
+    diaPeruano = (ms2) => new Date(ms2 - OFFSET_LIMA_MS).toISOString().slice(0, 10);
+    instanteArranque = (fecha, hora2) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora2)) return null;
+      const ms2 = (/* @__PURE__ */ new Date(`${fecha}T${hora2}:00.000-05:00`)).getTime();
+      return Number.isFinite(ms2) ? ms2 : null;
+    };
+    DIAS = ["domingo", "lunes", "martes", "mi\xE9rcoles", "jueves", "viernes", "s\xE1bado"];
+    fechaLegible = (fecha) => {
+      const [y65, m59, d67] = String(fecha || "").split("-").map(Number);
+      if (!y65 || !m59 || !d67) return fecha;
+      const dia = DIAS[new Date(Date.UTC(y65, m59 - 1, d67)).getUTCDay()];
+      const dd = String(d67).padStart(2, "0");
+      const mm = String(m59).padStart(2, "0");
+      return `${dia} ${dd}/${mm}`;
+    };
+  }
+});
+
+// src/agent/consultas/vista.ts
+var CACHE_MS2, cache2, num, ms, construirVista;
+var init_vista = __esm({
+  "src/agent/consultas/vista.ts"() {
+    init_models();
+    init_alcance();
+    init_tiempo();
+    CACHE_MS2 = 6e4;
+    cache2 = /* @__PURE__ */ new Map();
+    num = (v55) => typeof v55 === "number" && Number.isFinite(v55) ? v55 : Number(v55) || 0;
+    ms = (v55) => {
+      if (!v55) return void 0;
+      const t44 = new Date(v55).getTime();
+      return Number.isFinite(t44) ? t44 : void 0;
+    };
+    construirVista = async (fecha, ahoraMs = Date.now()) => {
+      const cacheada = cache2.get(fecha);
+      if (cacheada && ahoraMs - cacheada.computedAt < CACHE_MS2) return cacheada;
+      const OrderModel = await getOrderModel();
+      const DispatchModel = await getDispatchModel();
+      const inicio = instanteArranque(fecha, "00:00") ?? ahoraMs;
+      const fin = inicio + 24 * 36e5;
+      const orders = await OrderModel.find({
+        companyId: { $in: [...EMPRESAS_CON_PEDIDOS] },
+        fechaProgramacion: { $gte: new Date(inicio - 12 * 36e5), $lt: new Date(fin) },
+        status: { $nin: ["eliminado", "rechazado"] }
+      }).select("companyId cliente alias obra cantidadCubos horaInicio fechaProgramacion").lean();
+      const delDia = orders.filter((o37) => diaPeruano(new Date(o37.fechaProgramacion).getTime()) === fecha);
+      const ids = delDia.map((o37) => String(o37._id));
+      const dispatches = ids.length ? await DispatchModel.find({ orderId: { $in: ids }, state: { $ne: "eliminado" } }).select("orderId unitNumber plate driverName state quantity departedAt arrival pictures").lean() : [];
+      const vista = {
+        fecha,
+        computedAt: ahoraMs,
+        orders: delDia.map((o37) => {
+          const units = dispatches.filter((d67) => String(d67.orderId) === String(o37._id)).map((d67) => ({
+            unitNumber: num(d67.unitNumber),
+            plate: String(d67.plate || "").trim(),
+            driverName: String(d67.driverName || "").trim(),
+            state: ["pendiente", "progreso", "despachado"].includes(String(d67.state)) ? d67.state : "pendiente",
+            quantity: num(d67.quantity),
+            departedAt: ms(d67.departedAt),
+            arrivalAt: ms(d67.arrival?.at),
+            picturesCount: Array.isArray(d67.pictures) ? d67.pictures.length : 0
+          })).sort((a49, b63) => a49.unitNumber - b63.unitNumber);
+          return {
+            orderId: String(o37._id),
+            companyId: String(o37.companyId || ""),
+            cliente: String(o37.alias || o37.cliente || "").trim(),
+            obra: String(o37.obra || "").trim(),
+            cantidadCubos: num(o37.cantidadCubos),
+            m3Dispatched: units.filter((u66) => u66.state === "despachado").reduce((s59, u66) => s59 + u66.quantity, 0),
+            hora: String(o37.horaInicio || ""),
+            units
+          };
+        })
+      };
+      cache2.set(fecha, vista);
+      return vista;
+    };
+  }
+});
+
+// src/agent/consultas/responder.ts
+var hora, unidades, unidad, sinPedidos, responder;
+var init_responder = __esm({
+  "src/agent/consultas/responder.ts"() {
+    init_tiempo();
+    hora = (ms2) => ms2 ? new Date(ms2).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", minute: "2-digit", hour12: false }) : "\u2014";
+    unidades = (vista) => vista.orders.flatMap((o37) => o37.units.map((u66) => ({ ...u66, pedido: o37.cliente || o37.companyId })));
+    unidad = (vista, n43) => n43 ? unidades(vista).find((u66) => u66.unitNumber === n43) : void 0;
+    sinPedidos = (vista) => vista.orders.length === 0 ? `No hay pedidos para ${fechaLegible(vista.fecha)}.` : null;
+    responder = (clave, ctx) => {
+      const { vista, params } = ctx;
+      const dia = fechaLegible(vista.fecha);
+      if (!clave) return "Eso no lo puedo responder. Puedo decirte: qu\xE9 carro est\xE1 en planta o en campo, cu\xE1ntos m\xB3 van, a qu\xE9 hora sali\xF3 una unidad, qui\xE9n la maneja, qu\xE9 pedidos hay, y c\xF3mo va el checklist.";
+      const vacio = sinPedidos(vista);
+      if (vacio && clave !== "orders_day") return vacio;
+      switch (clave) {
+        case "orders_day": {
+          if (vacio) return vacio;
+          const lineas = vista.orders.map(
+            (o37) => `\u2022 ${o37.hora || "\u2014"} \u2014 *${o37.cliente || o37.companyId}* \xB7 ${o37.obra || "sin obra"} \xB7 ${o37.cantidadCubos} m\xB3 (${o37.m3Dispatched} despachados)`
+          );
+          return [`\u{1F4CB} *Pedidos de ${dia}*`, ...lineas].join("\n");
+        }
+        case "day_progress": {
+          const total = vista.orders.reduce((s59, o37) => s59 + o37.cantidadCubos, 0);
+          const van = vista.orders.reduce((s59, o37) => s59 + o37.m3Dispatched, 0);
+          const porPedido = vista.orders.map((o37) => `\u2022 ${o37.cliente || o37.companyId}: ${o37.m3Dispatched} de ${o37.cantidadCubos} m\xB3`);
+          return [`\u{1F4CA} *Avance de ${dia}*: *${van} de ${total} m\xB3* despachados, faltan ${Math.max(total - van, 0)}.`, ...porPedido].join("\n");
+        }
+        case "plant_current_unit": {
+          const todas = unidades(vista);
+          const cargando = todas.filter((u66) => u66.state === "progreso");
+          const salidas = todas.filter((u66) => u66.state === "despachado" && u66.departedAt).sort((a49, b63) => (b63.departedAt ?? 0) - (a49.departedAt ?? 0));
+          const partes = [];
+          if (cargando.length) partes.push(`\u{1F3ED} Cargando: ${cargando.map((u66) => `*unidad ${u66.unitNumber}* (${u66.plate || "sin placa"})`).join(", ")}.`);
+          if (salidas[0]) partes.push(`\xDAltima en salir: *unidad ${salidas[0].unitNumber}* a las ${hora(salidas[0].departedAt)}. Van ${salidas.length} despachadas.`);
+          if (!partes.length) partes.push(`Todav\xEDa no sali\xF3 ninguna unidad ${dia === fechaLegible(vista.fecha) ? "hoy" : dia}.`);
+          return partes.join("\n");
+        }
+        case "site_current_unit": {
+          const todas = unidades(vista);
+          const enRuta = todas.filter((u66) => u66.state === "despachado" && !u66.arrivalAt);
+          const llegadas = todas.filter((u66) => u66.arrivalAt).sort((a49, b63) => (b63.arrivalAt ?? 0) - (a49.arrivalAt ?? 0));
+          const partes = [];
+          if (llegadas[0]) partes.push(`\u{1F6E3} \xDAltima en llegar a campo: *unidad ${llegadas[0].unitNumber}* a las ${hora(llegadas[0].arrivalAt)}.`);
+          if (enRuta.length) partes.push(`En ruta: ${enRuta.map((u66) => `*${u66.unitNumber}*`).join(", ")}.`);
+          if (!partes.length) partes.push("No hay unidades en ruta ni llegadas registradas.");
+          return partes.join("\n");
+        }
+        case "unit_departure": {
+          if (!params.unitNumber) return "\xBFQu\xE9 unidad? Decime el n\xFAmero, por ejemplo \xAB@lila a qu\xE9 hora sali\xF3 la 5\xBB.";
+          const u66 = unidad(vista, params.unitNumber);
+          if (!u66) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+          if (u66.state === "despachado" && u66.departedAt) return `\u{1F69A} La *unidad ${u66.unitNumber}* (${u66.plate || "sin placa"}) sali\xF3 a las *${hora(u66.departedAt)}* con ${u66.quantity} m\xB3.`;
+          if (u66.state === "progreso") return `La *unidad ${u66.unitNumber}* est\xE1 cargando; todav\xEDa no sali\xF3.`;
+          return `La *unidad ${u66.unitNumber}* todav\xEDa no sali\xF3.`;
+        }
+        case "unit_driver": {
+          if (!params.unitNumber) return "\xBFQu\xE9 unidad? Decime el n\xFAmero, por ejemplo \xAB@lila qui\xE9n maneja la 5\xBB.";
+          const u66 = unidad(vista, params.unitNumber);
+          if (!u66) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+          return `\u{1F464} La *unidad ${u66.unitNumber}* la maneja *${u66.driverName || "sin conductor asignado"}*, placa ${u66.plate || "sin placa"}.`;
+        }
+        case "unit_eta": {
+          if (!params.unitNumber) return "\xBFQu\xE9 unidad? Decime el n\xFAmero.";
+          const u66 = unidad(vista, params.unitNumber);
+          if (!u66) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+          if (u66.arrivalAt) return `La *unidad ${u66.unitNumber}* ya lleg\xF3 a campo a las ${hora(u66.arrivalAt)}.`;
+          if (u66.departedAt) return `La *unidad ${u66.unitNumber}* sali\xF3 a las ${hora(u66.departedAt)}. Todav\xEDa no calculo tiempos de llegada por ac\xE1.`;
+          return `La *unidad ${u66.unitNumber}* todav\xEDa no sali\xF3.`;
+        }
+        case "unit_photos": {
+          if (!params.unitNumber) return "\xBFDe qu\xE9 unidad? Decime el n\xFAmero.";
+          const u66 = unidad(vista, params.unitNumber);
+          if (!u66) return `No encuentro la unidad ${params.unitNumber} en los pedidos de ${dia}.`;
+          return u66.picturesCount ? `\u{1F4F7} La *unidad ${u66.unitNumber}* tiene ${u66.picturesCount} foto(s) en Portal. Todav\xEDa no las mando por ac\xE1.` : `La *unidad ${u66.unitNumber}* no tiene fotos registradas.`;
+        }
+        case "checklist_status": {
+          const r39 = ctx.revision;
+          if (!r39) return `No tengo el checklist de ${dia} armado todav\xEDa.`;
+          const partes = [`\u2705 Confirmado: ${r39.resueltos.length ? r39.resueltos.map((i50) => i50.titulo).join(", ") : "nada a\xFAn"}.`];
+          partes.push(r39.pendientes.length ? `\u2754 Sin confirmar: ${r39.pendientes.map((i50) => i50.titulo).join(", ")}.` : "\u{1F389} No falta nada.");
+          return [`\u{1F4CB} *Checklist de ${dia}*`, ...partes].join("\n");
+        }
+        case "reports_status":
+          return "Los informes y certificados todav\xEDa no los consulto por ac\xE1. Se ven en Portal.";
+      }
+    };
+  }
+});
+
+// src/agent/checklist/semantica.ts
+var UMBRAL_SIMILITUD, MODELO, embedCargado, cargaFallida, cargarModelo, coseno, centroides, claveDe, centroideDe, clasificar, evaluarRevisionSemantica;
+var init_semantica = __esm({
+  "src/agent/checklist/semantica.ts"() {
+    init_logger();
+    init_checklist();
+    UMBRAL_SIMILITUD = 0.86;
+    MODELO = "Xenova/multilingual-e5-small";
+    embedCargado = null;
+    cargaFallida = false;
+    cargarModelo = async () => {
+      if (embedCargado) return embedCargado;
+      if (cargaFallida) return null;
+      const inicio = Date.now();
+      try {
+        const { pipeline } = await import("@huggingface/transformers");
+        const extractor = await pipeline("feature-extraction", MODELO, { dtype: "q8" });
+        embedCargado = async (textos) => {
+          const salida = await extractor(
+            textos.map((t44) => `query: ${t44}`),
+            { pooling: "mean", normalize: true }
+          );
+          return salida.tolist();
+        };
+        logger_default.info(
+          `[agente] modelo sem\xE1ntico cargado (${MODELO}) en ${((Date.now() - inicio) / 1e3).toFixed(1)} s, RSS ${Math.round(process.memoryUsage().rss / 1e6)} MB`
+        );
+        return embedCargado;
+      } catch (error) {
+        cargaFallida = true;
+        logger_default.warn(
+          `[agente] no pude cargar el modelo sem\xE1ntico; sigo con el matcher literal: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return null;
+      }
+    };
+    coseno = (a49, b63) => a49.reduce((s59, x63, i50) => s59 + x63 * b63[i50], 0);
+    centroides = /* @__PURE__ */ new Map();
+    claveDe = (item) => `${item.id}|${item.seSatisfaceCon.join("|")}`;
+    centroideDe = async (item, embed) => {
+      const clave = claveDe(item);
+      const cacheado = centroides.get(clave);
+      if (cacheado) return cacheado;
+      const vectores = await embed(item.seSatisfaceCon);
+      const dim = vectores[0]?.length ?? 0;
+      const centroide = Array.from(
+        { length: dim },
+        (_58, i50) => vectores.reduce((s59, v55) => s59 + v55[i50], 0) / vectores.length
+      );
+      centroides.set(clave, centroide);
+      return centroide;
+    };
+    clasificar = async (items, clausulas, embed) => {
+      const limpias = clausulas.map((c66) => normalizarTexto(c66)).filter(Boolean);
+      if (limpias.length === 0 || items.length === 0) return [];
+      const cents = await Promise.all(items.map((i50) => centroideDe(i50, embed)));
+      const vectores = await embed(limpias);
+      const coincidencias = [];
+      vectores.forEach((v55, idx) => {
+        let mejor = -1;
+        let mejorS = -1;
+        cents.forEach((c66, j50) => {
+          const s59 = coseno(v55, c66);
+          if (s59 > mejorS) {
+            mejorS = s59;
+            mejor = j50;
+          }
+        });
+        if (mejor >= 0 && mejorS >= UMBRAL_SIMILITUD) {
+          coincidencias.push({ itemId: items[mejor].id, clausula: limpias[idx], similitud: mejorS });
+        }
+      });
+      return coincidencias;
+    };
+    evaluarRevisionSemantica = async (items, clausulas, opciones = {}) => {
+      const considerados = opciones.soloCriticos ? items.filter((i50) => i50.critico) : items;
+      const embed = opciones.embed === void 0 ? await cargarModelo() : opciones.embed;
+      const negadas = opciones.negadas ?? [];
+      const semanticas = embed ? await clasificar(considerados, clausulas, embed) : [];
+      const porSemantica = new Set(semanticas.map((c66) => c66.itemId));
+      const pendientes2 = [];
+      const resueltos = [];
+      for (const item of considerados) {
+        const ok = itemSatisfecho(item, clausulas) || item.laNegacionConfirma && itemSatisfecho(item, negadas) || porSemantica.has(item.id);
+        (ok ? resueltos : pendientes2).push(item);
+      }
+      return { pendientes: pendientes2, resueltos, semanticas };
+    };
+  }
+});
+
+// src/agent/checklist/mensajes.ts
+var NEGACIONES_PALABRA, NEGACIONES_PREFIJO, esPregunta, enPalabras, niegaFragmento, SEPARADOR_CLAUSULA, enClausulas, niega, clausulasUtiles, motivoDescarte, filtrarMensajes;
+var init_mensajes = __esm({
+  "src/agent/checklist/mensajes.ts"() {
+    init_checklist();
+    NEGACIONES_PALABRA = ["no", "nada", "nadie", "tampoco", "sin", "aun", "todavia", "ni"];
+    NEGACIONES_PREFIJO = ["falta", "cancel", "postergam", "suspend", "se cayo"];
+    esPregunta = (texto) => texto.includes("?") || texto.includes("\xBF");
+    enPalabras = (textoNormalizado) => textoNormalizado.replace(/[^a-z0-9ñ]+/g, " ").split(" ").filter(Boolean);
+    niegaFragmento = (fragmento) => {
+      const palabras = enPalabras(normalizarTexto(fragmento));
+      if (palabras.some((palabra) => NEGACIONES_PALABRA.includes(palabra))) return true;
+      const limpio = palabras.join(" ");
+      return NEGACIONES_PREFIJO.some((prefijo) => limpio.includes(prefijo));
+    };
+    SEPARADOR_CLAUSULA = /[,;.]|\bpero\b|\baunque\b|\by (?=no |a[uú]n |todav[ií]a |ni |falta)/i;
+    enClausulas = (texto) => String(texto || "").split(SEPARADOR_CLAUSULA).map((c66) => c66.trim()).filter(Boolean);
+    niega = (textoNormalizado) => {
+      const [primera] = enClausulas(textoNormalizado);
+      return primera !== void 0 && niegaFragmento(primera);
+    };
+    clausulasUtiles = (texto) => enClausulas(texto).filter((c66) => !niegaFragmento(c66));
+    motivoDescarte = (mensaje) => {
+      if (mensaje.esPropio) return "propio";
+      const texto = normalizarTexto(mensaje.texto);
+      if (!texto) return "vacio";
+      if (esPregunta(mensaje.texto)) return "pregunta";
+      if (niega(texto)) return "negacion";
+      return null;
+    };
+    filtrarMensajes = (mensajes2) => {
+      const utiles = {
+        textos: [],
+        negadas: [],
+        autores: [],
+        descartados: { propio: 0, vacio: 0, pregunta: 0, negacion: 0 }
+      };
+      for (const mensaje of mensajes2) {
+        const motivo = motivoDescarte(mensaje);
+        if (motivo) {
+          utiles.descartados[motivo] += 1;
+          if (motivo === "negacion") utiles.negadas.push(...enClausulas(mensaje.texto));
+          continue;
+        }
+        utiles.negadas.push(...enClausulas(mensaje.texto).filter((c66) => niegaFragmento(c66)));
+        for (const clausula of clausulasUtiles(mensaje.texto)) {
+          utiles.textos.push(clausula);
+          utiles.autores.push(mensaje.autor);
+        }
+      }
+      return utiles;
+    };
+  }
+});
+
+// src/agent/checklist/aviso.ts
+var duracion, ENCABEZADO, construirAvisoChecklist, construirAvisoProduccion, describirCambio, conPiePropuesta, firmaAviso;
+var init_aviso = __esm({
+  "src/agent/checklist/aviso.ts"() {
+    init_tiempo();
+    duracion = (minutos) => {
+      const abs = Math.abs(minutos);
+      if (abs < 60) return `${abs} min`;
+      const h65 = Math.floor(abs / 60);
+      const m59 = abs % 60;
+      return m59 === 0 ? `${h65} h` : `${h65} h ${m59} min`;
+    };
+    ENCABEZADO = {
+      inicial: "\u{1F4CB} *Checklist de producci\xF3n*",
+      recordatorio: "\u23F0 *Recordatorio \u2014 sigue sin confirmar*",
+      "ultima-llamada": "\u{1F6A8} *\xDAltima llamada \u2014 falta lo cr\xEDtico*"
+    };
+    construirAvisoChecklist = (revision, contexto) => {
+      if (revision.pendientes.length === 0) return null;
+      const faltan = contexto.minutosParaArranque;
+      const cuando = faltan >= 0 ? `Arranca en ${duracion(faltan)}` : `Arranc\xF3 hace ${duracion(faltan)}`;
+      const quienes = contexto.pedidos.map((p64) => `${p64.hora} ${p64.empresa} ${p64.cubos} m\xB3`).join(" \xB7 ");
+      const lineas = [
+        `${ENCABEZADO[contexto.momento]} \u2014 ${fechaLegible(contexto.fecha)}`,
+        quienes + (contexto.pedidos.length > 1 ? ` \xB7 total ${contexto.totalCubos} m\xB3` : ""),
+        cuando
+      ];
+      const TITULO = { planta: "Planta", obra: "Campo" };
+      for (const dominio of ["planta", "obra"]) {
+        const pendientes2 = revision.pendientes.filter((i50) => i50.domain === dominio);
+        if (pendientes2.length === 0) continue;
+        lineas.push("", `*${TITULO[dominio]}* \u2014 sin confirmar:`);
+        lineas.push(...pendientes2.map((i50) => `\u2022 ${i50.pregunta}`));
+      }
+      if (revision.resueltos.length > 0) {
+        lineas.push("", `Ya confirmado: ${revision.resueltos.map((r39) => r39.titulo).join(", ")} \u2714`);
+      }
+      return lineas.join("\n");
+    };
+    construirAvisoProduccion = (dia, opciones = {}) => {
+      const titulo = opciones.actualizacion ? `\u{1F501} *Producci\xF3n de ${fechaLegible(dia.fecha)} \u2014 actualizaci\xF3n*` : `\u{1F4E2} *Producci\xF3n programada \u2014 ${fechaLegible(dia.fecha)}*`;
+      const lineas = [titulo];
+      if (opciones.actualizacion) lineas.push(opciones.actualizacion);
+      lineas.push("");
+      for (const p64 of dia.pedidos) {
+        lineas.push(
+          `\u2022 ${p64.hora} \u2014 *${p64.empresa}*${p64.cliente ? ` (${p64.cliente})` : ""} \xB7 ${p64.cubos} m\xB3`
+        );
+      }
+      if (dia.pedidos.length > 1) lineas.push("", `Total del d\xEDa: *${dia.totalCubos} m\xB3*`);
+      lineas.push("", "Por favor confirmar que planta est\xE1 enterada y coordinada.");
+      return lineas.join("\n");
+    };
+    describirCambio = (antes, ahora) => {
+      const porId = (lista) => new Map(lista.map((p64) => [p64.id ?? `${p64.empresa}|${p64.hora}`, p64]));
+      const a49 = porId(antes);
+      const b63 = porId(ahora);
+      const frases = [];
+      for (const [id, p64] of b63) {
+        const previo = a49.get(id);
+        if (!previo) frases.push(`se suma *${p64.empresa}* ${p64.cubos} m\xB3 a las ${p64.hora}`);
+        else if (previo.hora !== p64.hora) frases.push(`*${p64.empresa}* pasa de ${previo.hora} a ${p64.hora}`);
+        else if (previo.cubos !== p64.cubos) frases.push(`*${p64.empresa}* pasa de ${previo.cubos} a ${p64.cubos} m\xB3`);
+      }
+      for (const [id, p64] of a49) if (!b63.has(id)) frases.push(`se cae *${p64.empresa}* (${p64.hora})`);
+      return frases.length ? `Cambio: ${frases.join("; ")}.` : "";
+    };
+    conPiePropuesta = (texto, nombreDestino) => [
+      `\u{1F4E8} *Propuesta para \xAB${nombreDestino}\xBB*`,
+      "Para mandarlo: manten\xE9 presionado este mensaje \u2192 *Responder* \u2192 *1*",
+      "Para descartar: igual, con *3*",
+      "",
+      texto
+    ].join("\n");
+    firmaAviso = (fecha, momento, revision) => `${fecha}|${momento}|${revision.pendientes.map((i50) => i50.id).sort().join(",")}`;
+  }
+});
+
+// src/agent/checklist/dia.ts
+var agruparPorDia, firmaDia, diaAnterior, momentosDelDia, momentoVigente;
+var init_dia = __esm({
+  "src/agent/checklist/dia.ts"() {
+    init_tiempo();
+    agruparPorDia = (pedidos) => {
+      const porFecha = /* @__PURE__ */ new Map();
+      for (const p64 of pedidos) {
+        const fecha = new Date(p64.arranqueMs + 5 * 36e5).toISOString().slice(0, 10);
+        porFecha.set(fecha, [...porFecha.get(fecha) ?? [], p64]);
+      }
+      return Array.from(porFecha.entries()).map(([fecha, lista]) => {
+        const ordenados = [...lista].sort((a49, b63) => a49.arranqueMs - b63.arranqueMs);
+        return {
+          fecha,
+          pedidos: ordenados,
+          arranqueMs: ordenados[0].arranqueMs,
+          totalCubos: ordenados.reduce((s59, p64) => s59 + (p64.cubos || 0), 0),
+          creadoMs: Math.min(...ordenados.map((p64) => p64.creadoMs))
+        };
+      }).sort((a49, b63) => a49.arranqueMs - b63.arranqueMs);
+    };
+    firmaDia = (dia) => `${dia.fecha}|${dia.pedidos.map((p64) => `${p64.id}:${p64.hora}:${p64.cubos}`).sort().join(",")}`;
+    diaAnterior = (fecha) => {
+      const [y65, m59, d67] = fecha.split("-").map(Number);
+      return new Date(Date.UTC(y65, m59 - 1, d67 - 1)).toISOString().slice(0, 10);
+    };
+    momentosDelDia = (dia) => {
+      const anterior = diaAnterior(dia.fecha);
+      const momentos = [
+        { momento: "inicial", ms: instanteArranque(anterior, "16:00") ?? dia.arranqueMs - 12 * 36e5 },
+        { momento: "recordatorio", ms: instanteArranque(anterior, "20:00") ?? dia.arranqueMs - 8 * 36e5 },
+        { momento: "ultima-llamada", ms: dia.arranqueMs - 2 * 36e5 }
+      ];
+      return momentos.filter((m59) => m59.ms < dia.arranqueMs).sort((a49, b63) => a49.ms - b63.ms);
+    };
+    momentoVigente = (dia, ahoraMs) => {
+      if (ahoraMs >= dia.arranqueMs) return null;
+      const pasados = momentosDelDia(dia).filter((m59) => m59.ms <= ahoraMs);
+      return pasados.length ? pasados[pasados.length - 1].momento : null;
+    };
+  }
+});
+
+// src/agent/checklist/detector.ts
+var nombresEmpresa, pedidosConArranque, ultimaVersionDelDia, correrDeteccion, proponerAvisoDelDia, proponerRevisionDelDia, revisionDelDia, nombreEmpresa;
+var init_detector = __esm({
+  "src/agent/checklist/detector.ts"() {
+    init_logger();
+    init_models();
+    init_alcance();
+    init_observador();
+    init_almacen();
+    init_mensajes();
+    init_checklist();
+    init_semantica();
+    init_aviso();
+    init_emisor();
+    init_sugerencias();
+    init_dia();
+    init_tiempo();
+    init_interruptor();
+    nombresEmpresa = /* @__PURE__ */ new Map();
+    pedidosConArranque = async (ahoraMs) => {
+      const OrderModel = await getOrderModel();
+      const desde = new Date(ahoraMs - 24 * 60 * 60 * 1e3);
+      const hasta = new Date(ahoraMs + 48 * 60 * 60 * 1e3);
+      const docs = await OrderModel.find({
+        companyId: { $in: [...EMPRESAS_CON_PEDIDOS] },
+        fechaProgramacion: { $gte: desde, $lte: hasta },
+        horaInicio: { $exists: true, $ne: "" },
+        status: { $nin: ["eliminado", "rechazado"] }
+      }).select("companyId cliente alias cantidadCubos fechaProgramacion horaInicio createdAt").lean();
+      const pedidos = [];
+      for (const doc of docs) {
+        const fechaDoc = doc.fechaProgramacion;
+        if (!fechaDoc) continue;
+        const fecha = diaPeruano(new Date(fechaDoc).getTime());
+        const hora2 = String(doc.horaInicio || "");
+        const arranqueMs = instanteArranque(fecha, hora2);
+        if (arranqueMs === null) continue;
+        const companyId = String(doc.companyId || "");
+        pedidos.push({
+          id: String(doc._id),
+          companyId,
+          empresa: await nombreEmpresa(companyId),
+          // El alias es como lo llaman en el grupo; el nombre legal es el respaldo.
+          cliente: String(doc.alias || doc.cliente || "").trim(),
+          cubos: Number(doc.cantidadCubos) || 0,
+          hora: hora2,
+          arranqueMs,
+          creadoMs: doc.createdAt ? new Date(doc.createdAt).getTime() : arranqueMs - 24 * 36e5
+        });
+      }
+      return pedidos;
+    };
+    ultimaVersionDelDia = /* @__PURE__ */ new Map();
+    correrDeteccion = async (ahoraMs = Date.now()) => {
+      if (!destinoPermitido()) return 0;
+      if (agenteApagado()) {
+        logger_default.info("[agente] apagado por interruptor: no se propone nada");
+        return 0;
+      }
+      const alcance = await alcanceVigente(ahoraMs);
+      if (!alcance.grupoEscuchado) return 0;
+      for (const vencida of vencidasAhora(ahoraMs)) {
+        await enviarAOperaciones(`\u231B Venci\xF3 sin respuesta la propuesta para \xAB${vencida.nombreDestino}\xBB (${vencida.tipo}). No se mand\xF3.`);
+      }
+      const pedidos = await pedidosConArranque(ahoraMs);
+      const dias = agruparPorDia(pedidos);
+      let nuevas = 0;
+      logger_default.info(
+        `[agente] detecci\xF3n: ${pedidos.length} pedido(s) en ${dias.length} d\xEDa(s), ${observados(alcance.grupoEscuchado)} mensaje(s) observados del grupo, ${pendientes(ahoraMs).length} propuesta(s) esperando respuesta, d\xEDas ${dias.map((d67) => `${d67.fecha} (${d67.pedidos.map((p64) => `${p64.hora} ${p64.empresa} ${p64.cubos}m\xB3`).join(", ")})`).join(" | ") || "\u2014"}`
+      );
+      for (const dia of dias) {
+        if (ahoraMs >= dia.arranqueMs + 60 * 6e4) continue;
+        nuevas += await proponerAvisoDelDia(dia, alcance, ahoraMs);
+        nuevas += await proponerRevisionDelDia(dia, alcance, ahoraMs);
+      }
+      return nuevas;
+    };
+    proponerAvisoDelDia = async (dia, alcance, ahoraMs) => {
+      if (!alcance.grupoPlanta) return 0;
+      const firma = `${firmaDia(dia)}|aviso`;
+      if (yaPropuesta("aviso-planta", firma, ahoraMs)) return 0;
+      const anterior = ultimaVersionDelDia.get(dia.fecha);
+      const cambio = anterior ? describirCambio(anterior, dia.pedidos) : "";
+      const texto = construirAvisoProduccion(dia, { actualizacion: cambio || void 0 });
+      const propuesta = proponer(
+        {
+          tipo: "aviso-planta",
+          fecha: dia.fecha,
+          firma,
+          destino: alcance.grupoPlanta,
+          nombreDestino: alcance.nombreGrupoPlanta || "planta",
+          texto
+        },
+        ahoraMs
+      );
+      await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino));
+      ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
+      logger_default.info(`[agente] propuesta ${propuesta.id}: ${cambio ? "actualizaci\xF3n" : "aviso"} de producci\xF3n ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB`);
+      return 1;
+    };
+    proponerRevisionDelDia = async (dia, alcance, ahoraMs) => {
+      const momento = momentoVigente(dia, ahoraMs);
+      if (!momento) return 0;
+      const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
+      const utiles = filtrarMensajes(delGrupo);
+      const revision = await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
+        soloCriticos: momento === "ultima-llamada",
+        negadas: utiles.negadas
+      });
+      const contexto = {
+        fecha: dia.fecha,
+        minutosParaArranque: Math.round((dia.arranqueMs - ahoraMs) / 6e4),
+        pedidos: dia.pedidos,
+        totalCubos: dia.totalCubos,
+        momento,
+        grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado
+      };
+      const texto = construirAvisoChecklist(revision, contexto);
+      if (!texto) return 0;
+      const firma = firmaAviso(dia.fecha, momento, revision);
+      if (yaPropuesta("checklist-admin", firma, ahoraMs)) return 0;
+      if (yaPropuesta("checklist-admin", `${dia.fecha}|${momento}|`, ahoraMs)) return 0;
+      const propuesta = proponer(
+        {
+          tipo: "checklist-admin",
+          fecha: dia.fecha,
+          firma,
+          destino: alcance.grupoEscuchado,
+          nombreDestino: alcance.nombreGrupo || "admin",
+          texto
+        },
+        ahoraMs
+      );
+      proponer(
+        { ...propuesta, firma: `${dia.fecha}|${momento}|`, texto: "", destino: "", nombreDestino: "" },
+        ahoraMs
+      ).estado = "descartada";
+      await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino));
+      logger_default.info(
+        `[agente] propuesta ${propuesta.id}: checklist ${momento} de ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB (${revision.pendientes.length} pendientes, ${revision.semanticas.length} confirmaci\xF3n(es) entendidas por sem\xE1ntica, descartados: ${JSON.stringify(utiles.descartados)})`
+      );
+      return 1;
+    };
+    revisionDelDia = async (fecha, ahoraMs = Date.now()) => {
+      const alcance = await alcanceVigente(ahoraMs);
+      if (!alcance.grupoEscuchado) return null;
+      const dia = agruparPorDia(await pedidosConArranque(ahoraMs)).find((d67) => d67.fecha === fecha);
+      if (!dia) return null;
+      const utiles = filtrarMensajes(mensajesDesde(alcance.grupoEscuchado, dia.creadoMs));
+      return evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, { negadas: utiles.negadas });
+    };
+    nombreEmpresa = async (companyId) => {
+      const cacheado = nombresEmpresa.get(companyId);
+      if (cacheado) return cacheado;
+      try {
+        const { getCompanyModel: getCompanyModel2 } = await Promise.resolve().then(() => (init_models(), models_exports));
+        const CompanyModel = await getCompanyModel2();
+        const company = await CompanyModel.findOne({ companyId }).select("name").lean();
+        const nombre = String(company?.name || "").trim() || companyId;
+        nombresEmpresa.set(companyId, nombre);
+        return nombre;
+      } catch {
+        return companyId;
+      }
+    };
+  }
+});
+
+// src/agent/consultas/index.ts
+var consultas_exports = {};
+__export(consultas_exports, {
+  atenderConsulta: () => atenderConsulta,
+  esConsulta: () => esConsulta,
+  rutear: () => rutear
+});
+var UMBRAL_RUTEO, rutear, atenderConsulta;
+var init_consultas = __esm({
+  "src/agent/consultas/index.ts"() {
+    init_logger();
+    init_catalogo();
+    init_vista();
+    init_responder();
+    init_semantica();
+    init_emisor();
+    init_tiempo();
+    init_detector();
+    UMBRAL_RUTEO = 0.85;
+    rutear = async (pregunta) => {
+      if (fueraDeCatalogo(pregunta)) return null;
+      const porRegla = rutearPorReglas(pregunta);
+      if (porRegla) return porRegla;
+      const embed = await cargarModelo();
+      if (!embed) return null;
+      const [mejor] = await clasificar(CATALOGO, [pregunta], embed);
+      return mejor && mejor.similitud >= UMBRAL_RUTEO ? mejor.itemId : null;
+    };
+    atenderConsulta = async (texto, quien, numeroBot) => {
+      try {
+        const pregunta = preguntaLimpia(texto, numeroBot);
+        const clave = await rutear(pregunta);
+        const params = extraerParametros(pregunta);
+        const fecha = diaPeruano(Date.now() + (params.day === "tomorrow" ? 24 * 36e5 : 0));
+        const vista = await construirVista(fecha);
+        const revision = clave === "checklist_status" ? await revisionDelDia(fecha) : null;
+        const respuesta = responder(clave, { vista, params, revision });
+        logger_default.info(`[agente] consulta de ${quien}: \xAB${pregunta}\xBB \u2192 ${clave ?? "none"} ${JSON.stringify(params)}`);
+        await enviarAOperaciones(`\u{1F4AC} *Pregunta en el grupo* (${quien.split("@")[0]}): \xAB${pregunta}\xBB
+
+${respuesta}`);
+      } catch (error) {
+        logger_default.warn(`[agente] no pude atender la consulta \xAB${texto}\xBB: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+  }
+});
+
 // src/agent/checklist/observador.ts
 var ALCANCE_TTL_MS, alcanceCache, alcanceVigente, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, senderPiloto, jidPorNombre;
 var init_observador = __esm({
@@ -8970,6 +9766,11 @@ var init_observador = __esm({
             continue;
           }
           if (!debeEscuchar(remoteJid, alcance)) continue;
+          if (!raw?.key?.fromMe) {
+            void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(
+              ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2 }) => esConsulta2(texto, sessionPhone) ? atenderConsulta2(texto, String(raw?.key?.participant || "alguien"), sessionPhone) : void 0
+            ).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
+          }
           const ahora = Date.now();
           const mensaje = {
             texto,
@@ -10502,20 +11303,20 @@ var require_luxon = __commonJS({
       }
     }
     function mapMonths(f64) {
-      const ms = [];
+      const ms2 = [];
       for (let i50 = 1; i50 <= 12; i50++) {
         const dt2 = DateTime.utc(2009, i50, 1);
-        ms.push(f64(dt2));
+        ms2.push(f64(dt2));
       }
-      return ms;
+      return ms2;
     }
     function mapWeekdays(f64) {
-      const ms = [];
+      const ms2 = [];
       for (let i50 = 1; i50 <= 7; i50++) {
         const dt2 = DateTime.utc(2016, 11, 13 + i50);
-        ms.push(f64(dt2));
+        ms2.push(f64(dt2));
       }
-      return ms;
+      return ms2;
     }
     function listStuff(loc, length, englishFn, intlFn) {
       const mode = loc.listingMode();
@@ -12236,7 +13037,7 @@ var require_luxon = __commonJS({
       const [s60, yearStr, monthStr, weekStr, dayStr, hourStr, minuteStr, secondStr, millisecondsStr] = match2;
       const hasNegativePrefix = s60[0] === "-";
       const negativeSeconds = secondStr && secondStr[0] === "-";
-      const maybeNegate = (num, force = false) => num !== void 0 && (force || num && hasNegativePrefix) ? -num : num;
+      const maybeNegate = (num2, force = false) => num2 !== void 0 && (force || num2 && hasNegativePrefix) ? -num2 : num2;
       return [{
         years: maybeNegate(parseFloating(yearStr)),
         months: maybeNegate(parseFloating(monthStr)),
@@ -13958,8 +14759,8 @@ var require_luxon = __commonJS({
     function dayDiff(earlier, later) {
       const utcDayStart = (dt2) => dt2.toUTC(0, {
         keepLocalTime: true
-      }).startOf("day").valueOf(), ms = utcDayStart(later) - utcDayStart(earlier);
-      return Math.floor(Duration.fromMillis(ms).as("days"));
+      }).startOf("day").valueOf(), ms2 = utcDayStart(later) - utcDayStart(earlier);
+      return Math.floor(Duration.fromMillis(ms2).as("days"));
     }
     function highOrderDiffs(cursor, later, units) {
       const differs = [["years", (a49, b63) => b63.year - a49.year], ["quarters", (a49, b63) => b63.quarter - a49.quarter + (b63.year - a49.year) * 4], ["months", (a49, b63) => b63.month - a49.month + (b63.year - a49.year) * 12], ["weeks", (a49, b63) => {
@@ -17671,8 +18472,8 @@ var require_common = __commonJS({
           }
           const self2 = debug;
           const curr = Number(/* @__PURE__ */ new Date());
-          const ms = curr - (prevTime || curr);
-          self2.diff = ms;
+          const ms2 = curr - (prevTime || curr);
+          self2.diff = ms2;
           self2.prev = prevTime;
           self2.curr = curr;
           prevTime = curr;
@@ -33946,8 +34747,8 @@ var require_arrayMap = __commonJS({
 // node_modules/lodash/_cacheHas.js
 var require_cacheHas = __commonJS({
   "node_modules/lodash/_cacheHas.js"(exports, module) {
-    function cacheHas(cache2, key) {
-      return cache2.has(key);
+    function cacheHas(cache3, key) {
+      return cache3.has(key);
     }
     module.exports = cacheHas;
   }
@@ -61143,9 +61944,9 @@ var require_headers = __commonJS({
       }
       return 0;
     }
-    function indexOf(block, num, offset, end) {
+    function indexOf(block, num2, offset, end) {
       for (; offset < end; offset++) {
-        if (block[offset] === num) return offset;
+        if (block[offset] === num2) return offset;
       }
       return end;
     }
@@ -61160,18 +61961,18 @@ var require_headers = __commonJS({
       if (val.length > n43) return SEVENS.slice(0, n43) + " ";
       return ZEROS.slice(0, n43 - val.length) + val + " ";
     }
-    function encodeSizeBin(num, buf, off) {
+    function encodeSizeBin(num2, buf, off) {
       buf[off] = 128;
       for (let i50 = 11; i50 > 0; i50--) {
-        buf[off + i50] = num & 255;
-        num = Math.floor(num / 256);
+        buf[off + i50] = num2 & 255;
+        num2 = Math.floor(num2 / 256);
       }
     }
-    function encodeSize(num, buf, off) {
-      if (num.toString(8).length > 11) {
-        encodeSizeBin(num, buf, off);
+    function encodeSize(num2, buf, off) {
+      if (num2.toString(8).length > 11) {
+        encodeSizeBin(num2, buf, off);
       } else {
-        b4a.write(buf, encodeOct(num, 11), off);
+        b4a.write(buf, encodeOct(num2, 11), off);
       }
     }
     function parse256(buf) {
@@ -62169,9 +62970,9 @@ var require_dist4 = __commonJS({
         throw new Error("input must be buffer, number, or string, received " + typeof input);
       }
     }
-    function bufferizeInt(num) {
+    function bufferizeInt(num2) {
       const tmp = ensureBuffer(4);
-      tmp.writeInt32BE(num, 0);
+      tmp.writeInt32BE(num2, 0);
       return tmp;
     }
     function _crc32(buf, previous) {
@@ -81961,32 +82762,32 @@ var UNITS = ["", "UNO", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO
 var TEENS = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISEIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"];
 var TENS = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"];
 var HUNDREDS = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"];
-function toWords(num) {
+function toWords(num2) {
   let words = "";
-  if (num >= 1e6) {
-    const m59 = Math.floor(num / 1e6);
+  if (num2 >= 1e6) {
+    const m59 = Math.floor(num2 / 1e6);
     words += m59 === 1 ? "UN MILL\xD3N " : toWords(m59) + " MILLONES ";
-    num %= 1e6;
+    num2 %= 1e6;
   }
-  if (num >= 1e3) {
-    words += toWords(Math.floor(num / 1e3)) + " MIL ";
-    num %= 1e3;
+  if (num2 >= 1e3) {
+    words += toWords(Math.floor(num2 / 1e3)) + " MIL ";
+    num2 %= 1e3;
   }
-  if (num >= 100) {
-    words += HUNDREDS[Math.floor(num / 100)] + " ";
-    num %= 100;
+  if (num2 >= 100) {
+    words += HUNDREDS[Math.floor(num2 / 100)] + " ";
+    num2 %= 100;
   }
-  if (num >= 30) {
-    words += TENS[Math.floor(num / 10)] + (num % 10 !== 0 ? " Y " : "");
-    num %= 10;
-  } else if (num >= 20) {
+  if (num2 >= 30) {
+    words += TENS[Math.floor(num2 / 10)] + (num2 % 10 !== 0 ? " Y " : "");
+    num2 %= 10;
+  } else if (num2 >= 20) {
     words += "VEINTI";
-    num %= 10;
-  } else if (num >= 10) {
-    words += TEENS[num - 10] + " ";
-    num = 0;
+    num2 %= 10;
+  } else if (num2 >= 10) {
+    words += TEENS[num2 - 10] + " ";
+    num2 = 0;
   }
-  if (num > 0) words += UNITS[num] + " ";
+  if (num2 > 0) words += UNITS[num2] + " ";
   return words.trim();
 }
 function numberToWords(amount) {
@@ -83166,12 +83967,12 @@ ${signaturesHtml}`;
       [4, "IV"],
       [1, "I"]
     ];
-    let num = value;
+    let num2 = value;
     let out = "";
     for (const [n43, symbol] of roman) {
-      while (num >= n43) {
+      while (num2 >= n43) {
         out += symbol;
-        num -= n43;
+        num2 -= n43;
       }
     }
     return out || String(value);
@@ -84098,9 +84899,9 @@ ${signaturesHtml}`;
       } else if (photo.filename) {
         lines.push(photo.filename);
       }
-      const hora = photo.hora || (section.showHora ? photo.fecha : void 0);
+      const hora2 = photo.hora || (section.showHora ? photo.fecha : void 0);
       const metaParts = [];
-      if (hora) metaParts.push(`Hora: ${hora}`);
+      if (hora2) metaParts.push(`Hora: ${hora2}`);
       if (photo.codigoMuestra) metaParts.push(`Muestra: ${photo.codigoMuestra}`);
       if (metaParts.length > 0) {
         lines.push(metaParts.join(" | "));
@@ -84338,12 +85139,12 @@ ${signaturesHtml}`;
       return this.formatCurrency(value);
     }
     if (type === "number" || type === "percentage") {
-      const num = Number(value);
-      if (Number.isNaN(num)) return String(value);
+      const num2 = Number(value);
+      if (Number.isNaN(num2)) return String(value);
       if (type === "percentage") {
-        return `${num.toFixed(2)}%`;
+        return `${num2.toFixed(2)}%`;
       }
-      return num.toLocaleString("es-PE");
+      return num2.toLocaleString("es-PE");
     }
     if (type === "date" || type === "datetime") {
       return this.formatDateValue(value, type);
@@ -84377,17 +85178,17 @@ ${signaturesHtml}`;
     return date.toLocaleDateString("es-PE", { timeZone: "America/Lima" });
   }
   formatCurrency(value) {
-    const num = Number(value);
-    if (Number.isNaN(num)) return String(value);
+    const num2 = Number(value);
+    if (Number.isNaN(num2)) return String(value);
     try {
       return new Intl.NumberFormat("es-PE", {
         style: "currency",
         currency: "PEN",
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
-      }).format(num);
+      }).format(num2);
     } catch {
-      return `S/ ${num.toFixed(2)}`;
+      return `S/ ${num2.toFixed(2)}`;
     }
   }
   getValue(pathKey, source) {
@@ -85856,8 +86657,8 @@ function requireBase64Js() {
     }
     return arr;
   }
-  function tripletToBase64(num) {
-    return lookup2[num >> 18 & 63] + lookup2[num >> 12 & 63] + lookup2[num >> 6 & 63] + lookup2[num & 63];
+  function tripletToBase64(num2) {
+    return lookup2[num2 >> 18 & 63] + lookup2[num2 >> 12 & 63] + lookup2[num2 >> 6 & 63] + lookup2[num2 & 63];
   }
   function encodeChunk(uint8, start, end) {
     var tmp;
@@ -88482,7 +89283,7 @@ function requireWhichTypedArray() {
     }
     return -1;
   };
-  var cache2 = { __proto__: null };
+  var cache3 = { __proto__: null };
   if (hasToStringTag && gOPD && getPrototypeOf) {
     forEach(typedArrays, function(typedArray) {
       var arr = new g62[typedArray]();
@@ -88493,7 +89294,7 @@ function requireWhichTypedArray() {
           var superProto = getPrototypeOf(proto3);
           descriptor = gOPD(superProto, Symbol.toStringTag);
         }
-        cache2["$" + typedArray] = callBind2(descriptor.get);
+        cache3["$" + typedArray] = callBind2(descriptor.get);
       }
     });
   } else {
@@ -88501,13 +89302,13 @@ function requireWhichTypedArray() {
       var arr = new g62[typedArray]();
       var fn = arr.slice || arr.set;
       if (fn) {
-        cache2["$" + typedArray] = callBind2(fn);
+        cache3["$" + typedArray] = callBind2(fn);
       }
     });
   }
   var tryTypedArrays = function tryAllTypedArrays(value) {
     var found = false;
-    forEach(cache2, function(getter, typedArray) {
+    forEach(cache3, function(getter, typedArray) {
       if (!found) {
         try {
           if ("$" + getter(value) === typedArray) {
@@ -88521,7 +89322,7 @@ function requireWhichTypedArray() {
   };
   var trySlices = function tryAllSlices(value) {
     var found = false;
-    forEach(cache2, function(getter, name) {
+    forEach(cache3, function(getter, name) {
       if (!found) {
         try {
           getter(value);
@@ -93025,7 +93826,7 @@ Stream$1.prototype.pipe = function(dest, options2) {
     function parseEntity(parser) {
       var entity = parser.entity;
       var entityLC = entity.toLowerCase();
-      var num;
+      var num2;
       var numStr = "";
       if (parser.ENTITIES[entity]) {
         return parser.ENTITIES[entity];
@@ -93037,20 +93838,20 @@ Stream$1.prototype.pipe = function(dest, options2) {
       if (entity.charAt(0) === "#") {
         if (entity.charAt(1) === "x") {
           entity = entity.slice(2);
-          num = parseInt(entity, 16);
-          numStr = num.toString(16);
+          num2 = parseInt(entity, 16);
+          numStr = num2.toString(16);
         } else {
           entity = entity.slice(1);
-          num = parseInt(entity, 10);
-          numStr = num.toString(10);
+          num2 = parseInt(entity, 10);
+          numStr = num2.toString(10);
         }
       }
       entity = entity.replace(/^0+/, "");
-      if (isNaN(num) || numStr.toLowerCase() !== entity) {
+      if (isNaN(num2) || numStr.toLowerCase() !== entity) {
         strictFail(parser, "Invalid character entity");
         return "&" + parser.entity + ";";
       }
-      return String.fromCodePoint(num);
+      return String.fromCodePoint(num2);
     }
     function beginWhiteSpace(parser, c66) {
       if (c66 === "<") {
@@ -103049,13 +103850,13 @@ function disableUnsupportedReportLetterhead(schema, data) {
   data.documentSettings.letterhead = null;
 }
 function toNumber(value) {
-  const num = Number(value);
-  return Number.isFinite(num) ? num : 0;
+  const num2 = Number(value);
+  return Number.isFinite(num2) ? num2 : 0;
 }
 function toNumberOrNull(value) {
   if (value === null || value === void 0 || value === "") return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
+  const num2 = Number(value);
+  return Number.isFinite(num2) ? num2 : null;
 }
 function resolveArrayInput(source, data) {
   if (Array.isArray(source)) return source;
@@ -103079,10 +103880,10 @@ function avgValues(source, key, data) {
   return nums.reduce((acc, value) => acc + value, 0) / nums.length;
 }
 function roundValue(value, decimals = 2) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return 0;
+  const num2 = Number(value);
+  if (!Number.isFinite(num2)) return 0;
   const factor = 10 ** decimals;
-  return Math.round(num * factor) / factor;
+  return Math.round(num2 * factor) / factor;
 }
 function setNestedValue2(target, path42, value) {
   const parts = path42.split(".");
@@ -103904,17 +104705,17 @@ function escapeHtml2(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 function formatMoney(value) {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num)) return "0.00";
-  return num.toLocaleString("en-US", {
+  const num2 = Number(value || 0);
+  if (!Number.isFinite(num2)) return "0.00";
+  return num2.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 }
 function formatQuantity(value) {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num)) return "0.000";
-  return num.toLocaleString("en-US", {
+  const num2 = Number(value || 0);
+  if (!Number.isFinite(num2)) return "0.000";
+  return num2.toLocaleString("en-US", {
     minimumFractionDigits: 3,
     maximumFractionDigits: 3
   });
@@ -103926,12 +104727,12 @@ function formatQuoteFolio(value, prefix) {
   return `${prefix} - ${digits.padStart(7, "0")}`;
 }
 function formatCompactQuantity(value) {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num)) return "0";
-  if (Number.isInteger(num)) {
-    return num.toLocaleString("en-US");
+  const num2 = Number(value || 0);
+  if (!Number.isFinite(num2)) return "0";
+  if (Number.isInteger(num2)) {
+    return num2.toLocaleString("en-US");
   }
-  return num.toLocaleString("en-US", {
+  return num2.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
   });
@@ -105237,20 +106038,20 @@ function escapeHtml3(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 function formatMoney2(value) {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num)) return "0.00";
-  return num.toLocaleString("en-US", {
+  const num2 = Number(value || 0);
+  if (!Number.isFinite(num2)) return "0.00";
+  return num2.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 }
 function formatQuantity2(value) {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num)) return "0";
-  if (Number.isInteger(num)) {
-    return num.toLocaleString("en-US");
+  const num2 = Number(value || 0);
+  if (!Number.isFinite(num2)) return "0";
+  if (Number.isInteger(num2)) {
+    return num2.toLocaleString("en-US");
   }
-  return num.toLocaleString("en-US", {
+  return num2.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 3
   });
@@ -106052,10 +106853,10 @@ function resolveImageUrl3(baseUrl, source) {
 function formatAmountLabel(value, fallback) {
   const raw = String(fallback ?? "").trim();
   if (raw) return raw;
-  const num = Number(value || 0);
-  if (!Number.isFinite(num)) return "0";
-  if (Number.isInteger(num)) return String(num);
-  return num.toFixed(2);
+  const num2 = Number(value || 0);
+  if (!Number.isFinite(num2)) return "0";
+  if (Number.isInteger(num2)) return String(num2);
+  return num2.toFixed(2);
 }
 function normalizeServiceLines(value) {
   if (!Array.isArray(value)) {
@@ -109989,7 +110790,7 @@ async function fetchWithTimeout(url, fetcher, timeoutMs) {
     signal: AbortSignal.timeout(timeoutMs)
   });
 }
-var esperar = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
+var esperar = (ms2) => new Promise((resolve2) => setTimeout(resolve2, ms2));
 async function fetchForecastConReintentos(url, fetcher, now = Date.now) {
   const { maxAttempts, retryBaseDelayMs, fetchTimeoutMs, totalBudgetMs, minAttemptMs } = WEATHER_ASPHALT_FORECAST;
   const vence = now() + totalBudgetMs;
@@ -114552,430 +115353,9 @@ var restoreAllSessions = async (options2 = {}) => {
 // src/index.ts
 init_instance_lease();
 init_telegram_alert_service();
+init_detector();
+init_observador();
 import cron2 from "node-cron";
-
-// src/agent/checklist/detector.ts
-init_logger();
-init_models();
-init_alcance();
-init_observador();
-init_almacen();
-
-// src/agent/checklist/mensajes.ts
-init_checklist();
-var NEGACIONES_PALABRA = ["no", "nada", "nadie", "tampoco", "sin", "aun", "todavia", "ni"];
-var NEGACIONES_PREFIJO = ["falta", "cancel", "postergam", "suspend", "se cayo"];
-var esPregunta = (texto) => texto.includes("?") || texto.includes("\xBF");
-var enPalabras = (textoNormalizado) => textoNormalizado.replace(/[^a-z0-9ñ]+/g, " ").split(" ").filter(Boolean);
-var niegaFragmento = (fragmento) => {
-  const palabras = enPalabras(normalizarTexto(fragmento));
-  if (palabras.some((palabra) => NEGACIONES_PALABRA.includes(palabra))) return true;
-  const limpio = palabras.join(" ");
-  return NEGACIONES_PREFIJO.some((prefijo) => limpio.includes(prefijo));
-};
-var SEPARADOR_CLAUSULA = /[,;.]|\bpero\b|\baunque\b|\by (?=no |a[uú]n |todav[ií]a |ni |falta)/i;
-var enClausulas = (texto) => String(texto || "").split(SEPARADOR_CLAUSULA).map((c66) => c66.trim()).filter(Boolean);
-var niega = (textoNormalizado) => {
-  const [primera] = enClausulas(textoNormalizado);
-  return primera !== void 0 && niegaFragmento(primera);
-};
-var clausulasUtiles = (texto) => enClausulas(texto).filter((c66) => !niegaFragmento(c66));
-var motivoDescarte = (mensaje) => {
-  if (mensaje.esPropio) return "propio";
-  const texto = normalizarTexto(mensaje.texto);
-  if (!texto) return "vacio";
-  if (esPregunta(mensaje.texto)) return "pregunta";
-  if (niega(texto)) return "negacion";
-  return null;
-};
-var filtrarMensajes = (mensajes2) => {
-  const utiles = {
-    textos: [],
-    negadas: [],
-    autores: [],
-    descartados: { propio: 0, vacio: 0, pregunta: 0, negacion: 0 }
-  };
-  for (const mensaje of mensajes2) {
-    const motivo = motivoDescarte(mensaje);
-    if (motivo) {
-      utiles.descartados[motivo] += 1;
-      if (motivo === "negacion") utiles.negadas.push(...enClausulas(mensaje.texto));
-      continue;
-    }
-    utiles.negadas.push(...enClausulas(mensaje.texto).filter((c66) => niegaFragmento(c66)));
-    for (const clausula of clausulasUtiles(mensaje.texto)) {
-      utiles.textos.push(clausula);
-      utiles.autores.push(mensaje.autor);
-    }
-  }
-  return utiles;
-};
-
-// src/agent/checklist/detector.ts
-init_checklist();
-
-// src/agent/checklist/semantica.ts
-init_logger();
-init_checklist();
-var UMBRAL_SIMILITUD = 0.86;
-var MODELO = "Xenova/multilingual-e5-small";
-var embedCargado = null;
-var cargaFallida = false;
-var cargarModelo = async () => {
-  if (embedCargado) return embedCargado;
-  if (cargaFallida) return null;
-  const inicio = Date.now();
-  try {
-    const { pipeline } = await import("@huggingface/transformers");
-    const extractor = await pipeline("feature-extraction", MODELO, { dtype: "q8" });
-    embedCargado = async (textos) => {
-      const salida = await extractor(
-        textos.map((t44) => `query: ${t44}`),
-        { pooling: "mean", normalize: true }
-      );
-      return salida.tolist();
-    };
-    logger_default.info(
-      `[agente] modelo sem\xE1ntico cargado (${MODELO}) en ${((Date.now() - inicio) / 1e3).toFixed(1)} s, RSS ${Math.round(process.memoryUsage().rss / 1e6)} MB`
-    );
-    return embedCargado;
-  } catch (error) {
-    cargaFallida = true;
-    logger_default.warn(
-      `[agente] no pude cargar el modelo sem\xE1ntico; sigo con el matcher literal: ${error instanceof Error ? error.message : String(error)}`
-    );
-    return null;
-  }
-};
-var coseno = (a49, b63) => a49.reduce((s59, x63, i50) => s59 + x63 * b63[i50], 0);
-var centroides = /* @__PURE__ */ new Map();
-var claveDe = (item) => `${item.id}|${item.seSatisfaceCon.join("|")}`;
-var centroideDe = async (item, embed) => {
-  const clave = claveDe(item);
-  const cacheado = centroides.get(clave);
-  if (cacheado) return cacheado;
-  const vectores = await embed(item.seSatisfaceCon);
-  const dim = vectores[0]?.length ?? 0;
-  const centroide = Array.from(
-    { length: dim },
-    (_58, i50) => vectores.reduce((s59, v55) => s59 + v55[i50], 0) / vectores.length
-  );
-  centroides.set(clave, centroide);
-  return centroide;
-};
-var clasificar = async (items, clausulas, embed) => {
-  const limpias = clausulas.map((c66) => normalizarTexto(c66)).filter(Boolean);
-  if (limpias.length === 0 || items.length === 0) return [];
-  const cents = await Promise.all(items.map((i50) => centroideDe(i50, embed)));
-  const vectores = await embed(limpias);
-  const coincidencias = [];
-  vectores.forEach((v55, idx) => {
-    let mejor = -1;
-    let mejorS = -1;
-    cents.forEach((c66, j50) => {
-      const s59 = coseno(v55, c66);
-      if (s59 > mejorS) {
-        mejorS = s59;
-        mejor = j50;
-      }
-    });
-    if (mejor >= 0 && mejorS >= UMBRAL_SIMILITUD) {
-      coincidencias.push({ itemId: items[mejor].id, clausula: limpias[idx], similitud: mejorS });
-    }
-  });
-  return coincidencias;
-};
-var evaluarRevisionSemantica = async (items, clausulas, opciones = {}) => {
-  const considerados = opciones.soloCriticos ? items.filter((i50) => i50.critico) : items;
-  const embed = opciones.embed === void 0 ? await cargarModelo() : opciones.embed;
-  const negadas = opciones.negadas ?? [];
-  const semanticas = embed ? await clasificar(considerados, clausulas, embed) : [];
-  const porSemantica = new Set(semanticas.map((c66) => c66.itemId));
-  const pendientes2 = [];
-  const resueltos = [];
-  for (const item of considerados) {
-    const ok = itemSatisfecho(item, clausulas) || item.laNegacionConfirma && itemSatisfecho(item, negadas) || porSemantica.has(item.id);
-    (ok ? resueltos : pendientes2).push(item);
-  }
-  return { pendientes: pendientes2, resueltos, semanticas };
-};
-
-// src/agent/checklist/tiempo.ts
-var OFFSET_LIMA_MS = 5 * 60 * 60 * 1e3;
-var diaPeruano = (ms) => new Date(ms - OFFSET_LIMA_MS).toISOString().slice(0, 10);
-var instanteArranque = (fecha, hora) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return null;
-  const ms = (/* @__PURE__ */ new Date(`${fecha}T${hora}:00.000-05:00`)).getTime();
-  return Number.isFinite(ms) ? ms : null;
-};
-var DIAS = ["domingo", "lunes", "martes", "mi\xE9rcoles", "jueves", "viernes", "s\xE1bado"];
-var fechaLegible = (fecha) => {
-  const [y65, m59, d67] = String(fecha || "").split("-").map(Number);
-  if (!y65 || !m59 || !d67) return fecha;
-  const dia = DIAS[new Date(Date.UTC(y65, m59 - 1, d67)).getUTCDay()];
-  const dd = String(d67).padStart(2, "0");
-  const mm = String(m59).padStart(2, "0");
-  return `${dia} ${dd}/${mm}`;
-};
-
-// src/agent/checklist/aviso.ts
-var duracion = (minutos) => {
-  const abs = Math.abs(minutos);
-  if (abs < 60) return `${abs} min`;
-  const h65 = Math.floor(abs / 60);
-  const m59 = abs % 60;
-  return m59 === 0 ? `${h65} h` : `${h65} h ${m59} min`;
-};
-var ENCABEZADO = {
-  inicial: "\u{1F4CB} *Checklist de producci\xF3n*",
-  recordatorio: "\u23F0 *Recordatorio \u2014 sigue sin confirmar*",
-  "ultima-llamada": "\u{1F6A8} *\xDAltima llamada \u2014 falta lo cr\xEDtico*"
-};
-var construirAvisoChecklist = (revision, contexto) => {
-  if (revision.pendientes.length === 0) return null;
-  const faltan = contexto.minutosParaArranque;
-  const cuando = faltan >= 0 ? `Arranca en ${duracion(faltan)}` : `Arranc\xF3 hace ${duracion(faltan)}`;
-  const quienes = contexto.pedidos.map((p64) => `${p64.hora} ${p64.empresa} ${p64.cubos} m\xB3`).join(" \xB7 ");
-  const lineas = [
-    `${ENCABEZADO[contexto.momento]} \u2014 ${fechaLegible(contexto.fecha)}`,
-    quienes + (contexto.pedidos.length > 1 ? ` \xB7 total ${contexto.totalCubos} m\xB3` : ""),
-    cuando
-  ];
-  const TITULO = { planta: "Planta", obra: "Campo" };
-  for (const dominio of ["planta", "obra"]) {
-    const pendientes2 = revision.pendientes.filter((i50) => i50.domain === dominio);
-    if (pendientes2.length === 0) continue;
-    lineas.push("", `*${TITULO[dominio]}* \u2014 sin confirmar:`);
-    lineas.push(...pendientes2.map((i50) => `\u2022 ${i50.pregunta}`));
-  }
-  if (revision.resueltos.length > 0) {
-    lineas.push("", `Ya confirmado: ${revision.resueltos.map((r39) => r39.titulo).join(", ")} \u2714`);
-  }
-  return lineas.join("\n");
-};
-var construirAvisoProduccion = (dia, opciones = {}) => {
-  const titulo = opciones.actualizacion ? `\u{1F501} *Producci\xF3n de ${fechaLegible(dia.fecha)} \u2014 actualizaci\xF3n*` : `\u{1F4E2} *Producci\xF3n programada \u2014 ${fechaLegible(dia.fecha)}*`;
-  const lineas = [titulo];
-  if (opciones.actualizacion) lineas.push(opciones.actualizacion);
-  lineas.push("");
-  for (const p64 of dia.pedidos) {
-    lineas.push(
-      `\u2022 ${p64.hora} \u2014 *${p64.empresa}*${p64.cliente ? ` (${p64.cliente})` : ""} \xB7 ${p64.cubos} m\xB3`
-    );
-  }
-  if (dia.pedidos.length > 1) lineas.push("", `Total del d\xEDa: *${dia.totalCubos} m\xB3*`);
-  lineas.push("", "Por favor confirmar que planta est\xE1 enterada y coordinada.");
-  return lineas.join("\n");
-};
-var describirCambio = (antes, ahora) => {
-  const porId = (lista) => new Map(lista.map((p64) => [p64.id ?? `${p64.empresa}|${p64.hora}`, p64]));
-  const a49 = porId(antes);
-  const b63 = porId(ahora);
-  const frases = [];
-  for (const [id, p64] of b63) {
-    const previo = a49.get(id);
-    if (!previo) frases.push(`se suma *${p64.empresa}* ${p64.cubos} m\xB3 a las ${p64.hora}`);
-    else if (previo.hora !== p64.hora) frases.push(`*${p64.empresa}* pasa de ${previo.hora} a ${p64.hora}`);
-    else if (previo.cubos !== p64.cubos) frases.push(`*${p64.empresa}* pasa de ${previo.cubos} a ${p64.cubos} m\xB3`);
-  }
-  for (const [id, p64] of a49) if (!b63.has(id)) frases.push(`se cae *${p64.empresa}* (${p64.hora})`);
-  return frases.length ? `Cambio: ${frases.join("; ")}.` : "";
-};
-var conPiePropuesta = (texto, nombreDestino) => [
-  `\u{1F4E8} *Propuesta para \xAB${nombreDestino}\xBB*`,
-  "Para mandarlo: manten\xE9 presionado este mensaje \u2192 *Responder* \u2192 *1*",
-  "Para descartar: igual, con *3*",
-  "",
-  texto
-].join("\n");
-var firmaAviso = (fecha, momento, revision) => `${fecha}|${momento}|${revision.pendientes.map((i50) => i50.id).sort().join(",")}`;
-
-// src/agent/checklist/detector.ts
-init_emisor();
-init_sugerencias();
-
-// src/agent/checklist/dia.ts
-var agruparPorDia = (pedidos) => {
-  const porFecha = /* @__PURE__ */ new Map();
-  for (const p64 of pedidos) {
-    const fecha = new Date(p64.arranqueMs + 5 * 36e5).toISOString().slice(0, 10);
-    porFecha.set(fecha, [...porFecha.get(fecha) ?? [], p64]);
-  }
-  return Array.from(porFecha.entries()).map(([fecha, lista]) => {
-    const ordenados = [...lista].sort((a49, b63) => a49.arranqueMs - b63.arranqueMs);
-    return {
-      fecha,
-      pedidos: ordenados,
-      arranqueMs: ordenados[0].arranqueMs,
-      totalCubos: ordenados.reduce((s59, p64) => s59 + (p64.cubos || 0), 0),
-      creadoMs: Math.min(...ordenados.map((p64) => p64.creadoMs))
-    };
-  }).sort((a49, b63) => a49.arranqueMs - b63.arranqueMs);
-};
-var firmaDia = (dia) => `${dia.fecha}|${dia.pedidos.map((p64) => `${p64.id}:${p64.hora}:${p64.cubos}`).sort().join(",")}`;
-var diaAnterior = (fecha) => {
-  const [y65, m59, d67] = fecha.split("-").map(Number);
-  return new Date(Date.UTC(y65, m59 - 1, d67 - 1)).toISOString().slice(0, 10);
-};
-var momentosDelDia = (dia) => {
-  const anterior = diaAnterior(dia.fecha);
-  const momentos = [
-    { momento: "inicial", ms: instanteArranque(anterior, "16:00") ?? dia.arranqueMs - 12 * 36e5 },
-    { momento: "recordatorio", ms: instanteArranque(anterior, "20:00") ?? dia.arranqueMs - 8 * 36e5 },
-    { momento: "ultima-llamada", ms: dia.arranqueMs - 2 * 36e5 }
-  ];
-  return momentos.filter((m59) => m59.ms < dia.arranqueMs).sort((a49, b63) => a49.ms - b63.ms);
-};
-var momentoVigente = (dia, ahoraMs) => {
-  if (ahoraMs >= dia.arranqueMs) return null;
-  const pasados = momentosDelDia(dia).filter((m59) => m59.ms <= ahoraMs);
-  return pasados.length ? pasados[pasados.length - 1].momento : null;
-};
-
-// src/agent/checklist/detector.ts
-init_interruptor();
-var nombresEmpresa = /* @__PURE__ */ new Map();
-var pedidosConArranque = async (ahoraMs) => {
-  const OrderModel = await getOrderModel();
-  const desde = new Date(ahoraMs - 24 * 60 * 60 * 1e3);
-  const hasta = new Date(ahoraMs + 48 * 60 * 60 * 1e3);
-  const docs = await OrderModel.find({
-    companyId: { $in: [...EMPRESAS_CON_PEDIDOS] },
-    fechaProgramacion: { $gte: desde, $lte: hasta },
-    horaInicio: { $exists: true, $ne: "" },
-    status: { $nin: ["eliminado", "rechazado"] }
-  }).select("companyId cliente alias cantidadCubos fechaProgramacion horaInicio createdAt").lean();
-  const pedidos = [];
-  for (const doc of docs) {
-    const fechaDoc = doc.fechaProgramacion;
-    if (!fechaDoc) continue;
-    const fecha = diaPeruano(new Date(fechaDoc).getTime());
-    const hora = String(doc.horaInicio || "");
-    const arranqueMs = instanteArranque(fecha, hora);
-    if (arranqueMs === null) continue;
-    const companyId = String(doc.companyId || "");
-    pedidos.push({
-      id: String(doc._id),
-      companyId,
-      empresa: await nombreEmpresa(companyId),
-      // El alias es como lo llaman en el grupo; el nombre legal es el respaldo.
-      cliente: String(doc.alias || doc.cliente || "").trim(),
-      cubos: Number(doc.cantidadCubos) || 0,
-      hora,
-      arranqueMs,
-      creadoMs: doc.createdAt ? new Date(doc.createdAt).getTime() : arranqueMs - 24 * 36e5
-    });
-  }
-  return pedidos;
-};
-var ultimaVersionDelDia = /* @__PURE__ */ new Map();
-var correrDeteccion = async (ahoraMs = Date.now()) => {
-  if (!destinoPermitido()) return 0;
-  if (agenteApagado()) {
-    logger_default.info("[agente] apagado por interruptor: no se propone nada");
-    return 0;
-  }
-  const alcance = await alcanceVigente(ahoraMs);
-  if (!alcance.grupoEscuchado) return 0;
-  for (const vencida of vencidasAhora(ahoraMs)) {
-    await enviarAOperaciones(`\u231B Venci\xF3 sin respuesta la propuesta para \xAB${vencida.nombreDestino}\xBB (${vencida.tipo}). No se mand\xF3.`);
-  }
-  const pedidos = await pedidosConArranque(ahoraMs);
-  const dias = agruparPorDia(pedidos);
-  let nuevas = 0;
-  logger_default.info(
-    `[agente] detecci\xF3n: ${pedidos.length} pedido(s) en ${dias.length} d\xEDa(s), ${observados(alcance.grupoEscuchado)} mensaje(s) observados del grupo, ${pendientes(ahoraMs).length} propuesta(s) esperando respuesta, d\xEDas ${dias.map((d67) => `${d67.fecha} (${d67.pedidos.map((p64) => `${p64.hora} ${p64.empresa} ${p64.cubos}m\xB3`).join(", ")})`).join(" | ") || "\u2014"}`
-  );
-  for (const dia of dias) {
-    if (ahoraMs >= dia.arranqueMs + 60 * 6e4) continue;
-    nuevas += await proponerAvisoDelDia(dia, alcance, ahoraMs);
-    nuevas += await proponerRevisionDelDia(dia, alcance, ahoraMs);
-  }
-  return nuevas;
-};
-var proponerAvisoDelDia = async (dia, alcance, ahoraMs) => {
-  if (!alcance.grupoPlanta) return 0;
-  const firma = `${firmaDia(dia)}|aviso`;
-  if (yaPropuesta("aviso-planta", firma, ahoraMs)) return 0;
-  const anterior = ultimaVersionDelDia.get(dia.fecha);
-  const cambio = anterior ? describirCambio(anterior, dia.pedidos) : "";
-  const texto = construirAvisoProduccion(dia, { actualizacion: cambio || void 0 });
-  const propuesta = proponer(
-    {
-      tipo: "aviso-planta",
-      fecha: dia.fecha,
-      firma,
-      destino: alcance.grupoPlanta,
-      nombreDestino: alcance.nombreGrupoPlanta || "planta",
-      texto
-    },
-    ahoraMs
-  );
-  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino));
-  ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
-  logger_default.info(`[agente] propuesta ${propuesta.id}: ${cambio ? "actualizaci\xF3n" : "aviso"} de producci\xF3n ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB`);
-  return 1;
-};
-var proponerRevisionDelDia = async (dia, alcance, ahoraMs) => {
-  const momento = momentoVigente(dia, ahoraMs);
-  if (!momento) return 0;
-  const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
-  const utiles = filtrarMensajes(delGrupo);
-  const revision = await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
-    soloCriticos: momento === "ultima-llamada",
-    negadas: utiles.negadas
-  });
-  const contexto = {
-    fecha: dia.fecha,
-    minutosParaArranque: Math.round((dia.arranqueMs - ahoraMs) / 6e4),
-    pedidos: dia.pedidos,
-    totalCubos: dia.totalCubos,
-    momento,
-    grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado
-  };
-  const texto = construirAvisoChecklist(revision, contexto);
-  if (!texto) return 0;
-  const firma = firmaAviso(dia.fecha, momento, revision);
-  if (yaPropuesta("checklist-admin", firma, ahoraMs)) return 0;
-  if (yaPropuesta("checklist-admin", `${dia.fecha}|${momento}|`, ahoraMs)) return 0;
-  const propuesta = proponer(
-    {
-      tipo: "checklist-admin",
-      fecha: dia.fecha,
-      firma,
-      destino: alcance.grupoEscuchado,
-      nombreDestino: alcance.nombreGrupo || "admin",
-      texto
-    },
-    ahoraMs
-  );
-  proponer(
-    { ...propuesta, firma: `${dia.fecha}|${momento}|`, texto: "", destino: "", nombreDestino: "" },
-    ahoraMs
-  ).estado = "descartada";
-  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino));
-  logger_default.info(
-    `[agente] propuesta ${propuesta.id}: checklist ${momento} de ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB (${revision.pendientes.length} pendientes, ${revision.semanticas.length} confirmaci\xF3n(es) entendidas por sem\xE1ntica, descartados: ${JSON.stringify(utiles.descartados)})`
-  );
-  return 1;
-};
-var nombreEmpresa = async (companyId) => {
-  const cacheado = nombresEmpresa.get(companyId);
-  if (cacheado) return cacheado;
-  try {
-    const { getCompanyModel: getCompanyModel2 } = await Promise.resolve().then(() => (init_models(), models_exports));
-    const CompanyModel = await getCompanyModel2();
-    const company = await CompanyModel.findOne({ companyId }).select("name").lean();
-    const nombre = String(company?.name || "").trim() || companyId;
-    nombresEmpresa.set(companyId, nombre);
-    return nombre;
-  } catch {
-    return companyId;
-  }
-};
-
-// src/index.ts
-init_observador();
 import fs39 from "fs-extra";
 import path41 from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";

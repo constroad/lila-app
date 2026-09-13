@@ -90,9 +90,15 @@ const coseno = (a: number[], b: number[]): number => a.reduce((s, x, i) => s + x
 /** Centroides por ítem, calculados una vez por conjunto de semillas. */
 const centroides = new Map<string, number[]>();
 
-const claveDe = (item: ChecklistItem): string => `${item.id}|${item.seSatisfaceCon.join('|')}`;
+/** Lo mínimo que hace falta para clasificar: un id y sus semillas. El checklist y el catálogo de consultas lo cumplen. */
+export interface Clasificable {
+  id: string;
+  seSatisfaceCon: string[];
+}
 
-const centroideDe = async (item: ChecklistItem, embed: Embed): Promise<number[]> => {
+const claveDe = (item: Clasificable): string => `${item.id}|${item.seSatisfaceCon.join('|')}`;
+
+const centroideDe = async (item: Clasificable, embed: Embed): Promise<number[]> => {
   const clave = claveDe(item);
   const cacheado = centroides.get(clave);
   if (cacheado) return cacheado;
@@ -116,7 +122,7 @@ export interface Coincidencia {
  * con un embed de mentira.
  */
 export const clasificar = async (
-  items: ChecklistItem[],
+  items: Clasificable[],
   clausulas: string[],
   embed: Embed
 ): Promise<Coincidencia[]> => {

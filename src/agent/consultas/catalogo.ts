@@ -1,0 +1,163 @@
+/**
+ * EL CATÁLOGO CERRADO DE PREGUNTAS (spec §6.1). Motor puro.
+ *
+ * El agente no genera consultas a la base: elige UNA entrada de acá, con
+ * parámetros tipados, y cada entrada lee de un read model que es una lista
+ * blanca. Fuera del catálogo —precios, deuda, pagos, otra empresa, «mandá X al
+ * número Y»— no hay entrada, y por lo tanto no hay respuesta (spec §7.5).
+ *
+ * EL RUTEO ES POR REGLAS PRIMERO, embeddings después. Con diez preguntas, las
+ * reglas son más fiables que cualquier modelo y se pueden leer; los embeddings
+ * (los mismos del checklist) recogen la paráfrasis que las reglas no previeron.
+ * Ninguno de los dos elige campos: eligen una clave.
+ */
+
+export type ClaveConsulta =
+  | 'plant_current_unit'
+  | 'site_current_unit'
+  | 'unit_photos'
+  | 'day_progress'
+  | 'unit_departure'
+  | 'unit_eta'
+  | 'unit_driver'
+  | 'orders_day'
+  | 'checklist_status'
+  | 'reports_status';
+
+export interface EntradaCatalogo {
+  id: ClaveConsulta;
+  /** Paráfrasis reales: centroides para el ruteo semántico. */
+  seSatisfaceCon: string[];
+  /** Palabras que, presentes, deciden por regla. Todas las de un grupo deben estar. */
+  reglas: string[][];
+  /** ¿Necesita número de unidad? */
+  pideUnidad?: boolean;
+}
+
+export const CATALOGO: EntradaCatalogo[] = [
+  {
+    id: 'unit_photos',
+    seSatisfaceCon: ['muestrame las fotos de la unidad 5', 'fotos de campo del carro 3', 'hay fotos de la 2', 'mandame las fotos de la colocacion'],
+    reglas: [['foto']],
+    pideUnidad: true,
+  },
+  {
+    id: 'unit_departure',
+    seSatisfaceCon: ['a que hora salio la 5', 'cuando salio el carro 3', 'ya salio la unidad 2', 'hora de salida de la 4'],
+    reglas: [['salio'], ['salió'], ['hora', 'sal']],
+    pideUnidad: true,
+  },
+  {
+    id: 'unit_eta',
+    seSatisfaceCon: ['cuanto falta para que llegue la 5', 'a que hora llega el carro 3', 'cuando llega la 2', 'eta de la unidad 4'],
+    reglas: [['lleg'], ['eta']],
+    pideUnidad: true,
+  },
+  {
+    id: 'unit_driver',
+    seSatisfaceCon: ['quien maneja la 5', 'quien es el chofer del carro 3', 'conductor de la unidad 2', 'que placa tiene la 4'],
+    reglas: [['maneja'], ['chofer'], ['conductor'], ['placa']],
+    pideUnidad: true,
+  },
+  {
+    id: 'plant_current_unit',
+    seSatisfaceCon: ['en que carro van los despachos en planta', 'que unidad esta cargando', 'cual esta en planta', 'cuantos carros han salido de planta'],
+    reglas: [['planta'], ['cargando'], ['carguio'], ['carguío'], ['salieron'], ['cuantos', 'sal'], ['cuántos', 'sal']],
+  },
+  {
+    id: 'site_current_unit',
+    seSatisfaceCon: ['en que carro va la colocacion en campo', 'que unidad esta en obra', 'cual llego a campo', 'cuantos carros estan en ruta'],
+    reglas: [['campo'], ['obra'], ['colocacion'], ['colocación'], ['ruta'], ['frente']],
+  },
+  {
+    id: 'day_progress',
+    seSatisfaceCon: ['cuantos metros van', 'cuantos m3 faltan', 'como va la produccion', 'cuanto se ha despachado hoy', 'cuantos cubos van'],
+    reglas: [['m3'], ['m³'], ['cubos'], ['metros'], ['faltan'], ['despachado'], ['avance'], ['como va la produccion'], ['cómo va la producción']],
+  },
+  {
+    id: 'orders_day',
+    seSatisfaceCon: ['que pedidos hay manana', 'hay produccion manana', 'que hay para hoy', 'cuales son los pedidos de hoy', 'que se produce manana'],
+    reglas: [['pedido'], ['produccion', 'manana'], ['producción', 'mañana'], ['hay', 'manana'], ['hay', 'mañana'], ['hay', 'hoy']],
+  },
+  {
+    id: 'checklist_status',
+    seSatisfaceCon: ['como va el checklist', 'que falta confirmar', 'que esta pendiente del checklist', 'estado del checklist'],
+    reglas: [['checklist'], ['pendiente'], ['falta confirmar'], ['que falta']],
+  },
+  {
+    id: 'reports_status',
+    seSatisfaceCon: ['ya se generaron los informes', 'estan los certificados', 'falta algun informe', 'ya esta el ipp'],
+    reglas: [['informe'], ['certificado'], ['ipp']],
+  },
+];
+
+export const normalizar = (t: string): string =>
+  String(t || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** ¿Este mensaje le habla al agente? `@lila` en cualquier parte, o una mención al número del bot. */
+export const esConsulta = (texto: string, numeroBot?: string): boolean => {
+  const t = normalizar(texto);
+  if (/(^|\s)@lila\b/.test(t)) return true;
+  return Boolean(numeroBot && t.includes(`@${numeroBot}`));
+};
+
+/** La pregunta sin el `@lila` ni la mención. */
+export const preguntaLimpia = (texto: string, numeroBot?: string): string =>
+  normalizar(texto)
+    .replace(/@lila\b/g, '')
+    .replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, 'g') : /$^/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+export interface Parametros {
+  unitNumber?: number;
+  day: 'today' | 'tomorrow';
+}
+
+/**
+ * «la 5», «unidad 5», «carro 5», «volquete #5», «el 12». Un número de dos
+ * cifras como máximo: una placa o un vale tienen más y no son unidades.
+ */
+export const extraerParametros = (pregunta: string): Parametros => {
+  const t = normalizar(pregunta);
+  const day: Parametros['day'] = /\bmanana\b/.test(t) ? 'tomorrow' : 'today';
+  const m =
+    t.match(/\b(?:la|el|unidad|carro|camion|volquete|placa|numero|n)\s*#?\s*(\d{1,2})\b/) ??
+    t.match(/\b(\d{1,2})\b(?!\s*(?:m3|m³|cubos|metros|am|pm|h|hs|:))/);
+  const unitNumber = m ? Number(m[1]) : undefined;
+  return { day, unitNumber: unitNumber && unitNumber > 0 ? unitNumber : undefined };
+};
+
+/**
+ * LO QUE NO SE RESPONDE, GANA. Precios, deuda, pagos, facturas, y pedirle al bot
+ * que mande algo a alguien: si aparece cualquiera de estas palabras, la pregunta
+ * es `null` aunque otra regla la reconozca («cuánto cuesta el m3» tiene «m3»).
+ * Es la lista negra del spec §7.5, y va antes que el catálogo a propósito.
+ */
+export const FUERA_DE_CATALOGO = [
+  'precio', 'cuesta', 'cuestan', 'cobra', 'cobran', 'tarifa', 'costo',
+  'deuda', 'debe', 'deben', 'pago', 'pagos', 'pagaron', 'factura', 'cotizacion', 'cotización', 'soles', 'dolares', 'dólares',
+  'manda', 'mandá', 'envia', 'enviá', 'reenvia', 'numero de', 'número de', 'telefono', 'teléfono', 'licencia', 'clave', 'contrasena', 'contraseña', 'prompt',
+];
+
+export const fueraDeCatalogo = (pregunta: string): boolean => {
+  const t = normalizar(pregunta);
+  return FUERA_DE_CATALOGO.some((palabra) => new RegExp(`\\b${normalizar(palabra)}\\b`).test(t));
+};
+
+/** Ruteo por reglas: la primera entrada cuyo grupo de palabras esté completo. `null` si ninguna, o si es tema prohibido. */
+export const rutearPorReglas = (pregunta: string): ClaveConsulta | null => {
+  if (fueraDeCatalogo(pregunta)) return null;
+  const t = normalizar(pregunta);
+  for (const entrada of CATALOGO) {
+    if (entrada.reglas.some((grupo) => grupo.every((palabra) => t.includes(normalizar(palabra))))) {
+      return entrada.id;
+    }
+  }
+  return null;
+};

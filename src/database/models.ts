@@ -64,6 +64,21 @@ export async function getOrderModel(): Promise<Model<Record<string, unknown>>> {
   return orderModel;
 }
 
+let dispatchModel: Model<Record<string, unknown>> | null = null;
+
+/** Despachos del Portal (loose, solo lectura): las unidades de un pedido. */
+export async function getDispatchModel(): Promise<Model<Record<string, unknown>>> {
+  if (dispatchModel) {
+    return dispatchModel;
+  }
+
+  const conn = await getSharedConnection();
+  dispatchModel =
+    (conn.models.Dispatch as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Dispatch', looseSchema, 'dispatches');
+  return dispatchModel;
+}
+
 /** Medias del Portal (loose, solo lectura): archivos de un pedido. */
 export async function getMediaModel(): Promise<Model<Record<string, unknown>>> {
   if (mediaModel) {
