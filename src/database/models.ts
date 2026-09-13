@@ -94,6 +94,21 @@ export async function getPublicLinkModel(): Promise<Model<Record<string, unknown
   return publicLinkModel;
 }
 
+let serviceReportModel: Model<Record<string, unknown>> | null = null;
+
+/** Informes de servicio del Portal (loose, solo lectura): control de pista, imprimación, IPP… */
+export async function getServiceReportModel(): Promise<Model<Record<string, unknown>>> {
+  if (serviceReportModel) {
+    return serviceReportModel;
+  }
+
+  const conn = await getSharedConnection();
+  serviceReportModel =
+    (conn.models.ServiceManagementReport as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('ServiceManagementReport', looseSchema, 'servicemanagementreports');
+  return serviceReportModel;
+}
+
 /** Medias del Portal (loose, solo lectura): archivos de un pedido. */
 export async function getMediaModel(): Promise<Model<Record<string, unknown>>> {
   if (mediaModel) {

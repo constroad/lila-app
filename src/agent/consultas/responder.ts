@@ -2,7 +2,7 @@ import { normalizarPlaca, type ClaveConsulta, type Parametros } from './catalogo
 import type { VistaDelDia, UnidadDelDia, PedidoDelDiaVista } from './vista.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import type { Revision } from '../checklist/checklist.js';
-import type { Archivo } from './archivos.js';
+import type { Archivo, EstadoInforme } from './archivos.js';
 
 /** Una respuesta puede ser texto, texto + archivos, o una pregunta con opciones. */
 export interface Respuesta {
@@ -74,7 +74,61 @@ export interface ContextoRespuesta {
   params: Parametros;
   /** Estado del checklist del día, si el agente lo tiene. */
   revision?: Revision | null;
+  /** Informes del día, para `reports_status` y `site_finish`. */
+  informes?: EstadoInforme[] | null;
+  /** «Ahora», para estimaciones. */
+  ahoraMs?: number;
 }
+
+/**
+ * Cuándo terminaría, al ritmo de hoy: el intervalo promedio entre salidas por
+ * las unidades que faltan. Es una ESTIMACIÓN y se dice como tal. Con menos de
+ * dos salidas no hay ritmo, y no se inventa.
+ */
+export const estimarFin = (
+  salidasMs: number[],
+  unidadesRestantes: number,
+  ahoraMs: number
+): { ritmoMin: number; finMs: number } | null => {
+  const s = [...salidasMs].sort((a, b) => a - b);
+  if (s.length < 2 || unidadesRestantes <= 0) return null;
+  const ritmoMs = (s[s.length - 1] - s[0]) / (s.length - 1);
+  if (!Number.isFinite(ritmoMs) || ritmoMs <= 0) return null;
+  const base = Math.max(s[s.length - 1], ahoraMs);
+  return { ritmoMin: Math.round(ritmoMs / 60_000), finMs: base + ritmoMs * unidadesRestantes };
+};
+
+const ESTADO_INFORME = { completed: '✅', draft: '✏️', ninguno: '❌' } as const;
+const textoInforme = (i: EstadoInforme): string =>
+  `${i.status === 'completed' ? ESTADO_INFORME.completed : i.status === 'draft' ? ESTADO_INFORME.draft : ESTADO_INFORME.ninguno} ${i.label}` +
+  (i.status === 'completed' ? ' (completado)' : i.status === 'draft' ? ' (borrador)' : ' (no hay)');
+
+export const AYUDA = [
+  '🤖 *Lo que puedo hacer* — escribime «@lila …»',
+  '',
+  '*Del día en curso*',
+  '• en qué carro van los despachos en planta',
+  '• qué unidad está en campo / cuántos carros están en ruta',
+  '• cuántos m³ van · cuánto falta para terminar la producción en planta',
+  '• cuánto falta para terminar el control de pista',
+  '• a qué hora salió la 3 · quién maneja la 4 · cuánto falta para que llegue la 2',
+  '• muéstrame la foto y video de la unidad de placa AML838',
+  '',
+  '*Pedidos y documentos*',
+  '• qué pedidos hay hoy / mañana',
+  '• generame el enlace del pedido de hoy de globofast',
+  '• muéstrame las guías generadas para la producción de hoy',
+  '• tenemos hecho el informe de imprimación, área adicional…',
+  '• cómo va el checklist',
+  '',
+  '*Cómo funciona*',
+  '• Podés preguntar con tus palabras; si no entiendo, te digo qué sí puedo.',
+  '• Si hay más de una producción y no nombrás la empresa, te pregunto cuál: respondé con el número.',
+  '• Las propuestas (aviso a planta, checklist) llegan a error tracking: mantené presionado el mensaje → *Responder* → *1* para mandarlo, *3* para descartar.',
+  '• `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores del grupo.',
+  '',
+  'No respondo precios, pagos, deudas ni datos de conductores (teléfono, licencia).',
+].join('\n');
 
 export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): string => {
   const { vista, params } = ctx;
@@ -171,7 +225,65 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       return [`📋 *Checklist de ${dia}*`, ...partes].join('\n');
     }
 
-    case 'reports_status':
-      return 'Los informes y certificados todavía no los consulto por acá. Se ven en Portal.';
+    case 'help':
+      return AYUDA;
+
+    case 'plant_finish': {
+      const todas = unidades(vista);
+      const total = vista.orders.reduce((s, o) => s + o.cantidadCubos, 0);
+      const van = vista.orders.reduce((s, o) => s + o.m3Dispatched, 0);
+      const salidas = todas.filter((u) => u.state === 'despachado' && u.departedAt).map((u) => u.departedAt as number);
+      const restantes = todas.filter((u) => u.state !== 'despachado');
+      if (restantes.length === 0 && van >= total) {
+        const ultima = salidas.length ? hora(Math.max(...salidas)) : '—';
+        return `🏭 *Planta terminó ${dia}*: ${van} m³ en ${todas.length} unidades; la última salió a las ${ultima}.`;
+      }
+      const est = estimarFin(salidas, restantes.length, ctx.ahoraMs ?? Date.now());
+      const partes = [
+        `🏭 *Planta, ${dia}*: van *${van} de ${total} m³*, faltan ${Math.max(total - van, 0)} m³ (${restantes.length} unidad(es): ${restantes.map((u) => u.unitNumber).join(', ') || '—'}).`,
+      ];
+      partes.push(est ? `Al ritmo de hoy (una cada ~${est.ritmoMin} min) terminaría *~${hora(est.finMs)}*.` : 'Todavía no hay ritmo para estimar cuándo termina.');
+      return partes.join('\n');
+    }
+
+    case 'site_finish': {
+      const todas = unidades(vista);
+      const llegadas = todas.filter((u) => u.arrivalAt);
+      const enRuta = todas.filter((u) => u.state === 'despachado' && !u.arrivalAt);
+      const porSalir = todas.filter((u) => u.state !== 'despachado');
+      const total = vista.orders.reduce((s, o) => s + o.cantidadCubos, 0);
+      const colocados = llegadas.reduce((s, u) => s + u.quantity, 0);
+      const partes = [
+        `🛣 *Campo, ${dia}*: llegaron *${llegadas.length} unidad(es)* (${colocados} de ${total} m³); en ruta ${enRuta.length}; por salir de planta ${porSalir.length}.`,
+      ];
+      const est = estimarFin(llegadas.map((u) => u.arrivalAt as number), enRuta.length + porSalir.length, ctx.ahoraMs ?? Date.now());
+      partes.push(est ? `Al ritmo de llegadas (una cada ~${est.ritmoMin} min) la última llegaría *~${hora(est.finMs)}*.` : 'Todavía no hay ritmo de llegadas para estimar.');
+      const pista = ctx.informes?.find((i) => i.type === 'CTL-PIS');
+      if (pista) partes.push(`Informe: ${textoInforme(pista)}.`);
+      return partes.join('\n');
+    }
+
+    case 'reports_status': {
+      const informes = ctx.informes ?? [];
+      if (informes.length === 0) return `No tengo informes para ${dia}.`;
+      const t = (ctx.params as Parametros & { pregunta?: string }).pregunta ?? '';
+      // Si nombran informes, esos primero; después el resto que exista.
+      const nombrados = informes.filter((i) => TIPOS_ALIAS[i.type]?.some((a) => t.includes(a)));
+      const resto = informes.filter((i) => !nombrados.includes(i) && i.status !== null);
+      const lineas = [...nombrados, ...resto].map(textoInforme);
+      if (lineas.length === 0) return `📑 *Informes de ${dia}*: todavía no hay ninguno generado.`;
+      return [`📑 *Informes de ${dia}*`, ...lineas.map((l) => `• ${l}`)].join('\n');
+    }
   }
+};
+
+const TIPOS_ALIAS: Record<string, string[]> = {
+  IPP: ['ipp', 'produccion de planta'],
+  'CTL-PIS': ['control de pista', 'pista'],
+  'CTL-IMP': ['imprimacion'],
+  'SOL-IMP': ['solicitud'],
+  IAA: ['area adicional', 'adicional'],
+  'APR-ADI': ['aprobacion'],
+  'ACT-CNF': ['acta', 'conformidad'],
+  'RCP-CAM': ['recepcion'],
 };

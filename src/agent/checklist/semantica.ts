@@ -1,5 +1,6 @@
 import logger from '../../utils/logger.js';
 import { itemSatisfecho, normalizarTexto, type ChecklistItem, type Revision } from './checklist.js';
+import { AGENTE_ACTIVO } from './alcance.js';
 
 /**
  * ENTENDER UNA CONFIRMACIÓN ESCRITA COMO HABLA LA GENTE.
@@ -52,6 +53,7 @@ export const _resetSemantica = (): void => {
  * El modelo, cargado una vez. `null` si no se pudo: el detector sigue sin él.
  */
 export const cargarModelo = async (): Promise<Embed | null> => {
+  if (!AGENTE_ACTIVO) return null; // sin agente, sin 600 MB
   if (embedCargado) return embedCargado;
   if (cargaFallida) return null;
   const inicio = Date.now();

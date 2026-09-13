@@ -1,4 +1,4 @@
-import { acotarArchivos, elegirPedido, responder, unidadPor } from './responder';
+import { AYUDA, acotarArchivos, elegirPedido, estimarFin, responder, unidadPor } from './responder';
 import type { VistaDelDia } from './vista';
 import { CHECKLIST_PRODUCCION } from '../checklist/checklist';
 
@@ -113,5 +113,74 @@ describe('responder', () => {
     expect(elegirPedido(dos, hoy).pedido).toBeNull();
     expect(elegirPedido(dos, hoy).candidatos).toHaveLength(2);
     expect(elegirPedido(dos, { ...hoy, companyId: 'constroad' }).pedido?.orderId).toBe('o2');
+  });
+});
+
+describe('cuánto falta', () => {
+  it('planta: van, faltan, qué unidades, y una estimación al ritmo de hoy', () => {
+    // Salidas 05:32, 05:59, 06:26 → una cada 27 min; falta la 4. Son las 06:30,
+    // más tarde que la última salida: se cuenta desde ahora → ~06:57.
+    const r = responder('plant_finish', { vista, params: hoy, ahoraMs: lima('06:30') });
+    expect(r).toContain('van *75 de 91 m³*, faltan 16 m³ (1 unidad(es): 4)');
+    expect(r).toContain('una cada ~27 min');
+    expect(r).toContain('terminaría *~06:57*');
+  });
+
+  it('planta terminada: lo dice con la última salida', () => {
+    const lista: VistaDelDia = {
+      ...vista,
+      orders: [{ ...vista.orders[0], m3Dispatched: 91, units: vista.orders[0].units.map((u) => ({ ...u, state: 'despachado' as const, departedAt: u.departedAt ?? lima('06:51') })) }],
+    };
+    expect(responder('plant_finish', { vista: lista, params: hoy })).toContain('*Planta terminó domingo 13/09*: 91 m³ en 4 unidades; la última salió a las 06:51');
+  });
+
+  it('campo: llegadas, en ruta, por salir, y el informe de control de pista si existe', () => {
+    const informes = [{ type: 'CTL-PIS', label: 'Control de pista', status: 'draft' as const, cantidad: 1 }];
+    const r = responder('site_finish', { vista, params: hoy, informes, ahoraMs: lima('07:30') });
+    expect(r).toContain('llegaron *1 unidad(es)* (25 de 91 m³); en ruta 2; por salir de planta 1');
+    expect(r).toContain('Informe: ✏️ Control de pista (borrador)');
+    // Con una sola llegada no hay ritmo, y no se inventa.
+    expect(r).toContain('Todavía no hay ritmo de llegadas');
+  });
+
+  it('la estimación necesita al menos dos salidas y algo pendiente', () => {
+    expect(estimarFin([lima('05:00')], 2, lima('06:00'))).toBeNull();
+    expect(estimarFin([lima('05:00'), lima('05:30')], 0, lima('06:00'))).toBeNull();
+    const e = estimarFin([lima('05:00'), lima('05:30')], 2, lima('05:40'))!;
+    expect(e.ritmoMin).toBe(30);
+    // Desde la última salida (05:30) o desde ahora, lo que sea más tarde: 05:40 + 2×30 = 06:40.
+    expect(new Date(e.finMs).toISOString()).toBe(new Date(lima('06:40')).toISOString());
+  });
+});
+
+describe('informes', () => {
+  const informes = [
+    { type: 'IPP', label: 'Producción de planta', status: 'completed' as const, cantidad: 1 },
+    { type: 'CTL-PIS', label: 'Control de pista', status: 'draft' as const, cantidad: 1 },
+    { type: 'CTL-IMP', label: 'Control de imprimación', status: null, cantidad: 0 },
+    { type: 'IAA', label: 'Área adicional', status: null, cantidad: 0 },
+  ];
+
+  it('los nombrados van primero aunque no existan; el resto solo si existe', () => {
+    const r = responder('reports_status', { vista, params: { ...hoy, pregunta: 'tenemos hecho el informe de imprimacion, area adicional?' } as never, informes });
+    const lineas = r.split('\n').slice(1);
+    expect(lineas[0]).toBe('• ❌ Control de imprimación (no hay)');
+    expect(lineas[1]).toBe('• ❌ Área adicional (no hay)');
+    expect(lineas).toContain('• ✅ Producción de planta (completado)');
+    expect(lineas).toContain('• ✏️ Control de pista (borrador)');
+  });
+
+  it('sin ninguno generado, lo dice', () => {
+    const vacios = informes.map((i) => ({ ...i, status: null, cantidad: 0 }));
+    expect(responder('reports_status', { vista, params: hoy, informes: vacios })).toContain('todavía no hay ninguno generado');
+  });
+});
+
+describe('ayuda', () => {
+  it('lista lo que puede, cómo aprobar, y el interruptor', () => {
+    expect(responder('help', { vista, params: hoy })).toBe(AYUDA);
+    expect(AYUDA).toContain('!lila off');
+    expect(AYUDA).toContain('Responder');
+    expect(AYUDA).toContain('No respondo precios');
   });
 });

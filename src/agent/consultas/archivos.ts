@@ -1,4 +1,4 @@
-import { getMediaModel, getPublicLinkModel } from '../../database/models.js';
+import { getMediaModel, getPublicLinkModel, getServiceReportModel } from '../../database/models.js';
 
 /**
  * Lo que hay ARCHIVADO de un día: fotos y videos de un despacho, guías y vales
@@ -91,4 +91,56 @@ export const enlaceDelPedido = async (
     url: `https://www.constroad.com/public/${companySlug}/client-report/order?token=${String(doc.token)}`,
     tabs,
   };
+};
+
+/** Los informes que la gente pregunta, con su nombre. El orden es el de la lista. */
+export const TIPOS_INFORME: Array<{ type: string; label: string; alias: string[] }> = [
+  { type: 'IPP', label: 'Producción de planta', alias: ['ipp', 'produccion de planta'] },
+  { type: 'CTL-PIS', label: 'Control de pista', alias: ['control de pista', 'pista'] },
+  { type: 'CTL-IMP', label: 'Control de imprimación', alias: ['imprimacion'] },
+  { type: 'SOL-IMP', label: 'Solicitud de imprimación', alias: ['solicitud de imprimacion'] },
+  { type: 'IAA', label: 'Área adicional', alias: ['area adicional', 'adicional'] },
+  { type: 'APR-ADI', label: 'Aprobación de adicional', alias: ['aprobacion de adicional', 'aprobacion'] },
+  { type: 'ACT-CNF', label: 'Acta de conformidad', alias: ['acta', 'conformidad'] },
+  { type: 'RCP-CAM', label: 'Recepción de campo', alias: ['recepcion'] },
+];
+
+export interface EstadoInforme {
+  type: string;
+  label: string;
+  /** `null` si no existe ninguno para el día. */
+  status: 'draft' | 'completed' | null;
+  cantidad: number;
+}
+
+/**
+ * Qué informes existen para los pedidos de un día. Un informe se ata al día por
+ * sus `orderIds` o por su `date`; se consideran las dos porque no todos los
+ * tipos llevan pedidos.
+ */
+export const informesDelDia = async (
+  companyId: string,
+  orderIds: string[],
+  fecha: string
+): Promise<EstadoInforme[]> => {
+  const Reports = await getServiceReportModel();
+  const inicio = new Date(`${fecha}T00:00:00.000-05:00`);
+  const fin = new Date(inicio.getTime() + 24 * 3_600_000);
+  const docs = (await Reports.find({
+    companyId,
+    $or: [{ orderIds: { $in: orderIds } }, { date: { $gte: inicio, $lt: fin } }],
+  })
+    .select('type status')
+    .lean()) as Doc[];
+
+  return TIPOS_INFORME.map((t) => {
+    const delTipo = docs.filter((d) => String(d.type) === t.type);
+    const completado = delTipo.some((d) => String(d.status) === 'completed');
+    return {
+      type: t.type,
+      label: t.label,
+      status: delTipo.length === 0 ? null : completado ? 'completed' : 'draft',
+      cantidad: delTipo.length,
+    };
+  });
 };

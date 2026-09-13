@@ -1,6 +1,6 @@
 import logger from '../../utils/logger.js';
 import { getOrderModel } from '../../database/models.js';
-import { EMPRESAS_CON_PEDIDOS, destinoPermitido } from './alcance.js';
+import { AGENTE_ACTIVO, EMPRESAS_CON_PEDIDOS, destinoPermitido } from './alcance.js';
 import { alcanceVigente } from './observador.js';
 import { mensajesDesde, observados } from './almacen.js';
 import { filtrarMensajes } from './mensajes.js';
@@ -102,7 +102,7 @@ const ultimaVersionDelDia = new Map<string, PedidoDelDia[]>();
  * Una pasada. Devuelve cuántas propuestas nuevas publicó — 0 es lo normal.
  */
 export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => {
-  if (!destinoPermitido()) return 0;
+  if (!AGENTE_ACTIVO || !destinoPermitido()) return 0;
   if (agenteApagado()) {
     logger.info('[agente] apagado por interruptor: no se propone nada');
     return 0;

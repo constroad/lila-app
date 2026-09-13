@@ -24,7 +24,10 @@ export type ClaveConsulta =
   | 'unit_driver'
   | 'orders_day'
   | 'checklist_status'
-  | 'reports_status';
+  | 'reports_status'
+  | 'plant_finish'
+  | 'site_finish'
+  | 'help';
 
 export interface EntradaCatalogo {
   id: ClaveConsulta;
@@ -84,7 +87,7 @@ export const CATALOGO: EntradaCatalogo[] = [
   {
     id: 'day_progress',
     seSatisfaceCon: ['cuantos metros van', 'cuantos m3 faltan', 'como va la produccion', 'cuanto se ha despachado hoy', 'cuantos cubos van'],
-    reglas: [['m3'], ['m³'], ['cubos'], ['metros'], ['faltan'], ['despachado'], ['avance'], ['como va la produccion'], ['cómo va la producción']],
+    reglas: [['m3'], ['m³'], ['cubos'], ['metros'], ['faltan'], ['despachado'], ['avance'], ['como va la produccion'], ['cómo va la producción'], ['como vamos', 'produccion'], ['como vamos', 'despacho'], ['como va', 'despacho'], ['como va', 'planta']],
   },
   {
     id: 'orders_day',
@@ -97,9 +100,24 @@ export const CATALOGO: EntradaCatalogo[] = [
     reglas: [['checklist'], ['pendiente'], ['falta confirmar'], ['que falta']],
   },
   {
+    id: 'help',
+    seSatisfaceCon: ['ayuda', 'que puedes hacer', 'que sabes hacer', 'comandos', 'como te uso'],
+    reglas: [['ayuda'], ['help'], ['que puedes hacer'], ['qué puedes hacer'], ['que sabes'], ['comandos']],
+  },
+  {
+    id: 'plant_finish',
+    seSatisfaceCon: ['cuanto falta para terminar la produccion en planta', 'a que hora termina planta', 'cuando acaba la produccion', 'falta mucho para terminar de despachar'],
+    reglas: [['falta', 'terminar', 'planta'], ['falta', 'terminar', 'produccion'], ['falta', 'terminar', 'producción'], ['termina', 'planta'], ['acaba', 'produccion'], ['falta', 'despachar'], ['acabamos', 'planta'], ['terminamos', 'planta'], ['hora', 'acaba'], ['termina', 'despacho'], ['termina', 'produccion'], ['termina', 'producción']],
+  },
+  {
+    id: 'site_finish',
+    seSatisfaceCon: ['cuanto falta para terminar el control de pista', 'cuanto falta para terminar la colocacion', 'a que hora terminan en campo', 'falta mucho para acabar en obra'],
+    reglas: [['falta', 'terminar', 'pista'], ['falta', 'terminar', 'colocacion'], ['falta', 'terminar', 'colocación'], ['falta', 'terminar', 'campo'], ['termina', 'campo'], ['falta', 'acabar', 'obra'], ['termine', 'obra'], ['termine', 'campo'], ['acabamos', 'obra'], ['terminamos', 'campo'], ['termina', 'obra'], ['termina', 'colocacion']],
+  },
+  {
     id: 'reports_status',
-    seSatisfaceCon: ['ya se generaron los informes', 'estan los certificados', 'falta algun informe', 'ya esta el ipp'],
-    reglas: [['informe'], ['certificado'], ['ipp']],
+    seSatisfaceCon: ['ya se generaron los informes', 'tenemos hecho el informe de imprimacion', 'esta el informe de area adicional', 'falta algun informe', 'ya esta el ipp', 'hicieron el control de pista'],
+    reglas: [['informe'], ['certificado'], ['ipp'], ['imprimacion'], ['imprimación'], ['area adicional'], ['área adicional'], ['acta']],
   },
 ];
 
@@ -196,10 +214,19 @@ export const fueraDeCatalogo = (pregunta: string): boolean => {
 export const rutearPorReglas = (pregunta: string): ClaveConsulta | null => {
   if (fueraDeCatalogo(pregunta)) return null;
   const t = normalizar(pregunta);
+  // GANA LA REGLA MÁS ESPECÍFICA, no la primera: «cuánto falta para terminar
+  // la producción en planta» contiene «planta», pero la regla de tres palabras
+  // de `plant_finish` dice más que la de una palabra de `plant_current_unit`.
+  // Especificidad = cuántas palabras exige la regla; a igual cantidad manda el
+  // orden del catálogo, que va de lo que se PIDE (fotos, enlace, guías) a
+  // dónde (planta, campo): «fotos de campo» pide fotos.
+  let mejor: { id: ClaveConsulta; palabras: number } | null = null;
   for (const entrada of CATALOGO) {
-    if (entrada.reglas.some((grupo) => grupo.every((palabra) => t.includes(normalizar(palabra))))) {
-      return entrada.id;
+    for (const grupo of entrada.reglas) {
+      const palabras = grupo.map(normalizar);
+      if (!palabras.every((palabra) => t.includes(palabra))) continue;
+      if (!mejor || palabras.length > mejor.palabras) mejor = { id: entrada.id, palabras: palabras.length };
     }
   }
-  return null;
+  return mejor?.id ?? null;
 };

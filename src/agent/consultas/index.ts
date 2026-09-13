@@ -2,7 +2,7 @@ import logger from '../../utils/logger.js';
 import { CATALOGO, esConsulta, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { construirVista, type VistaDelDia } from './vista.js';
 import { acotarArchivos, elegirPedido, etiquetaPedido, responder, unidadPor, type Respuesta } from './responder.js';
-import { enlaceDelPedido, guiasDelPedido, mediaDelDespacho } from './archivos.js';
+import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { responderEnGrupo } from '../checklist/emisor.js';
@@ -22,7 +22,8 @@ export { esConsulta };
  *
  * Nunca lanza: cuelga del listener.
  */
-const UMBRAL_RUTEO = 0.85;
+// Más alto que el del checklist: rutear mal una pregunta es peor que decir «no entendí».
+const UMBRAL_RUTEO = 0.88;
 
 export const rutear = async (pregunta: string): Promise<ClaveConsulta | null> => {
   // La lista negra gana también sobre el modelo: un embedding no sabe qué es un precio.
@@ -122,7 +123,30 @@ const armarRespuesta = async (
     return unidadPor(vista, params) ? respuestaMedia(vista, params, encabezado) : { texto: encabezado };
   }
   const revision = clave === 'checklist_status' ? await revisionDelDia(fecha) : null;
-  return { texto: responder(clave, { vista, params, revision }) };
+  const informes =
+    clave === 'reports_status' || clave === 'site_finish'
+      ? await informesDeLaVista(vista, params, fecha)
+      : null;
+  return { texto: responder(clave, { vista, params: { ...params, pregunta } as Parametros, revision, informes }) };
+};
+
+/** Informes del día de la empresa preguntada (o de todas las del día). */
+const informesDeLaVista = async (vista: VistaDelDia, params: Parametros, fecha: string) => {
+  const pedidos = params.companyId ? vista.orders.filter((o) => o.companyId === params.companyId) : vista.orders;
+  const empresas = Array.from(new Set(pedidos.map((o) => o.companyId)));
+  if (empresas.length === 0) return [];
+  const porEmpresa = await Promise.all(
+    empresas.map((companyId) =>
+      informesDelDia(companyId, pedidos.filter((o) => o.companyId === companyId).map((o) => o.orderId), fecha)
+    )
+  );
+  // Con varias empresas se funde por tipo: «completado» le gana a «borrador» y a «no hay».
+  const orden = { completed: 2, draft: 1 } as const;
+  return porEmpresa[0].map((base, i) => {
+    const mismos = porEmpresa.map((lista) => lista[i]);
+    const mejor = mismos.reduce((a, b) => ((orden[b.status as 'completed' | 'draft'] ?? 0) > (orden[a.status as 'completed' | 'draft'] ?? 0) ? b : a));
+    return { ...base, status: mejor.status, cantidad: mismos.reduce((n, x) => n + x.cantidad, 0) };
+  });
 };
 
 export const atenderConsulta = async (

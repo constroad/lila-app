@@ -1,5 +1,5 @@
 import logger from '../../utils/logger.js';
-import { COMPANY_PILOTO, destinoPermitido, destinosConAprobacion, type AlcanceAgente } from './alcance.js';
+import { AGENTE_ACTIVO, COMPANY_PILOTO, destinoPermitido, destinosConAprobacion, grupoDestino, type AlcanceAgente } from './alcance.js';
 import { anotarMensaje, type Propuesta } from './sugerencias.js';
 import { guardarPropuesta } from './persistencia.js';
 import { agenteApagado } from './interruptor.js';
@@ -79,10 +79,11 @@ export const responderEnGrupo = async (
   respuesta: { texto?: string; archivos?: ArchivoAEnviar[] },
   alcance: AlcanceAgente
 ): Promise<boolean> => {
-  if (agenteApagado()) return false;
+  if (!AGENTE_ACTIVO || agenteApagado()) return false;
   const jid = String(destino || '').trim();
-  if (!jid || jid !== alcance.grupoEscuchado) {
-    logger.error(`[agente] se intentó responder en ${jid || '(vacío)'}, que no es el grupo escuchado. No se manda.`);
+  // Solo el grupo que se escucha o el nuestro de operaciones: donde se pregunta, se responde.
+  if (!jid || (jid !== alcance.grupoEscuchado && jid !== grupoDestino())) {
+    logger.error(`[agente] se intentó responder en ${jid || '(vacío)'}, que no es un grupo donde se atienden consultas. No se manda.`);
     return false;
   }
   if (respuesta.texto?.trim()) await mandar(jid, respuesta.texto);
@@ -120,6 +121,7 @@ export const enviarAprobado = async (
   propuesta: Propuesta,
   alcance: AlcanceAgente
 ): Promise<boolean> => {
+  if (!AGENTE_ACTIVO) return false;
   if (agenteApagado()) {
     logger.warn(`[agente] la propuesta ${propuesta.id} está aprobada pero el agente está apagado: no se manda`);
     return false;

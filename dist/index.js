@@ -8233,6 +8233,7 @@ __export(models_exports, {
   getMediaModel: () => getMediaModel,
   getOrderModel: () => getOrderModel,
   getPublicLinkModel: () => getPublicLinkModel,
+  getServiceReportModel: () => getServiceReportModel,
   getSharedModels: () => getSharedModels,
   getUsageMetricModel: () => getUsageMetricModel
 });
@@ -8285,6 +8286,14 @@ async function getPublicLinkModel() {
   publicLinkModel = conn.models.PublicLink || conn.model("PublicLink", looseSchema, "publiclinks");
   return publicLinkModel;
 }
+async function getServiceReportModel() {
+  if (serviceReportModel) {
+    return serviceReportModel;
+  }
+  const conn = await getSharedConnection();
+  serviceReportModel = conn.models.ServiceManagementReport || conn.model("ServiceManagementReport", looseSchema, "servicemanagementreports");
+  return serviceReportModel;
+}
 async function getMediaModel() {
   if (mediaModel) {
     return mediaModel;
@@ -8335,7 +8344,7 @@ async function getSharedModels() {
   ]);
   return { CronJobModel, CompanyModel, ConfigModel };
 }
-var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, publicLinkModel, academyTutorialModel, gpsPositionModel;
+var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, publicLinkModel, serviceReportModel, academyTutorialModel, gpsPositionModel;
 var init_models = __esm({
   "src/database/models.ts"() {
     init_sharedConnection();
@@ -8353,13 +8362,14 @@ var init_models = __esm({
     folderModel = null;
     dispatchModel = null;
     publicLinkModel = null;
+    serviceReportModel = null;
     academyTutorialModel = null;
     gpsPositionModel = null;
   }
 });
 
 // src/agent/checklist/alcance.ts
-var COMPANY_PILOTO, EMPRESAS_CON_PEDIDOS, GRUPO_ESCUCHA_PILOTO, GRUPO_PLANTA_PILOTO, esJidDeGrupo, AGENTE_CHECKLIST_ACTIVO, grupoDestino, debeEscuchar, puedeEnviarA, destinosConAprobacion, destinoPermitido, resolverAlcance;
+var COMPANY_PILOTO, EMPRESAS_CON_PEDIDOS, GRUPO_ESCUCHA_PILOTO, GRUPO_PLANTA_PILOTO, esJidDeGrupo, AGENTE_ACTIVO, grupoDestino, debeEscuchar, puedeEnviarA, destinosConAprobacion, destinoPermitido, resolverAlcance;
 var init_alcance = __esm({
   "src/agent/checklist/alcance.ts"() {
     init_whatsapp_constants();
@@ -8368,16 +8378,16 @@ var init_alcance = __esm({
     GRUPO_ESCUCHA_PILOTO = "Inframaq Admin";
     GRUPO_PLANTA_PILOTO = "Inframaq Planta";
     esJidDeGrupo = (valor) => String(valor || "").trim().endsWith("@g.us");
-    AGENTE_CHECKLIST_ACTIVO = true;
+    AGENTE_ACTIVO = true;
     grupoDestino = () => GROUP_ERRORS_TRACKING;
     debeEscuchar = (jid, alcance) => {
-      if (!AGENTE_CHECKLIST_ACTIVO) return false;
+      if (!AGENTE_ACTIVO) return false;
       const escuchado = String(alcance.grupoEscuchado || "").trim();
       if (!escuchado) return false;
       return String(jid || "").trim() === escuchado;
     };
     puedeEnviarA = (jid) => {
-      if (!AGENTE_CHECKLIST_ACTIVO) return false;
+      if (!AGENTE_ACTIVO) return false;
       const pedido = String(jid || "").trim();
       if (!pedido.endsWith("@g.us")) return false;
       return pedido === grupoDestino();
@@ -8889,10 +8899,10 @@ var init_emisor = __esm({
       return true;
     };
     responderEnGrupo = async (destino, respuesta, alcance) => {
-      if (agenteApagado()) return false;
+      if (!AGENTE_ACTIVO || agenteApagado()) return false;
       const jid = String(destino || "").trim();
-      if (!jid || jid !== alcance.grupoEscuchado) {
-        logger_default.error(`[agente] se intent\xF3 responder en ${jid || "(vac\xEDo)"}, que no es el grupo escuchado. No se manda.`);
+      if (!jid || jid !== alcance.grupoEscuchado && jid !== grupoDestino()) {
+        logger_default.error(`[agente] se intent\xF3 responder en ${jid || "(vac\xEDo)"}, que no es un grupo donde se atienden consultas. No se manda.`);
         return false;
       }
       if (respuesta.texto?.trim()) await mandar(jid, respuesta.texto);
@@ -8914,6 +8924,7 @@ var init_emisor = __esm({
     };
     mandadas = /* @__PURE__ */ new Set();
     enviarAprobado = async (propuesta, alcance) => {
+      if (!AGENTE_ACTIVO) return false;
       if (agenteApagado()) {
         logger_default.warn(`[agente] la propuesta ${propuesta.id} est\xE1 aprobada pero el agente est\xE1 apagado: no se manda`);
         return false;
@@ -9027,7 +9038,7 @@ var init_catalogo = __esm({
       {
         id: "day_progress",
         seSatisfaceCon: ["cuantos metros van", "cuantos m3 faltan", "como va la produccion", "cuanto se ha despachado hoy", "cuantos cubos van"],
-        reglas: [["m3"], ["m\xB3"], ["cubos"], ["metros"], ["faltan"], ["despachado"], ["avance"], ["como va la produccion"], ["c\xF3mo va la producci\xF3n"]]
+        reglas: [["m3"], ["m\xB3"], ["cubos"], ["metros"], ["faltan"], ["despachado"], ["avance"], ["como va la produccion"], ["c\xF3mo va la producci\xF3n"], ["como vamos"], ["c\xF3mo vamos"], ["como va"], ["c\xF3mo va"]]
       },
       {
         id: "orders_day",
@@ -9040,9 +9051,24 @@ var init_catalogo = __esm({
         reglas: [["checklist"], ["pendiente"], ["falta confirmar"], ["que falta"]]
       },
       {
+        id: "help",
+        seSatisfaceCon: ["ayuda", "que puedes hacer", "que sabes hacer", "comandos", "como te uso"],
+        reglas: [["ayuda"], ["help"], ["que puedes hacer"], ["qu\xE9 puedes hacer"], ["que sabes"], ["comandos"]]
+      },
+      {
+        id: "plant_finish",
+        seSatisfaceCon: ["cuanto falta para terminar la produccion en planta", "a que hora termina planta", "cuando acaba la produccion", "falta mucho para terminar de despachar"],
+        reglas: [["falta", "terminar", "planta"], ["falta", "terminar", "produccion"], ["falta", "terminar", "producci\xF3n"], ["termina", "planta"], ["acaba", "produccion"], ["falta", "despachar"], ["acabamos", "planta"], ["terminamos", "planta"], ["hora", "acaba"], ["termina", "despacho"], ["termina", "produccion"], ["termina", "producci\xF3n"]]
+      },
+      {
+        id: "site_finish",
+        seSatisfaceCon: ["cuanto falta para terminar el control de pista", "cuanto falta para terminar la colocacion", "a que hora terminan en campo", "falta mucho para acabar en obra"],
+        reglas: [["falta", "terminar", "pista"], ["falta", "terminar", "colocacion"], ["falta", "terminar", "colocaci\xF3n"], ["falta", "terminar", "campo"], ["termina", "campo"], ["falta", "acabar", "obra"], ["termine", "obra"], ["termine", "campo"], ["acabamos", "obra"], ["terminamos", "campo"], ["termina", "obra"], ["termina", "colocacion"]]
+      },
+      {
         id: "reports_status",
-        seSatisfaceCon: ["ya se generaron los informes", "estan los certificados", "falta algun informe", "ya esta el ipp"],
-        reglas: [["informe"], ["certificado"], ["ipp"]]
+        seSatisfaceCon: ["ya se generaron los informes", "tenemos hecho el informe de imprimacion", "esta el informe de area adicional", "falta algun informe", "ya esta el ipp", "hicieron el control de pista"],
+        reglas: [["informe"], ["certificado"], ["ipp"], ["imprimacion"], ["imprimaci\xF3n"], ["area adicional"], ["\xE1rea adicional"], ["acta"]]
       }
     ];
     normalizar = (t44) => String(t44 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
@@ -9116,12 +9142,15 @@ var init_catalogo = __esm({
     rutearPorReglas = (pregunta) => {
       if (fueraDeCatalogo(pregunta)) return null;
       const t44 = normalizar(pregunta);
+      let mejor = null;
       for (const entrada of CATALOGO) {
-        if (entrada.reglas.some((grupo) => grupo.every((palabra) => t44.includes(normalizar(palabra))))) {
-          return entrada.id;
+        for (const grupo of entrada.reglas) {
+          const palabras = grupo.map(normalizar);
+          if (!palabras.every((palabra) => t44.includes(palabra))) continue;
+          if (!mejor || palabras.length > mejor.palabras) mejor = { id: entrada.id, palabras: palabras.length };
         }
       }
-      return null;
+      return mejor?.id ?? null;
     };
   }
 });
@@ -9223,7 +9252,7 @@ var init_vista = __esm({
 });
 
 // src/agent/consultas/responder.ts
-var LIMITES, acotarArchivos, elegirPedido, etiquetaPedido, unidadPor, hora, unidades, unidad, sinPedidos, responder;
+var LIMITES, acotarArchivos, elegirPedido, etiquetaPedido, unidadPor, hora, unidades, unidad, sinPedidos, estimarFin, ESTADO_INFORME, textoInforme, AYUDA, responder, TIPOS_ALIAS;
 var init_responder = __esm({
   "src/agent/consultas/responder.ts"() {
     init_catalogo();
@@ -9256,6 +9285,42 @@ var init_responder = __esm({
     unidades = (vista) => vista.orders.flatMap((o37) => o37.units.map((u66) => ({ ...u66, pedido: o37.cliente || o37.companyId })));
     unidad = (vista, n43) => n43 ? unidades(vista).find((u66) => u66.unitNumber === n43) : void 0;
     sinPedidos = (vista) => vista.orders.length === 0 ? `No hay pedidos para ${fechaLegible(vista.fecha)}.` : null;
+    estimarFin = (salidasMs, unidadesRestantes, ahoraMs) => {
+      const s59 = [...salidasMs].sort((a49, b63) => a49 - b63);
+      if (s59.length < 2 || unidadesRestantes <= 0) return null;
+      const ritmoMs = (s59[s59.length - 1] - s59[0]) / (s59.length - 1);
+      if (!Number.isFinite(ritmoMs) || ritmoMs <= 0) return null;
+      const base = Math.max(s59[s59.length - 1], ahoraMs);
+      return { ritmoMin: Math.round(ritmoMs / 6e4), finMs: base + ritmoMs * unidadesRestantes };
+    };
+    ESTADO_INFORME = { completed: "\u2705", draft: "\u270F\uFE0F", ninguno: "\u274C" };
+    textoInforme = (i50) => `${i50.status === "completed" ? ESTADO_INFORME.completed : i50.status === "draft" ? ESTADO_INFORME.draft : ESTADO_INFORME.ninguno} ${i50.label}` + (i50.status === "completed" ? " (completado)" : i50.status === "draft" ? " (borrador)" : " (no hay)");
+    AYUDA = [
+      "\u{1F916} *Lo que puedo hacer* \u2014 escribime \xAB@lila \u2026\xBB",
+      "",
+      "*Del d\xEDa en curso*",
+      "\u2022 en qu\xE9 carro van los despachos en planta",
+      "\u2022 qu\xE9 unidad est\xE1 en campo / cu\xE1ntos carros est\xE1n en ruta",
+      "\u2022 cu\xE1ntos m\xB3 van \xB7 cu\xE1nto falta para terminar la producci\xF3n en planta",
+      "\u2022 cu\xE1nto falta para terminar el control de pista",
+      "\u2022 a qu\xE9 hora sali\xF3 la 3 \xB7 qui\xE9n maneja la 4 \xB7 cu\xE1nto falta para que llegue la 2",
+      "\u2022 mu\xE9strame la foto y video de la unidad de placa AML838",
+      "",
+      "*Pedidos y documentos*",
+      "\u2022 qu\xE9 pedidos hay hoy / ma\xF1ana",
+      "\u2022 generame el enlace del pedido de hoy de globofast",
+      "\u2022 mu\xE9strame las gu\xEDas generadas para la producci\xF3n de hoy",
+      "\u2022 tenemos hecho el informe de imprimaci\xF3n, \xE1rea adicional\u2026",
+      "\u2022 c\xF3mo va el checklist",
+      "",
+      "*C\xF3mo funciona*",
+      "\u2022 Pod\xE9s preguntar con tus palabras; si no entiendo, te digo qu\xE9 s\xED puedo.",
+      "\u2022 Si hay m\xE1s de una producci\xF3n y no nombr\xE1s la empresa, te pregunto cu\xE1l: respond\xE9 con el n\xFAmero.",
+      "\u2022 Las propuestas (aviso a planta, checklist) llegan a error tracking: manten\xE9 presionado el mensaje \u2192 *Responder* \u2192 *1* para mandarlo, *3* para descartar.",
+      "\u2022 `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores del grupo.",
+      "",
+      "No respondo precios, pagos, deudas ni datos de conductores (tel\xE9fono, licencia)."
+    ].join("\n");
     responder = (clave2, ctx) => {
       const { vista, params } = ctx;
       const dia = fechaLegible(vista.fecha);
@@ -9334,15 +9399,68 @@ var init_responder = __esm({
           partes.push(r39.pendientes.length ? `\u2754 Sin confirmar: ${r39.pendientes.map((i50) => i50.titulo).join(", ")}.` : "\u{1F389} No falta nada.");
           return [`\u{1F4CB} *Checklist de ${dia}*`, ...partes].join("\n");
         }
-        case "reports_status":
-          return "Los informes y certificados todav\xEDa no los consulto por ac\xE1. Se ven en Portal.";
+        case "help":
+          return AYUDA;
+        case "plant_finish": {
+          const todas = unidades(vista);
+          const total = vista.orders.reduce((s59, o37) => s59 + o37.cantidadCubos, 0);
+          const van = vista.orders.reduce((s59, o37) => s59 + o37.m3Dispatched, 0);
+          const salidas = todas.filter((u66) => u66.state === "despachado" && u66.departedAt).map((u66) => u66.departedAt);
+          const restantes = todas.filter((u66) => u66.state !== "despachado");
+          if (restantes.length === 0 && van >= total) {
+            const ultima = salidas.length ? hora(Math.max(...salidas)) : "\u2014";
+            return `\u{1F3ED} *Planta termin\xF3 ${dia}*: ${van} m\xB3 en ${todas.length} unidades; la \xFAltima sali\xF3 a las ${ultima}.`;
+          }
+          const est = estimarFin(salidas, restantes.length, ctx.ahoraMs ?? Date.now());
+          const partes = [
+            `\u{1F3ED} *Planta, ${dia}*: van *${van} de ${total} m\xB3*, faltan ${Math.max(total - van, 0)} m\xB3 (${restantes.length} unidad(es): ${restantes.map((u66) => u66.unitNumber).join(", ") || "\u2014"}).`
+          ];
+          partes.push(est ? `Al ritmo de hoy (una cada ~${est.ritmoMin} min) terminar\xEDa *~${hora(est.finMs)}*.` : "Todav\xEDa no hay ritmo para estimar cu\xE1ndo termina.");
+          return partes.join("\n");
+        }
+        case "site_finish": {
+          const todas = unidades(vista);
+          const llegadas = todas.filter((u66) => u66.arrivalAt);
+          const enRuta = todas.filter((u66) => u66.state === "despachado" && !u66.arrivalAt);
+          const porSalir = todas.filter((u66) => u66.state !== "despachado");
+          const total = vista.orders.reduce((s59, o37) => s59 + o37.cantidadCubos, 0);
+          const colocados = llegadas.reduce((s59, u66) => s59 + u66.quantity, 0);
+          const partes = [
+            `\u{1F6E3} *Campo, ${dia}*: llegaron *${llegadas.length} unidad(es)* (${colocados} de ${total} m\xB3); en ruta ${enRuta.length}; por salir de planta ${porSalir.length}.`
+          ];
+          const est = estimarFin(llegadas.map((u66) => u66.arrivalAt), enRuta.length + porSalir.length, ctx.ahoraMs ?? Date.now());
+          partes.push(est ? `Al ritmo de llegadas (una cada ~${est.ritmoMin} min) la \xFAltima llegar\xEDa *~${hora(est.finMs)}*.` : "Todav\xEDa no hay ritmo de llegadas para estimar.");
+          const pista = ctx.informes?.find((i50) => i50.type === "CTL-PIS");
+          if (pista) partes.push(`Informe: ${textoInforme(pista)}.`);
+          return partes.join("\n");
+        }
+        case "reports_status": {
+          const informes = ctx.informes ?? [];
+          if (informes.length === 0) return `No tengo informes para ${dia}.`;
+          const t44 = ctx.params.pregunta ?? "";
+          const nombrados = informes.filter((i50) => TIPOS_ALIAS[i50.type]?.some((a49) => t44.includes(a49)));
+          const resto = informes.filter((i50) => !nombrados.includes(i50) && i50.status !== null);
+          const lineas = [...nombrados, ...resto].map(textoInforme);
+          if (lineas.length === 0) return `\u{1F4D1} *Informes de ${dia}*: todav\xEDa no hay ninguno generado.`;
+          return [`\u{1F4D1} *Informes de ${dia}*`, ...lineas.map((l57) => `\u2022 ${l57}`)].join("\n");
+        }
       }
+    };
+    TIPOS_ALIAS = {
+      IPP: ["ipp", "produccion de planta"],
+      "CTL-PIS": ["control de pista", "pista"],
+      "CTL-IMP": ["imprimacion"],
+      "SOL-IMP": ["solicitud"],
+      IAA: ["area adicional", "adicional"],
+      "APR-ADI": ["aprobacion"],
+      "ACT-CNF": ["acta", "conformidad"],
+      "RCP-CAM": ["recepcion"]
     };
   }
 });
 
 // src/agent/consultas/archivos.ts
-var aArchivo, mediaDelDespacho, guiasDelPedido, enlaceDelPedido;
+var aArchivo, mediaDelDespacho, guiasDelPedido, enlaceDelPedido, TIPOS_INFORME, informesDelDia;
 var init_archivos = __esm({
   "src/agent/consultas/archivos.ts"() {
     init_models();
@@ -9395,6 +9513,35 @@ var init_archivos = __esm({
         tabs
       };
     };
+    TIPOS_INFORME = [
+      { type: "IPP", label: "Producci\xF3n de planta", alias: ["ipp", "produccion de planta"] },
+      { type: "CTL-PIS", label: "Control de pista", alias: ["control de pista", "pista"] },
+      { type: "CTL-IMP", label: "Control de imprimaci\xF3n", alias: ["imprimacion"] },
+      { type: "SOL-IMP", label: "Solicitud de imprimaci\xF3n", alias: ["solicitud de imprimacion"] },
+      { type: "IAA", label: "\xC1rea adicional", alias: ["area adicional", "adicional"] },
+      { type: "APR-ADI", label: "Aprobaci\xF3n de adicional", alias: ["aprobacion de adicional", "aprobacion"] },
+      { type: "ACT-CNF", label: "Acta de conformidad", alias: ["acta", "conformidad"] },
+      { type: "RCP-CAM", label: "Recepci\xF3n de campo", alias: ["recepcion"] }
+    ];
+    informesDelDia = async (companyId, orderIds, fecha) => {
+      const Reports = await getServiceReportModel();
+      const inicio = /* @__PURE__ */ new Date(`${fecha}T00:00:00.000-05:00`);
+      const fin = new Date(inicio.getTime() + 24 * 36e5);
+      const docs = await Reports.find({
+        companyId,
+        $or: [{ orderIds: { $in: orderIds } }, { date: { $gte: inicio, $lt: fin } }]
+      }).select("type status").lean();
+      return TIPOS_INFORME.map((t44) => {
+        const delTipo = docs.filter((d67) => String(d67.type) === t44.type);
+        const completado = delTipo.some((d67) => String(d67.status) === "completed");
+        return {
+          type: t44.type,
+          label: t44.label,
+          status: delTipo.length === 0 ? null : completado ? "completed" : "draft",
+          cantidad: delTipo.length
+        };
+      });
+    };
   }
 });
 
@@ -9431,11 +9578,13 @@ var init_semantica = __esm({
   "src/agent/checklist/semantica.ts"() {
     init_logger();
     init_checklist();
+    init_alcance();
     UMBRAL_SIMILITUD = 0.86;
     MODELO = "Xenova/multilingual-e5-small";
     embedCargado = null;
     cargaFallida = false;
     cargarModelo = async () => {
+      if (!AGENTE_ACTIVO) return null;
       if (embedCargado) return embedCargado;
       if (cargaFallida) return null;
       const inicio = Date.now();
@@ -9747,7 +9896,7 @@ var init_detector = __esm({
     };
     ultimaVersionDelDia = /* @__PURE__ */ new Map();
     correrDeteccion = async (ahoraMs = Date.now()) => {
-      if (!destinoPermitido()) return 0;
+      if (!AGENTE_ACTIVO || !destinoPermitido()) return 0;
       if (agenteApagado()) {
         logger_default.info("[agente] apagado por interruptor: no se propone nada");
         return 0;
@@ -9869,7 +10018,7 @@ __export(consultas_exports, {
   esConsulta: () => esConsulta,
   rutear: () => rutear
 });
-var UMBRAL_RUTEO, rutear, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, armarRespuesta, atenderConsulta, atenderEleccion;
+var UMBRAL_RUTEO, rutear, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, armarRespuesta, informesDeLaVista, atenderConsulta, atenderEleccion;
 var init_consultas = __esm({
   "src/agent/consultas/index.ts"() {
     init_logger();
@@ -9882,7 +10031,7 @@ var init_consultas = __esm({
     init_emisor();
     init_tiempo();
     init_detector();
-    UMBRAL_RUTEO = 0.85;
+    UMBRAL_RUTEO = 0.88;
     rutear = async (pregunta) => {
       if (fueraDeCatalogo(pregunta)) return null;
       const porRegla = rutearPorReglas(pregunta);
@@ -9958,7 +10107,24 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         return unidadPor(vista, params) ? respuestaMedia(vista, params, encabezado) : { texto: encabezado };
       }
       const revision = clave2 === "checklist_status" ? await revisionDelDia(fecha) : null;
-      return { texto: responder(clave2, { vista, params, revision }) };
+      const informes = clave2 === "reports_status" || clave2 === "site_finish" ? await informesDeLaVista(vista, params, fecha) : null;
+      return { texto: responder(clave2, { vista, params: { ...params, pregunta }, revision, informes }) };
+    };
+    informesDeLaVista = async (vista, params, fecha) => {
+      const pedidos = params.companyId ? vista.orders.filter((o37) => o37.companyId === params.companyId) : vista.orders;
+      const empresas = Array.from(new Set(pedidos.map((o37) => o37.companyId)));
+      if (empresas.length === 0) return [];
+      const porEmpresa = await Promise.all(
+        empresas.map(
+          (companyId) => informesDelDia(companyId, pedidos.filter((o37) => o37.companyId === companyId).map((o37) => o37.orderId), fecha)
+        )
+      );
+      const orden = { completed: 2, draft: 1 };
+      return porEmpresa[0].map((base, i50) => {
+        const mismos = porEmpresa.map((lista) => lista[i50]);
+        const mejor = mismos.reduce((a49, b63) => (orden[b63.status] ?? 0) > (orden[a49.status] ?? 0) ? b63 : a49);
+        return { ...base, status: mejor.status, cantidad: mismos.reduce((n43, x63) => n43 + x63.cantidad, 0) };
+      });
     };
     atenderConsulta = async (texto, quien, grupo, alcance, numeroBot) => {
       try {
@@ -10023,6 +10189,7 @@ var init_observador = __esm({
     };
     observarParaChecklist = async (sessionPhone, upsert) => {
       try {
+        if (!AGENTE_ACTIVO) return;
         if (upsert?.type !== "notify") return;
         const alcance = await alcanceVigente();
         if (!alcance.grupoEscuchado) return;
@@ -10031,17 +10198,26 @@ var init_observador = __esm({
           const texto = extractInboundText(raw.message);
           if (!texto.trim()) continue;
           if (remoteJid === GROUP_ERRORS_TRACKING) {
+            if (raw?.key?.fromMe) continue;
+            const quien = String(raw?.key?.participant || "desconocido");
             const comando = comandoInterruptor(texto);
-            if (!raw?.key?.fromMe && comando) {
-              await atenderInterruptor(comando, String(raw?.key?.participant || "desconocido"));
+            if (comando) {
+              await atenderInterruptor(comando, quien);
               continue;
             }
-            if (!raw?.key?.fromMe && esVoto(texto)) {
-              await atenderVoto(
-                { voto: texto, citaMsgId: citaDe(raw.message), quien: String(raw?.key?.participant || "desconocido") },
-                alcance
-              );
+            if (esVoto(texto) && citaDe(raw.message)) {
+              await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien }, alcance);
+              continue;
             }
+            void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2 }) => {
+              if (esConsulta2(texto, sessionPhone)) return atenderConsulta2(texto, quien, remoteJid, alcance, sessionPhone);
+              if (/^\s*\d{1,2}\s*$/.test(texto)) {
+                const fue = await atenderEleccion2(texto, quien, remoteJid, alcance);
+                if (!fue && esVoto(texto)) {
+                  await atenderVoto({ voto: texto, citaMsgId: "", quien }, alcance);
+                }
+              }
+            }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
             continue;
           }
           if (!debeEscuchar(remoteJid, alcance)) continue;
@@ -10124,6 +10300,10 @@ var init_observador = __esm({
       }
     };
     hidratarAgente = async (ahoraMs = Date.now()) => {
+      if (!AGENTE_ACTIVO) {
+        logger_default.info("[agente] AGENTE_ACTIVO = false: el agente est\xE1 apagado en c\xF3digo");
+        return;
+      }
       try {
         const [mensajes2, propuestas3, interruptor] = await Promise.all([
           cargarMensajes(ahoraMs - VENTANA_MS),
@@ -82954,14 +83134,14 @@ var ServiceReportSchema = new Schema9(
   { timestamps: true }
 );
 ServiceReportSchema.index({ serviceManagementId: 1, type: 1 });
-var serviceReportModel = null;
-async function getServiceReportModel() {
-  if (serviceReportModel) {
-    return serviceReportModel;
+var serviceReportModel2 = null;
+async function getServiceReportModel2() {
+  if (serviceReportModel2) {
+    return serviceReportModel2;
   }
   const conn = await getSharedConnection();
-  serviceReportModel = conn.models.ServiceManagementReport || conn.model("ServiceManagementReport", ServiceReportSchema);
-  return serviceReportModel;
+  serviceReportModel2 = conn.models.ServiceManagementReport || conn.model("ServiceManagementReport", ServiceReportSchema);
+  return serviceReportModel2;
 }
 
 // src/api/controllers/documents.controller.ts
@@ -104369,7 +104549,7 @@ async function resolveDocumentContext(req) {
   let report = null;
   let isTransient = false;
   if (reportId) {
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     report = await ServiceReport.findById(reportId);
   }
   if (!report && reportPayload) {
@@ -104861,7 +105041,7 @@ async function previewDocument(req, res, next) {
 async function getDocument2(req, res, next) {
   try {
     const { id } = req.params;
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const report = await ServiceReport.findById(id).lean();
     if (!report) {
       const err = new Error("Document not found");
@@ -104878,7 +105058,7 @@ async function downloadDocument(req, res, next) {
     const { id } = req.params;
     const { format: format2 = "pdf" } = req.query;
     const normalizedFormat = typeof format2 === "string" && format2.toLowerCase() === "word" ? "docx" : format2;
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const report = await ServiceReport.findById(id).lean();
     if (!report?.generatedDocuments) {
       logger_default.warn("documents.download.not_generated", { reportId: id, format: format2 });
@@ -111328,7 +111508,7 @@ function isAdmin(req) {
 }
 async function listReports(req, res, next) {
   try {
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const { serviceManagementId, type } = req.query;
     const filter = {};
     if (serviceManagementId) {
@@ -111353,7 +111533,7 @@ async function createReport(req, res, next) {
       err.statusCode = HTTP_STATUS.BAD_REQUEST;
       return next(err);
     }
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const report = await ServiceReport.create({
       serviceManagementId,
       type,
@@ -111372,7 +111552,7 @@ async function createReport(req, res, next) {
 async function getReport(req, res, next) {
   try {
     const { id } = req.params;
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const report = await ServiceReport.findById(id).lean();
     if (!report) {
       logger_default.warn("service_reports.not_found", { id });
@@ -111389,7 +111569,7 @@ async function getReport(req, res, next) {
 async function updateReport(req, res, next) {
   try {
     const { id } = req.params;
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const report = await ServiceReport.findByIdAndUpdate(id, req.body, { new: true });
     if (!report) {
       logger_default.warn("service_reports.not_found", { id });
@@ -111407,7 +111587,7 @@ async function updateReport(req, res, next) {
 async function deleteReport(req, res, next) {
   try {
     const { id } = req.params;
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const report = await ServiceReport.findByIdAndDelete(id);
     if (!report) {
       logger_default.warn("service_reports.not_found", { id });
@@ -111426,7 +111606,7 @@ async function acquireLock(req, res, next) {
   try {
     const { id } = req.params;
     const userId = resolveUserId(req);
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const report = await ServiceReport.findById(id);
     if (!report) {
       logger_default.warn("service_reports.lock.not_found", { id, userId });
@@ -111468,7 +111648,7 @@ async function releaseLock(req, res, next) {
   try {
     const { id } = req.params;
     const userId = resolveUserId(req);
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const report = await ServiceReport.findById(id);
     if (!report) {
       logger_default.warn("service_reports.lock.not_found", { id, userId });
@@ -111495,7 +111675,7 @@ async function heartbeatLock(req, res, next) {
   try {
     const { id } = req.params;
     const userId = resolveUserId(req);
-    const ServiceReport = await getServiceReportModel();
+    const ServiceReport = await getServiceReportModel2();
     const report = await ServiceReport.findById(id);
     if (!report) {
       logger_default.warn("service_reports.lock.not_found", { id, userId });

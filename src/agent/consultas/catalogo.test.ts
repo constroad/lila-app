@@ -49,6 +49,14 @@ describe('ruteo por reglas', () => {
     ['cómo va el checklist', 'checklist_status'],
     ['qué falta confirmar', 'checklist_status'],
     ['ya se generaron los informes?', 'reports_status'],
+    ['tenemos hecho el informe de imprimación, área adicional etc?', 'reports_status'],
+    ['cuánto falta para terminar la producción en planta', 'plant_finish'],
+    ['cuánto falta para terminar el control de pista', 'site_finish'],
+    ['a qué hora acabamos hoy en planta', 'plant_finish'],
+    ['falta mucho para que termine la obra?', 'site_finish'],
+    ['cómo vamos con la producción', 'day_progress'],
+    ['@lila ayuda', 'help'],
+    ['qué puedes hacer?', 'help'],
   ])('«%s» → %s', (pregunta, clave) => {
     expect(rutearPorReglas(pregunta)).toBe(clave);
   });
@@ -71,6 +79,19 @@ describe('ruteo por reglas', () => {
       expect(rutearPorReglas(pregunta)).toBeNull();
     }
   );
+});
+
+/**
+ * GANA LA REGLA MÁS ESPECÍFICA. «cuánto falta para terminar la producción en
+ * planta» contiene «planta» (regla de una palabra de `plant_current_unit`) y
+ * también «falta terminar planta» (tres palabras de `plant_finish`). La de tres
+ * dice más; el orden del catálogo no decide.
+ */
+describe('especificidad', () => {
+  it('una regla de tres palabras le gana a una de una', () => {
+    expect(rutearPorReglas('cuánto falta para terminar la producción en planta')).toBe('plant_finish');
+    expect(rutearPorReglas('en qué carro van en planta')).toBe('plant_current_unit');
+  });
 });
 
 describe('parámetros', () => {

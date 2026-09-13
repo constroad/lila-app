@@ -85,12 +85,26 @@ export const esJidDeGrupo = (valor: string): boolean =>
   String(valor || '').trim().endsWith('@g.us');
 
 /**
- * Interruptor de la fase. En código y no en `.env` a propósito: lo único que
- * hace este agente es escribir en el grupo de operaciones, así que apagarlo con
- * un revert (3 min) es proporcional. Una variable de entorno «por las dudas» es
- * deuda de configuración que después nadie sabe si está puesta.
+ * LA ÚNICA LÍNEA QUE HAY QUE TOCAR PARA APAGAR EL AGENTE ENTERO. José, 13/09:
+ * «con comentar una línea debería poder desactivarlo sin impactar nada».
+ *
+ * En `false`: el observador no mira nada, el detector no corre, ninguna de las
+ * tres puertas del emisor manda, las consultas no se responden y el modelo
+ * semántico ni se carga. Lo que queda es exactamente lo que había antes del
+ * agente: WhatsApp recibe y manda igual que siempre. Los dos puntos de
+ * integración con el resto de lila son `void`s envueltos en try/catch
+ * (`sessions.simple.ts` y el cron de `index.ts`): un fallo del agente nunca
+ * llega al listener de Baileys.
+ *
+ * En código y no en `.env` a propósito: apagarlo con un revert (3 min) es
+ * proporcional a lo que hace, y una variable de entorno «por las dudas» es
+ * deuda de configuración que después nadie sabe si está puesta. Para apagarlo
+ * SIN deploy está `!lila off` (interruptor.ts), que persiste en Mongo.
  */
-export const AGENTE_CHECKLIST_ACTIVO = true;
+export const AGENTE_ACTIVO = true;
+
+/** @deprecated nombre anterior; es el mismo interruptor. */
+export const AGENTE_CHECKLIST_ACTIVO = AGENTE_ACTIVO;
 
 /** Único destino de salida: el grupo de operaciones. */
 export const grupoDestino = (): string => GROUP_ERRORS_TRACKING;
@@ -117,7 +131,7 @@ export interface GrupoResuelto {
  * cosa más laxa es la puerta por la que se cuela otro grupo.
  */
 export const debeEscuchar = (jid: string, alcance: AlcanceAgente): boolean => {
-  if (!AGENTE_CHECKLIST_ACTIVO) return false;
+  if (!AGENTE_ACTIVO) return false;
   const escuchado = String(alcance.grupoEscuchado || '').trim();
   if (!escuchado) return false;
   return String(jid || '').trim() === escuchado;
@@ -134,7 +148,7 @@ export const debeEscuchar = (jid: string, alcance: AlcanceAgente): boolean => {
  * medio.
  */
 export const puedeEnviarA = (jid: string): boolean => {
-  if (!AGENTE_CHECKLIST_ACTIVO) return false;
+  if (!AGENTE_ACTIVO) return false;
   const pedido = String(jid || '').trim();
   if (!pedido.endsWith('@g.us')) return false;
   return pedido === grupoDestino();

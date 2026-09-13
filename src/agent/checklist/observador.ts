@@ -2,6 +2,7 @@ import logger from '../../utils/logger.js';
 import { getCompanyModel } from '../../database/models.js';
 import { extractInboundText, type BaileysMessageContent } from '../runtime/message-text.js';
 import {
+  AGENTE_ACTIVO,
   COMPANY_PILOTO,
   debeEscuchar,
   resolverAlcance,
@@ -96,6 +97,7 @@ export const observarParaChecklist = async (
   upsert: UpsertEvent
 ): Promise<void> => {
   try {
+    if (!AGENTE_ACTIVO) return;
     if (upsert?.type !== 'notify') return;
 
     const alcance = await alcanceVigente();
@@ -111,17 +113,31 @@ export const observarParaChecklist = async (
       // administra el grupo, no aprueba nada. Se atiende antes del guard de
       // abajo porque es otro grupo, con otra función — no se «escucha» para hechos.
       if (remoteJid === GROUP_ERRORS_TRACKING) {
+        if (raw?.key?.fromMe) continue;
+        const quien = String(raw?.key?.participant || 'desconocido');
         const comando = comandoInterruptor(texto);
-        if (!raw?.key?.fromMe && comando) {
-          await atenderInterruptor(comando, String(raw?.key?.participant || 'desconocido'));
+        if (comando) {
+          await atenderInterruptor(comando, quien);
           continue;
         }
-        if (!raw?.key?.fromMe && esVoto(texto)) {
-          await atenderVoto(
-            { voto: texto, citaMsgId: citaDe(raw.message), quien: String(raw?.key?.participant || 'desconocido') },
-            alcance
-          );
+        // Un voto cita una propuesta; una elección es un número suelto tras una
+        // pregunta del agente. El voto se prueba primero: si cita, es voto.
+        if (esVoto(texto) && citaDe(raw.message)) {
+          await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien }, alcance);
+          continue;
         }
+        // Las consultas también se atienden acá: es nuestro grupo (José, 13/09).
+        void import('../consultas/index.js')
+          .then(async ({ esConsulta, atenderConsulta, atenderEleccion }) => {
+            if (esConsulta(texto, sessionPhone)) return atenderConsulta(texto, quien, remoteJid, alcance, sessionPhone);
+            if (/^\s*\d{1,2}\s*$/.test(texto)) {
+              const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
+              if (!fue && esVoto(texto)) {
+                await atenderVoto({ voto: texto, citaMsgId: '', quien }, alcance);
+              }
+            }
+          })
+          .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
         continue;
       }
 
@@ -247,6 +263,10 @@ const atenderInterruptor = async (comando: 'off' | 'on', quien: string): Promise
  * Nunca lanza.
  */
 export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
+  if (!AGENTE_ACTIVO) {
+    logger.info('[agente] AGENTE_ACTIVO = false: el agente está apagado en código');
+    return;
+  }
   try {
     const [mensajes, propuestas, interruptor] = await Promise.all([
       cargarMensajes(ahoraMs - VENTANA_MS),
