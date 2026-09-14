@@ -205,3 +205,50 @@ describe('matchesAllowlist', () => {
     expect(matchesAllowlist('51902049935', undefined)).toBe(true);
   });
 });
+
+describe('routeInboundMessage — F2/F3 (ventas)', () => {
+  const inbound = (over: Partial<AgentInboundMessage> = {}): AgentInboundMessage => ({
+    sessionPhone: '51902049935',
+    remoteJid: '51902049935@s.whatsapp.net', // está en la allowlist del fixture
+    fromMe: false,
+    text: 'hola, quiero asfaltar un patio',
+    receivedAt: new Date('2026-09-14T15:00:00Z'),
+    ...over,
+  });
+
+  it('con `reply`, contesta lo que dice el agente y lo persiste', async () => {
+    const fake = buildDeps();
+    const recibido: string[] = [];
+    fake.deps.reply = async (input) => {
+      recibido.push(`${input.companyId}|${input.conversationId}|${input.customerPhone}|${input.message.text}`);
+      return 'Hola, soy María. ¿Para qué tipo de proyecto es?';
+    };
+    const outcome = await routeInboundMessage(inbound(), fake.deps);
+    expect(outcome).toBe('replied');
+    expect(recibido).toEqual(['company-1|conv-1|51902049935|hola, quiero asfaltar un patio']);
+    expect(fake.sentTexts[0].text).toBe('Hola, soy María. ¿Para qué tipo de proyecto es?');
+    expect(fake.savedOutbound[0].text).toBe('Hola, soy María. ¿Para qué tipo de proyecto es?');
+  });
+
+  it('`reply` = null es silencio: se persistió el mensaje pero no se manda nada (una persona tiene la conversación)', async () => {
+    const fake = buildDeps();
+    fake.deps.reply = async () => null;
+    expect(await routeInboundMessage(inbound(), fake.deps)).toBe('silent');
+    expect(fake.savedInbound).toHaveLength(1);
+    expect(fake.sentTexts).toEqual([]);
+  });
+
+  it('un mensaje del dueño (fromMe) llega a `onOwnerMessage` y no se contesta', async () => {
+    const fake = buildDeps();
+    const vistos: string[] = [];
+    fake.deps.onOwnerMessage = async (m, companyId) => {
+      vistos.push(`${companyId}:${m.remoteJid}:${m.text}`);
+    };
+    expect(await routeInboundMessage(inbound({ fromMe: true, text: 'ya te llamo' }), fake.deps)).toBe('from-me');
+    expect(vistos).toEqual(['company-1:51902049935@s.whatsapp.net:ya te llamo']);
+    expect(fake.sentTexts).toEqual([]);
+    // Un fromMe en un grupo no es del dueño a un cliente.
+    await routeInboundMessage(inbound({ fromMe: true, remoteJid: '120363@g.us' }), fake.deps);
+    expect(vistos).toHaveLength(1);
+  });
+});

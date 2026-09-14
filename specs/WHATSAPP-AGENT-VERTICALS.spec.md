@@ -1,6 +1,6 @@
 # WHATSAPP-AGENT-VERTICALS — Bot conversacional IA multi-tenant (SaaS por verticales)
 
-> **Estado:** F1 implementada (30/07/2026, ver §5); F2–F8 propuestas.
+> **Estado:** F1 implementada (30/07/2026); F2 y F3 implementadas para el vertical asfalto / CONSTROAD (14/09/2026, ver §5); F4–F8 propuestas.
 > **Producto:** bot de WhatsApp con IA que atiende clientes finales de negocios locales
 > (vertical 1: restaurantes/pedidos; vertical 2: citas — barberías/dentistas/spas).
 > Modelo comercial: setup S/300 + S/149/mes por negocio. Onboarding done-for-you.
@@ -468,7 +468,56 @@ el socket de la sesión constroad vive en PROD (Mac mini); el send-proxy dev
 solo cubre envíos salientes y el lease por sesión (SESSION-LEASE.spec) sigue
 propuesto. El E2E se corre con el runbook §9 tras deploy.
 
-### F2 — AgentRuntime con tool use + catálogo
+### F2 — AgentRuntime con tool use + catálogo — **IMPLEMENTADO 14/09/2026 (vertical asfalto, CONSTROAD)**
+
+Lo que corre (`src/agent/ventas/`, aislado del agente de operaciones):
+- `llm.types.ts` (`ProveedorLlm`), `anthropic.provider.ts` (Haiku 4.5, prompt
+  caching del bloque de persona) y `openai-compat.provider.ts` (Groq, DeepSeek,
+  OpenRouter, llama.cpp: `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL`). El
+  proveedor lo decide qué clave hay en el `.env`; sin ninguna, el agente no
+  contesta y lo dice en el log. **Al 14/09 no hay ninguna clave en producción:
+  decisión pendiente de José (Anthropic pide tarjeta).**
+- `prompt.asfalto.ts`: «María» v2 — hereda el tono del prompt legacy y aplica
+  §10: ≤3 líneas, una o dos preguntas por mensaje, nunca precios ni fechas,
+  admite ser asistente, escala a humano. Bloque de contexto por conversación
+  (hora, en/fuera de horario, cliente conocido con sus últimos pedidos, lead
+  guardado).
+- `herramientas.ts`: `guardar_lead` (nombre, empresa, servicio, detalle,
+  cantidad, distrito, fecha, listo), `escalar_a_humano`, `horario_atencion`.
+  Sin catálogo con precios: en asfalto cotiza el asesor.
+- `runtime.ts`: el turno (≤5 vueltas de herramientas, 30 s por llamada,
+  fallback y «degradado» si falla, se queda mudo o repite lo último) y el
+  historial → turnos (últimos 16, alternancia garantizada).
+- `cliente.ts`: cliente conocido por los últimos 9 dígitos del teléfono
+  (`clients.phone` y notificaciones) + sus 3 últimos pedidos.
+- `index.ts`: cola por conversación con 3 s de espera para ráfagas; avisa al
+  `ownerNotifyTarget` cuando el lead tiene con qué trabajar (servicio +
+  distrito o cantidad) y cuando queda listo; tokens por conversación.
+- El router F1 (`runtime/inbound-router.ts`) recibe `reply` (F2) y
+  `onOwnerMessage` (F3); sin ellas sigue el eco. La clave de tenant es
+  `companyId` («constroad»), no el `_id` (F1 lo usaba mal).
+- Tests: runtime con proveedor falso, prompt, router, traducción OpenAI.
+
+### F3 — Handoff humano — **IMPLEMENTADO 14/09/2026**
+- `fromMe` a un cliente con conversación → `status=human`,
+  `pausedUntil = +handoffPauseMinutes` (30), el mensaje del dueño se guarda
+  como `owner`. `!bot off` / `!bot on` (config de la empresa, con confirmación
+  al dueño), `!pausa` (24 h esa conversación). Al vencer la pausa, el próximo
+  mensaje del cliente reanuda al bot.
+
+### Runbook del piloto CONSTROAD (pendiente de la clave de LLM)
+1. Clave en `/Users/jose/deploys/lila/shared/.env`: `ANTHROPIC_API_KEY=…` o
+   `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`; y `WHATSAPP_AGENT_ENABLED=true`.
+2. `npx tsx scripts/agente-ventas-config.ts --company constroad --vertical
+   asphalt --enable --test <número de prueba> --notify <jid de error tracking>
+   --show`.
+3. Reiniciar lila (deploy o `launchctl`). Escribir al número de Constroad
+   desde el número de prueba. Log: `grep '\[ventas\]' logs/combined.log`.
+4. Abrir a todos: `--test all`. Apagar: `!bot off` desde el WhatsApp de
+   Constroad, o `--disable`.
+
+Lo planificado originalmente para F2 (catálogo con precios, `create_order`)
+queda para los verticales de restaurantes/citas:
 - `LLMProvider` (4.2) con ambas implementaciones desde el inicio.
 - Tools v1: `get_catalog`, `create_order` (borrador → confirmación explícita
   del cliente → persiste `bot-order`), `get_business_hours`,

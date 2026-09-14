@@ -3,7 +3,7 @@
  * El router es puro y recibe TODO por deps — así los tests no montan Mongo ni Baileys.
  */
 
-export type AgentVertical = 'restaurant' | 'appointments' | 'transport';
+export type AgentVertical = 'asphalt' | 'restaurant' | 'appointments' | 'transport';
 
 export interface AgentBotConfig {
   enabled: boolean;
@@ -11,6 +11,9 @@ export interface AgentBotConfig {
   greeting?: string;
   /** Allowlist de números de CLIENTE FINAL para pilotos. Vacía/ausente = todos. */
   testNumbers?: string[];
+  handoffPauseMinutes?: number;
+  /** JID (grupo o persona) al que se avisan los leads y las escaladas. */
+  ownerNotifyTarget?: string;
 }
 
 export interface AgentInboundMessage {
@@ -25,6 +28,7 @@ export interface AgentInboundMessage {
 
 export type RouteOutcome =
   | 'from-me'
+  | 'silent'
   | 'group'
   | 'non-text'
   | 'no-company'
@@ -52,6 +56,14 @@ export interface OutboundPersistInput {
   sentAt: Date;
 }
 
+export interface ReplyInput {
+  companyId: string;
+  conversationId: string;
+  botConfig: AgentBotConfig;
+  message: AgentInboundMessage;
+  customerPhone: string;
+}
+
 export interface InboundRouterDeps {
   resolveCompanyIdBySender(sessionPhone: string): Promise<string | null>;
   getBotConfig(companyId: string): Promise<AgentBotConfig | null>;
@@ -60,4 +72,11 @@ export interface InboundRouterDeps {
   saveOutbound(entry: OutboundPersistInput): Promise<void>;
   sendText(toJid: string, text: string): Promise<void>;
   simulateTyping(toJid: string, text: string): Promise<void>;
+  /**
+   * F2: la respuesta del agente (o `null` para callar: conversación en manos
+   * de una persona). Sin esto, el eco de F1.
+   */
+  reply?(input: ReplyInput): Promise<string | null>;
+  /** F3: un mensaje escrito desde el número del negocio (el dueño): pausa, comandos. */
+  onOwnerMessage?(message: AgentInboundMessage, companyId: string | null): Promise<void>;
 }

@@ -14,6 +14,7 @@ import { routeInboundMessage } from './inbound-router.js';
 import { JidRateLimiter } from './jid-rate-limit.js';
 import { saveInboundMessage, saveOutboundMessage } from './conversation.store.js';
 import type { AgentBotConfig, AgentInboundMessage, InboundRouterDeps } from './agent.types.js';
+import { atenderMensajeDelDueno, responderVentas } from '../ventas/index.js';
 
 interface AgentSocket {
   sendMessage(jid: string, content: { text: string }): Promise<unknown>;
@@ -69,8 +70,11 @@ async function resolveSessionContext(
   let botConfig: AgentBotConfig | null = null;
   try {
     const company = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
-    const rawId = (company as { _id?: unknown } | null)?._id;
-    companyId = rawId ? String(rawId) : null;
+    // La CLAVE de tenant es `companyId` («constroad»), la que llevan todas las
+    // colecciones (clientes, pedidos, quota). F1 usaba el `_id` del documento y
+    // con eso el agente de ventas no encontraba a nadie (14/09).
+    const clave = (company as { companyId?: unknown; _id?: unknown } | null)?.companyId ?? (company as { _id?: unknown } | null)?._id;
+    companyId = clave ? String(clave) : null;
     if (companyId) {
       const configModel = await getBotConfigModel();
       const stored = await configModel.findOne({ companyId }).lean();
@@ -80,6 +84,8 @@ async function resolveSessionContext(
             vertical: stored.vertical,
             greeting: stored.greeting,
             testNumbers: stored.testNumbers,
+            handoffPauseMinutes: stored.handoffPauseMinutes,
+            ownerNotifyTarget: stored.ownerNotifyTarget,
           }
         : null;
     }
@@ -92,13 +98,38 @@ async function resolveSessionContext(
   return resolved;
 }
 
+/** Un aviso al dueño (grupo o persona) por el mismo socket, con tope de tiempo y sin contar quota dos veces. */
+const notificarPor = (sock: AgentSocket) => async (target: string, texto: string): Promise<void> => {
+  try {
+    await sendWithAgentTimeout(`agent→${target}`, sock.sendMessage(target, { text: texto }));
+  } catch (error) {
+    logger.warn(`Agent: no pude avisar a ${target}: ${String(error)}`);
+  }
+};
+
 function buildDeps(sessionPhone: string, sock: AgentSocket): InboundRouterDeps {
+  const notificar = notificarPor(sock);
   return {
     resolveCompanyIdBySender: async () => (await resolveSessionContext(sessionPhone)).companyId,
     getBotConfig: async () => (await resolveSessionContext(sessionPhone)).botConfig,
     isRateLimited: (jid, nowMs) => rateLimiter.isLimited(jid, nowMs),
     saveInbound: saveInboundMessage,
     saveOutbound: saveOutboundMessage,
+    // F2: el agente de ventas (vertical asfalto). Otros verticales, cuando existan, entran acá.
+    reply: async (input) => (input.botConfig.vertical === 'asphalt' ? responderVentas(input, { notificar }) : null),
+    // F3: el dueño escribe desde su número → pausa / comandos.
+    onOwnerMessage: async (message, companyId) => {
+      const { botConfig } = await resolveSessionContext(sessionPhone);
+      if (!botConfig) return;
+      await atenderMensajeDelDueno(message, companyId, botConfig, {
+        notificar,
+        setBotEnabled: async (id, enabled) => {
+          const configModel = await getBotConfigModel();
+          await configModel.updateOne({ companyId: id }, { $set: { enabled } });
+          clearAgentSessionCache(sessionPhone);
+        },
+      });
+    },
     simulateTyping: async (toJid, text) => {
       await sock.sendPresenceUpdate('composing', toJid).catch(() => undefined);
       await delay(Math.min(calculateTypingDelay(text), MAX_TYPING_DELAY_MS));
@@ -153,7 +184,7 @@ export async function handleAgentMessagesUpsert(
       const outcome = await routeInboundMessage(inbound, buildDeps(sessionPhone, sock));
       if (outcome === 'replied') {
         logger.info(`Agent: respondido a ${remoteJid} (sesión ${sessionPhone})`);
-      } else if (outcome !== 'bot-disabled' && outcome !== 'from-me') {
+      } else if (outcome !== 'bot-disabled' && outcome !== 'from-me' && outcome !== 'group') {
         logger.debug(`Agent: mensaje de ${remoteJid} → ${outcome}`);
       }
     } catch (error) {

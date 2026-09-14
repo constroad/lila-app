@@ -50,8 +50,16 @@ export async function routeInboundMessage(
   message: AgentInboundMessage,
   deps: InboundRouterDeps
 ): Promise<RouteOutcome> {
-  if (message.fromMe) return 'from-me';
   if (isGroupOrBroadcastJid(message.remoteJid)) return 'group';
+  if (message.fromMe) {
+    // F3: lo que el dueño escribe desde su propio número a un cliente pausa al
+    // bot en esa conversación; sus comandos `!bot …` se atienden acá.
+    if (deps.onOwnerMessage && message.text.trim()) {
+      const companyId = await deps.resolveCompanyIdBySender(message.sessionPhone);
+      await deps.onOwnerMessage(message, companyId);
+    }
+    return 'from-me';
+  }
   if (!message.text.trim()) return 'non-text';
 
   const companyId = await deps.resolveCompanyIdBySender(message.sessionPhone);
@@ -79,7 +87,10 @@ export async function routeInboundMessage(
   });
   if (inbound.duplicated) return 'duplicate';
 
-  const reply = buildEchoReply(botConfig, message.text);
+  const reply = deps.reply
+    ? await deps.reply({ companyId, conversationId: inbound.conversationId, botConfig, message, customerPhone })
+    : buildEchoReply(botConfig, message.text);
+  if (reply === null) return 'silent';
   await deps.simulateTyping(message.remoteJid, reply);
   await deps.sendText(message.remoteJid, reply);
   await deps.saveOutbound({

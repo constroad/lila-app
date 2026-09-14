@@ -6,7 +6,7 @@ import { Schema } from 'mongoose';
  * guión bajo como usage_metrics / whatsapp_instance_lease.
  */
 
-export type BotVertical = 'restaurant' | 'appointments' | 'transport';
+export type BotVertical = 'asphalt' | 'restaurant' | 'appointments' | 'transport';
 export type BotConversationStatus = 'bot' | 'human' | 'closed';
 export type BotMessageRole = 'customer' | 'bot' | 'owner' | 'system';
 
@@ -31,7 +31,7 @@ export const BotConfigSchema = new Schema<IBotConfig>(
     vertical: {
       type: String,
       required: true,
-      enum: ['restaurant', 'appointments', 'transport'],
+      enum: ['asphalt', 'restaurant', 'appointments', 'transport'],
     },
     enabled: { type: Boolean, required: true, default: false },
     channelProvider: {
@@ -63,6 +63,14 @@ export interface IBotConversation {
   messageCount: number;
   /** 'YYYY-MM' en America/Lima — conteo de quota mensual (§3.7). */
   monthKey: string;
+  /** Lo que el agente de ventas juntó del cliente y su necesidad (vertical asfalto). */
+  lead?: Record<string, unknown>;
+  /** Cuándo se avisó al dueño del lead (una vez por conversación y día). */
+  leadNotifiedAt?: Date;
+  escalatedAt?: Date;
+  /** Tokens consumidos en esta conversación, para conocer el costo real. */
+  tokensIn?: number;
+  tokensOut?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -84,6 +92,11 @@ export const BotConversationSchema = new Schema<IBotConversation>(
     lastCustomerMessageAt: { type: Date, required: true },
     messageCount: { type: Number, default: 0 },
     monthKey: { type: String, required: true },
+    lead: { type: Schema.Types.Mixed },
+    leadNotifiedAt: { type: Date },
+    escalatedAt: { type: Date },
+    tokensIn: { type: Number },
+    tokensOut: { type: Number },
   },
   { collection: 'bot_conversations', timestamps: true }
 );

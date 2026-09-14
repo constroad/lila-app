@@ -7659,7 +7659,7 @@ var init_bot_model = __esm({
         vertical: {
           type: String,
           required: true,
-          enum: ["restaurant", "appointments", "transport"]
+          enum: ["asphalt", "restaurant", "appointments", "transport"]
         },
         enabled: { type: Boolean, required: true, default: false },
         channelProvider: {
@@ -7692,7 +7692,12 @@ var init_bot_model = __esm({
         lastMessageAt: { type: Date, required: true },
         lastCustomerMessageAt: { type: Date, required: true },
         messageCount: { type: Number, default: 0 },
-        monthKey: { type: String, required: true }
+        monthKey: { type: String, required: true },
+        lead: { type: Schema3.Types.Mixed },
+        leadNotifiedAt: { type: Date },
+        escalatedAt: { type: Date },
+        tokensIn: { type: Number },
+        tokensOut: { type: Number }
       },
       { collection: "bot_conversations", timestamps: true }
     );
@@ -7819,8 +7824,14 @@ function buildEchoReply(botConfig, inboundText) {
   return `${greeting} \u{1F44B} Soy el asistente virtual (en pruebas). Recib\xED tu mensaje: "${quoted}". Muy pronto voy a poder tomar tu pedido por aqu\xED.`;
 }
 async function routeInboundMessage(message, deps) {
-  if (message.fromMe) return "from-me";
   if (isGroupOrBroadcastJid(message.remoteJid)) return "group";
+  if (message.fromMe) {
+    if (deps.onOwnerMessage && message.text.trim()) {
+      const companyId2 = await deps.resolveCompanyIdBySender(message.sessionPhone);
+      await deps.onOwnerMessage(message, companyId2);
+    }
+    return "from-me";
+  }
   if (!message.text.trim()) return "non-text";
   const companyId = await deps.resolveCompanyIdBySender(message.sessionPhone);
   if (!companyId) return "no-company";
@@ -7842,7 +7853,8 @@ async function routeInboundMessage(message, deps) {
     receivedAt: message.receivedAt
   });
   if (inbound.duplicated) return "duplicate";
-  const reply = buildEchoReply(botConfig, message.text);
+  const reply = deps.reply ? await deps.reply({ companyId, conversationId: inbound.conversationId, botConfig, message, customerPhone }) : buildEchoReply(botConfig, message.text);
+  if (reply === null) return "silent";
   await deps.simulateTyping(message.remoteJid, reply);
   await deps.sendText(message.remoteJid, reply);
   await deps.saveOutbound({
@@ -7946,6 +7958,48 @@ async function saveOutboundMessage(entry) {
     { $set: { lastMessageAt: entry.sentAt }, $inc: { messageCount: 1 } }
   );
 }
+async function cargarConversacion(conversationId) {
+  const conversationModel = await getBotConversationModel();
+  const c66 = await conversationModel.findById(conversationId).lean();
+  if (!c66) return null;
+  return { id: String(c66._id), status: c66.status, pausedUntil: c66.pausedUntil, lead: c66.lead, leadNotifiedAt: c66.leadNotifiedAt, customerName: c66.customerName };
+}
+async function conversacionDeCliente(companyId, customerJid) {
+  const conversationModel = await getBotConversationModel();
+  const c66 = await conversationModel.findOne({ companyId, customerJid }).lean();
+  if (!c66) return null;
+  return { id: String(c66._id), status: c66.status, pausedUntil: c66.pausedUntil, lead: c66.lead, leadNotifiedAt: c66.leadNotifiedAt, customerName: c66.customerName };
+}
+async function ultimosMensajes(conversationId, cantidad = 16) {
+  const messageModel = await getBotConversationMessageModel();
+  const docs = await messageModel.find({ conversationId }).sort({ createdAt: -1 }).limit(cantidad).lean();
+  return docs.reverse().map((d67) => ({ role: d67.role, text: d67.text, createdAt: d67.createdAt }));
+}
+async function guardarLeadEnConversacion(conversationId, lead, notificadoAhora) {
+  const conversationModel = await getBotConversationModel();
+  await conversationModel.updateOne({ _id: conversationId }, { $set: { lead, ...notificadoAhora ? { leadNotifiedAt: /* @__PURE__ */ new Date() } : {} } });
+}
+async function pausarConversacion(conversationId, minutos, motivo) {
+  const conversationModel = await getBotConversationModel();
+  await conversationModel.updateOne(
+    { _id: conversationId },
+    { $set: { status: "human", pausedUntil: new Date(Date.now() + minutos * 6e4), ...motivo === "escalada" ? { escalatedAt: /* @__PURE__ */ new Date() } : {} } }
+  );
+}
+async function reanudarConversacion(conversationId) {
+  const conversationModel = await getBotConversationModel();
+  await conversationModel.updateOne({ _id: conversationId }, { $set: { status: "bot" }, $unset: { pausedUntil: 1 } });
+}
+async function guardarMensajeDueno(companyId, conversationId, text) {
+  const messageModel = await getBotConversationMessageModel();
+  await messageModel.create({ conversationId, companyId, role: "owner", text });
+  const conversationModel = await getBotConversationModel();
+  await conversationModel.updateOne({ _id: conversationId }, { $set: { lastMessageAt: /* @__PURE__ */ new Date() }, $inc: { messageCount: 1 } });
+}
+async function sumarTokens(conversationId, entrada, salida) {
+  const conversationModel = await getBotConversationModel();
+  await conversationModel.updateOne({ _id: conversationId }, { $inc: { tokensIn: entrada, tokensOut: salida } });
+}
 var LIMA_UTC_OFFSET_MS;
 var init_conversation_store = __esm({
   "src/agent/runtime/conversation.store.ts"() {
@@ -7954,114 +8008,125 @@ var init_conversation_store = __esm({
   }
 });
 
-// src/agent/runtime/agent-wiring.ts
-async function sendWithAgentTimeout(label, sendPromise) {
-  let timer3 = null;
-  const timeout = new Promise((_58, reject) => {
-    timer3 = setTimeout(
-      () => reject(new Error(`Agent send timeout (${AGENT_SEND_TIMEOUT_MS / 1e3}s): ${label}`)),
-      AGENT_SEND_TIMEOUT_MS
-    );
-  });
-  try {
-    return await Promise.race([sendPromise, timeout]);
-  } finally {
-    if (timer3) clearTimeout(timer3);
-  }
-}
-async function resolveSessionContext(sessionPhone) {
-  const cached2 = sessionContextCache.get(sessionPhone);
-  if (cached2 && Date.now() - cached2.cachedAt < CONFIG_CACHE_TTL_MS) {
-    return cached2;
-  }
-  let companyId = null;
-  let botConfig = null;
-  try {
-    const company = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
-    const rawId = company?._id;
-    companyId = rawId ? String(rawId) : null;
-    if (companyId) {
-      const configModel2 = await getBotConfigModel();
-      const stored = await configModel2.findOne({ companyId }).lean();
-      botConfig = stored ? {
-        enabled: Boolean(stored.enabled),
-        vertical: stored.vertical,
-        greeting: stored.greeting,
-        testNumbers: stored.testNumbers
-      } : null;
-    }
-  } catch (error) {
-    logger_default.warn(`Agent: no se pudo resolver contexto de ${sessionPhone}: ${String(error)}`);
-  }
-  const resolved = { companyId, botConfig, cachedAt: Date.now() };
-  sessionContextCache.set(sessionPhone, resolved);
-  return resolved;
-}
-function buildDeps(sessionPhone, sock) {
-  return {
-    resolveCompanyIdBySender: async () => (await resolveSessionContext(sessionPhone)).companyId,
-    getBotConfig: async () => (await resolveSessionContext(sessionPhone)).botConfig,
-    isRateLimited: (jid, nowMs) => rateLimiter.isLimited(jid, nowMs),
-    saveInbound: saveInboundMessage,
-    saveOutbound: saveOutboundMessage,
-    simulateTyping: async (toJid, text) => {
-      await sock.sendPresenceUpdate("composing", toJid).catch(() => void 0);
-      await delay(Math.min(calculateTypingDelay(text), MAX_TYPING_DELAY_MS));
-    },
-    sendText: async (toJid, text) => {
-      await sendWithAgentTimeout(`agent\u2192${toJid}`, sock.sendMessage(toJid, { text }));
-      await sock.sendPresenceUpdate("paused", toJid).catch(() => void 0);
-      const { companyId } = await resolveSessionContext(sessionPhone);
-      if (companyId) {
-        void quotaValidatorService.incrementWhatsAppUsage(companyId, 1).catch((error) => logger_default.warn(`Agent: fallo conteo de quota: ${String(error)}`));
-      }
-    }
-  };
-}
-async function handleAgentMessagesUpsert(sessionPhone, sock, upsert) {
-  if (!config.whatsapp.agentEnabled) return;
-  if (upsert?.type !== "notify") return;
-  for (const rawMessage of upsert.messages ?? []) {
-    const remoteJid = rawMessage?.key?.remoteJid;
-    if (!remoteJid) continue;
-    try {
-      const inbound = {
-        sessionPhone,
-        remoteJid,
-        fromMe: Boolean(rawMessage.key?.fromMe),
-        text: extractInboundText(rawMessage.message),
-        pushName: rawMessage.pushName ?? void 0,
-        channelMessageId: rawMessage.key?.id ?? void 0,
-        receivedAt: /* @__PURE__ */ new Date()
-      };
-      const outcome = await routeInboundMessage(inbound, buildDeps(sessionPhone, sock));
-      if (outcome === "replied") {
-        logger_default.info(`Agent: respondido a ${remoteJid} (sesi\xF3n ${sessionPhone})`);
-      } else if (outcome !== "bot-disabled" && outcome !== "from-me") {
-        logger_default.debug(`Agent: mensaje de ${remoteJid} \u2192 ${outcome}`);
-      }
-    } catch (error) {
-      logger_default.error(`Agent: error procesando mensaje de ${remoteJid}: ${String(error)}`);
-    }
-  }
-}
-var CONFIG_CACHE_TTL_MS, MAX_TYPING_DELAY_MS, AGENT_SEND_TIMEOUT_MS, rateLimiter, sessionContextCache;
-var init_agent_wiring = __esm({
-  "src/agent/runtime/agent-wiring.ts"() {
-    init_logger();
+// src/agent/ventas/anthropic.provider.ts
+import Anthropic from "@anthropic-ai/sdk";
+var MODELO_VENTAS, aMensajes, aHerramientas, crearProveedorAnthropic;
+var init_anthropic_provider = __esm({
+  "src/agent/ventas/anthropic.provider.ts"() {
     init_environment();
-    init_quota_validator_service();
-    init_bot_models();
-    init_retry();
-    init_message_text();
-    init_inbound_router();
-    init_jid_rate_limit();
-    init_conversation_store();
-    CONFIG_CACHE_TTL_MS = 6e4;
-    MAX_TYPING_DELAY_MS = 4e3;
-    AGENT_SEND_TIMEOUT_MS = 3e4;
-    rateLimiter = new JidRateLimiter(8, 6e4);
-    sessionContextCache = /* @__PURE__ */ new Map();
+    MODELO_VENTAS = "claude-haiku-4-5-20251001";
+    aMensajes = (turnos) => turnos.map((t44) => {
+      if (t44.rol === "usuario") return { role: "user", content: t44.texto };
+      if (t44.rol === "resultado") {
+        return {
+          role: "user",
+          content: t44.resultados.map((r39) => ({ type: "tool_result", tool_use_id: r39.id, content: r39.contenido, ...r39.error ? { is_error: true } : {} }))
+        };
+      }
+      const content = [];
+      if (t44.texto) content.push({ type: "text", text: t44.texto });
+      for (const l57 of t44.llamadas ?? []) content.push({ type: "tool_use", id: l57.id, name: l57.nombre, input: l57.argumentos });
+      return { role: "assistant", content };
+    });
+    aHerramientas = (lista) => lista.map((h65) => ({ name: h65.nombre, description: h65.descripcion, input_schema: h65.parametros }));
+    crearProveedorAnthropic = () => {
+      const apiKey = String(config.anthropic?.apiKey || "").trim();
+      if (!apiKey) return null;
+      const cliente = new Anthropic({ apiKey });
+      return {
+        nombre: `anthropic:${MODELO_VENTAS}`,
+        async chat({ sistema, turnos, herramientas, maxTokens, timeoutMs }) {
+          const system = sistema.map((b63) => ({
+            type: "text",
+            text: b63.texto,
+            ...b63.cacheable ? { cache_control: { type: "ephemeral" } } : {}
+          }));
+          const respuesta = await cliente.messages.create(
+            {
+              model: MODELO_VENTAS,
+              max_tokens: maxTokens,
+              system,
+              messages: aMensajes(turnos),
+              tools: herramientas.length ? aHerramientas(herramientas) : void 0
+            },
+            { timeout: timeoutMs }
+          );
+          const texto4 = respuesta.content.filter((b63) => b63.type === "text").map((b63) => b63.text).join("\n").trim();
+          const llamadas = respuesta.content.filter((b63) => b63.type === "tool_use").map((b63) => ({ id: b63.id, nombre: b63.name, argumentos: b63.input ?? {} }));
+          const uso = respuesta.usage;
+          return {
+            texto: texto4 || void 0,
+            llamadas: llamadas.length ? llamadas : void 0,
+            uso: { entrada: uso.input_tokens, salida: uso.output_tokens, cacheLeida: uso.cache_read_input_tokens ?? void 0, cacheEscrita: uso.cache_creation_input_tokens ?? void 0 },
+            motivo: respuesta.stop_reason === "tool_use" ? "herramientas" : respuesta.stop_reason === "max_tokens" ? "tope" : "fin"
+          };
+        }
+      };
+    };
+  }
+});
+
+// src/agent/ventas/openai-compat.provider.ts
+var aMensajesOpenAi, aTools, parsearArgumentos, crearProveedorOpenAiCompat;
+var init_openai_compat_provider = __esm({
+  "src/agent/ventas/openai-compat.provider.ts"() {
+    aMensajesOpenAi = (sistema, turnos) => {
+      const mensajes2 = [{ role: "system", content: sistema.map((b63) => b63.texto).join("\n\n") }];
+      for (const t44 of turnos) {
+        if (t44.rol === "usuario") mensajes2.push({ role: "user", content: t44.texto });
+        else if (t44.rol === "asistente") {
+          mensajes2.push({
+            role: "assistant",
+            content: t44.texto ?? null,
+            ...t44.llamadas?.length ? { tool_calls: t44.llamadas.map((l57) => ({ id: l57.id, type: "function", function: { name: l57.nombre, arguments: JSON.stringify(l57.argumentos) } })) } : {}
+          });
+        } else for (const r39 of t44.resultados) mensajes2.push({ role: "tool", tool_call_id: r39.id, content: r39.contenido });
+      }
+      return mensajes2;
+    };
+    aTools = (lista) => lista.map((h65) => ({ type: "function", function: { name: h65.nombre, description: h65.descripcion, parameters: h65.parametros } }));
+    parsearArgumentos = (texto4) => {
+      try {
+        const v55 = JSON.parse(texto4 || "{}");
+        return v55 && typeof v55 === "object" ? v55 : {};
+      } catch {
+        return {};
+      }
+    };
+    crearProveedorOpenAiCompat = (cfg) => ({
+      nombre: `openai-compat:${cfg.modelo}`,
+      async chat({ sistema, turnos, herramientas, maxTokens, timeoutMs }) {
+        const controlador = new AbortController();
+        const timer3 = setTimeout(() => controlador.abort(), timeoutMs);
+        try {
+          const res = await fetch(`${cfg.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${cfg.apiKey}` },
+            body: JSON.stringify({
+              model: cfg.modelo,
+              max_tokens: maxTokens,
+              temperature: 0.4,
+              messages: aMensajesOpenAi(sistema, turnos),
+              ...herramientas.length ? { tools: aTools(herramientas), tool_choice: "auto" } : {}
+            }),
+            signal: controlador.signal
+          });
+          if (!res.ok) throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 200)}`);
+          const data = await res.json();
+          const eleccion = data.choices?.[0];
+          const llamadas = (eleccion?.message?.tool_calls ?? []).map((c66) => ({ id: c66.id, nombre: c66.function.name, argumentos: parsearArgumentos(c66.function.arguments) }));
+          const texto4 = String(eleccion?.message?.content || "").trim();
+          return {
+            texto: texto4 || void 0,
+            llamadas: llamadas.length ? llamadas : void 0,
+            uso: { entrada: data.usage?.prompt_tokens ?? 0, salida: data.usage?.completion_tokens ?? 0, cacheLeida: data.usage?.prompt_tokens_details?.cached_tokens },
+            motivo: llamadas.length ? "herramientas" : eleccion?.finish_reason === "length" ? "tope" : "fin"
+          };
+        } finally {
+          clearTimeout(timer3);
+        }
+      }
+    });
   }
 });
 
@@ -8451,6 +8516,559 @@ var init_models = __esm({
   }
 });
 
+// src/agent/checklist/tiempo.ts
+var OFFSET_LIMA_MS, diaPeruano, instanteArranque, DIAS, fechaLegible;
+var init_tiempo = __esm({
+  "src/agent/checklist/tiempo.ts"() {
+    OFFSET_LIMA_MS = 5 * 60 * 60 * 1e3;
+    diaPeruano = (ms2) => new Date(ms2 - OFFSET_LIMA_MS).toISOString().slice(0, 10);
+    instanteArranque = (fecha, hora3) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora3)) return null;
+      const ms2 = (/* @__PURE__ */ new Date(`${fecha}T${hora3}:00.000-05:00`)).getTime();
+      return Number.isFinite(ms2) ? ms2 : null;
+    };
+    DIAS = ["domingo", "lunes", "martes", "mi\xE9rcoles", "jueves", "viernes", "s\xE1bado"];
+    fechaLegible = (fecha) => {
+      const [y65, m59, d67] = String(fecha || "").split("-").map(Number);
+      if (!y65 || !m59 || !d67) return fecha;
+      const dia = DIAS[new Date(Date.UTC(y65, m59 - 1, d67)).getUTCDay()];
+      const dd = String(d67).padStart(2, "0");
+      const mm = String(m59).padStart(2, "0");
+      return `${dia} ${dd}/${mm}`;
+    };
+  }
+});
+
+// src/agent/ventas/cliente.ts
+var texto, clientePorTelefono;
+var init_cliente = __esm({
+  "src/agent/ventas/cliente.ts"() {
+    init_models();
+    init_tiempo();
+    texto = (v55) => String(v55 ?? "").trim();
+    clientePorTelefono = async (companyId, telefono) => {
+      const digitos = String(telefono || "").replace(/\D/g, "");
+      if (digitos.length < 9) return null;
+      const sufijo = digitos.slice(-9);
+      const patron = new RegExp(`${sufijo}\\s*$`);
+      const Client = await getClientModel();
+      const c66 = await Client.findOne({
+        companyId,
+        $or: [{ phone: patron }, { "notifications.whatsAppAlerts": patron }, { "notifications.whatsAppManagement": patron }]
+      }).select("name alias contactPerson").lean();
+      if (!c66) return null;
+      const Order = await getOrderModel();
+      const pedidos = await Order.find({ companyId, $or: [{ clienteId: String(c66._id) }, { cliente: texto(c66.name) }], status: { $nin: ["eliminado", "rechazado"] } }).select("fechaProgramacion obra cantidadCubos").sort({ fechaProgramacion: -1 }).limit(3).lean();
+      const nombre = texto(c66.contactPerson) || texto(c66.alias) || texto(c66.name);
+      const empresa = texto(c66.name) !== nombre ? texto(c66.name) : void 0;
+      return {
+        nombre,
+        empresa,
+        ultimosPedidos: pedidos.map((p64) => {
+          const ms2 = new Date(p64.fechaProgramacion).getTime();
+          return `${Number.isFinite(ms2) ? diaPeruano(ms2) : "?"} ${texto(p64.obra) || "sin obra"} ${Number(p64.cantidadCubos) || 0} m\xB3`;
+        })
+      };
+    };
+  }
+});
+
+// src/agent/ventas/herramientas.ts
+var HERRAMIENTAS_VENTAS, texto2, ejecutarHerramienta;
+var init_herramientas = __esm({
+  "src/agent/ventas/herramientas.ts"() {
+    HERRAMIENTAS_VENTAS = [
+      {
+        nombre: "guardar_lead",
+        descripcion: "Guarda o actualiza lo que se sabe del cliente y de lo que necesita. Ll\xE1mala cada vez que aparezca un dato nuevo, con TODOS los datos conocidos hasta ahora. Con listo=true cuando el cliente confirm\xF3 el resumen.",
+        parametros: {
+          type: "object",
+          properties: {
+            nombre: { type: "string", description: "Nombre de la persona" },
+            empresa: { type: "string", description: "Empresa o consorcio, si aplica" },
+            servicio: { type: "string", enum: ["venta", "colocacion", "transporte", "fabricacion", "otro"] },
+            detalle: { type: "string", description: "Qu\xE9 necesita, en una frase: tipo de mezcla, espesor, base nueva o pavimento, fresado, etc." },
+            cantidad: { type: "string", description: "m\xB3 o m\xB2 con la unidad, tal como lo dijo" },
+            distrito: { type: "string", description: "Distrito o ubicaci\xF3n de la obra o entrega" },
+            fecha: { type: "string", description: "Para cu\xE1ndo lo necesita, tal como lo dijo" },
+            listo: { type: "boolean", description: "true cuando el cliente confirm\xF3 el resumen" }
+          }
+        }
+      },
+      {
+        nombre: "escalar_a_humano",
+        descripcion: "Pasa la conversaci\xF3n a un asesor humano. \xDAsala si lo piden, si est\xE1n molestos, si es fabricaci\xF3n de mezclas especiales, si es algo t\xE9cnico o legal fuera de los servicios, o si llevas dos mensajes sin entender.",
+        parametros: {
+          type: "object",
+          properties: { motivo: { type: "string", description: "Por qu\xE9 se escala, en una frase" } },
+          required: ["motivo"]
+        }
+      },
+      {
+        nombre: "horario_atencion",
+        descripcion: "Devuelve el horario de atenci\xF3n y si ahora mismo est\xE1 abierto.",
+        parametros: { type: "object", properties: {} }
+      }
+    ];
+    texto2 = (v55) => {
+      const s59 = String(v55 ?? "").trim();
+      return s59 ? s59.slice(0, 200) : void 0;
+    };
+    ejecutarHerramienta = async (llamada, ctx) => {
+      try {
+        switch (llamada.nombre) {
+          case "guardar_lead": {
+            const a49 = llamada.argumentos;
+            const datos = {
+              nombre: texto2(a49.nombre),
+              empresa: texto2(a49.empresa),
+              servicio: ["venta", "colocacion", "transporte", "fabricacion", "otro"].find((s59) => s59 === a49.servicio),
+              detalle: texto2(a49.detalle),
+              cantidad: texto2(a49.cantidad),
+              distrito: texto2(a49.distrito),
+              fecha: texto2(a49.fecha),
+              listo: a49.listo === true
+            };
+            const r39 = await ctx.guardarLead(datos);
+            return { id: llamada.id, contenido: JSON.stringify({ ok: true, asesorAvisado: r39.notificado }) };
+          }
+          case "escalar_a_humano": {
+            await ctx.escalar(texto2(llamada.argumentos.motivo) ?? "sin motivo");
+            return { id: llamada.id, contenido: JSON.stringify({ ok: true, mensaje: "Un asesor toma la conversaci\xF3n. Desp\xEDdete con una l\xEDnea y no prometas tiempos." }) };
+          }
+          case "horario_atencion":
+            return { id: llamada.id, contenido: JSON.stringify(ctx.horario()) };
+          default:
+            return { id: llamada.id, contenido: `Herramienta desconocida: ${llamada.nombre}`, error: true };
+        }
+      } catch (error) {
+        return { id: llamada.id, contenido: `Error: ${error instanceof Error ? error.message : String(error)}`, error: true };
+      }
+    };
+  }
+});
+
+// src/agent/ventas/prompt.asfalto.ts
+var CONSTROAD, promptAsfalto, bloqueContexto, bloquesSistema;
+var init_prompt_asfalto = __esm({
+  "src/agent/ventas/prompt.asfalto.ts"() {
+    CONSTROAD = {
+      nombre: "CONSTROAD",
+      asistente: "Mar\xEDa",
+      horario: "lunes a viernes de 8:00 a 18:00 y s\xE1bados de 8:00 a 13:00",
+      zona: "Lima y alrededores (planta en Cajamarquilla, Lurigancho)"
+    };
+    promptAsfalto = (negocio) => `# Qui\xE9n eres
+Eres ${negocio.asistente}, la asistente comercial de ${negocio.nombre}, empresa peruana de asfalto con m\xE1s de 15 a\xF1os: venta de mezcla asf\xE1ltica, colocaci\xF3n (asfaltado), imprimaci\xF3n y transporte. Atiendes por WhatsApp a quien escribe: clientes de siempre y gente que llega por la publicidad.
+
+# C\xF3mo hablas
+- Espa\xF1ol peruano, de t\xFA, c\xE1lida y directa. Como una persona, no como un formulario.
+- Mensajes CORTOS: m\xE1ximo 3 l\xEDneas. Una pregunta por mensaje, dos como mucho.
+- Sin muletillas repetidas (\xABperfecto, perfecto\xBB), sin emojis de m\xE1s (uno por mensaje, a veces ninguno).
+- No repitas lo que el cliente ya dijo ni preguntes lo que ya contest\xF3.
+- Si preguntan si eres una persona: eres la asistente virtual de ${negocio.nombre}, sin drama, y sigues ayudando.
+
+# Tu misi\xF3n
+Entender qu\xE9 necesita el cliente y juntar los datos para que un asesor le prepare la cotizaci\xF3n, de forma natural. Al final, dejar el pedido registrado y avisarle que un asesor lo contacta.
+
+# Servicios
+1. VENTA DE MEZCLA ASF\xC1LTICA (en planta o puesta en obra). Tipos: en caliente (lo com\xFAn: v\xEDas, estacionamientos), en fr\xEDo (parches, reparaciones), modificada con pol\xEDmeros (alto tr\xE1fico, zonas industriales). Espesores: 1" tr\xE1fico ligero, 2" calles y estacionamientos, 3" tr\xE1fico pesado. Datos: tipo de proyecto, tr\xE1fico, cantidad en m\xB3 (o el \xE1rea en m\xB2 y el espesor), si recogen en planta o se lleva a obra, y a qu\xE9 distrito.
+2. COLOCACI\xD3N / ASFALTADO. Datos: \xE1rea en m\xB2, distrito, espesor, si la base ya est\xE1 preparada o es terreno natural, si es base nueva (lleva imprimaci\xF3n con MC-30) o pavimento existente (lleva riego de liga), si necesitan fresado del asfalto viejo, y c\xF3mo es el \xE1rea (plana, pendiente, calles).
+3. TRANSPORTE de mezcla: punto de carga, punto de descarga, tipo de mezcla, m\xB3, restricciones de horario o acceso.
+4. FABRICACI\xD3N de mezclas especiales: deriva a un ingeniero de inmediato (usa escalar_a_humano).
+
+# Reglas que no se negocian
+- NUNCA des precios, ni aproximados, ni \xABdesde\xBB. Los precios los da el asesor con la cotizaci\xF3n. Si insisten: \xABel precio depende de la cantidad y la ubicaci\xF3n; con estos datos el asesor te cotiza hoy mismo\xBB.
+- NUNCA prometas fechas de entrega ni descuentos.
+- No inventes datos de la empresa, servicios que no est\xE1n ac\xE1, ni el estado de un pedido: si no lo sabes, dilo y ofrece que el asesor lo confirme.
+- Cada vez que tengas un dato nuevo del cliente o de su necesidad, llama a guardar_lead con TODO lo que sabes hasta ahora (nombre, empresa, servicio, detalle, cantidad, distrito, fecha). Cuando el cliente confirme el resumen, llama a guardar_lead con listo=true y cierra: \xABun asesor te contacta en el horario de atenci\xF3n\xBB.
+- Escala a humano (escalar_a_humano) si: lo piden, est\xE1n molestos, es fabricaci\xF3n, es algo t\xE9cnico o legal que no cubren los servicios, o llevas dos mensajes sin entender.
+- Fuera del horario (${negocio.horario}) atiendes igual y avisas que el asesor responde al abrir.
+- Si el cliente ya es cliente de ${negocio.nombre} (te lo dice el contexto), sal\xFAdalo por su nombre y no le pidas datos que ya tienes.
+- Zona de atenci\xF3n: ${negocio.zona}. Fuera de Lima, pregunta d\xF3nde y deja que el asesor decida.
+
+# Flujo
+1. Saludo corto y pregunta abierta: \xAB\xBFEn qu\xE9 te ayudo? Vendemos mezcla asf\xE1ltica, hacemos asfaltado y transporte\xBB.
+2. Identifica el servicio y pregunta los datos de a uno o dos.
+3. Resume en 2\u20133 l\xEDneas y confirma.
+4. Cierra: asesor te contacta. Sin volver a preguntar.`;
+    bloqueContexto = (params) => {
+      const partes = [`# Contexto de esta conversaci\xF3n`, `Ahora: ${params.ahoraTexto} (${params.enHorario ? "en horario de atenci\xF3n" : "FUERA del horario de atenci\xF3n"}). Tel\xE9fono del cliente: +${params.telefono}.`];
+      if (params.cliente) {
+        partes.push(
+          `Es cliente de la casa: ${params.cliente.nombre}${params.cliente.empresa ? ` (${params.cliente.empresa})` : ""}. Sal\xFAdalo por su nombre.` + (params.cliente.ultimosPedidos.length ? ` Sus \xFAltimos pedidos: ${params.cliente.ultimosPedidos.join("; ")}.` : " Sin pedidos recientes.")
+        );
+      } else {
+        partes.push("No figura como cliente: probablemente llega por la publicidad. P\xEDdele su nombre (y empresa, si aplica) en alg\xFAn momento natural, no de entrada.");
+      }
+      if (params.lead && Object.keys(params.lead).length) partes.push(`Datos ya guardados del lead: ${JSON.stringify(params.lead)}.`);
+      return partes.join("\n");
+    };
+    bloquesSistema = (negocio, contexto) => [
+      { texto: promptAsfalto(negocio), cacheable: true },
+      { texto: bloqueContexto(contexto) }
+    ];
+  }
+});
+
+// src/agent/ventas/runtime.ts
+var MAX_VUELTAS_HERRAMIENTAS, MAX_TOKENS_RESPUESTA, TIMEOUT_LLM_MS, RESPUESTA_FALLBACK, sumar, correrTurno, historialATurnos;
+var init_runtime = __esm({
+  "src/agent/ventas/runtime.ts"() {
+    init_herramientas();
+    MAX_VUELTAS_HERRAMIENTAS = 5;
+    MAX_TOKENS_RESPUESTA = 400;
+    TIMEOUT_LLM_MS = 3e4;
+    RESPUESTA_FALLBACK = "Dame un momento, un asesor te responde por aqu\xED.";
+    sumar = (a49, b63) => ({
+      entrada: a49.entrada + b63.entrada,
+      salida: a49.salida + b63.salida,
+      cacheLeida: (a49.cacheLeida ?? 0) + (b63.cacheLeida ?? 0),
+      cacheEscrita: (a49.cacheEscrita ?? 0) + (b63.cacheEscrita ?? 0)
+    });
+    correrTurno = async (params) => {
+      const turnos = [...params.historial];
+      let uso = { entrada: 0, salida: 0 };
+      const usadas = [];
+      for (let vuelta = 0; vuelta <= MAX_VUELTAS_HERRAMIENTAS; vuelta++) {
+        let respuesta;
+        try {
+          respuesta = await params.proveedor.chat({ sistema: params.sistema, turnos, herramientas: params.herramientas, maxTokens: MAX_TOKENS_RESPUESTA, timeoutMs: TIMEOUT_LLM_MS });
+        } catch {
+          return { texto: RESPUESTA_FALLBACK, uso, herramientasUsadas: usadas, degradado: true };
+        }
+        uso = sumar(uso, respuesta.uso);
+        if (respuesta.motivo === "herramientas" && respuesta.llamadas?.length) {
+          if (vuelta === MAX_VUELTAS_HERRAMIENTAS) break;
+          const llamadas = respuesta.llamadas;
+          turnos.push({ rol: "asistente", texto: respuesta.texto, llamadas });
+          const resultados = [];
+          for (const llamada of llamadas) {
+            usadas.push(llamada.nombre);
+            resultados.push(await ejecutarHerramienta(llamada, params.contexto));
+          }
+          turnos.push({ rol: "resultado", resultados });
+          continue;
+        }
+        const texto4 = String(respuesta.texto || "").trim();
+        if (!texto4) break;
+        if (params.ultimaRespuestaBot && texto4 === params.ultimaRespuestaBot.trim()) break;
+        return { texto: texto4, uso, herramientasUsadas: usadas, degradado: false };
+      }
+      return { texto: RESPUESTA_FALLBACK, uso, herramientasUsadas: usadas, degradado: true };
+    };
+    historialATurnos = (mensajes2, ultimos = 16) => {
+      const turnos = [];
+      for (const m59 of mensajes2.slice(-ultimos)) {
+        const texto4 = String(m59.text || "").trim();
+        if (!texto4) continue;
+        const rol = m59.role === "customer" ? "usuario" : "asistente";
+        const anterior = turnos[turnos.length - 1];
+        if (anterior && anterior.rol === rol) {
+          if (anterior.rol === "usuario") anterior.texto = `${anterior.texto}
+${texto4}`;
+          else if (anterior.rol === "asistente") anterior.texto = `${anterior.texto ?? ""}
+${texto4}`.trim();
+          continue;
+        }
+        turnos.push(rol === "usuario" ? { rol, texto: texto4 } : { rol, texto: texto4 });
+      }
+      while (turnos.length && turnos[0].rol !== "usuario") turnos.shift();
+      while (turnos.length && turnos[turnos.length - 1].rol !== "usuario") turnos.pop();
+      return turnos;
+    };
+  }
+});
+
+// src/agent/ventas/index.ts
+var PAUSA_POR_DEFECTO_MIN, ESPERA_RAFAGA_MS, HORARIO, proveedor, proveedorLlm, ahoraLima, colas, enCola, telefonoLegible, textoLead, responderVentas, atenderMensajeDelDueno;
+var init_ventas = __esm({
+  "src/agent/ventas/index.ts"() {
+    init_logger();
+    init_conversation_store();
+    init_anthropic_provider();
+    init_openai_compat_provider();
+    init_cliente();
+    init_herramientas();
+    init_prompt_asfalto();
+    init_runtime();
+    PAUSA_POR_DEFECTO_MIN = 30;
+    ESPERA_RAFAGA_MS = 3e3;
+    HORARIO = { diasLaborales: [1, 2, 3, 4, 5], apertura: 8, cierreSemana: 18, cierreSabado: 13 };
+    proveedorLlm = () => {
+      if (proveedor === void 0) {
+        proveedor = crearProveedorAnthropic();
+        const baseUrl = String(process.env.LLM_BASE_URL || "").trim();
+        const apiKey = String(process.env.LLM_API_KEY || "").trim();
+        const modelo = String(process.env.LLM_MODEL || "").trim();
+        if (!proveedor && baseUrl && apiKey && modelo) proveedor = crearProveedorOpenAiCompat({ baseUrl, apiKey, modelo });
+        if (!proveedor) logger_default.warn("[ventas] sin ANTHROPIC_API_KEY ni LLM_BASE_URL/LLM_API_KEY/LLM_MODEL: el agente de ventas no contesta");
+        else logger_default.info(`[ventas] proveedor de LLM: ${proveedor.nombre}`);
+      }
+      return proveedor;
+    };
+    ahoraLima = () => {
+      const ahora = /* @__PURE__ */ new Date();
+      const partes = new Intl.DateTimeFormat("es-PE", { timeZone: "America/Lima", weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(ahora);
+      const get = (t44) => partes.find((p64) => p64.type === t44)?.value ?? "";
+      const hora3 = Number(get("hour"));
+      const dow = new Date(ahora.toLocaleString("en-US", { timeZone: "America/Lima" })).getDay();
+      const enHorario = dow === 6 ? hora3 >= HORARIO.apertura && hora3 < HORARIO.cierreSabado : HORARIO.diasLaborales.includes(dow) && hora3 >= HORARIO.apertura && hora3 < HORARIO.cierreSemana;
+      return { texto: `${get("weekday")} ${get("day")}/${get("month")} ${get("hour")}:${get("minute")}`, enHorario, abiertoTexto: enHorario ? "abierto ahora" : "cerrado ahora" };
+    };
+    colas = /* @__PURE__ */ new Map();
+    enCola = (clave2, tarea) => {
+      const anterior = colas.get(clave2) ?? Promise.resolve();
+      const turno = anterior.then(tarea, tarea);
+      colas.set(clave2, turno.catch(() => void 0));
+      return turno;
+    };
+    telefonoLegible = (t44) => `+${t44.replace(/(\d{2})(\d{3})(\d{3})(\d{3})$/, "$1 $2 $3 $4")}`;
+    textoLead = (lead, telefono, nombreCliente) => {
+      const servicio = { venta: "Venta de mezcla", colocacion: "Colocaci\xF3n / asfaltado", transporte: "Transporte", fabricacion: "Fabricaci\xF3n (derivar a ingeniero)", otro: "Otro" }[lead.servicio ?? "otro"];
+      return [
+        `\u{1F9F2} *${lead.listo ? "Lead listo para cotizar" : "Nuevo lead"} \u2014 ${CONSTROAD.nombre}*`,
+        `\u{1F464} ${lead.nombre || nombreCliente || "sin nombre"}${lead.empresa ? ` \xB7 ${lead.empresa}` : ""} \xB7 ${telefonoLegible(telefono)}`,
+        `\u{1F3D7} ${servicio}${lead.detalle ? ` \u2014 ${lead.detalle}` : ""}`,
+        [lead.cantidad ? `\u{1F4D0} ${lead.cantidad}` : "", lead.distrito ? `\u{1F4CD} ${lead.distrito}` : "", lead.fecha ? `\u{1F4C5} ${lead.fecha}` : ""].filter(Boolean).join(" \xB7 "),
+        "Para tomarlo, responde al cliente desde el WhatsApp de Constroad: el bot se calla 30 min en esa conversaci\xF3n."
+      ].filter(Boolean).join("\n");
+    };
+    responderVentas = async (input, deps) => {
+      const { companyId, conversationId, botConfig, message, customerPhone } = input;
+      const llm = proveedorLlm();
+      if (!llm) return null;
+      return enCola(conversationId, async () => {
+        await new Promise((r39) => setTimeout(r39, ESPERA_RAFAGA_MS));
+        const conversacion = await cargarConversacion(conversationId);
+        if (!conversacion) return null;
+        if (conversacion.status === "human") {
+          if (conversacion.pausedUntil && conversacion.pausedUntil.getTime() > Date.now()) return null;
+          await reanudarConversacion(conversationId);
+        }
+        if (conversacion.status === "closed") return null;
+        const mensajes2 = await ultimosMensajes(conversationId);
+        const ultimo = mensajes2[mensajes2.length - 1];
+        if (!ultimo || ultimo.role !== "customer") return null;
+        const cliente = await clientePorTelefono(companyId, customerPhone).catch(() => null);
+        const hora3 = ahoraLima();
+        const sistema = bloquesSistema(CONSTROAD, { ahoraTexto: hora3.texto, enHorario: hora3.enHorario, cliente, telefono: customerPhone, lead: conversacion.lead ?? null });
+        const ultimaBot = [...mensajes2].reverse().find((m59) => m59.role === "bot")?.text;
+        let lead = { ...conversacion.lead };
+        let escalado = false;
+        const resultado = await correrTurno({
+          proveedor: llm,
+          sistema,
+          historial: historialATurnos(mensajes2),
+          herramientas: HERRAMIENTAS_VENTAS,
+          ultimaRespuestaBot: ultimaBot,
+          contexto: {
+            guardarLead: async (datos) => {
+              lead = { ...lead, ...Object.fromEntries(Object.entries(datos).filter(([, v55]) => v55 !== void 0 && v55 !== "")) };
+              const conQue = Boolean(lead.servicio && (lead.distrito || lead.cantidad));
+              const avisadoHoy = conversacion.leadNotifiedAt && Date.now() - conversacion.leadNotifiedAt.getTime() < 24 * 36e5;
+              const notificar = Boolean(botConfig.ownerNotifyTarget) && (lead.listo || conQue) && (!avisadoHoy || Boolean(lead.listo && !conversacion.lead?.listo));
+              await guardarLeadEnConversacion(conversationId, lead, notificar);
+              if (notificar) {
+                await deps.notificar(String(botConfig.ownerNotifyTarget), textoLead(lead, customerPhone, cliente?.nombre ?? conversacion.customerName));
+                conversacion.leadNotifiedAt = /* @__PURE__ */ new Date();
+                conversacion.lead = lead;
+              }
+              return { notificado: notificar };
+            },
+            escalar: async (motivo) => {
+              escalado = true;
+              await pausarConversacion(conversationId, botConfig.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN, "escalada");
+              if (botConfig.ownerNotifyTarget) {
+                const ultimos = mensajes2.filter((m59) => m59.role === "customer").slice(-2).map((m59) => `\xAB${String(m59.text || "").slice(0, 120)}\xBB`).join(" / ");
+                await deps.notificar(String(botConfig.ownerNotifyTarget), `\u{1F64B} *Cliente pide atenci\xF3n \u2014 ${CONSTROAD.nombre}*
+\u{1F464} ${cliente?.nombre ?? conversacion.customerName ?? "sin nombre"} \xB7 ${telefonoLegible(customerPhone)}
+Motivo: ${motivo}
+\xDAltimos mensajes: ${ultimos}
+El bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
+              }
+            },
+            horario: () => ({ texto: CONSTROAD.horario, abierto: hora3.enHorario })
+          }
+        });
+        void sumarTokens(conversationId, resultado.uso.entrada, resultado.uso.salida).catch(() => void 0);
+        if (resultado.degradado && !escalado) {
+          await pausarConversacion(conversationId, botConfig.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN, "escalada");
+          if (botConfig.ownerNotifyTarget) {
+            await deps.notificar(String(botConfig.ownerNotifyTarget), `\u26A0\uFE0F *El bot no pudo contestar \u2014 ${CONSTROAD.nombre}*
+${telefonoLegible(customerPhone)}: \xAB${String(message.text).slice(0, 160)}\xBB
+Le dije que un asesor responde. Toma la conversaci\xF3n desde el WhatsApp de Constroad.`);
+          }
+        }
+        logger_default.info(
+          `[ventas] ${customerPhone}${cliente ? ` (${cliente.nombre})` : ""}: ${resultado.herramientasUsadas.length ? `herramientas ${resultado.herramientasUsadas.join(",")} \xB7 ` : ""}${resultado.uso.entrada}/${resultado.uso.salida} tokens${resultado.uso.cacheLeida ? ` (cache ${resultado.uso.cacheLeida})` : ""}${resultado.degradado ? " \xB7 DEGRADADO" : ""}`
+        );
+        return resultado.texto;
+      });
+    };
+    atenderMensajeDelDueno = async (message, companyId, botConfig, deps) => {
+      if (!companyId) return;
+      const texto4 = message.text.trim();
+      const comando = texto4.toLowerCase().replace(/\s+/g, " ");
+      if (comando === "!bot off" || comando === "!bot on") {
+        await deps.setBotEnabled(companyId, comando === "!bot on");
+        await deps.notificar(message.remoteJid, comando === "!bot on" ? "\u{1F916} Bot de ventas encendido." : "\u{1F916} Bot de ventas apagado. Escribe !bot on para prenderlo.");
+        return;
+      }
+      const conversacion = await conversacionDeCliente(companyId, message.remoteJid);
+      if (!conversacion) return;
+      const minutos = comando === "!pausa" ? 24 * 60 : botConfig?.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN;
+      await pausarConversacion(conversacion.id, minutos, "owner");
+      if (comando !== "!pausa") await guardarMensajeDueno(companyId, conversacion.id, texto4);
+      logger_default.info(`[ventas] el due\xF1o tom\xF3 la conversaci\xF3n con ${message.remoteJid}: bot en pausa ${minutos} min`);
+    };
+  }
+});
+
+// src/agent/runtime/agent-wiring.ts
+async function sendWithAgentTimeout(label, sendPromise) {
+  let timer3 = null;
+  const timeout = new Promise((_58, reject) => {
+    timer3 = setTimeout(
+      () => reject(new Error(`Agent send timeout (${AGENT_SEND_TIMEOUT_MS / 1e3}s): ${label}`)),
+      AGENT_SEND_TIMEOUT_MS
+    );
+  });
+  try {
+    return await Promise.race([sendPromise, timeout]);
+  } finally {
+    if (timer3) clearTimeout(timer3);
+  }
+}
+async function resolveSessionContext(sessionPhone) {
+  const cached2 = sessionContextCache.get(sessionPhone);
+  if (cached2 && Date.now() - cached2.cachedAt < CONFIG_CACHE_TTL_MS) {
+    return cached2;
+  }
+  let companyId = null;
+  let botConfig = null;
+  try {
+    const company = await quotaValidatorService.getCompanyByWhatsappSender(sessionPhone);
+    const clave2 = company?.companyId ?? company?._id;
+    companyId = clave2 ? String(clave2) : null;
+    if (companyId) {
+      const configModel2 = await getBotConfigModel();
+      const stored = await configModel2.findOne({ companyId }).lean();
+      botConfig = stored ? {
+        enabled: Boolean(stored.enabled),
+        vertical: stored.vertical,
+        greeting: stored.greeting,
+        testNumbers: stored.testNumbers,
+        handoffPauseMinutes: stored.handoffPauseMinutes,
+        ownerNotifyTarget: stored.ownerNotifyTarget
+      } : null;
+    }
+  } catch (error) {
+    logger_default.warn(`Agent: no se pudo resolver contexto de ${sessionPhone}: ${String(error)}`);
+  }
+  const resolved = { companyId, botConfig, cachedAt: Date.now() };
+  sessionContextCache.set(sessionPhone, resolved);
+  return resolved;
+}
+function buildDeps(sessionPhone, sock) {
+  const notificar = notificarPor(sock);
+  return {
+    resolveCompanyIdBySender: async () => (await resolveSessionContext(sessionPhone)).companyId,
+    getBotConfig: async () => (await resolveSessionContext(sessionPhone)).botConfig,
+    isRateLimited: (jid, nowMs) => rateLimiter.isLimited(jid, nowMs),
+    saveInbound: saveInboundMessage,
+    saveOutbound: saveOutboundMessage,
+    // F2: el agente de ventas (vertical asfalto). Otros verticales, cuando existan, entran acá.
+    reply: async (input) => input.botConfig.vertical === "asphalt" ? responderVentas(input, { notificar }) : null,
+    // F3: el dueño escribe desde su número → pausa / comandos.
+    onOwnerMessage: async (message, companyId) => {
+      const { botConfig } = await resolveSessionContext(sessionPhone);
+      if (!botConfig) return;
+      await atenderMensajeDelDueno(message, companyId, botConfig, {
+        notificar,
+        setBotEnabled: async (id, enabled) => {
+          const configModel2 = await getBotConfigModel();
+          await configModel2.updateOne({ companyId: id }, { $set: { enabled } });
+          clearAgentSessionCache(sessionPhone);
+        }
+      });
+    },
+    simulateTyping: async (toJid, text) => {
+      await sock.sendPresenceUpdate("composing", toJid).catch(() => void 0);
+      await delay(Math.min(calculateTypingDelay(text), MAX_TYPING_DELAY_MS));
+    },
+    sendText: async (toJid, text) => {
+      await sendWithAgentTimeout(`agent\u2192${toJid}`, sock.sendMessage(toJid, { text }));
+      await sock.sendPresenceUpdate("paused", toJid).catch(() => void 0);
+      const { companyId } = await resolveSessionContext(sessionPhone);
+      if (companyId) {
+        void quotaValidatorService.incrementWhatsAppUsage(companyId, 1).catch((error) => logger_default.warn(`Agent: fallo conteo de quota: ${String(error)}`));
+      }
+    }
+  };
+}
+function clearAgentSessionCache(sessionPhone) {
+  if (sessionPhone) {
+    sessionContextCache.delete(sessionPhone);
+    return;
+  }
+  sessionContextCache.clear();
+}
+async function handleAgentMessagesUpsert(sessionPhone, sock, upsert) {
+  if (!config.whatsapp.agentEnabled) return;
+  if (upsert?.type !== "notify") return;
+  for (const rawMessage of upsert.messages ?? []) {
+    const remoteJid = rawMessage?.key?.remoteJid;
+    if (!remoteJid) continue;
+    try {
+      const inbound = {
+        sessionPhone,
+        remoteJid,
+        fromMe: Boolean(rawMessage.key?.fromMe),
+        text: extractInboundText(rawMessage.message),
+        pushName: rawMessage.pushName ?? void 0,
+        channelMessageId: rawMessage.key?.id ?? void 0,
+        receivedAt: /* @__PURE__ */ new Date()
+      };
+      const outcome = await routeInboundMessage(inbound, buildDeps(sessionPhone, sock));
+      if (outcome === "replied") {
+        logger_default.info(`Agent: respondido a ${remoteJid} (sesi\xF3n ${sessionPhone})`);
+      } else if (outcome !== "bot-disabled" && outcome !== "from-me" && outcome !== "group") {
+        logger_default.debug(`Agent: mensaje de ${remoteJid} \u2192 ${outcome}`);
+      }
+    } catch (error) {
+      logger_default.error(`Agent: error procesando mensaje de ${remoteJid}: ${String(error)}`);
+    }
+  }
+}
+var CONFIG_CACHE_TTL_MS, MAX_TYPING_DELAY_MS, AGENT_SEND_TIMEOUT_MS, rateLimiter, sessionContextCache, notificarPor;
+var init_agent_wiring = __esm({
+  "src/agent/runtime/agent-wiring.ts"() {
+    init_logger();
+    init_environment();
+    init_quota_validator_service();
+    init_bot_models();
+    init_retry();
+    init_message_text();
+    init_inbound_router();
+    init_jid_rate_limit();
+    init_conversation_store();
+    init_ventas();
+    CONFIG_CACHE_TTL_MS = 6e4;
+    MAX_TYPING_DELAY_MS = 4e3;
+    AGENT_SEND_TIMEOUT_MS = 3e4;
+    rateLimiter = new JidRateLimiter(8, 6e4);
+    sessionContextCache = /* @__PURE__ */ new Map();
+    notificarPor = (sock) => async (target, texto4) => {
+      try {
+        await sendWithAgentTimeout(`agent\u2192${target}`, sock.sendMessage(target, { text: texto4 }));
+      } catch (error) {
+        logger_default.warn(`Agent: no pude avisar a ${target}: ${String(error)}`);
+      }
+    };
+  }
+});
+
 // src/agent/checklist/alcance.ts
 var alcance_exports = {};
 __export(alcance_exports, {
@@ -8686,7 +9304,7 @@ var init_checklist = __esm({
       }
     ];
     CHECKLIST_PRODUCCION = [...CHECKLIST_PLANTA, ...CHECKLIST_CAMPO];
-    normalizarTexto = (texto2) => String(texto2 || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+    normalizarTexto = (texto4) => String(texto4 || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
     itemSatisfecho = (item, mensajes2) => {
       const dichos = mensajes2.map(normalizarTexto);
       return item.seSatisfaceCon.some((frase) => {
@@ -8775,8 +9393,8 @@ var init_sugerencias = __esm({
     };
     vencidasAhora = (ahoraMs = Date.now()) => expirar(ahoraMs);
     porMensaje = (msgId) => msgId ? propuestas.find((p64) => p64.msgId === msgId) : void 0;
-    esVoto = (texto2) => {
-      const t44 = String(texto2 || "").trim();
+    esVoto = (texto4) => {
+      const t44 = String(texto4 || "").trim();
       return t44 === "1" || t44 === "3";
     };
     decidir = (args, ahoraMs = Date.now()) => {
@@ -8944,8 +9562,8 @@ var init_interruptor = __esm({
       if (guardado && typeof guardado.apagado === "boolean") estado = { ...guardado };
     };
     agenteApagado = () => estado.apagado;
-    comandoInterruptor = (texto2) => {
-      const t44 = String(texto2 || "").trim().toLowerCase().replace(/\s+/g, " ");
+    comandoInterruptor = (texto4) => {
+      const t44 = String(texto4 || "").trim().toLowerCase().replace(/\s+/g, " ");
       if (t44 === "!lila off") return "off";
       if (t44 === "!lila on") return "on";
       return null;
@@ -8976,17 +9594,17 @@ var init_emisor = __esm({
       const company = await CompanyModel.findOne({ companyId: COMPANY_PILOTO }).lean();
       return String(company?.whatsappConfig?.sender || "");
     };
-    mandar = async (destino, texto2) => {
+    mandar = async (destino, texto4) => {
       const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
-      const resultado = await WhatsAppDirectService2.sendMessage(await sender(), destino, texto2, {
+      const resultado = await WhatsAppDirectService2.sendMessage(await sender(), destino, texto4, {
         companyId: COMPANY_PILOTO
       });
       return resultado?.key?.id || void 0;
     };
-    enviarAOperaciones = async (texto2) => {
+    enviarAOperaciones = async (texto4) => {
       const destino = destinoPermitido();
       if (!destino) return false;
-      await mandar(destino, texto2);
+      await mandar(destino, texto4);
       return true;
     };
     publicarPropuesta = async (propuesta, textoPublicado) => {
@@ -9260,15 +9878,15 @@ var init_catalogo = __esm({
       }
     ];
     normalizar = (t44) => String(t44 || "").replace(/[\u2066-\u2069\u200e\u200f\u202a-\u202e]/g, "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
-    esConsulta = (texto2, numeroBot, mencionados = [], jidsBot = []) => {
-      const t44 = normalizar(texto2);
+    esConsulta = (texto4, numeroBot, mencionados = [], jidsBot = []) => {
+      const t44 = normalizar(texto4);
       if (/(^|\s)@lila\b/.test(t44)) return true;
       if (/^lila\b/.test(t44)) return true;
       if (numeroBot && t44.includes(`@${numeroBot}`)) return true;
       const propios = new Set([...jidsBot, numeroBot ? `${numeroBot}@s.whatsapp.net` : ""].filter(Boolean).map((j50) => j50.replace(/:\d+@/, "@")));
       return mencionados.some((m59) => propios.has(String(m59).replace(/:\d+@/, "@")));
     };
-    preguntaLimpia = (texto2, numeroBot) => normalizar(texto2).replace(/@lila\b/g, "").replace(/^lila\b[,:]?/, "").replace(/@\d{6,}\b/g, "").replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, "g") : /$^/, "").replace(/\s+/g, " ").trim();
+    preguntaLimpia = (texto4, numeroBot) => normalizar(texto4).replace(/@lila\b/g, "").replace(/^lila\b[,:]?/, "").replace(/@\d{6,}\b/g, "").replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, "g") : /$^/, "").replace(/\s+/g, " ").trim();
     DIAS_SEMANA = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
     MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "setiembre", "octubre", "noviembre", "diciembre"];
     hoyLima = (ahoraMs = Date.now()) => new Date(ahoraMs - 5 * 36e5).toISOString().slice(0, 10);
@@ -9381,29 +9999,6 @@ var init_catalogo = __esm({
         }
       }
       return mejor?.id ?? null;
-    };
-  }
-});
-
-// src/agent/checklist/tiempo.ts
-var OFFSET_LIMA_MS, diaPeruano, instanteArranque, DIAS, fechaLegible;
-var init_tiempo = __esm({
-  "src/agent/checklist/tiempo.ts"() {
-    OFFSET_LIMA_MS = 5 * 60 * 60 * 1e3;
-    diaPeruano = (ms2) => new Date(ms2 - OFFSET_LIMA_MS).toISOString().slice(0, 10);
-    instanteArranque = (fecha, hora3) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora3)) return null;
-      const ms2 = (/* @__PURE__ */ new Date(`${fecha}T${hora3}:00.000-05:00`)).getTime();
-      return Number.isFinite(ms2) ? ms2 : null;
-    };
-    DIAS = ["domingo", "lunes", "martes", "mi\xE9rcoles", "jueves", "viernes", "s\xE1bado"];
-    fechaLegible = (fecha) => {
-      const [y65, m59, d67] = String(fecha || "").split("-").map(Number);
-      if (!y65 || !m59 || !d67) return fecha;
-      const dia = DIAS[new Date(Date.UTC(y65, m59 - 1, d67)).getUTCDay()];
-      const dd = String(d67).padStart(2, "0");
-      const mm = String(m59).padStart(2, "0");
-      return `${dia} ${dd}/${mm}`;
     };
   }
 });
@@ -9887,11 +10482,11 @@ var init_pendientes = __esm({
     preguntar = (p64, ahoraMs = Date.now()) => {
       pendientes2.set(clave(p64.quien, p64.grupo), { ...p64, creadaMs: ahoraMs });
     };
-    nombraUnidad = (texto2) => {
-      const t44 = String(texto2 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    nombraUnidad = (texto4) => {
+      const t44 = String(texto4 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
       return /\b\d{1,2}\b/.test(t44) || /\b[a-z]{3}[\s-]?\d{3}\b/.test(t44) || /\b(ultim[oa]|primer[oa]?)\b/.test(t44);
     };
-    responderPendiente = (quien, grupo, texto2, ahoraMs = Date.now()) => {
+    responderPendiente = (quien, grupo, texto4, ahoraMs = Date.now()) => {
       const k61 = clave(quien, grupo);
       const p64 = pendientes2.get(k61);
       if (!p64) return null;
@@ -9900,28 +10495,28 @@ var init_pendientes = __esm({
         return null;
       }
       if (p64.tipo === "unidad") {
-        if (!nombraUnidad(texto2)) return null;
+        if (!nombraUnidad(texto4)) return null;
         pendientes2.delete(k61);
-        return { pregunta: p64, indice: -1, texto: String(texto2 || "").trim() };
+        return { pregunta: p64, indice: -1, texto: String(texto4 || "").trim() };
       }
       if (p64.tipo === "texto") {
-        const t44 = String(texto2 || "").trim();
+        const t44 = String(texto4 || "").trim();
         if (!t44 || t44.length > 60 || t44.startsWith("@") || t44.startsWith("!")) return null;
         pendientes2.delete(k61);
         return { pregunta: p64, indice: -1, texto: t44 };
       }
       if (p64.tipo === "confirmar") {
-        const t44 = String(texto2 || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        const t44 = String(texto4 || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
         const si = /^(si|sí|dale|ok|okey|claro|exacto|eso|ya|1)\b/.test(t44);
         const no4 = /^(no|nada|otra|3)\b/.test(t44);
         if (!si && !no4) return null;
         pendientes2.delete(k61);
         return si ? { pregunta: p64, indice: 0, texto: t44 } : null;
       }
-      const n44 = Number(String(texto2 || "").trim());
+      const n44 = Number(String(texto4 || "").trim());
       if (!Number.isInteger(n44) || n44 < 1 || n44 > p64.opciones.length) return null;
       pendientes2.delete(k61);
-      return { pregunta: p64, indice: n44 - 1, texto: String(texto2 || "").trim() };
+      return { pregunta: p64, indice: n44 - 1, texto: String(texto4 || "").trim() };
     };
     textoPregunta = (encabezado, opciones) => [encabezado, ...opciones.map((o37, i50) => `${i50 + 1}. ${o37}`), "", "Responde con el n\xFAmero."].join("\n");
   }
@@ -9946,8 +10541,8 @@ var init_contexto = __esm({
       }
       return u66;
     };
-    pareceContinuacion = (texto2) => {
-      const t44 = String(texto2 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¿?¡!.,]/g, " ").replace(/\s+/g, " ").trim();
+    pareceContinuacion = (texto4) => {
+      const t44 = String(texto4 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¿?¡!.,]/g, " ").replace(/\s+/g, " ").trim();
       if (!t44 || t44.split(" ").length > 6) return false;
       const traeDato = /\b\d{1,2}\b/.test(t44) || /\b[a-z]{3}[\s-]?\d{3}\b/.test(t44) || /\b(manana|hoy|ayer|anteayer|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|mes|enero|febrero|marzo|abril|mayo|junio|julio|agosto|se[pt]?tiembre|octubre|noviembre|diciembre|ultim[oa]|primer[oa]?)\b/.test(t44) || /\b(en|de|para|con) [a-z]/.test(t44);
       const empiezaComoSeguimiento = /^(y |e |que tal |en |de |para |la |el |las |los |con )/.test(t44) || /^\d/.test(t44);
@@ -9968,8 +10563,8 @@ var init_contexto = __esm({
       if (traeEmpresa) for (const e29 of empresas) ant = ant.split(n44(e29)).join(" ");
       return `${nn} ${ant}`.replace(/\s+/g, " ").trim();
     };
-    pareceParaElAgente = (texto2) => {
-      const t44 = String(texto2 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¡!.,]/g, " ").replace(/\s+/g, " ").trim();
+    pareceParaElAgente = (texto4) => {
+      const t44 = String(texto4 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¡!.,]/g, " ").replace(/\s+/g, " ").trim();
       if (!t44 || t44.split(" ").length > 25) return false;
       if (/\?/.test(t44)) return true;
       return /^(ok |ya |listo |y |e )?(hay|que|cual|cuales|cuanto|cuanta|cuantos|cuantas|como|donde|quien|quienes|a que hora|muestrame|muestra|dame|pasame|mandame|enviame|dime|necesito|quiero|puedes|podrias|me (muestras|pasas|mandas|das|dices))\b/.test(t44);
@@ -10993,9 +11588,9 @@ var init_imagen = __esm({
         acumulado += c66.ancho;
       }
       const celda = (c66, i50, valor, y66, clase) => {
-        const texto2 = escapeXml(recortar(String(valor ?? ""), c66.max ?? 40));
+        const texto4 = escapeXml(recortar(String(valor ?? ""), c66.max ?? 40));
         const x63 = c66.alinear === "fin" ? xs[i50] + c66.ancho - 12 : xs[i50];
-        return `<text x="${x63}" y="${y66}" class="${clase}"${c66.alinear === "fin" ? ' text-anchor="end"' : ""}>${texto2}</text>`;
+        return `<text x="${x63}" y="${y66}" class="${clase}"${c66.alinear === "fin" ? ' text-anchor="end"' : ""}>${texto4}</text>`;
       };
       const partes = [];
       let y65 = HEADER + 8;
@@ -11134,7 +11729,7 @@ var init_semantica = __esm({
 });
 
 // src/agent/llm/datos.ts
-var num3, texto, EMPRESAS, patronDeBusqueda, nombresCache, nombresDeEmpresas, fechaDe2, buscarClientes, buscarProveedores, LIMITE_HISTORIAL, pedidosEntre, LIMITE_KARDEX, movimientosDeMaterial, ingresosDeAgregados, LIMITE_CERTIFICADOS, pedidosSinCertificado;
+var num3, texto3, EMPRESAS, patronDeBusqueda, nombresCache, nombresDeEmpresas, fechaDe2, buscarClientes, buscarProveedores, LIMITE_HISTORIAL, pedidosEntre, LIMITE_KARDEX, movimientosDeMaterial, ingresosDeAgregados, LIMITE_CERTIFICADOS, pedidosSinCertificado;
 var init_datos = __esm({
   "src/agent/llm/datos.ts"() {
     init_models();
@@ -11142,7 +11737,7 @@ var init_datos = __esm({
     init_tiempo();
     init_planta();
     num3 = (v55) => typeof v55 === "number" && Number.isFinite(v55) ? v55 : Number(v55) || 0;
-    texto = (v55) => String(v55 ?? "").trim();
+    texto3 = (v55) => String(v55 ?? "").trim();
     EMPRESAS = [...EMPRESAS_CON_PEDIDOS];
     patronDeBusqueda = (nombre) => {
       const CLASES = { a: "[a\xE1\xC1]", e: "[e\xE9\xC9]", i: "[i\xED\xCD]", o: "[o\xF3\xD3]", u: "[u\xFA\xDA]", n: "[n\xF1\xD1]" };
@@ -11169,19 +11764,19 @@ var init_datos = __esm({
         docs.map(async (d67) => {
           const pedidos = await Order.find({
             companyId: String(d67.companyId),
-            $or: [{ clienteId: String(d67._id) }, { cliente: texto(d67.name) }],
+            $or: [{ clienteId: String(d67._id) }, { cliente: texto3(d67.name) }],
             status: { $nin: ["eliminado", "rechazado"] }
           }).select("fechaProgramacion obra cantidadCubos").sort({ fechaProgramacion: -1 }).limit(3).lean();
           return {
             empresa: nombres.get(String(d67.companyId)) || String(d67.companyId),
-            nombre: texto(d67.name),
-            alias: texto(d67.alias),
-            ruc: texto(d67.ruc),
-            contacto: texto(d67.contactPerson),
-            telefono: texto(d67.phone),
-            email: texto(d67.email),
-            direccion: texto(d67.address),
-            ultimosPedidos: pedidos.map((p64) => ({ fecha: fechaDe2(p64.fechaProgramacion), obra: texto(p64.obra), m3: num3(p64.cantidadCubos) }))
+            nombre: texto3(d67.name),
+            alias: texto3(d67.alias),
+            ruc: texto3(d67.ruc),
+            contacto: texto3(d67.contactPerson),
+            telefono: texto3(d67.phone),
+            email: texto3(d67.email),
+            direccion: texto3(d67.address),
+            ultimosPedidos: pedidos.map((p64) => ({ fecha: fechaDe2(p64.fechaProgramacion), obra: texto3(p64.obra), m3: num3(p64.cantidadCubos) }))
           };
         })
       );
@@ -11195,15 +11790,15 @@ var init_datos = __esm({
       }).select("companyId name alias ruc contactPerson address phone email sellsMaterials transportsMaterials tags").limit(limite).lean();
       return docs.map((d67) => ({
         empresa: nombres.get(String(d67.companyId)) || String(d67.companyId),
-        nombre: texto(d67.name),
-        alias: texto(d67.alias),
-        ruc: texto(d67.ruc),
-        contacto: texto(d67.contactPerson),
-        telefono: texto(d67.phone),
-        email: texto(d67.email),
-        direccion: texto(d67.address),
+        nombre: texto3(d67.name),
+        alias: texto3(d67.alias),
+        ruc: texto3(d67.ruc),
+        contacto: texto3(d67.contactPerson),
+        telefono: texto3(d67.phone),
+        email: texto3(d67.email),
+        direccion: texto3(d67.address),
         rubros: [d67.sellsMaterials ? "vende materiales" : "", d67.transportsMaterials ? "transporta materiales" : ""].filter(Boolean),
-        etiquetas: Array.isArray(d67.tags) ? d67.tags.map(texto).filter(Boolean) : []
+        etiquetas: Array.isArray(d67.tags) ? d67.tags.map(texto3).filter(Boolean) : []
       }));
     };
     LIMITE_HISTORIAL = 30;
@@ -11233,13 +11828,13 @@ var init_datos = __esm({
       for (const d67 of despachos) despachadoPor.set(String(d67.orderId), (despachadoPor.get(String(d67.orderId)) ?? 0) + num3(d67.quantity));
       const pedidos = mostrados.map((o37) => ({
         fecha: fechaDe2(o37.fechaProgramacion),
-        hora: texto(o37.horaInicio),
+        hora: texto3(o37.horaInicio),
         empresa: nombres.get(String(o37.companyId)) || String(o37.companyId),
-        cliente: texto(o37.alias) || texto(o37.cliente),
-        obra: texto(o37.obra),
+        cliente: texto3(o37.alias) || texto3(o37.cliente),
+        obra: texto3(o37.obra),
         m3Pedidos: num3(o37.cantidadCubos),
         m3Despachados: despachadoPor.get(String(o37._id)) ?? 0,
-        estado: texto(o37.status) || "pendiente"
+        estado: texto3(o37.status) || "pendiente"
       }));
       return {
         desde: filtro.desde,
@@ -11275,17 +11870,17 @@ var init_datos = __esm({
           const mostrados = enRango.slice(0, LIMITE_KARDEX);
           const movimientos = mostrados.map((d67) => ({
             fecha: fechaDe2(d67.date),
-            tipo: texto(d67.type) === "Salida" ? "Salida" : "Ingreso",
+            tipo: texto3(d67.type) === "Salida" ? "Salida" : "Ingreso",
             cantidad: num3(d67.quantity),
             saldo: num3(d67.balanceQuantity),
-            detalle: texto(d67.providerName) || texto(d67.vendorProviderName) || texto(d67.description) || (d67.orderId ? "pedido" : "") || (d67.purchaseOrderNumber ? `OC ${texto(d67.purchaseOrderNumber)}` : "")
+            detalle: texto3(d67.providerName) || texto3(d67.vendorProviderName) || texto3(d67.description) || (d67.orderId ? "pedido" : "") || (d67.purchaseOrderNumber ? `OC ${texto3(d67.purchaseOrderNumber)}` : "")
           }));
           const ingresos = movimientos.filter((x63) => x63.tipo === "Ingreso");
           const salidas = movimientos.filter((x63) => x63.tipo === "Salida");
           return {
             empresa: nombres.get(String(m59.companyId)) || String(m59.companyId),
-            material: texto(m59.name).toUpperCase(),
-            unidad: texto(m59.unit).replace(/^m3$/i, "m\xB3") || "m\xB3",
+            material: texto3(m59.name).toUpperCase(),
+            unidad: texto3(m59.unit).replace(/^m3$/i, "m\xB3") || "m\xB3",
             desde: filtro.desde,
             hasta: filtro.hasta,
             movimientos,
@@ -11311,16 +11906,16 @@ var init_datos = __esm({
       }).select("companyId material m3 arriveDate status providerName vendorProviderName").sort({ arriveDate: 1 }).limit(500).lean();
       const enRango = docs.filter((d67) => {
         const dia = fechaDe2(d67.arriveDate);
-        return dia >= filtro.desde && dia <= filtro.hasta && esAgregado(texto(d67.material), "m3");
+        return dia >= filtro.desde && dia <= filtro.hasta && esAgregado(texto3(d67.material), "m3");
       });
       const porProveedor = /* @__PURE__ */ new Map();
       for (const d67 of enRango) {
-        const vendedor = texto(d67.vendorProviderName) || texto(d67.providerName) || "sin proveedor";
-        const transportista = texto(d67.providerName) && texto(d67.providerName) !== vendedor ? texto(d67.providerName) : void 0;
+        const vendedor = texto3(d67.vendorProviderName) || texto3(d67.providerName) || "sin proveedor";
+        const transportista = texto3(d67.providerName) && texto3(d67.providerName) !== vendedor ? texto3(d67.providerName) : void 0;
         const empresa = nombres.get(String(d67.companyId)) || String(d67.companyId);
         const clave2 = `${vendedor}|${empresa}`;
         const prov = porProveedor.get(clave2) ?? { proveedor: vendedor, transportista, empresa, materiales: [], total: 0, unidad: "m\xB3" };
-        const material = texto(d67.material).toUpperCase();
+        const material = texto3(d67.material).toUpperCase();
         let fila = prov.materiales.find((x63) => x63.material === material);
         if (!fila) {
           fila = { material, unidad: "m\xB3", cantidad: 0, ingresos: 0, pendientes: 0 };
@@ -11328,7 +11923,7 @@ var init_datos = __esm({
         }
         fila.cantidad += num3(d67.m3);
         fila.ingresos += 1;
-        if (texto(d67.status) !== "Completed") fila.pendientes += 1;
+        if (texto3(d67.status) !== "Completed") fila.pendientes += 1;
         prov.total += num3(d67.m3);
         porProveedor.set(clave2, prov);
       }
@@ -11367,10 +11962,10 @@ var init_datos = __esm({
       const pendientes3 = enRango.filter((o37) => !conCertificado.has(String(o37._id))).map((o37) => ({
         fecha: fechaDe2(o37.fechaProgramacion),
         empresa: nombres.get(String(o37.companyId)) || String(o37.companyId),
-        cliente: texto(o37.alias) || texto(o37.cliente) || "sin cliente",
-        obra: texto(o37.obra),
+        cliente: texto3(o37.alias) || texto3(o37.cliente) || "sin cliente",
+        obra: texto3(o37.obra),
         m3: num3(o37.cantidadCubos),
-        nota: texto(o37.noteCertificate),
+        nota: texto3(o37.noteCertificate),
         exige: o37.requireCertificates === true
       }));
       return { pedidos: pendientes3.slice(0, LIMITE_CERTIFICADOS), truncado: pendientes3.length > LIMITE_CERTIFICADOS, total: enRango.length };
@@ -11380,7 +11975,7 @@ var init_datos = __esm({
 
 // src/agent/llm/herramientas.ts
 var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, herramientaDeDatosPorReglas, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, textoConFecha, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
-var init_herramientas = __esm({
+var init_herramientas2 = __esm({
   "src/agent/llm/herramientas.ts"() {
     init_catalogo();
     init_weather_asphalt_forecast_service();
@@ -11915,7 +12510,7 @@ var init_modelo = __esm({
           const controlador = new AbortController();
           const timer3 = setTimeout(() => controlador.abort(), pedido.timeoutMs);
           try {
-            const texto2 = await entrada.sesion.prompt(pedido.usuario, {
+            const texto4 = await entrada.sesion.prompt(pedido.usuario, {
               grammar,
               maxTokens: pedido.maxTokens,
               temperature: 0,
@@ -11923,7 +12518,7 @@ var init_modelo = __esm({
               stopOnAbortSignal: false
             });
             logger_default.info(`[agente] llm ${pedido.tarea}: ${((Date.now() - inicio) / 1e3).toFixed(1)} s`);
-            return texto2;
+            return texto4;
           } finally {
             clearTimeout(timer3);
           }
@@ -11972,9 +12567,9 @@ var init_redaccion = __esm({
       "Contacto: Luis Paz \xB7 999888777",
       "Respuesta: *ANDES SAC* no tiene correo registrado. Su contacto es Luis Paz, tel\xE9fono 999888777."
     ].join("\n");
-    numerosDe = (texto2) => {
+    numerosDe = (texto4) => {
       const encontrados = [];
-      for (const m59 of String(texto2).matchAll(/\d[\d.,]*/g)) {
+      for (const m59 of String(texto4).matchAll(/\d[\d.,]*/g)) {
         const crudo = m59[0].replace(/[.,]$/, "");
         const ultimo = Math.max(crudo.lastIndexOf("."), crudo.lastIndexOf(","));
         const entero = ultimo < 0 ? crudo : crudo.slice(0, ultimo).replace(/[.,]/g, "");
@@ -12008,7 +12603,7 @@ ${pregunta}`.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
     TIMEOUT_REDACCION_MS = 25e3;
     MAX_FRASE = 320;
     redactar = async (pregunta, ficha) => {
-      const texto2 = await generar({
+      const texto4 = await generar({
         tarea: "redaccion",
         sistema: PROMPT_REDACCION,
         usuario: `Pregunta: ${pregunta}
@@ -12018,8 +12613,8 @@ Respuesta:`,
         maxTokens: 120,
         timeoutMs: TIMEOUT_REDACCION_MS
       });
-      if (!texto2) return null;
-      const frase = texto2.replace(/^respuesta:\s*/i, "").replace(/\s+/g, " ").trim();
+      if (!texto4) return null;
+      const frase = texto4.replace(/^respuesta:\s*/i, "").replace(/\s+/g, " ").trim();
       if (!frase || frase.length > MAX_FRASE) return null;
       if (/\bno (lo |la |los |las )?encontr/i.test(frase)) return null;
       return respetaLosDatos(frase, ficha, pregunta) ? frase : null;
@@ -12033,7 +12628,7 @@ var init_seleccion = __esm({
   "src/agent/llm/seleccion.ts"() {
     init_logger();
     init_catalogo();
-    init_herramientas();
+    init_herramientas2();
     init_modelo();
     ESQUEMA_SELECCION = {
       type: "object",
@@ -12156,13 +12751,13 @@ var init_llm = __esm({
     init_catalogo();
     init_pendientes();
     init_datos();
-    init_herramientas();
+    init_herramientas2();
     init_fichas();
     init_imagen();
     init_redaccion();
     init_seleccion();
     init_modelo();
-    init_herramientas();
+    init_herramientas2();
     DIAS_POR_DEFECTO = 30;
     PREGUNTA_NOMBRE = {
       clientes: "\xBFDe qu\xE9 cliente? Dime el nombre.",
@@ -12233,7 +12828,7 @@ var init_llm = __esm({
           grupo,
           opciones: [],
           tipo: "texto",
-          continuar: (_i, texto2) => responderConDatos(id, { ...args, nombre: String(texto2 || "").trim() }, `${pregunta} ${texto2 ?? ""}`, quien, grupo)
+          continuar: (_i, texto4) => responderConDatos(id, { ...args, nombre: String(texto4 || "").trim() }, `${pregunta} ${texto4 ?? ""}`, quien, grupo)
         });
         return { texto: PREGUNTA_NOMBRE[id] };
       }
@@ -12270,7 +12865,7 @@ var init_mensajes = __esm({
     init_checklist();
     NEGACIONES_PALABRA = ["no", "nada", "nadie", "tampoco", "sin", "aun", "todavia", "ni"];
     NEGACIONES_PREFIJO = ["falta", "cancel", "postergam", "suspend", "se cayo"];
-    esPregunta = (texto2) => texto2.includes("?") || texto2.includes("\xBF");
+    esPregunta = (texto4) => texto4.includes("?") || texto4.includes("\xBF");
     enPalabras = (textoNormalizado) => textoNormalizado.replace(/[^a-z0-9ñ]+/g, " ").split(" ").filter(Boolean);
     niegaFragmento = (fragmento) => {
       const palabras = enPalabras(normalizarTexto(fragmento));
@@ -12279,18 +12874,18 @@ var init_mensajes = __esm({
       return NEGACIONES_PREFIJO.some((prefijo) => limpio.includes(prefijo));
     };
     SEPARADOR_CLAUSULA = /[,;.]|\bpero\b|\baunque\b|\by (?=no |a[uú]n |todav[ií]a |ni |falta)/i;
-    enClausulas = (texto2) => String(texto2 || "").split(SEPARADOR_CLAUSULA).map((c66) => c66.trim()).filter(Boolean);
+    enClausulas = (texto4) => String(texto4 || "").split(SEPARADOR_CLAUSULA).map((c66) => c66.trim()).filter(Boolean);
     niega = (textoNormalizado) => {
       const [primera] = enClausulas(textoNormalizado);
       return primera !== void 0 && niegaFragmento(primera);
     };
-    clausulasUtiles = (texto2) => enClausulas(texto2).filter((c66) => !niegaFragmento(c66));
+    clausulasUtiles = (texto4) => enClausulas(texto4).filter((c66) => !niegaFragmento(c66));
     motivoDescarte = (mensaje) => {
       if (mensaje.esPropio) return "propio";
-      const texto2 = normalizarTexto(mensaje.texto);
-      if (!texto2) return "vacio";
+      const texto4 = normalizarTexto(mensaje.texto);
+      if (!texto4) return "vacio";
       if (esPregunta(mensaje.texto)) return "pregunta";
-      if (niega(texto2)) return "negacion";
+      if (niega(texto4)) return "negacion";
       return null;
     };
     filtrarMensajes = (mensajes2) => {
@@ -12385,12 +12980,12 @@ var init_aviso = __esm({
       for (const [id, p64] of a49) if (!b63.has(id)) frases.push(`se cae *${p64.empresa}* (${p64.hora})`);
       return frases.length ? `Cambio: ${frases.join("; ")}.` : "";
     };
-    conPiePropuesta = (texto2, nombreDestino) => [
+    conPiePropuesta = (texto4, nombreDestino) => [
       `\u{1F4E8} *Propuesta para \xAB${nombreDestino}\xBB*`,
       "Para enviarlo: mant\xE9n presionado este mensaje \u2192 *Responder* \u2192 *1*",
       "Para descartar: igual, con *3*",
       "",
-      texto2
+      texto4
     ].join("\n");
     firmaAviso = (fecha, momento, revision) => `${fecha}|${momento}|${revision.pendientes.map((i50) => i50.id).sort().join(",")}`;
   }
@@ -12445,7 +13040,7 @@ var PRODUCCION, FUTURO, PASADO, DIAS_SIN_FECHA, HILO_MS, DIAS_SEMANA2, MESES3, i
 var init_menciones = __esm({
   "src/agent/checklist/menciones.ts"() {
     init_catalogo();
-    init_herramientas();
+    init_herramientas2();
     init_alcance();
     init_tiempo();
     PRODUCCION = /\b(produccion|producciones|producir|produciremos|producimos|pedido|pedidos|despacho|despachos|asfaltar|asfaltado|asfaltamos|colocacion|colocar|imprimacion|imprimar|carga|cargar|cargamos|mezcla)\b/;
@@ -12525,8 +13120,8 @@ var init_menciones = __esm({
       return `${String(h65).padStart(2, "0")}:${min}`;
     };
     empresaDe = (t44) => ALIAS_EMPRESA.filter((e29) => e29.companyId !== COMPANY_PILOTO).find((e29) => e29.alias.some((a49) => new RegExp(`\\b${a49}\\b`).test(t44)))?.companyId;
-    clienteDe = (texto2) => {
-      const m59 = texto2.match(/cliente\s*:\s*([^\n]+)/i);
+    clienteDe = (texto4) => {
+      const m59 = texto4.match(/cliente\s*:\s*([^\n]+)/i);
       return m59 ? m59[1].trim().slice(0, 60) : void 0;
     };
     mencionesDe = (m59, enHilo = false) => {
@@ -12699,7 +13294,7 @@ var init_detector = __esm({
       if (yaPropuesta("aviso-planta", firma, ahoraMs)) return 0;
       const anterior = ultimaVersionDelDia.get(dia.fecha);
       const cambio = anterior ? describirCambio(anterior, dia.pedidos) : "";
-      const texto2 = construirAvisoProduccion(dia, { actualizacion: cambio || void 0 });
+      const texto4 = construirAvisoProduccion(dia, { actualizacion: cambio || void 0 });
       const propuesta = proponer(
         {
           tipo: "aviso-planta",
@@ -12707,11 +13302,11 @@ var init_detector = __esm({
           firma,
           destino: alcance.grupoPlanta,
           nombreDestino: alcance.nombreGrupoPlanta || "planta",
-          texto: texto2
+          texto: texto4
         },
         ahoraMs
       );
-      await publicarPropuesta(propuesta, conPiePropuesta(texto2, propuesta.nombreDestino));
+      await publicarPropuesta(propuesta, conPiePropuesta(texto4, propuesta.nombreDestino));
       ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
       logger_default.info(`[agente] propuesta ${propuesta.id}: ${cambio ? "actualizaci\xF3n" : "aviso"} de producci\xF3n ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB`);
       return 1;
@@ -12733,8 +13328,8 @@ var init_detector = __esm({
         momento,
         grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado
       };
-      const texto2 = construirAvisoChecklist(revision, contexto);
-      if (!texto2) return 0;
+      const texto4 = construirAvisoChecklist(revision, contexto);
+      if (!texto4) return 0;
       const firma = firmaAviso(dia.fecha, momento, revision);
       if (yaPropuesta("checklist-admin", firma, ahoraMs)) return 0;
       if (yaPropuesta("checklist-admin", `${dia.fecha}|${momento}|`, ahoraMs)) return 0;
@@ -12745,7 +13340,7 @@ var init_detector = __esm({
           firma,
           destino: alcance.grupoEscuchado,
           nombreDestino: alcance.nombreGrupo || "admin",
-          texto: texto2
+          texto: texto4
         },
         ahoraMs
       );
@@ -12753,7 +13348,7 @@ var init_detector = __esm({
         { ...propuesta, firma: `${dia.fecha}|${momento}|`, texto: "", destino: "", nombreDestino: "" },
         ahoraMs
       ).estado = "descartada";
-      await publicarPropuesta(propuesta, conPiePropuesta(texto2, propuesta.nombreDestino));
+      await publicarPropuesta(propuesta, conPiePropuesta(texto4, propuesta.nombreDestino));
       logger_default.info(
         `[agente] propuesta ${propuesta.id}: checklist ${momento} de ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB (${revision.pendientes.length} pendientes, ${revision.semanticas.length} confirmaci\xF3n(es) entendidas por sem\xE1ntica, descartados: ${JSON.stringify(utiles.descartados)})`
       );
@@ -12826,12 +13421,12 @@ var init_detector = __esm({
       const contexto = `En \xAB${alcance.nombreGrupo || "el grupo"}\xBB dijeron: ${citas.join(" / ")}`;
       let nuevas = 0;
       if (sinPedido.length && alcance.grupoPlanta) {
-        const texto2 = textoAvisoPrevio(sinPedido);
+        const texto4 = textoAvisoPrevio(sinPedido);
         const propuesta2 = proponer(
-          { tipo: "aviso-mencion", fecha: sinPedido[0].desde, firma, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || "planta", texto: texto2 },
+          { tipo: "aviso-mencion", fecha: sinPedido[0].desde, firma, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || "planta", texto: texto4 },
           ahoraMs
         );
-        await publicarPropuesta(propuesta2, [contexto, "No hay pedido en Portal: sin \xE9l no sale el aviso formal ni el checklist.", "", conPiePropuesta(texto2, propuesta2.nombreDestino)].join("\n"));
+        await publicarPropuesta(propuesta2, [contexto, "No hay pedido en Portal: sin \xE9l no sale el aviso formal ni el checklist.", "", conPiePropuesta(texto4, propuesta2.nombreDestino)].join("\n"));
         logger_default.info(`[agente] propuesta ${propuesta2.id}: aviso previo por ${sinPedido.length} menci\xF3n(es) \u2192 \xAB${propuesta2.nombreDestino}\xBB`);
         nuevas += 1;
       }
@@ -12969,9 +13564,9 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       }
       if (clave2 === "tank_levels") {
         const lista = await tanques();
-        const texto2 = textoTanques(lista);
-        if (lista.length === 0) return { texto: texto2 };
-        return conImagen(texto2, `tanques-${fecha}.png`, () => pngTanques(lista, "Inframaq \xB7 planta"));
+        const texto4 = textoTanques(lista);
+        if (lista.length === 0) return { texto: texto4 };
+        return conImagen(texto4, `tanques-${fecha}.png`, () => pngTanques(lista, "Inframaq \xB7 planta"));
       }
       if (clave2 === "production_consume") return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
       if (clave2 === "aggregates_stock") {
@@ -13017,7 +13612,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
           grupo,
           opciones: [],
           tipo: "unidad",
-          continuar: (_i, texto2) => armarRespuesta(clave2, `${pregunta} ${texto2 ?? ""}`, quien, grupo)
+          continuar: (_i, texto4) => armarRespuesta(clave2, `${pregunta} ${texto4 ?? ""}`, quien, grupo)
         });
         return { texto: PREGUNTA_UNIDAD };
       }
@@ -13113,10 +13708,10 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       }
       return { clave: null, pregunta };
     };
-    atenderConsulta = async (texto2, quien, grupo, alcance, numeroBot, opciones = {}) => {
+    atenderConsulta = async (texto4, quien, grupo, alcance, numeroBot, opciones = {}) => {
       try {
         await empezarAEscribir(grupo, alcance);
-        let pregunta = preguntaLimpia(texto2, numeroBot);
+        let pregunta = preguntaLimpia(texto4, numeroBot);
         const vetada = fueraDeCatalogo(pregunta);
         const porRegla = vetada ? null : rutearPorReglas(pregunta);
         const larga = pregunta.split(/\s+/).length > PALABRAS_PARA_MODELO;
@@ -13142,27 +13737,27 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         }
         respuesta = respuesta ?? await armarRespuesta(clave2, pregunta, quien, grupo, extra);
         if (clave2) recordarConsulta({ quien, grupo, clave: clave2, pregunta });
-        logger_default.info(`[agente] consulta de ${quien}: \xAB${preguntaLimpia(texto2, numeroBot)}\xBB \u2192 ${clave2 ?? "none"}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
+        logger_default.info(`[agente] consulta de ${quien}: \xAB${preguntaLimpia(texto4, numeroBot)}\xBB \u2192 ${clave2 ?? "none"}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
         await responderEnGrupo(grupo, respuesta, alcance);
       } catch (error) {
-        logger_default.warn(`[agente] no pude atender la consulta \xAB${texto2}\xBB: ${error instanceof Error ? error.message : String(error)}`);
+        logger_default.warn(`[agente] no pude atender la consulta \xAB${texto4}\xBB: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         await dejarDeEscribir(grupo);
       }
     };
-    atenderContinuacion = async (texto2, quien, grupo, alcance) => {
+    atenderContinuacion = async (texto4, quien, grupo, alcance) => {
       const ultima = ultimaConsulta(quien, grupo);
       if (!ultima) return false;
-      if (pareceContinuacion(texto2) || rutearPorReglas(preguntaLimpia(texto2))) {
-        await atenderConsulta(`@lila ${texto2}`, quien, grupo, alcance);
+      if (pareceContinuacion(texto4) || rutearPorReglas(preguntaLimpia(texto4))) {
+        await atenderConsulta(`@lila ${texto4}`, quien, grupo, alcance);
         return true;
       }
-      if (!pareceParaElAgente(texto2)) return false;
-      await atenderConsulta(`@lila ${texto2}`, quien, grupo, alcance, void 0, { implicita: true });
+      if (!pareceParaElAgente(texto4)) return false;
+      await atenderConsulta(`@lila ${texto4}`, quien, grupo, alcance, void 0, { implicita: true });
       return true;
     };
-    atenderEleccion = async (texto2, quien, grupo, alcance) => {
-      const eleccion = responderPendiente(quien, grupo, texto2);
+    atenderEleccion = async (texto4, quien, grupo, alcance) => {
+      const eleccion = responderPendiente(quien, grupo, texto4);
       if (!eleccion) return false;
       try {
         await empezarAEscribir(grupo, alcance);
@@ -13261,33 +13856,33 @@ var init_observador = __esm({
         if (!alcance.grupoEscuchado) return;
         for (const raw of upsert.messages ?? []) {
           const remoteJid = String(raw?.key?.remoteJid || "");
-          const texto2 = extractInboundText(raw.message);
-          if (!texto2.trim()) continue;
+          const texto4 = extractInboundText(raw.message);
+          if (!texto4.trim()) continue;
           if (yaVisto(`${remoteJid}|${String(raw?.key?.id || "")}`)) continue;
           if (remoteJid === GROUP_ERRORS_TRACKING) {
             if (await esDelBot(raw, sessionPhone)) continue;
             if (findOutgoingMessage(sessionPhone, raw?.key?.id)) continue;
             const quien = String(raw?.key?.participant || "desconocido");
-            const comando = comandoInterruptor(texto2);
+            const comando = comandoInterruptor(texto4);
             if (comando) {
               await atenderInterruptor(comando, quien);
               continue;
             }
-            if (esVoto(texto2) && citaDe(raw.message)) {
-              await atenderVoto({ voto: texto2, citaMsgId: citaDe(raw.message), quien }, alcance);
+            if (esVoto(texto4) && citaDe(raw.message)) {
+              await atenderVoto({ voto: texto4, citaMsgId: citaDe(raw.message), quien }, alcance);
               continue;
             }
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2, atenderContinuacion: atenderContinuacion2 }) => {
               const bot = await senderPilotoCacheado();
-              if (esConsulta2(texto2, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
-                return atenderConsulta2(texto2, quien, remoteJid, alcance, bot);
+              if (esConsulta2(texto4, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
+                return atenderConsulta2(texto4, quien, remoteJid, alcance, bot);
               }
-              if (/lila/i.test(texto2)) {
-                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto2.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
+              if (/lila/i.test(texto4)) {
+                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto4.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
-              const fue = await atenderEleccion2(texto2, quien, remoteJid, alcance) || await atenderContinuacion2(texto2, quien, remoteJid, alcance);
-              if (!fue && /^\s*\d{1,2}\s*$/.test(texto2) && esVoto(texto2)) {
-                await atenderVoto({ voto: texto2, citaMsgId: "", quien }, alcance);
+              const fue = await atenderEleccion2(texto4, quien, remoteJid, alcance) || await atenderContinuacion2(texto4, quien, remoteJid, alcance);
+              if (!fue && /^\s*\d{1,2}\s*$/.test(texto4) && esVoto(texto4)) {
+                await atenderVoto({ voto: texto4, citaMsgId: "", quien }, alcance);
               }
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
             continue;
@@ -13298,18 +13893,18 @@ var init_observador = __esm({
             const quien = String(raw?.key?.participant || "alguien");
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2, atenderContinuacion: atenderContinuacion2 }) => {
               const bot = await senderPilotoCacheado();
-              if (esConsulta2(texto2, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
-                return atenderConsulta2(texto2, quien, remoteJid, alcance, bot);
+              if (esConsulta2(texto4, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
+                return atenderConsulta2(texto4, quien, remoteJid, alcance, bot);
               }
-              if (/lila/i.test(texto2)) {
-                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto2.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
+              if (/lila/i.test(texto4)) {
+                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto4.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
-              await atenderEleccion2(texto2, quien, remoteJid, alcance) || await atenderContinuacion2(texto2, quien, remoteJid, alcance);
+              await atenderEleccion2(texto4, quien, remoteJid, alcance) || await atenderContinuacion2(texto4, quien, remoteJid, alcance);
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
           }
           const ahora = Date.now();
           const mensaje = {
-            texto: texto2,
+            texto: texto4,
             // En un grupo, quien escribió viene en `participant`; `remoteJid` es el
             // grupo. Se guarda para la seguridad por rol de F2 (spec §7.3).
             autor: String(raw?.key?.participant || ""),
@@ -86305,9 +86900,9 @@ function shouldHideDocumentLogo(data) {
 // src/services/report-html-renderer.service.ts
 var LIQUIDACION_IGV_RATE = 0.18;
 var resolverTituloCtlImp = (ligante) => {
-  const texto2 = String(ligante ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (texto2.includes("mc30")) return "IMPRIMACI\xD3N DE BASE GRANULAR";
-  if (texto2.includes("emulsion") || texto2.includes("riegodeliga")) return "RIEGO DE LIGA";
+  const texto4 = String(ligante ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (texto4.includes("mc30")) return "IMPRIMACI\xD3N DE BASE GRANULAR";
+  if (texto4.includes("emulsion") || texto4.includes("riegodeliga")) return "RIEGO DE LIGA";
   return "RIEGO DE IMPRIMACI\xD3N";
 };
 var ReportHtmlRenderer = class {
@@ -86510,7 +87105,7 @@ var ReportHtmlRenderer = class {
     const margins = letterhead ? getDocumentLetterheadMargins(letterhead, this.schema.margins) : this.schema.margins || { top: 20, right: 20, bottom: 20, left: 20 };
     const pageMargin = letterhead ? `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm` : "20px";
     const titulo = e29(d67.titulo?.texto || "CONTRATO DE SERVICIO");
-    const proveedor = d67.proveedor || {};
+    const proveedor2 = d67.proveedor || {};
     const cliente = d67.cliente || {};
     const monto = d67.monto || {};
     const montoTotal = typeof monto.total === "number" ? monto.total : parseFloat(monto.total) || 0;
@@ -86525,9 +87120,9 @@ var ReportHtmlRenderer = class {
 </p>
 <p style="text-align:justify;margin-bottom:12pt;">
   Y de otra parte, la empresa
-  <strong>${e29(proveedor.razonSocial)}</strong>${e29(proveedor.ruc) ? `, identificado con RUC N\xB0 ${e29(proveedor.ruc)}` : ""},
-  domiciliado en ${e29(proveedor.domicilio)},
-  debidamente representada por <strong>${e29(proveedor.representante)}</strong>${e29(proveedor.dniRepresentante) ? `, con DNI N\xB0 ${e29(proveedor.dniRepresentante)}` : ""},
+  <strong>${e29(proveedor2.razonSocial)}</strong>${e29(proveedor2.ruc) ? `, identificado con RUC N\xB0 ${e29(proveedor2.ruc)}` : ""},
+  domiciliado en ${e29(proveedor2.domicilio)},
+  debidamente representada por <strong>${e29(proveedor2.representante)}</strong>${e29(proveedor2.dniRepresentante) ? `, con DNI N\xB0 ${e29(proveedor2.dniRepresentante)}` : ""},
   a quien en adelante se denominar\xE1 <strong>"EL PROVEEDOR"</strong>.
 </p>
 <p style="text-align:justify;margin-bottom:12pt;">
@@ -86625,9 +87220,9 @@ ${e29(plazos.descripcion) ? `<p style="text-align:justify;margin:6pt 0;">${e29(p
   </div>
   <div style="text-align:center;width:45%;">
     <div style="border-top:2px solid #000;padding-top:10pt;margin-top:60pt;">
-      <div style="font-weight:bold;">${e29(proveedor.representante) || "EL PROVEEDOR"}</div>
-      <div>${e29(proveedor.razonSocial)}</div>
-      ${e29(proveedor.ruc) ? `<div>RUC N\xB0 ${e29(proveedor.ruc)}</div>` : ""}
+      <div style="font-weight:bold;">${e29(proveedor2.representante) || "EL PROVEEDOR"}</div>
+      <div>${e29(proveedor2.razonSocial)}</div>
+      ${e29(proveedor2.ruc) ? `<div>RUC N\xB0 ${e29(proveedor2.ruc)}</div>` : ""}
     </div>
   </div>
 </div>`;
