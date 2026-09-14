@@ -2,7 +2,8 @@ import type { BloqueSistema } from './llm.types.js';
 
 /**
  * LA PERSONA Y EL CONOCIMIENTO DEL VERTICAL ASFALTO (CONSTROAD). Hereda del
- * prompt legacy de «María» (`whatsapp/ai-agent/prompts/asphalt-sales.prompt`),
+ * prompt legacy de «María» (`whatsapp/ai-agent/prompts/asphalt-sales.prompt`)
+ * —José la renombró Dali el 14/09/2026—,
  * que fijó el tono —cálida, peruana, sin muletillas—, y lo ajusta a lo que la
  * comunidad reporta que falla en un bot (spec §10): respuestas cortas, una o
  * dos preguntas por mensaje, nunca inventar precios ni fechas, salida a humano
@@ -21,7 +22,7 @@ export interface NegocioAsfalto {
 
 export const CONSTROAD: NegocioAsfalto = {
   nombre: 'CONSTROAD',
-  asistente: 'María',
+  asistente: 'Dali',
   horario: 'lunes a viernes de 8:00 a 18:00 y sábados de 8:00 a 13:00',
   zona: 'Lima y alrededores (planta en Cajamarquilla, Lurigancho)',
 };

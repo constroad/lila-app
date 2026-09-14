@@ -1,5 +1,5 @@
 /**
- * EL GUION DEL VERTICAL ASFALTO: qué pregunta María por cada servicio, en qué
+ * EL GUION DEL VERTICAL ASFALTO: qué pregunta Dali por cada servicio, en qué
  * orden y con qué condición. Sale del spec del agente comercial
  * (`specs/ESPECIFICACIONES_IA_BOT.md` §1–3): colocación pregunta área,
  * distrito, espesor, base, imprimación —y si va, MC-30 o riego de liga, y

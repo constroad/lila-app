@@ -24,7 +24,7 @@ import { CONSTROAD, bloquesSistema } from './prompt.asfalto.js';
 import { correrTurno, historialATurnos } from './runtime.js';
 
 /**
- * EL AGENTE DE VENTAS (WHATSAPP-AGENT-VERTICALS F2+F3), vertical asfalto,
+ * EL AGENTE DE VENTAS —DALI— (WHATSAPP-AGENT-VERTICALS F2+F3), vertical asfalto,
  * primero para CONSTROAD. José, 14/09/2026: «construyamos el agente vertical
  * que va a atender primero a constroad los mensajes que lleguen de publicidad
  * o de gente que ya es mi cliente, y luego escalaremos».
@@ -60,8 +60,8 @@ export const proveedorLlm = (): ProveedorLlm | null => {
     const modelo = String(process.env.LLM_MODEL || '').trim();
     if (!proveedor && baseUrl && apiKey && modelo) proveedor = crearProveedorOpenAiCompat({ baseUrl, apiKey, modelo });
     if (!proveedor && modeloDescargado()) proveedor = crearProveedorQwen();
-    if (!proveedor) logger.warn('[maria] sin clave de LLM ni modelo local: el agente de ventas no contesta');
-    else logger.info(`[maria] proveedor de LLM: ${proveedor.nombre}`);
+    if (!proveedor) logger.warn('[dali] sin clave de LLM ni modelo local: el agente de ventas no contesta');
+    else logger.info(`[dali] proveedor de LLM: ${proveedor.nombre}`);
   }
   return proveedor;
 };
@@ -183,7 +183,7 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
       }
     }
     logger.info(
-      `[maria] ${customerPhone}${cliente ? ` (${cliente.nombre})` : ''}: ${resultado.herramientasUsadas.length ? `herramientas ${resultado.herramientasUsadas.join(',')} · ` : ''}${resultado.uso.entrada}/${resultado.uso.salida} tokens${resultado.uso.cacheLeida ? ` (cache ${resultado.uso.cacheLeida})` : ''}${resultado.degradado ? ' · DEGRADADO' : ''}`
+      `[dali] ${customerPhone}${cliente ? ` (${cliente.nombre})` : ''}: ${resultado.herramientasUsadas.length ? `herramientas ${resultado.herramientasUsadas.join(',')} · ` : ''}${resultado.uso.entrada}/${resultado.uso.salida} tokens${resultado.uso.cacheLeida ? ` (cache ${resultado.uso.cacheLeida})` : ''}${resultado.degradado ? ' · DEGRADADO' : ''}`
     );
     return resultado.texto;
   });
@@ -247,7 +247,7 @@ const turnoGuiado = async (
   }
   const respondido = Object.entries(p.estado.respuestas ?? {}).map(([k, v]) => `${k}=${v}`).join(' ');
   logger.info(
-    `[maria] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ''}: guiado · extraído ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v]) => v && v !== '')))} · ${p.estado.servicio ?? 'sin servicio'}${respondido ? ` · ${respondido}` : ''} · pregunta ${p.estado.ultimoCampo ?? (p.estado.resumenEnviado ? 'resumen' : p.estado.cerrado ? 'cerrado' : 'servicio')} · ${((Date.now() - inicio) / 1000).toFixed(1)} s${p.escalar ? ` · ESCALA (${p.escalar})` : ''}`
+    `[dali] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ''}: guiado · extraído ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v]) => v && v !== '')))} · ${p.estado.servicio ?? 'sin servicio'}${respondido ? ` · ${respondido}` : ''} · pregunta ${p.estado.ultimoCampo ?? (p.estado.resumenEnviado ? 'resumen' : p.estado.cerrado ? 'cerrado' : 'servicio')} · ${((Date.now() - inicio) / 1000).toFixed(1)} s${p.escalar ? ` · ESCALA (${p.escalar})` : ''}`
   );
   return p.texto;
 };
@@ -267,5 +267,5 @@ export const atenderMensajeDelDueno = async (message: AgentInboundMessage, compa
   const minutos = comando === '!pausa' ? 24 * 60 : botConfig?.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN;
   await pausarConversacion(conversacion.id, minutos, 'owner');
   if (comando !== '!pausa') await guardarMensajeDueno(companyId, conversacion.id, texto);
-  logger.info(`[maria] el dueño tomó la conversación con ${message.remoteJid}: bot en pausa ${minutos} min`);
+  logger.info(`[dali] el dueño tomó la conversación con ${message.remoteJid}: bot en pausa ${minutos} min`);
 };

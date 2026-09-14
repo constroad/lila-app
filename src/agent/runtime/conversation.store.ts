@@ -70,7 +70,7 @@ export async function saveOutboundMessage(entry: OutboundPersistInput): Promise<
   // «sparse» pero compuesto, y un compuesto sparse indexa el documento si
   // CUALQUIER campo existe — así que dos salientes sin id de la misma empresa
   // chocaban (E11000) y el segundo mensaje del bot no se guardaba. El 14/09
-  // María contestó bien pero «olvidó» lo que había dicho: la ráfaga siguiente
+  // Dali contestó bien pero «olvidó» lo que había dicho: la ráfaga siguiente
   // volvía a incluir el mensaje anterior del cliente.
   await messageModel.create({
     conversationId: entry.conversationId,

@@ -17,7 +17,7 @@ const pregunta = (campo: string, servicio = 'colocacion') => [...GUION_ASFALTO.s
 describe('flujo guiado — la conversación del piloto (14/09), ahora con el guion del spec', () => {
   it('«vi el anuncio» no fija servicio; «150m3 para Lurín cuánto» es venta y no da precio; «solo quiero cotización» sigue; «y si es asfaltado» cambia de servicio', () => {
     let p = habla({}, 'Vi el anuncio en instagram sobre asfalto', { servicio: 'venta' });
-    expect(p.texto).toBe('¡Hola! Soy María, la asistente de CONSTROAD 👋 ¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.');
+    expect(p.texto).toBe('¡Hola! Soy Dali, la asistente de CONSTROAD 👋 ¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.');
     expect(p.estado.servicio).toBeUndefined();
 
     p = habla(p.estado, 'Para lurin 150m3 cuanto?', { cantidad: '150m3', distrito: 'lurin' });
@@ -39,7 +39,7 @@ describe('flujo guiado — la conversación del piloto (14/09), ahora con el gui
 
   it('colocación de punta a punta: espesor, base, superficie, imprimación → MC-30 o riego de liga → bastón o barra, fresado, terreno, fecha, nombre, resumen, cierre', () => {
     let p = habla({}, 'Hola, necesito asfaltar el patio de mi almacén', { detalle: 'asfaltar el patio' });
-    expect(p.texto).toBe(`¡Hola! Soy María, la asistente de CONSTROAD 👋 Con gusto te ayudo con asfaltado (colocación). ${pregunta('area')}`);
+    expect(p.texto).toBe(`¡Hola! Soy Dali, la asistente de CONSTROAD 👋 Con gusto te ayudo con asfaltado (colocación). ${pregunta('area')}`);
 
     p = habla(p.estado, 'son como 600 m2 en Lurín', { cantidad: '600 m2', distrito: 'Lurín' });
     expect(p.estado.respuestas).toMatchObject({ area: '600 m2', distrito: 'Lurín' });
@@ -248,7 +248,7 @@ describe('flujo guiado — la conversación del piloto (14/09), ahora con el gui
 
   it('fuera de horario lo dice; un cliente conocido no da su nombre', () => {
     let p = habla({}, 'necesito 40 m3 de mezcla en caliente puestos en obra en Ate para mañana, es para una vía, camiones', { cantidad: '40 m3', distrito: 'Ate', fecha: 'mañana' }, { nombre: 'JUAN CARLOS', empresa: 'CONSORCIO LOS PINOS' }, false);
-    expect(p.texto).toContain('¡Hola, JUAN CARLOS! Soy María, de CONSTROAD 👋');
+    expect(p.texto).toContain('¡Hola, JUAN CARLOS! Soy Dali, de CONSTROAD 👋');
     expect(p.estado.respuestas).toMatchObject({ cantidad: '40 m3', distrito: 'Ate', fecha: 'mañana', tipoMezcla: 'en caliente', entrega: 'puesto en obra', tipoProyecto: 'vía', trafico: 'medio (camionetas y camiones)', nombre: 'JUAN CARLOS' });
     p = habla(p.estado, '2 pulgadas', {}, { nombre: 'JUAN CARLOS' }, false);
     expect(p.texto).toContain('¿Está bien así?'); // ya tenía todo: el nombre es del cliente conocido
@@ -318,7 +318,7 @@ describe('interpretarRespuesta — la respuesta contra la pregunta que se hizo',
 describe('validarExtraccion — del modelo solo lo que el mensaje respalda', () => {
   const m = 'Hola, vi su anuncio. Necesito asfaltar el patio de mi almacén';
   it('tira lo inventado: cantidad sin número, distrito que no está, nombre de la asistente, fecha «así es», fecha con número suelto, confirma sin confirmar', () => {
-    const x = validarExtraccion({ servicio: 'venta', detalle: 'asfaltar el patio', cantidad: 'necesito', distrito: 'almacén', base: 'nueva', fecha: 'así es', nombre: 'María', empresa: 'CONSTROAD', confirma: true }, m);
+    const x = validarExtraccion({ servicio: 'venta', detalle: 'asfaltar el patio', cantidad: 'necesito', distrito: 'almacén', base: 'nueva', fecha: 'así es', nombre: 'Dali', empresa: 'CONSTROAD', confirma: true }, m);
     expect(x.cantidad).toBeUndefined();
     expect(x.distrito).toBeUndefined(); // «almacén» está en el texto, pero no es un lugar
     expect(x.fecha).toBeUndefined();

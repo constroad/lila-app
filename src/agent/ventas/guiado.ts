@@ -102,7 +102,7 @@ const re = (patron: string): RegExp | null => {
 };
 const matchea = (patrones: string[] | undefined, t: string): boolean => Boolean(patrones?.some((p) => re(p)?.test(t)));
 
-const NOMBRES_PROHIBIDOS = ['maria', 'constroad', 'asistente', 'cliente', 'asesor'];
+const NOMBRES_PROHIBIDOS = ['dali', 'maria', 'constroad', 'asistente', 'cliente', 'asesor'];
 /** Palabras que el modelo confunde con un lugar: «el patio de mi almacén» no es un distrito. */
 const NO_ES_LUGAR = new Set(['almacen', 'patio', 'obra', 'casa', 'local', 'empresa', 'pista', 'calle', 'planta', 'terreno', 'estacionamiento', 'condominio', 'fabrica', 'taller', 'cochera', 'garaje', 'via', 'avenida', 'jiron', 'urbanizacion', 'zona', 'lugar', 'sitio', 'proyecto', 'losa', 'parque', 'colegio', 'mercado']);
 /** Una fecha dice un mes, un día, «mañana», «urgente», «15 de…» o «15/10»; un número suelto no es fecha («asfaltado para 3000m2»). */

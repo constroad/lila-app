@@ -213,7 +213,7 @@ export async function handleAgentMessagesUpsert(
       } else if (outcome !== 'bot-disabled' && outcome !== 'from-me' && outcome !== 'group') {
         // A nivel info: «no me responde» se diagnostica con esta línea (14/09: un
         // chat @lid quedó «not-allowlisted» sin dejar rastro en el log).
-        logger.info(`[maria] mensaje de ${remoteJid} → ${outcome}`);
+        logger.info(`[dali] mensaje de ${remoteJid} → ${outcome}`);
       }
     } catch (error) {
       logger.error(`Agent: error procesando mensaje de ${remoteJid}: ${String(error)}`);

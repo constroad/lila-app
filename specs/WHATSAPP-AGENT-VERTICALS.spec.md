@@ -477,7 +477,7 @@ Lo que corre (`src/agent/ventas/`, aislado del agente de operaciones):
   proveedor lo decide qué clave hay en el `.env`; sin ninguna, el agente no
   contesta y lo dice en el log. **Al 14/09 no hay ninguna clave en producción:
   decisión pendiente de José (Anthropic pide tarjeta).**
-- `prompt.asfalto.ts`: «María» v2 — hereda el tono del prompt legacy y aplica
+- `prompt.asfalto.ts`: «Dali» (antes «María»; José la renombró el 14/09) — hereda el tono del prompt legacy y aplica
   §10: ≤3 líneas, una o dos preguntas por mensaje, nunca precios ni fechas,
   admite ser asistente, escala a humano. Bloque de contexto por conversación
   (hora, en/fuera de horario, cliente conocido con sus últimos pedidos, lead
@@ -602,7 +602,7 @@ nada fuera de su conversación; (5) el dueño lo apaga desde WhatsApp.
    asphalt --enable --test <número de prueba> --notify <jid de error tracking>
    --show`.
 3. Reiniciar lila (deploy o `launchctl`). Escribir al número de Constroad
-   desde el número de prueba. Log: `grep '\[maria\]' logs/combined.log`.
+   desde el número de prueba. Log: `grep '\[dali\]' logs/combined.log`.
 4. Abrir a todos: `--test all`. Apagar: `!bot off` desde el WhatsApp de
    Constroad, o `--disable`.
 
