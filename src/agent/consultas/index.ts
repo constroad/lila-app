@@ -13,7 +13,7 @@ import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
-import { elegirHerramienta, esHerramientaDeDatos, responderConDatos, type Argumentos } from '../llm/index.js';
+import { argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, responderConDatos, type Argumentos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import type { AlcanceAgente } from '../checklist/alcance.js';
@@ -325,7 +325,15 @@ export const atenderConsulta = async (
     let clave: ClaveConsulta | null = vetada ? null : rutearPorReglas(pregunta);
     let respuesta: Respuesta | undefined;
     let extra: Partial<Parametros> | undefined;
-    if (!clave && !vetada) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo));
+    // «Qué pedidos hay esta semana»: la regla dice «pedidos de hoy», pero el
+    // rango de la pregunta manda — es lo programado (o lo despachado) en ese rango.
+    const rango = clave === 'orders_day' ? argumentosDeRango(pregunta) : null;
+    if (rango) {
+      respuesta = await responderConDatos('pedidos', rango, pregunta, quien, grupo);
+      recordarConsulta({ quien, grupo, clave: 'pedidos', pregunta });
+      clave = null;
+    }
+    if (!clave && !vetada && !respuesta) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo));
     respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo, extra));
     if (clave) recordarConsulta({ quien, grupo, clave, pregunta });
     logger.info(`[agente] consulta de ${quien}: «${preguntaLimpia(texto, numeroBot)}» → ${clave ?? 'none'}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);

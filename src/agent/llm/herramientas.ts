@@ -98,7 +98,9 @@ const iso = (y: number, m: number, d: number): string => `${y}-${String(m).padSt
 
 /**
  * El RANGO que nombra la pregunta, resuelto por código: «este mes», «el mes
- * pasado», «esta semana», «la semana pasada», «en agosto», «hoy/ayer». El
+ * pasado», «esta semana», «la semana pasada», «en agosto», «hoy/ayer». Los
+ * rangos en curso («esta semana», «este mes») van completos, con los días por
+ * venir: «qué pedidos hay esta semana» pregunta por lo programado. El
  * modelo se equivoca justo acá («este mes» → todo el año), así que lo que se
  * puede leer con reglas se lee con reglas y el modelo solo aporta lo demás
  * («del 1 al 15», «desde el 3 de agosto»).
@@ -111,13 +113,17 @@ export const rangoDe = (pregunta: string, hoy: string): { desde: string; hasta: 
   if (/\b(anteayer|antes de ayer)\b/.test(t)) return { desde: sumarDias(hoy, -2), hasta: sumarDias(hoy, -2) };
   if (/\bayer\b/.test(t)) return { desde: sumarDias(hoy, -1), hasta: sumarDias(hoy, -1) };
   if (/\bhoy\b/.test(t)) return { desde: hoy, hasta: hoy };
-  if (/\b(este|del|el) mes\b/.test(t) && !/\bmes pasado\b/.test(t)) return { desde: iso(y, m, 1), hasta: hoy };
+  if (/\b(este|del|el) mes\b/.test(t) && !/\bmes pasado\b/.test(t)) return { desde: iso(y, m, 1), hasta: iso(y, m, ultimoDia(y, m)) };
   if (/\bmes pasado\b/.test(t)) {
     const [py, pm] = m === 1 ? [y - 1, 12] : [y, m - 1];
     return { desde: iso(py, pm, 1), hasta: iso(py, pm, ultimoDia(py, pm)) };
   }
   if (/\bsemana pasada\b/.test(t)) return { desde: sumarDias(lunes, -7), hasta: sumarDias(lunes, -1) };
-  if (/\b(esta|de la|de esta) semana\b/.test(t)) return { desde: lunes, hasta: hoy };
+  // «Esta semana» es la semana ENTERA, lunes a domingo: lo que ya pasó y lo que
+  // está programado. Un historial no tiene nada en los días por venir, y los
+  // pedidos programados sí, así que el rango completo sirve a los dos.
+  if (/\b(esta|de la|de esta|la|en la) semana\b/.test(t) || /\bsemana\b/.test(t)) return { desde: lunes, hasta: sumarDias(lunes, 6) };
+  if (/\b(proximos|estos) dias\b/.test(t)) return { desde: hoy, hasta: sumarDias(hoy, 7) };
   const mes = MESES.findIndex((nombre) => new RegExp(`\\b(en|de|del) (mes de )?${nombre === 'septiembre' ? 'se[pt]?tiembre' : nombre}\\b`).test(t));
   if (mes >= 0) {
     // «en agosto» es el agosto más reciente: el de este año si ya empezó, si no el del año pasado.

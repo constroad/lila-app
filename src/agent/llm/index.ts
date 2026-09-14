@@ -1,14 +1,16 @@
 import logger from '../../utils/logger.js';
-import { hoyLima, sumarDias } from '../consultas/catalogo.js';
+import { COMPANY_PILOTO } from '../checklist/alcance.js';
+import { extraerParametros, hoyLima, sumarDias } from '../consultas/catalogo.js';
 import { preguntar } from '../consultas/pendientes.js';
 import { buscarClientes, buscarProveedores, movimientosDeMaterial, nombresDeEmpresas, pedidosEntre } from './datos.js';
+import { rangoDe } from './herramientas.js';
 import { fichaClientes, fichaKardex, fichaPedidos, fichaProveedores } from './fichas.js';
 import type { Argumentos, HerramientaDeDatos } from './herramientas.js';
 import { redactar } from './redaccion.js';
 
 export { elegirHerramienta, esClaveDeCatalogo, type Eleccion } from './seleccion.js';
 export { descargarModelo, estadoLlm } from './modelo.js';
-export { esHerramientaDeDatos, type Argumentos, type HerramientaDeDatos } from './herramientas.js';
+export { esHerramientaDeDatos, rangoDe, type Argumentos, type HerramientaDeDatos } from './herramientas.js';
 
 /**
  * UNA HERRAMIENTA DE DATOS, DE PUNTA A PUNTA: leer (`datos.ts`), armar la ficha
@@ -43,8 +45,12 @@ export const fichaPara = async (id: HerramientaDeDatos, args: Argumentos, ahoraM
     }
     case 'pedidos': {
       const nombres = await nombresDeEmpresas();
-      const h = await pedidosEntre({ desde, hasta, companyId: args.companyId, cliente: args.nombre });
-      return { ficha: fichaPedidos(h, { empresa: args.companyId ? nombres.get(args.companyId) || args.companyId : undefined, cliente: args.nombre }), resultados: h.pedidos.length };
+      // «Los pedidos en inframaq» son los de LA PLANTA (todos): inframaq la
+      // opera, y los pedidos los hacen globofast y constroad. Filtrar por la
+      // empresa inframaq contestaría «no hay pedidos» con la planta llena.
+      const companyId = args.companyId === COMPANY_PILOTO ? undefined : args.companyId;
+      const h = await pedidosEntre({ desde, hasta, companyId, cliente: args.nombre });
+      return { ficha: fichaPedidos(h, { empresa: companyId ? nombres.get(companyId) || companyId : undefined, cliente: args.nombre }, hoy), resultados: h.pedidos.length };
     }
     case 'kardex': {
       const lista = await movimientosDeMaterial({ material: args.nombre ?? '', desde, hasta, companyId: args.companyId });
@@ -86,4 +92,17 @@ export const responderConDatos = async (
   const frase = conFrase(id, resultados) ? await redactar(pregunta, ficha) : null;
   logger.info(`[agente] ${id} ${JSON.stringify(args)} → ficha de ${ficha.split('\n').length} línea(s)${frase ? ' con frase' : ''} en ${((Date.now() - inicio) / 1000).toFixed(1)} s`);
   return { texto: frase ? `${frase}\n\n${ficha}` : ficha };
+};
+
+/**
+ * «Qué pedidos hay esta semana / este mes / la semana pasada»: la regla de
+ * siempre lo mandaba a los pedidos de HOY. Con un rango de más de un día en la
+ * pregunta, la respuesta es el historial/la programación de ese rango, sin
+ * pasar por el modelo. `null` si la pregunta no trae un rango así.
+ */
+export const argumentosDeRango = (pregunta: string, ahoraMs = Date.now()): Argumentos | null => {
+  const rango = rangoDe(pregunta, hoyLima(ahoraMs));
+  if (!rango || rango.desde === rango.hasta) return null;
+  const { companyId } = extraerParametros(pregunta, ahoraMs);
+  return { ...rango, ...(companyId ? { companyId } : {}) };
 };

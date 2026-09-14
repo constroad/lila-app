@@ -71,7 +71,7 @@ describe('normalizarArgumentos', () => {
   });
 
   it('los rangos que el código entiende mandan sobre los del modelo («este mes» no es todo el año)', () => {
-    expect(normalizarArgumentos('pedidos', [{ campo: 'nombre', valor: 'cobeñas' }, { campo: 'desde', valor: '2026-01-01' }, { campo: 'hasta', valor: '2026-12-31' }], 'los pedidos de cobeñas de este mes', lunes)).toEqual({ nombre: 'cobeñas', desde: '2026-09-01', hasta: '2026-09-14' });
+    expect(normalizarArgumentos('pedidos', [{ campo: 'nombre', valor: 'cobeñas' }, { campo: 'desde', valor: '2026-01-01' }, { campo: 'hasta', valor: '2026-12-31' }], 'los pedidos de cobeñas de este mes', lunes)).toEqual({ nombre: 'cobeñas', desde: '2026-09-01', hasta: '2026-09-30' });
   });
 
   it('un argumento que la herramienta no acepta se ignora', () => {
@@ -91,9 +91,12 @@ describe('rangoDe', () => {
   it.each([
     ['los pedidos de hoy', { desde: '2026-09-14', hasta: '2026-09-14' }],
     ['las salidas de ayer', { desde: '2026-09-13', hasta: '2026-09-13' }],
-    ['los ingresos de este mes', { desde: '2026-09-01', hasta: '2026-09-14' }],
+    ['los ingresos de este mes', { desde: '2026-09-01', hasta: '2026-09-30' }],
     ['los pedidos del mes pasado', { desde: '2026-08-01', hasta: '2026-08-31' }],
-    ['qué se despachó esta semana', { desde: '2026-09-14', hasta: '2026-09-14' }],
+    ['qué se despachó esta semana', { desde: '2026-09-14', hasta: '2026-09-20' }],
+    ['qué pedidos tenemos programados esta semana', { desde: '2026-09-14', hasta: '2026-09-20' }],
+    ['qué pedidos hay la semana', { desde: '2026-09-14', hasta: '2026-09-20' }],
+    ['qué pedidos hay los próximos días', { desde: '2026-09-14', hasta: '2026-09-21' }],
     ['qué se despachó la semana pasada', { desde: '2026-09-07', hasta: '2026-09-13' }],
     ['los pedidos de agosto', { desde: '2026-08-01', hasta: '2026-08-31' }],
     ['los pedidos en setiembre', { desde: '2026-09-01', hasta: '2026-09-30' }],

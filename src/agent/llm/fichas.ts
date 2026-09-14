@@ -49,13 +49,26 @@ export const fichaProveedores = (nombre: string, lista: ProveedorFicha[]): strin
 
 const rango = (desde: string, hasta: string): string => (desde === hasta ? `el ${fechaLegible(desde)}` : `del ${corta(desde)} al ${corta(hasta)}`);
 
-export const fichaPedidos = (h: Historial, filtro: { empresa?: string; cliente?: string }): string => {
+export const fichaPedidos = (h: Historial, filtro: { empresa?: string; cliente?: string }, hoy = ''): string => {
   const de = [filtro.cliente ? `de ${filtro.cliente}` : '', filtro.empresa ? `en ${filtro.empresa}` : ''].filter(Boolean).join(' ');
-  if (h.pedidos.length === 0) return `No hay pedidos ${de ? `${de} ` : ''}${rango(h.desde, h.hasta)}.`;
-  const lineas = [`📋 *${h.pedidos.length} pedido(s) ${de ? `${de} ` : ''}${rango(h.desde, h.hasta)}* — ${n(h.totalM3Despachados)} de ${n(h.totalM3Pedidos)} m³ despachados`];
+  if (h.pedidos.length === 0) {
+    // El agente ve Portal, no el chat: si en el grupo dijeron que habrá
+    // producción y acá no aparece, es que el pedido no está cargado.
+    const porVenir = Boolean(hoy) && h.hasta >= hoy;
+    return `No hay pedidos ${de ? `${de} ` : ''}${rango(h.desde, h.hasta)} en Portal.${porVenir ? ' Si hay producción programada, todavía no está cargada.' : ''}`;
+  }
+  // Lo programado se cuenta en m³ pedidos; lo que ya pasó, en despachados sobre pedidos.
+  const porVenir = (p: { fecha: string }) => Boolean(hoy) && p.fecha > hoy;
+  const todosPorVenir = h.pedidos.every(porVenir);
+  const lineas = [
+    todosPorVenir
+      ? `📋 *${h.pedidos.length} pedido(s) programado(s) ${de ? `${de} ` : ''}${rango(h.desde, h.hasta)}* — ${n(h.totalM3Pedidos)} m³`
+      : `📋 *${h.pedidos.length} pedido(s) ${de ? `${de} ` : ''}${rango(h.desde, h.hasta)}* — ${n(h.totalM3Despachados)} de ${n(h.totalM3Pedidos)} m³ despachados`,
+  ];
   for (const p of h.pedidos) {
     const quien = [filtro.cliente ? '' : p.cliente, filtro.empresa ? '' : `(${p.empresa})`].filter(Boolean).join(' ');
-    lineas.push(`• ${corta(p.fecha)}${p.hora ? ` ${p.hora}` : ''} ${quien ? `${recortar(quien, 45)} ` : ''}${recortar(p.obra || 'sin obra')}: ${n(p.m3Despachados)} de ${n(p.m3Pedidos)} m³, ${p.estado}`);
+    const cantidad = porVenir(p) ? `${n(p.m3Pedidos)} m³, ${p.hora ? 'programado' : 'sin hora de inicio'}` : `${n(p.m3Despachados)} de ${n(p.m3Pedidos)} m³, ${p.estado}`;
+    lineas.push(`• ${corta(p.fecha)}${p.hora ? ` ${p.hora}` : ''} ${quien ? `${recortar(quien, 45)} ` : ''}${recortar(p.obra || 'sin obra')}: ${cantidad}`);
   }
   if (h.truncado) lineas.push(`… y más: te muestro los primeros ${h.pedidos.length}. Acota las fechas o el cliente.`);
   return lineas.join('\n');

@@ -40,7 +40,8 @@ describe('fichas', () => {
     expect(f).toContain('• 09/09 04:00 (Globofast) AV. UNIVERSITARIA: 118 de 120 m³, despachado');
     expect(f).toContain('• 11/09 (Globofast) sin obra: 60 de 60 m³, despachado');
     expect(f).toContain('te muestro los primeros 2');
-    expect(fichaPedidos({ desde: '2026-09-13', hasta: '2026-09-13', pedidos: [], totalM3Pedidos: 0, totalM3Despachados: 0, truncado: false }, {})).toBe('No hay pedidos el domingo 13/09.');
+    expect(fichaPedidos({ desde: '2026-09-13', hasta: '2026-09-13', pedidos: [], totalM3Pedidos: 0, totalM3Despachados: 0, truncado: false }, {}, '2026-09-14')).toBe('No hay pedidos el domingo 13/09 en Portal.');
+    expect(fichaPedidos({ desde: '2026-09-14', hasta: '2026-09-20', pedidos: [], totalM3Pedidos: 0, totalM3Despachados: 0, truncado: false }, {}, '2026-09-14')).toBe('No hay pedidos del 14/09 al 20/09 en Portal. Si hay producción programada, todavía no está cargada.');
   });
 
   it('kardex: totales, stock actual y cada movimiento con su saldo', () => {
@@ -63,6 +64,20 @@ describe('fichas', () => {
     const lleno = { ...vacio, empresa: 'Globofast', movimientos: [{ fecha: '2026-08-04', tipo: 'Ingreso' as const, cantidad: 10, saldo: 10, detalle: '' }], totalIngresos: 10, cantidadIngresos: 1, saldoActual: 10 };
     expect(fichaKardex('confitillo', [vacio, lleno])).not.toContain('Constroad');
     expect(fichaKardex('confitillo', [vacio])).toContain('Sin movimientos en ese rango.');
+  });
+
+  it('lo programado se cuenta en m³ pedidos, no en despachados', () => {
+    const f = fichaPedidos(
+      { desde: '2026-09-14', hasta: '2026-09-20', pedidos: [
+        { fecha: '2026-09-16', hora: '04:00', empresa: 'Globofast', cliente: 'CONSORCIO LOMAS', obra: 'LA MOLINA', m3Pedidos: 250, m3Despachados: 0, estado: 'pendiente' },
+        { fecha: '2026-09-18', hora: '', empresa: 'Constroad', cliente: 'RENATO', obra: 'CAÑETE', m3Pedidos: 15, m3Despachados: 0, estado: 'pendiente' },
+      ], totalM3Pedidos: 265, totalM3Despachados: 0, truncado: false },
+      {},
+      '2026-09-14'
+    );
+    expect(f).toContain('📋 *2 pedido(s) programado(s) del 14/09 al 20/09* — 265 m³');
+    expect(f).toContain('• 16/09 04:00 CONSORCIO LOMAS (Globofast) LA MOLINA: 250 m³, programado');
+    expect(f).toContain('• 18/09 RENATO (Constroad) CAÑETE: 15 m³, sin hora de inicio');
   });
 
   it('las obras kilométricas se recortan', () => {

@@ -11081,6 +11081,164 @@ var init_datos = __esm({
   }
 });
 
+// src/agent/llm/herramientas.ts
+var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
+var init_herramientas = __esm({
+  "src/agent/llm/herramientas.ts"() {
+    init_catalogo();
+    init_weather_asphalt_forecast_service();
+    HERRAMIENTAS_DE_DATOS = ["clientes", "proveedores", "pedidos", "kardex"];
+    esHerramientaDeDatos = (id) => HERRAMIENTAS_DE_DATOS.includes(id);
+    CAMPOS_ARGUMENTO = ["fecha", "desde", "hasta", "unidad", "placa", "empresa", "distrito", "nombre"];
+    HERRAMIENTAS = [
+      { id: "orders_day", descripcion: "qu\xE9 pedidos o producciones hay un d\xEDa", argumentos: ["fecha", "empresa"] },
+      { id: "dispatch_summary", descripcion: "resumen de despachos de un d\xEDa", argumentos: ["fecha"] },
+      { id: "day_progress", descripcion: "cu\xE1ntos m\xB3 van despachados hoy", argumentos: ["fecha"] },
+      { id: "plant_current_unit", descripcion: "qu\xE9 unidad se est\xE1 cargando en planta ahora", argumentos: [] },
+      { id: "site_current_unit", descripcion: "qu\xE9 unidad est\xE1 en campo / en obra ahora", argumentos: [] },
+      { id: "unit_driver", descripcion: "qui\xE9n maneja / conductor de una unidad", argumentos: ["unidad", "placa", "fecha"] },
+      { id: "unit_departure", descripcion: "a qu\xE9 hora sali\xF3 una unidad", argumentos: ["unidad", "placa", "fecha"] },
+      { id: "unit_eta", descripcion: "cu\xE1nto falta para que llegue una unidad", argumentos: ["unidad", "placa"] },
+      { id: "unit_media", descripcion: "fotos y videos de una unidad", argumentos: ["unidad", "placa", "fecha"] },
+      { id: "order_link", descripcion: "enlace/link del pedido para el cliente", argumentos: ["empresa", "fecha"] },
+      { id: "guias_day", descripcion: "gu\xEDas y vales de remisi\xF3n generados", argumentos: ["empresa", "fecha"] },
+      { id: "reports_status", descripcion: "informes de campo hechos (imprimaci\xF3n, \xE1rea adicional\u2026)", argumentos: ["fecha"] },
+      { id: "checklist_status", descripcion: "c\xF3mo va el checklist de la producci\xF3n", argumentos: ["fecha"] },
+      { id: "plant_finish", descripcion: "cu\xE1nto falta para terminar la producci\xF3n en planta", argumentos: [] },
+      { id: "site_finish", descripcion: "cu\xE1nto falta para terminar en campo / control de pista", argumentos: [] },
+      { id: "tank_levels", descripcion: "galones, niveles, l\xEDquidos, PEN, petr\xF3leo, gasohol de los tanques", argumentos: [] },
+      { id: "production_consume", descripcion: "consumos de una producci\xF3n", argumentos: ["fecha"] },
+      { id: "aggregates_stock", descripcion: "stock actual de agregados: arena, piedra, confitillo", argumentos: [] },
+      { id: "weather", descripcion: "clima, lluvia, pron\xF3stico en un distrito", argumentos: ["distrito", "fecha"] },
+      { id: "help", descripcion: "qu\xE9 puede hacer Lila", argumentos: [] },
+      { id: "clientes", descripcion: "datos de UN cliente: RUC, contacto, tel\xE9fono, correo, direcci\xF3n, sus \xFAltimos pedidos", argumentos: ["nombre"] },
+      { id: "proveedores", descripcion: "datos de UN proveedor: RUC, contacto, tel\xE9fono, qu\xE9 vende o transporta", argumentos: ["nombre"] },
+      { id: "pedidos", descripcion: "historial de pedidos en un rango de fechas, de una empresa o de un cliente", argumentos: ["desde", "hasta", "empresa", "nombre"], historial: true },
+      { id: "kardex", descripcion: "ingresos, salidas y movimientos de UN material en un rango de fechas", argumentos: ["nombre", "desde", "hasta", "empresa"], historial: true }
+    ];
+    herramienta = (id) => HERRAMIENTAS.find((h65) => h65.id === id);
+    FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+    fechaValida = (v55, hoy) => {
+      if (!FECHA_ISO.test(v55)) return false;
+      const [y65, m59, d67] = v55.split("-").map(Number);
+      const dt2 = new Date(Date.UTC(y65, m59 - 1, d67));
+      if (dt2.getUTCFullYear() !== y65 || dt2.getUTCMonth() !== m59 - 1 || dt2.getUTCDate() !== d67) return false;
+      return v55 >= sumarDias(hoy, -400) && v55 <= sumarDias(hoy, 60);
+    };
+    MESES2 = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+    ultimoDia = (y65, m59) => new Date(Date.UTC(y65, m59, 0)).getUTCDate();
+    iso = (y65, m59, d67) => `${y65}-${String(m59).padStart(2, "0")}-${String(d67).padStart(2, "0")}`;
+    rangoDe = (pregunta, hoy) => {
+      const t44 = normalizar(pregunta);
+      const [y65, m59, d67] = hoy.split("-").map(Number);
+      const dow = new Date(Date.UTC(y65, m59 - 1, d67)).getUTCDay();
+      const lunes = sumarDias(hoy, -((dow + 6) % 7));
+      if (/\b(anteayer|antes de ayer)\b/.test(t44)) return { desde: sumarDias(hoy, -2), hasta: sumarDias(hoy, -2) };
+      if (/\bayer\b/.test(t44)) return { desde: sumarDias(hoy, -1), hasta: sumarDias(hoy, -1) };
+      if (/\bhoy\b/.test(t44)) return { desde: hoy, hasta: hoy };
+      if (/\b(este|del|el) mes\b/.test(t44) && !/\bmes pasado\b/.test(t44)) return { desde: iso(y65, m59, 1), hasta: iso(y65, m59, ultimoDia(y65, m59)) };
+      if (/\bmes pasado\b/.test(t44)) {
+        const [py, pm] = m59 === 1 ? [y65 - 1, 12] : [y65, m59 - 1];
+        return { desde: iso(py, pm, 1), hasta: iso(py, pm, ultimoDia(py, pm)) };
+      }
+      if (/\bsemana pasada\b/.test(t44)) return { desde: sumarDias(lunes, -7), hasta: sumarDias(lunes, -1) };
+      if (/\b(esta|de la|de esta|la|en la) semana\b/.test(t44) || /\bsemana\b/.test(t44)) return { desde: lunes, hasta: sumarDias(lunes, 6) };
+      if (/\b(proximos|estos) dias\b/.test(t44)) return { desde: hoy, hasta: sumarDias(hoy, 7) };
+      const mes = MESES2.findIndex((nombre) => new RegExp(`\\b(en|de|del) (mes de )?${nombre === "septiembre" ? "se[pt]?tiembre" : nombre}\\b`).test(t44));
+      if (mes >= 0) {
+        const anio = mes + 1 <= m59 ? y65 : y65 - 1;
+        return { desde: iso(anio, mes + 1, 1), hasta: iso(anio, mes + 1, ultimoDia(anio, mes + 1)) };
+      }
+      return void 0;
+    };
+    empresaPorAlias = (valor) => {
+      const v55 = normalizar(valor);
+      return ALIAS_EMPRESA.find((e29) => e29.alias.some((a49) => v55 === a49 || new RegExp(`\\b${a49}\\b`).test(v55)))?.companyId;
+    };
+    aliasEnPregunta = (companyId, t44) => ALIAS_EMPRESA.find((e29) => e29.companyId === companyId)?.alias.some((a49) => new RegExp(`\\b${a49}\\b`).test(t44)) ?? false;
+    normalizarArgumentos = (id, crudos, pregunta, ahoraMs = Date.now()) => {
+      const h65 = herramienta(id);
+      const t44 = normalizar(pregunta);
+      const tCompacto = t44.replace(/[\s-]/g, "");
+      const hoy = hoyLima(ahoraMs);
+      const args = {};
+      const acepta = (campo) => Boolean(h65?.argumentos.includes(campo));
+      for (const { campo, valor: crudo } of crudos) {
+        const valor = String(crudo ?? "").trim();
+        if (!valor) continue;
+        switch (campo) {
+          case "unidad": {
+            const n44 = Number(valor);
+            if (acepta("unidad") && Number.isInteger(n44) && n44 > 0 && n44 < 100 && new RegExp(`\\b${n44}\\b`).test(t44)) args.unitNumber = n44;
+            break;
+          }
+          case "placa": {
+            if (/^\d{1,2}$/.test(valor)) {
+              const n44 = Number(valor);
+              if (acepta("unidad") && new RegExp(`\\b${n44}\\b`).test(t44)) args.unitNumber = n44;
+              break;
+            }
+            const placa = normalizarPlaca(valor);
+            if (acepta("placa") && /^[A-Z]{3}\d{3}$/.test(placa) && tCompacto.includes(placa.toLowerCase())) args.plate = placa;
+            break;
+          }
+          case "empresa": {
+            const companyId = empresaPorAlias(valor);
+            if (acepta("empresa") && companyId && aliasEnPregunta(companyId, t44)) {
+              args.companyId = companyId;
+              break;
+            }
+            if (!companyId && acepta("nombre") && !args.nombre) {
+              const palabras = normalizar(valor).split(/[^a-z0-9ñ]+/).filter((p64) => p64.length >= 3);
+              if (palabras.length && palabras.some((p64) => t44.includes(p64))) args.nombre = valor.slice(0, 60);
+            }
+            break;
+          }
+          case "nombre": {
+            const comoEmpresa = empresaPorAlias(valor);
+            if (comoEmpresa && acepta("empresa") && aliasEnPregunta(comoEmpresa, t44)) {
+              args.companyId = comoEmpresa;
+              break;
+            }
+            if (!acepta("nombre")) break;
+            const palabras = normalizar(valor).split(/[^a-z0-9ñ]+/).filter((p64) => p64.length >= 3);
+            if (palabras.length && palabras.some((p64) => t44.includes(p64))) args.nombre = valor.slice(0, 60);
+            break;
+          }
+          case "distrito": {
+            const v55 = normalizar(valor);
+            const d67 = LOCATIONS.slice(1).find((l57) => normalizar(l57.name) === v55);
+            if (acepta("distrito") && d67 && t44.includes(normalizar(d67.name))) args.distrito = d67.name;
+            break;
+          }
+          case "fecha":
+          case "desde":
+          case "hasta": {
+            if (acepta(campo) && fechaValida(valor, hoy)) args[campo] = valor;
+            break;
+          }
+          default:
+            break;
+        }
+      }
+      if (acepta("fecha")) {
+        const propia = fechaDe(pregunta, ahoraMs);
+        if (propia) args.fecha = propia;
+        else if (/\bhoy\b/.test(t44)) args.fecha = hoy;
+        else if (/\bmanana\b/.test(t44) && !/\bpasado manana\b/.test(t44)) args.fecha = sumarDias(hoy, 1);
+      }
+      if (acepta("desde") || acepta("hasta")) {
+        const rango2 = rangoDe(pregunta, hoy);
+        if (rango2) Object.assign(args, rango2);
+        if (args.desde && !args.hasta) args.hasta = args.desde;
+        if (args.hasta && !args.desde) args.desde = args.hasta;
+        if (args.desde && args.hasta && args.hasta < args.desde) [args.desde, args.hasta] = [args.hasta, args.desde];
+      }
+      return args;
+    };
+  }
+});
+
 // src/agent/llm/fichas.ts
 var n, recortar2, corta, EMPRESAS_TEXTO, fichaClientes, fichaProveedores, rango, fichaPedidos, fichaKardex;
 var init_fichas = __esm({
@@ -11119,13 +11277,21 @@ var init_fichas = __esm({
       return bloques.join("\n\n");
     };
     rango = (desde, hasta) => desde === hasta ? `el ${fechaLegible(desde)}` : `del ${corta(desde)} al ${corta(hasta)}`;
-    fichaPedidos = (h65, filtro) => {
+    fichaPedidos = (h65, filtro, hoy = "") => {
       const de9 = [filtro.cliente ? `de ${filtro.cliente}` : "", filtro.empresa ? `en ${filtro.empresa}` : ""].filter(Boolean).join(" ");
-      if (h65.pedidos.length === 0) return `No hay pedidos ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)}.`;
-      const lineas = [`\u{1F4CB} *${h65.pedidos.length} pedido(s) ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)}* \u2014 ${n(h65.totalM3Despachados)} de ${n(h65.totalM3Pedidos)} m\xB3 despachados`];
+      if (h65.pedidos.length === 0) {
+        const porVenir2 = Boolean(hoy) && h65.hasta >= hoy;
+        return `No hay pedidos ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)} en Portal.${porVenir2 ? " Si hay producci\xF3n programada, todav\xEDa no est\xE1 cargada." : ""}`;
+      }
+      const porVenir = (p64) => Boolean(hoy) && p64.fecha > hoy;
+      const todosPorVenir = h65.pedidos.every(porVenir);
+      const lineas = [
+        todosPorVenir ? `\u{1F4CB} *${h65.pedidos.length} pedido(s) programado(s) ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)}* \u2014 ${n(h65.totalM3Pedidos)} m\xB3` : `\u{1F4CB} *${h65.pedidos.length} pedido(s) ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)}* \u2014 ${n(h65.totalM3Despachados)} de ${n(h65.totalM3Pedidos)} m\xB3 despachados`
+      ];
       for (const p64 of h65.pedidos) {
         const quien = [filtro.cliente ? "" : p64.cliente, filtro.empresa ? "" : `(${p64.empresa})`].filter(Boolean).join(" ");
-        lineas.push(`\u2022 ${corta(p64.fecha)}${p64.hora ? ` ${p64.hora}` : ""} ${quien ? `${recortar2(quien, 45)} ` : ""}${recortar2(p64.obra || "sin obra")}: ${n(p64.m3Despachados)} de ${n(p64.m3Pedidos)} m\xB3, ${p64.estado}`);
+        const cantidad = porVenir(p64) ? `${n(p64.m3Pedidos)} m\xB3, ${p64.hora ? "programado" : "sin hora de inicio"}` : `${n(p64.m3Despachados)} de ${n(p64.m3Pedidos)} m\xB3, ${p64.estado}`;
+        lineas.push(`\u2022 ${corta(p64.fecha)}${p64.hora ? ` ${p64.hora}` : ""} ${quien ? `${recortar2(quien, 45)} ` : ""}${recortar2(p64.obra || "sin obra")}: ${cantidad}`);
       }
       if (h65.truncado) lineas.push(`\u2026 y m\xE1s: te muestro los primeros ${h65.pedidos.length}. Acota las fechas o el cliente.`);
       return lineas.join("\n");
@@ -11408,163 +11574,6 @@ Respuesta:`,
   }
 });
 
-// src/agent/llm/herramientas.ts
-var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
-var init_herramientas = __esm({
-  "src/agent/llm/herramientas.ts"() {
-    init_catalogo();
-    init_weather_asphalt_forecast_service();
-    HERRAMIENTAS_DE_DATOS = ["clientes", "proveedores", "pedidos", "kardex"];
-    esHerramientaDeDatos = (id) => HERRAMIENTAS_DE_DATOS.includes(id);
-    CAMPOS_ARGUMENTO = ["fecha", "desde", "hasta", "unidad", "placa", "empresa", "distrito", "nombre"];
-    HERRAMIENTAS = [
-      { id: "orders_day", descripcion: "qu\xE9 pedidos o producciones hay un d\xEDa", argumentos: ["fecha", "empresa"] },
-      { id: "dispatch_summary", descripcion: "resumen de despachos de un d\xEDa", argumentos: ["fecha"] },
-      { id: "day_progress", descripcion: "cu\xE1ntos m\xB3 van despachados hoy", argumentos: ["fecha"] },
-      { id: "plant_current_unit", descripcion: "qu\xE9 unidad se est\xE1 cargando en planta ahora", argumentos: [] },
-      { id: "site_current_unit", descripcion: "qu\xE9 unidad est\xE1 en campo / en obra ahora", argumentos: [] },
-      { id: "unit_driver", descripcion: "qui\xE9n maneja / conductor de una unidad", argumentos: ["unidad", "placa", "fecha"] },
-      { id: "unit_departure", descripcion: "a qu\xE9 hora sali\xF3 una unidad", argumentos: ["unidad", "placa", "fecha"] },
-      { id: "unit_eta", descripcion: "cu\xE1nto falta para que llegue una unidad", argumentos: ["unidad", "placa"] },
-      { id: "unit_media", descripcion: "fotos y videos de una unidad", argumentos: ["unidad", "placa", "fecha"] },
-      { id: "order_link", descripcion: "enlace/link del pedido para el cliente", argumentos: ["empresa", "fecha"] },
-      { id: "guias_day", descripcion: "gu\xEDas y vales de remisi\xF3n generados", argumentos: ["empresa", "fecha"] },
-      { id: "reports_status", descripcion: "informes de campo hechos (imprimaci\xF3n, \xE1rea adicional\u2026)", argumentos: ["fecha"] },
-      { id: "checklist_status", descripcion: "c\xF3mo va el checklist de la producci\xF3n", argumentos: ["fecha"] },
-      { id: "plant_finish", descripcion: "cu\xE1nto falta para terminar la producci\xF3n en planta", argumentos: [] },
-      { id: "site_finish", descripcion: "cu\xE1nto falta para terminar en campo / control de pista", argumentos: [] },
-      { id: "tank_levels", descripcion: "galones, niveles, l\xEDquidos, PEN, petr\xF3leo, gasohol de los tanques", argumentos: [] },
-      { id: "production_consume", descripcion: "consumos de una producci\xF3n", argumentos: ["fecha"] },
-      { id: "aggregates_stock", descripcion: "stock actual de agregados: arena, piedra, confitillo", argumentos: [] },
-      { id: "weather", descripcion: "clima, lluvia, pron\xF3stico en un distrito", argumentos: ["distrito", "fecha"] },
-      { id: "help", descripcion: "qu\xE9 puede hacer Lila", argumentos: [] },
-      { id: "clientes", descripcion: "datos de UN cliente: RUC, contacto, tel\xE9fono, correo, direcci\xF3n, sus \xFAltimos pedidos", argumentos: ["nombre"] },
-      { id: "proveedores", descripcion: "datos de UN proveedor: RUC, contacto, tel\xE9fono, qu\xE9 vende o transporta", argumentos: ["nombre"] },
-      { id: "pedidos", descripcion: "historial de pedidos en un rango de fechas, de una empresa o de un cliente", argumentos: ["desde", "hasta", "empresa", "nombre"], historial: true },
-      { id: "kardex", descripcion: "ingresos, salidas y movimientos de UN material en un rango de fechas", argumentos: ["nombre", "desde", "hasta", "empresa"], historial: true }
-    ];
-    herramienta = (id) => HERRAMIENTAS.find((h65) => h65.id === id);
-    FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
-    fechaValida = (v55, hoy) => {
-      if (!FECHA_ISO.test(v55)) return false;
-      const [y65, m59, d67] = v55.split("-").map(Number);
-      const dt2 = new Date(Date.UTC(y65, m59 - 1, d67));
-      if (dt2.getUTCFullYear() !== y65 || dt2.getUTCMonth() !== m59 - 1 || dt2.getUTCDate() !== d67) return false;
-      return v55 >= sumarDias(hoy, -400) && v55 <= sumarDias(hoy, 60);
-    };
-    MESES2 = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-    ultimoDia = (y65, m59) => new Date(Date.UTC(y65, m59, 0)).getUTCDate();
-    iso = (y65, m59, d67) => `${y65}-${String(m59).padStart(2, "0")}-${String(d67).padStart(2, "0")}`;
-    rangoDe = (pregunta, hoy) => {
-      const t44 = normalizar(pregunta);
-      const [y65, m59, d67] = hoy.split("-").map(Number);
-      const dow = new Date(Date.UTC(y65, m59 - 1, d67)).getUTCDay();
-      const lunes = sumarDias(hoy, -((dow + 6) % 7));
-      if (/\b(anteayer|antes de ayer)\b/.test(t44)) return { desde: sumarDias(hoy, -2), hasta: sumarDias(hoy, -2) };
-      if (/\bayer\b/.test(t44)) return { desde: sumarDias(hoy, -1), hasta: sumarDias(hoy, -1) };
-      if (/\bhoy\b/.test(t44)) return { desde: hoy, hasta: hoy };
-      if (/\b(este|del|el) mes\b/.test(t44) && !/\bmes pasado\b/.test(t44)) return { desde: iso(y65, m59, 1), hasta: hoy };
-      if (/\bmes pasado\b/.test(t44)) {
-        const [py, pm] = m59 === 1 ? [y65 - 1, 12] : [y65, m59 - 1];
-        return { desde: iso(py, pm, 1), hasta: iso(py, pm, ultimoDia(py, pm)) };
-      }
-      if (/\bsemana pasada\b/.test(t44)) return { desde: sumarDias(lunes, -7), hasta: sumarDias(lunes, -1) };
-      if (/\b(esta|de la|de esta) semana\b/.test(t44)) return { desde: lunes, hasta: hoy };
-      const mes = MESES2.findIndex((nombre) => new RegExp(`\\b(en|de|del) (mes de )?${nombre === "septiembre" ? "se[pt]?tiembre" : nombre}\\b`).test(t44));
-      if (mes >= 0) {
-        const anio = mes + 1 <= m59 ? y65 : y65 - 1;
-        return { desde: iso(anio, mes + 1, 1), hasta: iso(anio, mes + 1, ultimoDia(anio, mes + 1)) };
-      }
-      return void 0;
-    };
-    empresaPorAlias = (valor) => {
-      const v55 = normalizar(valor);
-      return ALIAS_EMPRESA.find((e29) => e29.alias.some((a49) => v55 === a49 || new RegExp(`\\b${a49}\\b`).test(v55)))?.companyId;
-    };
-    aliasEnPregunta = (companyId, t44) => ALIAS_EMPRESA.find((e29) => e29.companyId === companyId)?.alias.some((a49) => new RegExp(`\\b${a49}\\b`).test(t44)) ?? false;
-    normalizarArgumentos = (id, crudos, pregunta, ahoraMs = Date.now()) => {
-      const h65 = herramienta(id);
-      const t44 = normalizar(pregunta);
-      const tCompacto = t44.replace(/[\s-]/g, "");
-      const hoy = hoyLima(ahoraMs);
-      const args = {};
-      const acepta = (campo) => Boolean(h65?.argumentos.includes(campo));
-      for (const { campo, valor: crudo } of crudos) {
-        const valor = String(crudo ?? "").trim();
-        if (!valor) continue;
-        switch (campo) {
-          case "unidad": {
-            const n44 = Number(valor);
-            if (acepta("unidad") && Number.isInteger(n44) && n44 > 0 && n44 < 100 && new RegExp(`\\b${n44}\\b`).test(t44)) args.unitNumber = n44;
-            break;
-          }
-          case "placa": {
-            if (/^\d{1,2}$/.test(valor)) {
-              const n44 = Number(valor);
-              if (acepta("unidad") && new RegExp(`\\b${n44}\\b`).test(t44)) args.unitNumber = n44;
-              break;
-            }
-            const placa = normalizarPlaca(valor);
-            if (acepta("placa") && /^[A-Z]{3}\d{3}$/.test(placa) && tCompacto.includes(placa.toLowerCase())) args.plate = placa;
-            break;
-          }
-          case "empresa": {
-            const companyId = empresaPorAlias(valor);
-            if (acepta("empresa") && companyId && aliasEnPregunta(companyId, t44)) {
-              args.companyId = companyId;
-              break;
-            }
-            if (!companyId && acepta("nombre") && !args.nombre) {
-              const palabras = normalizar(valor).split(/[^a-z0-9ñ]+/).filter((p64) => p64.length >= 3);
-              if (palabras.length && palabras.some((p64) => t44.includes(p64))) args.nombre = valor.slice(0, 60);
-            }
-            break;
-          }
-          case "nombre": {
-            const comoEmpresa = empresaPorAlias(valor);
-            if (comoEmpresa && acepta("empresa") && aliasEnPregunta(comoEmpresa, t44)) {
-              args.companyId = comoEmpresa;
-              break;
-            }
-            if (!acepta("nombre")) break;
-            const palabras = normalizar(valor).split(/[^a-z0-9ñ]+/).filter((p64) => p64.length >= 3);
-            if (palabras.length && palabras.some((p64) => t44.includes(p64))) args.nombre = valor.slice(0, 60);
-            break;
-          }
-          case "distrito": {
-            const v55 = normalizar(valor);
-            const d67 = LOCATIONS.slice(1).find((l57) => normalizar(l57.name) === v55);
-            if (acepta("distrito") && d67 && t44.includes(normalizar(d67.name))) args.distrito = d67.name;
-            break;
-          }
-          case "fecha":
-          case "desde":
-          case "hasta": {
-            if (acepta(campo) && fechaValida(valor, hoy)) args[campo] = valor;
-            break;
-          }
-          default:
-            break;
-        }
-      }
-      if (acepta("fecha")) {
-        const propia = fechaDe(pregunta, ahoraMs);
-        if (propia) args.fecha = propia;
-        else if (/\bhoy\b/.test(t44)) args.fecha = hoy;
-        else if (/\bmanana\b/.test(t44) && !/\bpasado manana\b/.test(t44)) args.fecha = sumarDias(hoy, 1);
-      }
-      if (acepta("desde") || acepta("hasta")) {
-        const rango2 = rangoDe(pregunta, hoy);
-        if (rango2) Object.assign(args, rango2);
-        if (args.desde && !args.hasta) args.hasta = args.desde;
-        if (args.hasta && !args.desde) args.desde = args.hasta;
-        if (args.desde && args.hasta && args.hasta < args.desde) [args.desde, args.hasta] = [args.hasta, args.desde];
-      }
-      return args;
-    };
-  }
-});
-
 // src/agent/llm/seleccion.ts
 var ESQUEMA_SELECCION, DIAS2, diaSemana, promptSeleccion, interpretarSeleccion, TIMEOUT_SELECCION_MS, elegirHerramienta, esClaveDeCatalogo;
 var init_seleccion = __esm({
@@ -11672,21 +11681,25 @@ ${pregunta}` : pregunta;
 // src/agent/llm/index.ts
 var llm_exports = {};
 __export(llm_exports, {
+  argumentosDeRango: () => argumentosDeRango,
   descargarModelo: () => descargarModelo,
   elegirHerramienta: () => elegirHerramienta,
   esClaveDeCatalogo: () => esClaveDeCatalogo,
   esHerramientaDeDatos: () => esHerramientaDeDatos,
   estadoLlm: () => estadoLlm,
   fichaPara: () => fichaPara,
+  rangoDe: () => rangoDe,
   responderConDatos: () => responderConDatos
 });
-var DIAS_POR_DEFECTO, PREGUNTA_NOMBRE, fichaPara, conFrase, responderConDatos;
+var DIAS_POR_DEFECTO, PREGUNTA_NOMBRE, fichaPara, conFrase, responderConDatos, argumentosDeRango;
 var init_llm = __esm({
   "src/agent/llm/index.ts"() {
     init_logger();
+    init_alcance();
     init_catalogo();
     init_pendientes();
     init_datos();
+    init_herramientas();
     init_fichas();
     init_redaccion();
     init_seleccion();
@@ -11714,8 +11727,9 @@ var init_llm = __esm({
         }
         case "pedidos": {
           const nombres = await nombresDeEmpresas();
-          const h65 = await pedidosEntre({ desde, hasta, companyId: args.companyId, cliente: args.nombre });
-          return { ficha: fichaPedidos(h65, { empresa: args.companyId ? nombres.get(args.companyId) || args.companyId : void 0, cliente: args.nombre }), resultados: h65.pedidos.length };
+          const companyId = args.companyId === COMPANY_PILOTO ? void 0 : args.companyId;
+          const h65 = await pedidosEntre({ desde, hasta, companyId, cliente: args.nombre });
+          return { ficha: fichaPedidos(h65, { empresa: companyId ? nombres.get(companyId) || companyId : void 0, cliente: args.nombre }, hoy), resultados: h65.pedidos.length };
         }
         case "kardex": {
           const lista = await movimientosDeMaterial({ material: args.nombre ?? "", desde, hasta, companyId: args.companyId });
@@ -11744,6 +11758,12 @@ var init_llm = __esm({
       return { texto: frase ? `${frase}
 
 ${ficha}` : ficha };
+    };
+    argumentosDeRango = (pregunta, ahoraMs = Date.now()) => {
+      const rango2 = rangoDe(pregunta, hoyLima(ahoraMs));
+      if (!rango2 || rango2.desde === rango2.hasta) return null;
+      const { companyId } = extraerParametros(pregunta, ahoraMs);
+      return { ...rango2, ...companyId ? { companyId } : {} };
     };
   }
 });
@@ -12335,7 +12355,13 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         let clave2 = vetada ? null : rutearPorReglas(pregunta);
         let respuesta;
         let extra;
-        if (!clave2 && !vetada) ({ clave: clave2, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo));
+        const rango2 = clave2 === "orders_day" ? argumentosDeRango(pregunta) : null;
+        if (rango2) {
+          respuesta = await responderConDatos("pedidos", rango2, pregunta, quien, grupo);
+          recordarConsulta({ quien, grupo, clave: "pedidos", pregunta });
+          clave2 = null;
+        }
+        if (!clave2 && !vetada && !respuesta) ({ clave: clave2, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo));
         respuesta = respuesta ?? await armarRespuesta(clave2, pregunta, quien, grupo, extra);
         if (clave2) recordarConsulta({ quien, grupo, clave: clave2, pregunta });
         logger_default.info(`[agente] consulta de ${quien}: \xAB${preguntaLimpia(texto2, numeroBot)}\xBB \u2192 ${clave2 ?? "none"}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
