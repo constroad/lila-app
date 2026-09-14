@@ -8260,6 +8260,7 @@ __export(models_exports, {
   getDispatchModel: () => getDispatchModel,
   getFolderModel: () => getFolderModel,
   getGpsPositionModel: () => getGpsPositionModel,
+  getInputModel: () => getInputModel,
   getKardexModel: () => getKardexModel,
   getMaterialModel: () => getMaterialModel,
   getMediaModel: () => getMediaModel,
@@ -8375,6 +8376,12 @@ async function getProviderModel() {
   providerModel = conn.models.Provider || conn.model("Provider", looseSchema, "providers");
   return providerModel;
 }
+async function getInputModel() {
+  if (inputModel) return inputModel;
+  const conn = await getSharedConnection();
+  inputModel = conn.models.Input || conn.model("Input", looseSchema, "inputs");
+  return inputModel;
+}
 async function getKardexModel() {
   if (kardexModel) return kardexModel;
   const conn = await getSharedConnection();
@@ -8413,7 +8420,7 @@ async function getSharedModels() {
   ]);
   return { CronJobModel, CompanyModel, ConfigModel };
 }
-var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, publicLinkModel, serviceReportModel, controlTankModel, consumeModel, materialModel, clientModel, providerModel, kardexModel, academyTutorialModel, gpsPositionModel;
+var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, publicLinkModel, serviceReportModel, controlTankModel, consumeModel, materialModel, clientModel, providerModel, kardexModel, inputModel, academyTutorialModel, gpsPositionModel;
 var init_models = __esm({
   "src/database/models.ts"() {
     init_sharedConnection();
@@ -8438,6 +8445,7 @@ var init_models = __esm({
     clientModel = null;
     providerModel = null;
     kardexModel = null;
+    inputModel = null;
     academyTutorialModel = null;
     gpsPositionModel = null;
   }
@@ -9886,7 +9894,8 @@ var init_contexto = __esm({
       if (!t44 || t44.split(" ").length > 6) return false;
       const traeDato = /\b\d{1,2}\b/.test(t44) || /\b[a-z]{3}[\s-]?\d{3}\b/.test(t44) || /\b(manana|hoy|ayer|anteayer|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|mes|enero|febrero|marzo|abril|mayo|junio|julio|agosto|se[pt]?tiembre|octubre|noviembre|diciembre|ultim[oa]|primer[oa]?)\b/.test(t44) || /\b(en|de|para|con) [a-z]/.test(t44);
       const empiezaComoSeguimiento = /^(y |e |que tal |en |de |para |la |el |las |los |con )/.test(t44) || /^\d/.test(t44);
-      return traeDato && empiezaComoSeguimiento;
+      const yAlgo = /^(y|e) [a-z0-9ñ]+( [a-z0-9ñ]+)?$/.test(t44);
+      return traeDato && empiezaComoSeguimiento || yAlgo;
     };
     fusionar = (nueva, anterior, distritos = [], empresas = []) => {
       const n44 = (t44) => t44.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -9907,6 +9916,124 @@ var init_contexto = __esm({
       if (!t44 || t44.split(" ").length > 25) return false;
       if (/\?/.test(t44)) return true;
       return /^(ok |ya |listo |y |e )?(hay|que|cual|cuales|cuanto|cuanta|cuantos|cuantas|como|donde|quien|quienes|a que hora|muestrame|muestra|dame|pasame|mandame|enviame|dime|necesito|quiero|puedes|podrias|me (muestras|pasas|mandas|das|dices))\b/.test(t44);
+    };
+  }
+});
+
+// src/agent/consultas/planta.ts
+var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, ES_LIQUIDO, UNIDAD_LIQUIDA, esAgregado, materiales, materialesPorEmpresa, SIN_AGREGADOS, textoMaterialesDe, textoMateriales;
+var init_planta = __esm({
+  "src/agent/consultas/planta.ts"() {
+    init_models();
+    init_alcance();
+    init_tiempo();
+    num2 = (v55) => typeof v55 === "number" && Number.isFinite(v55) ? v55 : Number(v55) || 0;
+    r1 = (n44) => (Math.round(n44 * 10) / 10).toLocaleString("es-PE");
+    CONTENIDO = { pen: "pen", gasohol: "gasohol", petroleum: "petroleo", petroleo: "petroleo", thermal_oil: "otro", other: "otro" };
+    tanques = async () => {
+      const Tank = await getControlTankModel();
+      const docs = await Tank.find({ companyId: COMPANY_PILOTO, includeInFluidsReport: { $ne: false } }).select("name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter volume reorderPoint bgColor").lean();
+      return docs.map((d67) => {
+        const disponibles = Math.max(num2(d67.volumeInStock) - num2(d67.valveDeadVolumeGallons), 0);
+        const glPorM3 = num2(d67.gallonsPerProductionM3);
+        return {
+          nombre: String(d67.name || "").toUpperCase().replace(/#/g, ""),
+          contenido: CONTENIDO[String(d67.contentType || "").toLowerCase()] || "otro",
+          galones: disponibles,
+          m3Producibles: glPorM3 > 0 ? disponibles / glPorM3 : 0,
+          nivelCm: num2(d67.levelCentimeter),
+          capacidad: num2(d67.volume),
+          stock: num2(d67.volumeInStock),
+          reorden: num2(d67.reorderPoint),
+          color: String(d67.bgColor || "").trim() || void 0
+        };
+      });
+    };
+    textoTanques = (lista) => {
+      if (lista.length === 0) return "No hay tanques en el reporte de l\xEDquidos.";
+      const lineas = ["\u{1F4CB} *Tanques de planta \u2014 Inframaq*"];
+      const pen = lista.filter((t44) => t44.contenido === "pen" && t44.m3Producibles > 0);
+      for (const t44 of pen) lineas.push(`*- ${t44.nombre}:* ${t44.m3Producibles.toFixed(0)} m\xB3 prod. (${r1(t44.galones)} gl, ${t44.nivelCm} cm)`);
+      if (pen.length === 0) lineas.push("*- PEN:* 0 m\xB3 \u26A0\uFE0F SIN STOCK");
+      for (const t44 of lista.filter((t45) => t45.contenido === "petroleo" || t45.contenido === "otro")) {
+        const etiqueta = t44.nombre.includes("HIGHWAY") ? "HIGHWAY" : t44.nombre;
+        lineas.push(`*- ${etiqueta}:* ${t44.nivelCm} cm (${r1(t44.galones)} gl)${t44.nombre.includes("HIGHWAY") && t44.nivelCm < 40 ? " (\u26A0\uFE0F PEDIR PETR\xD3LEO)" : ""}`);
+      }
+      const gasohol = lista.filter((t44) => t44.contenido === "gasohol").reduce((s59, t44) => s59 + t44.m3Producibles, 0);
+      const gasoholGl = lista.filter((t44) => t44.contenido === "gasohol").reduce((s59, t44) => s59 + t44.galones, 0);
+      lineas.push(
+        gasohol > 0 ? `*- GASOHOL:* ${gasohol.toFixed(0)} m\xB3 (${r1(gasoholGl)} gl)${gasohol < 50 ? " (\u26A0\uFE0F PEDIR GASOHOL)" : ""}` : "*- GASOHOL:* 0 m\xB3 (\u26A0\uFE0F SIN STOCK)"
+      );
+      return lineas.join("\n");
+    };
+    consumosDelDia = async (fecha) => {
+      const Consume = await getConsumeModel();
+      const inicio = /* @__PURE__ */ new Date(`${fecha}T00:00:00.000-05:00`);
+      const fin = new Date(inicio.getTime() + 24 * 36e5);
+      const docs = await Consume.find({
+        companyId: COMPANY_PILOTO,
+        $or: [{ date: { $gte: inicio, $lt: fin } }, { periodStart: { $gte: inicio, $lt: fin } }]
+      }).select("date orders computedM3 totalCubes measures").sort({ date: 1 }).lean();
+      return docs.map((d67) => {
+        const m310 = num2(d67.computedM3) || num2(d67.totalCubes);
+        const medidas = Array.isArray(d67.measures) ? d67.measures : [];
+        const porTanque = medidas.map((m59) => {
+          const galones = num2(m59.quantityConsumed);
+          return { tanque: String(m59.tank || ""), galones, glPorM3: m310 > 0 ? galones / m310 : 0 };
+        });
+        return {
+          fecha,
+          pedidos: (d67.orders ?? []).map((o37) => String(o37.orderClient || o37.orderName || "")).filter(Boolean),
+          m3: m310,
+          porTanque,
+          totalGalones: porTanque.reduce((s59, t44) => s59 + t44.galones, 0)
+        };
+      });
+    };
+    textoConsumos = (lista, fecha) => {
+      if (lista.length === 0) return `No hay consumo registrado para ${fechaLegible(fecha)}. Se registra en Portal \u2192 Consumos.`;
+      const bloques = lista.map((c66, i50) => {
+        const titulo = lista.length > 1 ? `*Consumo ${i50 + 1}* (${c66.pedidos.join(", ") || "sin pedido"})` : `*${c66.pedidos.join(", ") || "Producci\xF3n"}*`;
+        const lineas = [`${titulo} \u2014 ${r1(c66.m3)} m\xB3, ${r1(c66.totalGalones)} gl en total`];
+        lineas.push(...c66.porTanque.map((t44) => `\u2022 ${t44.tanque}: ${r1(t44.galones)} gl \xB7 ${(Math.round(t44.glPorM3 * 1e3) / 1e3).toLocaleString("es-PE")} gl/m\xB3`));
+        return lineas.join("\n");
+      });
+      return [`\u{1F6E2} *Consumos de ${fechaLegible(fecha)}*`, "", ...bloques].join("\n\n");
+    };
+    ES_LIQUIDO = /\b(pen|gasoh?ol|gashol|petroleo|petróleo|diesel|asfalto|aceite|emulsion|emulsión|combustible)\b/i;
+    UNIDAD_LIQUIDA = /^(gl|gls|gal|galon|galones|l|lt|lts|litros)$/i;
+    esAgregado = (nombre, unidad) => !ES_LIQUIDO.test(nombre) && !UNIDAD_LIQUIDA.test(String(unidad || "").trim());
+    materiales = async (empresas) => {
+      const Mat = await getMaterialModel();
+      const docs = await Mat.find({ companyId: { $in: empresas.map((e29) => e29.companyId) } }).select("companyId name quantity unit reorderPoint").sort({ name: 1 }).lean();
+      return docs.filter((d67) => esAgregado(String(d67.name || ""), String(d67.unit || ""))).map((d67) => {
+        const reorden = num2(d67.reorderPoint);
+        return {
+          empresa: empresas.find((e29) => e29.companyId === String(d67.companyId))?.nombre || String(d67.companyId),
+          nombre: String(d67.name || "").trim().toUpperCase(),
+          cantidad: num2(d67.quantity),
+          unidad: String(d67.unit || "m\xB3").replace(/^m3$/i, "m\xB3"),
+          reponer: reorden > 0 && num2(d67.quantity) <= reorden,
+          reorden
+        };
+      });
+    };
+    materialesPorEmpresa = (lista) => {
+      const porEmpresa = /* @__PURE__ */ new Map();
+      for (const m59 of lista) porEmpresa.set(m59.empresa, [...porEmpresa.get(m59.empresa) ?? [], m59]);
+      return [...porEmpresa].filter(([, ms2]) => ms2.some((m59) => m59.cantidad > 0)).map(([empresa, materiales2]) => ({ empresa, materiales: materiales2 }));
+    };
+    SIN_AGREGADOS = "No hay stock de agregados registrado.";
+    textoMaterialesDe = (empresa, ms2) => {
+      const total = ms2.reduce((s59, m59) => s59 + m59.cantidad, 0);
+      const lineas = [`\u{1F4E6} *Stock de agregados \u2014 ${empresa}*`];
+      lineas.push(...ms2.map((m59) => `*- ${m59.nombre}:* ${m59.cantidad.toLocaleString("es-PE", { maximumFractionDigits: 2 })} ${m59.unidad}${m59.reponer ? " (\u26A0\uFE0F REPONER)" : ""}`));
+      lineas.push(`*- Total:* ${total.toLocaleString("es-PE", { maximumFractionDigits: 2 })} m\xB3`);
+      return lineas.join("\n");
+    };
+    textoMateriales = (lista) => {
+      const bloques = materialesPorEmpresa(lista).map(({ empresa, materiales: ms2 }) => textoMaterialesDe(empresa, ms2));
+      return bloques.length ? bloques.join("\n\n") : SIN_AGREGADOS;
     };
   }
 });
@@ -10340,126 +10467,8 @@ var init_weather_asphalt_forecast_service = __esm({
   }
 });
 
-// src/agent/consultas/planta.ts
-var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, ES_LIQUIDO, UNIDAD_LIQUIDA, esAgregado, materiales, materialesPorEmpresa, SIN_AGREGADOS, textoMaterialesDe, textoMateriales;
-var init_planta = __esm({
-  "src/agent/consultas/planta.ts"() {
-    init_models();
-    init_alcance();
-    init_tiempo();
-    num2 = (v55) => typeof v55 === "number" && Number.isFinite(v55) ? v55 : Number(v55) || 0;
-    r1 = (n44) => (Math.round(n44 * 10) / 10).toLocaleString("es-PE");
-    CONTENIDO = { pen: "pen", gasohol: "gasohol", petroleum: "petroleo", petroleo: "petroleo", thermal_oil: "otro", other: "otro" };
-    tanques = async () => {
-      const Tank = await getControlTankModel();
-      const docs = await Tank.find({ companyId: COMPANY_PILOTO, includeInFluidsReport: { $ne: false } }).select("name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter volume reorderPoint bgColor").lean();
-      return docs.map((d67) => {
-        const disponibles = Math.max(num2(d67.volumeInStock) - num2(d67.valveDeadVolumeGallons), 0);
-        const glPorM3 = num2(d67.gallonsPerProductionM3);
-        return {
-          nombre: String(d67.name || "").toUpperCase().replace(/#/g, ""),
-          contenido: CONTENIDO[String(d67.contentType || "").toLowerCase()] || "otro",
-          galones: disponibles,
-          m3Producibles: glPorM3 > 0 ? disponibles / glPorM3 : 0,
-          nivelCm: num2(d67.levelCentimeter),
-          capacidad: num2(d67.volume),
-          stock: num2(d67.volumeInStock),
-          reorden: num2(d67.reorderPoint),
-          color: String(d67.bgColor || "").trim() || void 0
-        };
-      });
-    };
-    textoTanques = (lista) => {
-      if (lista.length === 0) return "No hay tanques en el reporte de l\xEDquidos.";
-      const lineas = ["\u{1F4CB} *Tanques de planta \u2014 Inframaq*"];
-      const pen = lista.filter((t44) => t44.contenido === "pen" && t44.m3Producibles > 0);
-      for (const t44 of pen) lineas.push(`*- ${t44.nombre}:* ${t44.m3Producibles.toFixed(0)} m\xB3 prod. (${r1(t44.galones)} gl, ${t44.nivelCm} cm)`);
-      if (pen.length === 0) lineas.push("*- PEN:* 0 m\xB3 \u26A0\uFE0F SIN STOCK");
-      for (const t44 of lista.filter((t45) => t45.contenido === "petroleo" || t45.contenido === "otro")) {
-        const etiqueta = t44.nombre.includes("HIGHWAY") ? "HIGHWAY" : t44.nombre;
-        lineas.push(`*- ${etiqueta}:* ${t44.nivelCm} cm (${r1(t44.galones)} gl)${t44.nombre.includes("HIGHWAY") && t44.nivelCm < 40 ? " (\u26A0\uFE0F PEDIR PETR\xD3LEO)" : ""}`);
-      }
-      const gasohol = lista.filter((t44) => t44.contenido === "gasohol").reduce((s59, t44) => s59 + t44.m3Producibles, 0);
-      const gasoholGl = lista.filter((t44) => t44.contenido === "gasohol").reduce((s59, t44) => s59 + t44.galones, 0);
-      lineas.push(
-        gasohol > 0 ? `*- GASOHOL:* ${gasohol.toFixed(0)} m\xB3 (${r1(gasoholGl)} gl)${gasohol < 50 ? " (\u26A0\uFE0F PEDIR GASOHOL)" : ""}` : "*- GASOHOL:* 0 m\xB3 (\u26A0\uFE0F SIN STOCK)"
-      );
-      return lineas.join("\n");
-    };
-    consumosDelDia = async (fecha) => {
-      const Consume = await getConsumeModel();
-      const inicio = /* @__PURE__ */ new Date(`${fecha}T00:00:00.000-05:00`);
-      const fin = new Date(inicio.getTime() + 24 * 36e5);
-      const docs = await Consume.find({
-        companyId: COMPANY_PILOTO,
-        $or: [{ date: { $gte: inicio, $lt: fin } }, { periodStart: { $gte: inicio, $lt: fin } }]
-      }).select("date orders computedM3 totalCubes measures").sort({ date: 1 }).lean();
-      return docs.map((d67) => {
-        const m310 = num2(d67.computedM3) || num2(d67.totalCubes);
-        const medidas = Array.isArray(d67.measures) ? d67.measures : [];
-        const porTanque = medidas.map((m59) => {
-          const galones = num2(m59.quantityConsumed);
-          return { tanque: String(m59.tank || ""), galones, glPorM3: m310 > 0 ? galones / m310 : 0 };
-        });
-        return {
-          fecha,
-          pedidos: (d67.orders ?? []).map((o37) => String(o37.orderClient || o37.orderName || "")).filter(Boolean),
-          m3: m310,
-          porTanque,
-          totalGalones: porTanque.reduce((s59, t44) => s59 + t44.galones, 0)
-        };
-      });
-    };
-    textoConsumos = (lista, fecha) => {
-      if (lista.length === 0) return `No hay consumo registrado para ${fechaLegible(fecha)}. Se registra en Portal \u2192 Consumos.`;
-      const bloques = lista.map((c66, i50) => {
-        const titulo = lista.length > 1 ? `*Consumo ${i50 + 1}* (${c66.pedidos.join(", ") || "sin pedido"})` : `*${c66.pedidos.join(", ") || "Producci\xF3n"}*`;
-        const lineas = [`${titulo} \u2014 ${r1(c66.m3)} m\xB3, ${r1(c66.totalGalones)} gl en total`];
-        lineas.push(...c66.porTanque.map((t44) => `\u2022 ${t44.tanque}: ${r1(t44.galones)} gl \xB7 ${(Math.round(t44.glPorM3 * 1e3) / 1e3).toLocaleString("es-PE")} gl/m\xB3`));
-        return lineas.join("\n");
-      });
-      return [`\u{1F6E2} *Consumos de ${fechaLegible(fecha)}*`, "", ...bloques].join("\n\n");
-    };
-    ES_LIQUIDO = /\b(pen|gasoh?ol|gashol|petroleo|petróleo|diesel|asfalto|aceite|emulsion|emulsión|combustible)\b/i;
-    UNIDAD_LIQUIDA = /^(gl|gls|gal|galon|galones|l|lt|lts|litros)$/i;
-    esAgregado = (nombre, unidad) => !ES_LIQUIDO.test(nombre) && !UNIDAD_LIQUIDA.test(String(unidad || "").trim());
-    materiales = async (empresas) => {
-      const Mat = await getMaterialModel();
-      const docs = await Mat.find({ companyId: { $in: empresas.map((e29) => e29.companyId) } }).select("companyId name quantity unit reorderPoint").sort({ name: 1 }).lean();
-      return docs.filter((d67) => esAgregado(String(d67.name || ""), String(d67.unit || ""))).map((d67) => {
-        const reorden = num2(d67.reorderPoint);
-        return {
-          empresa: empresas.find((e29) => e29.companyId === String(d67.companyId))?.nombre || String(d67.companyId),
-          nombre: String(d67.name || "").trim().toUpperCase(),
-          cantidad: num2(d67.quantity),
-          unidad: String(d67.unit || "m\xB3").replace(/^m3$/i, "m\xB3"),
-          reponer: reorden > 0 && num2(d67.quantity) <= reorden,
-          reorden
-        };
-      });
-    };
-    materialesPorEmpresa = (lista) => {
-      const porEmpresa = /* @__PURE__ */ new Map();
-      for (const m59 of lista) porEmpresa.set(m59.empresa, [...porEmpresa.get(m59.empresa) ?? [], m59]);
-      return [...porEmpresa].filter(([, ms2]) => ms2.some((m59) => m59.cantidad > 0)).map(([empresa, materiales2]) => ({ empresa, materiales: materiales2 }));
-    };
-    SIN_AGREGADOS = "No hay stock de agregados registrado.";
-    textoMaterialesDe = (empresa, ms2) => {
-      const total = ms2.reduce((s59, m59) => s59 + m59.cantidad, 0);
-      const lineas = [`\u{1F4E6} *Stock de agregados \u2014 ${empresa}*`];
-      lineas.push(...ms2.map((m59) => `*- ${m59.nombre}:* ${m59.cantidad.toLocaleString("es-PE", { maximumFractionDigits: 2 })} ${m59.unidad}${m59.reponer ? " (\u26A0\uFE0F REPONER)" : ""}`));
-      lineas.push(`*- Total:* ${total.toLocaleString("es-PE", { maximumFractionDigits: 2 })} m\xB3`);
-      return lineas.join("\n");
-    };
-    textoMateriales = (lista) => {
-      const bloques = materialesPorEmpresa(lista).map(({ empresa, materiales: ms2 }) => textoMaterialesDe(empresa, ms2));
-      return bloques.length ? bloques.join("\n\n") : SIN_AGREGADOS;
-    };
-  }
-});
-
 // src/agent/consultas/clima.ts
-var cielo, distritoDe, URL_BASE, MAX_DIAS, diasHasta, pedir, pronosticoHorario, pronosticoSemanal, ICONO, textoClimaSemanal, textoFueraDeAlcance, franjasDeRiesgo, hh, textoClima, riesgoPorDistrito, DIA_CORTO, diaCorto, textoRiesgoDistritos;
+var cielo, ALIAS_DISTRITO, NOMBRES_DE_DISTRITOS, distritosDe, lugarDesconocido, textoLugarDesconocido, URL_BASE, MAX_DIAS, diasHasta, pedir, pronosticoHorario, pronosticoSemanal, ICONO, textoClimaSemanal, textoFueraDeAlcance, franjasDeRiesgo, hh, textoClima, riesgoPorDistrito, DIA_CORTO, diaCorto, textoRiesgoDistritos;
 var init_clima = __esm({
   "src/agent/consultas/clima.ts"() {
     init_logger();
@@ -10477,15 +10486,40 @@ var init_clima = __esm({
       if (codigo >= 95) return "con tormenta";
       return "variable";
     };
-    distritoDe = (pregunta) => {
+    ALIAS_DISTRITO = [
+      { alias: "cajamarquilla", distrito: { ...LOCATIONS[0], name: "Cajamarquilla (planta)" } },
+      { alias: "la planta", distrito: { ...LOCATIONS[0], name: "la planta" } },
+      { alias: "planta", distrito: { ...LOCATIONS[0], name: "la planta" } }
+    ];
+    NOMBRES_DE_DISTRITOS = [...LOCATIONS.slice(1).map((l57) => l57.name), ...ALIAS_DISTRITO.map((a49) => a49.alias)];
+    distritosDe = (pregunta, max = 3) => {
       const t44 = normalizar(pregunta);
-      let mejor = null;
+      const encontrados = [];
       for (const l57 of LOCATIONS.slice(1)) {
         const pos = t44.indexOf(normalizar(l57.name));
-        if (pos >= 0 && (!mejor || pos < mejor.pos)) mejor = { l: l57, pos };
+        if (pos >= 0) encontrados.push({ d: l57, pos });
       }
-      return mejor?.l ?? { ...LOCATIONS[0], name: "la planta" };
+      for (const a49 of ALIAS_DISTRITO) {
+        const pos = t44.search(new RegExp(`\\b${a49.alias}\\b`));
+        if (pos >= 0 && !encontrados.some((e29) => e29.d.lat === a49.distrito.lat && e29.d.lon === a49.distrito.lon)) encontrados.push({ d: a49.distrito, pos });
+      }
+      const sinSolapes = encontrados.sort((a49, b63) => a49.pos - b63.pos).filter((e29, i50, arr) => !arr.some((o37) => o37 !== e29 && o37.pos <= e29.pos && o37.pos + normalizar(o37.d.name).length > e29.pos && normalizar(o37.d.name).length > normalizar(e29.d.name).length));
+      const distritos = sinSolapes.map((e29) => e29.d).filter((d67, i50, arr) => arr.findIndex((x63) => x63.name === d67.name) === i50);
+      return distritos.length ? distritos.slice(0, max) : [{ ...LOCATIONS[0], name: "la planta" }];
     };
+    lugarDesconocido = (pregunta) => {
+      const t44 = normalizar(pregunta).replace(/[¿?¡!.,]/g, " ");
+      if (distritosDe(pregunta).some((d67) => d67.name !== "la planta")) return null;
+      const RELLENO = /* @__PURE__ */ new Set(["hoy", "manana", "pasado", "semana", "mes", "planta", "lima", "obra", "campo", "pista", "zona", "dia", "tarde", "noche", "madrugada", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo", "clima", "lluvia", "riesgo", "distrito", "distritos", "produccion", "asfaltado", "asfaltar", "mezcla", "tiempo", "pronostico", "esta", "este", "proxima", "proximo", "temprano"]);
+      const m59 = t44.match(/\b(?:en|para|de|por) (?:el |la |los |las )?([a-zñ]{4,}(?: [a-zñ]{3,})?)/g);
+      if (!m59) return null;
+      for (const frase of m59) {
+        const palabras = frase.replace(/^(?:en|para|de|por) (?:el |la |los |las )?/, "").split(" ").filter((p64) => !RELLENO.has(p64));
+        if (palabras.length) return palabras.join(" ");
+      }
+      return null;
+    };
+    textoLugarDesconocido = (lugar) => `No tengo \xAB${lugar}\xBB entre mis distritos. Conozco: ${LOCATIONS.slice(1).map((l57) => l57.name).join(", ")} y la planta (Cajamarquilla).`;
     URL_BASE = "https://api.open-meteo.com/v1/forecast?hourly=precipitation_probability,precipitation,temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum&timezone=America%2FLima";
     MAX_DIAS = 16;
     diasHasta = (fecha, hoy) => {
@@ -11150,48 +11184,48 @@ var init_datos = __esm({
       );
     };
     ingresosDeAgregados = async (filtro) => {
-      const [Material, Kardex, nombres] = await Promise.all([getMaterialModel(), getKardexModel(), nombresDeEmpresas()]);
+      const [Input, nombres] = await Promise.all([getInputModel(), nombresDeEmpresas()]);
       const empresas = filtro.companyId ? [filtro.companyId] : EMPRESAS;
-      const materiales2 = await Material.find({ companyId: { $in: empresas } }).select("companyId name unit").lean();
-      const agregados = new Map(materiales2.filter((m59) => esAgregado(texto(m59.name), texto(m59.unit))).map((m59) => [String(m59._id), m59]));
       const inicio = new Date((instanteArranque(filtro.desde, "00:00") ?? Date.now()) - 12 * 36e5);
       const fin = new Date((instanteArranque(filtro.hasta, "00:00") ?? Date.now()) + 36 * 36e5);
-      const docs = await Kardex.find({
+      const docs = await Input.find({
         companyId: { $in: empresas },
-        materialId: { $in: [...agregados.keys()] },
-        type: "Ingreso",
-        status: { $ne: "deleted" },
-        $or: [{ date: { $gte: inicio, $lt: fin } }, { date: { $gte: inicio.toISOString(), $lt: fin.toISOString() } }]
-      }).select("companyId materialId quantity date providerName vendorProviderName description").sort({ date: 1 }).limit(500).lean();
+        status: { $ne: "Deleted" },
+        $or: [{ arriveDate: { $gte: inicio.toISOString(), $lt: fin.toISOString() } }, { arriveDate: { $gte: inicio, $lt: fin } }]
+      }).select("companyId material m3 arriveDate status providerName vendorProviderName").sort({ arriveDate: 1 }).limit(500).lean();
       const enRango = docs.filter((d67) => {
-        const dia = fechaDe2(d67.date);
-        return dia >= filtro.desde && dia <= filtro.hasta;
+        const dia = fechaDe2(d67.arriveDate);
+        return dia >= filtro.desde && dia <= filtro.hasta && esAgregado(texto(d67.material), "m3");
       });
       const porProveedor = /* @__PURE__ */ new Map();
       for (const d67 of enRango) {
-        const m59 = agregados.get(String(d67.materialId));
-        if (!m59) continue;
         const vendedor = texto(d67.vendorProviderName) || texto(d67.providerName) || "sin proveedor";
         const transportista = texto(d67.providerName) && texto(d67.providerName) !== vendedor ? texto(d67.providerName) : void 0;
         const empresa = nombres.get(String(d67.companyId)) || String(d67.companyId);
-        const unidad = texto(m59.unit).replace(/^m3$/i, "m\xB3") || "m\xB3";
         const clave2 = `${vendedor}|${empresa}`;
-        const prov = porProveedor.get(clave2) ?? { proveedor: vendedor, transportista, empresa, materiales: [], total: 0, unidad };
-        const material = texto(m59.name).toUpperCase();
-        const fila = prov.materiales.find((x63) => x63.material === material) ?? (prov.materiales.push({ material, unidad, cantidad: 0, ingresos: 0 }), prov.materiales[prov.materiales.length - 1]);
-        fila.cantidad += num3(d67.quantity);
+        const prov = porProveedor.get(clave2) ?? { proveedor: vendedor, transportista, empresa, materiales: [], total: 0, unidad: "m\xB3" };
+        const material = texto(d67.material).toUpperCase();
+        let fila = prov.materiales.find((x63) => x63.material === material);
+        if (!fila) {
+          fila = { material, unidad: "m\xB3", cantidad: 0, ingresos: 0, pendientes: 0 };
+          prov.materiales.push(fila);
+        }
+        fila.cantidad += num3(d67.m3);
         fila.ingresos += 1;
-        prov.total += num3(d67.quantity);
+        if (texto(d67.status) !== "Completed") fila.pendientes += 1;
+        prov.total += num3(d67.m3);
         porProveedor.set(clave2, prov);
       }
       const proveedores = [...porProveedor.values()].sort((a49, b63) => b63.total - a49.total);
+      const materiales2 = proveedores.flatMap((p64) => p64.materiales);
       return {
         desde: filtro.desde,
         hasta: filtro.hasta,
         proveedores,
-        totalIngresos: proveedores.reduce((s59, p64) => s59 + p64.materiales.reduce((x63, m59) => x63 + m59.ingresos, 0), 0),
+        totalIngresos: materiales2.reduce((s59, m59) => s59 + m59.ingresos, 0),
         total: proveedores.reduce((s59, p64) => s59 + p64.total, 0),
-        unidad: proveedores[0]?.unidad ?? "m\xB3"
+        pendientes: materiales2.reduce((s59, m59) => s59 + m59.pendientes, 0),
+        unidad: "m\xB3"
       };
     };
     LIMITE_CERTIFICADOS = 40;
@@ -11253,7 +11287,7 @@ var init_herramientas = __esm({
       { id: "proveedores", descripcion: "datos de UN proveedor: RUC, contacto, tel\xE9fono, qu\xE9 vende o transporta", argumentos: ["nombre"] },
       { id: "pedidos", descripcion: "historial de pedidos en un rango de fechas, de una empresa o de un cliente", argumentos: ["desde", "hasta", "empresa", "nombre"], historial: true },
       { id: "kardex", descripcion: "ingresos, salidas y movimientos de UN material en un rango de fechas", argumentos: ["nombre", "desde", "hasta", "empresa"], historial: true },
-      { id: "ingresos_agregados", descripcion: "cu\xE1ntos agregados llegaron / ingresaron (todos los materiales, por proveedor) en un d\xEDa o rango", argumentos: ["desde", "hasta", "empresa"], historial: true, reglas: [["llegaron"], ["llego"], ["llegado"], ["ingresaron"], ["ingreso", "agregado"], ["ingresos", "agregado"], ["ingreso", "material"], ["ingresos", "material"], ["entrada", "material"], ["entradas", "material"], ["recibimos"], ["recepcion", "agregado"], ["cuanto", "llego"]] },
+      { id: "ingresos_agregados", descripcion: "cu\xE1ntos agregados / insumos llegaron o se recibieron (camiones por proveedor) en un d\xEDa o rango", argumentos: ["desde", "hasta", "empresa"], historial: true, reglas: [["llegaron"], ["llego"], ["llegado"], ["ingresaron"], ["ingreso", "agregado"], ["ingresos", "agregado"], ["ingreso", "material"], ["ingresos", "material"], ["entrada", "material"], ["entradas", "material"], ["recibimos"], ["recepcion"], ["insumo"], ["insumos"], ["cuanto", "llego"]] },
       { id: "certificados_pendientes", descripcion: "qu\xE9 pedidos no tienen certificado cargado / certificados pendientes", argumentos: ["empresa"], reglas: [["certificado"], ["certificados"]] }
     ];
     herramientaDeDatosPorReglas = (pregunta) => {
@@ -11473,11 +11507,13 @@ var init_fichas = __esm({
     };
     fichaIngresos = (r39, hoy = "") => {
       const cuando = r39.desde === r39.hasta ? r39.desde === hoy ? "hoy" : `el ${fechaLegible(r39.desde)}` : `del ${corta(r39.desde)} al ${corta(r39.hasta)}`;
-      if (r39.proveedores.length === 0) return `No hay ingresos de agregados registrados ${cuando} en el kardex.`;
-      const lineas = [`\u{1F69A} *Ingresos de agregados ${cuando}*: ${r39.totalIngresos} ingreso(s), ${n(r39.total)} ${r39.unidad}`];
+      if (r39.proveedores.length === 0) return `No hay camiones de agregados registrados ${cuando} en la recepci\xF3n de insumos.`;
+      const lineas = [`\u{1F69A} *Ingresos de agregados ${cuando}*: ${r39.totalIngresos} cami\xF3n(es), ${n(r39.total)} ${r39.unidad}${r39.pendientes ? ` \xB7 ${r39.pendientes} por confirmar` : ""}`];
       for (const p64 of r39.proveedores) {
         lineas.push(`*${p64.proveedor}*${p64.transportista ? ` (transporta ${p64.transportista})` : ""} \xB7 ${p64.empresa} \u2014 ${n(p64.total)} ${p64.unidad}`);
-        for (const m59 of p64.materiales) lineas.push(`\u2022 ${m59.material}: ${n(m59.cantidad)} ${m59.unidad}${m59.ingresos > 1 ? ` en ${m59.ingresos} ingresos` : ""}`);
+        for (const m59 of p64.materiales) {
+          lineas.push(`\u2022 ${m59.material}: ${n(m59.cantidad)} ${m59.unidad}${m59.ingresos > 1 ? ` en ${m59.ingresos} camiones` : ""}${m59.pendientes ? ` (${m59.pendientes === m59.ingresos ? "por confirmar" : `${m59.pendientes} por confirmar`})` : ""}`);
+        }
       }
       return lineas.join("\n");
     };
@@ -12571,7 +12607,6 @@ var init_consultas = __esm({
     init_archivos();
     init_pendientes();
     init_contexto();
-    init_weather_asphalt_forecast_service();
     init_catalogo();
     init_planta();
     init_clima();
@@ -12683,11 +12718,17 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         return { texto: textoRiesgoDistritos(await riesgoPorDistrito(unDia ? diasHasta(fecha, hoyLima()) ?? 1 : 7), unDia ? fecha : void 0) };
       }
       if (clave2 === "weather") {
-        const distrito = distritoDe(pregunta);
-        if (params.rango === "semana") return { texto: textoClimaSemanal(await pronosticoSemanal(distrito)) };
+        const desconocido = lugarDesconocido(pregunta);
+        if (desconocido) return { texto: textoLugarDesconocido(desconocido) };
+        const distritos = distritosDe(pregunta);
+        if (params.rango === "semana") {
+          const textos2 = await Promise.all(distritos.map(async (d67) => textoClimaSemanal(await pronosticoSemanal(d67))));
+          return { texto: textos2.join("\n\n") };
+        }
         if (diasHasta(fecha, hoyLima()) === null) return { texto: textoFueraDeAlcance(fecha) };
         const horaLima = Number((/* @__PURE__ */ new Date()).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", hour12: false }).slice(0, 2));
-        return { texto: textoClima(await pronosticoHorario(distrito, fecha), fecha === hoyLima() ? horaLima : -1) };
+        const textos = await Promise.all(distritos.map(async (d67) => textoClima(await pronosticoHorario(d67, fecha), fecha === hoyLima() ? horaLima : -1)));
+        return { texto: textos.join("\n\n") };
       }
       if (clave2 === "dispatch_summary") {
         if (vista.orders.length === 0) return { texto: responder(clave2, { vista, params }) };
@@ -12765,7 +12806,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
     sinRuta = async (pregunta, quien, grupo, reglaDeRespaldo = null) => {
       const ultima = ultimaConsulta(quien, grupo);
       if (ultima && pareceContinuacion(pregunta)) {
-        const fusionada = fusionar(pregunta, ultima.pregunta, LOCATIONS.map((l57) => l57.name), ALIAS_EMPRESA.flatMap((e29) => e29.alias));
+        const fusionada = fusionar(pregunta, ultima.pregunta, NOMBRES_DE_DISTRITOS, ALIAS_EMPRESA.flatMap((e29) => e29.alias));
         if (!esHerramientaDeDatos(ultima.clave)) return { clave: ultima.clave, pregunta: fusionada };
         pregunta = fusionada;
       }

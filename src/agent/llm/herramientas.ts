@@ -65,7 +65,7 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
   { id: 'proveedores', descripcion: 'datos de UN proveedor: RUC, contacto, teléfono, qué vende o transporta', argumentos: ['nombre'] },
   { id: 'pedidos', descripcion: 'historial de pedidos en un rango de fechas, de una empresa o de un cliente', argumentos: ['desde', 'hasta', 'empresa', 'nombre'], historial: true },
   { id: 'kardex', descripcion: 'ingresos, salidas y movimientos de UN material en un rango de fechas', argumentos: ['nombre', 'desde', 'hasta', 'empresa'], historial: true },
-  { id: 'ingresos_agregados', descripcion: 'cuántos agregados llegaron / ingresaron (todos los materiales, por proveedor) en un día o rango', argumentos: ['desde', 'hasta', 'empresa'], historial: true, reglas: [['llegaron'], ['llego'], ['llegado'], ['ingresaron'], ['ingreso', 'agregado'], ['ingresos', 'agregado'], ['ingreso', 'material'], ['ingresos', 'material'], ['entrada', 'material'], ['entradas', 'material'], ['recibimos'], ['recepcion', 'agregado'], ['cuanto', 'llego']] },
+  { id: 'ingresos_agregados', descripcion: 'cuántos agregados / insumos llegaron o se recibieron (camiones por proveedor) en un día o rango', argumentos: ['desde', 'hasta', 'empresa'], historial: true, reglas: [['llegaron'], ['llego'], ['llegado'], ['ingresaron'], ['ingreso', 'agregado'], ['ingresos', 'agregado'], ['ingreso', 'material'], ['ingresos', 'material'], ['entrada', 'material'], ['entradas', 'material'], ['recibimos'], ['recepcion'], ['insumo'], ['insumos'], ['cuanto', 'llego']] },
   { id: 'certificados_pendientes', descripcion: 'qué pedidos no tienen certificado cargado / certificados pendientes', argumentos: ['empresa'], reglas: [['certificado'], ['certificados']] },
 ];
 

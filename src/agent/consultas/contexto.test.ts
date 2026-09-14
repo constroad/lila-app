@@ -72,3 +72,12 @@ describe('pareceParaElAgente', () => {
     expect(pareceParaElAgente(t)).toBe(false);
   });
 });
+
+describe('«¿y cajamarquilla?»', () => {
+  it('un «y» con una o dos palabras es una continuación aunque la palabra no sea de una lista', () => {
+    expect(pareceContinuacion('Y cajamarquilla?')).toBe(true);
+    expect(pareceContinuacion('y en huachipa')).toBe(true);
+    expect(pareceContinuacion('y qué tal si mejor lo vemos mañana temprano')).toBe(false);
+    expect(fusionar('y cajamarquilla?', 'como estara el clima en la molina para manana', ['La Molina', 'cajamarquilla'])).toBe('y cajamarquilla? como estara el clima en para manana');
+  });
+});

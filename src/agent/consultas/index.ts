@@ -5,10 +5,9 @@ import { PREGUNTA_UNIDAD, acotarArchivos, elegirPedido, etiquetaPedido, identifi
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
 import { fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto.js';
-import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
 import { ALIAS_EMPRESA } from './catalogo.js';
 import { SIN_AGREGADOS, consumosDelDia, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
-import { distritoDe, diasHasta, pronosticoHorario, pronosticoSemanal, riesgoPorDistrito, textoClima, textoClimaSemanal, textoFueraDeAlcance, textoRiesgoDistritos } from './clima.js';
+import { NOMBRES_DE_DISTRITOS, diasHasta, distritosDe, lugarDesconocido, pronosticoHorario, pronosticoSemanal, riesgoPorDistrito, textoClima, textoClimaSemanal, textoFueraDeAlcance, textoLugarDesconocido, textoRiesgoDistritos } from './clima.js';
 import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
@@ -170,11 +169,19 @@ const armarRespuesta = async (
     return { texto: textoRiesgoDistritos(await riesgoPorDistrito(unDia ? (diasHasta(fecha, hoyLima()) ?? 1) : 7), unDia ? fecha : undefined) };
   }
   if (clave === 'weather') {
-    const distrito = distritoDe(pregunta);
-    if (params.rango === 'semana') return { texto: textoClimaSemanal(await pronosticoSemanal(distrito)) };
+    // Un lugar que no conozco se dice; varios distritos se contestan todos
+    // («clima en la molina y cajamarquilla», 14/09: solo salió La Molina).
+    const desconocido = lugarDesconocido(pregunta);
+    if (desconocido) return { texto: textoLugarDesconocido(desconocido) };
+    const distritos = distritosDe(pregunta);
+    if (params.rango === 'semana') {
+      const textos = await Promise.all(distritos.map(async (d) => textoClimaSemanal(await pronosticoSemanal(d))));
+      return { texto: textos.join('\n\n') };
+    }
     if (diasHasta(fecha, hoyLima()) === null) return { texto: textoFueraDeAlcance(fecha) };
     const horaLima = Number(new Date().toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', hour12: false }).slice(0, 2));
-    return { texto: textoClima(await pronosticoHorario(distrito, fecha), fecha === hoyLima() ? horaLima : -1) };
+    const textos = await Promise.all(distritos.map(async (d) => textoClima(await pronosticoHorario(d, fecha), fecha === hoyLima() ? horaLima : -1)));
+    return { texto: textos.join('\n\n') };
   }
 
   if (clave === 'dispatch_summary') {
@@ -289,7 +296,7 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRe
   const ultima = ultimaConsulta(quien, grupo);
   if (ultima && pareceContinuacion(pregunta)) {
     // La misma pregunta con el dato nuevo, y sin el dato viejo del mismo tipo.
-    const fusionada = fusionar(pregunta, ultima.pregunta, LOCATIONS.map((l) => l.name), ALIAS_EMPRESA.flatMap((e) => e.alias));
+    const fusionada = fusionar(pregunta, ultima.pregunta, NOMBRES_DE_DISTRITOS, ALIAS_EMPRESA.flatMap((e) => e.alias));
     // Un hilo de datos (clientes, kardex…) lo sigue el modelo, que es quien lo abrió.
     if (!esHerramientaDeDatos(ultima.clave)) return { clave: ultima.clave as ClaveConsulta, pregunta: fusionada };
     pregunta = fusionada;

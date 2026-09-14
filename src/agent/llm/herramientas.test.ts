@@ -120,6 +120,7 @@ describe('herramientas de datos por regla (sin modelo)', () => {
     ['cuántos agregados llegaron hoy', 'ingresos_agregados'],
     ['qué llegó ayer', 'ingresos_agregados'],
     ['ingresos de material de la semana pasada', 'ingresos_agregados'],
+    ['pero registro de insumos?', 'ingresos_agregados'],
     ['cuántos pedidos no tienen certificados cargados', 'certificados_pendientes'],
     ['certificados pendientes de constroad', 'certificados_pendientes'],
     ['cuántos m3 van', null],

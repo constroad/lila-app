@@ -45,19 +45,72 @@ const cielo = (codigo: number): string => {
   return 'variable';
 };
 
-/** El distrito nombrado en la pregunta; sin nombre, la planta (Constroad). */
-export const distritoDe = (pregunta: string): { name: string; lat: number; lon: number } => {
+export interface Distrito {
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+/**
+ * Lugares que la gente nombra y no están en la lista del reporte: la zona de la
+ * planta. José, 14/09: «¿y Cajamarquilla?» → contestó «la planta» de HOY, sin
+ * decir que no conocía el nombre. Cajamarquilla es donde está la planta.
+ */
+const ALIAS_DISTRITO: Array<{ alias: string; distrito: Distrito }> = [
+  { alias: 'cajamarquilla', distrito: { ...LOCATIONS[0], name: 'Cajamarquilla (planta)' } },
+  { alias: 'la planta', distrito: { ...LOCATIONS[0], name: 'la planta' } },
+  { alias: 'planta', distrito: { ...LOCATIONS[0], name: 'la planta' } },
+];
+
+/** Todos los nombres que cuentan como distrito, para el hilo (`fusionar`). */
+export const NOMBRES_DE_DISTRITOS: string[] = [...LOCATIONS.slice(1).map((l) => l.name), ...ALIAS_DISTRITO.map((a) => a.alias)];
+
+/**
+ * Los distritos nombrados en la pregunta, en el orden en que aparecen: «clima
+ * en la molina y cajamarquilla» son dos. Sin ninguno, la planta.
+ */
+export const distritosDe = (pregunta: string, max = 3): Distrito[] => {
   const t = normalizar(pregunta);
-  // El distrito que aparece PRIMERO en el texto: en una continuación («¿y en
-  // Ate?» pegado a la pregunta anterior) el nuevo va adelante y manda.
-  // «Constroad» (la planta) es el default, no un nombre que la gente escriba.
-  let mejor: { l: (typeof LOCATIONS)[number]; pos: number } | null = null;
+  const encontrados: Array<{ d: Distrito; pos: number }> = [];
   for (const l of LOCATIONS.slice(1)) {
     const pos = t.indexOf(normalizar(l.name));
-    if (pos >= 0 && (!mejor || pos < mejor.pos)) mejor = { l, pos };
+    if (pos >= 0) encontrados.push({ d: l, pos });
   }
-  return mejor?.l ?? { ...LOCATIONS[0], name: 'la planta' };
+  for (const a of ALIAS_DISTRITO) {
+    const pos = t.search(new RegExp(`\\b${a.alias}\\b`));
+    if (pos >= 0 && !encontrados.some((e) => e.d.lat === a.distrito.lat && e.d.lon === a.distrito.lon)) encontrados.push({ d: a.distrito, pos });
+  }
+  // «Lurigancho» contiene «Lurin»: si dos se solapan en el texto, se queda el más largo.
+  const sinSolapes = encontrados
+    .sort((a, b) => a.pos - b.pos)
+    .filter((e, i, arr) => !arr.some((o) => o !== e && o.pos <= e.pos && o.pos + normalizar(o.d.name).length > e.pos && normalizar(o.d.name).length > normalizar(e.d.name).length));
+  const distritos = sinSolapes.map((e) => e.d).filter((d, i, arr) => arr.findIndex((x) => x.name === d.name) === i);
+  return distritos.length ? distritos.slice(0, max) : [{ ...LOCATIONS[0], name: 'la planta' }];
 };
+
+/** El primero, para quien solo quiere uno. */
+export const distritoDe = (pregunta: string): Distrito => distritosDe(pregunta, 1)[0];
+
+/**
+ * El lugar que nombró la pregunta y NO está en la lista («clima en Huaral»):
+ * mejor decirlo que contestar por la planta como si nada.
+ */
+export const lugarDesconocido = (pregunta: string): string | null => {
+  const t = normalizar(pregunta).replace(/[¿?¡!.,]/g, ' ');
+  if (distritosDe(pregunta).some((d) => d.name !== 'la planta')) return null;
+  const RELLENO = new Set(['hoy', 'manana', 'pasado', 'semana', 'mes', 'planta', 'lima', 'obra', 'campo', 'pista', 'zona', 'dia', 'tarde', 'noche', 'madrugada', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo', 'clima', 'lluvia', 'riesgo', 'distrito', 'distritos', 'produccion', 'asfaltado', 'asfaltar', 'mezcla', 'tiempo', 'pronostico', 'esta', 'este', 'proxima', 'proximo', 'temprano']);
+  const m = t.match(/\b(?:en|para|de|por) (?:el |la |los |las )?([a-zñ]{4,}(?: [a-zñ]{3,})?)/g);
+  if (!m) return null;
+  for (const frase of m) {
+    // «en huaral mañana» → «huaral»: se cortan las palabras de relleno del final y del principio.
+    const palabras = frase.replace(/^(?:en|para|de|por) (?:el |la |los |las )?/, '').split(' ').filter((p) => !RELLENO.has(p));
+    if (palabras.length) return palabras.join(' ');
+  }
+  return null;
+};
+
+export const textoLugarDesconocido = (lugar: string): string =>
+  `No tengo «${lugar}» entre mis distritos. Conozco: ${LOCATIONS.slice(1).map((l) => l.name).join(', ')} y la planta (Cajamarquilla).`;
 
 const URL_BASE =
   'https://api.open-meteo.com/v1/forecast?hourly=precipitation_probability,precipitation,temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum&timezone=America%2FLima';

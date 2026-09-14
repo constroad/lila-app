@@ -94,14 +94,16 @@ export const fichaKardex = (material: string, lista: KardexDeMaterial[]): string
   return bloques.join('\n\n');
 };
 
-/** Lo que llegó, por proveedor (y por material dentro de cada uno). */
+/** Lo que llegó, por proveedor (y por material dentro de cada uno), con lo que falta confirmar. */
 export const fichaIngresos = (r: IngresosDeAgregados, hoy = ''): string => {
   const cuando = r.desde === r.hasta ? (r.desde === hoy ? 'hoy' : `el ${fechaLegible(r.desde)}`) : `del ${corta(r.desde)} al ${corta(r.hasta)}`;
-  if (r.proveedores.length === 0) return `No hay ingresos de agregados registrados ${cuando} en el kardex.`;
-  const lineas = [`🚚 *Ingresos de agregados ${cuando}*: ${r.totalIngresos} ingreso(s), ${n(r.total)} ${r.unidad}`];
+  if (r.proveedores.length === 0) return `No hay camiones de agregados registrados ${cuando} en la recepción de insumos.`;
+  const lineas = [`🚚 *Ingresos de agregados ${cuando}*: ${r.totalIngresos} camión(es), ${n(r.total)} ${r.unidad}${r.pendientes ? ` · ${r.pendientes} por confirmar` : ''}`];
   for (const p of r.proveedores) {
     lineas.push(`*${p.proveedor}*${p.transportista ? ` (transporta ${p.transportista})` : ''} · ${p.empresa} — ${n(p.total)} ${p.unidad}`);
-    for (const m of p.materiales) lineas.push(`• ${m.material}: ${n(m.cantidad)} ${m.unidad}${m.ingresos > 1 ? ` en ${m.ingresos} ingresos` : ''}`);
+    for (const m of p.materiales) {
+      lineas.push(`• ${m.material}: ${n(m.cantidad)} ${m.unidad}${m.ingresos > 1 ? ` en ${m.ingresos} camiones` : ''}${m.pendientes ? ` (${m.pendientes === m.ingresos ? 'por confirmar' : `${m.pendientes} por confirmar`})` : ''}`);
+    }
   }
   return lineas.join('\n');
 };

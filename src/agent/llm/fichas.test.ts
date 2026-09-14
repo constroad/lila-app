@@ -93,18 +93,18 @@ describe('ingresos y certificados', () => {
   it('lo que llegó, por proveedor y material, con quién lo trajo', () => {
     const f = fichaIngresos(
       {
-        desde: '2026-09-14', hasta: '2026-09-14', totalIngresos: 4, total: 95, unidad: 'm³',
+        desde: '2026-09-14', hasta: '2026-09-14', totalIngresos: 4, total: 95, pendientes: 2, unidad: 'm³',
         proveedores: [
-          { proveedor: 'NOR BUILDING', transportista: 'SAUL GIRARDO', empresa: 'Globofast', unidad: 'm³', total: 75, materiales: [{ material: 'ARENA SECUNDARIA', unidad: 'm³', cantidad: 75, ingresos: 3 }] },
-          { proveedor: 'AGREXA SAC', empresa: 'Globofast', unidad: 'm³', total: 20, materiales: [{ material: 'CONFITILLO', unidad: 'm³', cantidad: 20, ingresos: 1 }] },
+          { proveedor: 'NOR BUILDING', transportista: 'SAUL GIRARDO', empresa: 'Globofast', unidad: 'm³', total: 75, materiales: [{ material: 'ARENA SECUNDARIA', unidad: 'm³', cantidad: 75, ingresos: 3, pendientes: 1 }] },
+          { proveedor: 'AGREXA SAC', empresa: 'Globofast', unidad: 'm³', total: 20, materiales: [{ material: 'CONFITILLO', unidad: 'm³', cantidad: 20, ingresos: 1, pendientes: 1 }] },
         ],
       },
       '2026-09-14'
     );
-    expect(f).toContain('🚚 *Ingresos de agregados hoy*: 4 ingreso(s), 95 m³');
-    expect(f).toContain('*NOR BUILDING* (transporta SAUL GIRARDO) · Globofast — 75 m³\n• ARENA SECUNDARIA: 75 m³ en 3 ingresos');
-    expect(f).toContain('*AGREXA SAC* · Globofast — 20 m³\n• CONFITILLO: 20 m³');
-    expect(fichaIngresos({ desde: '2026-09-13', hasta: '2026-09-13', proveedores: [], totalIngresos: 0, total: 0, unidad: 'm³' }, '2026-09-14')).toBe('No hay ingresos de agregados registrados el domingo 13/09 en el kardex.');
+    expect(f).toContain('🚚 *Ingresos de agregados hoy*: 4 camión(es), 95 m³ · 2 por confirmar');
+    expect(f).toContain('*NOR BUILDING* (transporta SAUL GIRARDO) · Globofast — 75 m³\n• ARENA SECUNDARIA: 75 m³ en 3 camiones (1 por confirmar)');
+    expect(f).toContain('*AGREXA SAC* · Globofast — 20 m³\n• CONFITILLO: 20 m³ (por confirmar)');
+    expect(fichaIngresos({ desde: '2026-09-13', hasta: '2026-09-13', proveedores: [], totalIngresos: 0, total: 0, pendientes: 0, unidad: 'm³' }, '2026-09-14')).toBe('No hay camiones de agregados registrados el domingo 13/09 en la recepción de insumos.');
   });
 
   it('certificados pendientes: por cliente cuando hay varios; plano con uno', () => {

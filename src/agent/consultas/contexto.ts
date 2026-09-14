@@ -61,7 +61,11 @@ export const pareceContinuacion = (texto: string): boolean => {
     /\b(manana|hoy|ayer|anteayer|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|mes|enero|febrero|marzo|abril|mayo|junio|julio|agosto|se[pt]?tiembre|octubre|noviembre|diciembre|ultim[oa]|primer[oa]?)\b/.test(t) ||
     /\b(en|de|para|con) [a-z]/.test(t);
   const empiezaComoSeguimiento = /^(y |e |que tal |en |de |para |la |el |las |los |con )/.test(t) || /^\d/.test(t);
-  return traeDato && empiezaComoSeguimiento;
+  // «¿Y Cajamarquilla?»: un «y» seguido de una o dos palabras es un cambio de
+  // dato aunque la palabra no sea de una lista (14/09: se fue al modelo y
+  // volvió con la planta de hoy).
+  const yAlgo = /^(y|e) [a-z0-9ñ]+( [a-z0-9ñ]+)?$/.test(t);
+  return (traeDato && empiezaComoSeguimiento) || yAlgo;
 };
 
 /**

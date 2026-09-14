@@ -2,6 +2,7 @@ import {
   getClientModel,
   getCompanyModel,
   getDispatchModel,
+  getInputModel,
   getKardexModel,
   getMaterialModel,
   getMediaModel,
@@ -325,6 +326,8 @@ export interface IngresoDeMaterial {
   unidad: string;
   cantidad: number;
   ingresos: number;
+  /** Camiones que llegaron y todavía no se confirmaron (no pasaron al kardex). */
+  pendientes: number;
 }
 
 export interface IngresosDeProveedor {
@@ -343,61 +346,68 @@ export interface IngresosDeAgregados {
   proveedores: IngresosDeProveedor[];
   totalIngresos: number;
   total: number;
+  pendientes: number;
   unidad: string;
 }
 
 /**
- * Lo que LLEGÓ de agregados en un rango (kardex, tipo Ingreso), por proveedor
- * (José, 14/09: «cuántos agregados llegaron hoy… organizado por proveedor»).
+ * Lo que LLEGÓ de agregados en un rango, por proveedor (José, 14/09: «cuántos
+ * agregados llegaron hoy… organizado por proveedor»).
+ *
+ * Se lee de la RECEPCIÓN DE INSUMOS (`inputs`), no del kardex: cada camión se
+ * registra ahí al llegar (`Pending`) y pasa al kardex recién al confirmarse
+ * (`Completed`). El 14/09 a las 13:02 el kardex decía «no llegó nada» con dos
+ * camiones ya registrados hace media hora («¿pero registro de insumos?»).
  * Sin valor ni costo: precios son lista negra.
  */
 export const ingresosDeAgregados = async (filtro: { desde: string; hasta: string; companyId?: string }): Promise<IngresosDeAgregados> => {
-  const [Material, Kardex, nombres] = await Promise.all([getMaterialModel(), getKardexModel(), nombresDeEmpresas()]);
+  const [Input, nombres] = await Promise.all([getInputModel(), nombresDeEmpresas()]);
   const empresas = filtro.companyId ? [filtro.companyId] : EMPRESAS;
-  const materiales = (await Material.find({ companyId: { $in: empresas } }).select('companyId name unit').lean()) as Doc[];
-  const agregados = new Map(materiales.filter((m) => esAgregado(texto(m.name), texto(m.unit))).map((m) => [String(m._id), m]));
   const inicio = new Date((instanteArranque(filtro.desde, '00:00') ?? Date.now()) - 12 * 3_600_000);
   const fin = new Date((instanteArranque(filtro.hasta, '00:00') ?? Date.now()) + 36 * 3_600_000);
-  const docs = (await Kardex.find({
+  // `arriveDate` vive como texto ISO (y en algún doc viejo como Date): se piden las dos formas.
+  const docs = (await Input.find({
     companyId: { $in: empresas },
-    materialId: { $in: [...agregados.keys()] },
-    type: 'Ingreso',
-    status: { $ne: 'deleted' },
-    $or: [{ date: { $gte: inicio, $lt: fin } }, { date: { $gte: inicio.toISOString(), $lt: fin.toISOString() } }],
+    status: { $ne: 'Deleted' },
+    $or: [{ arriveDate: { $gte: inicio.toISOString(), $lt: fin.toISOString() } }, { arriveDate: { $gte: inicio, $lt: fin } }],
   })
-    .select('companyId materialId quantity date providerName vendorProviderName description')
-    .sort({ date: 1 })
+    .select('companyId material m3 arriveDate status providerName vendorProviderName')
+    .sort({ arriveDate: 1 })
     .limit(500)
     .lean()) as Doc[];
   const enRango = docs.filter((d) => {
-    const dia = fechaDe(d.date);
-    return dia >= filtro.desde && dia <= filtro.hasta;
+    const dia = fechaDe(d.arriveDate);
+    return dia >= filtro.desde && dia <= filtro.hasta && esAgregado(texto(d.material), 'm3');
   });
   const porProveedor = new Map<string, IngresosDeProveedor>();
   for (const d of enRango) {
-    const m = agregados.get(String(d.materialId));
-    if (!m) continue;
     const vendedor = texto(d.vendorProviderName) || texto(d.providerName) || 'sin proveedor';
     const transportista = texto(d.providerName) && texto(d.providerName) !== vendedor ? texto(d.providerName) : undefined;
     const empresa = nombres.get(String(d.companyId)) || String(d.companyId);
-    const unidad = texto(m.unit).replace(/^m3$/i, 'm³') || 'm³';
     const clave = `${vendedor}|${empresa}`;
-    const prov = porProveedor.get(clave) ?? { proveedor: vendedor, transportista, empresa, materiales: [], total: 0, unidad };
-    const material = texto(m.name).toUpperCase();
-    const fila = prov.materiales.find((x) => x.material === material) ?? (prov.materiales.push({ material, unidad, cantidad: 0, ingresos: 0 }), prov.materiales[prov.materiales.length - 1]);
-    fila.cantidad += num(d.quantity);
+    const prov = porProveedor.get(clave) ?? { proveedor: vendedor, transportista, empresa, materiales: [], total: 0, unidad: 'm³' };
+    const material = texto(d.material).toUpperCase();
+    let fila = prov.materiales.find((x) => x.material === material);
+    if (!fila) {
+      fila = { material, unidad: 'm³', cantidad: 0, ingresos: 0, pendientes: 0 };
+      prov.materiales.push(fila);
+    }
+    fila.cantidad += num(d.m3);
     fila.ingresos += 1;
-    prov.total += num(d.quantity);
+    if (texto(d.status) !== 'Completed') fila.pendientes += 1;
+    prov.total += num(d.m3);
     porProveedor.set(clave, prov);
   }
   const proveedores = [...porProveedor.values()].sort((a, b) => b.total - a.total);
+  const materiales = proveedores.flatMap((p) => p.materiales);
   return {
     desde: filtro.desde,
     hasta: filtro.hasta,
     proveedores,
-    totalIngresos: proveedores.reduce((s, p) => s + p.materiales.reduce((x, m) => x + m.ingresos, 0), 0),
+    totalIngresos: materiales.reduce((s, m) => s + m.ingresos, 0),
     total: proveedores.reduce((s, p) => s + p.total, 0),
-    unidad: proveedores[0]?.unidad ?? 'm³',
+    pendientes: materiales.reduce((s, m) => s + m.pendientes, 0),
+    unidad: 'm³',
   };
 };
 

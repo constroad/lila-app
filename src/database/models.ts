@@ -195,6 +195,18 @@ export async function getProviderModel(): Promise<Model<Record<string, unknown>>
   return providerModel;
 }
 
+let inputModel: Model<Record<string, unknown>> | null = null;
+
+/** Recepción de insumos del Portal (loose, solo lectura): cada camión que llega, antes y después de pasar al kardex. */
+export async function getInputModel(): Promise<Model<Record<string, unknown>>> {
+  if (inputModel) return inputModel;
+  const conn = await getSharedConnection();
+  inputModel =
+    (conn.models.Input as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Input', looseSchema, 'inputs');
+  return inputModel;
+}
+
 /** Movimientos del kardex de materiales del Portal (loose, solo lectura). Colección `kardexes`. */
 export async function getKardexModel(): Promise<Model<Record<string, unknown>>> {
   if (kardexModel) return kardexModel;
