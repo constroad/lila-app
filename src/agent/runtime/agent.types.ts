@@ -14,6 +14,8 @@ export interface AgentBotConfig {
   handoffPauseMinutes?: number;
   /** JID (grupo o persona) al que se avisan los leads y las escaladas. */
   ownerNotifyTarget?: string;
+  /** El guion de preguntas del vertical (`ventas/guion.asfalto.ts`); ausente = el default en código. */
+  guion?: unknown;
 }
 
 export interface AgentInboundMessage {
@@ -54,6 +56,7 @@ export interface OutboundPersistInput {
   conversationId: string;
   text: string;
   sentAt: Date;
+  channelMessageId?: string;
 }
 
 export interface ReplyInput {

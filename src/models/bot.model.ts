@@ -21,6 +21,8 @@ export interface IBotConfig {
   testNumbers?: string[];
   handoffPauseMinutes: number;
   ownerNotifyTarget?: string;
+  /** Guion de preguntas del agente de ventas (forma en `agent/ventas/guion.asfalto.ts`); ausente = default en código. */
+  guion?: unknown;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -44,6 +46,7 @@ export const BotConfigSchema = new Schema<IBotConfig>(
     testNumbers: { type: [String], default: undefined },
     handoffPauseMinutes: { type: Number, default: 30 },
     ownerNotifyTarget: { type: String },
+    guion: { type: Schema.Types.Mixed },
   },
   { collection: 'bot_configs', timestamps: true }
 );
@@ -129,10 +132,12 @@ export const BotConversationMessageSchema = new Schema<IBotConversationMessage>(
   { collection: 'bot_conversation_messages', timestamps: { createdAt: true, updatedAt: false } }
 );
 BotConversationMessageSchema.index({ conversationId: 1, createdAt: 1 });
-// Idempotencia de reintentos del canal: mismo mensaje = un solo turno.
+// Idempotencia de reintentos del canal: mismo mensaje = un solo turno. PARCIAL
+// (no «sparse»): un índice compuesto sparse indexa el documento si cualquiera de
+// sus campos existe, y los salientes sin `channelMessageId` chocaban entre sí.
 BotConversationMessageSchema.index(
   { companyId: 1, channelMessageId: 1 },
-  { unique: true, sparse: true }
+  { unique: true, partialFilterExpression: { channelMessageId: { $exists: true } } }
 );
 // Solo el DETALLE expira (90 d); conversación y pedidos no (spec §3.5).
 BotConversationMessageSchema.index({ createdAt: 1 }, { expireAfterSeconds: MESSAGE_TTL_SECONDS });

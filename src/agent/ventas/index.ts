@@ -15,7 +15,8 @@ import { crearProveedorOpenAiCompat } from './openai-compat.provider.js';
 import { crearProveedorQwen } from './qwen.provider.js';
 import { modeloDescargado } from '../llm/modelo.js';
 import { extraerConQwen } from './extraccion.js';
-import { paso, validarExtraccion, type EstadoGuiado } from './guiado.js';
+import { leadDe, paraGuardar, paso, validarExtraccion, type EstadoGuiado } from './guiado.js';
+import { guionDe } from './guion.asfalto.js';
 import { clientePorTelefono } from './cliente.js';
 import { HERRAMIENTAS_VENTAS, type DatosLead } from './herramientas.js';
 import type { ProveedorLlm } from './llm.types.js';
@@ -86,13 +87,17 @@ const enCola = <T>(clave: string, tarea: () => Promise<T>): Promise<T> => {
 
 const telefonoLegible = (t: string): string => `+${t.replace(/(\d{2})(\d{3})(\d{3})(\d{3})$/, '$1 $2 $3 $4')}`;
 
-const textoLead = (lead: DatosLead, telefono: string, nombreCliente?: string): string => {
+/** Lo que sabe el bot del lead, más los detalles del guion (espesor, base, imprimación…) cuando los hay. */
+type LeadParaAviso = DatosLead & { campos?: Array<[string, string]> };
+
+const textoLead = (lead: LeadParaAviso, telefono: string, nombreCliente?: string): string => {
   const servicio = { venta: 'Venta de mezcla', colocacion: 'Colocación / asfaltado', transporte: 'Transporte', fabricacion: 'Fabricación (derivar a ingeniero)', otro: 'Otro' }[lead.servicio ?? 'otro'];
   return [
     `🧲 *${lead.listo ? 'Lead listo para cotizar' : 'Nuevo lead'} — ${CONSTROAD.nombre}*`,
     `👤 ${lead.nombre || nombreCliente || 'sin nombre'}${lead.empresa ? ` · ${lead.empresa}` : ''} · ${telefonoLegible(telefono)}`,
     `🏗 ${servicio}${lead.detalle ? ` — ${lead.detalle}` : ''}`,
     [lead.cantidad ? `📐 ${lead.cantidad}` : '', lead.distrito ? `📍 ${lead.distrito}` : '', lead.fecha ? `📅 ${lead.fecha}` : ''].filter(Boolean).join(' · '),
+    lead.campos?.length ? `🧾 ${lead.campos.map(([etiqueta, valor]) => `${etiqueta}: ${valor}`).join(' · ')}` : '',
     'Para tomarlo, responde al cliente desde el WhatsApp de Constroad: el bot se calla 30 min en esa conversación.',
   ]
     .filter(Boolean)
@@ -184,19 +189,21 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
   });
 };
 
+/** Guarda el estado y avisa al dueño si hay con qué (servicio y lugar o cantidad), una vez por día, y otra vez al quedar listo. */
 const notificarLead = async (
-  lead: DatosLead,
+  lead: LeadParaAviso,
+  guardar: Record<string, unknown>,
   ctx: { conversationId: string; botConfig: ReplyInput['botConfig']; customerPhone: string; conversacion: { leadNotifiedAt?: Date; lead?: Record<string, unknown> }; nombreCliente?: string },
   deps: DepsVentas
 ): Promise<boolean> => {
   const conQue = Boolean(lead.servicio && (lead.distrito || lead.cantidad));
   const avisadoHoy = ctx.conversacion.leadNotifiedAt && Date.now() - ctx.conversacion.leadNotifiedAt.getTime() < 24 * 3_600_000;
   const notificar = Boolean(ctx.botConfig.ownerNotifyTarget) && (lead.listo || conQue) && (!avisadoHoy || Boolean(lead.listo && !ctx.conversacion.lead?.listo));
-  await guardarLeadEnConversacion(ctx.conversationId, lead as Record<string, unknown>, notificar);
+  await guardarLeadEnConversacion(ctx.conversationId, guardar, notificar);
   if (notificar) {
     await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), textoLead(lead, ctx.customerPhone, ctx.nombreCliente));
     ctx.conversacion.leadNotifiedAt = new Date();
-    ctx.conversacion.lead = lead as Record<string, unknown>;
+    ctx.conversacion.lead = guardar;
   }
   return notificar;
 };
@@ -214,26 +221,34 @@ const turnoGuiado = async (
   deps: DepsVentas
 ): Promise<string> => {
   const estado = (ctx.conversacion.lead ?? {}) as EstadoGuiado;
+  // El guion de la empresa (`bot_configs.guion`) o el default del vertical.
+  const guion = guionDe(ctx.botConfig.guion);
   // Todo lo que el cliente dijo desde la última respuesta del bot (la ráfaga).
   let desde = ctx.mensajes.length;
   while (desde > 0 && ctx.mensajes[desde - 1].role === 'customer') desde--;
   const texto = ctx.mensajes.slice(desde).map((m) => String(m.text || '')).join('\n');
   const ultimaBot = [...ctx.mensajes].reverse().find((m) => m.role === 'bot')?.text;
   const inicio = Date.now();
-  const extraido = validarExtraccion(await extraerConQwen(texto, { ultimaPreguntaBot: ultimaBot, resumenEnviado: Boolean(estado.resumenEnviado) }), texto);
-  const p = paso(estado, extraido, CONSTROAD, ctx.cliente, ctx.enHorario, texto);
-  if (p.guardar) await notificarLead(p.estado, { ...ctx, nombreCliente: ctx.cliente?.nombre ?? ctx.conversacion.customerName }, deps);
-  else await guardarLeadEnConversacion(ctx.conversationId, p.estado as Record<string, unknown>, false);
+  const extraido = validarExtraccion(await extraerConQwen(texto, { ultimaPreguntaBot: ultimaBot, resumenEnviado: Boolean(estado.resumenEnviado) }), texto, guion);
+  const p = paso(estado, extraido, CONSTROAD, ctx.cliente, ctx.enHorario, texto, guion);
+  const lead = leadDe(guion, p.estado);
+  const guardar = paraGuardar(guion, p.estado);
+  if (p.guardar) await notificarLead(lead, guardar, { ...ctx, nombreCliente: ctx.cliente?.nombre ?? ctx.conversacion.customerName }, deps);
+  else await guardarLeadEnConversacion(ctx.conversationId, guardar, false);
+  const quien = lead.nombre ?? ctx.cliente?.nombre ?? ctx.conversacion.customerName;
   if (p.notaNueva && ctx.botConfig.ownerNotifyTarget) {
-    await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), `➕ *${p.estado.nombre ?? ctx.cliente?.nombre ?? telefonoLegible(ctx.customerPhone)} agregó:* «${p.notaNueva}»`);
+    await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), `➕ *${quien ?? telefonoLegible(ctx.customerPhone)} agregó:* «${p.notaNueva}»`);
   }
   if (p.escalar) {
     await pausarConversacion(ctx.conversationId, ctx.botConfig.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN, 'escalada');
     if (ctx.botConfig.ownerNotifyTarget) {
-      await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), `🙋 *Cliente pide atención — ${CONSTROAD.nombre}*\n👤 ${p.estado.nombre ?? ctx.cliente?.nombre ?? ctx.conversacion.customerName ?? 'sin nombre'} · ${telefonoLegible(ctx.customerPhone)}\nMotivo: ${p.escalar}\nÚltimo mensaje: «${texto.slice(0, 160)}»\nEl bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
+      await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), `🙋 *Cliente pide atención — ${CONSTROAD.nombre}*\n👤 ${quien ?? 'sin nombre'} · ${telefonoLegible(ctx.customerPhone)}\nMotivo: ${p.escalar}\nÚltimo mensaje: «${texto.slice(0, 160)}»\nEl bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
     }
   }
-  logger.info(`[maria] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ''}: guiado · extraído ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v]) => v && v !== '')))} · ${((Date.now() - inicio) / 1000).toFixed(1)} s${p.escalar ? ` · ESCALA (${p.escalar})` : ''}`);
+  const respondido = Object.entries(p.estado.respuestas ?? {}).map(([k, v]) => `${k}=${v}`).join(' ');
+  logger.info(
+    `[maria] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ''}: guiado · extraído ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v]) => v && v !== '')))} · ${p.estado.servicio ?? 'sin servicio'}${respondido ? ` · ${respondido}` : ''} · pregunta ${p.estado.ultimoCampo ?? (p.estado.resumenEnviado ? 'resumen' : p.estado.cerrado ? 'cerrado' : 'servicio')} · ${((Date.now() - inicio) / 1000).toFixed(1)} s${p.escalar ? ` · ESCALA (${p.escalar})` : ''}`
+  );
   return p.texto;
 };
 

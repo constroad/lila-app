@@ -520,6 +520,71 @@ que revelar. Probado con la conversación de un lead real (600 m², Lurín,
 precio, inyección, nombre, confirmación, pedido extra tras el cierre).
 Con un modelo grande (Anthropic/Groq) se activa solo el modo conversacional.
 
+**El GUION (14/09, segunda vuelta; José: «debe preguntar si va a hacer
+imprimación, si es sí preguntar si es riego de liga o MC-30, falta
+bastante»).** La primera versión preguntaba cantidad/distrito/fecha/nombre y
+nada más. Ahora las preguntas viven en un guion de datos
+(`ventas/guion.asfalto.ts`, tomado de `specs/ESPECIFICACIONES_IA_BOT.md`
+§1–3), por servicio y en orden, con condición (`cuando`):
+- **Colocación:** área → distrito → espesor (1"/2"/3", o por el tipo de
+  vehículo) → base (preparada / terreno natural) → superficie (base nueva /
+  pavimento existente, solo si está preparada) → imprimación (sí/no) → si sí,
+  imprimante (MC-30 / riego de liga) y aplicación (bastón / barra) → fresado
+  (solo sobre pavimento existente) → terreno (plano / pendiente / calles /
+  tiro largo). Cada pregunta tiene `pista` (si no se entendió) y
+  `explicacion` («¿qué es la imprimación?» se contesta y se vuelve a
+  preguntar).
+- **Venta:** proyecto → tráfico (y con eso RECOMIENDA mezcla y espesor, como
+  el spec) → mezcla (caliente / frío / modificada) → espesor → entrega
+  (planta / puesto en obra) → distrito (solo puesto en obra) → m³.
+- **Transporte:** carga → descarga → mezcla → m³ → restricciones.
+- **Fabricación:** deriva a ingeniero. **Cierre (todos):** fecha, nombre.
+
+Cómo se lee una respuesta: contra LA PREGUNTA QUE SE HIZO, sin modelo —
+sí/no, una opción por sus `alias` («la segunda», «con barra», «maquinaria
+pesada» → 3"), un número con unidad, o texto corto—. Las opciones con
+`senal` (MC-30, riego de liga, «sin fresado», «en caliente», «puesto en
+obra»…) se reconocen en cualquier mensaje, así «asfaltar 3000 m² en Ate,
+base nueva con imprimación MC-30 y barra» salta todo eso. Qwen aporta lo
+suelto (cantidad, lugar, fecha, nombre/empresa), validado contra el texto.
+Reglas que salieron del smoke con Qwen real: el servicio se fija por las
+palabras que lo NOMBRAN (un lugar como «estacionamiento» no lo fija: se
+pregunta «¿solo la mezcla, que la coloquemos, o transporte?»); se cambia
+solo si el cliente nombra otro y no está respondiendo la pregunta («¿y si
+es asfaltado para 3000 m²?» sí; «40 cubos» o «Transportes Paredes» no); una
+pregunta del cliente no se guarda como respuesta; un número no se inventa
+(a la segunda queda «por confirmar»); la misma pregunta tres veces sin
+respuesta se deja al asesor; tras el resumen, «mejor 2 pulgadas» corrige y
+se vuelve a resumir; tras el cierre, un pedido nuevo abre otro lead con el
+mismo nombre y empresa. `quierePersona` es solo por reglas (el modelo lo
+inventó con «soy Jose Zena de Constroad Ingenieros SAC» y escalaba).
+
+**Dónde se define cada cosa (respuesta a José):**
+- Las preguntas y sus opciones: `guion.asfalto.ts` (default en código). Si
+  hay `bot_configs.guion` para la empresa (Mongo), reemplaza el default
+  entero (validado por forma; sin deploy). El panel de Portal para editarlo
+  es F4.
+- Los textos fijos (saludo, precio, cierre, escalada): `guiado.ts`.
+- La memoria: `bot_conversations.lead` (servicio + `respuestas` por campo +
+  banderas: resumen enviado, cerrado, pausas) y `bot_conversation_messages`
+  (los mensajes, TTL 90 días).
+- Los datos del cliente: `clients` por teléfono (últimos 9 dígitos) y sus
+  últimos `orders` (`ventas/cliente.ts`); un cliente conocido no da su
+  nombre.
+- El aviso al dueño lleva también los campos del guion (🧾 Espesor: 2" ·
+  Base: preparada · Imprimación: sí · …).
+
+Estado guardado ANTES del guion (campos sueltos `cantidad/distrito/fecha`)
+se migra al abrir la conversación: cantidad y lugar se conservan; la fecha
+solo si parece fecha (el modelo había guardado «asfaltado para 3000m2»).
+
+**Verificado:** 19 tests en `guiado.test.ts` (los tres servicios de punta a
+punta, cambios de servicio, corrección tras el resumen, migración,
+inyección, escalada) y smoke con Qwen real de las tres conversaciones
+(`scratchpad/ventas-guion.mts`), 1,5–2,5 s por mensaje con el modelo
+cargado. **No verificado:** el guion sobreescrito desde `bot_configs.guion`
+en producción (solo la validación de forma en test); el reabrir tras 7 días.
+
 **Seguridad (pregunta de José, 14/09):** (1) el tenant sale del NÚMERO que
 recibe (la sesión), nunca del mensaje; cada lectura lleva ese `companyId`
 (clientes, pedidos, conversaciones) — esa es la RLS; (2) allowlist
@@ -537,7 +602,7 @@ nada fuera de su conversación; (5) el dueño lo apaga desde WhatsApp.
    asphalt --enable --test <número de prueba> --notify <jid de error tracking>
    --show`.
 3. Reiniciar lila (deploy o `launchctl`). Escribir al número de Constroad
-   desde el número de prueba. Log: `grep '\[ventas\]' logs/combined.log`.
+   desde el número de prueba. Log: `grep '\[maria\]' logs/combined.log`.
 4. Abrir a todos: `--test all`. Apagar: `!bot off` desde el WhatsApp de
    Constroad, o `--disable`.
 

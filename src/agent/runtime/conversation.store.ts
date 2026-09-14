@@ -3,6 +3,7 @@
  * El store liviano de Baileys NO guarda mensajes a propósito — estas
  * colecciones son la única fuente del historial conversacional.
  */
+import { randomUUID } from 'node:crypto';
 import {
   getBotConversationMessageModel,
   getBotConversationModel,
@@ -65,11 +66,18 @@ export async function saveInboundMessage(
 
 export async function saveOutboundMessage(entry: OutboundPersistInput): Promise<void> {
   const messageModel = await getBotConversationMessageModel();
+  // Con id propio SIEMPRE: el índice único {companyId, channelMessageId} es
+  // «sparse» pero compuesto, y un compuesto sparse indexa el documento si
+  // CUALQUIER campo existe — así que dos salientes sin id de la misma empresa
+  // chocaban (E11000) y el segundo mensaje del bot no se guardaba. El 14/09
+  // María contestó bien pero «olvidó» lo que había dicho: la ráfaga siguiente
+  // volvía a incluir el mensaje anterior del cliente.
   await messageModel.create({
     conversationId: entry.conversationId,
     companyId: entry.companyId,
     role: 'bot',
     text: entry.text,
+    channelMessageId: entry.channelMessageId ?? `out-${randomUUID()}`,
   });
   const conversationModel = await getBotConversationModel();
   await conversationModel.updateOne(
@@ -131,7 +139,7 @@ export async function reanudarConversacion(conversationId: string): Promise<void
 
 export async function guardarMensajeDueno(companyId: string, conversationId: string, text: string): Promise<void> {
   const messageModel = await getBotConversationMessageModel();
-  await messageModel.create({ conversationId, companyId, role: 'owner', text });
+  await messageModel.create({ conversationId, companyId, role: 'owner', text, channelMessageId: `owner-${randomUUID()}` });
   const conversationModel = await getBotConversationModel();
   await conversationModel.updateOne({ _id: conversationId }, { $set: { lastMessageAt: new Date() }, $inc: { messageCount: 1 } });
 }

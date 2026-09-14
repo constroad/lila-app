@@ -86,6 +86,7 @@ async function resolveSessionContext(
             testNumbers: stored.testNumbers,
             handoffPauseMinutes: stored.handoffPauseMinutes,
             ownerNotifyTarget: stored.ownerNotifyTarget,
+            guion: stored.guion,
           }
         : null;
     }
