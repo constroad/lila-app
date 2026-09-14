@@ -154,6 +154,8 @@ const trackWhatsAppUsage = async (
 
 /** LID → número por sesión (ver `telefonoDeLid`). */
 const mapasLid = new Map<string, { porLid: Map<string, string>; at: number }>();
+/** número → LID por sesión (ver `lidDeTelefono`). */
+const lidsPorTelefono = new Map<string, Map<string, string | null>>();
 
 export const WhatsAppDirectService = {
   /**
@@ -822,6 +824,32 @@ export const WhatsAppDirectService = {
       mapasLid.set(id, mapa);
     }
     return mapa.porLid.get(clave) ?? null;
+  },
+
+  /**
+   * Número → LID, preguntándole a WhatsApp (`onWhatsApp` devuelve `lid` en
+   * 6.7.18). Es la dirección que sí se puede resolver: sirve para saber si un
+   * chat `…@lid` es el de un número conocido (la allowlist del piloto). Se
+   * cachea por sesión.
+   */
+  lidDeTelefono: async (id: string, telefono: string): Promise<string | null> => {
+    const digitos = String(telefono || '').replace(/\D/g, '');
+    if (!digitos) return null;
+    const cache = lidsPorTelefono.get(id) ?? new Map<string, string | null>();
+    if (cache.has(digitos)) return cache.get(digitos) ?? null;
+    const sock = getSession(id);
+    if (!sock) return null;
+    let lid: string | null = null;
+    try {
+      const [r] = (await sock.onWhatsApp(`${digitos}@s.whatsapp.net`)) ?? [];
+      const crudo = (r as { lid?: string } | undefined)?.lid;
+      lid = crudo ? String(crudo).replace(/:\d+@/, '@') : null;
+    } catch {
+      lid = null;
+    }
+    cache.set(digitos, lid);
+    lidsPorTelefono.set(id, cache);
+    return lid;
   },
 
   /**

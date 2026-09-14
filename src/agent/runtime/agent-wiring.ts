@@ -118,7 +118,18 @@ function buildDeps(sessionPhone: string, sock: AgentSocket): InboundRouterDeps {
     resolvePhone: async (jid) => {
       try {
         const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
-        return await WhatsAppDirectService.telefonoDeLid(sessionPhone, jid);
+        // 1) Los grupos en común; 2) la allowlist del piloto al revés: cada
+        // número permitido → su LID (WhatsApp sí contesta eso), y si el chat es
+        // uno de ellos, ese es el número. Un lead desconocido queda como LID.
+        const porGrupos = await WhatsAppDirectService.telefonoDeLid(sessionPhone, jid);
+        if (porGrupos) return porGrupos;
+        const { botConfig } = await resolveSessionContext(sessionPhone);
+        const lidBuscado = jid.replace(/:\d+@/, '@');
+        for (const numero of botConfig?.testNumbers ?? []) {
+          const lid = await WhatsAppDirectService.lidDeTelefono(sessionPhone, numero);
+          if (lid && lid === lidBuscado) return numero.replace(/\D/g, '');
+        }
+        return null;
       } catch {
         return null;
       }

@@ -6545,7 +6545,7 @@ __export(whatsapp_direct_service_exports, {
 });
 import path9 from "path";
 import fs6 from "fs/promises";
-var resolveUsageCompanyId, flushingOutbox, SEND_TIMEOUT_MS, retryStoreHabilitado, sendWithTimeout, trackWhatsAppUsage, mapasLid, WhatsAppDirectService;
+var resolveUsageCompanyId, flushingOutbox, SEND_TIMEOUT_MS, retryStoreHabilitado, sendWithTimeout, trackWhatsAppUsage, mapasLid, lidsPorTelefono, WhatsAppDirectService;
 var init_whatsapp_direct_service = __esm({
   "src/services/whatsapp-direct.service.ts"() {
     init_sessions_simple();
@@ -6606,6 +6606,7 @@ var init_whatsapp_direct_service = __esm({
       }
     };
     mapasLid = /* @__PURE__ */ new Map();
+    lidsPorTelefono = /* @__PURE__ */ new Map();
     WhatsAppDirectService = {
       /**
        * Create session with QR code
@@ -7143,6 +7144,31 @@ var init_whatsapp_direct_service = __esm({
           mapasLid.set(id, mapa);
         }
         return mapa.porLid.get(clave2) ?? null;
+      },
+      /**
+       * Número → LID, preguntándole a WhatsApp (`onWhatsApp` devuelve `lid` en
+       * 6.7.18). Es la dirección que sí se puede resolver: sirve para saber si un
+       * chat `…@lid` es el de un número conocido (la allowlist del piloto). Se
+       * cachea por sesión.
+       */
+      lidDeTelefono: async (id, telefono) => {
+        const digitos = String(telefono || "").replace(/\D/g, "");
+        if (!digitos) return null;
+        const cache3 = lidsPorTelefono.get(id) ?? /* @__PURE__ */ new Map();
+        if (cache3.has(digitos)) return cache3.get(digitos) ?? null;
+        const sock = getSession(id);
+        if (!sock) return null;
+        let lid = null;
+        try {
+          const [r39] = await sock.onWhatsApp(`${digitos}@s.whatsapp.net`) ?? [];
+          const crudo = r39?.lid;
+          lid = crudo ? String(crudo).replace(/:\d+@/, "@") : null;
+        } catch {
+          lid = null;
+        }
+        cache3.set(digitos, lid);
+        lidsPorTelefono.set(id, cache3);
+        return lid;
       },
       /**
        * Refresh groups from WhatsApp
@@ -9664,7 +9690,15 @@ function buildDeps(sessionPhone, sock) {
     resolvePhone: async (jid) => {
       try {
         const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
-        return await WhatsAppDirectService2.telefonoDeLid(sessionPhone, jid);
+        const porGrupos = await WhatsAppDirectService2.telefonoDeLid(sessionPhone, jid);
+        if (porGrupos) return porGrupos;
+        const { botConfig } = await resolveSessionContext(sessionPhone);
+        const lidBuscado = jid.replace(/:\d+@/, "@");
+        for (const numero of botConfig?.testNumbers ?? []) {
+          const lid = await WhatsAppDirectService2.lidDeTelefono(sessionPhone, numero);
+          if (lid && lid === lidBuscado) return numero.replace(/\D/g, "");
+        }
+        return null;
       } catch {
         return null;
       }
