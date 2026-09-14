@@ -115,6 +115,14 @@ function buildDeps(sessionPhone: string, sock: AgentSocket): InboundRouterDeps {
     isRateLimited: (jid, nowMs) => rateLimiter.isLimited(jid, nowMs),
     saveInbound: saveInboundMessage,
     saveOutbound: saveOutboundMessage,
+    resolvePhone: async (jid) => {
+      try {
+        const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
+        return await WhatsAppDirectService.telefonoDeLid(sessionPhone, jid);
+      } catch {
+        return null;
+      }
+    },
     // F2: el agente de ventas (vertical asfalto). Otros verticales, cuando existan, entran acá.
     reply: async (input) => {
       if (input.botConfig.vertical !== 'asphalt') return null;
@@ -191,7 +199,9 @@ export async function handleAgentMessagesUpsert(
       if (outcome === 'replied') {
         logger.info(`Agent: respondido a ${remoteJid} (sesión ${sessionPhone})`);
       } else if (outcome !== 'bot-disabled' && outcome !== 'from-me' && outcome !== 'group') {
-        logger.debug(`Agent: mensaje de ${remoteJid} → ${outcome}`);
+        // A nivel info: «no me responde» se diagnostica con esta línea (14/09: un
+        // chat @lid quedó «not-allowlisted» sin dejar rastro en el log).
+        logger.info(`[maria] mensaje de ${remoteJid} → ${outcome}`);
       }
     } catch (error) {
       logger.error(`Agent: error procesando mensaje de ${remoteJid}: ${String(error)}`);

@@ -152,6 +152,9 @@ const trackWhatsAppUsage = async (
   }
 };
 
+/** LID → número por sesión (ver `telefonoDeLid`). */
+const mapasLid = new Map<string, { porLid: Map<string, string>; at: number }>();
+
 export const WhatsAppDirectService = {
   /**
    * Create session with QR code
@@ -782,6 +785,43 @@ export const WhatsAppDirectService = {
       admins: participantes.filter((p) => p.admin === 'admin' || p.admin === 'superadmin').flatMap((p) => formas(p as never)),
       miembros: participantes.flatMap((p) => formas(p as never)),
     };
+  },
+
+  /**
+   * LID → número, con lo que la sesión ve en sus grupos. Baileys 6.7.18 entrega
+   * los chats 1:1 de muchos contactos como `…@lid` sin el número (el
+   * `sender_pn` del stanza no llega a la clave; las versiones nuevas lo traen
+   * como `remoteJidAlt`). En los metadatos de grupo cada participante sí viene
+   * con `id` (número) y `lid`, así que quien comparte un grupo con el número
+   * se resuelve; quien no, queda como LID. Se cachea 10 min por sesión.
+   */
+  telefonoDeLid: async (id: string, lid: string): Promise<string | null> => {
+    const clave = String(lid || '').replace(/:\d+@/, '@');
+    if (!clave.endsWith('@lid')) return null;
+    const ahora = Date.now();
+    let mapa = mapasLid.get(id);
+    if (!mapa || ahora - mapa.at > 10 * 60_000 || !mapa.porLid.has(clave)) {
+      const sock = getSession(id);
+      if (!sock) return null;
+      const porLid = new Map<string, string>(mapa?.porLid ?? []);
+      const grupos = WhatsAppDirectService.listGroups(id) as Array<{ id?: string }>;
+      for (const g of grupos) {
+        if (!g?.id) continue;
+        try {
+          const meta = await sock.groupMetadata(g.id);
+          for (const p of meta?.participants ?? []) {
+            const par = p as { id?: string; lid?: string };
+            if (par.lid && par.id && par.id.endsWith('@s.whatsapp.net')) porLid.set(par.lid.replace(/:\d+@/, '@'), par.id.split('@')[0].split(':')[0]);
+          }
+        } catch {
+          /* un grupo que no responde no frena a los demás */
+        }
+        if (porLid.has(clave)) break;
+      }
+      mapa = { porLid, at: ahora };
+      mapasLid.set(id, mapa);
+    }
+    return mapa.porLid.get(clave) ?? null;
   },
 
   /**

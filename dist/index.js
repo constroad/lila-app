@@ -6545,7 +6545,7 @@ __export(whatsapp_direct_service_exports, {
 });
 import path9 from "path";
 import fs6 from "fs/promises";
-var resolveUsageCompanyId, flushingOutbox, SEND_TIMEOUT_MS, retryStoreHabilitado, sendWithTimeout, trackWhatsAppUsage, WhatsAppDirectService;
+var resolveUsageCompanyId, flushingOutbox, SEND_TIMEOUT_MS, retryStoreHabilitado, sendWithTimeout, trackWhatsAppUsage, mapasLid, WhatsAppDirectService;
 var init_whatsapp_direct_service = __esm({
   "src/services/whatsapp-direct.service.ts"() {
     init_sessions_simple();
@@ -6605,6 +6605,7 @@ var init_whatsapp_direct_service = __esm({
         logger_default.warn(`Failed to track WhatsApp usage for sender ${sessionId} (${context}): ${String(error)}`);
       }
     };
+    mapasLid = /* @__PURE__ */ new Map();
     WhatsAppDirectService = {
       /**
        * Create session with QR code
@@ -7107,6 +7108,41 @@ var init_whatsapp_direct_service = __esm({
           admins: participantes.filter((p64) => p64.admin === "admin" || p64.admin === "superadmin").flatMap((p64) => formas(p64)),
           miembros: participantes.flatMap((p64) => formas(p64))
         };
+      },
+      /**
+       * LID → número, con lo que la sesión ve en sus grupos. Baileys 6.7.18 entrega
+       * los chats 1:1 de muchos contactos como `…@lid` sin el número (el
+       * `sender_pn` del stanza no llega a la clave; las versiones nuevas lo traen
+       * como `remoteJidAlt`). En los metadatos de grupo cada participante sí viene
+       * con `id` (número) y `lid`, así que quien comparte un grupo con el número
+       * se resuelve; quien no, queda como LID. Se cachea 10 min por sesión.
+       */
+      telefonoDeLid: async (id, lid) => {
+        const clave2 = String(lid || "").replace(/:\d+@/, "@");
+        if (!clave2.endsWith("@lid")) return null;
+        const ahora = Date.now();
+        let mapa = mapasLid.get(id);
+        if (!mapa || ahora - mapa.at > 10 * 6e4 || !mapa.porLid.has(clave2)) {
+          const sock = getSession(id);
+          if (!sock) return null;
+          const porLid = new Map(mapa?.porLid ?? []);
+          const grupos = WhatsAppDirectService.listGroups(id);
+          for (const g62 of grupos) {
+            if (!g62?.id) continue;
+            try {
+              const meta = await sock.groupMetadata(g62.id);
+              for (const p64 of meta?.participants ?? []) {
+                const par = p64;
+                if (par.lid && par.id && par.id.endsWith("@s.whatsapp.net")) porLid.set(par.lid.replace(/:\d+@/, "@"), par.id.split("@")[0].split(":")[0]);
+              }
+            } catch {
+            }
+            if (porLid.has(clave2)) break;
+          }
+          mapa = { porLid, at: ahora };
+          mapasLid.set(id, mapa);
+        }
+        return mapa.porLid.get(clave2) ?? null;
       },
       /**
        * Refresh groups from WhatsApp
@@ -7837,7 +7873,7 @@ async function routeInboundMessage(message, deps) {
   if (!companyId) return "no-company";
   const botConfig = await deps.getBotConfig(companyId);
   if (!botConfig || !botConfig.enabled) return "bot-disabled";
-  const customerPhone = phoneFromJid(message.remoteJid);
+  const customerPhone = (message.remoteJid.endsWith("@lid") && deps.resolvePhone ? await deps.resolvePhone(message.remoteJid) : null) ?? phoneFromJid(message.remoteJid);
   if (!matchesAllowlist(customerPhone, botConfig.testNumbers)) return "not-allowlisted";
   if (deps.isRateLimited(message.remoteJid, message.receivedAt.getTime())) {
     return "rate-limited";
@@ -9625,6 +9661,14 @@ function buildDeps(sessionPhone, sock) {
     isRateLimited: (jid, nowMs) => rateLimiter.isLimited(jid, nowMs),
     saveInbound: saveInboundMessage,
     saveOutbound: saveOutboundMessage,
+    resolvePhone: async (jid) => {
+      try {
+        const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
+        return await WhatsAppDirectService2.telefonoDeLid(sessionPhone, jid);
+      } catch {
+        return null;
+      }
+    },
     // F2: el agente de ventas (vertical asfalto). Otros verticales, cuando existan, entran acá.
     reply: async (input) => {
       if (input.botConfig.vertical !== "asphalt") return null;
@@ -9685,7 +9729,7 @@ async function handleAgentMessagesUpsert(sessionPhone, sock, upsert) {
       if (outcome === "replied") {
         logger_default.info(`Agent: respondido a ${remoteJid} (sesi\xF3n ${sessionPhone})`);
       } else if (outcome !== "bot-disabled" && outcome !== "from-me" && outcome !== "group") {
-        logger_default.debug(`Agent: mensaje de ${remoteJid} \u2192 ${outcome}`);
+        logger_default.info(`[maria] mensaje de ${remoteJid} \u2192 ${outcome}`);
       }
     } catch (error) {
       logger_default.error(`Agent: error procesando mensaje de ${remoteJid}: ${String(error)}`);

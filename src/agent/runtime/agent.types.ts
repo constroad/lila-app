@@ -79,4 +79,6 @@ export interface InboundRouterDeps {
   reply?(input: ReplyInput): Promise<string | null>;
   /** F3: un mensaje escrito desde el número del negocio (el dueño): pausa, comandos. */
   onOwnerMessage?(message: AgentInboundMessage, companyId: string | null): Promise<void>;
+  /** El número detrás de un JID `@lid` (Baileys 6.7.18 no lo trae en la clave); sin esto, los dígitos del JID. */
+  resolvePhone?(jid: string): Promise<string | null>;
 }

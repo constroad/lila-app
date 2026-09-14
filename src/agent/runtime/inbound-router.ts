@@ -68,7 +68,10 @@ export async function routeInboundMessage(
   const botConfig = await deps.getBotConfig(companyId);
   if (!botConfig || !botConfig.enabled) return 'bot-disabled';
 
-  const customerPhone = phoneFromJid(message.remoteJid);
+  // Un chat `@lid` no trae el número: se resuelve si se puede (grupos en
+  // común); si no, el LID identifica al cliente igual y la allowlist del
+  // piloto lo deja afuera (un lead de verdad, sin allowlist, entra).
+  const customerPhone = (message.remoteJid.endsWith('@lid') && deps.resolvePhone ? await deps.resolvePhone(message.remoteJid) : null) ?? phoneFromJid(message.remoteJid);
   if (!matchesAllowlist(customerPhone, botConfig.testNumbers)) return 'not-allowlisted';
 
   if (deps.isRateLimited(message.remoteJid, message.receivedAt.getTime())) {
