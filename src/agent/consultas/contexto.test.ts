@@ -1,4 +1,4 @@
-import { VIGENCIA_HILO_MS, _resetContexto, fusionar, pareceContinuacion, recordarConsulta, ultimaConsulta } from './contexto';
+import { VIGENCIA_HILO_MS, _resetContexto, fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto';
 
 /**
  * EL HILO. José, 13/09/2026: «no quiero que la mejores solo para este caso
@@ -52,5 +52,23 @@ describe('rangos y meses en el hilo', () => {
     expect(fusionar('¿y en agosto?', 'ingresos de arena en globofast este mes')).toBe('¿y en agosto? ingresos de arena en globofast');
     expect(fusionar('y la semana pasada?', 'los pedidos de cobeñas en agosto')).toBe('y la semana pasada? los pedidos de cobenas');
     expect(fusionar('y el martes pasado', 'los pedidos del martes')).toBe('y el martes pasado los pedidos del');
+  });
+});
+
+describe('pareceParaElAgente', () => {
+  it.each([
+    'Hay prpgramacion de despachos eata semana?',
+    'cuánto líquido tengo',
+    'ok y cuanto liquido tengo?',
+    'muéstrame las guías de hoy',
+    'dame el teléfono de cobeñas',
+    'qué pedidos hay el miércoles',
+    'me pasas el enlace del pedido',
+  ])('«%s» es una pregunta para el agente', (t) => {
+    expect(pareceParaElAgente(t)).toBe(true);
+  });
+
+  it.each(['gracias', 'ok', 'ya está la cuadrilla', 'listo, salió la 4', 'buenos días a todos', 'mañana llega el petróleo a las 6'])('«%s» no lo es', (t) => {
+    expect(pareceParaElAgente(t)).toBe(false);
   });
 });

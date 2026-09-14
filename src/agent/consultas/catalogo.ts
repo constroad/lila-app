@@ -97,7 +97,7 @@ export const CATALOGO: EntradaCatalogo[] = [
   {
     id: 'orders_day',
     seSatisfaceCon: ['que pedidos hay manana', 'hay produccion manana', 'que hay para hoy', 'cuales son los pedidos de hoy', 'que se produce manana'],
-    reglas: [['pedido'], ['produccion', 'manana'], ['producción', 'mañana'], ['que hay', 'manana'], ['que hay', 'mañana'], ['que hay', 'hoy'], ['que hay para']],
+    reglas: [['pedido'], ['programa'], ['producciones'], ['hay', 'produccion'], ['hay', 'producción'], ['produccion', 'manana'], ['producción', 'mañana'], ['que hay', 'manana'], ['que hay', 'mañana'], ['que hay', 'hoy'], ['que hay para']],
   },
   {
     id: 'checklist_status',

@@ -9193,7 +9193,7 @@ var init_catalogo = __esm({
       {
         id: "orders_day",
         seSatisfaceCon: ["que pedidos hay manana", "hay produccion manana", "que hay para hoy", "cuales son los pedidos de hoy", "que se produce manana"],
-        reglas: [["pedido"], ["produccion", "manana"], ["producci\xF3n", "ma\xF1ana"], ["que hay", "manana"], ["que hay", "ma\xF1ana"], ["que hay", "hoy"], ["que hay para"]]
+        reglas: [["pedido"], ["programa"], ["producciones"], ["hay", "produccion"], ["hay", "producci\xF3n"], ["produccion", "manana"], ["producci\xF3n", "ma\xF1ana"], ["que hay", "manana"], ["que hay", "ma\xF1ana"], ["que hay", "hoy"], ["que hay para"]]
       },
       {
         id: "checklist_status",
@@ -9855,7 +9855,7 @@ var init_pendientes = __esm({
 });
 
 // src/agent/consultas/contexto.ts
-var VIGENCIA_HILO_MS, hilos, k, recordarConsulta, ultimaConsulta, pareceContinuacion, fusionar;
+var VIGENCIA_HILO_MS, hilos, k, recordarConsulta, ultimaConsulta, pareceContinuacion, fusionar, pareceParaElAgente;
 var init_contexto = __esm({
   "src/agent/consultas/contexto.ts"() {
     VIGENCIA_HILO_MS = 3 * 6e4;
@@ -9893,6 +9893,12 @@ var init_contexto = __esm({
       const traeEmpresa = empresas.some((e29) => nn.includes(n44(e29)));
       if (traeEmpresa) for (const e29 of empresas) ant = ant.split(n44(e29)).join(" ");
       return `${nn} ${ant}`.replace(/\s+/g, " ").trim();
+    };
+    pareceParaElAgente = (texto2) => {
+      const t44 = String(texto2 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¡!.,]/g, " ").replace(/\s+/g, " ").trim();
+      if (!t44 || t44.split(" ").length > 25) return false;
+      if (/\?/.test(t44)) return true;
+      return /^(ok |ya |listo |y |e )?(hay|que|cual|cuales|cuanto|cuanta|cuantos|cuantas|como|donde|quien|quienes|a que hora|muestrame|muestra|dame|pasame|mandame|enviame|dime|necesito|quiero|puedes|podrias|me (muestras|pasas|mandas|das|dices))\b/.test(t44);
     };
   }
 });
@@ -12121,7 +12127,7 @@ __export(consultas_exports, {
   atenderEleccion: () => atenderEleccion,
   esConsulta: () => esConsulta
 });
-var UMBRAL_RUTEO, comoParametros, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, conImagen, armarRespuesta, empresasDelPiloto, informesDeLaVista, UMBRAL_SUGERENCIA, EJEMPLO, sinRuta, atenderConsulta, atenderContinuacion, atenderEleccion;
+var UMBRAL_RUTEO, esDeUnDia, comoParametros, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, conImagen, armarRespuesta, empresasDelPiloto, informesDeLaVista, UMBRAL_SUGERENCIA, EJEMPLO, sinRuta, atenderConsulta, atenderContinuacion, atenderEleccion;
 var init_consultas = __esm({
   "src/agent/consultas/index.ts"() {
     init_logger();
@@ -12143,6 +12149,7 @@ var init_consultas = __esm({
     init_tiempo();
     init_detector();
     UMBRAL_RUTEO = 0.88;
+    esDeUnDia = (clave2) => clave2 === "orders_day" || clave2 === "dispatch_summary" || clave2 === "day_progress";
     comoParametros = (a49) => ({
       ...a49.fecha ? { fecha: a49.fecha } : {},
       ...a49.unitNumber ? { unitNumber: a49.unitNumber } : {},
@@ -12323,9 +12330,12 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       }
       const eleccion = await elegirHerramienta(pregunta, ultima?.pregunta);
       if (eleccion) {
-        if (esHerramientaDeDatos(eleccion.herramienta)) {
-          recordarConsulta({ quien, grupo, clave: eleccion.herramienta, pregunta });
-          return { clave: null, pregunta, respuesta: await responderConDatos(eleccion.herramienta, eleccion.argumentos, pregunta, quien, grupo) };
+        const rango2 = esDeUnDia(eleccion.herramienta) ? argumentosDeRango(pregunta) : null;
+        if (esHerramientaDeDatos(eleccion.herramienta) || rango2) {
+          const herramienta2 = rango2 ? "pedidos" : eleccion.herramienta;
+          const argumentos = rango2 ?? eleccion.argumentos;
+          recordarConsulta({ quien, grupo, clave: herramienta2, pregunta });
+          return { clave: null, pregunta, respuesta: await responderConDatos(herramienta2, argumentos, pregunta, quien, grupo) };
         }
         return { clave: eleccion.herramienta, pregunta, extra: comoParametros(eleccion.argumentos) };
       }
@@ -12347,7 +12357,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       }
       return { clave: null, pregunta };
     };
-    atenderConsulta = async (texto2, quien, grupo, alcance, numeroBot) => {
+    atenderConsulta = async (texto2, quien, grupo, alcance, numeroBot, opciones = {}) => {
       try {
         await empezarAEscribir(grupo, alcance);
         let pregunta = preguntaLimpia(texto2, numeroBot);
@@ -12355,13 +12365,17 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         let clave2 = vetada ? null : rutearPorReglas(pregunta);
         let respuesta;
         let extra;
-        const rango2 = clave2 === "orders_day" ? argumentosDeRango(pregunta) : null;
+        const rango2 = esDeUnDia(clave2) ? argumentosDeRango(pregunta) : null;
         if (rango2) {
           respuesta = await responderConDatos("pedidos", rango2, pregunta, quien, grupo);
           recordarConsulta({ quien, grupo, clave: "pedidos", pregunta });
           clave2 = null;
         }
         if (!clave2 && !vetada && !respuesta) ({ clave: clave2, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo));
+        if (opciones.implicita && !clave2 && !respuesta) {
+          logger_default.info(`[agente] consulta impl\xEDcita de ${quien} sin ruta, se deja pasar: \xAB${pregunta}\xBB`);
+          return;
+        }
         respuesta = respuesta ?? await armarRespuesta(clave2, pregunta, quien, grupo, extra);
         if (clave2) recordarConsulta({ quien, grupo, clave: clave2, pregunta });
         logger_default.info(`[agente] consulta de ${quien}: \xAB${preguntaLimpia(texto2, numeroBot)}\xBB \u2192 ${clave2 ?? "none"}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
@@ -12375,8 +12389,12 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
     atenderContinuacion = async (texto2, quien, grupo, alcance) => {
       const ultima = ultimaConsulta(quien, grupo);
       if (!ultima) return false;
-      if (!pareceContinuacion(texto2) && !rutearPorReglas(preguntaLimpia(texto2))) return false;
-      await atenderConsulta(`@lila ${texto2}`, quien, grupo, alcance);
+      if (pareceContinuacion(texto2) || rutearPorReglas(preguntaLimpia(texto2))) {
+        await atenderConsulta(`@lila ${texto2}`, quien, grupo, alcance);
+        return true;
+      }
+      if (!pareceParaElAgente(texto2)) return false;
+      await atenderConsulta(`@lila ${texto2}`, quien, grupo, alcance, void 0, { implicita: true });
       return true;
     };
     atenderEleccion = async (texto2, quien, grupo, alcance) => {
@@ -12414,6 +12432,7 @@ var init_observador = __esm({
     init_persistencia();
     init_almacen();
     init_whatsapp_constants();
+    init_outgoing_messages();
     ALCANCE_TTL_MS = 5 * 6e4;
     alcanceCache = null;
     _resetAlcanceCache = () => void (alcanceCache = null);
@@ -12483,6 +12502,7 @@ var init_observador = __esm({
           if (yaVisto(`${remoteJid}|${String(raw?.key?.id || "")}`)) continue;
           if (remoteJid === GROUP_ERRORS_TRACKING) {
             if (await esDelBot(raw, sessionPhone)) continue;
+            if (findOutgoingMessage(sessionPhone, raw?.key?.id)) continue;
             const quien = String(raw?.key?.participant || "desconocido");
             const comando = comandoInterruptor(texto2);
             if (comando) {

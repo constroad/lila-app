@@ -91,6 +91,11 @@ describe('ruteo por reglas', () => {
     ['va a llover mañana en Ate?', 'weather'],
     ['hay riesgo de lluvia hoy', 'weather'],
     ['muéstrame el resumen de despachos de hoy', 'dispatch_summary'],
+    // «Programado» y «producciones» son pedidos (14/09: «hay programación de
+    // despachos esta semana?» no caía en nada); el rango lo resuelve después el índice.
+    ['hay programación de despachos esta semana?', 'orders_day'],
+    ['hay algo programado para mañana?', 'orders_day'],
+    ['qué producciones hay esta semana', 'orders_day'],
     ['@lila ayuda', 'help'],
     ['qué puedes hacer?', 'help'],
   ])('«%s» → %s', (pregunta, clave) => {

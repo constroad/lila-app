@@ -85,3 +85,24 @@ export const fusionar = (nueva: string, anterior: string, distritos: string[] = 
   if (traeEmpresa) for (const e of empresas) ant = ant.split(n(e)).join(' ');
   return `${nn} ${ant}`.replace(/\s+/g, ' ').trim();
 };
+
+/**
+ * ¿Este mensaje, de alguien que está conversando con el agente, le está
+ * PREGUNTANDO algo? Una pregunta con signo, o que empieza como pregunta o
+ * pedido («hay…», «cuánto…», «muéstrame…», «dame…»). José, 14/09, 11:41: «Hay
+ * programación de despachos esta semana?» un minuto después de preguntar por
+ * los tanques, sin respuesta: no era una continuación ni caía en una regla.
+ * Dentro del hilo, una pregunta es para el agente aunque no lo etiquete.
+ */
+export const pareceParaElAgente = (texto: string): boolean => {
+  const t = String(texto || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[¡!.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t || t.split(' ').length > 25) return false;
+  if (/\?/.test(t)) return true;
+  return /^(ok |ya |listo |y |e )?(hay|que|cual|cuales|cuanto|cuanta|cuantos|cuantas|como|donde|quien|quienes|a que hora|muestrame|muestra|dame|pasame|mandame|enviame|dime|necesito|quiero|puedes|podrias|me (muestras|pasas|mandas|das|dices))\b/.test(t);
+};

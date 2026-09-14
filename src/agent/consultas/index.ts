@@ -4,7 +4,7 @@ import { construirVista, type VistaDelDia } from './vista.js';
 import { PREGUNTA_UNIDAD, acotarArchivos, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
-import { fusionar, pareceContinuacion, recordarConsulta, ultimaConsulta } from './contexto.js';
+import { fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto.js';
 import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
 import { ALIAS_EMPRESA } from './catalogo.js';
 import { SIN_AGREGADOS, consumosDelDia, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
@@ -13,7 +13,7 @@ import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
-import { argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, responderConDatos, type Argumentos } from '../llm/index.js';
+import { argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import type { AlcanceAgente } from '../checklist/alcance.js';
@@ -32,6 +32,9 @@ export { esConsulta };
  */
 // Más alto que el del checklist: rutear mal una pregunta es peor que decir «no entendí».
 const UMBRAL_RUTEO = 0.88;
+
+/** Las consultas que hablan de UN día: con un rango en la pregunta, es la programación o el historial del rango. */
+const esDeUnDia = (clave: ClaveConsulta | null): boolean => clave === 'orders_day' || clave === 'dispatch_summary' || clave === 'day_progress';
 
 /** Lo que el modelo generativo sacó de la pregunta, en el molde de siempre. */
 const comoParametros = (a: Argumentos): Partial<Parametros> => ({
@@ -283,9 +286,14 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string): Promise<
   }
   const eleccion = await elegirHerramienta(pregunta, ultima?.pregunta);
   if (eleccion) {
-    if (esHerramientaDeDatos(eleccion.herramienta)) {
-      recordarConsulta({ quien, grupo, clave: eleccion.herramienta, pregunta });
-      return { clave: null, pregunta, respuesta: await responderConDatos(eleccion.herramienta, eleccion.argumentos, pregunta, quien, grupo) };
+    // «Hay programación de despachos esta semana?» → el modelo dice «resumen
+    // de despachos» (de un día); el rango de la pregunta manda.
+    const rango = esDeUnDia(eleccion.herramienta as ClaveConsulta) ? argumentosDeRango(pregunta) : null;
+    if (esHerramientaDeDatos(eleccion.herramienta) || rango) {
+      const herramienta = rango ? 'pedidos' : (eleccion.herramienta as HerramientaDeDatos);
+      const argumentos = rango ?? eleccion.argumentos;
+      recordarConsulta({ quien, grupo, clave: herramienta, pregunta });
+      return { clave: null, pregunta, respuesta: await responderConDatos(herramienta, argumentos, pregunta, quien, grupo) };
     }
     return { clave: eleccion.herramienta, pregunta, extra: comoParametros(eleccion.argumentos) };
   }
@@ -313,7 +321,8 @@ export const atenderConsulta = async (
   quien: string,
   grupo: string,
   alcance: AlcanceAgente,
-  numeroBot?: string
+  numeroBot?: string,
+  opciones: { implicita?: boolean } = {}
 ): Promise<void> => {
   try {
     // «Escribiendo…» desde ya: rutear, armar una imagen o leer un video toma
@@ -327,13 +336,19 @@ export const atenderConsulta = async (
     let extra: Partial<Parametros> | undefined;
     // «Qué pedidos hay esta semana»: la regla dice «pedidos de hoy», pero el
     // rango de la pregunta manda — es lo programado (o lo despachado) en ese rango.
-    const rango = clave === 'orders_day' ? argumentosDeRango(pregunta) : null;
+    const rango = esDeUnDia(clave) ? argumentosDeRango(pregunta) : null;
     if (rango) {
       respuesta = await responderConDatos('pedidos', rango, pregunta, quien, grupo);
       recordarConsulta({ quien, grupo, clave: 'pedidos', pregunta });
       clave = null;
     }
     if (!clave && !vetada && !respuesta) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo));
+    // Una consulta IMPLÍCITA (sin @lila, dentro del hilo) que no se entiende se
+    // deja pasar en silencio: puede que no fuera para el agente.
+    if (opciones.implicita && !clave && !respuesta) {
+      logger.info(`[agente] consulta implícita de ${quien} sin ruta, se deja pasar: «${pregunta}»`);
+      return;
+    }
     respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo, extra));
     if (clave) recordarConsulta({ quien, grupo, clave, pregunta });
     logger.info(`[agente] consulta de ${quien}: «${preguntaLimpia(texto, numeroBot)}» → ${clave ?? 'none'}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
@@ -357,12 +372,18 @@ export const atenderContinuacion = async (
 ): Promise<boolean> => {
   const ultima = ultimaConsulta(quien, grupo);
   if (!ultima) return false;
-  // Dos formas de seguir hablando sin volver a etiquetar al agente: un cambio
-  // de dato («¿y la 3?»), o una consulta nueva que las REGLAS reconocen con
-  // certeza («ahora el resumen de líquidos»). Solo reglas, no el modelo: en
-  // una charla entre personas un parecido no alcanza para meterse.
-  if (!pareceContinuacion(texto) && !rutearPorReglas(preguntaLimpia(texto))) return false;
-  await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance);
+  // Tres formas de seguir hablando sin volver a etiquetar al agente: un cambio
+  // de dato («¿y la 3?»), una consulta nueva que las REGLAS reconocen con
+  // certeza («ahora el resumen de líquidos»), o una PREGUNTA («¿hay
+  // programación esta semana?»). La pregunta va por todo el camino —modelo
+  // incluido— pero en silencio si no se entiende: dentro del hilo es casi
+  // seguro para el agente, y «casi» no alcanza para contestar «no lo tengo».
+  if (pareceContinuacion(texto) || rutearPorReglas(preguntaLimpia(texto))) {
+    await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance);
+    return true;
+  }
+  if (!pareceParaElAgente(texto)) return false;
+  await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance, undefined, { implicita: true });
   return true;
 };
 

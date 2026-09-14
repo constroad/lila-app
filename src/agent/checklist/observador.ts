@@ -18,6 +18,7 @@ import { apagar, comandoInterruptor, encender, hidratarInterruptor, type EstadoI
 import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje } from './persistencia.js';
 import { VENTANA_MS } from './almacen.js';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
+import { findOutgoingMessage } from '../../whatsapp/baileys/outgoing-messages.js';
 
 /**
  * El oído del agente: mira los mensajes del grupo piloto y NADA MÁS.
@@ -194,6 +195,10 @@ export const observarParaChecklist = async (
       // abajo porque es otro grupo, con otra función — no se «escucha» para hechos.
       if (remoteJid === GROUP_ERRORS_TRACKING) {
         if (await esDelBot(raw, sessionPhone)) continue;
+        // Las alertas de Portal salen por la sesión de constroad —el teléfono
+        // de José— y llegan como si las hubiera escrito él. Lo que mandamos
+        // por API queda en el registro de salientes: no es una consulta.
+        if (findOutgoingMessage(sessionPhone, raw?.key?.id)) continue;
         const quien = String(raw?.key?.participant || 'desconocido');
         const comando = comandoInterruptor(texto);
         if (comando) {
