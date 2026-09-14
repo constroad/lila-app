@@ -75,7 +75,7 @@ describe('preguntas pendientes', () => {
 
   it('la pregunta se numera y dice cómo responder', () => {
     expect(textoPregunta('¿Cuál?', ['04:00 — Globofast', '07:00 — Constroad'])).toBe(
-      '¿Cuál?\n1. 04:00 — Globofast\n2. 07:00 — Constroad\n\nRespondé con el número.'
+      '¿Cuál?\n1. 04:00 — Globofast\n2. 07:00 — Constroad\n\nResponde con el número.'
     );
   });
 });

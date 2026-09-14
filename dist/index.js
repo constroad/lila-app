@@ -9139,7 +9139,7 @@ var init_catalogo = __esm({
       {
         id: "tank_levels",
         seSatisfaceCon: ["cuantos galones tenemos en los tanques", "como estan los tanques", "cuanto pen queda", "nivel de gasohol", "cuanto petroleo hay en planta"],
-        reglas: [["galones"], ["tanque"], ["nivel"], ["queda", "pen"], ["queda", "gasohol"], ["queda", "petroleo"], ["queda", "petr\xF3leo"], ["hay", "pen"]]
+        reglas: [["galones"], ["tanque"], ["nivel"], ["liquido"], ["l\xEDquido"], ["pen"], ["gasohol"], ["gashol"], ["petroleo", "planta"], ["petr\xF3leo", "planta"], ["queda", "petroleo"], ["queda", "petr\xF3leo"], ["resumen", "liquido"], ["resumen", "l\xEDquido"], ["reporte", "liquido"], ["reporte", "l\xEDquido"]]
       },
       {
         id: "production_consume",
@@ -9149,7 +9149,7 @@ var init_catalogo = __esm({
       {
         id: "aggregates_stock",
         seSatisfaceCon: ["cuanto agregado tengo en stock", "cuanta arena hay", "stock de piedra", "tenemos agregados en cancha"],
-        reglas: [["agregado"], ["stock"], ["arena"], ["piedra"], ["cancha"]]
+        reglas: [["agregado"], ["stock"], ["arena"], ["piedra"], ["grava"], ["confitillo"], ["cancha"], ["material"]]
       },
       {
         id: "weather",
@@ -9159,7 +9159,7 @@ var init_catalogo = __esm({
       {
         id: "dispatch_summary",
         seSatisfaceCon: ["muestrame el resumen de despachos de hoy", "resumen del pedido de hoy", "listado de unidades de hoy", "como fueron los despachos", "detalle de los despachos"],
-        reglas: [["resumen"], ["listado", "unidad"], ["detalle", "despacho"], ["como fueron", "despacho"]]
+        reglas: [["resumen", "despacho"], ["resumen", "pedido"], ["resumen", "unidad"], ["resumen", "hoy"], ["resumen", "produccion"], ["resumen", "producci\xF3n"], ["listado", "unidad"], ["detalle", "despacho"], ["como fueron", "despacho"]]
       },
       {
         id: "help",
@@ -9439,9 +9439,9 @@ var init_responder = __esm({
     identificaUnidad = (params) => Boolean(params.plate || params.unitNumber || params.ordinal);
     hora = (ms2) => ms2 ? new Date(ms2).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", minute: "2-digit", hour12: false }) : "\u2014";
     unidades = (vista) => vista.orders.flatMap((o37) => o37.units.map((u66) => ({ ...u66, pedido: o37.cliente || o37.companyId })));
-    PREGUNTA_UNIDAD = "\xBFQu\xE9 unidad? Decime el n\xFAmero, la placa, o \xABla \xFAltima\xBB.";
+    PREGUNTA_UNIDAD = "\xBFDe cu\xE1l unidad? Dime el n\xFAmero, la placa o \xABla \xFAltima\xBB.";
     describeUnidad = (params) => params.plate ? `la placa ${params.plate}` : params.unitNumber ? `la unidad ${params.unitNumber}` : params.ordinal === "ultima" ? "la \xFAltima unidad" : "la primera unidad";
-    sinPedidos = (vista) => vista.orders.length === 0 ? `No hay pedidos para ${fechaLegible(vista.fecha)}.` : null;
+    sinPedidos = (vista) => vista.orders.length === 0 ? `No tengo pedidos cargados para ${fechaLegible(vista.fecha)}. Si hay producci\xF3n, todav\xEDa no est\xE1 en Portal.` : null;
     estimarFin = (salidasMs, unidadesRestantes, ahoraMs) => {
       const s59 = [...salidasMs].sort((a49, b63) => a49 - b63);
       if (s59.length < 2 || unidadesRestantes <= 0) return null;
@@ -9476,9 +9476,9 @@ var init_responder = __esm({
       "\u2022 c\xF3mo va el checklist",
       "",
       "*C\xF3mo funciona*",
-      "\u2022 Pod\xE9s preguntar con tus palabras; si no entiendo, te digo qu\xE9 s\xED puedo.",
-      "\u2022 Si hay m\xE1s de una producci\xF3n y no nombr\xE1s la empresa, te pregunto cu\xE1l: respond\xE9 con el n\xFAmero.",
-      "\u2022 Las propuestas (aviso a planta, checklist) llegan a error tracking: manten\xE9 presionado el mensaje \u2192 *Responder* \u2192 *1* para mandarlo, *3* para descartar.",
+      "\u2022 Puedes preguntar con tus palabras y seguir el hilo (\xAB\xBFy la 3?\xBB, \xAB\xBFy ma\xF1ana?\xBB). Si no entiendo, te digo qu\xE9 s\xED puedo.",
+      "\u2022 Si hay m\xE1s de una producci\xF3n y no nombras la empresa, te pregunto cu\xE1l: responde con el n\xFAmero.",
+      "\u2022 Las propuestas (aviso a planta, checklist) llegan a error tracking: mant\xE9n presionado el mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar.",
       "\u2022 `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores del grupo.",
       "",
       "No respondo precios, pagos, deudas ni datos de conductores (tel\xE9fono, licencia)."
@@ -9486,7 +9486,7 @@ var init_responder = __esm({
     responder = (clave2, ctx) => {
       const { vista, params } = ctx;
       const dia = fechaLegible(vista.fecha);
-      if (!clave2) return "Eso no lo puedo responder. Puedo decirte: qu\xE9 carro est\xE1 en planta o en campo, cu\xE1ntos m\xB3 van, a qu\xE9 hora sali\xF3 una unidad, qui\xE9n la maneja, qu\xE9 pedidos hay, y c\xF3mo va el checklist.";
+      if (!clave2) return "Eso no lo tengo. Puedo ayudarte con lo de planta y campo, unidades, pedidos, tanques, agregados, informes y clima \u2014 escribe \xABlila ayuda\xBB para ver la lista.";
       const vacio = sinPedidos(vista);
       if (vacio && clave2 !== "orders_day") return vacio;
       switch (clave2) {
@@ -9763,7 +9763,7 @@ var init_pendientes = __esm({
       pendientes2.delete(k61);
       return { pregunta: p64, indice: n43 - 1, texto: String(texto || "").trim() };
     };
-    textoPregunta = (encabezado, opciones) => [encabezado, ...opciones.map((o37, i50) => `${i50 + 1}. ${o37}`), "", "Respond\xE9 con el n\xFAmero."].join("\n");
+    textoPregunta = (encabezado, opciones) => [encabezado, ...opciones.map((o37, i50) => `${i50 + 1}. ${o37}`), "", "Responde con el n\xFAmero."].join("\n");
   }
 });
 
@@ -10240,7 +10240,7 @@ var init_weather_asphalt_forecast_service = __esm({
 });
 
 // src/agent/consultas/planta.ts
-var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, ES_LIQUIDO, materiales, textoMateriales;
+var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, ES_LIQUIDO, UNIDAD_LIQUIDA, materiales, textoMateriales;
 var init_planta = __esm({
   "src/agent/consultas/planta.ts"() {
     init_models();
@@ -10315,11 +10315,12 @@ var init_planta = __esm({
       });
       return [`\u{1F6E2} *Consumos de ${fechaLegible(fecha)}*`, "", ...bloques].join("\n\n");
     };
-    ES_LIQUIDO = /\b(pen|gasohol|petroleo|petróleo|diesel|asfalto)\b/i;
+    ES_LIQUIDO = /\b(pen|gasoh?ol|gashol|petroleo|petróleo|diesel|asfalto|aceite|emulsion|emulsión|combustible)\b/i;
+    UNIDAD_LIQUIDA = /^(gl|gls|gal|galon|galones|l|lt|lts|litros)$/i;
     materiales = async (empresas) => {
       const Mat = await getMaterialModel();
       const docs = await Mat.find({ companyId: { $in: empresas.map((e29) => e29.companyId) } }).select("companyId name quantity unit reorderPoint").sort({ name: 1 }).lean();
-      return docs.filter((d67) => !ES_LIQUIDO.test(String(d67.name || ""))).map((d67) => {
+      return docs.filter((d67) => !ES_LIQUIDO.test(String(d67.name || "")) && !UNIDAD_LIQUIDA.test(String(d67.unit || "").trim())).map((d67) => {
         const reorden = num2(d67.reorderPoint);
         return {
           empresa: empresas.find((e29) => e29.companyId === String(d67.companyId))?.nombre || String(d67.companyId),
@@ -10445,14 +10446,14 @@ var init_clima = __esm({
     };
     ICONO = { ok: "\u2705", moderate_risk: "\u26A0\uFE0F", high_risk: "\u26D4" };
     textoClimaSemanal = (p64) => {
-      if (!p64) return "No pude consultar el pron\xF3stico ahora. Prob\xE1 de nuevo en un rato.";
+      if (!p64) return "No pude consultar el pron\xF3stico ahora. Int\xE9ntalo de nuevo en un rato.";
       const lineas = [`\u{1F5D3} *Clima en ${p64.distrito} \u2014 pr\xF3ximos ${p64.dias.length} d\xEDas*`];
       for (const d67 of p64.dias) {
         const nivel = getCombinedRiskLevel(d67.probMax, d67.mm);
         const lluvia = d67.probMax >= 30 || d67.mm >= 0.5 ? `lluvia ${d67.probMax.toFixed(0)} %, ${d67.mm.toFixed(1)} mm` : "sin lluvia";
         lineas.push(`${ICONO[nivel] ?? "\u2022"} ${fechaLegible(d67.fecha)}: ${cielo(d67.codigo)}, ${d67.tMin.toFixed(0)}\u2013${d67.tMax.toFixed(0)} \xB0C, ${lluvia}`);
       }
-      lineas.push("", "\u2705 apto \xB7 \u26A0\uFE0F con precauci\xF3n \xB7 \u26D4 no apto para asfaltar. Preguntame por un d\xEDa para ver las franjas horarias.");
+      lineas.push("", "\u2705 apto \xB7 \u26A0\uFE0F con precauci\xF3n \xB7 \u26D4 no apto para asfaltar. Preg\xFAntame por un d\xEDa para ver las franjas horarias.");
       return lineas.join("\n");
     };
     textoFueraDeAlcance = (fecha) => `Para ${fechaLegible(fecha)} todav\xEDa no hay pron\xF3stico: llego hasta ${MAX_DIAS} d\xEDas adelante.`;
@@ -10478,7 +10479,7 @@ var init_clima = __esm({
     };
     hh = (h65) => `${String(h65).padStart(2, "0")}:00`;
     textoClima = (p64, ahoraHora) => {
-      if (!p64) return "No pude consultar el pron\xF3stico ahora. Prob\xE1 de nuevo en un rato.";
+      if (!p64) return "No pude consultar el pron\xF3stico ahora. Int\xE9ntalo de nuevo en un rato.";
       const { horas } = p64;
       const probMax = Math.max(...horas.map((h65) => h65.probLluvia));
       const mmTotal = horas.reduce((s59, h65) => s59 + h65.mm, 0);
@@ -10818,7 +10819,7 @@ var init_aviso = __esm({
     };
     conPiePropuesta = (texto, nombreDestino) => [
       `\u{1F4E8} *Propuesta para \xAB${nombreDestino}\xBB*`,
-      "Para mandarlo: manten\xE9 presionado este mensaje \u2192 *Responder* \u2192 *1*",
+      "Para enviarlo: mant\xE9n presionado este mensaje \u2192 *Responder* \u2192 *1*",
       "Para descartar: igual, con *3*",
       "",
       texto
@@ -11247,7 +11248,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
             tipo: "confirmar",
             continuar: async () => armarRespuesta(clave2, pregunta, quien, grupo)
           });
-          return { clave: null, pregunta, respuesta: { texto: `\xBFTe refer\xEDs a ${EJEMPLO[clave2] ?? clave2}? Respond\xE9 *s\xED* y te lo paso.` } };
+          return { clave: null, pregunta, respuesta: { texto: `\xBFQuieres que te pase ${EJEMPLO[clave2] ?? clave2}? Responde *s\xED*.` } };
         }
       }
       return { clave: null, pregunta };
@@ -11268,7 +11269,8 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
     };
     atenderContinuacion = async (texto, quien, grupo, alcance) => {
       const ultima = ultimaConsulta(quien, grupo);
-      if (!ultima || !pareceContinuacion(texto)) return false;
+      if (!ultima) return false;
+      if (!pareceContinuacion(texto) && !rutearPorReglas(preguntaLimpia(texto))) return false;
       await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance);
       return true;
     };

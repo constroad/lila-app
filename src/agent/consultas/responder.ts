@@ -83,13 +83,13 @@ const unidad = (vista: VistaDelDia, n?: number) => (n ? unidades(vista).find((u)
  * manejo en index.ts. José, 13/09: «le contesté 'la unidad 4' y me dijo que
  * no lo puede responder». Un humano no olvida lo que acaba de preguntar.
  */
-export const PREGUNTA_UNIDAD = '¿Qué unidad? Decime el número, la placa, o «la última».';
+export const PREGUNTA_UNIDAD = '¿De cuál unidad? Dime el número, la placa o «la última».';
 
 const describeUnidad = (params: Parametros): string =>
   params.plate ? `la placa ${params.plate}` : params.unitNumber ? `la unidad ${params.unitNumber}` : params.ordinal === 'ultima' ? 'la última unidad' : 'la primera unidad';
 
 const sinPedidos = (vista: VistaDelDia): string | null =>
-  vista.orders.length === 0 ? `No hay pedidos para ${fechaLegible(vista.fecha)}.` : null;
+  vista.orders.length === 0 ? `No tengo pedidos cargados para ${fechaLegible(vista.fecha)}. Si hay producción, todavía no está en Portal.` : null;
 
 export interface ContextoRespuesta {
   vista: VistaDelDia;
@@ -149,9 +149,9 @@ export const AYUDA = [
   '• cómo va el checklist',
   '',
   '*Cómo funciona*',
-  '• Podés preguntar con tus palabras; si no entiendo, te digo qué sí puedo.',
-  '• Si hay más de una producción y no nombrás la empresa, te pregunto cuál: respondé con el número.',
-  '• Las propuestas (aviso a planta, checklist) llegan a error tracking: mantené presionado el mensaje → *Responder* → *1* para mandarlo, *3* para descartar.',
+  '• Puedes preguntar con tus palabras y seguir el hilo («¿y la 3?», «¿y mañana?»). Si no entiendo, te digo qué sí puedo.',
+  '• Si hay más de una producción y no nombras la empresa, te pregunto cuál: responde con el número.',
+  '• Las propuestas (aviso a planta, checklist) llegan a error tracking: mantén presionado el mensaje → *Responder* → *1* para enviarlo, *3* para descartar.',
   '• `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores del grupo.',
   '',
   'No respondo precios, pagos, deudas ni datos de conductores (teléfono, licencia).',
@@ -161,7 +161,7 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
   const { vista, params } = ctx;
   const dia = fechaLegible(vista.fecha);
 
-  if (!clave) return 'Eso no lo puedo responder. Puedo decirte: qué carro está en planta o en campo, cuántos m³ van, a qué hora salió una unidad, quién la maneja, qué pedidos hay, y cómo va el checklist.';
+  if (!clave) return 'Eso no lo tengo. Puedo ayudarte con lo de planta y campo, unidades, pedidos, tanques, agregados, informes y clima — escribe «lila ayuda» para ver la lista.';
 
   const vacio = sinPedidos(vista);
   if (vacio && clave !== 'orders_day') return vacio;

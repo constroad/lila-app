@@ -160,7 +160,7 @@ export const describirCambio = (
 export const conPiePropuesta = (texto: string, nombreDestino: string): string =>
   [
     `📨 *Propuesta para «${nombreDestino}»*`,
-    'Para mandarlo: mantené presionado este mensaje → *Responder* → *1*',
+    'Para enviarlo: mantén presionado este mensaje → *Responder* → *1*',
     'Para descartar: igual, con *3*',
     '',
     texto,

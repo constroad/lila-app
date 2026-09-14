@@ -77,4 +77,4 @@ export const responderPendiente = (
 };
 
 export const textoPregunta = (encabezado: string, opciones: string[]): string =>
-  [encabezado, ...opciones.map((o, i) => `${i + 1}. ${o}`), '', 'Respondé con el número.'].join('\n');
+  [encabezado, ...opciones.map((o, i) => `${i + 1}. ${o}`), '', 'Responde con el número.'].join('\n');

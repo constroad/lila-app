@@ -258,7 +258,7 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string): Promise<
         tipo: 'confirmar',
         continuar: async () => armarRespuesta(clave, pregunta, quien, grupo),
       });
-      return { clave: null, pregunta, respuesta: { texto: `¿Te referís a ${EJEMPLO[clave] ?? clave}? Respondé *sí* y te lo paso.` } };
+      return { clave: null, pregunta, respuesta: { texto: `¿Quieres que te pase ${EJEMPLO[clave] ?? clave}? Responde *sí*.` } };
     }
   }
   return { clave: null, pregunta };
@@ -296,7 +296,12 @@ export const atenderContinuacion = async (
   alcance: AlcanceAgente
 ): Promise<boolean> => {
   const ultima = ultimaConsulta(quien, grupo);
-  if (!ultima || !pareceContinuacion(texto)) return false;
+  if (!ultima) return false;
+  // Dos formas de seguir hablando sin volver a etiquetar al agente: un cambio
+  // de dato («¿y la 3?»), o una consulta nueva que las REGLAS reconocen con
+  // certeza («ahora el resumen de líquidos»). Solo reglas, no el modelo: en
+  // una charla entre personas un parecido no alcanza para meterse.
+  if (!pareceContinuacion(texto) && !rutearPorReglas(preguntaLimpia(texto))) return false;
   await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance);
   return true;
 };

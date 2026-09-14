@@ -107,17 +107,17 @@ export const CATALOGO: EntradaCatalogo[] = [
   {
     id: 'tank_levels',
     seSatisfaceCon: ['cuantos galones tenemos en los tanques', 'como estan los tanques', 'cuanto pen queda', 'nivel de gasohol', 'cuanto petroleo hay en planta'],
-    reglas: [['galones'], ['tanque'], ['nivel'], ['queda', 'pen'], ['queda', 'gasohol'], ['queda', 'petroleo'], ['queda', 'petróleo'], ['hay', 'pen']],
+    reglas: [['galones'], ['tanque'], ['nivel'], ['liquido'], ['líquido'], ['pen'], ['gasohol'], ['gashol'], ['petroleo', 'planta'], ['petróleo', 'planta'], ['queda', 'petroleo'], ['queda', 'petróleo'], ['resumen', 'liquido'], ['resumen', 'líquido'], ['reporte', 'liquido'], ['reporte', 'líquido']],
   },
   {
     id: 'production_consume',
     seSatisfaceCon: ['cuanto consumio la produccion de hoy', 'consumos de la produccion', 'cuanto pen gastamos', 'consumo de gasohol de hoy', 'cuantos galones se usaron'],
-    reglas: [['consumo'], ['consumio'], ['consumió'], ['consumieron'], ['gastamos'], ['gasto', 'produccion'], ['se uso'], ['se usaron']],
+    reglas: [['consumo'], ['consumio'], ['consumió'], ['consumieron'], ['gastamos'], ['gasto', 'produccion'], ['se', 'uso'], ['se', 'usaron'], ['se', 'gasto'], ['cuanto', 'gasohol', 'hoy'], ['cuanto', 'pen', 'hoy']],
   },
   {
     id: 'aggregates_stock',
     seSatisfaceCon: ['cuanto agregado tengo en stock', 'cuanta arena hay', 'stock de piedra', 'tenemos agregados en cancha'],
-    reglas: [['agregado'], ['stock'], ['arena'], ['piedra'], ['cancha']],
+    reglas: [['agregado'], ['stock'], ['arena'], ['piedra'], ['grava'], ['confitillo'], ['cancha'], ['material']],
   },
   {
     id: 'weather',
@@ -127,7 +127,7 @@ export const CATALOGO: EntradaCatalogo[] = [
   {
     id: 'dispatch_summary',
     seSatisfaceCon: ['muestrame el resumen de despachos de hoy', 'resumen del pedido de hoy', 'listado de unidades de hoy', 'como fueron los despachos', 'detalle de los despachos'],
-    reglas: [['resumen'], ['listado', 'unidad'], ['detalle', 'despacho'], ['como fueron', 'despacho']],
+    reglas: [['resumen', 'despacho'], ['resumen', 'pedido'], ['resumen', 'unidad'], ['resumen', 'hoy'], ['resumen', 'produccion'], ['resumen', 'producción'], ['listado', 'unidad'], ['detalle', 'despacho'], ['como fueron', 'despacho']],
   },
   {
     id: 'help',

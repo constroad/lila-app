@@ -154,14 +154,14 @@ export const pronosticoSemanal = async (
 const ICONO: Record<string, string> = { ok: '✅', moderate_risk: '⚠️', high_risk: '⛔' };
 
 export const textoClimaSemanal = (p: { distrito: string; dias: DiaResumen[] } | null): string => {
-  if (!p) return 'No pude consultar el pronóstico ahora. Probá de nuevo en un rato.';
+  if (!p) return 'No pude consultar el pronóstico ahora. Inténtalo de nuevo en un rato.';
   const lineas = [`🗓 *Clima en ${p.distrito} — próximos ${p.dias.length} días*`];
   for (const d of p.dias) {
     const nivel = getCombinedRiskLevel(d.probMax, d.mm);
     const lluvia = d.probMax >= 30 || d.mm >= 0.5 ? `lluvia ${d.probMax.toFixed(0)} %, ${d.mm.toFixed(1)} mm` : 'sin lluvia';
     lineas.push(`${ICONO[nivel] ?? '•'} ${fechaLegible(d.fecha)}: ${cielo(d.codigo)}, ${d.tMin.toFixed(0)}–${d.tMax.toFixed(0)} °C, ${lluvia}`);
   }
-  lineas.push('', '✅ apto · ⚠️ con precaución · ⛔ no apto para asfaltar. Preguntame por un día para ver las franjas horarias.');
+  lineas.push('', '✅ apto · ⚠️ con precaución · ⛔ no apto para asfaltar. Pregúntame por un día para ver las franjas horarias.');
   return lineas.join('\n');
 };
 
@@ -193,7 +193,7 @@ export const franjasDeRiesgo = (horas: Hora[]): Array<{ desde: number; hasta: nu
 const hh = (h: number): string => `${String(h).padStart(2, '0')}:00`;
 
 export const textoClima = (p: PronosticoDia | null, ahoraHora: number): string => {
-  if (!p) return 'No pude consultar el pronóstico ahora. Probá de nuevo en un rato.';
+  if (!p) return 'No pude consultar el pronóstico ahora. Inténtalo de nuevo en un rato.';
   const { horas } = p;
   const probMax = Math.max(...horas.map((h) => h.probLluvia));
   const mmTotal = horas.reduce((s, h) => s + h.mm, 0);

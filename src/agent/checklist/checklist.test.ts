@@ -217,7 +217,7 @@ describe('el aviso al grupo de operaciones', () => {
     const propuesta = conPiePropuesta(texto, 'Inframaq Planta');
 
     expect(propuesta).toContain('📨 *Propuesta para «Inframaq Planta»*');
-    expect(propuesta).toContain('mantené presionado este mensaje → *Responder* → *1*');
+    expect(propuesta).toContain('mantén presionado este mensaje → *Responder* → *1*');
     expect(propuesta.endsWith(texto)).toBe(true);
   });
 

@@ -35,7 +35,7 @@ const hoy = { day: 'today' as const };
 
 describe('responder', () => {
   it('fuera del catálogo: una respuesta fija que dice qué SÍ puede', () => {
-    expect(responder(null, { vista, params: hoy })).toContain('Eso no lo puedo responder');
+    expect(responder(null, { vista, params: hoy })).toContain('Eso no lo tengo');
   });
 
   it('planta: qué carga y cuál fue la última en salir', () => {
@@ -59,7 +59,7 @@ describe('responder', () => {
     expect(responder('unit_departure', { vista, params: { ...hoy, unitNumber: 1 } })).toContain('salió a las *05:32*');
     expect(responder('unit_departure', { vista, params: { ...hoy, unitNumber: 4 } })).toContain('está cargando');
     expect(responder('unit_departure', { vista, params: { ...hoy, unitNumber: 9 } })).toContain('No encuentro la unidad 9');
-    expect(responder('unit_departure', { vista, params: hoy })).toContain('¿Qué unidad?');
+    expect(responder('unit_departure', { vista, params: hoy })).toContain('¿De cuál unidad?');
   });
 
   it('conductor: nombre y placa, y NADA más', () => {
@@ -77,7 +77,7 @@ describe('responder', () => {
 
   it('sin pedidos, lo dice y no inventa unidades', () => {
     const vacia: VistaDelDia = { fecha: '2026-09-14', computedAt: 0, orders: [] };
-    expect(responder('plant_current_unit', { vista: vacia, params: hoy })).toBe('No hay pedidos para lunes 14/09.');
+    expect(responder('plant_current_unit', { vista: vacia, params: hoy })).toContain('No tengo pedidos cargados para lunes 14/09');
   });
 
   it('checklist: confirmado y sin confirmar en palabras de obra', () => {
@@ -98,7 +98,7 @@ describe('responder', () => {
   });
 
   it('sin unidad, pregunta cuál (y acepta número, placa o «la última»)', () => {
-    expect(responder('unit_departure', { vista, params: hoy })).toBe('¿Qué unidad? Decime el número, la placa, o «la última».');
+    expect(responder('unit_departure', { vista, params: hoy })).toBe('¿De cuál unidad? Dime el número, la placa o «la última».');
   });
 
   it('media: la unidad se encuentra por placa o por número', () => {
@@ -106,7 +106,7 @@ describe('responder', () => {
     expect(unidadPor(vista, { ...hoy, unitNumber: 3 })?.plate).toBe('ALC 812');
     expect(unidadPor(vista, { ...hoy, plate: 'ZZZ999' })).toBeUndefined();
     expect(responder('unit_media', { vista, params: { ...hoy, plate: 'AZJ910' } })).toContain('*Unidad 1* (AZJ 910)');
-    expect(responder('unit_media', { vista, params: hoy })).toContain('¿Qué unidad?');
+    expect(responder('unit_media', { vista, params: hoy })).toContain('¿De cuál unidad?');
   });
 
   /** El presupuesto por respuesta: fotos, videos y documentos por separado. */
@@ -195,6 +195,8 @@ describe('ayuda', () => {
     expect(responder('help', { vista, params: hoy })).toBe(AYUDA);
     expect(AYUDA).toContain('!lila off');
     expect(AYUDA).toContain('Responder');
+    // Tuteo peruano, no voseo: la gente del grupo escribe «muéstrame», no «mostrame».
+    expect(AYUDA).not.toMatch(/\b(decime|respondé|mantené|probá|podés)\b/);
     expect(AYUDA).toContain('No respondo precios');
   });
 });
