@@ -1,4 +1,4 @@
-import { esConsulta, extraerParametros, fechaDe, normalizarPlaca, preguntaLimpia, rutearPorReglas, sumarDias } from './catalogo';
+import { especificidadDeRegla, esConsulta, extraerParametros, fechaDe, normalizarPlaca, preguntaLimpia, rutearPorReglas, sumarDias } from './catalogo';
 
 /**
  * EL CATÁLOGO ES CERRADO Y EL RUTEO SE PUEDE LEER. Cada pregunta real de José
@@ -98,6 +98,7 @@ describe('ruteo por reglas', () => {
     ['qué distritos están propensos a lluvia esta semana', 'weather_districts'],
     ['en qué distritos va a llover mañana', 'weather_districts'],
     ['cómo estará el clima para planta esta semana', 'weather'],
+    ['y el clima en la molina y cajamarquilla en planta para asfaltar mañana?', 'weather'],
     ['hay algo programado para mañana?', 'orders_day'],
     ['qué producciones hay esta semana', 'orders_day'],
     ['@lila ayuda', 'help'],
@@ -218,5 +219,13 @@ describe('parámetros', () => {
   it('hoy por defecto, mañana si lo dice', () => {
     expect(extraerParametros('qué pedidos hay').day).toBe('today');
     expect(extraerParametros('qué pedidos hay mañana').day).toBe('tomorrow');
+  });
+});
+
+describe('especificidadDeRegla', () => {
+  it('cuenta las palabras de la mejor regla que casa', () => {
+    expect(especificidadDeRegla('y el clima en la molina y cajamarquilla en planta para asfaltar mañana?')).toBe(2); // clima + planta
+    expect(especificidadDeRegla('cuántos m3 van')).toBe(1);
+    expect(especificidadDeRegla('hola qué tal')).toBe(0);
   });
 });

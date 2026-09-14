@@ -59,8 +59,8 @@ export const proveedorLlm = (): ProveedorLlm | null => {
     const modelo = String(process.env.LLM_MODEL || '').trim();
     if (!proveedor && baseUrl && apiKey && modelo) proveedor = crearProveedorOpenAiCompat({ baseUrl, apiKey, modelo });
     if (!proveedor && modeloDescargado()) proveedor = crearProveedorQwen();
-    if (!proveedor) logger.warn('[ventas] sin clave de LLM ni modelo local: el agente de ventas no contesta');
-    else logger.info(`[ventas] proveedor de LLM: ${proveedor.nombre}`);
+    if (!proveedor) logger.warn('[maria] sin clave de LLM ni modelo local: el agente de ventas no contesta');
+    else logger.info(`[maria] proveedor de LLM: ${proveedor.nombre}`);
   }
   return proveedor;
 };
@@ -178,7 +178,7 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
       }
     }
     logger.info(
-      `[ventas] ${customerPhone}${cliente ? ` (${cliente.nombre})` : ''}: ${resultado.herramientasUsadas.length ? `herramientas ${resultado.herramientasUsadas.join(',')} · ` : ''}${resultado.uso.entrada}/${resultado.uso.salida} tokens${resultado.uso.cacheLeida ? ` (cache ${resultado.uso.cacheLeida})` : ''}${resultado.degradado ? ' · DEGRADADO' : ''}`
+      `[maria] ${customerPhone}${cliente ? ` (${cliente.nombre})` : ''}: ${resultado.herramientasUsadas.length ? `herramientas ${resultado.herramientasUsadas.join(',')} · ` : ''}${resultado.uso.entrada}/${resultado.uso.salida} tokens${resultado.uso.cacheLeida ? ` (cache ${resultado.uso.cacheLeida})` : ''}${resultado.degradado ? ' · DEGRADADO' : ''}`
     );
     return resultado.texto;
   });
@@ -233,7 +233,7 @@ const turnoGuiado = async (
       await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), `🙋 *Cliente pide atención — ${CONSTROAD.nombre}*\n👤 ${p.estado.nombre ?? ctx.cliente?.nombre ?? ctx.conversacion.customerName ?? 'sin nombre'} · ${telefonoLegible(ctx.customerPhone)}\nMotivo: ${p.escalar}\nÚltimo mensaje: «${texto.slice(0, 160)}»\nEl bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
     }
   }
-  logger.info(`[ventas] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ''}: guiado · extraído ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v]) => v && v !== '')))} · ${((Date.now() - inicio) / 1000).toFixed(1)} s${p.escalar ? ` · ESCALA (${p.escalar})` : ''}`);
+  logger.info(`[maria] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ''}: guiado · extraído ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v]) => v && v !== '')))} · ${((Date.now() - inicio) / 1000).toFixed(1)} s${p.escalar ? ` · ESCALA (${p.escalar})` : ''}`);
   return p.texto;
 };
 
@@ -252,5 +252,5 @@ export const atenderMensajeDelDueno = async (message: AgentInboundMessage, compa
   const minutos = comando === '!pausa' ? 24 * 60 : botConfig?.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN;
   await pausarConversacion(conversacion.id, minutos, 'owner');
   if (comando !== '!pausa') await guardarMensajeDueno(companyId, conversacion.id, texto);
-  logger.info(`[ventas] el dueño tomó la conversación con ${message.remoteJid}: bot en pausa ${minutos} min`);
+  logger.info(`[maria] el dueño tomó la conversación con ${message.remoteJid}: bot en pausa ${minutos} min`);
 };

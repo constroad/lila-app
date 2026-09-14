@@ -1,5 +1,5 @@
 import logger from '../../utils/logger.js';
-import { CATALOGO, esConsulta, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
+import { CATALOGO, esConsulta, especificidadDeRegla, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { construirVista, type VistaDelDia } from './vista.js';
 import { PREGUNTA_UNIDAD, acotarArchivos, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo } from './archivos.js';
@@ -321,7 +321,10 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRe
     if (!esHerramientaDeDatos(ultima.clave)) return { clave: ultima.clave as ClaveConsulta, pregunta: fusionada };
     pregunta = fusionada;
   }
-  const eleccion = await elegirHerramienta(pregunta, ultima?.pregunta);
+  // La pregunta anterior del hilo solo ayuda con una pregunta CORTA («¿y en
+  // Ate?»); a una larga la confunde: «y el clima en la molina…» tras «stock de
+  // líquidos» fue a los agregados (14/09).
+  const eleccion = await elegirHerramienta(pregunta, pregunta.split(/\s+/).length <= 8 ? ultima?.pregunta : undefined);
   if (eleccion) {
     // «Hay programación de despachos esta semana?» → el modelo dice «resumen
     // de despachos» (de un día); el rango de la pregunta manda.
@@ -375,7 +378,10 @@ export const atenderConsulta = async (
     // pisa: «habrá producciones esta semana… ¿cómo estará el clima para planta
     // y qué distritos están propensos a lluvia?» caía en «planta» → unidad en
     // planta (14/09). Las reglas quedan de respaldo si el modelo no está.
-    const larga = pregunta.split(/\s+/).length > PALABRAS_PARA_MODELO;
+    // …salvo que la regla sea de dos o más palabras («clima» + «planta»): esa
+    // es precisa aunque la pregunta sea larga (14/09, 13:49: el modelo mandó
+    // «y el clima en la molina… para asfaltar mañana» a los agregados).
+    const larga = pregunta.split(/\s+/).length > PALABRAS_PARA_MODELO && especificidadDeRegla(pregunta) < 2;
     let clave: ClaveConsulta | null = larga ? null : porRegla;
     let respuesta: Respuesta | undefined;
     let extra: Partial<Parametros> | undefined;
@@ -405,7 +411,7 @@ export const atenderConsulta = async (
     }
     respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo, extra));
     if (clave) recordarConsulta({ quien, grupo, clave, pregunta });
-    logger.info(`[agente] consulta de ${quien}: «${preguntaLimpia(texto, numeroBot)}» → ${clave ?? 'none'}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
+    logger.info(`[agente] consulta de ${quien}: «${preguntaLimpia(texto, numeroBot)}» → ${clave ?? (respuesta ? 'datos' : 'none')}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
     await responderEnGrupo(grupo, respuesta, alcance);
   } catch (error) {
     logger.warn(`[agente] no pude atender la consulta «${texto}»: ${error instanceof Error ? error.message : String(error)}`);

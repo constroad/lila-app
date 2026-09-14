@@ -9407,8 +9407,8 @@ var init_ventas = __esm({
         const modelo = String(process.env.LLM_MODEL || "").trim();
         if (!proveedor && baseUrl && apiKey && modelo) proveedor = crearProveedorOpenAiCompat({ baseUrl, apiKey, modelo });
         if (!proveedor && modeloDescargado()) proveedor = crearProveedorQwen();
-        if (!proveedor) logger_default.warn("[ventas] sin clave de LLM ni modelo local: el agente de ventas no contesta");
-        else logger_default.info(`[ventas] proveedor de LLM: ${proveedor.nombre}`);
+        if (!proveedor) logger_default.warn("[maria] sin clave de LLM ni modelo local: el agente de ventas no contesta");
+        else logger_default.info(`[maria] proveedor de LLM: ${proveedor.nombre}`);
       }
       return proveedor;
     };
@@ -9509,7 +9509,7 @@ Le dije que un asesor responde. Toma la conversaci\xF3n desde el WhatsApp de Con
           }
         }
         logger_default.info(
-          `[ventas] ${customerPhone}${cliente ? ` (${cliente.nombre})` : ""}: ${resultado.herramientasUsadas.length ? `herramientas ${resultado.herramientasUsadas.join(",")} \xB7 ` : ""}${resultado.uso.entrada}/${resultado.uso.salida} tokens${resultado.uso.cacheLeida ? ` (cache ${resultado.uso.cacheLeida})` : ""}${resultado.degradado ? " \xB7 DEGRADADO" : ""}`
+          `[maria] ${customerPhone}${cliente ? ` (${cliente.nombre})` : ""}: ${resultado.herramientasUsadas.length ? `herramientas ${resultado.herramientasUsadas.join(",")} \xB7 ` : ""}${resultado.uso.entrada}/${resultado.uso.salida} tokens${resultado.uso.cacheLeida ? ` (cache ${resultado.uso.cacheLeida})` : ""}${resultado.degradado ? " \xB7 DEGRADADO" : ""}`
         );
         return resultado.texto;
       });
@@ -9550,7 +9550,7 @@ Motivo: ${p64.escalar}
 El bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
         }
       }
-      logger_default.info(`[ventas] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ""}: guiado \xB7 extra\xEDdo ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v55]) => v55 && v55 !== "")))} \xB7 ${((Date.now() - inicio) / 1e3).toFixed(1)} s${p64.escalar ? ` \xB7 ESCALA (${p64.escalar})` : ""}`);
+      logger_default.info(`[maria] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ""}: guiado \xB7 extra\xEDdo ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v55]) => v55 && v55 !== "")))} \xB7 ${((Date.now() - inicio) / 1e3).toFixed(1)} s${p64.escalar ? ` \xB7 ESCALA (${p64.escalar})` : ""}`);
       return p64.texto;
     };
     atenderMensajeDelDueno = async (message, companyId, botConfig, deps) => {
@@ -9567,7 +9567,7 @@ El bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
       const minutos = comando === "!pausa" ? 24 * 60 : botConfig?.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN;
       await pausarConversacion(conversacion.id, minutos, "owner");
       if (comando !== "!pausa") await guardarMensajeDueno(companyId, conversacion.id, texto4);
-      logger_default.info(`[ventas] el due\xF1o tom\xF3 la conversaci\xF3n con ${message.remoteJid}: bot en pausa ${minutos} min`);
+      logger_default.info(`[maria] el due\xF1o tom\xF3 la conversaci\xF3n con ${message.remoteJid}: bot en pausa ${minutos} min`);
     };
   }
 });
@@ -10334,7 +10334,7 @@ var init_aprobadores = __esm({
 });
 
 // src/agent/consultas/catalogo.ts
-var CATALOGO, normalizar2, esConsulta, preguntaLimpia, DIAS_SEMANA, MESES, hoyLima, sumarDias, fechaDe, ALIAS_EMPRESA, normalizarPlaca, extraerParametros, FUERA_DE_CATALOGO, fueraDeCatalogo, rutearPorReglas;
+var CATALOGO, normalizar2, esConsulta, preguntaLimpia, DIAS_SEMANA, MESES, hoyLima, sumarDias, fechaDe, ALIAS_EMPRESA, normalizarPlaca, extraerParametros, FUERA_DE_CATALOGO, fueraDeCatalogo, especificidadDeRegla, rutearPorReglas;
 var init_catalogo = __esm({
   "src/agent/consultas/catalogo.ts"() {
     CATALOGO = [
@@ -10557,6 +10557,17 @@ var init_catalogo = __esm({
     fueraDeCatalogo = (pregunta2) => {
       const t44 = normalizar2(pregunta2);
       return FUERA_DE_CATALOGO.some((palabra) => new RegExp(`\\b${normalizar2(palabra)}\\b`).test(t44));
+    };
+    especificidadDeRegla = (pregunta2) => {
+      const t44 = normalizar2(pregunta2);
+      let mejor = 0;
+      for (const entrada of CATALOGO) {
+        for (const grupo of entrada.reglas) {
+          const palabras = grupo.map(normalizar2);
+          if (palabras.every((palabra) => new RegExp(`\\b${palabra.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(t44))) mejor = Math.max(mejor, palabras.length);
+        }
+      }
+      return mejor;
     };
     rutearPorReglas = (pregunta2) => {
       if (fueraDeCatalogo(pregunta2)) return null;
@@ -14072,7 +14083,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         if (!esHerramientaDeDatos(ultima.clave)) return { clave: ultima.clave, pregunta: fusionada };
         pregunta2 = fusionada;
       }
-      const eleccion = await elegirHerramienta(pregunta2, ultima?.pregunta);
+      const eleccion = await elegirHerramienta(pregunta2, pregunta2.split(/\s+/).length <= 8 ? ultima?.pregunta : void 0);
       if (eleccion) {
         const rango2 = esDeUnDia(eleccion.herramienta) ? argumentosDeRango(pregunta2) : null;
         if (esHerramientaDeDatos(eleccion.herramienta) || rango2) {
@@ -14108,7 +14119,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         let pregunta2 = preguntaLimpia(texto4, numeroBot);
         const vetada = fueraDeCatalogo(pregunta2);
         const porRegla = vetada ? null : rutearPorReglas(pregunta2);
-        const larga = pregunta2.split(/\s+/).length > PALABRAS_PARA_MODELO;
+        const larga = pregunta2.split(/\s+/).length > PALABRAS_PARA_MODELO && especificidadDeRegla(pregunta2) < 2;
         let clave2 = larga ? null : porRegla;
         let respuesta;
         let extra;
@@ -14131,7 +14142,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         }
         respuesta = respuesta ?? await armarRespuesta(clave2, pregunta2, quien, grupo, extra);
         if (clave2) recordarConsulta({ quien, grupo, clave: clave2, pregunta: pregunta2 });
-        logger_default.info(`[agente] consulta de ${quien}: \xAB${preguntaLimpia(texto4, numeroBot)}\xBB \u2192 ${clave2 ?? "none"}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
+        logger_default.info(`[agente] consulta de ${quien}: \xAB${preguntaLimpia(texto4, numeroBot)}\xBB \u2192 ${clave2 ?? (respuesta ? "datos" : "none")}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
         await responderEnGrupo(grupo, respuesta, alcance);
       } catch (error) {
         logger_default.warn(`[agente] no pude atender la consulta \xAB${texto4}\xBB: ${error instanceof Error ? error.message : String(error)}`);

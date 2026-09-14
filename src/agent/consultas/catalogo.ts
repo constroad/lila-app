@@ -325,6 +325,19 @@ export const fueraDeCatalogo = (pregunta: string): boolean => {
 };
 
 /** Ruteo por reglas: la primera entrada cuyo grupo de palabras esté completo. `null` si ninguna, o si es tema prohibido. */
+/** Cuántas palabras exige la mejor regla que casa (0 si ninguna): mide qué tan precisa fue. */
+export const especificidadDeRegla = (pregunta: string): number => {
+  const t = normalizar(pregunta);
+  let mejor = 0;
+  for (const entrada of CATALOGO) {
+    for (const grupo of entrada.reglas) {
+      const palabras = grupo.map(normalizar);
+      if (palabras.every((palabra) => new RegExp(`\\b${palabra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(t))) mejor = Math.max(mejor, palabras.length);
+    }
+  }
+  return mejor;
+};
+
 export const rutearPorReglas = (pregunta: string): ClaveConsulta | null => {
   if (fueraDeCatalogo(pregunta)) return null;
   const t = normalizar(pregunta);
