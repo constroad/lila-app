@@ -54,6 +54,7 @@
     "mongoose": "^9.1.5",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
+    "node-llama-cpp": "^3.21.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.6.82",
     "puppeteer": "^21.6.1",

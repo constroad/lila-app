@@ -14,8 +14,12 @@ export interface PreguntaPendiente<T = unknown> {
   grupo: string;
   /** Opciones numeradas («¿cuál pedido?»), o vacío si lo que falta es una unidad. */
   opciones: string[];
-  /** `unidad`: se contesta con un número, una placa o «la última». `confirmar`: con un «sí». */
-  tipo?: 'opciones' | 'unidad' | 'confirmar';
+  /**
+   * `unidad`: se contesta con un número, una placa o «la última». `confirmar`:
+   * con un «sí». `texto`: con cualquier cosa corta (un nombre de cliente, de
+   * proveedor o de material que faltó en la pregunta).
+   */
+  tipo?: 'opciones' | 'unidad' | 'confirmar' | 'texto';
   /** Qué hacer con la opción elegida (índice base 0) o con el texto de la unidad. */
   continuar: (indice: number, texto?: string) => Promise<T>;
   creadaMs: number;
@@ -61,6 +65,13 @@ export const responderPendiente = (
     if (!nombraUnidad(texto)) return null;
     pendientes.delete(k);
     return { pregunta: p, indice: -1, texto: String(texto || '').trim() };
+  }
+  if (p.tipo === 'texto') {
+    const t = String(texto || '').trim();
+    // Un mensaje largo es otra conversación, no la respuesta a «¿qué nombre?».
+    if (!t || t.length > 60 || t.startsWith('@') || t.startsWith('!')) return null;
+    pendientes.delete(k);
+    return { pregunta: p, indice: -1, texto: t };
   }
   if (p.tipo === 'confirmar') {
     const t = String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');

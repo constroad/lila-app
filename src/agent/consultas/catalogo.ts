@@ -242,7 +242,9 @@ export const fechaDe = (pregunta: string, ahoraMs = Date.now()): string | undefi
   if (dia >= 0) {
     const [y, m, d] = hoy.split('-').map(Number);
     const hoyDia = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-    const delta = ((dia - hoyDia + 7) % 7) || 7;
+    // «el martes pasado» mira hacia atrás: el último martes que ya fue.
+    const pasado = new RegExp(`\\b${DIAS_SEMANA[dia]}\\s+pasad[oa]\\b`).test(t);
+    const delta = pasado ? -(((hoyDia - dia + 7) % 7) || 7) : ((dia - hoyDia + 7) % 7) || 7;
     return sumarDias(hoy, delta);
   }
   return undefined;

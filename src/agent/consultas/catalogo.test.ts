@@ -184,6 +184,10 @@ describe('parámetros', () => {
     expect(fechaDe('los pedidos de anteayer', ahora)).toBe('2026-09-12');
     expect(fechaDe('qué se despachó antes de ayer', ahora)).toBe('2026-09-12');
     expect(fechaDe('los pedidos de ayer', new Date('2026-10-01T14:00:00Z').getTime())).toBe('2026-09-30');
+    // «el martes pasado» es el último martes que ya fue; «el martes», el próximo.
+    expect(fechaDe('los pedidos del martes pasado', ahora)).toBe('2026-09-08');
+    expect(fechaDe('los pedidos del lunes pasado', ahora)).toBe('2026-09-07'); // hoy es lunes: el anterior
+    expect(fechaDe('los pedidos del martes', ahora)).toBe('2026-09-15');
     expect(extraerParametros('resumen de despachos de ayer', ahora).fecha).toBe('2026-09-13');
   });
 

@@ -48,6 +48,8 @@ esbuild
       '@huggingface/transformers',
       'onnxruntime-node',
       'sharp',
+      // Modelo generativo local (binario nativo + Metal): nunca dentro del bundle.
+      'node-llama-cpp',
     ],
   })
   .then(() => console.log('✅ Build completed successfully'))

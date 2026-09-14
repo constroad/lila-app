@@ -13,6 +13,7 @@ import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
+import { elegirHerramienta, esHerramientaDeDatos, responderConDatos, type Argumentos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import type { AlcanceAgente } from '../checklist/alcance.js';
@@ -32,16 +33,13 @@ export { esConsulta };
 // Más alto que el del checklist: rutear mal una pregunta es peor que decir «no entendí».
 const UMBRAL_RUTEO = 0.88;
 
-export const rutear = async (pregunta: string): Promise<ClaveConsulta | null> => {
-  // La lista negra gana también sobre el modelo: un embedding no sabe qué es un precio.
-  if (fueraDeCatalogo(pregunta)) return null;
-  const porRegla = rutearPorReglas(pregunta);
-  if (porRegla) return porRegla;
-  const embed = await cargarModelo();
-  if (!embed) return null;
-  const [mejor] = await clasificar(CATALOGO, [pregunta], embed);
-  return mejor && mejor.similitud >= UMBRAL_RUTEO ? (mejor.itemId as ClaveConsulta) : null;
-};
+/** Lo que el modelo generativo sacó de la pregunta, en el molde de siempre. */
+const comoParametros = (a: Argumentos): Partial<Parametros> => ({
+  ...(a.fecha ? { fecha: a.fecha } : {}),
+  ...(a.unitNumber ? { unitNumber: a.unitNumber } : {}),
+  ...(a.plate ? { plate: a.plate } : {}),
+  ...(a.companyId ? { companyId: a.companyId } : {}),
+});
 
 /** Con un pedido elegido: el enlace del cliente, si existe. */
 const respuestaEnlace = async (vista: VistaDelDia, indice: number): Promise<Respuesta> => {
@@ -128,9 +126,12 @@ const armarRespuesta = async (
   clave: ClaveConsulta | null,
   pregunta: string,
   quien: string,
-  grupo: string
+  grupo: string,
+  extra: Partial<Parametros> = {}
 ): Promise<Respuesta> => {
-  const params = extraerParametros(pregunta);
+  // Lo que se lee de la pregunta con reglas, y encima lo que entendió el modelo
+  // generativo («la semana pasada», «el martes pasado») cuando lo hubo.
+  const params = { ...extraerParametros(pregunta), ...extra };
   // Una fecha nombrada («el martes», «15/09») manda; si no, hoy o mañana.
   const fecha = params.fecha ?? (params.day === 'tomorrow' ? sumarDias(hoyLima(), 1) : hoyLima());
   const vista = await construirVista(fecha);
@@ -252,23 +253,46 @@ const EJEMPLO: Partial<Record<ClaveConsulta, string>> = {
   help: 'la ayuda',
 };
 
+interface Ruta {
+  clave: ClaveConsulta | null;
+  pregunta: string;
+  respuesta?: Respuesta;
+  extra?: Partial<Parametros>;
+}
+
 /**
- * Cuando no se entiende: ¿es una CONTINUACIÓN de lo último que preguntó esta
- * persona? ¿O se parece bastante a algo del catálogo como para proponerlo?
+ * Cuando las reglas no reconocen la pregunta, en este orden:
+ *
+ * 1. ¿Es una CONTINUACIÓN de lo último que preguntó esta persona? («¿y la 3?»)
+ * 2. EL MODELO GENERATIVO elige una herramienta y sus argumentos (`llm/`): es
+ *    lo que entiende «qué le despachamos a cobeñas la semana pasada» o «el
+ *    teléfono del cliente zapata». Sin modelo (no bajó, no cargó, se pasó de
+ *    tiempo) se sigue con lo de antes.
+ * 3. Los embeddings: rutean si se parecen mucho, proponen si se parecen algo.
+ *
  * Lo general de la experiencia está acá, no en cada consulta.
  */
-const sinRuta = async (pregunta: string, quien: string, grupo: string): Promise<{ clave: ClaveConsulta | null; pregunta: string; respuesta?: Respuesta }> => {
+const sinRuta = async (pregunta: string, quien: string, grupo: string): Promise<Ruta> => {
   const ultima = ultimaConsulta(quien, grupo);
   if (ultima && pareceContinuacion(pregunta)) {
     // La misma pregunta con el dato nuevo, y sin el dato viejo del mismo tipo.
-    return {
-      clave: ultima.clave as ClaveConsulta,
-      pregunta: fusionar(pregunta, ultima.pregunta, LOCATIONS.map((l) => l.name), ALIAS_EMPRESA.flatMap((e) => e.alias)),
-    };
+    const fusionada = fusionar(pregunta, ultima.pregunta, LOCATIONS.map((l) => l.name), ALIAS_EMPRESA.flatMap((e) => e.alias));
+    // Un hilo de datos (clientes, kardex…) lo sigue el modelo, que es quien lo abrió.
+    if (!esHerramientaDeDatos(ultima.clave)) return { clave: ultima.clave as ClaveConsulta, pregunta: fusionada };
+    pregunta = fusionada;
+  }
+  const eleccion = await elegirHerramienta(pregunta, ultima?.pregunta);
+  if (eleccion) {
+    if (esHerramientaDeDatos(eleccion.herramienta)) {
+      recordarConsulta({ quien, grupo, clave: eleccion.herramienta, pregunta });
+      return { clave: null, pregunta, respuesta: await responderConDatos(eleccion.herramienta, eleccion.argumentos, pregunta, quien, grupo) };
+    }
+    return { clave: eleccion.herramienta, pregunta, extra: comoParametros(eleccion.argumentos) };
   }
   const embed = await cargarModelo();
   if (embed) {
     const [mejor] = await clasificar(CATALOGO, [pregunta], embed);
+    if (mejor && mejor.similitud >= UMBRAL_RUTEO) return { clave: mejor.itemId as ClaveConsulta, pregunta };
     if (mejor && mejor.similitud >= UMBRAL_SUGERENCIA) {
       const clave = mejor.itemId as ClaveConsulta;
       preguntar({
@@ -296,10 +320,13 @@ export const atenderConsulta = async (
     // segundos, y la persona tiene que ver que algo pasa (José, 14/09).
     await empezarAEscribir(grupo, alcance);
     let pregunta = preguntaLimpia(texto, numeroBot);
-    let clave = await rutear(pregunta);
+    // La lista negra gana sobre todo: ni reglas, ni modelo, ni embeddings ven un precio.
+    const vetada = fueraDeCatalogo(pregunta);
+    let clave: ClaveConsulta | null = vetada ? null : rutearPorReglas(pregunta);
     let respuesta: Respuesta | undefined;
-    if (!clave) ({ clave, pregunta, respuesta } = await sinRuta(pregunta, quien, grupo));
-    respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo));
+    let extra: Partial<Parametros> | undefined;
+    if (!clave && !vetada) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo));
+    respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo, extra));
     if (clave) recordarConsulta({ quien, grupo, clave, pregunta });
     logger.info(`[agente] consulta de ${quien}: «${preguntaLimpia(texto, numeroBot)}» → ${clave ?? 'none'}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
     await responderEnGrupo(grupo, respuesta, alcance);

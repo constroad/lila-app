@@ -171,6 +171,40 @@ export async function getFolderModel(): Promise<Model<Record<string, unknown>>> 
   return folderModel;
 }
 
+let clientModel: Model<Record<string, unknown>> | null = null;
+let providerModel: Model<Record<string, unknown>> | null = null;
+let kardexModel: Model<Record<string, unknown>> | null = null;
+
+/** Clientes del Portal (loose, solo lectura): para las consultas del agente. */
+export async function getClientModel(): Promise<Model<Record<string, unknown>>> {
+  if (clientModel) return clientModel;
+  const conn = await getSharedConnection();
+  clientModel =
+    (conn.models.Client as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Client', looseSchema, 'clients');
+  return clientModel;
+}
+
+/** Proveedores del Portal (loose, solo lectura). */
+export async function getProviderModel(): Promise<Model<Record<string, unknown>>> {
+  if (providerModel) return providerModel;
+  const conn = await getSharedConnection();
+  providerModel =
+    (conn.models.Provider as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Provider', looseSchema, 'providers');
+  return providerModel;
+}
+
+/** Movimientos del kardex de materiales del Portal (loose, solo lectura). Colección `kardexes`. */
+export async function getKardexModel(): Promise<Model<Record<string, unknown>>> {
+  if (kardexModel) return kardexModel;
+  const conn = await getSharedConnection();
+  kardexModel =
+    (conn.models.Kardex as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Kardex', looseSchema, 'kardexes');
+  return kardexModel;
+}
+
 export async function getUsageMetricModel(): Promise<Model<IUsageMetric>> {
   if (usageMetricModel) {
     return usageMetricModel;

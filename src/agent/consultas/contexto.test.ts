@@ -44,3 +44,13 @@ describe('memoria por persona y grupo, tres minutos', () => {
     expect(ultimaConsulta('jose', 'g', VIGENCIA_HILO_MS + 1)).toBeNull();
   });
 });
+
+describe('rangos y meses en el hilo', () => {
+  it('«¿y en agosto?» reemplaza «este mes»; «¿y la semana pasada?» reemplaza «en agosto»', () => {
+    expect(pareceContinuacion('¿y en agosto?')).toBe(true);
+    expect(pareceContinuacion('y el mes pasado?')).toBe(true);
+    expect(fusionar('¿y en agosto?', 'ingresos de arena en globofast este mes')).toBe('¿y en agosto? ingresos de arena en globofast');
+    expect(fusionar('y la semana pasada?', 'los pedidos de cobeñas en agosto')).toBe('y la semana pasada? los pedidos de cobenas');
+    expect(fusionar('y el martes pasado', 'los pedidos del martes')).toBe('y el martes pasado los pedidos del');
+  });
+});

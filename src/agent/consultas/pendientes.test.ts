@@ -79,3 +79,15 @@ describe('preguntas pendientes', () => {
     );
   });
 });
+
+describe('pregunta de texto libre', () => {
+  it('un nombre corto la contesta; un mensaje largo, un @ o un comando, no', () => {
+    _resetPendientes();
+    const continuar = async (_i: number, texto?: string) => texto;
+    preguntar({ quien: 'a', grupo: 'g', opciones: [], tipo: 'texto', continuar }, 1_000);
+    expect(responderPendiente('a', 'g', '@lila otra cosa', 2_000)).toBeNull();
+    expect(responderPendiente('a', 'g', 'x'.repeat(61), 2_000)).toBeNull();
+    expect(responderPendiente('a', 'g', 'consorcio los pinos', 2_000)).toMatchObject({ indice: -1, texto: 'consorcio los pinos' });
+    expect(responderPendiente('a', 'g', 'otra', 3_000)).toBeNull(); // ya se consumió
+  });
+});

@@ -355,6 +355,11 @@ export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
     // Los aprobadores se leen ya, para que la lista quede en el log antes del
     // primer voto — y no descubrir en el peor momento que nadie es admin.
     void cargarAprobadores().catch(() => undefined);
+    // El modelo generativo se baja en segundo plano si no está (1,1 GB, una
+    // vez): hasta entonces las consultas van por reglas y embeddings.
+    void import('../llm/index.js')
+      .then(({ descargarModelo }) => descargarModelo())
+      .catch(() => undefined);
   } catch (error) {
     logger.warn(`[agente] no pude rehidratar la memoria: ${error instanceof Error ? error.message : String(error)}`);
   }
