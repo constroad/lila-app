@@ -58,7 +58,7 @@ export const pareceContinuacion = (texto: string): boolean => {
   const traeDato =
     /\b\d{1,2}\b/.test(t) ||
     /\b[a-z]{3}[\s-]?\d{3}\b/.test(t) ||
-    /\b(manana|hoy|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|ultim[oa]|primer[oa]?)\b/.test(t) ||
+    /\b(manana|hoy|ayer|anteayer|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|ultim[oa]|primer[oa]?)\b/.test(t) ||
     /\b(en|de|para|con) [a-z]/.test(t);
   const empiezaComoSeguimiento = /^(y |e |que tal |en |de |para |la |el |las |los |con )/.test(t) || /^\d/.test(t);
   return traeDato && empiezaComoSeguimiento;
@@ -75,7 +75,7 @@ export const fusionar = (nueva: string, anterior: string, distritos: string[] = 
   const nn = n(nueva);
   let ant = n(anterior);
   const UNIDAD = /\b((?:la|el|unidad|carro|camion|volquete|placa|numero|n)\s*#?\s*\d{1,2}|[a-z]{3}[\s-]?\d{3}|ultim[oa]|primer[oa]?|acaba de salir)\b/g;
-  const DIA = /\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|\d{1,2}\/\d{1,2}|\d{1,2} de [a-z]+)\b/g;
+  const DIA = /\b(hoy|ayer|anteayer|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|\d{1,2}\/\d{1,2}|\d{1,2} de [a-z]+)\b/g;
   if (UNIDAD.test(nn)) ant = ant.replace(UNIDAD, ' ');
   if (DIA.test(nn)) ant = ant.replace(DIA, ' ');
   const traeDistrito = distritos.some((d) => nn.includes(n(d)));

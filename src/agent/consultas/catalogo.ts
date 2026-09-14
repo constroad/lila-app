@@ -223,6 +223,10 @@ export const sumarDias = (fecha: string, dias: number): string => {
 export const fechaDe = (pregunta: string, ahoraMs = Date.now()): string | undefined => {
   const t = normalizar(pregunta);
   const hoy = hoyLima(ahoraMs);
+  // «ayer» no existía y se tomaba por hoy (14/09: «resumen de despachos de
+  // ayer» → «no tengo pedidos para el lunes 14»). Y «anteayer».
+  if (/\b(anteayer|antes de ayer)\b/.test(t)) return sumarDias(hoy, -2);
+  if (/\bayer\b/.test(t)) return sumarDias(hoy, -1);
   if (/\bpasado manana\b/.test(t)) return sumarDias(hoy, 2);
   const dm = t.match(/\b(\d{1,2})\s*(?:de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/) ?? t.match(/\b(\d{1,2})\/(\d{1,2})\b/);
   if (dm) {
@@ -258,7 +262,7 @@ export const normalizarPlaca = (placa: string): string =>
  * «la 5», «unidad 5», «carro 5», «volquete #5», «el 12». Un número de dos
  * cifras como máximo: una placa o un vale tienen más y no son unidades.
  */
-export const extraerParametros = (pregunta: string): Parametros => {
+export const extraerParametros = (pregunta: string, ahoraMs = Date.now()): Parametros => {
   const t = normalizar(pregunta);
   const day: Parametros['day'] = /\bmanana\b/.test(t) ? 'tomorrow' : 'today';
 
@@ -276,7 +280,7 @@ export const extraerParametros = (pregunta: string): Parametros => {
 
   const empresa = ALIAS_EMPRESA.find((e) => e.alias.some((a) => new RegExp(`\\b${a}\\b`).test(t)));
   const rango = /\b(semana|semanal|proximos dias|próximos días|estos dias|estos días)\b/.test(t) ? ('semana' as const) : undefined;
-  const fecha = fechaDe(pregunta);
+  const fecha = fechaDe(pregunta, ahoraMs);
   // «la última», «el último carro», «la que acaba de salir» / «la primera».
   const ordinal = /\b(ultim[oa]|acaba de salir|recien salio|recién salió)\b/.test(t)
     ? ('ultima' as const)

@@ -9144,7 +9144,7 @@ var init_catalogo = __esm({
       {
         id: "production_consume",
         seSatisfaceCon: ["cuanto consumio la produccion de hoy", "consumos de la produccion", "cuanto pen gastamos", "consumo de gasohol de hoy", "cuantos galones se usaron"],
-        reglas: [["consumo"], ["consumio"], ["consumi\xF3"], ["consumieron"], ["gastamos"], ["gasto", "produccion"], ["se uso"], ["se usaron"]]
+        reglas: [["consumo"], ["consumio"], ["consumi\xF3"], ["consumieron"], ["gastamos"], ["gasto", "produccion"], ["se", "uso"], ["se", "usaron"], ["se", "gasto"], ["cuanto", "gasohol", "hoy"], ["cuanto", "pen", "hoy"]]
       },
       {
         id: "aggregates_stock",
@@ -9202,6 +9202,8 @@ var init_catalogo = __esm({
     fechaDe = (pregunta, ahoraMs = Date.now()) => {
       const t44 = normalizar(pregunta);
       const hoy = hoyLima(ahoraMs);
+      if (/\b(anteayer|antes de ayer)\b/.test(t44)) return sumarDias(hoy, -2);
+      if (/\bayer\b/.test(t44)) return sumarDias(hoy, -1);
       if (/\bpasado manana\b/.test(t44)) return sumarDias(hoy, 2);
       const dm = t44.match(/\b(\d{1,2})\s*(?:de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/) ?? t44.match(/\b(\d{1,2})\/(\d{1,2})\b/);
       if (dm) {
@@ -9789,7 +9791,7 @@ var init_contexto = __esm({
     pareceContinuacion = (texto) => {
       const t44 = String(texto || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¿?¡!.,]/g, " ").replace(/\s+/g, " ").trim();
       if (!t44 || t44.split(" ").length > 6) return false;
-      const traeDato = /\b\d{1,2}\b/.test(t44) || /\b[a-z]{3}[\s-]?\d{3}\b/.test(t44) || /\b(manana|hoy|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|ultim[oa]|primer[oa]?)\b/.test(t44) || /\b(en|de|para|con) [a-z]/.test(t44);
+      const traeDato = /\b\d{1,2}\b/.test(t44) || /\b[a-z]{3}[\s-]?\d{3}\b/.test(t44) || /\b(manana|hoy|ayer|anteayer|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|ultim[oa]|primer[oa]?)\b/.test(t44) || /\b(en|de|para|con) [a-z]/.test(t44);
       const empiezaComoSeguimiento = /^(y |e |que tal |en |de |para |la |el |las |los |con )/.test(t44) || /^\d/.test(t44);
       return traeDato && empiezaComoSeguimiento;
     };
@@ -9798,7 +9800,7 @@ var init_contexto = __esm({
       const nn = n43(nueva);
       let ant = n43(anterior);
       const UNIDAD = /\b((?:la|el|unidad|carro|camion|volquete|placa|numero|n)\s*#?\s*\d{1,2}|[a-z]{3}[\s-]?\d{3}|ultim[oa]|primer[oa]?|acaba de salir)\b/g;
-      const DIA = /\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|\d{1,2}\/\d{1,2}|\d{1,2} de [a-z]+)\b/g;
+      const DIA = /\b(hoy|ayer|anteayer|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|\d{1,2}\/\d{1,2}|\d{1,2} de [a-z]+)\b/g;
       if (UNIDAD.test(nn)) ant = ant.replace(UNIDAD, " ");
       if (DIA.test(nn)) ant = ant.replace(DIA, " ");
       const traeDistrito = distritos.some((d67) => nn.includes(n43(d67)));
@@ -10240,7 +10242,7 @@ var init_weather_asphalt_forecast_service = __esm({
 });
 
 // src/agent/consultas/planta.ts
-var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, ES_LIQUIDO, UNIDAD_LIQUIDA, materiales, textoMateriales;
+var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, ES_LIQUIDO, UNIDAD_LIQUIDA, materiales, materialesPorEmpresa, SIN_AGREGADOS, textoMaterialesDe, textoMateriales;
 var init_planta = __esm({
   "src/agent/consultas/planta.ts"() {
     init_models();
@@ -10251,7 +10253,7 @@ var init_planta = __esm({
     CONTENIDO = { pen: "pen", gasohol: "gasohol", petroleum: "petroleo", petroleo: "petroleo", thermal_oil: "otro", other: "otro" };
     tanques = async () => {
       const Tank = await getControlTankModel();
-      const docs = await Tank.find({ companyId: COMPANY_PILOTO, includeInFluidsReport: { $ne: false } }).select("name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter").lean();
+      const docs = await Tank.find({ companyId: COMPANY_PILOTO, includeInFluidsReport: { $ne: false } }).select("name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter volume reorderPoint bgColor").lean();
       return docs.map((d67) => {
         const disponibles = Math.max(num2(d67.volumeInStock) - num2(d67.valveDeadVolumeGallons), 0);
         const glPorM3 = num2(d67.gallonsPerProductionM3);
@@ -10260,7 +10262,11 @@ var init_planta = __esm({
           contenido: CONTENIDO[String(d67.contentType || "").toLowerCase()] || "otro",
           galones: disponibles,
           m3Producibles: glPorM3 > 0 ? disponibles / glPorM3 : 0,
-          nivelCm: num2(d67.levelCentimeter)
+          nivelCm: num2(d67.levelCentimeter),
+          capacidad: num2(d67.volume),
+          stock: num2(d67.volumeInStock),
+          reorden: num2(d67.reorderPoint),
+          color: String(d67.bgColor || "").trim() || void 0
         };
       });
     };
@@ -10327,27 +10333,27 @@ var init_planta = __esm({
           nombre: String(d67.name || "").trim().toUpperCase(),
           cantidad: num2(d67.quantity),
           unidad: String(d67.unit || "m\xB3").replace(/^m3$/i, "m\xB3"),
-          reponer: reorden > 0 && num2(d67.quantity) <= reorden
+          reponer: reorden > 0 && num2(d67.quantity) <= reorden,
+          reorden
         };
       });
     };
-    textoMateriales = (lista) => {
-      if (lista.length === 0) return "No hay stock de agregados registrado.";
+    materialesPorEmpresa = (lista) => {
       const porEmpresa = /* @__PURE__ */ new Map();
       for (const m59 of lista) porEmpresa.set(m59.empresa, [...porEmpresa.get(m59.empresa) ?? [], m59]);
-      const bloques = [];
-      for (const [empresa, ms2] of porEmpresa) {
-        const total = ms2.reduce((s59, m59) => s59 + m59.cantidad, 0);
-        const lineas = [`\u{1F4E6} *Stock de agregados \u2014 ${empresa}*`];
-        if (ms2.every((m59) => m59.cantidad === 0)) {
-          lineas.push("Todo figura en 0: el kardex no tiene movimientos registrados.");
-        } else {
-          lineas.push(...ms2.map((m59) => `*- ${m59.nombre}:* ${m59.cantidad.toLocaleString("es-PE", { maximumFractionDigits: 2 })} ${m59.unidad}${m59.reponer ? " (\u26A0\uFE0F REPONER)" : ""}`));
-          lineas.push(`*- Total:* ${total.toLocaleString("es-PE", { maximumFractionDigits: 2 })} m\xB3`);
-        }
-        bloques.push(lineas.join("\n"));
-      }
-      return bloques.join("\n\n");
+      return [...porEmpresa].filter(([, ms2]) => ms2.some((m59) => m59.cantidad > 0)).map(([empresa, materiales2]) => ({ empresa, materiales: materiales2 }));
+    };
+    SIN_AGREGADOS = "No hay stock de agregados registrado.";
+    textoMaterialesDe = (empresa, ms2) => {
+      const total = ms2.reduce((s59, m59) => s59 + m59.cantidad, 0);
+      const lineas = [`\u{1F4E6} *Stock de agregados \u2014 ${empresa}*`];
+      lineas.push(...ms2.map((m59) => `*- ${m59.nombre}:* ${m59.cantidad.toLocaleString("es-PE", { maximumFractionDigits: 2 })} ${m59.unidad}${m59.reponer ? " (\u26A0\uFE0F REPONER)" : ""}`));
+      lineas.push(`*- Total:* ${total.toLocaleString("es-PE", { maximumFractionDigits: 2 })} m\xB3`);
+      return lineas.join("\n");
+    };
+    textoMateriales = (lista) => {
+      const bloques = materialesPorEmpresa(lista).map(({ empresa, materiales: ms2 }) => textoMaterialesDe(empresa, ms2));
+      return bloques.length ? bloques.join("\n\n") : SIN_AGREGADOS;
     };
   }
 });
@@ -10516,7 +10522,7 @@ var init_clima = __esm({
 });
 
 // src/agent/consultas/imagen.ts
-var INK, INK_SOFT, HEADER_BG, ROW_ALT, LINE, ESTADO, WIDTH, PAD, HEADER, ORDER_HEADER, ROW, FOOT, escapeXml, hora2, recortar, filaUnidad, svgResumenDespachos, pngResumenDespachos;
+var INK, INK_SOFT, HEADER_BG, ROW_ALT, LINE, ESTADO, WIDTH, PAD, HEADER, ORDER_HEADER, ROW, FOOT, escapeXml, hora2, recortar, filaUnidad, svgResumenDespachos, pngResumenDespachos, CARD_W, CARD_GAP, POR_FILA, CARD_PAD, CARD_IMG_W, CARD_HEADER, CARD_BG, TRACK_BG, GROUND, PUNTO, ETIQUETA_ESTADO, FACTOR_MEDIO, clamp, estadoPorReorden, fmt0, fmt2, estilosTarjetas, grilla, TANK_CARD_H, TANK_BAR_H, TANK_BAR_W, COLOR_CONTENIDO, tarjetaTanque, svgTanques, pngTanques, PILE_CARD_H, PILA, FACTOR_REFERENCIA, siluetaPila, tarjetaMaterial, svgAgregados, pngAgregados;
 var init_imagen = __esm({
   "src/agent/consultas/imagen.ts"() {
     init_tiempo();
@@ -10598,6 +10604,133 @@ var init_imagen = __esm({
     pngResumenDespachos = async (vista) => {
       const { default: sharp7 } = await import("sharp");
       return sharp7(Buffer.from(svgResumenDespachos(vista))).png().toBuffer();
+    };
+    CARD_W = 280;
+    CARD_GAP = 20;
+    POR_FILA = 3;
+    CARD_PAD = 24;
+    CARD_IMG_W = CARD_PAD * 2 + CARD_W * POR_FILA + CARD_GAP * (POR_FILA - 1);
+    CARD_HEADER = 88;
+    CARD_BG = "#f7f8fb";
+    TRACK_BG = "#e7e8ee";
+    GROUND = "#d8dae2";
+    PUNTO = { healthy: "#10b981", medium: "#f59e0b", low: "#ef4444", unknown: "#9ca3af" };
+    ETIQUETA_ESTADO = { healthy: "Saludable", medium: "Stock medio", low: "Reponer", unknown: "Sin umbral" };
+    FACTOR_MEDIO = 1.5;
+    clamp = (v55) => Math.max(0, Math.min(100, v55));
+    estadoPorReorden = (stock, reorden) => {
+      if (!(reorden > 0)) return "unknown";
+      if (stock <= reorden) return "low";
+      if (stock <= reorden * FACTOR_MEDIO) return "medium";
+      return "healthy";
+    };
+    fmt0 = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 0 });
+    fmt2 = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 2 });
+    estilosTarjetas = `
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; }
+    .title { font-size: 24px; font-weight: 800; fill: #ffffff; }
+    .subtitle { font-size: 14px; font-weight: 500; fill: #b9bdc7; }
+    .name { font-size: 16px; font-weight: 800; fill: ${INK}; }
+    .pct { font-size: 15px; font-weight: 900; fill: #ffffff; paint-order: stroke; stroke: rgba(0,0,0,0.4); stroke-width: 3px; }
+    .lbl { font-size: 11px; font-weight: 800; letter-spacing: 0.5px; fill: ${INK_SOFT}; }
+    .val { font-size: 17px; font-weight: 800; fill: ${INK}; }
+    .status { font-size: 12.5px; font-weight: 700; fill: ${INK_SOFT}; }
+  </style>`;
+    grilla = (titulo, subtitulo, altoTarjeta, tarjetas) => {
+      const filas = Math.max(1, Math.ceil(tarjetas.length / POR_FILA));
+      const height = CARD_HEADER + filas * altoTarjeta + (filas - 1) * CARD_GAP + 28;
+      const cuerpo = tarjetas.map((t44, i50) => t44(CARD_PAD + i50 % POR_FILA * (CARD_W + CARD_GAP), CARD_HEADER + Math.floor(i50 / POR_FILA) * (altoTarjeta + CARD_GAP), i50)).join("");
+      return `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${CARD_IMG_W}" height="${height}" viewBox="0 0 ${CARD_IMG_W} ${height}">
+      ${estilosTarjetas}
+      <rect width="${CARD_IMG_W}" height="${height}" fill="#ffffff" />
+      <rect width="${CARD_IMG_W}" height="${CARD_HEADER}" fill="${HEADER_BG}" />
+      <text x="${CARD_PAD}" y="36" class="title">${escapeXml(titulo)}</text>
+      <text x="${CARD_PAD}" y="58" class="subtitle">${escapeXml(subtitulo)}</text>
+      ${cuerpo}
+    </svg>`;
+    };
+    TANK_CARD_H = 300;
+    TANK_BAR_H = 168;
+    TANK_BAR_W = 74;
+    COLOR_CONTENIDO = { pen: "#1f2937", gasohol: "#16a34a", petroleo: "#e24b4a", otro: "#2563eb" };
+    tarjetaTanque = (t44) => (x63, y65) => {
+      const llenado = clamp(t44.capacidad > 0 ? Math.max(t44.stock, 0) * 100 / t44.capacidad : 0);
+      const estado2 = estadoPorReorden(Math.max(t44.stock, 0), t44.reorden);
+      const barX = x63 + 24;
+      const barY = y65 + 60;
+      const altoLleno = TANK_BAR_H * llenado / 100;
+      const infoX = barX + TANK_BAR_W + 20;
+      const disponible = t44.contenido === "pen" || t44.contenido === "gasohol" ? `${t44.m3Producibles.toFixed(0)} m\xB3 prod.` : `${fmt0.format(t44.galones)} gl`;
+      return `
+    <g>
+      <rect x="${x63}" y="${y65}" width="${CARD_W}" height="${TANK_CARD_H}" rx="18" fill="${CARD_BG}" />
+      <text x="${x63 + 22}" y="${y65 + 34}" class="name">${escapeXml(recortar(t44.nombre, 22))}</text>
+      <rect x="${barX}" y="${barY}" width="${TANK_BAR_W}" height="${TANK_BAR_H}" rx="14" fill="${TRACK_BG}" />
+      ${altoLleno > 0 ? `<rect x="${barX}" y="${barY + TANK_BAR_H - altoLleno}" width="${TANK_BAR_W}" height="${altoLleno}" rx="14" fill="${escapeXml(t44.color || COLOR_CONTENIDO[t44.contenido])}" />` : ""}
+      <rect x="${barX}" y="${barY}" width="${TANK_BAR_W}" height="${TANK_BAR_H}" rx="14" fill="none" stroke="#ffffff" stroke-width="2" />
+      <text x="${barX + TANK_BAR_W / 2}" y="${barY + TANK_BAR_H / 2 + 6}" class="pct" text-anchor="middle">${Math.round(llenado)}%</text>
+      <text x="${infoX}" y="${barY + 30}" class="lbl">NIVEL</text>
+      <text x="${infoX}" y="${barY + 54}" class="val">${t44.nivelCm} cm</text>
+      <text x="${infoX}" y="${barY + 92}" class="lbl">DISPONIBLE</text>
+      <text x="${infoX}" y="${barY + 116}" class="val">${escapeXml(disponible)}</text>
+      <circle cx="${x63 + 22}" cy="${y65 + TANK_CARD_H - 26}" r="5" fill="${PUNTO[estado2]}" />
+      <text x="${x63 + 34}" y="${y65 + TANK_CARD_H - 21}" class="status">${ETIQUETA_ESTADO[estado2]}</text>
+    </g>`;
+    };
+    svgTanques = (lista, subtitulo) => grilla("Control de tanques", subtitulo, TANK_CARD_H, lista.map((t44) => tarjetaTanque(t44)));
+    pngTanques = async (lista, subtitulo) => {
+      const { default: sharp7 } = await import("sharp");
+      return sharp7(Buffer.from(svgTanques(lista, subtitulo))).png().toBuffer();
+    };
+    PILE_CARD_H = 216;
+    PILA = { w: 126, h: 68, crestaIni: 0.34, crestaFin: 0.66 };
+    FACTOR_REFERENCIA = 2;
+    siluetaPila = (x63, baseY) => {
+      const top = baseY - PILA.h;
+      const izq = x63 + PILA.w * PILA.crestaIni;
+      const der = x63 + PILA.w * PILA.crestaFin;
+      const centro = x63 + PILA.w / 2;
+      return `M ${x63} ${baseY} L ${izq} ${top + 6} Q ${(izq + centro) / 2} ${top} ${centro} ${top} Q ${(centro + der) / 2} ${top} ${der} ${top + 6} L ${x63 + PILA.w} ${baseY} Z`;
+    };
+    tarjetaMaterial = (m59) => (x63, y65, i50) => {
+      const px = x63 + 16;
+      const baseY = y65 + 146;
+      const llenado = m59.reorden > 0 ? clamp(Math.round(m59.cantidad / (m59.reorden * FACTOR_REFERENCIA) * 100)) : null;
+      const estado2 = estadoPorReorden(m59.cantidad, m59.reorden);
+      const altoLleno = PILA.h * (llenado ?? 0) / 100;
+      const ruta = siluetaPila(px, baseY);
+      const clipId = `pila-${i50}`;
+      const infoX = x63 + 156;
+      const medioIn = PILA.w * PILA.crestaIni / 2;
+      return `
+    <g>
+      <defs><clipPath id="${clipId}"><path d="${ruta}" /></clipPath></defs>
+      <rect x="${x63}" y="${y65}" width="${CARD_W}" height="${PILE_CARD_H}" rx="18" fill="${CARD_BG}" />
+      <text x="${x63 + 22}" y="${y65 + 32}" class="name">${escapeXml(recortar(m59.nombre, 22))}</text>
+      <ellipse cx="${px + PILA.w / 2}" cy="${baseY + 3}" rx="${PILA.w / 2 + 10}" ry="7" fill="${GROUND}" />
+      <g clip-path="url(#${clipId})">
+        <rect x="${px}" y="${baseY - PILA.h}" width="${PILA.w}" height="${PILA.h}" fill="${TRACK_BG}" />
+        ${altoLleno > 0 ? `<rect x="${px}" y="${baseY - altoLleno}" width="${PILA.w}" height="${altoLleno}" fill="${PUNTO[estado2]}" />` : ""}
+        <rect x="${px + PILA.w / 2}" y="${baseY - PILA.h}" width="${PILA.w / 2}" height="${PILA.h}" fill="#000000" opacity="0.07" />
+      </g>
+      ${m59.reorden > 0 ? `<line x1="${px + medioIn - 5}" y1="${baseY - PILA.h / 2}" x2="${px + PILA.w - medioIn + 5}" y2="${baseY - PILA.h / 2}" stroke="${INK}" stroke-width="2" stroke-dasharray="4 3" opacity="0.5" />` : ""}
+      <path d="${ruta}" fill="none" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" />
+      <line x1="${px - 8}" y1="${baseY}" x2="${px + PILA.w + 8}" y2="${baseY}" stroke="${INK_SOFT}" stroke-width="1.5" opacity="0.35" />
+      ${llenado === null ? "" : `<text x="${px + PILA.w / 2}" y="${baseY - 14}" class="pct" text-anchor="middle">${llenado}%</text>`}
+      <text x="${infoX}" y="${y65 + 86}" class="lbl">STOCK</text>
+      <text x="${infoX}" y="${y65 + 110}" class="val">${escapeXml(`${fmt2.format(m59.cantidad)} ${m59.unidad}`)}</text>
+      <text x="${infoX}" y="${y65 + 140}" class="lbl">M\xCDNIMO</text>
+      <text x="${infoX}" y="${y65 + 164}" class="val">${escapeXml(m59.reorden > 0 ? `${fmt2.format(m59.reorden)} ${m59.unidad}` : "\u2014")}</text>
+      <circle cx="${x63 + 22}" cy="${y65 + PILE_CARD_H - 26}" r="5" fill="${PUNTO[estado2]}" />
+      <text x="${x63 + 34}" y="${y65 + PILE_CARD_H - 21}" class="status">${ETIQUETA_ESTADO[estado2]}</text>
+    </g>`;
+    };
+    svgAgregados = (lista, empresa) => grilla("Stock de agregados", empresa, PILE_CARD_H, lista.map((m59) => tarjetaMaterial(m59)));
+    pngAgregados = async (lista, empresa) => {
+      const { default: sharp7 } = await import("sharp");
+      return sharp7(Buffer.from(svgAgregados(lista, empresa))).png().toBuffer();
     };
   }
 });
@@ -11049,7 +11182,7 @@ __export(consultas_exports, {
   esConsulta: () => esConsulta,
   rutear: () => rutear
 });
-var UMBRAL_RUTEO, rutear, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, armarRespuesta, empresasDelPiloto, informesDeLaVista, UMBRAL_SUGERENCIA, EJEMPLO, sinRuta, atenderConsulta, atenderContinuacion, atenderEleccion;
+var UMBRAL_RUTEO, rutear, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, conImagen, armarRespuesta, empresasDelPiloto, informesDeLaVista, UMBRAL_SUGERENCIA, EJEMPLO, sinRuta, atenderConsulta, atenderContinuacion, atenderEleccion;
 var init_consultas = __esm({
   "src/agent/consultas/index.ts"() {
     init_logger();
@@ -11134,13 +11267,37 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       });
       return { texto: textoPregunta(`Hay ${candidatos.length} producciones ${fechaLegible(vista.fecha)}. \xBFCu\xE1l?`, opciones) };
     };
+    conImagen = async (caption, nombre, armar) => {
+      try {
+        const buffer2 = await armar();
+        return { texto: "", archivos: [{ tipo: "image", url: "", nombre, fechaMs: Date.now(), mime: "image/png", companyId: "", buffer: buffer2, caption }] };
+      } catch (error) {
+        logger_default.warn(`[agente] no pude armar la imagen ${nombre}: ${error instanceof Error ? error.message : String(error)}`);
+        return { texto: caption };
+      }
+    };
     armarRespuesta = async (clave2, pregunta, quien, grupo) => {
       const params = extraerParametros(pregunta);
       const fecha = params.fecha ?? (params.day === "tomorrow" ? sumarDias(hoyLima(), 1) : hoyLima());
       const vista = await construirVista(fecha);
-      if (clave2 === "tank_levels") return { texto: textoTanques(await tanques()) };
+      if (clave2 === "tank_levels") {
+        const lista = await tanques();
+        const texto = textoTanques(lista);
+        if (lista.length === 0) return { texto };
+        return conImagen(texto, `tanques-${fecha}.png`, () => pngTanques(lista, "Inframaq \xB7 planta"));
+      }
       if (clave2 === "production_consume") return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
-      if (clave2 === "aggregates_stock") return { texto: textoMateriales(await materiales(await empresasDelPiloto())) };
+      if (clave2 === "aggregates_stock") {
+        const porEmpresa = materialesPorEmpresa(await materiales(await empresasDelPiloto()));
+        if (porEmpresa.length === 0) return { texto: SIN_AGREGADOS };
+        const archivos = [];
+        for (const { empresa, materiales: ms2 } of porEmpresa) {
+          const r39 = await conImagen(textoMaterialesDe(empresa, ms2), `agregados-${empresa}-${fecha}.png`, () => pngAgregados(ms2, empresa));
+          if (r39.archivos) archivos.push(...r39.archivos);
+          else return { texto: textoMateriales(porEmpresa.flatMap((e29) => e29.materiales)) };
+        }
+        return { texto: "", archivos };
+      }
       if (clave2 === "weather") {
         const distrito = distritoDe(pregunta);
         if (params.rango === "semana") return { texto: textoClimaSemanal(await pronosticoSemanal(distrito)) };
@@ -11150,16 +11307,8 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       }
       if (clave2 === "dispatch_summary") {
         if (vista.orders.length === 0) return { texto: responder(clave2, { vista, params }) };
-        try {
-          const png = await pngResumenDespachos(vista);
-          return {
-            texto: "",
-            archivos: [{ tipo: "image", url: "", nombre: `despachos-${fecha}.png`, fechaMs: Date.now(), mime: "image/png", companyId: "", buffer: png, caption: `\u{1F4CB} Despachos de ${fechaLegible(fecha)}` }]
-          };
-        } catch (error) {
-          logger_default.warn(`[agente] no pude armar la imagen del resumen: ${error instanceof Error ? error.message : String(error)}`);
-          return { texto: responder(clave2, { vista, params }) };
-        }
+        const r39 = await conImagen(`\u{1F4CB} Despachos de ${fechaLegible(fecha)}`, `despachos-${fecha}.png`, () => pngResumenDespachos(vista));
+        return r39.archivos ? r39 : { texto: responder(clave2, { vista, params }) };
       }
       if (clave2 === "order_link") return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
       if (clave2 === "guias_day") return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
@@ -63526,7 +63675,7 @@ var require_headers = __commonJS({
     function isGNU(buf) {
       return b4a.equals(GNU_MAGIC, buf.subarray(MAGIC_OFFSET, MAGIC_OFFSET + 6)) && b4a.equals(GNU_VER, buf.subarray(VERSION_OFFSET, VERSION_OFFSET + 2));
     }
-    function clamp(index, len, defaultValue) {
+    function clamp2(index, len, defaultValue) {
       if (typeof index !== "number") return defaultValue;
       index = ~~index;
       if (index >= len) return len;
@@ -63645,7 +63794,7 @@ var require_headers = __commonJS({
         return parse256(val);
       } else {
         while (offset < val.length && val[offset] === 32) offset++;
-        const end = clamp(indexOf(val, 32, offset, val.length), val.length, val.length);
+        const end = clamp2(indexOf(val, 32, offset, val.length), val.length, val.length);
         while (offset < end && val[offset] === 0) offset++;
         if (end === offset) return 0;
         return parseInt(b4a.toString(val.subarray(offset, end)), 8);

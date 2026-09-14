@@ -1,4 +1,4 @@
-import { textoConsumos, textoMateriales, textoTanques } from './planta';
+import { SIN_AGREGADOS, materialesPorEmpresa, textoConsumos, textoMateriales, textoTanques } from './planta';
 
 /**
  * Los textos de planta, sin base. Lo que se prueba es que digan lo MISMO que
@@ -8,11 +8,11 @@ import { textoConsumos, textoMateriales, textoTanques } from './planta';
 describe('tanques', () => {
   it('PEN en m³ producibles, petróleo en cm, gasohol total; mismos umbrales que el cron', () => {
     const t = textoTanques([
-      { nombre: 'INFRA PEN 1', contenido: 'pen', galones: 573.56, m3Producibles: 22.94, nivelCm: 38 },
-      { nombre: 'INFRA PEN 2', contenido: 'pen', galones: 295.34, m3Producibles: 11.81, nivelCm: 29.5 },
-      { nombre: 'INFRA HIGHWAY', contenido: 'petroleo', galones: 66.65, m3Producibles: 0, nivelCm: 29.5 },
-      { nombre: 'GRUPO WILSON', contenido: 'petroleo', galones: 35.37, m3Producibles: 0, nivelCm: 57 },
-      { nombre: 'INFRA GASOHOL', contenido: 'gasohol', galones: 1008.66, m3Producibles: 403.46, nivelCm: 157 },
+      { nombre: 'INFRA PEN 1', contenido: 'pen', galones: 573.56, m3Producibles: 22.94, nivelCm: 38, capacidad: 2000, stock: 600, reorden: 200 },
+      { nombre: 'INFRA PEN 2', contenido: 'pen', galones: 295.34, m3Producibles: 11.81, nivelCm: 29.5, capacidad: 2000, stock: 600, reorden: 200 },
+      { nombre: 'INFRA HIGHWAY', contenido: 'petroleo', galones: 66.65, m3Producibles: 0, nivelCm: 29.5, capacidad: 2000, stock: 600, reorden: 200 },
+      { nombre: 'GRUPO WILSON', contenido: 'petroleo', galones: 35.37, m3Producibles: 0, nivelCm: 57, capacidad: 2000, stock: 600, reorden: 200 },
+      { nombre: 'INFRA GASOHOL', contenido: 'gasohol', galones: 1008.66, m3Producibles: 403.46, nivelCm: 157, capacidad: 2000, stock: 600, reorden: 200 },
     ]);
     expect(t).toContain('*- INFRA PEN 1:* 23 m³ prod. (573.6 gl, 38 cm)');
     expect(t).toContain('*- INFRA PEN 2:* 12 m³ prod.');
@@ -23,13 +23,13 @@ describe('tanques', () => {
   });
 
   it('sin PEN ni gasohol lo dice como el cron: SIN STOCK', () => {
-    const t = textoTanques([{ nombre: 'GRUPO WILSON', contenido: 'petroleo', galones: 35, m3Producibles: 0, nivelCm: 57 }]);
+    const t = textoTanques([{ nombre: 'GRUPO WILSON', contenido: 'petroleo', galones: 35, m3Producibles: 0, nivelCm: 57, capacidad: 2000, stock: 600, reorden: 200 }]);
     expect(t).toContain('*- PEN:* 0 m³ ⚠️ SIN STOCK');
     expect(t).toContain('*- GASOHOL:* 0 m³ (⚠️ SIN STOCK)');
   });
 
   it('gasohol bajo 50 m³ pide gasohol', () => {
-    const t = textoTanques([{ nombre: 'INFRA GASOHOL', contenido: 'gasohol', galones: 100, m3Producibles: 40, nivelCm: 20 }]);
+    const t = textoTanques([{ nombre: 'INFRA GASOHOL', contenido: 'gasohol', galones: 100, m3Producibles: 40, nivelCm: 20, capacidad: 2000, stock: 600, reorden: 200 }]);
     expect(t).toContain('*- GASOHOL:* 40 m³ (100 gl) (⚠️ PEDIR GASOHOL)');
   });
 });
@@ -53,9 +53,9 @@ describe('consumos', () => {
 describe('agregados', () => {
   it('por empresa, con REPONER por punto de reorden y el total, como el cron', () => {
     const t = textoMateriales([
-      { empresa: 'Globofast', nombre: 'ARENA PRIMARIA', cantidad: 291.65, unidad: 'm³', reponer: true },
-      { empresa: 'Globofast', nombre: 'ARENA SECUNDARIA', cantidad: 632.63, unidad: 'm³', reponer: false },
-      { empresa: 'Globofast', nombre: 'GRAVA 5/7', cantidad: 2.87, unidad: 'm³', reponer: true },
+      { empresa: 'Globofast', nombre: 'ARENA PRIMARIA', cantidad: 291.65, unidad: 'm³', reponer: true, reorden: 300 },
+      { empresa: 'Globofast', nombre: 'ARENA SECUNDARIA', cantidad: 632.63, unidad: 'm³', reponer: false, reorden: 300 },
+      { empresa: 'Globofast', nombre: 'GRAVA 5/7', cantidad: 2.87, unidad: 'm³', reponer: true, reorden: 300 },
     ]);
     expect(t).toContain('📦 *Stock de agregados — Globofast*');
     expect(t).toContain('*- ARENA PRIMARIA:* 291.65 m³ (⚠️ REPONER)');
@@ -64,12 +64,22 @@ describe('agregados', () => {
     expect(t).toContain('*- Total:* 927.15 m³');
   });
 
-  it('todo en cero NO es un stock: es un kardex que no se lleva', () => {
-    const t = textoMateriales([
-      { empresa: 'Inframaq', nombre: 'ARENA 1', cantidad: 0, unidad: 'm³', reponer: false },
-      { empresa: 'Inframaq', nombre: 'PIEDRA 1', cantidad: 0, unidad: 'm³', reponer: false },
-    ]);
-    expect(t).toContain('Todo figura en 0: el kardex no tiene movimientos registrados');
-    expect(t).not.toContain('Total');
+  /**
+   * Una empresa con todo en cero no lleva el kardex y NO se muestra (José,
+   * 14/09: «si no hay agregados no los muestres»). Antes salía un bloque
+   * «Todo figura en 0» al lado del de Globofast, que no informaba nada.
+   */
+  it('la empresa con todo en cero no aparece; si ninguna tiene stock, se dice', () => {
+    const inframaq = [
+      { empresa: 'Inframaq', nombre: 'ARENA 1', cantidad: 0, unidad: 'm³', reponer: false, reorden: 0 },
+      { empresa: 'Inframaq', nombre: 'PIEDRA 1', cantidad: 0, unidad: 'm³', reponer: false, reorden: 0 },
+    ];
+    const globofast = [{ empresa: 'Globofast', nombre: 'ARENA PRIMARIA', cantidad: 291.65, unidad: 'm³', reponer: true, reorden: 300 }];
+    const t = textoMateriales([...inframaq, ...globofast]);
+    expect(t).toContain('Stock de agregados — Globofast');
+    expect(t).not.toContain('Inframaq');
+    expect(t).not.toContain('Todo figura en 0');
+    expect(materialesPorEmpresa([...inframaq, ...globofast]).map((e) => e.empresa)).toEqual(['Globofast']);
+    expect(textoMateriales(inframaq)).toBe(SIN_AGREGADOS);
   });
 });

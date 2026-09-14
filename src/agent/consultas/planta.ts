@@ -20,6 +20,12 @@ export interface Tanque {
   /** Lo que se puede PRODUCIR con eso, en m³ de mezcla. Solo PEN y gasohol. */
   m3Producibles: number;
   nivelCm: number;
+  /** Para la tarjeta: el llenado y el semáforo, como en «Control de tanques». */
+  capacidad: number;
+  stock: number;
+  reorden: number;
+  /** Color configurado en Portal para el tanque, si lo hay. */
+  color?: string;
 }
 
 const CONTENIDO: Record<string, Tanque['contenido']> = { pen: 'pen', gasohol: 'gasohol', petroleum: 'petroleo', petroleo: 'petroleo', thermal_oil: 'otro', other: 'otro' };
@@ -33,7 +39,7 @@ const CONTENIDO: Record<string, Tanque['contenido']> = { pen: 'pen', gasohol: 'g
 export const tanques = async (): Promise<Tanque[]> => {
   const Tank = await getControlTankModel();
   const docs = (await Tank.find({ companyId: COMPANY_PILOTO, includeInFluidsReport: { $ne: false } })
-    .select('name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter')
+    .select('name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter volume reorderPoint bgColor')
     .lean()) as Doc[];
   return docs.map((d) => {
     const disponibles = Math.max(num(d.volumeInStock) - num(d.valveDeadVolumeGallons), 0);
@@ -44,6 +50,10 @@ export const tanques = async (): Promise<Tanque[]> => {
       galones: disponibles,
       m3Producibles: glPorM3 > 0 ? disponibles / glPorM3 : 0,
       nivelCm: num(d.levelCentimeter),
+      capacidad: num(d.volume),
+      stock: num(d.volumeInStock),
+      reorden: num(d.reorderPoint),
+      color: String(d.bgColor || '').trim() || undefined,
     };
   });
 };
@@ -124,6 +134,8 @@ export interface Material {
   unidad: string;
   /** `quantity <= reorderPoint`, igual que `needsRestock` del reporte de Portal. Sin punto, no se inventa. */
   reponer: boolean;
+  /** Punto de reposición; 0 si la empresa no lo configuró. */
+  reorden: number;
 }
 
 // Lo que vive en un tanque no es un agregado: por nombre (con las faltas de
@@ -154,27 +166,35 @@ export const materiales = async (empresas: Array<{ companyId: string; nombre: st
         cantidad: num(d.quantity),
         unidad: String(d.unit || 'm³').replace(/^m3$/i, 'm³'),
         reponer: reorden > 0 && num(d.quantity) <= reorden,
+        reorden,
       };
     });
 };
 
-export const textoMateriales = (lista: Material[]): string => {
-  if (lista.length === 0) return 'No hay stock de agregados registrado.';
+/**
+ * Los agregados por empresa, SOLO de las que llevan el kardex. Una empresa con
+ * todo en cero no se muestra (José, 14/09: «si no hay agregados no los
+ * muestres»): antes salía un bloque «Todo figura en 0» que no informa nada.
+ */
+export const materialesPorEmpresa = (lista: Material[]): Array<{ empresa: string; materiales: Material[] }> => {
   const porEmpresa = new Map<string, Material[]>();
   for (const m of lista) porEmpresa.set(m.empresa, [...(porEmpresa.get(m.empresa) ?? []), m]);
-  const bloques: string[] = [];
-  for (const [empresa, ms] of porEmpresa) {
-    const total = ms.reduce((s, m) => s + m.cantidad, 0);
-    const lineas = [`📦 *Stock de agregados — ${empresa}*`];
-    if (ms.every((m) => m.cantidad === 0)) {
-      // La verdad antes que un número bonito: todo en cero no es un stock, es un
-      // kardex que no se lleva.
-      lineas.push('Todo figura en 0: el kardex no tiene movimientos registrados.');
-    } else {
-      lineas.push(...ms.map((m) => `*- ${m.nombre}:* ${m.cantidad.toLocaleString('es-PE', { maximumFractionDigits: 2 })} ${m.unidad}${m.reponer ? ' (⚠️ REPONER)' : ''}`));
-      lineas.push(`*- Total:* ${total.toLocaleString('es-PE', { maximumFractionDigits: 2 })} m³`);
-    }
-    bloques.push(lineas.join('\n'));
-  }
-  return bloques.join('\n\n');
+  return [...porEmpresa]
+    .filter(([, ms]) => ms.some((m) => m.cantidad > 0))
+    .map(([empresa, materiales]) => ({ empresa, materiales }));
+};
+
+export const SIN_AGREGADOS = 'No hay stock de agregados registrado.';
+
+export const textoMaterialesDe = (empresa: string, ms: Material[]): string => {
+  const total = ms.reduce((s, m) => s + m.cantidad, 0);
+  const lineas = [`📦 *Stock de agregados — ${empresa}*`];
+  lineas.push(...ms.map((m) => `*- ${m.nombre}:* ${m.cantidad.toLocaleString('es-PE', { maximumFractionDigits: 2 })} ${m.unidad}${m.reponer ? ' (⚠️ REPONER)' : ''}`));
+  lineas.push(`*- Total:* ${total.toLocaleString('es-PE', { maximumFractionDigits: 2 })} m³`);
+  return lineas.join('\n');
+};
+
+export const textoMateriales = (lista: Material[]): string => {
+  const bloques = materialesPorEmpresa(lista).map(({ empresa, materiales: ms }) => textoMaterialesDe(empresa, ms));
+  return bloques.length ? bloques.join('\n\n') : SIN_AGREGADOS;
 };

@@ -173,6 +173,20 @@ describe('parámetros', () => {
     expect(sumarDias('2026-09-30', 1)).toBe('2026-10-01');
   });
 
+  /**
+   * «AYER» faltaba y se tomaba por hoy: el 14/09 José pidió «el resumen de
+   * despachos de ayer» y el agente contestó «no tengo pedidos para el lunes
+   * 14» — los del domingo 13 estaban. Y hacia atrás cruza el mes.
+   */
+  it('entiende «ayer» y «anteayer»', () => {
+    const ahora = new Date('2026-09-14T14:00:00Z').getTime(); // lunes 14/09, 09:00 Lima
+    expect(fechaDe('el resumen de despachos de ayer', ahora)).toBe('2026-09-13');
+    expect(fechaDe('los pedidos de anteayer', ahora)).toBe('2026-09-12');
+    expect(fechaDe('qué se despachó antes de ayer', ahora)).toBe('2026-09-12');
+    expect(fechaDe('los pedidos de ayer', new Date('2026-10-01T14:00:00Z').getTime())).toBe('2026-09-30');
+    expect(extraerParametros('resumen de despachos de ayer', ahora).fecha).toBe('2026-09-13');
+  });
+
   /** «la última unidad despachada» no pide un número: se resuelve sola. */
   it('entiende «la última» y «la primera»', () => {
     expect(extraerParametros('a qué hora salió la última unidad despachada hoy').ordinal).toBe('ultima');

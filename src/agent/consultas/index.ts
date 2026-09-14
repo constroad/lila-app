@@ -2,14 +2,14 @@ import logger from '../../utils/logger.js';
 import { CATALOGO, esConsulta, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { construirVista, type VistaDelDia } from './vista.js';
 import { PREGUNTA_UNIDAD, acotarArchivos, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
-import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho } from './archivos.js';
+import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
 import { fusionar, pareceContinuacion, recordarConsulta, ultimaConsulta } from './contexto.js';
 import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
 import { ALIAS_EMPRESA } from './catalogo.js';
-import { consumosDelDia, materiales, tanques, textoConsumos, textoMateriales, textoTanques } from './planta.js';
+import { SIN_AGREGADOS, consumosDelDia, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
 import { distritoDe, diasHasta, pronosticoHorario, pronosticoSemanal, textoClima, textoClimaSemanal, textoFueraDeAlcance } from './clima.js';
-import { pngResumenDespachos } from './imagen.js';
+import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { responderEnGrupo } from '../checklist/emisor.js';
@@ -113,6 +113,17 @@ const conPedidoElegido = async (
   return { texto: textoPregunta(`Hay ${candidatos.length} producciones ${fechaLegible(vista.fecha)}. ¿Cuál?`, opciones) };
 };
 
+/** Una imagen con su caption; si no se puede rasterizar, el texto solo. */
+const conImagen = async (caption: string, nombre: string, armar: () => Promise<Buffer>): Promise<Respuesta> => {
+  try {
+    const buffer = await armar();
+    return { texto: '', archivos: [{ tipo: 'image', url: '', nombre, fechaMs: Date.now(), mime: 'image/png', companyId: '', buffer, caption }] };
+  } catch (error) {
+    logger.warn(`[agente] no pude armar la imagen ${nombre}: ${error instanceof Error ? error.message : String(error)}`);
+    return { texto: caption };
+  }
+};
+
 const armarRespuesta = async (
   clave: ClaveConsulta | null,
   pregunta: string,
@@ -125,9 +136,26 @@ const armarRespuesta = async (
   const vista = await construirVista(fecha);
 
   // Lo de planta no depende de los pedidos del día: se contesta aunque no haya.
-  if (clave === 'tank_levels') return { texto: textoTanques(await tanques()) };
+  // Tanques y agregados van en IMAGEN con el texto de caption (José, 14/09), las
+  // mismas tarjetas del cron; si la imagen no se puede armar, queda el texto.
+  if (clave === 'tank_levels') {
+    const lista = await tanques();
+    const texto = textoTanques(lista);
+    if (lista.length === 0) return { texto };
+    return conImagen(texto, `tanques-${fecha}.png`, () => pngTanques(lista, 'Inframaq · planta'));
+  }
   if (clave === 'production_consume') return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
-  if (clave === 'aggregates_stock') return { texto: textoMateriales(await materiales(await empresasDelPiloto())) };
+  if (clave === 'aggregates_stock') {
+    const porEmpresa = materialesPorEmpresa(await materiales(await empresasDelPiloto()));
+    if (porEmpresa.length === 0) return { texto: SIN_AGREGADOS };
+    const archivos: Archivo[] = [];
+    for (const { empresa, materiales: ms } of porEmpresa) {
+      const r = await conImagen(textoMaterialesDe(empresa, ms), `agregados-${empresa}-${fecha}.png`, () => pngAgregados(ms, empresa));
+      if (r.archivos) archivos.push(...r.archivos);
+      else return { texto: textoMateriales(porEmpresa.flatMap((e) => e.materiales)) };
+    }
+    return { texto: '', archivos };
+  }
   if (clave === 'weather') {
     const distrito = distritoDe(pregunta);
     if (params.rango === 'semana') return { texto: textoClimaSemanal(await pronosticoSemanal(distrito)) };
@@ -139,16 +167,8 @@ const armarRespuesta = async (
   if (clave === 'dispatch_summary') {
     if (vista.orders.length === 0) return { texto: responder(clave, { vista, params }) };
     // En imagen (José, 13/09), y el texto de respaldo si la imagen no se pudiera armar.
-    try {
-      const png = await pngResumenDespachos(vista);
-      return {
-        texto: '',
-        archivos: [{ tipo: 'image', url: '', nombre: `despachos-${fecha}.png`, fechaMs: Date.now(), mime: 'image/png', companyId: '', buffer: png, caption: `📋 Despachos de ${fechaLegible(fecha)}` }],
-      };
-    } catch (error) {
-      logger.warn(`[agente] no pude armar la imagen del resumen: ${error instanceof Error ? error.message : String(error)}`);
-      return { texto: responder(clave, { vista, params }) };
-    }
+    const r = await conImagen(`📋 Despachos de ${fechaLegible(fecha)}`, `despachos-${fecha}.png`, () => pngResumenDespachos(vista));
+    return r.archivos ? r : { texto: responder(clave, { vista, params }) };
   }
 
   if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
