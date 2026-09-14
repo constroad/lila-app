@@ -296,9 +296,6 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       return [`📋 *Checklist de ${dia}*`, ...partes].join('\n');
     }
 
-    case 'help':
-      return AYUDA;
-
     case 'plant_finish': {
       const todas = unidades(vista);
       const total = vista.orders.reduce((s, o) => s + o.cantidadCubos, 0);
