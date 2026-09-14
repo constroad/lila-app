@@ -12398,7 +12398,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
 });
 
 // src/agent/checklist/observador.ts
-var ALCANCE_TTL_MS, alcanceCache, alcanceVigente, esDelBot, senderCache, senderPilotoCacheado, mencionadosDe, vistos, yaVisto, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, jidsPropios, senderPiloto, jidPorNombre;
+var ALCANCE_TTL_MS, alcanceCache, _resetAlcanceCache, alcanceVigente, esperarAlcance, esDelBot, senderCache, senderPilotoCacheado, mencionadosDe, vistos, yaVisto, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, jidsPropios, senderPiloto, jidPorNombre;
 var init_observador = __esm({
   "src/agent/checklist/observador.ts"() {
     init_logger();
@@ -12416,10 +12416,22 @@ var init_observador = __esm({
     init_whatsapp_constants();
     ALCANCE_TTL_MS = 5 * 6e4;
     alcanceCache = null;
+    _resetAlcanceCache = () => void (alcanceCache = null);
     alcanceVigente = async (now = Date.now()) => {
       if (alcanceCache && now - alcanceCache.at < ALCANCE_TTL_MS) return alcanceCache.alcance;
       const alcance = await resolverAlcance(jidPorNombre);
-      alcanceCache = { alcance, at: now };
+      if (alcance.grupoEscuchado) {
+        if (!alcanceCache) logger_default.info(`[agente] alcance resuelto: escucho \xAB${alcance.nombreGrupo}\xBB (${alcance.grupoEscuchado}); planta \xAB${alcance.nombreGrupoPlanta || "\u2014"}\xBB`);
+        alcanceCache = { alcance, at: now };
+      }
+      return alcance;
+    };
+    esperarAlcance = async (obtener, { intentos = 20, esperaMs = 2e3, dormir = (ms2) => new Promise((r39) => setTimeout(r39, ms2)) } = {}) => {
+      let alcance = await obtener();
+      for (let i50 = 0; !alcance.grupoEscuchado && i50 < intentos; i50++) {
+        await dormir(esperaMs);
+        alcance = await obtener();
+      }
       return alcance;
     };
     esDelBot = async (raw, sessionPhone) => {
@@ -12462,7 +12474,7 @@ var init_observador = __esm({
       try {
         if (!AGENTE_ACTIVO) return;
         if (upsert?.type !== "notify") return;
-        const alcance = await alcanceVigente();
+        const alcance = await esperarAlcance(alcanceVigente);
         if (!alcance.grupoEscuchado) return;
         for (const raw of upsert.messages ?? []) {
           const remoteJid = String(raw?.key?.remoteJid || "");
@@ -12600,6 +12612,8 @@ var init_observador = __esm({
           `[agente] memoria rehidratada: ${mensajes2.length} mensaje(s), ${propuestas3.length} propuesta(s), interruptor ${interruptor?.apagado ? "APAGADO" : "prendido"}`
         );
         void cargarAprobadores().catch(() => void 0);
+        _resetAlcanceCache();
+        void alcanceVigente().catch(() => void 0);
         void Promise.resolve().then(() => (init_llm(), llm_exports)).then(({ descargarModelo: descargarModelo2 }) => descargarModelo2()).catch(() => void 0);
       } catch (error) {
         logger_default.warn(`[agente] no pude rehidratar la memoria: ${error instanceof Error ? error.message : String(error)}`);

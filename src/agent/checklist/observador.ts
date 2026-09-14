@@ -49,7 +49,32 @@ export const alcanceVigente = async (now = Date.now()): Promise<AlcanceAgente> =
 
   const alcance = await resolverAlcance(jidPorNombre);
 
-  alcanceCache = { alcance, at: now };
+  // UN ALCANCE VACÍO NO SE CACHEA. Al arrancar, las sesiones conectan de a
+  // una y la de inframaq —la que resuelve el grupo por nombre— es la última,
+  // ~25 s después de la primera. Un mensaje que llegaba en ese hueco por la
+  // sesión de constroad resolvía «nada» y lo dejaba cacheado CINCO MINUTOS:
+  // el 14/09 a las 11:25, una pregunta de José 18 s después del deploy quedó
+  // sin respuesta y sin una línea en el log.
+  if (alcance.grupoEscuchado) {
+    if (!alcanceCache) logger.info(`[agente] alcance resuelto: escucho «${alcance.nombreGrupo}» (${alcance.grupoEscuchado}); planta «${alcance.nombreGrupoPlanta || '—'}»`);
+    alcanceCache = { alcance, at: now };
+  }
+  return alcance;
+};
+
+/**
+ * Reintenta hasta que el alcance esté resuelto: es lo que hace que un mensaje
+ * recibido durante el arranque espere a la sesión que falta en vez de perderse.
+ */
+export const esperarAlcance = async (
+  obtener: () => Promise<AlcanceAgente>,
+  { intentos = 20, esperaMs = 2_000, dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) } = {}
+): Promise<AlcanceAgente> => {
+  let alcance = await obtener();
+  for (let i = 0; !alcance.grupoEscuchado && i < intentos; i++) {
+    await dormir(esperaMs);
+    alcance = await obtener();
+  }
   return alcance;
 };
 
@@ -154,7 +179,7 @@ export const observarParaChecklist = async (
     if (!AGENTE_ACTIVO) return;
     if (upsert?.type !== 'notify') return;
 
-    const alcance = await alcanceVigente();
+    const alcance = await esperarAlcance(alcanceVigente);
     if (!alcance.grupoEscuchado) return;
 
     for (const raw of upsert.messages ?? []) {
@@ -355,6 +380,10 @@ export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
     // Los aprobadores se leen ya, para que la lista quede en el log antes del
     // primer voto — y no descubrir en el peor momento que nadie es admin.
     void cargarAprobadores().catch(() => undefined);
+    // El alcance se resuelve ya, con todas las sesiones arriba, para que el
+    // primer mensaje no lo pague ni lo encuentre a medias.
+    _resetAlcanceCache();
+    void alcanceVigente().catch(() => undefined);
     // El modelo generativo se baja en segundo plano si no está (1,1 GB, una
     // vez): hasta entonces las consultas van por reglas y embeddings.
     void import('../llm/index.js')
