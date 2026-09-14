@@ -39,7 +39,9 @@ const pause = valor('--pause');
 if (pause) set.handoffPauseMinutes = Number(pause);
 
 const Model = await getBotConfigModel();
-await Model.updateOne({ companyId: company }, { $set: set, $setOnInsert: { companyId: company, enabled: set.enabled === true } }, { upsert: true });
+const setOnInsert: Record<string, unknown> = { companyId: company };
+if (set.enabled === undefined) setOnInsert.enabled = false;
+await Model.updateOne({ companyId: company }, { $set: set, $setOnInsert: setOnInsert }, { upsert: true });
 if (args.includes('--show')) console.log(JSON.stringify(await Model.findOne({ companyId: company }).lean(), null, 2));
 console.log(`bot_configs de ${company} actualizado: ${JSON.stringify(set)}`);
 process.exit(0);

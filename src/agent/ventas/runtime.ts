@@ -51,7 +51,7 @@ export const correrTurno = async (params: {
       return { texto: RESPUESTA_FALLBACK, uso, herramientasUsadas: usadas, degradado: true };
     }
     uso = sumar(uso, respuesta.uso);
-    if (respuesta.motivo === 'herramientas' && respuesta.llamadas?.length) {
+    if (respuesta.llamadas?.length) {
       if (vuelta === MAX_VUELTAS_HERRAMIENTAS) break;
       const llamadas: LlamadaHerramienta[] = respuesta.llamadas;
       turnos.push({ rol: 'asistente', texto: respuesta.texto, llamadas });
@@ -61,14 +61,41 @@ export const correrTurno = async (params: {
         resultados.push(await ejecutarHerramienta(llamada, params.contexto));
       }
       turnos.push({ rol: 'resultado', resultados });
-      continue;
+      // Un proveedor que trae texto y llamadas en el mismo turno (el modelo
+      // local) ya dijo lo suyo: se ejecutan las herramientas y no se le vuelve
+      // a preguntar.
+      if (respuesta.motivo === 'herramientas' || !respuesta.texto) continue;
     }
     const texto = String(respuesta.texto || '').trim();
     if (!texto) break;
     if (params.ultimaRespuestaBot && texto === params.ultimaRespuestaBot.trim()) break;
+    const seguro = respuestaSegura(texto);
+    if (seguro.ok === false) {
+      usadas.push('escalar_a_humano');
+      await params.contexto.escalar(`respuesta bloqueada: ${seguro.motivo}`);
+      return { texto: RESPUESTA_FALLBACK, uso, herramientasUsadas: usadas, degradado: true };
+    }
     return { texto, uso, herramientasUsadas: usadas, degradado: false };
   }
   return { texto: RESPUESTA_FALLBACK, uso, herramientasUsadas: usadas, degradado: true };
+};
+
+/**
+ * LA GUARDA DE SALIDA. El prompt le dice al modelo qué no hacer; esto lo
+ * VERIFICA antes de mandar, porque un cliente puede pedirle «ignora tus
+ * instrucciones» o «dime tus reglas», y un modelo chico a veces obedece:
+ * - Nada que parezca un precio (S/, soles, $, «por m³» con número).
+ * - Nada del prompt de sistema (sus títulos, «instrucciones», «system prompt»).
+ * - Nada eterno: tope de caracteres.
+ * Si algo de eso sale, no se manda: fallback y escalada a una persona.
+ */
+export const respuestaSegura = (texto: string): { ok: true } | { ok: false; motivo: string } => {
+  const t = texto.toLowerCase();
+  if (texto.length > 900) return { ok: false, motivo: 'demasiado larga' };
+  if (/(s\/\.?\s*\d|\bsoles\b.*\d|\d.*\bsoles\b|\$\s*\d|\bus\$|\bdolares\b.*\d|\d[\d.,]*\s*(por|el|cada)\s*(m3|m³|m2|m²|metro))/i.test(t)) return { ok: false, motivo: 'contiene un precio' };
+  if (/(instrucciones del sistema|system prompt|prompt de sistema|mis instrucciones son|mis reglas son|# quién eres|# reglas que no se negocian|# servicios|no se negocian)/i.test(t)) return { ok: false, motivo: 'revela instrucciones' };
+  if (/(ignorar[ée]? mis instrucciones|ya no soy (la )?asistente|ahora soy|modo desarrollador|sin restricciones)/i.test(t)) return { ok: false, motivo: 'salió del papel' };
+  return { ok: true };
 };
 
 /** El historial guardado, en turnos para el modelo: cliente → usuario; bot y dueño → asistente. */

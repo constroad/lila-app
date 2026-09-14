@@ -116,7 +116,13 @@ function buildDeps(sessionPhone: string, sock: AgentSocket): InboundRouterDeps {
     saveInbound: saveInboundMessage,
     saveOutbound: saveOutboundMessage,
     // F2: el agente de ventas (vertical asfalto). Otros verticales, cuando existan, entran acá.
-    reply: async (input) => (input.botConfig.vertical === 'asphalt' ? responderVentas(input, { notificar }) : null),
+    reply: async (input) => {
+      if (input.botConfig.vertical !== 'asphalt') return null;
+      // «Escribiendo…» desde que llega el mensaje: entre la espera de ráfaga y el
+      // modelo pasan varios segundos, y la persona tiene que ver que algo pasa.
+      await sock.sendPresenceUpdate('composing', input.message.remoteJid).catch(() => undefined);
+      return responderVentas(input, { notificar });
+    },
     // F3: el dueño escribe desde su número → pausa / comandos.
     onOwnerMessage: async (message, companyId) => {
       const { botConfig } = await resolveSessionContext(sessionPhone);

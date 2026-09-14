@@ -505,7 +505,32 @@ Lo que corre (`src/agent/ventas/`, aislado del agente de operaciones):
   al dueño), `!pausa` (24 h esa conversación). Al vencer la pausa, el próximo
   mensaje del cliente reanuda al bot.
 
-### Runbook del piloto CONSTROAD (pendiente de la clave de LLM)
+### Modo GUIADO con Qwen local — **el que corre en el piloto (14/09/2026)**
+José: «hagámoslo con Qwen, que ya lo tenemos instalado». Probado el 1,5 B
+escribiendo él las respuestas: copiaba los ejemplos, saludaba en cada turno,
+inventaba nombres, repreguntaba. Lo que sí hace bien es EXTRAER. Entonces
+(`ventas/guiado.ts`, `extraccion.ts`): el código lleva la conversación
+(qué falta, qué se dice, en tuteo) y Qwen solo lee el último mensaje y
+devuelve un JSON con gramática; cada campo se valida contra el texto
+(«cantidad: necesito», «nombre: María», «fecha: así es» se tiran) y las
+señales que se pueden leer por regla —confirma, precio, persona, saludo,
+servicio, base, inyección— las lee el código. Ningún texto del modelo llega
+al cliente: no hay inyección por la salida, y el modelo no ve instrucciones
+que revelar. Probado con la conversación de un lead real (600 m², Lurín,
+precio, inyección, nombre, confirmación, pedido extra tras el cierre).
+Con un modelo grande (Anthropic/Groq) se activa solo el modo conversacional.
+
+**Seguridad (pregunta de José, 14/09):** (1) el tenant sale del NÚMERO que
+recibe (la sesión), nunca del mensaje; cada lectura lleva ese `companyId`
+(clientes, pedidos, conversaciones) — esa es la RLS; (2) allowlist
+`testNumbers` en el piloto; rate limit 8 msg/min por número; mensajes
+acotados a 600 caracteres para el modelo; (3) inyección: en modo guiado el
+modelo solo extrae y el código escribe; en modo conversacional hay regla en
+el prompt + `respuestaSegura` (bloquea precios, fugas del prompt, «ahora
+soy…») → fallback y escalada; (4) el bot no tiene herramientas que muten
+nada fuera de su conversación; (5) el dueño lo apaga desde WhatsApp.
+
+### Runbook del piloto (hecho el 14/09/2026 para el número 51949376824 ↔ 51902049935)
 1. Clave en `/Users/jose/deploys/lila/shared/.env`: `ANTHROPIC_API_KEY=…` o
    `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`; y `WHATSAPP_AGENT_ENABLED=true`.
 2. `npx tsx scripts/agente-ventas-config.ts --company constroad --vertical

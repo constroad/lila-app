@@ -137,10 +137,10 @@ export const cargarLlm = async (): Promise<Runtime | null> => {
       const { getLlama, LlamaChatSession } = await import('node-llama-cpp');
       const llama = await getLlama({ logLevel: 'error' } as never);
       const model = await llama.loadModel({ modelPath: rutaModelo(), gpuLayers: 'auto' } as never);
-      // Dos secuencias: una para elegir herramienta, otra para redactar. Cada
-      // una conserva su prompt de sistema evaluado, así una pregunta solo paga
-      // sus propios tokens.
-      const context = await model.createContext({ contextSize: CONTEXTO_TOKENS, sequences: 2 } as never);
+      // Tres secuencias: elegir herramienta, redactar, y el agente de ventas.
+      // Cada una conserva su prompt de sistema evaluado, así una pregunta solo
+      // paga sus propios tokens. Un solo modelo en memoria para los dos agentes.
+      const context = await model.createContext({ contextSize: CONTEXTO_TOKENS, sequences: 3 } as never);
       const rt: Runtime = {
         llama: llama as never,
         model: model as never,
@@ -194,6 +194,8 @@ export interface PedidoDeTexto {
   esquema?: Record<string, unknown>;
   maxTokens: number;
   timeoutMs: number;
+  /** 0 por defecto (determinista); el agente de ventas usa algo de variedad. */
+  temperatura?: number;
 }
 
 /**
@@ -227,7 +229,7 @@ export const generar = (pedido: PedidoDeTexto): Promise<string | null> => {
         const texto = await entrada.sesion.prompt(pedido.usuario, {
           grammar,
           maxTokens: pedido.maxTokens,
-          temperature: 0,
+          temperature: pedido.temperatura ?? 0,
           signal: controlador.signal,
           stopOnAbortSignal: false,
         });

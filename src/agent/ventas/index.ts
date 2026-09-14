@@ -12,6 +12,10 @@ import {
 } from '../runtime/conversation.store.js';
 import { crearProveedorAnthropic } from './anthropic.provider.js';
 import { crearProveedorOpenAiCompat } from './openai-compat.provider.js';
+import { crearProveedorQwen } from './qwen.provider.js';
+import { modeloDescargado } from '../llm/modelo.js';
+import { extraerConQwen } from './extraccion.js';
+import { paso, validarExtraccion, type EstadoGuiado } from './guiado.js';
 import { clientePorTelefono } from './cliente.js';
 import { HERRAMIENTAS_VENTAS, type DatosLead } from './herramientas.js';
 import type { ProveedorLlm } from './llm.types.js';
@@ -40,10 +44,11 @@ const ESPERA_RAFAGA_MS = 3_000;
 const HORARIO = { diasLaborales: [1, 2, 3, 4, 5], apertura: 8, cierreSemana: 18, cierreSabado: 13 };
 
 /**
- * El proveedor lo decide qué clave hay en el `.env`: `ANTHROPIC_API_KEY`
- * (Haiku 4.5, la opción v1 del spec) o, si no, `LLM_BASE_URL` + `LLM_API_KEY`
- * + `LLM_MODEL` (Groq, DeepSeek, OpenRouter, un llama.cpp propio). Sin
- * ninguna, el agente no contesta y lo dice una vez en el log.
+ * El proveedor lo decide qué hay: `ANTHROPIC_API_KEY` (Haiku 4.5, la opción
+ * v1 del spec); si no, `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL` (Groq,
+ * DeepSeek, OpenRouter); si no, **Qwen local**, el mismo modelo del agente de
+ * operaciones (José, 14/09: «hagámoslo con Qwen, que ya lo tenemos»). Sin
+ * ninguno, el agente no contesta y lo dice una vez en el log.
  */
 let proveedor: ProveedorLlm | null | undefined;
 export const proveedorLlm = (): ProveedorLlm | null => {
@@ -53,7 +58,8 @@ export const proveedorLlm = (): ProveedorLlm | null => {
     const apiKey = String(process.env.LLM_API_KEY || '').trim();
     const modelo = String(process.env.LLM_MODEL || '').trim();
     if (!proveedor && baseUrl && apiKey && modelo) proveedor = crearProveedorOpenAiCompat({ baseUrl, apiKey, modelo });
-    if (!proveedor) logger.warn('[ventas] sin ANTHROPIC_API_KEY ni LLM_BASE_URL/LLM_API_KEY/LLM_MODEL: el agente de ventas no contesta');
+    if (!proveedor && modeloDescargado()) proveedor = crearProveedorQwen();
+    if (!proveedor) logger.warn('[ventas] sin clave de LLM ni modelo local: el agente de ventas no contesta');
     else logger.info(`[ventas] proveedor de LLM: ${proveedor.nombre}`);
   }
   return proveedor;
@@ -121,6 +127,12 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
 
     const cliente = await clientePorTelefono(companyId, customerPhone).catch(() => null);
     const hora = ahoraLima();
+    // CON EL MODELO LOCAL, EL FLUJO GUIADO: el código lleva la conversación y
+    // Qwen solo extrae (`guiado.ts` cuenta por qué). Con un modelo grande, el
+    // turno conversacional de abajo.
+    if (llm.nombre === 'qwen-local') {
+      return turnoGuiado({ conversationId, botConfig, customerPhone, mensajes, cliente, enHorario: hora.enHorario, conversacion }, deps);
+    }
     const sistema = bloquesSistema(CONSTROAD, { ahoraTexto: hora.texto, enHorario: hora.enHorario, cliente, telefono: customerPhone, lead: conversacion.lead ?? null });
     const ultimaBot = [...mensajes].reverse().find((m) => m.role === 'bot')?.text;
     let lead: DatosLead = { ...(conversacion.lead as DatosLead | undefined) };
@@ -170,6 +182,59 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
     );
     return resultado.texto;
   });
+};
+
+const notificarLead = async (
+  lead: DatosLead,
+  ctx: { conversationId: string; botConfig: ReplyInput['botConfig']; customerPhone: string; conversacion: { leadNotifiedAt?: Date; lead?: Record<string, unknown> }; nombreCliente?: string },
+  deps: DepsVentas
+): Promise<boolean> => {
+  const conQue = Boolean(lead.servicio && (lead.distrito || lead.cantidad));
+  const avisadoHoy = ctx.conversacion.leadNotifiedAt && Date.now() - ctx.conversacion.leadNotifiedAt.getTime() < 24 * 3_600_000;
+  const notificar = Boolean(ctx.botConfig.ownerNotifyTarget) && (lead.listo || conQue) && (!avisadoHoy || Boolean(lead.listo && !ctx.conversacion.lead?.listo));
+  await guardarLeadEnConversacion(ctx.conversationId, lead as Record<string, unknown>, notificar);
+  if (notificar) {
+    await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), textoLead(lead, ctx.customerPhone, ctx.nombreCliente));
+    ctx.conversacion.leadNotifiedAt = new Date();
+    ctx.conversacion.lead = lead as Record<string, unknown>;
+  }
+  return notificar;
+};
+
+const turnoGuiado = async (
+  ctx: {
+    conversationId: string;
+    botConfig: ReplyInput['botConfig'];
+    customerPhone: string;
+    mensajes: Array<{ role: string; text?: string }>;
+    cliente: { nombre: string; empresa?: string } | null;
+    enHorario: boolean;
+    conversacion: { leadNotifiedAt?: Date; lead?: Record<string, unknown>; customerName?: string };
+  },
+  deps: DepsVentas
+): Promise<string> => {
+  const estado = (ctx.conversacion.lead ?? {}) as EstadoGuiado;
+  // Todo lo que el cliente dijo desde la última respuesta del bot (la ráfaga).
+  let desde = ctx.mensajes.length;
+  while (desde > 0 && ctx.mensajes[desde - 1].role === 'customer') desde--;
+  const texto = ctx.mensajes.slice(desde).map((m) => String(m.text || '')).join('\n');
+  const ultimaBot = [...ctx.mensajes].reverse().find((m) => m.role === 'bot')?.text;
+  const inicio = Date.now();
+  const extraido = validarExtraccion(await extraerConQwen(texto, { ultimaPreguntaBot: ultimaBot, resumenEnviado: Boolean(estado.resumenEnviado) }), texto);
+  const p = paso(estado, extraido, CONSTROAD, ctx.cliente, ctx.enHorario, texto);
+  if (p.guardar) await notificarLead(p.estado, { ...ctx, nombreCliente: ctx.cliente?.nombre ?? ctx.conversacion.customerName }, deps);
+  else await guardarLeadEnConversacion(ctx.conversationId, p.estado as Record<string, unknown>, false);
+  if (p.notaNueva && ctx.botConfig.ownerNotifyTarget) {
+    await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), `➕ *${p.estado.nombre ?? ctx.cliente?.nombre ?? telefonoLegible(ctx.customerPhone)} agregó:* «${p.notaNueva}»`);
+  }
+  if (p.escalar) {
+    await pausarConversacion(ctx.conversationId, ctx.botConfig.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN, 'escalada');
+    if (ctx.botConfig.ownerNotifyTarget) {
+      await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), `🙋 *Cliente pide atención — ${CONSTROAD.nombre}*\n👤 ${p.estado.nombre ?? ctx.cliente?.nombre ?? ctx.conversacion.customerName ?? 'sin nombre'} · ${telefonoLegible(ctx.customerPhone)}\nMotivo: ${p.escalar}\nÚltimo mensaje: «${texto.slice(0, 160)}»\nEl bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
+    }
+  }
+  logger.info(`[ventas] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ''}: guiado · extraído ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v]) => v && v !== '')))} · ${((Date.now() - inicio) / 1000).toFixed(1)} s${p.escalar ? ` · ESCALA (${p.escalar})` : ''}`);
+  return p.texto;
 };
 
 /** F3: el dueño escribió desde el número del negocio. */

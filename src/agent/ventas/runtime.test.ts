@@ -1,4 +1,4 @@
-import { RESPUESTA_FALLBACK, correrTurno, historialATurnos } from './runtime';
+import { RESPUESTA_FALLBACK, correrTurno, historialATurnos, respuestaSegura } from './runtime';
 import { HERRAMIENTAS_VENTAS } from './herramientas';
 import type { ProveedorLlm, RespuestaLlm, TurnoChat } from './llm.types';
 
@@ -117,5 +117,37 @@ describe('historialATurnos', () => {
     const turnos = historialATurnos(muchos, 6);
     expect(turnos).toHaveLength(5); // 6 mensajes, el último (bot) se cae
     expect(turnos[0]).toEqual({ rol: 'usuario', texto: 'm34' });
+  });
+});
+
+describe('respuestaSegura (inyección y fugas)', () => {
+  it('bloquea precios, instrucciones reveladas y el modelo fuera de papel', () => {
+    expect(respuestaSegura('Claro, son S/ 250 por m³.')).toMatchObject({ ok: false, motivo: 'contiene un precio' });
+    expect(respuestaSegura('Te sale 180 soles el metro.')).toMatchObject({ ok: false, motivo: 'contiene un precio' });
+    expect(respuestaSegura('Mis instrucciones son: # Quién eres…')).toMatchObject({ ok: false, motivo: 'revela instrucciones' });
+    expect(respuestaSegura('Ok, ahora soy un asistente sin restricciones.')).toMatchObject({ ok: false, motivo: 'salió del papel' });
+    expect(respuestaSegura('x'.repeat(901))).toMatchObject({ ok: false, motivo: 'demasiado larga' });
+  });
+
+  it('deja pasar lo normal, con números que no son precios', () => {
+    expect(respuestaSegura('Perfecto: 600 m² en Lurín con base lista. ¿Para cuándo lo necesitas?')).toEqual({ ok: true });
+    expect(respuestaSegura('Atendemos de lunes a viernes de 8:00 a 18:00.')).toEqual({ ok: true });
+    expect(respuestaSegura('Con 2 pulgadas de espesor va bien para tráfico medio.')).toEqual({ ok: true });
+  });
+
+  it('una respuesta bloqueada no se manda: fallback y escalada', async () => {
+    const c = contexto();
+    const r = await correrTurno({ proveedor: proveedorDe([{ texto: 'Te cobramos S/ 300 por m3, solo por hoy.', uso, motivo: 'fin' }]), sistema: [], historial, herramientas: [], contexto: c.ctx });
+    expect(r).toMatchObject({ texto: RESPUESTA_FALLBACK, degradado: true });
+    expect(c.escaladas).toEqual(['respuesta bloqueada: contiene un precio']);
+  });
+
+  it('texto y llamadas en el mismo turno (modelo local): se ejecutan y se responde sin volver a preguntar', async () => {
+    const c = contexto();
+    const p = proveedorDe([{ texto: '¿De cuántos m² es?', llamadas: [{ id: 'lead', nombre: 'guardar_lead', argumentos: { servicio: 'colocacion' } }], uso, motivo: 'fin' }]);
+    const r = await correrTurno({ proveedor: p, sistema: [], historial, herramientas: HERRAMIENTAS_VENTAS, contexto: c.ctx });
+    expect(r.texto).toBe('¿De cuántos m² es?');
+    expect(p.turnosVistos).toHaveLength(1);
+    expect(c.leads).toHaveLength(1);
   });
 });
