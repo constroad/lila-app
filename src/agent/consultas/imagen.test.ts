@@ -1,4 +1,4 @@
-import { estadoPorReorden, svgAgregados, svgResumenDespachos, svgTanques } from './imagen';
+import { estadoPorReorden, svgAgregados, svgResumenDespachos, svgTabla, svgTanques } from './imagen';
 import type { VistaDelDia } from './vista';
 
 /**
@@ -96,5 +96,24 @@ describe('tarjetas de agregados', () => {
     expect(estadoPorReorden(450, 300)).toBe('medium');
     expect(estadoPorReorden(451, 300)).toBe('healthy');
     expect(estadoPorReorden(999, 0)).toBe('unknown');
+  });
+});
+
+describe('tabla genérica', () => {
+  it('cabecera, columnas, secciones con detalle y filas; escapa el XML y recorta lo largo', () => {
+    const svg = svgTabla({
+      titulo: 'Pedidos sin certificado cargado',
+      subtitulo: 'del 15/08 al 14/09 · 3 de 5 despachados',
+      columnas: [{ titulo: 'Fecha', ancho: 110 }, { titulo: 'm³', ancho: 120, alinear: 'fin' }, { titulo: 'Obra', ancho: 470, max: 20 }],
+      secciones: [{ encabezado: 'DE & BD INMOBILIARIA', detalle: '2 pedido(s)', filas: [['10/09', '161.1', 'CREACION DEL SERVICIO DE MOVILIDAD URBANA'], ['09/09', '125', '<obra>']] }],
+      pie: 'Se muestran los primeros.',
+    });
+    expect(svg).toContain('Pedidos sin certificado cargado');
+    expect(svg).toContain('>FECHA<');
+    expect(svg).toContain('DE &amp; BD INMOBILIARIA');
+    expect(svg).toContain('CREACION DEL SERVIC…');
+    expect(svg).toContain('&lt;obra&gt;');
+    expect(svg).toContain('text-anchor="end"');
+    expect(svg).toContain('Se muestran los primeros.');
   });
 });

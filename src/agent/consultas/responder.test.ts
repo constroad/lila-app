@@ -72,7 +72,7 @@ describe('responder', () => {
   it('pedidos del día', () => {
     const r = responder('orders_day', { vista, params: hoy });
     expect(r).toContain('📋 *Pedidos de domingo 13/09*');
-    expect(r).toContain('04:00 — *FERNANDO COBEÑAS* · PROYECTOS VARIOS · 91 m³ (75 despachados)');
+    expect(r).toContain('• 04:00 · 75/91 m³ · *FERNANDO COBEÑAS*\n   PROYECTOS VARIOS');
   });
 
   it('sin pedidos, lo dice y no inventa unidades', () => {

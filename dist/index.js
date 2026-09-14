@@ -9581,13 +9581,14 @@ var init_ayuda = __esm({
 });
 
 // src/agent/consultas/responder.ts
-var LIMITES, acotarArchivos, elegirPedido, etiquetaPedido, unidadPor, identificaUnidad, hora, unidades, PREGUNTA_UNIDAD, describeUnidad, sinPedidos, estimarFin, ESTADO_INFORME, textoInforme, AYUDA, responder, TIPOS_ALIAS;
+var LIMITES, recortarTexto, acotarArchivos, elegirPedido, etiquetaPedido, unidadPor, identificaUnidad, hora, unidades, PREGUNTA_UNIDAD, describeUnidad, sinPedidos, estimarFin, ESTADO_INFORME, textoInforme, AYUDA, responder, TIPOS_ALIAS;
 var init_responder = __esm({
   "src/agent/consultas/responder.ts"() {
     init_catalogo();
     init_tiempo();
     init_ayuda();
     LIMITES = { imagenes: 5, videos: 2, documentos: 6 };
+    recortarTexto = (s59, max) => s59.length > max ? `${s59.slice(0, max - 1)}\u2026` : s59;
     acotarArchivos = (archivos) => {
       const enviar = [];
       const cuenta = { image: 0, video: 0, document: 0 };
@@ -9644,15 +9645,17 @@ var init_responder = __esm({
         case "orders_day": {
           if (vacio) return vacio;
           const lineas = vista.orders.map(
-            (o37) => `\u2022 ${o37.hora || "\u2014"} \u2014 *${o37.cliente || o37.companyId}* \xB7 ${o37.obra || "sin obra"} \xB7 ${o37.cantidadCubos} m\xB3 (${o37.m3Dispatched} despachados)`
+            // Una línea por pedido que entre en un celular: hora, m³ y cliente; la obra debajo, corta.
+            (o37) => `\u2022 ${o37.hora || "\u2014"} \xB7 ${o37.m3Dispatched}/${o37.cantidadCubos} m\xB3 \xB7 *${recortarTexto(o37.cliente || o37.companyId, 22)}*` + (o37.obra ? `
+   ${recortarTexto(o37.obra, 34)}` : "")
           );
           return [`\u{1F4CB} *Pedidos de ${dia}*`, ...lineas].join("\n");
         }
         case "day_progress": {
           const total = vista.orders.reduce((s59, o37) => s59 + o37.cantidadCubos, 0);
           const van = vista.orders.reduce((s59, o37) => s59 + o37.m3Dispatched, 0);
-          const porPedido = vista.orders.map((o37) => `\u2022 ${o37.cliente || o37.companyId}: ${o37.m3Dispatched} de ${o37.cantidadCubos} m\xB3`);
-          return [`\u{1F4CA} *Avance de ${dia}*: *${van} de ${total} m\xB3* despachados, faltan ${Math.max(total - van, 0)}.`, ...porPedido].join("\n");
+          const porPedido = vista.orders.map((o37) => `\u2022 ${o37.m3Dispatched}/${o37.cantidadCubos} m\xB3 \xB7 ${recortarTexto(o37.cliente || o37.companyId, 24)}`);
+          return [`\u{1F4CA} *Avance de ${dia}*`, `*${van} de ${total} m\xB3* despachados, faltan ${Math.max(total - van, 0)}.`, ...porPedido].join("\n");
         }
         case "plant_current_unit": {
           const todas = unidades(vista);
@@ -9715,7 +9718,8 @@ var init_responder = __esm({
             const lineas = [`\u{1F69B} *${o37.cliente || o37.companySlug}* \xB7 ${o37.obra || "sin obra"} \xB7 ${o37.m3Dispatched} de ${o37.cantidadCubos} m\xB3 \xB7 ${o37.units.length} unidad(es)`];
             for (const u66 of o37.units) {
               const estado2 = u66.state === "despachado" ? `\u2705 sali\xF3 ${hora(u66.departedAt)}${u66.arrivalAt ? `, lleg\xF3 ${hora(u66.arrivalAt)}` : ""}` : u66.state === "progreso" ? "\u{1F3ED} cargando" : "\u23F3 pendiente";
-              lineas.push(`${u66.unitNumber}. ${u66.plate || "sin placa"} \xB7 ${u66.driverName || "sin conductor"} \xB7 ${u66.quantity} m\xB3 \xB7 ${estado2}`);
+              lineas.push(`${u66.unitNumber}. ${u66.plate || "sin placa"} \xB7 ${u66.quantity} m\xB3 \xB7 ${estado2}
+   ${recortarTexto(u66.driverName || "sin conductor", 30)}`);
             }
             return lineas.join("\n");
           });
@@ -10764,7 +10768,7 @@ var init_clima = __esm({
 });
 
 // src/agent/consultas/imagen.ts
-var INK, INK_SOFT, HEADER_BG, ROW_ALT, LINE, ESTADO, WIDTH, PAD, HEADER, ORDER_HEADER, ROW, FOOT, escapeXml, hora2, recortar, filaUnidad, svgResumenDespachos, pngResumenDespachos, CARD_W, CARD_GAP, POR_FILA, CARD_PAD, CARD_IMG_W, CARD_HEADER, CARD_BG, TRACK_BG, GROUND, PUNTO, ETIQUETA_ESTADO, FACTOR_MEDIO, clamp, estadoPorReorden, fmt0, fmt2, estilosTarjetas, grilla, TANK_CARD_H, TANK_BAR_H, TANK_BAR_W, COLOR_CONTENIDO, tarjetaTanque, svgTanques, pngTanques, PILE_CARD_H, PILA, FACTOR_REFERENCIA, siluetaPila, tarjetaMaterial, svgAgregados, pngAgregados;
+var INK, INK_SOFT, HEADER_BG, ROW_ALT, LINE, ESTADO, WIDTH, PAD, HEADER, ORDER_HEADER, ROW, FOOT, escapeXml, hora2, recortar, filaUnidad, svgResumenDespachos, pngResumenDespachos, CARD_W, CARD_GAP, POR_FILA, CARD_PAD, CARD_IMG_W, CARD_HEADER, CARD_BG, TRACK_BG, GROUND, PUNTO, ETIQUETA_ESTADO, FACTOR_MEDIO, clamp, estadoPorReorden, fmt0, fmt2, estilosTarjetas, grilla, TANK_CARD_H, TANK_BAR_H, TANK_BAR_W, COLOR_CONTENIDO, tarjetaTanque, svgTanques, pngTanques, PILE_CARD_H, PILA, FACTOR_REFERENCIA, siluetaPila, tarjetaMaterial, svgAgregados, pngAgregados, T_ROW, T_SECCION, T_ENCABEZADO_COLS, T_MAX_FILAS, svgTabla, pngTabla;
 var init_imagen = __esm({
   "src/agent/consultas/imagen.ts"() {
     init_tiempo();
@@ -10973,6 +10977,65 @@ var init_imagen = __esm({
     pngAgregados = async (lista, empresa) => {
       const { default: sharp7 } = await import("sharp");
       return sharp7(Buffer.from(svgAgregados(lista, empresa))).png().toBuffer();
+    };
+    T_ROW = 40;
+    T_SECCION = 48;
+    T_ENCABEZADO_COLS = 30;
+    T_MAX_FILAS = 60;
+    svgTabla = (t44) => {
+      const secciones = t44.secciones.map((s59) => ({ ...s59, filas: s59.filas.slice(0, T_MAX_FILAS) }));
+      const filasTotales = secciones.reduce((n44, s59) => n44 + s59.filas.length, 0);
+      const height = HEADER + T_ENCABEZADO_COLS + secciones.length * (T_SECCION + 12) + filasTotales * T_ROW + (t44.pie ? 34 : 0) + FOOT;
+      const xs = [];
+      let acumulado = PAD + 16;
+      for (const c66 of t44.columnas) {
+        xs.push(acumulado);
+        acumulado += c66.ancho;
+      }
+      const celda = (c66, i50, valor, y66, clase) => {
+        const texto2 = escapeXml(recortar(String(valor ?? ""), c66.max ?? 40));
+        const x63 = c66.alinear === "fin" ? xs[i50] + c66.ancho - 12 : xs[i50];
+        return `<text x="${x63}" y="${y66}" class="${clase}"${c66.alinear === "fin" ? ' text-anchor="end"' : ""}>${texto2}</text>`;
+      };
+      const partes = [];
+      let y65 = HEADER + 8;
+      partes.push(...t44.columnas.map((c66, i50) => celda(c66, i50, c66.titulo.toUpperCase(), y65 + 14, "lbl")));
+      y65 += T_ENCABEZADO_COLS;
+      for (const s59 of secciones) {
+        partes.push(`<line x1="${PAD}" y1="${y65 + 6}" x2="${WIDTH - PAD}" y2="${y65 + 6}" stroke="${LINE}" />`);
+        partes.push(`<text x="${PAD}" y="${y65 + 32}" class="order">${escapeXml(recortar(s59.encabezado, 60))}</text>`);
+        if (s59.detalle) partes.push(`<text x="${WIDTH - PAD}" y="${y65 + 32}" class="sub" text-anchor="end">${escapeXml(recortar(s59.detalle, 40))}</text>`);
+        y65 += T_SECCION;
+        s59.filas.forEach((fila, i50) => {
+          if (i50 % 2 === 1) partes.push(`<rect x="${PAD}" y="${y65}" width="${WIDTH - PAD * 2}" height="${T_ROW}" fill="${ROW_ALT}" />`);
+          partes.push(...t44.columnas.map((c66, j50) => celda(c66, j50, fila[j50] ?? "", y65 + 26, j50 === 0 ? "num" : "cell")));
+          y65 += T_ROW;
+        });
+        y65 += 12;
+      }
+      if (t44.pie) partes.push(`<text x="${PAD}" y="${y65 + 20}" class="sub">${escapeXml(t44.pie)}</text>`);
+      return `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">
+      <style>
+        text { font-family: Arial, Helvetica, sans-serif; }
+        .title { font-size: 28px; font-weight: 800; fill: #ffffff; }
+        .subtitle { font-size: 15px; font-weight: 500; fill: #b9bdc7; }
+        .order { font-size: 19px; font-weight: 800; fill: ${INK}; }
+        .sub { font-size: 14px; font-weight: 500; fill: ${INK_SOFT}; }
+        .lbl { font-size: 11px; font-weight: 800; letter-spacing: 0.6px; fill: ${INK_SOFT}; }
+        .num { font-size: 16px; font-weight: 800; fill: ${INK}; }
+        .cell { font-size: 16px; font-weight: 600; fill: ${INK}; }
+      </style>
+      <rect width="${WIDTH}" height="${height}" fill="#ffffff" />
+      <rect width="${WIDTH}" height="${HEADER}" fill="${HEADER_BG}" />
+      <text x="${PAD}" y="42" class="title">${escapeXml(t44.titulo)}</text>
+      <text x="${PAD}" y="68" class="subtitle">${escapeXml(t44.subtitulo)}</text>
+      ${partes.join("\n")}
+    </svg>`;
+    };
+    pngTabla = async (t44) => {
+      const { default: sharp7 } = await import("sharp");
+      return sharp7(Buffer.from(svgTabla(t44))).png().toBuffer();
     };
   }
 });
@@ -11496,7 +11559,7 @@ var init_herramientas = __esm({
 });
 
 // src/agent/llm/fichas.ts
-var n, recortar2, corta, EMPRESAS_TEXTO, fichaClientes, fichaProveedores, rango, fichaPedidos, fichaKardex, fichaIngresos, fichaCertificados;
+var n, recortar2, corta, EMPRESAS_TEXTO, FILAS_PARA_IMAGEN, etiquetaEmpresa, fichaClientes, fichaProveedores, rango, encabezadoPedidos, fichaPedidos, tablaPedidos, kardexConMovimientos, resumenKardex, fichaKardex, tablaKardex, cuandoIngresos, fichaIngresos, tablaIngresos, cuandoCertificados, porClienteDe, resumenCertificados, fichaCertificados, tablaCertificados;
 var init_fichas = __esm({
   "src/agent/llm/fichas.ts"() {
     init_tiempo();
@@ -11504,6 +11567,14 @@ var init_fichas = __esm({
     recortar2 = (s59, max = 60) => s59.length > max ? `${s59.slice(0, max - 1)}\u2026` : s59;
     corta = (f64) => f64 ? fechaLegible(f64).replace(/^\S+ /, "") : "\u2014";
     EMPRESAS_TEXTO = "Globofast, Constroad ni Inframaq";
+    FILAS_PARA_IMAGEN = 6;
+    etiquetaEmpresa = (nombre) => {
+      const t44 = String(nombre || "").toLowerCase();
+      if (t44.includes("globofas")) return "Globofast";
+      if (t44.includes("constroad")) return "Constroad";
+      if (t44.includes("inframaq")) return "Inframaq";
+      return String(nombre || "");
+    };
     fichaClientes = (nombre, lista) => {
       if (lista.length === 0) return `No encontr\xE9 ning\xFAn cliente que se llame \xAB${nombre}\xBB en ${EMPRESAS_TEXTO}.`;
       const bloques = lista.map((c66) => {
@@ -11533,74 +11604,168 @@ var init_fichas = __esm({
       return bloques.join("\n\n");
     };
     rango = (desde, hasta) => desde === hasta ? `el ${fechaLegible(desde)}` : `del ${corta(desde)} al ${corta(hasta)}`;
+    encabezadoPedidos = (h65, filtro, hoy) => {
+      const de9 = [filtro.cliente ? `de ${filtro.cliente}` : "", filtro.empresa ? `\xB7 ${etiquetaEmpresa(filtro.empresa)}` : ""].filter(Boolean).join(" ");
+      const todosPorVenir = Boolean(hoy) && h65.pedidos.every((p64) => p64.fecha > hoy);
+      return todosPorVenir ? `\u{1F4CB} *${h65.pedidos.length} pedido(s) programado(s)* ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)} \u2014 ${n(h65.totalM3Pedidos)} m\xB3` : `\u{1F4CB} *${h65.pedidos.length} pedido(s)* ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)}
+${n(h65.totalM3Despachados)} de ${n(h65.totalM3Pedidos)} m\xB3 despachados`;
+    };
     fichaPedidos = (h65, filtro, hoy = "") => {
-      const de9 = [filtro.cliente ? `de ${filtro.cliente}` : "", filtro.empresa ? `en ${filtro.empresa}` : ""].filter(Boolean).join(" ");
+      const de9 = [filtro.cliente ? `de ${filtro.cliente}` : "", filtro.empresa ? `en ${etiquetaEmpresa(filtro.empresa)}` : ""].filter(Boolean).join(" ");
       if (h65.pedidos.length === 0) {
         const porVenir2 = Boolean(hoy) && h65.hasta >= hoy;
         return `No hay pedidos ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)} en Portal.${porVenir2 ? " Si hay producci\xF3n programada, todav\xEDa no est\xE1 cargada." : ""}`;
       }
       const porVenir = (p64) => Boolean(hoy) && p64.fecha > hoy;
-      const todosPorVenir = h65.pedidos.every(porVenir);
-      const lineas = [
-        todosPorVenir ? `\u{1F4CB} *${h65.pedidos.length} pedido(s) programado(s) ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)}* \u2014 ${n(h65.totalM3Pedidos)} m\xB3` : `\u{1F4CB} *${h65.pedidos.length} pedido(s) ${de9 ? `${de9} ` : ""}${rango(h65.desde, h65.hasta)}* \u2014 ${n(h65.totalM3Despachados)} de ${n(h65.totalM3Pedidos)} m\xB3 despachados`
-      ];
+      const lineas = [encabezadoPedidos(h65, filtro, hoy)];
       for (const p64 of h65.pedidos) {
-        const quien = [filtro.cliente ? "" : p64.cliente, filtro.empresa ? "" : `(${p64.empresa})`].filter(Boolean).join(" ");
-        const cantidad = porVenir(p64) ? `${n(p64.m3Pedidos)} m\xB3, ${p64.hora ? "programado" : "sin hora de inicio"}` : `${n(p64.m3Despachados)} de ${n(p64.m3Pedidos)} m\xB3, ${p64.estado}`;
-        lineas.push(`\u2022 ${corta(p64.fecha)}${p64.hora ? ` ${p64.hora}` : ""} ${quien ? `${recortar2(quien, 45)} ` : ""}${recortar2(p64.obra || "sin obra")}: ${cantidad}`);
+        const cantidad = porVenir(p64) ? `${n(p64.m3Pedidos)} m\xB3${p64.hora ? "" : " \xB7 sin hora"}` : `${n(p64.m3Despachados)}/${n(p64.m3Pedidos)} m\xB3`;
+        const quien = filtro.cliente ? recortar2(p64.obra || "sin obra", 18) : recortar2(p64.cliente, 18);
+        lineas.push(`\u2022 ${corta(p64.fecha)}${p64.hora ? ` ${p64.hora}` : ""} \xB7 ${cantidad} \xB7 ${quien}${filtro.empresa ? "" : ` (${etiquetaEmpresa(p64.empresa)})`}`);
       }
       if (h65.truncado) lineas.push(`\u2026 y m\xE1s: te muestro los primeros ${h65.pedidos.length}. Acota las fechas o el cliente.`);
       return lineas.join("\n");
     };
+    tablaPedidos = (h65, filtro, hoy = "") => {
+      const porVenir = (p64) => Boolean(hoy) && p64.fecha > hoy;
+      const porEmpresa = /* @__PURE__ */ new Map();
+      for (const p64 of h65.pedidos) porEmpresa.set(p64.empresa, [...porEmpresa.get(p64.empresa) ?? [], p64]);
+      return {
+        titulo: filtro.cliente ? `Pedidos de ${recortar2(filtro.cliente, 30)}` : "Pedidos",
+        subtitulo: `${rango(h65.desde, h65.hasta)} \xB7 ${h65.pedidos.length} pedido(s) \xB7 ${n(h65.totalM3Despachados)} de ${n(h65.totalM3Pedidos)} m\xB3 despachados`,
+        columnas: [
+          { titulo: "Fecha", ancho: 110 },
+          { titulo: "Hora", ancho: 80 },
+          { titulo: "m\xB3", ancho: 130, alinear: "fin" },
+          { titulo: "Cliente", ancho: 300, max: 26 },
+          { titulo: "Obra", ancho: 300, max: 26 },
+          { titulo: "Estado", ancho: 96, max: 12 }
+        ],
+        secciones: [...porEmpresa].map(([empresa, lista]) => ({
+          encabezado: etiquetaEmpresa(empresa),
+          detalle: `${lista.length} pedido(s) \xB7 ${n(lista.reduce((s59, p64) => s59 + p64.m3Despachados, 0))} de ${n(lista.reduce((s59, p64) => s59 + p64.m3Pedidos, 0))} m\xB3`,
+          filas: lista.map((p64) => [corta(p64.fecha), p64.hora || "\u2014", porVenir(p64) ? `${n(p64.m3Pedidos)}` : `${n(p64.m3Despachados)} / ${n(p64.m3Pedidos)}`, p64.cliente, p64.obra || "sin obra", porVenir(p64) ? p64.hora ? "programado" : "sin hora" : p64.estado])
+        })),
+        pie: h65.truncado ? `Se muestran los primeros ${h65.pedidos.length}. Acota las fechas o el cliente para ver el resto.` : void 0
+      };
+    };
+    kardexConMovimientos = (lista) => {
+      const con = lista.filter((k61) => k61.movimientos.length > 0);
+      return con.length ? con : lista;
+    };
+    resumenKardex = (k61) => `\u2B06\uFE0F ${k61.cantidadIngresos} ingresos \xB7 ${n(k61.totalIngresos)} ${k61.unidad}
+\u2B07\uFE0F ${k61.cantidadSalidas} salidas \xB7 ${n(k61.totalSalidas)} ${k61.unidad}
+\u{1F4E6} stock actual ${n(k61.saldoActual)} ${k61.unidad}`;
     fichaKardex = (material, lista) => {
       if (lista.length === 0) return `No encontr\xE9 un material que se llame \xAB${material}\xBB en ${EMPRESAS_TEXTO}.`;
-      const conMovimientos = lista.filter((k61) => k61.movimientos.length > 0);
-      const bloques = (conMovimientos.length ? conMovimientos : lista).map((k61) => {
-        const lineas = [
-          `\u{1F4E6} *${k61.material}* \xB7 ${k61.empresa} \xB7 ${rango(k61.desde, k61.hasta)}`,
-          `${k61.cantidadIngresos} ingreso(s) por ${n(k61.totalIngresos)} ${k61.unidad} \xB7 ${k61.cantidadSalidas} salida(s) por ${n(k61.totalSalidas)} ${k61.unidad} \xB7 stock actual ${n(k61.saldoActual)} ${k61.unidad}`
-        ];
+      const bloques = kardexConMovimientos(lista).map((k61) => {
+        const lineas = [`\u{1F4E6} *${k61.material}* \xB7 ${etiquetaEmpresa(k61.empresa)}`, rango(k61.desde, k61.hasta), resumenKardex(k61)];
         if (k61.movimientos.length === 0) lineas.push("Sin movimientos en ese rango.");
         for (const m59 of k61.movimientos) {
-          lineas.push(`\u2022 ${corta(m59.fecha)} ${m59.tipo === "Ingreso" ? "\u2B06\uFE0F" : "\u2B07\uFE0F"} ${n(m59.cantidad)} ${k61.unidad}${m59.detalle ? ` (${recortar2(m59.detalle, 40)})` : ""} \u2192 saldo ${n(m59.saldo)}`);
+          lineas.push(`\u2022 ${corta(m59.fecha)} ${m59.tipo === "Ingreso" ? "\u2B06\uFE0F" : "\u2B07\uFE0F"} ${n(m59.cantidad)} \u2192 ${n(m59.saldo)}${m59.detalle ? ` \xB7 ${recortar2(m59.detalle, 16)}` : ""}`);
         }
         if (k61.truncado) lineas.push(`\u2026 y m\xE1s: te muestro los primeros ${k61.movimientos.length}. Acota las fechas.`);
         return lineas.join("\n");
       });
       return bloques.join("\n\n");
     };
+    tablaKardex = (material, lista) => {
+      const con = kardexConMovimientos(lista);
+      return {
+        titulo: `Kardex \u2014 ${recortar2(material.toUpperCase(), 30)}`,
+        subtitulo: con.length ? `${rango(con[0].desde, con[0].hasta)} \xB7 ${con.length} material(es)` : "",
+        columnas: [
+          { titulo: "Fecha", ancho: 110 },
+          { titulo: "Tipo", ancho: 110 },
+          { titulo: "Cantidad", ancho: 150, alinear: "fin" },
+          { titulo: "Saldo", ancho: 150, alinear: "fin" },
+          { titulo: "Detalle", ancho: 496, max: 44 }
+        ],
+        secciones: con.map((k61) => ({
+          encabezado: `${k61.material} \xB7 ${etiquetaEmpresa(k61.empresa)}`,
+          detalle: `\u2B06 ${n(k61.totalIngresos)} \xB7 \u2B07 ${n(k61.totalSalidas)} \xB7 stock ${n(k61.saldoActual)} ${k61.unidad}`,
+          filas: k61.movimientos.map((m59) => [corta(m59.fecha), m59.tipo, `${n(m59.cantidad)} ${k61.unidad}`, n(m59.saldo), m59.detalle])
+        })),
+        pie: con.some((k61) => k61.truncado) ? "Se muestran los primeros movimientos. Acota las fechas para ver el resto." : void 0
+      };
+    };
+    cuandoIngresos = (r39, hoy) => r39.desde === r39.hasta ? r39.desde === hoy ? "hoy" : `el ${fechaLegible(r39.desde)}` : `del ${corta(r39.desde)} al ${corta(r39.hasta)}`;
     fichaIngresos = (r39, hoy = "") => {
-      const cuando = r39.desde === r39.hasta ? r39.desde === hoy ? "hoy" : `el ${fechaLegible(r39.desde)}` : `del ${corta(r39.desde)} al ${corta(r39.hasta)}`;
+      const cuando = cuandoIngresos(r39, hoy);
       if (r39.proveedores.length === 0) return `No hay camiones de agregados registrados ${cuando} en la recepci\xF3n de insumos.`;
-      const lineas = [`\u{1F69A} *Ingresos de agregados ${cuando}*: ${r39.totalIngresos} cami\xF3n(es), ${n(r39.total)} ${r39.unidad}${r39.pendientes ? ` \xB7 ${r39.pendientes} por confirmar` : ""}`];
+      const lineas = [`\u{1F69A} *Ingresos de agregados ${cuando}*`, `${r39.totalIngresos} cami\xF3n(es) \xB7 ${n(r39.total)} ${r39.unidad}${r39.pendientes ? ` \xB7 ${r39.pendientes} por confirmar` : ""}`];
       for (const p64 of r39.proveedores) {
-        lineas.push(`*${p64.proveedor}*${p64.transportista ? ` (transporta ${p64.transportista})` : ""} \xB7 ${p64.empresa} \u2014 ${n(p64.total)} ${p64.unidad}`);
+        lineas.push("", `*${recortar2(p64.proveedor, 24)}* \xB7 ${etiquetaEmpresa(p64.empresa)} \xB7 ${n(p64.total)} ${p64.unidad}${p64.transportista ? `
+(transporta ${recortar2(p64.transportista, 22)})` : ""}`);
         for (const m59 of p64.materiales) {
-          lineas.push(`\u2022 ${m59.material}: ${n(m59.cantidad)} ${m59.unidad}${m59.ingresos > 1 ? ` en ${m59.ingresos} camiones` : ""}${m59.pendientes ? ` (${m59.pendientes === m59.ingresos ? "por confirmar" : `${m59.pendientes} por confirmar`})` : ""}`);
+          lineas.push(`\u2022 ${n(m59.cantidad)} ${m59.unidad} ${recortar2(m59.material, 22)}${m59.ingresos > 1 ? ` \xD7${m59.ingresos}` : ""}${m59.pendientes ? ` \u23F3${m59.pendientes === m59.ingresos ? "" : m59.pendientes}` : ""}`);
         }
       }
+      if (r39.pendientes) lineas.push("", "\u23F3 = por confirmar (todav\xEDa no pas\xF3 al kardex)");
+      return lineas.join("\n");
+    };
+    tablaIngresos = (r39, hoy = "") => ({
+      titulo: "Ingresos de agregados",
+      subtitulo: `${cuandoIngresos(r39, hoy)} \xB7 ${r39.totalIngresos} cami\xF3n(es) \xB7 ${n(r39.total)} ${r39.unidad}${r39.pendientes ? ` \xB7 ${r39.pendientes} por confirmar` : ""}`,
+      columnas: [
+        { titulo: "Material", ancho: 520, max: 44 },
+        { titulo: "m\xB3", ancho: 150, alinear: "fin" },
+        { titulo: "Camiones", ancho: 150, alinear: "fin" },
+        { titulo: "Estado", ancho: 196, max: 20 }
+      ],
+      secciones: r39.proveedores.map((p64) => ({
+        encabezado: `${p64.proveedor}${p64.transportista ? ` (transporta ${p64.transportista})` : ""}`,
+        detalle: `${etiquetaEmpresa(p64.empresa)} \xB7 ${n(p64.total)} ${p64.unidad}`,
+        filas: p64.materiales.map((m59) => [m59.material, n(m59.cantidad), String(m59.ingresos), m59.pendientes ? m59.pendientes === m59.ingresos ? "por confirmar" : `${m59.pendientes} por confirmar` : "confirmado"])
+      }))
+    });
+    cuandoCertificados = (rango2) => rango2.desde === rango2.hasta ? `el ${fechaLegible(rango2.desde)}` : `del ${corta(rango2.desde)} al ${corta(rango2.hasta)}`;
+    porClienteDe = (pedidos) => {
+      const m59 = /* @__PURE__ */ new Map();
+      for (const p64 of pedidos) m59.set(p64.cliente, [...m59.get(p64.cliente) ?? [], p64]);
+      return [...m59].sort((a49, b63) => b63[1].length - a49[1].length);
+    };
+    resumenCertificados = (r39, rango2, empresa) => {
+      const de9 = empresa ? ` de ${etiquetaEmpresa(empresa)}` : "";
+      const cuando = cuandoCertificados(rango2);
+      if (r39.total === 0) return `No hay pedidos despachados${de9} ${cuando}.`;
+      if (r39.pedidos.length === 0) return `Los ${r39.total} pedidos despachados${de9} ${cuando} tienen su certificado cargado.`;
+      const lineas = [`\u{1F4C4} *${r39.pedidos.length}${r39.truncado ? "+" : ""} de ${r39.total} pedidos despachados${de9}*`, `${cuando}, sin certificado cargado`];
+      const porCliente = porClienteDe(r39.pedidos);
+      if (porCliente.length > 1) lineas.push("", ...porCliente.map(([cliente, lista]) => `\u2022 ${lista.length} \xB7 ${recortar2(cliente, 26)}`));
+      const exigen = r39.pedidos.filter((p64) => p64.exige).length;
+      if (exigen) lineas.push("", `\u26A0\uFE0F ${exigen} marcado(s) en Portal como que lo exigen.`);
       return lineas.join("\n");
     };
     fichaCertificados = (r39, rango2, empresa) => {
-      const de9 = empresa ? ` de ${empresa}` : "";
-      const cuando = rango2.desde === rango2.hasta ? `el ${fechaLegible(rango2.desde)}` : `del ${corta(rango2.desde)} al ${corta(rango2.hasta)}`;
-      if (r39.total === 0) return `No hay pedidos despachados${de9} ${cuando}.`;
-      if (r39.pedidos.length === 0) return `Los ${r39.total} pedidos despachados${de9} ${cuando} tienen su certificado cargado.`;
-      const lineas = [`\u{1F4C4} *${r39.pedidos.length}${r39.truncado ? "+" : ""} de ${r39.total} pedidos despachados${de9} ${cuando} sin certificado cargado*`];
-      const porCliente = /* @__PURE__ */ new Map();
-      for (const p64 of r39.pedidos) porCliente.set(p64.cliente, [...porCliente.get(p64.cliente) ?? [], p64]);
-      const linea = (p64) => `\u2022 ${corta(p64.fecha)} ${recortar2(p64.obra || "sin obra", 40)} ${n(p64.m3)} m\xB3${p64.exige ? " \u26A0\uFE0F exige certificado" : ""}${p64.nota ? ` \u2014 ${recortar2(p64.nota, 40)}` : ""}`;
-      if (porCliente.size === 1) {
-        const [[cliente, lista]] = [...porCliente];
-        lineas.push(`*${recortar2(cliente, 45)}* \xB7 ${lista[0].empresa}`, ...lista.map(linea));
-      } else {
-        for (const [cliente, lista] of [...porCliente].sort((a49, b63) => b63[1].length - a49[1].length)) {
-          lineas.push(`*${recortar2(cliente, 45)}* \xB7 ${lista[0].empresa} \u2014 ${lista.length}`, ...lista.map(linea));
-        }
+      if (r39.pedidos.length === 0) return resumenCertificados(r39, rango2, empresa);
+      const de9 = empresa ? ` de ${etiquetaEmpresa(empresa)}` : "";
+      const lineas = [`\u{1F4C4} *${r39.pedidos.length}${r39.truncado ? "+" : ""} de ${r39.total} pedidos despachados${de9}*`, `${cuandoCertificados(rango2)}, sin certificado cargado`];
+      const linea = (p64) => `\u2022 ${corta(p64.fecha)} \xB7 ${n(p64.m3)} m\xB3 \xB7 ${recortar2(p64.obra || "sin obra", 16)}${p64.exige ? " \u26A0\uFE0F" : ""}`;
+      for (const [cliente, lista] of porClienteDe(r39.pedidos)) {
+        lineas.push("", `*${recortar2(cliente, 28)}* \xB7 ${etiquetaEmpresa(lista[0].empresa)}${lista.length > 1 ? ` \xB7 ${lista.length}` : ""}`, ...lista.map(linea));
       }
+      if (r39.pedidos.some((p64) => p64.exige)) lineas.push("", "\u26A0\uFE0F = marcado en Portal como que lo exige");
       if (r39.truncado) lineas.push("\u2026 y m\xE1s. Acota las fechas o la empresa para ver el resto.");
       return lineas.join("\n");
     };
+    tablaCertificados = (r39, rango2, empresa) => ({
+      titulo: "Pedidos sin certificado cargado",
+      subtitulo: `${cuandoCertificados(rango2)}${empresa ? ` \xB7 ${etiquetaEmpresa(empresa)}` : ""} \xB7 ${r39.pedidos.length}${r39.truncado ? "+" : ""} de ${r39.total} despachados`,
+      columnas: [
+        { titulo: "Fecha", ancho: 110 },
+        { titulo: "m\xB3", ancho: 120, alinear: "fin" },
+        { titulo: "Obra", ancho: 470, max: 40 },
+        { titulo: "Empresa", ancho: 150, max: 14 },
+        { titulo: "Exige", ancho: 166, max: 12 }
+      ],
+      secciones: porClienteDe(r39.pedidos).map(([cliente, lista]) => ({
+        encabezado: cliente,
+        detalle: `${lista.length} pedido(s) \xB7 ${n(lista.reduce((s59, p64) => s59 + p64.m3, 0))} m\xB3`,
+        filas: lista.map((p64) => [corta(p64.fecha), n(p64.m3), p64.obra || "sin obra", etiquetaEmpresa(p64.empresa), p64.exige ? "\u26A0\uFE0F s\xED" : ""])
+      })),
+      pie: r39.truncado ? "Se muestran los primeros. Acota las fechas o la empresa para ver el resto." : void 0
+    });
   }
 });
 
@@ -11993,6 +12158,7 @@ var init_llm = __esm({
     init_datos();
     init_herramientas();
     init_fichas();
+    init_imagen();
     init_redaccion();
     init_seleccion();
     init_modelo();
@@ -12023,20 +12189,37 @@ var init_llm = __esm({
           const nombres = await nombresDeEmpresas();
           const companyId = args.companyId === COMPANY_PILOTO ? void 0 : args.companyId;
           const h65 = await pedidosEntre({ desde, hasta, companyId, cliente: args.nombre });
-          return { ficha: fichaPedidos(h65, { empresa: companyId ? nombres.get(companyId) || companyId : void 0, cliente: args.nombre }, hoy), resultados: h65.pedidos.length };
+          const filtro = { empresa: companyId ? nombres.get(companyId) || companyId : void 0, cliente: args.nombre };
+          const ficha = fichaPedidos(h65, filtro, hoy);
+          const larga = h65.pedidos.length > FILAS_PARA_IMAGEN;
+          return { ficha, resultados: h65.pedidos.length, tabla: larga ? tablaPedidos(h65, filtro, hoy) : void 0, resumen: larga ? ficha.split("\n").slice(0, 2).join("\n") : void 0 };
         }
         case "kardex": {
           const lista = await movimientosDeMaterial({ material: args.nombre ?? "", desde, hasta, companyId: args.companyId });
-          return { ficha: fichaKardex(args.nombre ?? "", lista), resultados: lista.length };
+          const ficha = fichaKardex(args.nombre ?? "", lista);
+          const filas = kardexConMovimientos(lista).reduce((s59, k61) => s59 + k61.movimientos.length, 0);
+          const larga = filas > FILAS_PARA_IMAGEN;
+          const resumen = ficha.split("\n\n").map((b63) => b63.split("\n").filter((l57) => !l57.startsWith("\u2022 ")).join("\n")).join("\n\n");
+          return { ficha, resultados: lista.length, tabla: larga ? tablaKardex(args.nombre ?? "", lista) : void 0, resumen: larga ? resumen : void 0 };
         }
         case "ingresos_agregados": {
           const r39 = await ingresosDeAgregados({ desde: args.desde ?? hoy, hasta: args.hasta ?? hoy, companyId: args.companyId });
-          return { ficha: fichaIngresos(r39, hoy), resultados: r39.proveedores.length };
+          const ficha = fichaIngresos(r39, hoy);
+          const filas = r39.proveedores.reduce((s59, p64) => s59 + p64.materiales.length, 0);
+          const larga = filas > FILAS_PARA_IMAGEN;
+          return { ficha, resultados: r39.proveedores.length, tabla: larga ? tablaIngresos(r39, hoy) : void 0, resumen: larga ? ficha.split("\n").slice(0, 2).join("\n") : void 0 };
         }
         case "certificados_pendientes": {
           const nombres = await nombresDeEmpresas();
           const r39 = await pedidosSinCertificado({ desde, hasta, companyId: args.companyId });
-          return { ficha: fichaCertificados(r39, { desde, hasta }, args.companyId ? nombres.get(args.companyId) || args.companyId : void 0), resultados: r39.pedidos.length };
+          const empresa = args.companyId ? nombres.get(args.companyId) || args.companyId : void 0;
+          const larga = r39.pedidos.length > FILAS_PARA_IMAGEN;
+          return {
+            ficha: fichaCertificados(r39, { desde, hasta }, empresa),
+            resultados: r39.pedidos.length,
+            tabla: larga ? tablaCertificados(r39, { desde, hasta }, empresa) : void 0,
+            resumen: larga ? resumenCertificados(r39, { desde, hasta }, empresa) : void 0
+          };
         }
         default:
           return { ficha: "", resultados: 0 };
@@ -12055,7 +12238,16 @@ var init_llm = __esm({
         return { texto: PREGUNTA_NOMBRE[id] };
       }
       const inicio = Date.now();
-      const { ficha, resultados } = await fichaPara(id, args);
+      const { ficha, resultados, tabla, resumen } = await fichaPara(id, args);
+      if (tabla && resumen) {
+        try {
+          const buffer2 = await pngTabla(tabla);
+          logger_default.info(`[agente] ${id} ${JSON.stringify(args)} \u2192 tabla en imagen (${tabla.secciones.reduce((s59, x63) => s59 + x63.filas.length, 0)} filas) en ${((Date.now() - inicio) / 1e3).toFixed(1)} s`);
+          return { texto: "", archivos: [{ tipo: "image", url: "", nombre: `${id}-${Date.now()}.png`, fechaMs: Date.now(), mime: "image/png", companyId: "", buffer: buffer2, caption: resumen }] };
+        } catch (error) {
+          logger_default.warn(`[agente] no pude armar la tabla de ${id}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       const frase = conFrase(id, resultados) ? await redactar(pregunta, ficha) : null;
       logger_default.info(`[agente] ${id} ${JSON.stringify(args)} \u2192 ficha de ${ficha.split("\n").length} l\xEDnea(s)${frase ? " con frase" : ""} en ${((Date.now() - inicio) / 1e3).toFixed(1)} s`);
       return { texto: frase ? `${frase}

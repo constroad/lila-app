@@ -15,6 +15,9 @@ export interface Respuesta {
 
 export const LIMITES = { imagenes: 5, videos: 2, documentos: 6 };
 
+/** Lo que no entra en una línea de celular (~36 caracteres) se recorta con «…». */
+const recortarTexto = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+
 /** Recorta al presupuesto por respuesta y dice cuántos quedaron afuera. */
 export const acotarArchivos = (archivos: Archivo[]): { enviar: Archivo[]; omitidos: number } => {
   const enviar: Archivo[] = [];
@@ -146,7 +149,10 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
     case 'orders_day': {
       if (vacio) return vacio;
       const lineas = vista.orders.map(
-        (o) => `• ${o.hora || '—'} — *${o.cliente || o.companyId}* · ${o.obra || 'sin obra'} · ${o.cantidadCubos} m³ (${o.m3Dispatched} despachados)`
+        // Una línea por pedido que entre en un celular: hora, m³ y cliente; la obra debajo, corta.
+        (o) =>
+          `• ${o.hora || '—'} · ${o.m3Dispatched}/${o.cantidadCubos} m³ · *${recortarTexto(o.cliente || o.companyId, 22)}*` +
+          (o.obra ? `\n   ${recortarTexto(o.obra, 34)}` : '')
       );
       return [`📋 *Pedidos de ${dia}*`, ...lineas].join('\n');
     }
@@ -154,8 +160,8 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
     case 'day_progress': {
       const total = vista.orders.reduce((s, o) => s + o.cantidadCubos, 0);
       const van = vista.orders.reduce((s, o) => s + o.m3Dispatched, 0);
-      const porPedido = vista.orders.map((o) => `• ${o.cliente || o.companyId}: ${o.m3Dispatched} de ${o.cantidadCubos} m³`);
-      return [`📊 *Avance de ${dia}*: *${van} de ${total} m³* despachados, faltan ${Math.max(total - van, 0)}.`, ...porPedido].join('\n');
+      const porPedido = vista.orders.map((o) => `• ${o.m3Dispatched}/${o.cantidadCubos} m³ · ${recortarTexto(o.cliente || o.companyId, 24)}`);
+      return [`📊 *Avance de ${dia}*`, `*${van} de ${total} m³* despachados, faltan ${Math.max(total - van, 0)}.`, ...porPedido].join('\n');
     }
 
     case 'plant_current_unit': {
@@ -236,7 +242,7 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
               : u.state === 'progreso'
                 ? '🏭 cargando'
                 : '⏳ pendiente';
-          lineas.push(`${u.unitNumber}. ${u.plate || 'sin placa'} · ${u.driverName || 'sin conductor'} · ${u.quantity} m³ · ${estado}`);
+          lineas.push(`${u.unitNumber}. ${u.plate || 'sin placa'} · ${u.quantity} m³ · ${estado}\n   ${recortarTexto(u.driverName || 'sin conductor', 30)}`);
         }
         return lineas.join('\n');
       });

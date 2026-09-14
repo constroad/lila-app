@@ -1,4 +1,4 @@
-import { fichaCertificados, fichaClientes, fichaIngresos, fichaKardex, fichaPedidos, fichaProveedores } from './fichas';
+import { fichaCertificados, fichaClientes, fichaIngresos, fichaKardex, fichaPedidos, fichaProveedores, resumenCertificados, tablaCertificados } from './fichas';
 
 describe('fichas', () => {
   it('cliente: nombre, RUC, contacto y últimos pedidos; sin cuentas bancarias', () => {
@@ -36,10 +36,12 @@ describe('fichas', () => {
       },
       { cliente: 'consorcio los pinos' }
     );
-    expect(f).toContain('📋 *2 pedido(s) de consorcio los pinos del 07/09 al 13/09* — 178 de 180 m³ despachados');
-    expect(f).toContain('• 09/09 04:00 (Globofast) AV. UNIVERSITARIA: 118 de 120 m³, despachado');
-    expect(f).toContain('• 11/09 (Globofast) sin obra: 60 de 60 m³, despachado');
+    expect(f).toContain('📋 *2 pedido(s)* de consorcio los pinos del 07/09 al 13/09\n178 de 180 m³ despachados');
+    expect(f).toContain('• 09/09 04:00 · 118/120 m³ · AV. UNIVERSITARIA (Globofast)');
+    expect(f).toContain('• 11/09 · 60/60 m³ · sin obra (Globofast)');
     expect(f).toContain('te muestro los primeros 2');
+    // Ninguna línea se parte en un celular.
+    for (const linea of f.split('\n').filter((l) => l.startsWith('• '))) expect(linea.length).toBeLessThanOrEqual(64);
     expect(fichaPedidos({ desde: '2026-09-13', hasta: '2026-09-13', pedidos: [], totalM3Pedidos: 0, totalM3Despachados: 0, truncado: false }, {}, '2026-09-14')).toBe('No hay pedidos el domingo 13/09 en Portal.');
     expect(fichaPedidos({ desde: '2026-09-14', hasta: '2026-09-20', pedidos: [], totalM3Pedidos: 0, totalM3Despachados: 0, truncado: false }, {}, '2026-09-14')).toBe('No hay pedidos del 14/09 al 20/09 en Portal. Si hay producción programada, todavía no está cargada.');
   });
@@ -52,10 +54,10 @@ describe('fichas', () => {
         totalIngresos: 234.07, totalSalidas: 96.3, cantidadIngresos: 1, cantidadSalidas: 1, saldoActual: 291.65, truncado: false,
       },
     ]);
-    expect(f).toContain('📦 *ARENA PRIMARIA* · Globofast · del 01/08 al 31/08');
-    expect(f).toContain('1 ingreso(s) por 234.07 m³ · 1 salida(s) por 96.3 m³ · stock actual 291.65 m³');
-    expect(f).toContain('• 04/08 ⬆️ 234.07 m³ (JULIO LICAS) → saldo 500.1');
-    expect(f).toContain('• 21/08 ⬇️ 96.3 m³ → saldo 403.8');
+    expect(f).toContain('📦 *ARENA PRIMARIA* · Globofast\ndel 01/08 al 31/08');
+    expect(f).toContain('⬆️ 1 ingresos · 234.07 m³\n⬇️ 1 salidas · 96.3 m³\n📦 stock actual 291.65 m³');
+    expect(f).toContain('• 04/08 ⬆️ 234.07 → 500.1 · JULIO LICAS');
+    expect(f).toContain('• 21/08 ⬇️ 96.3 → 403.8');
     expect(f).not.toMatch(/S\/|costo|valor/i);
   });
 
@@ -75,9 +77,9 @@ describe('fichas', () => {
       {},
       '2026-09-14'
     );
-    expect(f).toContain('📋 *2 pedido(s) programado(s) del 14/09 al 20/09* — 265 m³');
-    expect(f).toContain('• 16/09 04:00 CONSORCIO LOMAS (Globofast) LA MOLINA: 250 m³, programado');
-    expect(f).toContain('• 18/09 RENATO (Constroad) CAÑETE: 15 m³, sin hora de inicio');
+    expect(f).toContain('📋 *2 pedido(s) programado(s)* del 14/09 al 20/09 — 265 m³');
+    expect(f).toContain('• 16/09 04:00 · 250 m³ · CONSORCIO LOMAS (Globofast)');
+    expect(f).toContain('• 18/09 · 15 m³ · sin hora · RENATO (Constroad)');
   });
 
   it('las obras kilométricas se recortan', () => {
@@ -85,7 +87,9 @@ describe('fichas', () => {
       { desde: '2026-09-07', hasta: '2026-09-13', pedidos: [{ fecha: '2026-09-09', hora: '', empresa: 'Globofast', cliente: 'CONSORCIO LOMAS', obra: 'MEJORAMIENTO DEL SERVICIO DE MOVILIDAD URBANA DE LAS URB. LOMAS DE LA MOLINA VIEJA ETAPAS I Y II', m3Pedidos: 250, m3Despachados: 250, estado: 'despachado' }], totalM3Pedidos: 250, totalM3Despachados: 250, truncado: false },
       {}
     );
-    expect(f).toContain('MEJORAMIENTO DEL SERVICIO DE MOVILIDAD URBANA DE LAS URB. L…: 250 de 250 m³');
+    // En el texto la obra no va (es lo más largo); va el cliente, recortado.
+    expect(f).toContain('• 09/09 · 250/250 m³ · CONSORCIO LOMAS (Globofast)');
+    for (const linea of f.split('\n').filter((l) => l.startsWith('• '))) expect(linea.length).toBeLessThanOrEqual(64);
   });
 });
 
@@ -101,21 +105,33 @@ describe('ingresos y certificados', () => {
       },
       '2026-09-14'
     );
-    expect(f).toContain('🚚 *Ingresos de agregados hoy*: 4 camión(es), 95 m³ · 2 por confirmar');
-    expect(f).toContain('*NOR BUILDING* (transporta SAUL GIRARDO) · Globofast — 75 m³\n• ARENA SECUNDARIA: 75 m³ en 3 camiones (1 por confirmar)');
-    expect(f).toContain('*AGREXA SAC* · Globofast — 20 m³\n• CONFITILLO: 20 m³ (por confirmar)');
+    expect(f).toContain('🚚 *Ingresos de agregados hoy*\n4 camión(es) · 95 m³ · 2 por confirmar');
+    expect(f).toContain('*NOR BUILDING* · Globofast · 75 m³\n(transporta SAUL GIRARDO)\n• 75 m³ ARENA SECUNDARIA ×3 ⏳1');
+    expect(f).toContain('*AGREXA SAC* · Globofast · 20 m³\n• 20 m³ CONFITILLO ⏳');
+    expect(f).toContain('⏳ = por confirmar');
     expect(fichaIngresos({ desde: '2026-09-13', hasta: '2026-09-13', proveedores: [], totalIngresos: 0, total: 0, pendientes: 0, unidad: 'm³' }, '2026-09-14')).toBe('No hay camiones de agregados registrados el domingo 13/09 en la recepción de insumos.');
   });
 
   it('certificados pendientes: por cliente cuando hay varios; plano con uno; ⚠️ los que lo exigen', () => {
     const rango = { desde: '2026-08-15', hasta: '2026-09-14' };
     const uno = { fecha: '2026-09-10', empresa: 'CONSTROAD SAC', cliente: 'MERIDIANA S.A.C.', obra: 'VENTANILLA- SECTOR 280', m3: 18, nota: '', exige: true };
-    expect(fichaCertificados({ pedidos: [uno], truncado: false, total: 3 }, rango)).toBe('📄 *1 de 3 pedidos despachados del 15/08 al 14/09 sin certificado cargado*\n*MERIDIANA S.A.C.* · CONSTROAD SAC\n• 10/09 VENTANILLA- SECTOR 280 18 m³ ⚠️ exige certificado');
+    expect(fichaCertificados({ pedidos: [uno], truncado: false, total: 3 }, rango)).toBe(
+      '📄 *1 de 3 pedidos despachados*\ndel 15/08 al 14/09, sin certificado cargado\n\n*MERIDIANA S.A.C.* · Constroad\n• 10/09 · 18 m³ · VENTANILLA- SEC… ⚠️\n\n⚠️ = marcado en Portal como que lo exige'
+    );
     const varios = fichaCertificados({ pedidos: [uno, { ...uno, cliente: 'RENATO', obra: 'CAÑETE', m3: 15, fecha: '2026-08-05', nota: 'falta densidad', exige: false }, { ...uno, cliente: 'RENATO', fecha: '2026-08-06', exige: false }], truncado: false, total: 5 }, rango, 'CONSTROAD SAC');
-    expect(varios).toContain('📄 *3 de 5 pedidos despachados de CONSTROAD SAC del 15/08 al 14/09 sin certificado cargado*');
-    expect(varios.indexOf('*RENATO* · CONSTROAD SAC — 2')).toBeLessThan(varios.indexOf('*MERIDIANA S.A.C.* · CONSTROAD SAC — 1'));
-    expect(varios).toContain('• 05/08 CAÑETE 15 m³ — falta densidad');
+    expect(varios).toContain('📄 *3 de 5 pedidos despachados de Constroad*\ndel 15/08 al 14/09, sin certificado cargado');
+    expect(varios.indexOf('*RENATO* · Constroad · 2')).toBeLessThan(varios.indexOf('*MERIDIANA S.A.C.* · Constroad'));
+    expect(varios).toContain('• 05/08 · 15 m³ · CAÑETE');
+    for (const linea of varios.split('\n')) expect(linea.length).toBeLessThanOrEqual(48);
     expect(fichaCertificados({ pedidos: [], truncado: false, total: 4 }, rango)).toBe('Los 4 pedidos despachados del 15/08 al 14/09 tienen su certificado cargado.');
     expect(fichaCertificados({ pedidos: [], truncado: false, total: 0 }, rango, 'Globofast')).toBe('No hay pedidos despachados de Globofast del 15/08 al 14/09.');
+    // El resumen (caption de la imagen): conteo por cliente, sin las filas.
+    const resumen = resumenCertificados({ pedidos: [uno, { ...uno, cliente: 'RENATO' }, { ...uno, cliente: 'RENATO' }], truncado: false, total: 5 }, rango);
+    expect(resumen).toContain('📄 *3 de 5 pedidos despachados*\ndel 15/08 al 14/09, sin certificado cargado\n\n• 2 · RENATO\n• 1 · MERIDIANA S.A.C.');
+    expect(resumen).not.toContain('VENTANILLA');
+    // La tabla: una sección por cliente, filas fecha/m³/obra/empresa/exige.
+    const tabla = tablaCertificados({ pedidos: [uno, { ...uno, cliente: 'RENATO' }], truncado: false, total: 5 }, rango);
+    expect(tabla.secciones.map((s) => s.encabezado)).toEqual(['MERIDIANA S.A.C.', 'RENATO']);
+    expect(tabla.secciones[0].filas[0]).toEqual(['10/09', '18', 'VENTANILLA- SECTOR 280', 'Constroad', '⚠️ sí']);
   });
 });

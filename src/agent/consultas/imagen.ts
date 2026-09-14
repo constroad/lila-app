@@ -266,3 +266,96 @@ export const pngAgregados = async (lista: Material[], empresa: string): Promise<
   const { default: sharp } = await import('sharp');
   return sharp(Buffer.from(svgAgregados(lista, empresa))).png().toBuffer();
 };
+
+/*
+ * UNA TABLA GENÉRICA EN IMAGEN, para las listas largas (certificados
+ * pendientes, historial de pedidos, kardex, ingresos). José, 14/09: 24 pedidos
+ * en texto en un celular «no es legible, está todo desordenado»; la imagen sí.
+ * Secciones con encabezado (un cliente, un proveedor), filas de celdas, misma
+ * cabecera oscura y paleta que las otras tarjetas.
+ */
+
+export interface ColumnaTabla {
+  titulo: string;
+  /** Ancho en px dentro de los 1080 − márgenes. */
+  ancho: number;
+  alinear?: 'inicio' | 'fin';
+  /** Caracteres antes de recortar con «…». */
+  max?: number;
+}
+
+export interface SeccionTabla {
+  encabezado: string;
+  detalle?: string;
+  filas: string[][];
+}
+
+export interface TablaSpec {
+  titulo: string;
+  subtitulo: string;
+  columnas: ColumnaTabla[];
+  secciones: SeccionTabla[];
+  pie?: string;
+}
+
+const T_ROW = 40;
+const T_SECCION = 48;
+const T_ENCABEZADO_COLS = 30;
+const T_MAX_FILAS = 60;
+
+export const svgTabla = (t: TablaSpec): string => {
+  const secciones = t.secciones.map((s) => ({ ...s, filas: s.filas.slice(0, T_MAX_FILAS) }));
+  const filasTotales = secciones.reduce((n, s) => n + s.filas.length, 0);
+  const height = HEADER + T_ENCABEZADO_COLS + secciones.length * (T_SECCION + 12) + filasTotales * T_ROW + (t.pie ? 34 : 0) + FOOT;
+  const xs: number[] = [];
+  let acumulado = PAD + 16;
+  for (const c of t.columnas) {
+    xs.push(acumulado);
+    acumulado += c.ancho;
+  }
+  const celda = (c: ColumnaTabla, i: number, valor: string, y: number, clase: string) => {
+    const texto = escapeXml(recortar(String(valor ?? ''), c.max ?? 40));
+    const x = c.alinear === 'fin' ? xs[i] + c.ancho - 12 : xs[i];
+    return `<text x="${x}" y="${y}" class="${clase}"${c.alinear === 'fin' ? ' text-anchor="end"' : ''}>${texto}</text>`;
+  };
+  const partes: string[] = [];
+  let y = HEADER + 8;
+  partes.push(...t.columnas.map((c, i) => celda(c, i, c.titulo.toUpperCase(), y + 14, 'lbl')));
+  y += T_ENCABEZADO_COLS;
+  for (const s of secciones) {
+    partes.push(`<line x1="${PAD}" y1="${y + 6}" x2="${WIDTH - PAD}" y2="${y + 6}" stroke="${LINE}" />`);
+    partes.push(`<text x="${PAD}" y="${y + 32}" class="order">${escapeXml(recortar(s.encabezado, 60))}</text>`);
+    if (s.detalle) partes.push(`<text x="${WIDTH - PAD}" y="${y + 32}" class="sub" text-anchor="end">${escapeXml(recortar(s.detalle, 40))}</text>`);
+    y += T_SECCION;
+    s.filas.forEach((fila, i) => {
+      if (i % 2 === 1) partes.push(`<rect x="${PAD}" y="${y}" width="${WIDTH - PAD * 2}" height="${T_ROW}" fill="${ROW_ALT}" />`);
+      partes.push(...t.columnas.map((c, j) => celda(c, j, fila[j] ?? '', y + 26, j === 0 ? 'num' : 'cell')));
+      y += T_ROW;
+    });
+    y += 12;
+  }
+  if (t.pie) partes.push(`<text x="${PAD}" y="${y + 20}" class="sub">${escapeXml(t.pie)}</text>`);
+  return `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">
+      <style>
+        text { font-family: Arial, Helvetica, sans-serif; }
+        .title { font-size: 28px; font-weight: 800; fill: #ffffff; }
+        .subtitle { font-size: 15px; font-weight: 500; fill: #b9bdc7; }
+        .order { font-size: 19px; font-weight: 800; fill: ${INK}; }
+        .sub { font-size: 14px; font-weight: 500; fill: ${INK_SOFT}; }
+        .lbl { font-size: 11px; font-weight: 800; letter-spacing: 0.6px; fill: ${INK_SOFT}; }
+        .num { font-size: 16px; font-weight: 800; fill: ${INK}; }
+        .cell { font-size: 16px; font-weight: 600; fill: ${INK}; }
+      </style>
+      <rect width="${WIDTH}" height="${height}" fill="#ffffff" />
+      <rect width="${WIDTH}" height="${HEADER}" fill="${HEADER_BG}" />
+      <text x="${PAD}" y="42" class="title">${escapeXml(t.titulo)}</text>
+      <text x="${PAD}" y="68" class="subtitle">${escapeXml(t.subtitulo)}</text>
+      ${partes.join('\n')}
+    </svg>`;
+};
+
+export const pngTabla = async (t: TablaSpec): Promise<Buffer> => {
+  const { default: sharp } = await import('sharp');
+  return sharp(Buffer.from(svgTabla(t))).png().toBuffer();
+};
