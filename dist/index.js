@@ -8930,7 +8930,7 @@ var init_interruptor = __esm({
 });
 
 // src/agent/checklist/emisor.ts
-var sender, mandar, enviarAOperaciones, publicarPropuesta, responderEnGrupo, mandadas, enviarAprobado;
+var sender, mandar, enviarAOperaciones, publicarPropuesta, grupoDeConsultas, escribiendoEn, RENOVAR_ESCRIBIENDO_MS, TOPE_ESCRIBIENDO_MS, empezarAEscribir, dejarDeEscribir, responderEnGrupo, mandadas, enviarAprobado;
 var init_emisor = __esm({
   "src/agent/checklist/emisor.ts"() {
     init_logger();
@@ -8966,17 +8966,57 @@ var init_emisor = __esm({
       void guardarPropuesta(propuesta);
       return true;
     };
+    grupoDeConsultas = (destino, alcance) => {
+      const jid = String(destino || "").trim();
+      if (!jid || jid !== alcance.grupoEscuchado && jid !== grupoDestino()) return null;
+      return jid;
+    };
+    escribiendoEn = /* @__PURE__ */ new Map();
+    RENOVAR_ESCRIBIENDO_MS = 7e3;
+    TOPE_ESCRIBIENDO_MS = 12e4;
+    empezarAEscribir = async (destino, alcance) => {
+      if (!AGENTE_ACTIVO || agenteApagado()) return;
+      const jid = grupoDeConsultas(destino, alcance);
+      if (!jid || escribiendoEn.has(jid)) return;
+      try {
+        const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
+        const id = await sender();
+        const inicio = Date.now();
+        await WhatsAppDirectService2.setTyping(id, jid, true);
+        const timer3 = setInterval(() => {
+          if (Date.now() - inicio > TOPE_ESCRIBIENDO_MS) void dejarDeEscribir(jid);
+          else void WhatsAppDirectService2.setTyping(id, jid, true);
+        }, RENOVAR_ESCRIBIENDO_MS);
+        timer3.unref?.();
+        escribiendoEn.set(jid, timer3);
+      } catch {
+      }
+    };
+    dejarDeEscribir = async (destino) => {
+      const jid = String(destino || "").trim();
+      const timer3 = escribiendoEn.get(jid);
+      if (!timer3) return;
+      clearInterval(timer3);
+      escribiendoEn.delete(jid);
+      try {
+        const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
+        await WhatsAppDirectService2.setTyping(await sender(), jid, false);
+      } catch {
+      }
+    };
     responderEnGrupo = async (destino, respuesta, alcance) => {
       if (!AGENTE_ACTIVO || agenteApagado()) return false;
-      const jid = String(destino || "").trim();
-      if (!jid || jid !== alcance.grupoEscuchado && jid !== grupoDestino()) {
-        logger_default.error(`[agente] se intent\xF3 responder en ${jid || "(vac\xEDo)"}, que no es un grupo donde se atienden consultas. No se manda.`);
+      const jid = grupoDeConsultas(destino, alcance);
+      if (!jid) {
+        logger_default.error(`[agente] se intent\xF3 responder en ${String(destino || "").trim() || "(vac\xEDo)"}, que no es un grupo donde se atienden consultas. No se manda.`);
         return false;
       }
       const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
       const id = await sender();
-      await WhatsAppDirectService2.setTyping(id, jid, true);
-      await new Promise((r39) => setTimeout(r39, Math.min(600 + (respuesta.texto?.length ?? 0) * 8, 2500)));
+      if (!escribiendoEn.has(jid)) {
+        await empezarAEscribir(jid, alcance);
+        await new Promise((r39) => setTimeout(r39, Math.min(600 + (respuesta.texto?.length ?? 0) * 8, 2500)));
+      }
       if (respuesta.texto?.trim()) await mandar(jid, respuesta.texto);
       if (respuesta.archivos?.length) {
         const { resolveFileBuffer: resolveFileBuffer2 } = await Promise.resolve().then(() => (init_whatsapp_media_utils(), whatsapp_media_utils_exports));
@@ -9005,7 +9045,7 @@ var init_emisor = __esm({
           }
         }
       }
-      await WhatsAppDirectService2.setTyping(id, jid, false);
+      await dejarDeEscribir(jid);
       return true;
     };
     mandadas = /* @__PURE__ */ new Set();
@@ -9230,7 +9270,7 @@ var init_catalogo = __esm({
       { companyId: "inframaq-iax", alias: ["inframaq", "infra"] }
     ];
     normalizarPlaca = (placa) => String(placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-    extraerParametros = (pregunta) => {
+    extraerParametros = (pregunta, ahoraMs = Date.now()) => {
       const t44 = normalizar(pregunta);
       const day = /\bmanana\b/.test(t44) ? "tomorrow" : "today";
       const placa = t44.match(/\b([a-z]{3})[\s-]?(\d{3})\b/);
@@ -9240,7 +9280,7 @@ var init_catalogo = __esm({
       const unitNumber = m59 ? Number(m59[1]) : void 0;
       const empresa = ALIAS_EMPRESA.find((e29) => e29.alias.some((a49) => new RegExp(`\\b${a49}\\b`).test(t44)));
       const rango = /\b(semana|semanal|proximos dias|próximos días|estos dias|estos días)\b/.test(t44) ? "semana" : void 0;
-      const fecha = fechaDe(pregunta);
+      const fecha = fechaDe(pregunta, ahoraMs);
       const ordinal = /\b(ultim[oa]|acaba de salir|recien salio|recién salió)\b/.test(t44) ? "ultima" : /\bprimer[oa]?\b/.test(t44) ? "primera" : void 0;
       return {
         day,
@@ -9455,35 +9495,42 @@ var init_responder = __esm({
     ESTADO_INFORME = { completed: "\u2705", draft: "\u270F\uFE0F", ninguno: "\u274C" };
     textoInforme = (i50) => `${i50.status === "completed" ? ESTADO_INFORME.completed : i50.status === "draft" ? ESTADO_INFORME.draft : ESTADO_INFORME.ninguno} ${i50.label}` + (i50.status === "completed" ? " (completado)" : i50.status === "draft" ? " (borrador)" : " (no hay)");
     AYUDA = [
-      "\u{1F916} *Lo que puedo hacer* \u2014 escribime \xAB@lila \u2026\xBB",
+      "\u{1F916} *Lila \u2014 lo que puedes preguntarme*",
+      "Escribe \xAB@lila \u2026\xBB o \xABlila \u2026\xBB y pregunta con tus palabras. Por ejemplo:",
       "",
-      "*Del d\xEDa en curso*",
-      "\u2022 en qu\xE9 carro van los despachos en planta",
-      "\u2022 qu\xE9 unidad est\xE1 en campo / cu\xE1ntos carros est\xE1n en ruta",
-      "\u2022 cu\xE1ntos m\xB3 van \xB7 cu\xE1nto falta para terminar la producci\xF3n en planta",
-      "\u2022 cu\xE1nto falta para terminar el control de pista",
-      "\u2022 cu\xE1ntos galones tenemos en los tanques \xB7 consumos de la producci\xF3n de hoy \xB7 cu\xE1nto agregado hay en stock",
+      "\u{1F69B} *Despachos y unidades*",
+      "\u2022 qu\xE9 pedidos hay hoy",
+      "\u2022 resumen de despachos de ayer _(imagen)_",
+      "\u2022 cu\xE1ntos m\xB3 van",
+      "\u2022 en qu\xE9 carro van en planta \xB7 qu\xE9 unidad est\xE1 en campo",
       "\u2022 a qu\xE9 hora sali\xF3 la 3 \xB7 qui\xE9n maneja la 4 \xB7 cu\xE1nto falta para que llegue la 2",
-      "\u2022 mu\xE9strame la foto y video de la unidad de placa AML838",
+      "\u2022 fotos y video de la unidad de placa AML838",
       "",
-      "*Clima*",
-      "\u2022 c\xF3mo est\xE1 el clima en Lurigancho \xB7 va a llover el martes en Ate \xB7 clima de la semana en Comas",
-      "\u2022 hasta 16 d\xEDas adelante: \xABclima el 20 de septiembre\xBB",
+      "\u{1F3ED} *Planta*",
+      "\u2022 cu\xE1nto falta para terminar la producci\xF3n",
+      "\u2022 cu\xE1nto falta para terminar el control de pista",
+      "\u2022 resumen de l\xEDquidos / galones en los tanques _(imagen)_",
+      "\u2022 consumos de la producci\xF3n de hoy",
+      "\u2022 stock de agregados _(imagen)_",
       "",
-      "*Pedidos y documentos*",
-      "\u2022 qu\xE9 pedidos hay hoy / ma\xF1ana \xB7 resumen de despachos de hoy",
-      "\u2022 generame el enlace del pedido de hoy de globofast",
-      "\u2022 mu\xE9strame las gu\xEDas generadas para la producci\xF3n de hoy",
-      "\u2022 tenemos hecho el informe de imprimaci\xF3n, \xE1rea adicional\u2026",
+      "\u{1F4C4} *Documentos*",
+      "\u2022 el enlace del pedido de hoy de globofast",
+      "\u2022 las gu\xEDas generadas para la producci\xF3n de hoy",
+      "\u2022 el informe de imprimaci\xF3n / \xE1rea adicional",
       "\u2022 c\xF3mo va el checklist",
       "",
-      "*C\xF3mo funciona*",
-      "\u2022 Puedes preguntar con tus palabras y seguir el hilo (\xAB\xBFy la 3?\xBB, \xAB\xBFy ma\xF1ana?\xBB). Si no entiendo, te digo qu\xE9 s\xED puedo.",
-      "\u2022 Si hay m\xE1s de una producci\xF3n y no nombras la empresa, te pregunto cu\xE1l: responde con el n\xFAmero.",
-      "\u2022 Las propuestas (aviso a planta, checklist) llegan a error tracking: mant\xE9n presionado el mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar.",
-      "\u2022 `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores del grupo.",
+      "\u{1F326} *Clima*",
+      "\u2022 c\xF3mo est\xE1 el clima en Lurigancho",
+      "\u2022 va a llover el martes en Ate",
+      "\u2022 clima de la semana en Comas \xB7 clima el 20 de septiembre _(hasta 16 d\xEDas)_",
       "",
-      "No respondo precios, pagos, deudas ni datos de conductores (tel\xE9fono, licencia)."
+      "\u{1F4C5} *Fechas*: hoy, ayer, ma\xF1ana, el martes, 15/09, 15 de septiembre.",
+      "\u{1F4AC} *Sigue el hilo* sin volver a etiquetarme: \xAB\xBFy la 3?\xBB, \xAB\xBFy ma\xF1ana?\xBB, \xAB\xBFy en Ate?\xBB. Si hay m\xE1s de una producci\xF3n, te pregunto cu\xE1l: responde con el n\xFAmero.",
+      "",
+      "\u2699\uFE0F *Propuestas* (aviso a planta, checklist): llegan a error tracking; mant\xE9n presionado el mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar.",
+      "\u{1F50C} `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores.",
+      "",
+      "No respondo precios, pagos, deudas ni datos personales de conductores."
     ].join("\n");
     responder = (clave2, ctx) => {
       const { vista, params } = ctx;
@@ -11404,6 +11451,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
     };
     atenderConsulta = async (texto, quien, grupo, alcance, numeroBot) => {
       try {
+        await empezarAEscribir(grupo, alcance);
         let pregunta = preguntaLimpia(texto, numeroBot);
         let clave2 = await rutear(pregunta);
         let respuesta;
@@ -11414,6 +11462,8 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         await responderEnGrupo(grupo, respuesta, alcance);
       } catch (error) {
         logger_default.warn(`[agente] no pude atender la consulta \xAB${texto}\xBB: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        await dejarDeEscribir(grupo);
       }
     };
     atenderContinuacion = async (texto, quien, grupo, alcance) => {
@@ -11427,11 +11477,14 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       const eleccion = responderPendiente(quien, grupo, texto);
       if (!eleccion) return false;
       try {
+        await empezarAEscribir(grupo, alcance);
         const respuesta = await eleccion.pregunta.continuar(eleccion.indice, eleccion.texto);
         logger_default.info(`[agente] ${quien} contest\xF3 \xAB${eleccion.texto}\xBB a la pregunta pendiente`);
         await responderEnGrupo(grupo, respuesta, alcance);
       } catch (error) {
         logger_default.warn(`[agente] no pude continuar la consulta de ${quien}: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        await dejarDeEscribir(grupo);
       }
       return true;
     };

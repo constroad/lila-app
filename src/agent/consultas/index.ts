@@ -12,7 +12,7 @@ import { distritoDe, diasHasta, pronosticoHorario, pronosticoSemanal, textoClima
 import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
-import { responderEnGrupo } from '../checklist/emisor.js';
+import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import type { AlcanceAgente } from '../checklist/alcance.js';
@@ -292,6 +292,9 @@ export const atenderConsulta = async (
   numeroBot?: string
 ): Promise<void> => {
   try {
+    // «Escribiendo…» desde ya: rutear, armar una imagen o leer un video toma
+    // segundos, y la persona tiene que ver que algo pasa (José, 14/09).
+    await empezarAEscribir(grupo, alcance);
     let pregunta = preguntaLimpia(texto, numeroBot);
     let clave = await rutear(pregunta);
     let respuesta: Respuesta | undefined;
@@ -302,6 +305,8 @@ export const atenderConsulta = async (
     await responderEnGrupo(grupo, respuesta, alcance);
   } catch (error) {
     logger.warn(`[agente] no pude atender la consulta «${texto}»: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    await dejarDeEscribir(grupo);
   }
 };
 
@@ -336,11 +341,14 @@ export const atenderEleccion = async (
   const eleccion = responderPendiente(quien, grupo, texto);
   if (!eleccion) return false;
   try {
+    await empezarAEscribir(grupo, alcance);
     const respuesta = (await eleccion.pregunta.continuar(eleccion.indice, eleccion.texto)) as Respuesta;
     logger.info(`[agente] ${quien} contestó «${eleccion.texto}» a la pregunta pendiente`);
     await responderEnGrupo(grupo, respuesta, alcance);
   } catch (error) {
     logger.warn(`[agente] no pude continuar la consulta de ${quien}: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    await dejarDeEscribir(grupo);
   }
   return true;
 };

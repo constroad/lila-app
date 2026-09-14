@@ -7,6 +7,7 @@ import { jest } from '@jest/globals';
  */
 const sendMessage = jest.fn(async () => undefined);
 const sendImageFile = jest.fn(async () => undefined);
+const setTyping = jest.fn(async (_id: string, _to: string, _composing: boolean) => undefined);
 jest.unstable_mockModule('../../services/whatsapp-direct.service.js', () => ({
   __esModule: true,
   WhatsAppDirectService: {
@@ -14,7 +15,7 @@ jest.unstable_mockModule('../../services/whatsapp-direct.service.js', () => ({
     sendImageFile,
     sendVideoFile: jest.fn(async () => undefined),
     sendDocument: jest.fn(async () => undefined),
-    setTyping: jest.fn(async () => undefined),
+    setTyping,
   },
 }));
 jest.unstable_mockModule('../../database/models.js', () => ({
@@ -65,6 +66,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   sendMessage.mockClear();
+  setTyping.mockClear();
   emisor._resetEmisor();
   sugerencias._resetPropuestas();
   interruptor._resetInterruptor();
@@ -186,6 +188,53 @@ describe('responderEnGrupo', () => {
   it('apagado, tampoco responde', async () => {
     interruptor.apagar('jose');
     await expect(emisor.responderEnGrupo(ADMIN, { texto: 'hola' }, alcance)).resolves.toBe(false);
+  });
+});
+
+/**
+ * «Escribiendo…» desde que se entiende la pregunta (José, 14/09: con las
+ * imágenes «el usuario piensa que no está haciendo nada»), renovado mientras
+ * se arma la respuesta, y cortado al contestar.
+ */
+describe('escribiendo…', () => {
+  it('arranca antes de la respuesta, se renueva, y se corta al responder', async () => {
+    jest.useFakeTimers();
+    try {
+      await emisor.empezarAEscribir(ADMIN, alcance);
+      expect(setTyping).toHaveBeenCalledWith(expect.any(String), ADMIN, true);
+      expect(emisor._escribiendoEn()).toEqual([ADMIN]);
+
+      // Mientras se arma una imagen lenta, WhatsApp lo olvidaría a los ~10 s: se renueva.
+      const antes = setTyping.mock.calls.length;
+      await jest.advanceTimersByTimeAsync(15_000);
+      expect(setTyping.mock.calls.length).toBeGreaterThan(antes);
+      expect(setTyping.mock.calls.slice(antes).every((c) => c[2] === true)).toBe(true);
+
+      // Un segundo aviso para el mismo grupo no duplica el renovador.
+      await emisor.empezarAEscribir(ADMIN, alcance);
+      expect(emisor._escribiendoEn()).toEqual([ADMIN]);
+
+      await emisor.dejarDeEscribir(ADMIN);
+      expect(emisor._escribiendoEn()).toEqual([]);
+      expect(setTyping).toHaveBeenLastCalledWith(expect.any(String), ADMIN, false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('responder corta el «escribiendo…» que venía de la pregunta', async () => {
+    await emisor.empezarAEscribir(ADMIN, alcance);
+    await emisor.responderEnGrupo(ADMIN, { texto: 'hola' }, alcance);
+    expect(emisor._escribiendoEn()).toEqual([]);
+    expect(setTyping).toHaveBeenLastCalledWith(expect.any(String), ADMIN, false);
+  });
+
+  it('no escribe en un grupo donde no se contesta, ni apagado', async () => {
+    await emisor.empezarAEscribir(PLANTA, alcance);
+    interruptor.apagar('jose');
+    await emisor.empezarAEscribir(ADMIN, alcance);
+    expect(setTyping).not.toHaveBeenCalled();
+    expect(emisor._escribiendoEn()).toEqual([]);
   });
 });
 

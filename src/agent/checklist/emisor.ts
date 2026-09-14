@@ -74,6 +74,66 @@ export interface ArchivoAEnviar {
   buffer?: Buffer;
 }
 
+/** Solo el grupo que se escucha o el nuestro de operaciones: donde se pregunta, se responde. */
+const grupoDeConsultas = (destino: string, alcance: AlcanceAgente): string | null => {
+  const jid = String(destino || '').trim();
+  if (!jid || (jid !== alcance.grupoEscuchado && jid !== grupoDestino())) return null;
+  return jid;
+};
+
+/**
+ * «ESCRIBIENDO…» DESDE QUE SE ENTIENDE LA PREGUNTA, no desde que la respuesta
+ * está lista. José, 14/09/2026: «para la generación de imágenes o de cosas
+ * pesadas no me muestra inmediatamente escribiendo, lo cual al usuario lo hace
+ * pensar que no está haciendo nada». Armar una imagen, leer un video del
+ * storage o pedir el pronóstico toma segundos, y todo eso pasaba ANTES del
+ * primer «escribiendo…».
+ *
+ * WhatsApp deja de mostrarlo solo a los ~10 s si no se repite, así que se
+ * renueva cada 7 s hasta que `dejarDeEscribir` lo corta — y tiene un tope, por
+ * si a quien lo pidió se le olvida. Es cosmético: nunca lanza, nunca frena.
+ */
+const escribiendoEn = new Map<string, NodeJS.Timeout>();
+const RENOVAR_ESCRIBIENDO_MS = 7_000;
+const TOPE_ESCRIBIENDO_MS = 120_000;
+
+export const empezarAEscribir = async (destino: string, alcance: AlcanceAgente): Promise<void> => {
+  if (!AGENTE_ACTIVO || agenteApagado()) return;
+  const jid = grupoDeConsultas(destino, alcance);
+  if (!jid || escribiendoEn.has(jid)) return;
+  try {
+    const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
+    const id = await sender();
+    const inicio = Date.now();
+    await WhatsAppDirectService.setTyping(id, jid, true);
+    const timer = setInterval(() => {
+      if (Date.now() - inicio > TOPE_ESCRIBIENDO_MS) void dejarDeEscribir(jid);
+      else void WhatsAppDirectService.setTyping(id, jid, true);
+    }, RENOVAR_ESCRIBIENDO_MS);
+    timer.unref?.();
+    escribiendoEn.set(jid, timer);
+  } catch {
+    /* cosmético */
+  }
+};
+
+export const dejarDeEscribir = async (destino: string): Promise<void> => {
+  const jid = String(destino || '').trim();
+  const timer = escribiendoEn.get(jid);
+  if (!timer) return;
+  clearInterval(timer);
+  escribiendoEn.delete(jid);
+  try {
+    const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
+    await WhatsAppDirectService.setTyping(await sender(), jid, false);
+  } catch {
+    /* cosmético */
+  }
+};
+
+/** Solo para tests. */
+export const _escribiendoEn = (): string[] => [...escribiendoEn.keys()];
+
 /**
  * Texto y archivos al grupo que preguntó. El destino se compara contra el
  * alcance resuelto AHORA, y nada más pasa: ni otro grupo, ni una persona.
@@ -84,18 +144,21 @@ export const responderEnGrupo = async (
   alcance: AlcanceAgente
 ): Promise<boolean> => {
   if (!AGENTE_ACTIVO || agenteApagado()) return false;
-  const jid = String(destino || '').trim();
-  // Solo el grupo que se escucha o el nuestro de operaciones: donde se pregunta, se responde.
-  if (!jid || (jid !== alcance.grupoEscuchado && jid !== grupoDestino())) {
-    logger.error(`[agente] se intentó responder en ${jid || '(vacío)'}, que no es un grupo donde se atienden consultas. No se manda.`);
+  const jid = grupoDeConsultas(destino, alcance);
+  if (!jid) {
+    logger.error(`[agente] se intentó responder en ${String(destino || '').trim() || '(vacío)'}, que no es un grupo donde se atienden consultas. No se manda.`);
     return false;
   }
   const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
   const id = await sender();
-  // «Escribiendo…» un momento antes de contestar. Lo justo para que parezca
-  // una persona y no un cañón; proporcional al largo de lo que va a decir.
-  await WhatsAppDirectService.setTyping(id, jid, true);
-  await new Promise((r) => setTimeout(r, Math.min(600 + (respuesta.texto?.length ?? 0) * 8, 2_500)));
+  // Si nadie avisó antes que estaba escribiendo, «escribiendo…» un momento
+  // antes de contestar: lo justo para que parezca una persona y no un cañón,
+  // proporcional al largo de lo que va a decir. Si ya venía escribiendo desde
+  // la pregunta, ese momento ya pasó.
+  if (!escribiendoEn.has(jid)) {
+    await empezarAEscribir(jid, alcance);
+    await new Promise((r) => setTimeout(r, Math.min(600 + (respuesta.texto?.length ?? 0) * 8, 2_500)));
+  }
   if (respuesta.texto?.trim()) await mandar(jid, respuesta.texto);
   if (respuesta.archivos?.length) {
     const { resolveFileBuffer } = await import('../../services/whatsapp-media.utils.js');
@@ -141,14 +204,18 @@ export const responderEnGrupo = async (
       }
     }
   }
-  await WhatsAppDirectService.setTyping(id, jid, false);
+  await dejarDeEscribir(jid);
   return true;
 };
 
 const mandadas = new Set<string>();
 
 /** Solo para tests. */
-export const _resetEmisor = (): void => mandadas.clear();
+export const _resetEmisor = (): void => {
+  mandadas.clear();
+  for (const timer of escribiendoEn.values()) clearInterval(timer);
+  escribiendoEn.clear();
+};
 
 /**
  * Manda una propuesta APROBADA a su destino real. Verifica las tres cosas que

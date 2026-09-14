@@ -150,9 +150,35 @@ jobs:
       # CUÁL. Sin esto npm se queda callado y el diagnóstico es adivinanza.
       # El techo por paso hace que falle en 6 min con el nombre del paso a la vista,
       # en vez de comerse los 15 del job y aparecer como "cancelled".
+      #
+      # SIN SCRIPTS DE INSTALACIÓN (`--ignore-scripts`), y esto es el arreglo de
+      # un incidente. El 14/09/2026 dos runs seguidos quedaron rojos sin que un
+      # solo test corriera: el `install` de `ffmpeg-static` baja su binario de
+      # GitHub Releases, el binario bajó bien, y la descarga del README que viene
+      # después devolvió **504** — y ese paquete solo tolera 404. `npm ci` no
+      # distingue un postinstall prescindible de uno vital, así que un CDN ajeno
+      # con hipo tumbaba la CI entera.
+      #
+      # Ninguno de los scripts del árbol hace falta para los tests (revisado
+      # contra el lockfile el 14/09/2026): ffmpeg-static (binario; el servicio
+      # cae a candidatos del sistema si no está), esbuild (el build no corre acá),
+      # puppeteer (Chromium, ya se saltaba), onnxruntime-node (binarios CUDA; el
+      # modelo no se carga en tests), sharp (solo valida; el binario linux entra
+      # en el paso siguiente), baileys (chequeo de engine), protobufjs y scarf
+      # (telemetría). Si mañana un test necesita un binario de postinstall, el
+      # síntoma va a ser «not found» en ese test y la respuesta es correr ESE
+      # script a mano acá, no volver a prender todos.
+      #
+      # Y con reintento, para los blips del registry: si las tres veces falla,
+      # el log lo dice tres veces.
       - name: Instalar dependencias
-        timeout-minutes: 6
-        run: npm ci --no-audit --no-fund --foreground-scripts
+        timeout-minutes: 8
+        run: |
+          for intento in 1 2 3; do
+            npm ci --no-audit --no-fund --ignore-scripts && exit 0
+            echo "::warning::npm ci falló (intento ${intento}/3)"; sleep 20
+          done
+          exit 1
 
       # LOS BINARIOS NATIVOS PARA LINUX, QUE EL LOCKFILE NO TIENE.
       #
@@ -176,7 +202,7 @@ jobs:
       # ("Cannot find native binding" / "Could not load … using the linux-x64
       # runtime") y la respuesta es agregarlo a esta línea.
       - name: Binarios nativos para linux-x64
-        run: npm install --no-save --os=linux --cpu=x64 --include=optional sharp @napi-rs/canvas
+        run: npm install --no-save --ignore-scripts --os=linux --cpu=x64 --include=optional sharp @napi-rs/canvas
 
       # NODE_ENV=test: varios guards fail-closed de seguridad lanzan excepción si
       #   se creen en producción sin los secretos cargados.
