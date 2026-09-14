@@ -9568,6 +9568,7 @@ var init_responder = __esm({
       const { vista, params } = ctx;
       const dia = fechaLegible(vista.fecha);
       if (!clave2) return "Eso no lo tengo. Puedo ayudarte con lo de planta y campo, unidades, pedidos, tanques, agregados, informes y clima \u2014 escribe \xABlila ayuda\xBB para ver la lista.";
+      if (clave2 === "help") return AYUDA;
       const vacio = sinPedidos(vista);
       if (vacio && clave2 !== "orders_day") return vacio;
       switch (clave2) {

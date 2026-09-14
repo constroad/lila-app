@@ -181,6 +181,9 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
   const dia = fechaLegible(vista.fecha);
 
   if (!clave) return 'Eso no lo tengo. Puedo ayudarte con lo de planta y campo, unidades, pedidos, tanques, agregados, informes y clima — escribe «lila ayuda» para ver la lista.';
+  // La ayuda no depende de que haya pedidos (14/09: un día sin producción,
+  // «@lila ayuda» contestaba «no tengo pedidos cargados»).
+  if (clave === 'help') return AYUDA;
 
   const vacio = sinPedidos(vista);
   if (vacio && clave !== 'orders_day') return vacio;

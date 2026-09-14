@@ -193,6 +193,8 @@ describe('informes', () => {
 describe('ayuda', () => {
   it('lista lo que puede, cómo aprobar, y el interruptor', () => {
     expect(responder('help', { vista, params: hoy })).toBe(AYUDA);
+    // Un día sin pedidos también tiene ayuda.
+    expect(responder('help', { vista: { ...vista, orders: [] }, params: hoy })).toBe(AYUDA);
     expect(AYUDA).toContain('!lila off');
     expect(AYUDA).toContain('Responder');
     // Tuteo peruano, no voseo: la gente del grupo escribe «muéstrame», no «mostrame».
