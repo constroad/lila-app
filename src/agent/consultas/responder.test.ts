@@ -192,13 +192,14 @@ describe('informes', () => {
 
 describe('ayuda', () => {
   it('lista lo que puede, cómo aprobar, y el interruptor', () => {
-    expect(responder('help', { vista, params: hoy })).toBe(AYUDA);
-    // Un día sin pedidos también tiene ayuda.
+    // Con pedidos hoy, los ejemplos del momento son de despachos; sin pedidos, de programación.
+    expect(responder('help', { vista, params: hoy })).toContain('«resumen de despachos de hoy»');
     expect(responder('help', { vista: { ...vista, orders: [] }, params: hoy })).toBe(AYUDA);
-    expect(AYUDA).toContain('!lila off');
-    expect(AYUDA).toContain('Responder');
+    expect(AYUDA).toContain('«qué pedidos hay esta semana»');
+    expect(AYUDA).toContain('6. Cómo funciona');
+    expect(AYUDA.split('\n').length).toBeLessThanOrEqual(11);
     // Tuteo peruano, no voseo: la gente del grupo escribe «muéstrame», no «mostrame».
     expect(AYUDA).not.toMatch(/\b(decime|respondé|mantené|probá|podés)\b/);
-    expect(AYUDA).toContain('No respondo precios');
+    expect(AYUDA).not.toContain('No respondo precios'); // eso vive en el tema «Cómo funciona»
   });
 });

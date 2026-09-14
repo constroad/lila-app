@@ -9481,12 +9481,112 @@ var init_vista = __esm({
   }
 });
 
+// src/agent/consultas/ayuda.ts
+var TEMAS, menuAyuda, textoTema, temaPorPalabra;
+var init_ayuda = __esm({
+  "src/agent/consultas/ayuda.ts"() {
+    init_catalogo();
+    TEMAS = [
+      {
+        titulo: "Despachos y unidades",
+        palabras: ["despacho", "despachos", "unidad", "unidades", "carro", "pedidos"],
+        ejemplos: [
+          "qu\xE9 pedidos hay hoy \xB7 qu\xE9 pedidos hay esta semana",
+          "resumen de despachos de ayer (en imagen)",
+          "cu\xE1ntos m\xB3 van \xB7 cu\xE1nto falta para terminar en planta / en campo",
+          "a qu\xE9 hora sali\xF3 la 3 \xB7 qui\xE9n maneja la 4 \xB7 cu\xE1nto falta para que llegue la 2",
+          "fotos y video de la unidad de placa AML838"
+        ]
+      },
+      {
+        titulo: "Planta",
+        palabras: ["planta", "tanque", "tanques", "agregado", "agregados", "kardex", "insumo", "insumos"],
+        ejemplos: [
+          "resumen de l\xEDquidos / galones en los tanques (en imagen)",
+          "stock de agregados (en imagen)",
+          "cu\xE1ntos agregados llegaron hoy (por proveedor)",
+          "consumos de la producci\xF3n de hoy",
+          "ingresos de arena en Globofast este mes (kardex)"
+        ]
+      },
+      {
+        titulo: "Documentos y certificados",
+        palabras: ["documento", "documentos", "certificado", "certificados", "guia", "guias", "gu\xEDa", "gu\xEDas", "enlace", "informe", "informes", "checklist"],
+        ejemplos: [
+          "el enlace del pedido de hoy de Globofast",
+          "las gu\xEDas generadas para la producci\xF3n de hoy",
+          "el informe de imprimaci\xF3n / \xE1rea adicional",
+          "qu\xE9 pedidos no tienen certificado cargado (por cliente)",
+          "c\xF3mo va el checklist"
+        ]
+      },
+      {
+        titulo: "Clima",
+        palabras: ["clima", "lluvia", "tiempo", "pronostico", "pron\xF3stico"],
+        ejemplos: [
+          "c\xF3mo est\xE1 el clima en Lurigancho \xB7 va a llover el martes en Ate",
+          "clima de la semana en Comas \xB7 clima el 20 de septiembre (hasta 16 d\xEDas)",
+          "qu\xE9 distritos est\xE1n propensos a lluvia esta semana"
+        ]
+      },
+      {
+        titulo: "Clientes, proveedores e historial",
+        palabras: ["cliente", "clientes", "proveedor", "proveedores", "historial"],
+        ejemplos: [
+          "el tel\xE9fono / RUC / direcci\xF3n del cliente Cobe\xF1as",
+          "qui\xE9n nos vende petr\xF3leo \xB7 datos del proveedor Julio Licas",
+          "qu\xE9 le despachamos a Consorcio Los Pinos la semana pasada",
+          "cu\xE1ntos pedidos tuvo Constroad en agosto"
+        ]
+      },
+      {
+        titulo: "C\xF3mo funciona",
+        palabras: ["funciona", "comandos", "comando", "fechas", "propuestas", "off", "on"],
+        ejemplos: [],
+        notas: [
+          "\u{1F4C5} *Fechas*: hoy, ayer, ma\xF1ana, el martes, el martes pasado, 15/09, esta semana, la semana pasada, en agosto.",
+          "\u{1F4AC} *Sigue el hilo* sin volver a etiquetarme: \xAB\xBFy la 3?\xBB, \xAB\xBFy ma\xF1ana?\xBB, \xAB\xBFy en Ate?\xBB. Si hay m\xE1s de una producci\xF3n, te pregunto cu\xE1l: responde con el n\xFAmero.",
+          "\u2699\uFE0F *Propuestas* (aviso a planta, checklist, recordatorios): llegan a error tracking; mant\xE9n presionado el mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar.",
+          "\u{1F50C} `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores.",
+          "No respondo precios, pagos, deudas ni datos personales de conductores."
+        ]
+      }
+    ];
+    menuAyuda = (contexto = { hayPedidosHoy: false }) => {
+      const delMomento = contexto.hayPedidosHoy ? ["\xABresumen de despachos de hoy\xBB", "\xABcu\xE1nto falta para terminar en planta\xBB"] : ["\xABqu\xE9 pedidos hay esta semana\xBB", "\xABcu\xE1ntos agregados llegaron hoy\xBB"];
+      return [
+        "\u{1F916} *Lila* \u2014 preg\xFAntame con tus palabras, por ejemplo " + delMomento.join(" o ") + ".",
+        "O elige un tema:",
+        ...TEMAS.map((t44, i50) => `${i50 + 1}. ${t44.titulo}`),
+        "",
+        "Responde con el n\xFAmero, o escribe \xABayuda clima\xBB, \xABayuda planta\xBB\u2026"
+      ].join("\n");
+    };
+    textoTema = (indice) => {
+      const t44 = TEMAS[indice];
+      if (!t44) return menuAyuda();
+      const lineas = [`*${indice + 1}. ${t44.titulo}*`, ...t44.ejemplos.map((e29) => `\u2022 ${e29}`), ...t44.notas ?? []];
+      lineas.push("", "Otro tema: responde su n\xFAmero. O preg\xFAntame directo.");
+      return lineas.join("\n");
+    };
+    temaPorPalabra = (pregunta) => {
+      const t44 = normalizar(pregunta).replace(/[¿?¡!.,]/g, " ");
+      const m59 = t44.match(/\b(ayuda|help|menu)\b\s*(?:de |del |con |sobre |para )?(.*)$/);
+      const resto = (m59?.[2] ?? "").trim();
+      if (!resto) return null;
+      const i50 = TEMAS.findIndex((tema) => tema.palabras.some((p64) => new RegExp(`\\b${normalizar(p64)}\\b`).test(resto)));
+      return i50 >= 0 ? i50 : null;
+    };
+  }
+});
+
 // src/agent/consultas/responder.ts
 var LIMITES, acotarArchivos, elegirPedido, etiquetaPedido, unidadPor, identificaUnidad, hora, unidades, PREGUNTA_UNIDAD, describeUnidad, sinPedidos, estimarFin, ESTADO_INFORME, textoInforme, AYUDA, responder, TIPOS_ALIAS;
 var init_responder = __esm({
   "src/agent/consultas/responder.ts"() {
     init_catalogo();
     init_tiempo();
+    init_ayuda();
     LIMITES = { imagenes: 5, videos: 2, documentos: 6 };
     acotarArchivos = (archivos) => {
       const enviar = [];
@@ -9532,59 +9632,12 @@ var init_responder = __esm({
     };
     ESTADO_INFORME = { completed: "\u2705", draft: "\u270F\uFE0F", ninguno: "\u274C" };
     textoInforme = (i50) => `${i50.status === "completed" ? ESTADO_INFORME.completed : i50.status === "draft" ? ESTADO_INFORME.draft : ESTADO_INFORME.ninguno} ${i50.label}` + (i50.status === "completed" ? " (completado)" : i50.status === "draft" ? " (borrador)" : " (no hay)");
-    AYUDA = [
-      "\u{1F916} *Lila \u2014 lo que puedes preguntarme*",
-      "Escribe \xAB@lila \u2026\xBB o \xABlila \u2026\xBB y pregunta con tus palabras. Por ejemplo:",
-      "",
-      "\u{1F69B} *Despachos y unidades*",
-      "\u2022 qu\xE9 pedidos hay hoy",
-      "\u2022 resumen de despachos de ayer _(imagen)_",
-      "\u2022 cu\xE1ntos m\xB3 van",
-      "\u2022 en qu\xE9 carro van en planta \xB7 qu\xE9 unidad est\xE1 en campo",
-      "\u2022 a qu\xE9 hora sali\xF3 la 3 \xB7 qui\xE9n maneja la 4 \xB7 cu\xE1nto falta para que llegue la 2",
-      "\u2022 fotos y video de la unidad de placa AML838",
-      "",
-      "\u{1F3ED} *Planta*",
-      "\u2022 cu\xE1nto falta para terminar la producci\xF3n",
-      "\u2022 cu\xE1nto falta para terminar el control de pista",
-      "\u2022 resumen de l\xEDquidos / galones en los tanques _(imagen)_",
-      "\u2022 consumos de la producci\xF3n de hoy",
-      "\u2022 stock de agregados _(imagen)_",
-      "",
-      "\u{1F4C4} *Documentos*",
-      "\u2022 el enlace del pedido de hoy de globofast",
-      "\u2022 las gu\xEDas generadas para la producci\xF3n de hoy",
-      "\u2022 el informe de imprimaci\xF3n / \xE1rea adicional",
-      "\u2022 c\xF3mo va el checklist",
-      "",
-      "\u{1F326} *Clima*",
-      "\u2022 c\xF3mo est\xE1 el clima en Lurigancho",
-      "\u2022 va a llover el martes en Ate",
-      "\u2022 clima de la semana en Comas \xB7 clima el 20 de septiembre _(hasta 16 d\xEDas)_",
-      "\u2022 qu\xE9 distritos est\xE1n propensos a lluvia esta semana",
-      "",
-      "\u{1F5C2} *Clientes, proveedores e historial*",
-      "\u2022 el tel\xE9fono / RUC / direcci\xF3n del cliente Cobe\xF1as",
-      "\u2022 qui\xE9n nos vende petr\xF3leo \xB7 datos del proveedor Julio Licas",
-      "\u2022 qu\xE9 le despachamos a Consorcio Los Pinos la semana pasada",
-      "\u2022 cu\xE1ntos pedidos tuvo Constroad en agosto",
-      "\u2022 ingresos de arena en Globofast este mes _(kardex)_",
-      "\u2022 cu\xE1ntos agregados llegaron hoy _(por proveedor)_",
-      "\u2022 qu\xE9 pedidos no tienen certificado cargado _(por cliente)_",
-      "",
-      "\u{1F4C5} *Fechas*: hoy, ayer, ma\xF1ana, el martes, el martes pasado, 15/09, la semana pasada, en agosto.",
-      "\u{1F4AC} *Sigue el hilo* sin volver a etiquetarme: \xAB\xBFy la 3?\xBB, \xAB\xBFy ma\xF1ana?\xBB, \xAB\xBFy en Ate?\xBB. Si hay m\xE1s de una producci\xF3n, te pregunto cu\xE1l: responde con el n\xFAmero.",
-      "",
-      "\u2699\uFE0F *Propuestas* (aviso a planta, checklist): llegan a error tracking; mant\xE9n presionado el mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar.",
-      "\u{1F50C} `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores.",
-      "",
-      "No respondo precios, pagos, deudas ni datos personales de conductores."
-    ].join("\n");
+    AYUDA = menuAyuda();
     responder = (clave2, ctx) => {
       const { vista, params } = ctx;
       const dia = fechaLegible(vista.fecha);
       if (!clave2) return "Eso no lo tengo. Puedo ayudarte con lo de planta y campo, unidades, pedidos, tanques, agregados, informes y clima \u2014 escribe \xABlila ayuda\xBB para ver la lista.";
-      if (clave2 === "help") return AYUDA;
+      if (clave2 === "help") return menuAyuda({ hayPedidosHoy: vista.orders.length > 0 });
       const vacio = sinPedidos(vista);
       if (vacio && clave2 !== "orders_day") return vacio;
       switch (clave2) {
@@ -12619,6 +12672,7 @@ var init_consultas = __esm({
     init_responder();
     init_archivos();
     init_pendientes();
+    init_ayuda();
     init_contexto();
     init_catalogo();
     init_planta();
@@ -12707,6 +12761,20 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       const params = { ...extraerParametros(pregunta), ...extra };
       const fecha = params.fecha ?? (params.day === "tomorrow" ? sumarDias(hoyLima(), 1) : hoyLima());
       const vista = await construirVista(fecha);
+      if (clave2 === "help") {
+        const menuPendiente = () => preguntar({
+          quien,
+          grupo,
+          opciones: TEMAS.map((t44) => t44.titulo),
+          continuar: async (i50) => {
+            menuPendiente();
+            return { texto: textoTema(i50) };
+          }
+        });
+        const tema = temaPorPalabra(pregunta);
+        menuPendiente();
+        return { texto: tema === null ? menuAyuda({ hayPedidosHoy: vista.orders.length > 0 }) : textoTema(tema) };
+      }
       if (clave2 === "tank_levels") {
         const lista = await tanques();
         const texto2 = textoTanques(lista);

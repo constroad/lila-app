@@ -4,6 +4,7 @@ import { construirVista, type VistaDelDia } from './vista.js';
 import { PREGUNTA_UNIDAD, acotarArchivos, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
+import { TEMAS, menuAyuda, temaPorPalabra, textoTema } from './ayuda.js';
 import { fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto.js';
 import { ALIAS_EMPRESA } from './catalogo.js';
 import { SIN_AGREGADOS, consumosDelDia, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
@@ -140,6 +141,25 @@ const armarRespuesta = async (
   // Una fecha nombrada («el martes», «15/09») manda; si no, hoy o mañana.
   const fecha = params.fecha ?? (params.day === 'tomorrow' ? sumarDias(hoyLima(), 1) : hoyLima());
   const vista = await construirVista(fecha);
+
+  // LA AYUDA POR NIVELES: «ayuda» muestra los temas y deja la elección
+  // pendiente (10 min); «ayuda clima» va directo al tema. Al mostrar un tema
+  // se vuelve a dejar pendiente, para saltar a otro con su número.
+  if (clave === 'help') {
+    const menuPendiente = () =>
+      preguntar({
+        quien,
+        grupo,
+        opciones: TEMAS.map((t) => t.titulo),
+        continuar: async (i) => {
+          menuPendiente();
+          return { texto: textoTema(i) };
+        },
+      });
+    const tema = temaPorPalabra(pregunta);
+    menuPendiente();
+    return { texto: tema === null ? menuAyuda({ hayPedidosHoy: vista.orders.length > 0 }) : textoTema(tema) };
+  }
 
   // Lo de planta no depende de los pedidos del día: se contesta aunque no haya.
   // Tanques y agregados van en IMAGEN con el texto de caption (José, 14/09), las

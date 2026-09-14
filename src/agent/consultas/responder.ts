@@ -1,6 +1,7 @@
 import { normalizarPlaca, type ClaveConsulta, type Parametros } from './catalogo.js';
 import type { VistaDelDia, UnidadDelDia, PedidoDelDiaVista } from './vista.js';
 import { fechaLegible } from '../checklist/tiempo.js';
+import { menuAyuda } from './ayuda.js';
 import type { Revision } from '../checklist/checklist.js';
 import type { Archivo, EstadoInforme } from './archivos.js';
 
@@ -125,59 +126,8 @@ const textoInforme = (i: EstadoInforme): string =>
   `${i.status === 'completed' ? ESTADO_INFORME.completed : i.status === 'draft' ? ESTADO_INFORME.draft : ESTADO_INFORME.ninguno} ${i.label}` +
   (i.status === 'completed' ? ' (completado)' : i.status === 'draft' ? ' (borrador)' : ' (no hay)');
 
-/**
- * LA AYUDA, por tema y un ejemplo por línea. José, 14/09: «me parece un poco
- * desordenado». Lo transversal (fechas, seguir el hilo, propuestas, apagado) va
- * al final, una vez, y no repartido entre los temas.
- */
-export const AYUDA = [
-  '🤖 *Lila — lo que puedes preguntarme*',
-  'Escribe «@lila …» o «lila …» y pregunta con tus palabras. Por ejemplo:',
-  '',
-  '🚛 *Despachos y unidades*',
-  '• qué pedidos hay hoy',
-  '• resumen de despachos de ayer _(imagen)_',
-  '• cuántos m³ van',
-  '• en qué carro van en planta · qué unidad está en campo',
-  '• a qué hora salió la 3 · quién maneja la 4 · cuánto falta para que llegue la 2',
-  '• fotos y video de la unidad de placa AML838',
-  '',
-  '🏭 *Planta*',
-  '• cuánto falta para terminar la producción',
-  '• cuánto falta para terminar el control de pista',
-  '• resumen de líquidos / galones en los tanques _(imagen)_',
-  '• consumos de la producción de hoy',
-  '• stock de agregados _(imagen)_',
-  '',
-  '📄 *Documentos*',
-  '• el enlace del pedido de hoy de globofast',
-  '• las guías generadas para la producción de hoy',
-  '• el informe de imprimación / área adicional',
-  '• cómo va el checklist',
-  '',
-  '🌦 *Clima*',
-  '• cómo está el clima en Lurigancho',
-  '• va a llover el martes en Ate',
-  '• clima de la semana en Comas · clima el 20 de septiembre _(hasta 16 días)_',
-  '• qué distritos están propensos a lluvia esta semana',
-  '',
-  '🗂 *Clientes, proveedores e historial*',
-  '• el teléfono / RUC / dirección del cliente Cobeñas',
-  '• quién nos vende petróleo · datos del proveedor Julio Licas',
-  '• qué le despachamos a Consorcio Los Pinos la semana pasada',
-  '• cuántos pedidos tuvo Constroad en agosto',
-  '• ingresos de arena en Globofast este mes _(kardex)_',
-  '• cuántos agregados llegaron hoy _(por proveedor)_',
-  '• qué pedidos no tienen certificado cargado _(por cliente)_',
-  '',
-  '📅 *Fechas*: hoy, ayer, mañana, el martes, el martes pasado, 15/09, la semana pasada, en agosto.',
-  '💬 *Sigue el hilo* sin volver a etiquetarme: «¿y la 3?», «¿y mañana?», «¿y en Ate?». Si hay más de una producción, te pregunto cuál: responde con el número.',
-  '',
-  '⚙️ *Propuestas* (aviso a planta, checklist): llegan a error tracking; mantén presionado el mensaje → *Responder* → *1* para enviarlo, *3* para descartar.',
-  '🔌 `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores.',
-  '',
-  'No respondo precios, pagos, deudas ni datos personales de conductores.',
-].join('\n');
+/** El menú de ayuda (nivel de arriba); los temas viven en `ayuda.ts`. */
+export const AYUDA = menuAyuda();
 
 export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): string => {
   const { vista, params } = ctx;
@@ -185,8 +135,9 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
 
   if (!clave) return 'Eso no lo tengo. Puedo ayudarte con lo de planta y campo, unidades, pedidos, tanques, agregados, informes y clima — escribe «lila ayuda» para ver la lista.';
   // La ayuda no depende de que haya pedidos (14/09: un día sin producción,
-  // «@lila ayuda» contestaba «no tengo pedidos cargados»).
-  if (clave === 'help') return AYUDA;
+  // «@lila ayuda» contestaba «no tengo pedidos cargados»). Los ejemplos del
+  // momento sí miran si hay producción hoy.
+  if (clave === 'help') return menuAyuda({ hayPedidosHoy: vista.orders.length > 0 });
 
   const vacio = sinPedidos(vista);
   if (vacio && clave !== 'orders_day') return vacio;
