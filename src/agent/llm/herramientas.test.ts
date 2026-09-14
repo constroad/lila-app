@@ -131,6 +131,7 @@ describe('herramientas de datos por regla (sin modelo)', () => {
 
   it('la empresa nombrada entra sola; inframaq es la planta', () => {
     expect(normalizarArgumentos('certificados_pendientes', [], 'certificados pendientes de constroad', lunes)).toEqual({ companyId: 'constroad' });
+    expect(normalizarArgumentos('certificados_pendientes', [], 'certificados pendientes de globofast en agosto', lunes)).toEqual({ companyId: 'globofas-s8k', desde: '2026-08-01', hasta: '2026-08-31' });
     expect(normalizarArgumentos('ingresos_agregados', [], 'cuántos agregados llegaron hoy a globofast', lunes)).toEqual({ desde: '2026-09-14', hasta: '2026-09-14', companyId: 'globofas-s8k' });
     expect(normalizarArgumentos('ingresos_agregados', [], 'qué llegó a inframaq esta semana', lunes)).toEqual({ desde: '2026-09-14', hasta: '2026-09-20' });
   });

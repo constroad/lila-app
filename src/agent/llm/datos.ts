@@ -420,32 +420,52 @@ export interface PedidoSinCertificado {
   obra: string;
   m3: number;
   nota: string;
+  /** Marcado en Portal como «requiere certificados». */
+  exige: boolean;
 }
 
 export const LIMITE_CERTIFICADOS = 40;
 
 /**
- * Pedidos que exigen certificado y no tienen ninguno cargado. Misma regla que
- * el cron `missing-order-certificates` de Portal: `requireCertificates` y sin
- * un archivo `CERTIFICATE` (no borrado) asociado al pedido. Del más reciente
- * al más viejo.
+ * Pedidos DESPACHADOS en un rango que no tienen ningún certificado cargado
+ * (archivo `CERTIFICATE` no borrado asociado al pedido), del más reciente al
+ * más viejo, con la marca de los que Portal tiene como «requiere certificados».
+ *
+ * No se filtra por esa marca, y es a propósito: el cron de Portal
+ * (`missing-order-certificates`) sí lo hace, y con eso globofast no aparecía
+ * nunca —marca 1 pedido de 45 y sube certificados para muchos más (14/09:
+ * «¿no hay certificados pendientes en globofast?»; había 18 despachados sin
+ * certificado en 30 días). Qué pedido chico no lo necesita lo decide quien
+ * lee, no el agente.
  */
-export const pedidosSinCertificado = async (companyId?: string): Promise<{ pedidos: PedidoSinCertificado[]; truncado: boolean }> => {
+export const pedidosSinCertificado = async (
+  filtro: { desde: string; hasta: string; companyId?: string }
+): Promise<{ pedidos: PedidoSinCertificado[]; truncado: boolean; total: number }> => {
   const [Order, Media, nombres] = await Promise.all([getOrderModel(), getMediaModel(), nombresDeEmpresas()]);
-  const empresas = companyId ? [companyId] : EMPRESAS;
-  const orders = (await Order.find({ companyId: { $in: empresas }, requireCertificates: true, status: { $nin: ['eliminado', 'rechazado'] } })
-    .select('companyId cliente alias obra fechaProgramacion cantidadCubos noteCertificate')
+  const empresas = filtro.companyId ? [filtro.companyId] : EMPRESAS;
+  const inicio = instanteArranque(filtro.desde, '00:00') ?? Date.now();
+  const fin = (instanteArranque(filtro.hasta, '00:00') ?? Date.now()) + 24 * 3_600_000;
+  const orders = (await Order.find({
+    companyId: { $in: empresas },
+    status: 'despachado',
+    fechaProgramacion: { $gte: new Date(inicio - 12 * 3_600_000), $lt: new Date(fin + 12 * 3_600_000) },
+  })
+    .select('companyId cliente alias obra fechaProgramacion cantidadCubos noteCertificate requireCertificates')
     .sort({ fechaProgramacion: -1 })
-    .limit(1000)
+    .limit(500)
     .lean()) as Doc[];
-  if (orders.length === 0) return { pedidos: [], truncado: false };
-  const ids = orders.map((o) => String(o._id));
+  const enRango = orders.filter((o) => {
+    const dia = fechaDe(o.fechaProgramacion);
+    return dia >= filtro.desde && dia <= filtro.hasta;
+  });
+  if (enRango.length === 0) return { pedidos: [], truncado: false, total: 0 };
+  const ids = enRango.map((o) => String(o._id));
   const conCertificado = new Set(
     ((await Media.find({ companyId: { $in: empresas }, resourceId: { $in: ids }, type: 'CERTIFICATE', status: { $ne: 'DELETED' } })
       .select('resourceId')
       .lean()) as Doc[]).map((m) => String(m.resourceId || '').trim())
   );
-  const pendientes = orders
+  const pendientes = enRango
     .filter((o) => !conCertificado.has(String(o._id)))
     .map((o) => ({
       fecha: fechaDe(o.fechaProgramacion),
@@ -454,6 +474,7 @@ export const pedidosSinCertificado = async (companyId?: string): Promise<{ pedid
       obra: texto(o.obra),
       m3: num(o.cantidadCubos),
       nota: texto(o.noteCertificate),
+      exige: o.requireCertificates === true,
     }));
-  return { pedidos: pendientes.slice(0, LIMITE_CERTIFICADOS), truncado: pendientes.length > LIMITE_CERTIFICADOS };
+  return { pedidos: pendientes.slice(0, LIMITE_CERTIFICADOS), truncado: pendientes.length > LIMITE_CERTIFICADOS, total: enRango.length };
 };

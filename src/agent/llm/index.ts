@@ -65,8 +65,8 @@ export const fichaPara = async (id: HerramientaDeDatos, args: Argumentos, ahoraM
     }
     case 'certificados_pendientes': {
       const nombres = await nombresDeEmpresas();
-      const r = await pedidosSinCertificado(args.companyId);
-      return { ficha: fichaCertificados(r, args.companyId ? nombres.get(args.companyId) || args.companyId : undefined), resultados: r.pedidos.length };
+      const r = await pedidosSinCertificado({ desde, hasta, companyId: args.companyId });
+      return { ficha: fichaCertificados(r, { desde, hasta }, args.companyId ? nombres.get(args.companyId) || args.companyId : undefined), resultados: r.pedidos.length };
     }
     default:
       return { ficha: '', resultados: 0 };

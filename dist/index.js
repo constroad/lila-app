@@ -11229,24 +11229,35 @@ var init_datos = __esm({
       };
     };
     LIMITE_CERTIFICADOS = 40;
-    pedidosSinCertificado = async (companyId) => {
+    pedidosSinCertificado = async (filtro) => {
       const [Order, Media2, nombres] = await Promise.all([getOrderModel(), getMediaModel(), nombresDeEmpresas()]);
-      const empresas = companyId ? [companyId] : EMPRESAS;
-      const orders = await Order.find({ companyId: { $in: empresas }, requireCertificates: true, status: { $nin: ["eliminado", "rechazado"] } }).select("companyId cliente alias obra fechaProgramacion cantidadCubos noteCertificate").sort({ fechaProgramacion: -1 }).limit(1e3).lean();
-      if (orders.length === 0) return { pedidos: [], truncado: false };
-      const ids = orders.map((o37) => String(o37._id));
+      const empresas = filtro.companyId ? [filtro.companyId] : EMPRESAS;
+      const inicio = instanteArranque(filtro.desde, "00:00") ?? Date.now();
+      const fin = (instanteArranque(filtro.hasta, "00:00") ?? Date.now()) + 24 * 36e5;
+      const orders = await Order.find({
+        companyId: { $in: empresas },
+        status: "despachado",
+        fechaProgramacion: { $gte: new Date(inicio - 12 * 36e5), $lt: new Date(fin + 12 * 36e5) }
+      }).select("companyId cliente alias obra fechaProgramacion cantidadCubos noteCertificate requireCertificates").sort({ fechaProgramacion: -1 }).limit(500).lean();
+      const enRango = orders.filter((o37) => {
+        const dia = fechaDe2(o37.fechaProgramacion);
+        return dia >= filtro.desde && dia <= filtro.hasta;
+      });
+      if (enRango.length === 0) return { pedidos: [], truncado: false, total: 0 };
+      const ids = enRango.map((o37) => String(o37._id));
       const conCertificado = new Set(
         (await Media2.find({ companyId: { $in: empresas }, resourceId: { $in: ids }, type: "CERTIFICATE", status: { $ne: "DELETED" } }).select("resourceId").lean()).map((m59) => String(m59.resourceId || "").trim())
       );
-      const pendientes3 = orders.filter((o37) => !conCertificado.has(String(o37._id))).map((o37) => ({
+      const pendientes3 = enRango.filter((o37) => !conCertificado.has(String(o37._id))).map((o37) => ({
         fecha: fechaDe2(o37.fechaProgramacion),
         empresa: nombres.get(String(o37.companyId)) || String(o37.companyId),
         cliente: texto(o37.alias) || texto(o37.cliente) || "sin cliente",
         obra: texto(o37.obra),
         m3: num3(o37.cantidadCubos),
-        nota: texto(o37.noteCertificate)
+        nota: texto(o37.noteCertificate),
+        exige: o37.requireCertificates === true
       }));
-      return { pedidos: pendientes3.slice(0, LIMITE_CERTIFICADOS), truncado: pendientes3.length > LIMITE_CERTIFICADOS };
+      return { pedidos: pendientes3.slice(0, LIMITE_CERTIFICADOS), truncado: pendientes3.length > LIMITE_CERTIFICADOS, total: enRango.length };
     };
   }
 });
@@ -11288,7 +11299,7 @@ var init_herramientas = __esm({
       { id: "pedidos", descripcion: "historial de pedidos en un rango de fechas, de una empresa o de un cliente", argumentos: ["desde", "hasta", "empresa", "nombre"], historial: true },
       { id: "kardex", descripcion: "ingresos, salidas y movimientos de UN material en un rango de fechas", argumentos: ["nombre", "desde", "hasta", "empresa"], historial: true },
       { id: "ingresos_agregados", descripcion: "cu\xE1ntos agregados / insumos llegaron o se recibieron (camiones por proveedor) en un d\xEDa o rango", argumentos: ["desde", "hasta", "empresa"], historial: true, reglas: [["llegaron"], ["llego"], ["llegado"], ["ingresaron"], ["ingreso", "agregado"], ["ingresos", "agregado"], ["ingreso", "material"], ["ingresos", "material"], ["entrada", "material"], ["entradas", "material"], ["recibimos"], ["recepcion"], ["insumo"], ["insumos"], ["cuanto", "llego"]] },
-      { id: "certificados_pendientes", descripcion: "qu\xE9 pedidos no tienen certificado cargado / certificados pendientes", argumentos: ["empresa"], reglas: [["certificado"], ["certificados"]] }
+      { id: "certificados_pendientes", descripcion: "qu\xE9 pedidos despachados no tienen certificado cargado / certificados pendientes (por cliente), en un rango", argumentos: ["desde", "hasta", "empresa"], historial: true, reglas: [["certificado"], ["certificados"]] }
     ];
     herramientaDeDatosPorReglas = (pregunta) => {
       const t44 = normalizar(pregunta);
@@ -11517,22 +11528,24 @@ var init_fichas = __esm({
       }
       return lineas.join("\n");
     };
-    fichaCertificados = (r39, empresa) => {
+    fichaCertificados = (r39, rango2, empresa) => {
       const de9 = empresa ? ` de ${empresa}` : "";
-      if (r39.pedidos.length === 0) return `No hay pedidos${de9} con certificado pendiente: todos los que lo exigen ya lo tienen cargado.`;
-      const lineas = [`\u{1F4C4} *${r39.pedidos.length}${r39.truncado ? "+" : ""} pedido(s)${de9} sin certificado cargado*`];
+      const cuando = rango2.desde === rango2.hasta ? `el ${fechaLegible(rango2.desde)}` : `del ${corta(rango2.desde)} al ${corta(rango2.hasta)}`;
+      if (r39.total === 0) return `No hay pedidos despachados${de9} ${cuando}.`;
+      if (r39.pedidos.length === 0) return `Los ${r39.total} pedidos despachados${de9} ${cuando} tienen su certificado cargado.`;
+      const lineas = [`\u{1F4C4} *${r39.pedidos.length}${r39.truncado ? "+" : ""} de ${r39.total} pedidos despachados${de9} ${cuando} sin certificado cargado*`];
       const porCliente = /* @__PURE__ */ new Map();
       for (const p64 of r39.pedidos) porCliente.set(p64.cliente, [...porCliente.get(p64.cliente) ?? [], p64]);
-      const linea = (p64) => `\u2022 ${corta(p64.fecha)} ${recortar2(p64.obra || "sin obra", 40)} ${n(p64.m3)} m\xB3${p64.nota ? ` \u2014 ${recortar2(p64.nota, 40)}` : ""}`;
+      const linea = (p64) => `\u2022 ${corta(p64.fecha)} ${recortar2(p64.obra || "sin obra", 40)} ${n(p64.m3)} m\xB3${p64.exige ? " \u26A0\uFE0F exige certificado" : ""}${p64.nota ? ` \u2014 ${recortar2(p64.nota, 40)}` : ""}`;
       if (porCliente.size === 1) {
         const [[cliente, lista]] = [...porCliente];
-        lineas.push(`*${cliente}* \xB7 ${lista[0].empresa}`, ...lista.map(linea));
+        lineas.push(`*${recortar2(cliente, 45)}* \xB7 ${lista[0].empresa}`, ...lista.map(linea));
       } else {
         for (const [cliente, lista] of [...porCliente].sort((a49, b63) => b63[1].length - a49[1].length)) {
           lineas.push(`*${recortar2(cliente, 45)}* \xB7 ${lista[0].empresa} \u2014 ${lista.length}`, ...lista.map(linea));
         }
       }
-      if (r39.truncado) lineas.push("\u2026 y m\xE1s. Acota por empresa para ver el resto.");
+      if (r39.truncado) lineas.push("\u2026 y m\xE1s. Acota las fechas o la empresa para ver el resto.");
       return lineas.join("\n");
     };
   }
@@ -11969,8 +11982,8 @@ var init_llm = __esm({
         }
         case "certificados_pendientes": {
           const nombres = await nombresDeEmpresas();
-          const r39 = await pedidosSinCertificado(args.companyId);
-          return { ficha: fichaCertificados(r39, args.companyId ? nombres.get(args.companyId) || args.companyId : void 0), resultados: r39.pedidos.length };
+          const r39 = await pedidosSinCertificado({ desde, hasta, companyId: args.companyId });
+          return { ficha: fichaCertificados(r39, { desde, hasta }, args.companyId ? nombres.get(args.companyId) || args.companyId : void 0), resultados: r39.pedidos.length };
         }
         default:
           return { ficha: "", resultados: 0 };

@@ -108,22 +108,24 @@ export const fichaIngresos = (r: IngresosDeAgregados, hoy = ''): string => {
   return lineas.join('\n');
 };
 
-/** Pedidos sin certificado, por cliente cuando hay más de uno. */
-export const fichaCertificados = (r: { pedidos: PedidoSinCertificado[]; truncado: boolean }, empresa?: string): string => {
+/** Pedidos despachados sin certificado, por cliente cuando hay más de uno; ⚠️ los que Portal marca como que lo exigen. */
+export const fichaCertificados = (r: { pedidos: PedidoSinCertificado[]; truncado: boolean; total: number }, rango: { desde: string; hasta: string }, empresa?: string): string => {
   const de = empresa ? ` de ${empresa}` : '';
-  if (r.pedidos.length === 0) return `No hay pedidos${de} con certificado pendiente: todos los que lo exigen ya lo tienen cargado.`;
-  const lineas = [`📄 *${r.pedidos.length}${r.truncado ? '+' : ''} pedido(s)${de} sin certificado cargado*`];
+  const cuando = rango.desde === rango.hasta ? `el ${fechaLegible(rango.desde)}` : `del ${corta(rango.desde)} al ${corta(rango.hasta)}`;
+  if (r.total === 0) return `No hay pedidos despachados${de} ${cuando}.`;
+  if (r.pedidos.length === 0) return `Los ${r.total} pedidos despachados${de} ${cuando} tienen su certificado cargado.`;
+  const lineas = [`📄 *${r.pedidos.length}${r.truncado ? '+' : ''} de ${r.total} pedidos despachados${de} ${cuando} sin certificado cargado*`];
   const porCliente = new Map<string, PedidoSinCertificado[]>();
   for (const p of r.pedidos) porCliente.set(p.cliente, [...(porCliente.get(p.cliente) ?? []), p]);
-  const linea = (p: PedidoSinCertificado) => `• ${corta(p.fecha)} ${recortar(p.obra || 'sin obra', 40)} ${n(p.m3)} m³${p.nota ? ` — ${recortar(p.nota, 40)}` : ''}`;
+  const linea = (p: PedidoSinCertificado) => `• ${corta(p.fecha)} ${recortar(p.obra || 'sin obra', 40)} ${n(p.m3)} m³${p.exige ? ' ⚠️ exige certificado' : ''}${p.nota ? ` — ${recortar(p.nota, 40)}` : ''}`;
   if (porCliente.size === 1) {
     const [[cliente, lista]] = [...porCliente];
-    lineas.push(`*${cliente}* · ${lista[0].empresa}`, ...lista.map(linea));
+    lineas.push(`*${recortar(cliente, 45)}* · ${lista[0].empresa}`, ...lista.map(linea));
   } else {
     for (const [cliente, lista] of [...porCliente].sort((a, b) => b[1].length - a[1].length)) {
       lineas.push(`*${recortar(cliente, 45)}* · ${lista[0].empresa} — ${lista.length}`, ...lista.map(linea));
     }
   }
-  if (r.truncado) lineas.push('… y más. Acota por empresa para ver el resto.');
+  if (r.truncado) lineas.push('… y más. Acota las fechas o la empresa para ver el resto.');
   return lineas.join('\n');
 };

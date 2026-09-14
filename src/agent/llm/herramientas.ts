@@ -66,7 +66,7 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
   { id: 'pedidos', descripcion: 'historial de pedidos en un rango de fechas, de una empresa o de un cliente', argumentos: ['desde', 'hasta', 'empresa', 'nombre'], historial: true },
   { id: 'kardex', descripcion: 'ingresos, salidas y movimientos de UN material en un rango de fechas', argumentos: ['nombre', 'desde', 'hasta', 'empresa'], historial: true },
   { id: 'ingresos_agregados', descripcion: 'cuántos agregados / insumos llegaron o se recibieron (camiones por proveedor) en un día o rango', argumentos: ['desde', 'hasta', 'empresa'], historial: true, reglas: [['llegaron'], ['llego'], ['llegado'], ['ingresaron'], ['ingreso', 'agregado'], ['ingresos', 'agregado'], ['ingreso', 'material'], ['ingresos', 'material'], ['entrada', 'material'], ['entradas', 'material'], ['recibimos'], ['recepcion'], ['insumo'], ['insumos'], ['cuanto', 'llego']] },
-  { id: 'certificados_pendientes', descripcion: 'qué pedidos no tienen certificado cargado / certificados pendientes', argumentos: ['empresa'], reglas: [['certificado'], ['certificados']] },
+  { id: 'certificados_pendientes', descripcion: 'qué pedidos despachados no tienen certificado cargado / certificados pendientes (por cliente), en un rango', argumentos: ['desde', 'hasta', 'empresa'], historial: true, reglas: [['certificado'], ['certificados']] },
 ];
 
 /** Las herramientas de datos que se reconocen por regla, sin modelo: las que no necesitan un nombre. */

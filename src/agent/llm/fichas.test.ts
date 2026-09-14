@@ -107,13 +107,15 @@ describe('ingresos y certificados', () => {
     expect(fichaIngresos({ desde: '2026-09-13', hasta: '2026-09-13', proveedores: [], totalIngresos: 0, total: 0, pendientes: 0, unidad: 'm³' }, '2026-09-14')).toBe('No hay camiones de agregados registrados el domingo 13/09 en la recepción de insumos.');
   });
 
-  it('certificados pendientes: por cliente cuando hay varios; plano con uno', () => {
-    const uno = { fecha: '2026-07-10', empresa: 'CONSTROAD SAC', cliente: 'MERIDIANA S.A.C.', obra: 'VENTANILLA- SECTOR 280', m3: 18, nota: '' };
-    expect(fichaCertificados({ pedidos: [uno], truncado: false })).toBe('📄 *1 pedido(s) sin certificado cargado*\n*MERIDIANA S.A.C.* · CONSTROAD SAC\n• 10/07 VENTANILLA- SECTOR 280 18 m³');
-    const varios = fichaCertificados({ pedidos: [uno, { ...uno, cliente: 'RENATO', obra: 'CAÑETE', m3: 15, fecha: '2026-08-05', nota: 'falta densidad' }, { ...uno, cliente: 'RENATO', fecha: '2026-08-06' }], truncado: false }, 'CONSTROAD SAC');
-    expect(varios).toContain('📄 *3 pedido(s) de CONSTROAD SAC sin certificado cargado*');
+  it('certificados pendientes: por cliente cuando hay varios; plano con uno; ⚠️ los que lo exigen', () => {
+    const rango = { desde: '2026-08-15', hasta: '2026-09-14' };
+    const uno = { fecha: '2026-09-10', empresa: 'CONSTROAD SAC', cliente: 'MERIDIANA S.A.C.', obra: 'VENTANILLA- SECTOR 280', m3: 18, nota: '', exige: true };
+    expect(fichaCertificados({ pedidos: [uno], truncado: false, total: 3 }, rango)).toBe('📄 *1 de 3 pedidos despachados del 15/08 al 14/09 sin certificado cargado*\n*MERIDIANA S.A.C.* · CONSTROAD SAC\n• 10/09 VENTANILLA- SECTOR 280 18 m³ ⚠️ exige certificado');
+    const varios = fichaCertificados({ pedidos: [uno, { ...uno, cliente: 'RENATO', obra: 'CAÑETE', m3: 15, fecha: '2026-08-05', nota: 'falta densidad', exige: false }, { ...uno, cliente: 'RENATO', fecha: '2026-08-06', exige: false }], truncado: false, total: 5 }, rango, 'CONSTROAD SAC');
+    expect(varios).toContain('📄 *3 de 5 pedidos despachados de CONSTROAD SAC del 15/08 al 14/09 sin certificado cargado*');
     expect(varios.indexOf('*RENATO* · CONSTROAD SAC — 2')).toBeLessThan(varios.indexOf('*MERIDIANA S.A.C.* · CONSTROAD SAC — 1'));
     expect(varios).toContain('• 05/08 CAÑETE 15 m³ — falta densidad');
-    expect(fichaCertificados({ pedidos: [], truncado: false })).toContain('todos los que lo exigen ya lo tienen cargado');
+    expect(fichaCertificados({ pedidos: [], truncado: false, total: 4 }, rango)).toBe('Los 4 pedidos despachados del 15/08 al 14/09 tienen su certificado cargado.');
+    expect(fichaCertificados({ pedidos: [], truncado: false, total: 0 }, rango, 'Globofast')).toBe('No hay pedidos despachados de Globofast del 15/08 al 14/09.');
   });
 });
