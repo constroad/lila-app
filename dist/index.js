@@ -9561,6 +9561,8 @@ var init_responder = __esm({
       "\u2022 qu\xE9 le despachamos a Consorcio Los Pinos la semana pasada",
       "\u2022 cu\xE1ntos pedidos tuvo Constroad en agosto",
       "\u2022 ingresos de arena en Globofast este mes _(kardex)_",
+      "\u2022 cu\xE1ntos agregados llegaron hoy _(por proveedor)_",
+      "\u2022 qu\xE9 pedidos no tienen certificado cargado _(por cliente)_",
       "",
       "\u{1F4C5} *Fechas*: hoy, ayer, ma\xF1ana, el martes, el martes pasado, 15/09, la semana pasada, en agosto.",
       "\u{1F4AC} *Sigue el hilo* sin volver a etiquetarme: \xAB\xBFy la 3?\xBB, \xAB\xBFy ma\xF1ana?\xBB, \xAB\xBFy en Ate?\xBB. Si hay m\xE1s de una producci\xF3n, te pregunto cu\xE1l: responde con el n\xFAmero.",
@@ -10339,7 +10341,7 @@ var init_weather_asphalt_forecast_service = __esm({
 });
 
 // src/agent/consultas/planta.ts
-var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, ES_LIQUIDO, UNIDAD_LIQUIDA, materiales, materialesPorEmpresa, SIN_AGREGADOS, textoMaterialesDe, textoMateriales;
+var num2, r1, CONTENIDO, tanques, textoTanques, consumosDelDia, textoConsumos, ES_LIQUIDO, UNIDAD_LIQUIDA, esAgregado, materiales, materialesPorEmpresa, SIN_AGREGADOS, textoMaterialesDe, textoMateriales;
 var init_planta = __esm({
   "src/agent/consultas/planta.ts"() {
     init_models();
@@ -10420,10 +10422,11 @@ var init_planta = __esm({
     };
     ES_LIQUIDO = /\b(pen|gasoh?ol|gashol|petroleo|petróleo|diesel|asfalto|aceite|emulsion|emulsión|combustible)\b/i;
     UNIDAD_LIQUIDA = /^(gl|gls|gal|galon|galones|l|lt|lts|litros)$/i;
+    esAgregado = (nombre, unidad) => !ES_LIQUIDO.test(nombre) && !UNIDAD_LIQUIDA.test(String(unidad || "").trim());
     materiales = async (empresas) => {
       const Mat = await getMaterialModel();
       const docs = await Mat.find({ companyId: { $in: empresas.map((e29) => e29.companyId) } }).select("companyId name quantity unit reorderPoint").sort({ name: 1 }).lean();
-      return docs.filter((d67) => !ES_LIQUIDO.test(String(d67.name || "")) && !UNIDAD_LIQUIDA.test(String(d67.unit || "").trim())).map((d67) => {
+      return docs.filter((d67) => esAgregado(String(d67.name || ""), String(d67.unit || ""))).map((d67) => {
         const reorden = num2(d67.reorderPoint);
         return {
           empresa: empresas.find((e29) => e29.companyId === String(d67.companyId))?.nombre || String(d67.companyId),
@@ -10981,12 +10984,13 @@ var init_semantica = __esm({
 });
 
 // src/agent/llm/datos.ts
-var num3, texto, EMPRESAS, patronDeBusqueda, nombresCache, nombresDeEmpresas, fechaDe2, buscarClientes, buscarProveedores, LIMITE_HISTORIAL, pedidosEntre, LIMITE_KARDEX, movimientosDeMaterial;
+var num3, texto, EMPRESAS, patronDeBusqueda, nombresCache, nombresDeEmpresas, fechaDe2, buscarClientes, buscarProveedores, LIMITE_HISTORIAL, pedidosEntre, LIMITE_KARDEX, movimientosDeMaterial, ingresosDeAgregados, LIMITE_CERTIFICADOS, pedidosSinCertificado;
 var init_datos = __esm({
   "src/agent/llm/datos.ts"() {
     init_models();
     init_alcance();
     init_tiempo();
+    init_planta();
     num3 = (v55) => typeof v55 === "number" && Number.isFinite(v55) ? v55 : Number(v55) || 0;
     texto = (v55) => String(v55 ?? "").trim();
     EMPRESAS = [...EMPRESAS_CON_PEDIDOS];
@@ -11145,16 +11149,82 @@ var init_datos = __esm({
         })
       );
     };
+    ingresosDeAgregados = async (filtro) => {
+      const [Material, Kardex, nombres] = await Promise.all([getMaterialModel(), getKardexModel(), nombresDeEmpresas()]);
+      const empresas = filtro.companyId ? [filtro.companyId] : EMPRESAS;
+      const materiales2 = await Material.find({ companyId: { $in: empresas } }).select("companyId name unit").lean();
+      const agregados = new Map(materiales2.filter((m59) => esAgregado(texto(m59.name), texto(m59.unit))).map((m59) => [String(m59._id), m59]));
+      const inicio = new Date((instanteArranque(filtro.desde, "00:00") ?? Date.now()) - 12 * 36e5);
+      const fin = new Date((instanteArranque(filtro.hasta, "00:00") ?? Date.now()) + 36 * 36e5);
+      const docs = await Kardex.find({
+        companyId: { $in: empresas },
+        materialId: { $in: [...agregados.keys()] },
+        type: "Ingreso",
+        status: { $ne: "deleted" },
+        $or: [{ date: { $gte: inicio, $lt: fin } }, { date: { $gte: inicio.toISOString(), $lt: fin.toISOString() } }]
+      }).select("companyId materialId quantity date providerName vendorProviderName description").sort({ date: 1 }).limit(500).lean();
+      const enRango = docs.filter((d67) => {
+        const dia = fechaDe2(d67.date);
+        return dia >= filtro.desde && dia <= filtro.hasta;
+      });
+      const porProveedor = /* @__PURE__ */ new Map();
+      for (const d67 of enRango) {
+        const m59 = agregados.get(String(d67.materialId));
+        if (!m59) continue;
+        const vendedor = texto(d67.vendorProviderName) || texto(d67.providerName) || "sin proveedor";
+        const transportista = texto(d67.providerName) && texto(d67.providerName) !== vendedor ? texto(d67.providerName) : void 0;
+        const empresa = nombres.get(String(d67.companyId)) || String(d67.companyId);
+        const unidad = texto(m59.unit).replace(/^m3$/i, "m\xB3") || "m\xB3";
+        const clave2 = `${vendedor}|${empresa}`;
+        const prov = porProveedor.get(clave2) ?? { proveedor: vendedor, transportista, empresa, materiales: [], total: 0, unidad };
+        const material = texto(m59.name).toUpperCase();
+        const fila = prov.materiales.find((x63) => x63.material === material) ?? (prov.materiales.push({ material, unidad, cantidad: 0, ingresos: 0 }), prov.materiales[prov.materiales.length - 1]);
+        fila.cantidad += num3(d67.quantity);
+        fila.ingresos += 1;
+        prov.total += num3(d67.quantity);
+        porProveedor.set(clave2, prov);
+      }
+      const proveedores = [...porProveedor.values()].sort((a49, b63) => b63.total - a49.total);
+      return {
+        desde: filtro.desde,
+        hasta: filtro.hasta,
+        proveedores,
+        totalIngresos: proveedores.reduce((s59, p64) => s59 + p64.materiales.reduce((x63, m59) => x63 + m59.ingresos, 0), 0),
+        total: proveedores.reduce((s59, p64) => s59 + p64.total, 0),
+        unidad: proveedores[0]?.unidad ?? "m\xB3"
+      };
+    };
+    LIMITE_CERTIFICADOS = 40;
+    pedidosSinCertificado = async (companyId) => {
+      const [Order, Media2, nombres] = await Promise.all([getOrderModel(), getMediaModel(), nombresDeEmpresas()]);
+      const empresas = companyId ? [companyId] : EMPRESAS;
+      const orders = await Order.find({ companyId: { $in: empresas }, requireCertificates: true, status: { $nin: ["eliminado", "rechazado"] } }).select("companyId cliente alias obra fechaProgramacion cantidadCubos noteCertificate").sort({ fechaProgramacion: -1 }).limit(1e3).lean();
+      if (orders.length === 0) return { pedidos: [], truncado: false };
+      const ids = orders.map((o37) => String(o37._id));
+      const conCertificado = new Set(
+        (await Media2.find({ companyId: { $in: empresas }, resourceId: { $in: ids }, type: "CERTIFICATE", status: { $ne: "DELETED" } }).select("resourceId").lean()).map((m59) => String(m59.resourceId || "").trim())
+      );
+      const pendientes3 = orders.filter((o37) => !conCertificado.has(String(o37._id))).map((o37) => ({
+        fecha: fechaDe2(o37.fechaProgramacion),
+        empresa: nombres.get(String(o37.companyId)) || String(o37.companyId),
+        cliente: texto(o37.alias) || texto(o37.cliente) || "sin cliente",
+        obra: texto(o37.obra),
+        m3: num3(o37.cantidadCubos),
+        nota: texto(o37.noteCertificate)
+      }));
+      return { pedidos: pendientes3.slice(0, LIMITE_CERTIFICADOS), truncado: pendientes3.length > LIMITE_CERTIFICADOS };
+    };
   }
 });
 
 // src/agent/llm/herramientas.ts
-var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, textoConFecha, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
+var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, herramientaDeDatosPorReglas, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, textoConFecha, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
 var init_herramientas = __esm({
   "src/agent/llm/herramientas.ts"() {
     init_catalogo();
     init_weather_asphalt_forecast_service();
-    HERRAMIENTAS_DE_DATOS = ["clientes", "proveedores", "pedidos", "kardex"];
+    init_alcance();
+    HERRAMIENTAS_DE_DATOS = ["clientes", "proveedores", "pedidos", "kardex", "ingresos_agregados", "certificados_pendientes"];
     esHerramientaDeDatos = (id) => HERRAMIENTAS_DE_DATOS.includes(id);
     CAMPOS_ARGUMENTO = ["fecha", "desde", "hasta", "unidad", "placa", "empresa", "distrito", "nombre"];
     HERRAMIENTAS = [
@@ -11182,8 +11252,23 @@ var init_herramientas = __esm({
       { id: "clientes", descripcion: "datos de UN cliente: RUC, contacto, tel\xE9fono, correo, direcci\xF3n, sus \xFAltimos pedidos", argumentos: ["nombre"] },
       { id: "proveedores", descripcion: "datos de UN proveedor: RUC, contacto, tel\xE9fono, qu\xE9 vende o transporta", argumentos: ["nombre"] },
       { id: "pedidos", descripcion: "historial de pedidos en un rango de fechas, de una empresa o de un cliente", argumentos: ["desde", "hasta", "empresa", "nombre"], historial: true },
-      { id: "kardex", descripcion: "ingresos, salidas y movimientos de UN material en un rango de fechas", argumentos: ["nombre", "desde", "hasta", "empresa"], historial: true }
+      { id: "kardex", descripcion: "ingresos, salidas y movimientos de UN material en un rango de fechas", argumentos: ["nombre", "desde", "hasta", "empresa"], historial: true },
+      { id: "ingresos_agregados", descripcion: "cu\xE1ntos agregados llegaron / ingresaron (todos los materiales, por proveedor) en un d\xEDa o rango", argumentos: ["desde", "hasta", "empresa"], historial: true, reglas: [["llegaron"], ["llego"], ["llegado"], ["ingresaron"], ["ingreso", "agregado"], ["ingresos", "agregado"], ["ingreso", "material"], ["ingresos", "material"], ["entrada", "material"], ["entradas", "material"], ["recibimos"], ["recepcion", "agregado"], ["cuanto", "llego"]] },
+      { id: "certificados_pendientes", descripcion: "qu\xE9 pedidos no tienen certificado cargado / certificados pendientes", argumentos: ["empresa"], reglas: [["certificado"], ["certificados"]] }
     ];
+    herramientaDeDatosPorReglas = (pregunta) => {
+      const t44 = normalizar(pregunta);
+      let mejor = null;
+      for (const h65 of HERRAMIENTAS) {
+        if (!esHerramientaDeDatos(h65.id) || !h65.reglas) continue;
+        for (const grupo of h65.reglas) {
+          const palabras = grupo.map(normalizar);
+          if (!palabras.every((p64) => new RegExp(`\\b${p64}`).test(t44))) continue;
+          if (!mejor || palabras.length > mejor.palabras) mejor = { id: h65.id, palabras: palabras.length };
+        }
+      }
+      return mejor?.id ?? null;
+    };
     herramienta = (id) => HERRAMIENTAS.find((h65) => h65.id === id);
     FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
     fechaValida = (v55, hoy) => {
@@ -11290,6 +11375,10 @@ var init_herramientas = __esm({
             break;
         }
       }
+      if (acepta("empresa") && !args.companyId) {
+        const nombrada = ALIAS_EMPRESA.find((e29) => e29.companyId !== COMPANY_PILOTO && e29.alias.some((a49) => new RegExp(`\\b${a49}\\b`).test(t44)));
+        if (nombrada) args.companyId = nombrada.companyId;
+      }
       if (acepta("fecha")) {
         const propia = fechaDe(pregunta, ahoraMs);
         if (propia) args.fecha = propia;
@@ -11309,7 +11398,7 @@ var init_herramientas = __esm({
 });
 
 // src/agent/llm/fichas.ts
-var n, recortar2, corta, EMPRESAS_TEXTO, fichaClientes, fichaProveedores, rango, fichaPedidos, fichaKardex;
+var n, recortar2, corta, EMPRESAS_TEXTO, fichaClientes, fichaProveedores, rango, fichaPedidos, fichaKardex, fichaIngresos, fichaCertificados;
 var init_fichas = __esm({
   "src/agent/llm/fichas.ts"() {
     init_tiempo();
@@ -11381,6 +11470,34 @@ var init_fichas = __esm({
         return lineas.join("\n");
       });
       return bloques.join("\n\n");
+    };
+    fichaIngresos = (r39, hoy = "") => {
+      const cuando = r39.desde === r39.hasta ? r39.desde === hoy ? "hoy" : `el ${fechaLegible(r39.desde)}` : `del ${corta(r39.desde)} al ${corta(r39.hasta)}`;
+      if (r39.proveedores.length === 0) return `No hay ingresos de agregados registrados ${cuando} en el kardex.`;
+      const lineas = [`\u{1F69A} *Ingresos de agregados ${cuando}*: ${r39.totalIngresos} ingreso(s), ${n(r39.total)} ${r39.unidad}`];
+      for (const p64 of r39.proveedores) {
+        lineas.push(`*${p64.proveedor}*${p64.transportista ? ` (transporta ${p64.transportista})` : ""} \xB7 ${p64.empresa} \u2014 ${n(p64.total)} ${p64.unidad}`);
+        for (const m59 of p64.materiales) lineas.push(`\u2022 ${m59.material}: ${n(m59.cantidad)} ${m59.unidad}${m59.ingresos > 1 ? ` en ${m59.ingresos} ingresos` : ""}`);
+      }
+      return lineas.join("\n");
+    };
+    fichaCertificados = (r39, empresa) => {
+      const de9 = empresa ? ` de ${empresa}` : "";
+      if (r39.pedidos.length === 0) return `No hay pedidos${de9} con certificado pendiente: todos los que lo exigen ya lo tienen cargado.`;
+      const lineas = [`\u{1F4C4} *${r39.pedidos.length}${r39.truncado ? "+" : ""} pedido(s)${de9} sin certificado cargado*`];
+      const porCliente = /* @__PURE__ */ new Map();
+      for (const p64 of r39.pedidos) porCliente.set(p64.cliente, [...porCliente.get(p64.cliente) ?? [], p64]);
+      const linea = (p64) => `\u2022 ${corta(p64.fecha)} ${recortar2(p64.obra || "sin obra", 40)} ${n(p64.m3)} m\xB3${p64.nota ? ` \u2014 ${recortar2(p64.nota, 40)}` : ""}`;
+      if (porCliente.size === 1) {
+        const [[cliente, lista]] = [...porCliente];
+        lineas.push(`*${cliente}* \xB7 ${lista[0].empresa}`, ...lista.map(linea));
+      } else {
+        for (const [cliente, lista] of [...porCliente].sort((a49, b63) => b63[1].length - a49[1].length)) {
+          lineas.push(`*${recortar2(cliente, 45)}* \xB7 ${lista[0].empresa} \u2014 ${lista.length}`, ...lista.map(linea));
+        }
+      }
+      if (r39.truncado) lineas.push("\u2026 y m\xE1s. Acota por empresa para ver el resto.");
+      return lineas.join("\n");
     };
   }
 });
@@ -11706,6 +11823,8 @@ var init_seleccion = __esm({
         ej("cu\xE1ntas salidas de piedra hubo la semana pasada en globofast", "kardex", [["nombre", "piedra"], ["desde", lunesPasado], ["hasta", domingoPasado], ["empresa", "globofast"]]),
         ej("cu\xE1ntos pedidos tuvo constroad la semana pasada", "pedidos", [["empresa", "constroad"], ["desde", lunesPasado], ["hasta", domingoPasado]]),
         ej("qui\xE9n nos vende el petr\xF3leo", "proveedores", [["nombre", "petr\xF3leo"]]),
+        ej("cu\xE1ntos agregados llegaron hoy", "ingresos_agregados", [["desde", hoy], ["hasta", hoy]]),
+        ej("qu\xE9 pedidos no tienen certificado cargado", "certificados_pendientes", []),
         ej("c\xF3mo estar\xE1 el clima en ate el jueves", "weather", [["distrito", "ate"], ["fecha", jueves]]),
         ej("gracias lila", "ninguna", [])
       ].join("\n");
@@ -11757,6 +11876,8 @@ __export(llm_exports, {
   esHerramientaDeDatos: () => esHerramientaDeDatos,
   estadoLlm: () => estadoLlm,
   fichaPara: () => fichaPara,
+  herramientaDeDatosPorReglas: () => herramientaDeDatosPorReglas,
+  normalizarArgumentos: () => normalizarArgumentos,
   rangoDe: () => rangoDe,
   responderConDatos: () => responderConDatos
 });
@@ -11779,7 +11900,9 @@ var init_llm = __esm({
       clientes: "\xBFDe qu\xE9 cliente? Dime el nombre.",
       proveedores: "\xBFDe qu\xE9 proveedor? Dime el nombre.",
       pedidos: "",
-      kardex: "\xBFDe qu\xE9 material? Dime el nombre (arena, piedra, confitillo\u2026)."
+      kardex: "\xBFDe qu\xE9 material? Dime el nombre (arena, piedra, confitillo\u2026).",
+      ingresos_agregados: "",
+      certificados_pendientes: ""
     };
     fichaPara = async (id, args, ahoraMs = Date.now()) => {
       const hoy = hoyLima(ahoraMs);
@@ -11803,6 +11926,15 @@ var init_llm = __esm({
         case "kardex": {
           const lista = await movimientosDeMaterial({ material: args.nombre ?? "", desde, hasta, companyId: args.companyId });
           return { ficha: fichaKardex(args.nombre ?? "", lista), resultados: lista.length };
+        }
+        case "ingresos_agregados": {
+          const r39 = await ingresosDeAgregados({ desde: args.desde ?? hoy, hasta: args.hasta ?? hoy, companyId: args.companyId });
+          return { ficha: fichaIngresos(r39, hoy), resultados: r39.proveedores.length };
+        }
+        case "certificados_pendientes": {
+          const nombres = await nombresDeEmpresas();
+          const r39 = await pedidosSinCertificado(args.companyId);
+          return { ficha: fichaCertificados(r39, args.companyId ? nombres.get(args.companyId) || args.companyId : void 0), resultados: r39.pedidos.length };
         }
         default:
           return { ficha: "", resultados: 0 };
@@ -12677,6 +12809,12 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         let clave2 = larga ? null : porRegla;
         let respuesta;
         let extra;
+        const porDatos = vetada || larga ? null : herramientaDeDatosPorReglas(pregunta);
+        if (porDatos) {
+          respuesta = await responderConDatos(porDatos, normalizarArgumentos(porDatos, [], pregunta), pregunta, quien, grupo);
+          recordarConsulta({ quien, grupo, clave: porDatos, pregunta });
+          clave2 = null;
+        }
         const rango2 = esDeUnDia(clave2) ? argumentosDeRango(pregunta) : null;
         if (rango2) {
           respuesta = await responderConDatos("pedidos", rango2, pregunta, quien, grupo);

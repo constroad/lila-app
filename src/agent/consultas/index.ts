@@ -13,7 +13,7 @@ import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
-import { argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
+import { argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, herramientaDeDatosPorReglas, normalizarArgumentos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import type { AlcanceAgente } from '../checklist/alcance.js';
@@ -352,6 +352,15 @@ export const atenderConsulta = async (
     let clave: ClaveConsulta | null = larga ? null : porRegla;
     let respuesta: Respuesta | undefined;
     let extra: Partial<Parametros> | undefined;
+    // Las herramientas de datos que se reconocen por palabra y no necesitan un
+    // nombre («cuántos agregados llegaron hoy», «qué pedidos no tienen
+    // certificado») se contestan sin modelo, con las fechas que el código lee.
+    const porDatos = vetada || larga ? null : herramientaDeDatosPorReglas(pregunta);
+    if (porDatos) {
+      respuesta = await responderConDatos(porDatos, normalizarArgumentos(porDatos, [], pregunta), pregunta, quien, grupo);
+      recordarConsulta({ quien, grupo, clave: porDatos, pregunta });
+      clave = null;
+    }
     // «Qué pedidos hay esta semana»: la regla dice «pedidos de hoy», pero el
     // rango de la pregunta manda — es lo programado (o lo despachado) en ese rango.
     const rango = esDeUnDia(clave) ? argumentosDeRango(pregunta) : null;

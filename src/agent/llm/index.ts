@@ -2,15 +2,15 @@ import logger from '../../utils/logger.js';
 import { COMPANY_PILOTO } from '../checklist/alcance.js';
 import { extraerParametros, hoyLima, sumarDias } from '../consultas/catalogo.js';
 import { preguntar } from '../consultas/pendientes.js';
-import { buscarClientes, buscarProveedores, movimientosDeMaterial, nombresDeEmpresas, pedidosEntre } from './datos.js';
+import { buscarClientes, buscarProveedores, ingresosDeAgregados, movimientosDeMaterial, nombresDeEmpresas, pedidosEntre, pedidosSinCertificado } from './datos.js';
 import { rangoDe } from './herramientas.js';
-import { fichaClientes, fichaKardex, fichaPedidos, fichaProveedores } from './fichas.js';
+import { fichaCertificados, fichaClientes, fichaIngresos, fichaKardex, fichaPedidos, fichaProveedores } from './fichas.js';
 import type { Argumentos, HerramientaDeDatos } from './herramientas.js';
 import { redactar } from './redaccion.js';
 
 export { elegirHerramienta, esClaveDeCatalogo, type Eleccion } from './seleccion.js';
 export { descargarModelo, estadoLlm } from './modelo.js';
-export { esHerramientaDeDatos, rangoDe, type Argumentos, type HerramientaDeDatos } from './herramientas.js';
+export { esHerramientaDeDatos, herramientaDeDatosPorReglas, normalizarArgumentos, rangoDe, type Argumentos, type HerramientaDeDatos } from './herramientas.js';
 
 /**
  * UNA HERRAMIENTA DE DATOS, DE PUNTA A PUNTA: leer (`datos.ts`), armar la ficha
@@ -26,6 +26,8 @@ const PREGUNTA_NOMBRE: Record<HerramientaDeDatos, string> = {
   proveedores: '¿De qué proveedor? Dime el nombre.',
   pedidos: '',
   kardex: '¿De qué material? Dime el nombre (arena, piedra, confitillo…).',
+  ingresos_agregados: '',
+  certificados_pendientes: '',
 };
 
 /** La ficha de una herramienta con sus argumentos ya validados, y cuántos resultados trae. */
@@ -55,6 +57,16 @@ export const fichaPara = async (id: HerramientaDeDatos, args: Argumentos, ahoraM
     case 'kardex': {
       const lista = await movimientosDeMaterial({ material: args.nombre ?? '', desde, hasta, companyId: args.companyId });
       return { ficha: fichaKardex(args.nombre ?? '', lista), resultados: lista.length };
+    }
+    case 'ingresos_agregados': {
+      // «¿Cuántos agregados llegaron?» sin fecha es hoy, no los últimos 30 días.
+      const r = await ingresosDeAgregados({ desde: args.desde ?? hoy, hasta: args.hasta ?? hoy, companyId: args.companyId });
+      return { ficha: fichaIngresos(r, hoy), resultados: r.proveedores.length };
+    }
+    case 'certificados_pendientes': {
+      const nombres = await nombresDeEmpresas();
+      const r = await pedidosSinCertificado(args.companyId);
+      return { ficha: fichaCertificados(r, args.companyId ? nombres.get(args.companyId) || args.companyId : undefined), resultados: r.pedidos.length };
     }
     default:
       return { ficha: '', resultados: 0 };

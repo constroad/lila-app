@@ -4,11 +4,13 @@ import {
   getDispatchModel,
   getKardexModel,
   getMaterialModel,
+  getMediaModel,
   getOrderModel,
   getProviderModel,
 } from '../../database/models.js';
 import { EMPRESAS_CON_PEDIDOS } from '../checklist/alcance.js';
 import { diaPeruano, instanteArranque } from '../checklist/tiempo.js';
+import { esAgregado } from '../consultas/planta.js';
 
 /**
  * LOS DATOS DE LAS HERRAMIENTAS NUEVAS: clientes, proveedores, historial de
@@ -314,4 +316,134 @@ export const movimientosDeMaterial = async (
       };
     })
   );
+};
+
+// ---------- Ingresos de agregados (lo que llegó) ----------
+
+export interface IngresoDeMaterial {
+  material: string;
+  unidad: string;
+  cantidad: number;
+  ingresos: number;
+}
+
+export interface IngresosDeProveedor {
+  /** Quien vende; si lo trajo otro, va aparte. */
+  proveedor: string;
+  transportista?: string;
+  empresa: string;
+  materiales: IngresoDeMaterial[];
+  total: number;
+  unidad: string;
+}
+
+export interface IngresosDeAgregados {
+  desde: string;
+  hasta: string;
+  proveedores: IngresosDeProveedor[];
+  totalIngresos: number;
+  total: number;
+  unidad: string;
+}
+
+/**
+ * Lo que LLEGÓ de agregados en un rango (kardex, tipo Ingreso), por proveedor
+ * (José, 14/09: «cuántos agregados llegaron hoy… organizado por proveedor»).
+ * Sin valor ni costo: precios son lista negra.
+ */
+export const ingresosDeAgregados = async (filtro: { desde: string; hasta: string; companyId?: string }): Promise<IngresosDeAgregados> => {
+  const [Material, Kardex, nombres] = await Promise.all([getMaterialModel(), getKardexModel(), nombresDeEmpresas()]);
+  const empresas = filtro.companyId ? [filtro.companyId] : EMPRESAS;
+  const materiales = (await Material.find({ companyId: { $in: empresas } }).select('companyId name unit').lean()) as Doc[];
+  const agregados = new Map(materiales.filter((m) => esAgregado(texto(m.name), texto(m.unit))).map((m) => [String(m._id), m]));
+  const inicio = new Date((instanteArranque(filtro.desde, '00:00') ?? Date.now()) - 12 * 3_600_000);
+  const fin = new Date((instanteArranque(filtro.hasta, '00:00') ?? Date.now()) + 36 * 3_600_000);
+  const docs = (await Kardex.find({
+    companyId: { $in: empresas },
+    materialId: { $in: [...agregados.keys()] },
+    type: 'Ingreso',
+    status: { $ne: 'deleted' },
+    $or: [{ date: { $gte: inicio, $lt: fin } }, { date: { $gte: inicio.toISOString(), $lt: fin.toISOString() } }],
+  })
+    .select('companyId materialId quantity date providerName vendorProviderName description')
+    .sort({ date: 1 })
+    .limit(500)
+    .lean()) as Doc[];
+  const enRango = docs.filter((d) => {
+    const dia = fechaDe(d.date);
+    return dia >= filtro.desde && dia <= filtro.hasta;
+  });
+  const porProveedor = new Map<string, IngresosDeProveedor>();
+  for (const d of enRango) {
+    const m = agregados.get(String(d.materialId));
+    if (!m) continue;
+    const vendedor = texto(d.vendorProviderName) || texto(d.providerName) || 'sin proveedor';
+    const transportista = texto(d.providerName) && texto(d.providerName) !== vendedor ? texto(d.providerName) : undefined;
+    const empresa = nombres.get(String(d.companyId)) || String(d.companyId);
+    const unidad = texto(m.unit).replace(/^m3$/i, 'm³') || 'm³';
+    const clave = `${vendedor}|${empresa}`;
+    const prov = porProveedor.get(clave) ?? { proveedor: vendedor, transportista, empresa, materiales: [], total: 0, unidad };
+    const material = texto(m.name).toUpperCase();
+    const fila = prov.materiales.find((x) => x.material === material) ?? (prov.materiales.push({ material, unidad, cantidad: 0, ingresos: 0 }), prov.materiales[prov.materiales.length - 1]);
+    fila.cantidad += num(d.quantity);
+    fila.ingresos += 1;
+    prov.total += num(d.quantity);
+    porProveedor.set(clave, prov);
+  }
+  const proveedores = [...porProveedor.values()].sort((a, b) => b.total - a.total);
+  return {
+    desde: filtro.desde,
+    hasta: filtro.hasta,
+    proveedores,
+    totalIngresos: proveedores.reduce((s, p) => s + p.materiales.reduce((x, m) => x + m.ingresos, 0), 0),
+    total: proveedores.reduce((s, p) => s + p.total, 0),
+    unidad: proveedores[0]?.unidad ?? 'm³',
+  };
+};
+
+// ---------- Certificados pendientes ----------
+
+export interface PedidoSinCertificado {
+  fecha: string;
+  empresa: string;
+  cliente: string;
+  obra: string;
+  m3: number;
+  nota: string;
+}
+
+export const LIMITE_CERTIFICADOS = 40;
+
+/**
+ * Pedidos que exigen certificado y no tienen ninguno cargado. Misma regla que
+ * el cron `missing-order-certificates` de Portal: `requireCertificates` y sin
+ * un archivo `CERTIFICATE` (no borrado) asociado al pedido. Del más reciente
+ * al más viejo.
+ */
+export const pedidosSinCertificado = async (companyId?: string): Promise<{ pedidos: PedidoSinCertificado[]; truncado: boolean }> => {
+  const [Order, Media, nombres] = await Promise.all([getOrderModel(), getMediaModel(), nombresDeEmpresas()]);
+  const empresas = companyId ? [companyId] : EMPRESAS;
+  const orders = (await Order.find({ companyId: { $in: empresas }, requireCertificates: true, status: { $nin: ['eliminado', 'rechazado'] } })
+    .select('companyId cliente alias obra fechaProgramacion cantidadCubos noteCertificate')
+    .sort({ fechaProgramacion: -1 })
+    .limit(1000)
+    .lean()) as Doc[];
+  if (orders.length === 0) return { pedidos: [], truncado: false };
+  const ids = orders.map((o) => String(o._id));
+  const conCertificado = new Set(
+    ((await Media.find({ companyId: { $in: empresas }, resourceId: { $in: ids }, type: 'CERTIFICATE', status: { $ne: 'DELETED' } })
+      .select('resourceId')
+      .lean()) as Doc[]).map((m) => String(m.resourceId || '').trim())
+  );
+  const pendientes = orders
+    .filter((o) => !conCertificado.has(String(o._id)))
+    .map((o) => ({
+      fecha: fechaDe(o.fechaProgramacion),
+      empresa: nombres.get(String(o.companyId)) || String(o.companyId),
+      cliente: texto(o.alias) || texto(o.cliente) || 'sin cliente',
+      obra: texto(o.obra),
+      m3: num(o.cantidadCubos),
+      nota: texto(o.noteCertificate),
+    }));
+  return { pedidos: pendientes.slice(0, LIMITE_CERTIFICADOS), truncado: pendientes.length > LIMITE_CERTIFICADOS };
 };

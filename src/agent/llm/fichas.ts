@@ -1,5 +1,5 @@
 import { fechaLegible } from '../checklist/tiempo.js';
-import type { ClienteFicha, Historial, KardexDeMaterial, ProveedorFicha } from './datos.js';
+import type { ClienteFicha, Historial, IngresosDeAgregados, KardexDeMaterial, PedidoSinCertificado, ProveedorFicha } from './datos.js';
 
 /**
  * LAS FICHAS: la respuesta determinista de cada herramienta de datos. Todo lo
@@ -92,4 +92,36 @@ export const fichaKardex = (material: string, lista: KardexDeMaterial[]): string
     return lineas.join('\n');
   });
   return bloques.join('\n\n');
+};
+
+/** Lo que llegó, por proveedor (y por material dentro de cada uno). */
+export const fichaIngresos = (r: IngresosDeAgregados, hoy = ''): string => {
+  const cuando = r.desde === r.hasta ? (r.desde === hoy ? 'hoy' : `el ${fechaLegible(r.desde)}`) : `del ${corta(r.desde)} al ${corta(r.hasta)}`;
+  if (r.proveedores.length === 0) return `No hay ingresos de agregados registrados ${cuando} en el kardex.`;
+  const lineas = [`🚚 *Ingresos de agregados ${cuando}*: ${r.totalIngresos} ingreso(s), ${n(r.total)} ${r.unidad}`];
+  for (const p of r.proveedores) {
+    lineas.push(`*${p.proveedor}*${p.transportista ? ` (transporta ${p.transportista})` : ''} · ${p.empresa} — ${n(p.total)} ${p.unidad}`);
+    for (const m of p.materiales) lineas.push(`• ${m.material}: ${n(m.cantidad)} ${m.unidad}${m.ingresos > 1 ? ` en ${m.ingresos} ingresos` : ''}`);
+  }
+  return lineas.join('\n');
+};
+
+/** Pedidos sin certificado, por cliente cuando hay más de uno. */
+export const fichaCertificados = (r: { pedidos: PedidoSinCertificado[]; truncado: boolean }, empresa?: string): string => {
+  const de = empresa ? ` de ${empresa}` : '';
+  if (r.pedidos.length === 0) return `No hay pedidos${de} con certificado pendiente: todos los que lo exigen ya lo tienen cargado.`;
+  const lineas = [`📄 *${r.pedidos.length}${r.truncado ? '+' : ''} pedido(s)${de} sin certificado cargado*`];
+  const porCliente = new Map<string, PedidoSinCertificado[]>();
+  for (const p of r.pedidos) porCliente.set(p.cliente, [...(porCliente.get(p.cliente) ?? []), p]);
+  const linea = (p: PedidoSinCertificado) => `• ${corta(p.fecha)} ${recortar(p.obra || 'sin obra', 40)} ${n(p.m3)} m³${p.nota ? ` — ${recortar(p.nota, 40)}` : ''}`;
+  if (porCliente.size === 1) {
+    const [[cliente, lista]] = [...porCliente];
+    lineas.push(`*${cliente}* · ${lista[0].empresa}`, ...lista.map(linea));
+  } else {
+    for (const [cliente, lista] of [...porCliente].sort((a, b) => b[1].length - a[1].length)) {
+      lineas.push(`*${recortar(cliente, 45)}* · ${lista[0].empresa} — ${lista.length}`, ...lista.map(linea));
+    }
+  }
+  if (r.truncado) lineas.push('… y más. Acota por empresa para ver el resto.');
+  return lineas.join('\n');
 };

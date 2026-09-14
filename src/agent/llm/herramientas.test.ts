@@ -1,4 +1,4 @@
-import { HERRAMIENTAS, normalizarArgumentos, rangoDe } from './herramientas';
+import { HERRAMIENTAS, herramientaDeDatosPorReglas, normalizarArgumentos, rangoDe } from './herramientas';
 
 /**
  * DEL MODELO SOLO SE ACEPTA LO QUE LA PREGUNTA RESPALDA. Estos casos son los
@@ -112,5 +112,25 @@ describe('rangoDe', () => {
 
   it('el mes pasado cruzando el año', () => {
     expect(rangoDe('los pedidos del mes pasado', '2027-01-05')).toEqual({ desde: '2026-12-01', hasta: '2026-12-31' });
+  });
+});
+
+describe('herramientas de datos por regla (sin modelo)', () => {
+  it.each([
+    ['cuántos agregados llegaron hoy', 'ingresos_agregados'],
+    ['qué llegó ayer', 'ingresos_agregados'],
+    ['ingresos de material de la semana pasada', 'ingresos_agregados'],
+    ['cuántos pedidos no tienen certificados cargados', 'certificados_pendientes'],
+    ['certificados pendientes de constroad', 'certificados_pendientes'],
+    ['cuántos m3 van', null],
+    ['el teléfono del cliente cobeñas', null], // necesita un nombre: lo saca el modelo
+  ])('«%s» → %s', (pregunta, esperado) => {
+    expect(herramientaDeDatosPorReglas(pregunta)).toBe(esperado);
+  });
+
+  it('la empresa nombrada entra sola; inframaq es la planta', () => {
+    expect(normalizarArgumentos('certificados_pendientes', [], 'certificados pendientes de constroad', lunes)).toEqual({ companyId: 'constroad' });
+    expect(normalizarArgumentos('ingresos_agregados', [], 'cuántos agregados llegaron hoy a globofast', lunes)).toEqual({ desde: '2026-09-14', hasta: '2026-09-14', companyId: 'globofas-s8k' });
+    expect(normalizarArgumentos('ingresos_agregados', [], 'qué llegó a inframaq esta semana', lunes)).toEqual({ desde: '2026-09-14', hasta: '2026-09-20' });
   });
 });

@@ -167,6 +167,8 @@ export const AYUDA = [
   '• qué le despachamos a Consorcio Los Pinos la semana pasada',
   '• cuántos pedidos tuvo Constroad en agosto',
   '• ingresos de arena en Globofast este mes _(kardex)_',
+  '• cuántos agregados llegaron hoy _(por proveedor)_',
+  '• qué pedidos no tienen certificado cargado _(por cliente)_',
   '',
   '📅 *Fechas*: hoy, ayer, mañana, el martes, el martes pasado, 15/09, la semana pasada, en agosto.',
   '💬 *Sigue el hilo* sin volver a etiquetarme: «¿y la 3?», «¿y mañana?», «¿y en Ate?». Si hay más de una producción, te pregunto cuál: responde con el número.',

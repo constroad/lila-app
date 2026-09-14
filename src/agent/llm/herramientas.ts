@@ -1,5 +1,6 @@
 import { ALIAS_EMPRESA, fechaDe, hoyLima, normalizar, normalizarPlaca, sumarDias, type ClaveConsulta } from '../consultas/catalogo.js';
 import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
+import { COMPANY_PILOTO } from '../checklist/alcance.js';
 
 /**
  * LAS HERRAMIENTAS: las únicas puertas por las que el modelo puede pedir datos.
@@ -17,10 +18,10 @@ import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
  * (`datos.ts`) y se responden con una ficha (`fichas.ts`).
  */
 
-export type HerramientaDeDatos = 'clientes' | 'proveedores' | 'pedidos' | 'kardex';
+export type HerramientaDeDatos = 'clientes' | 'proveedores' | 'pedidos' | 'kardex' | 'ingresos_agregados' | 'certificados_pendientes';
 export type IdHerramienta = ClaveConsulta | HerramientaDeDatos;
 
-export const HERRAMIENTAS_DE_DATOS: readonly HerramientaDeDatos[] = ['clientes', 'proveedores', 'pedidos', 'kardex'];
+export const HERRAMIENTAS_DE_DATOS: readonly HerramientaDeDatos[] = ['clientes', 'proveedores', 'pedidos', 'kardex', 'ingresos_agregados', 'certificados_pendientes'];
 export const esHerramientaDeDatos = (id: string): id is HerramientaDeDatos =>
   (HERRAMIENTAS_DE_DATOS as readonly string[]).includes(id);
 
@@ -34,6 +35,8 @@ export interface Herramienta {
   argumentos: readonly CampoArgumento[];
   /** Mira hacia atrás (historial): las fechas del modelo mandan, no las de «el martes» = próximo martes. */
   historial?: boolean;
+  /** Reglas por palabra (como las del catálogo) para reconocerla sin modelo. Solo las que no necesitan un nombre. */
+  reglas?: readonly (readonly string[])[];
 }
 
 export const HERRAMIENTAS: readonly Herramienta[] = [
@@ -62,7 +65,24 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
   { id: 'proveedores', descripcion: 'datos de UN proveedor: RUC, contacto, teléfono, qué vende o transporta', argumentos: ['nombre'] },
   { id: 'pedidos', descripcion: 'historial de pedidos en un rango de fechas, de una empresa o de un cliente', argumentos: ['desde', 'hasta', 'empresa', 'nombre'], historial: true },
   { id: 'kardex', descripcion: 'ingresos, salidas y movimientos de UN material en un rango de fechas', argumentos: ['nombre', 'desde', 'hasta', 'empresa'], historial: true },
+  { id: 'ingresos_agregados', descripcion: 'cuántos agregados llegaron / ingresaron (todos los materiales, por proveedor) en un día o rango', argumentos: ['desde', 'hasta', 'empresa'], historial: true, reglas: [['llegaron'], ['llego'], ['llegado'], ['ingresaron'], ['ingreso', 'agregado'], ['ingresos', 'agregado'], ['ingreso', 'material'], ['ingresos', 'material'], ['entrada', 'material'], ['entradas', 'material'], ['recibimos'], ['recepcion', 'agregado'], ['cuanto', 'llego']] },
+  { id: 'certificados_pendientes', descripcion: 'qué pedidos no tienen certificado cargado / certificados pendientes', argumentos: ['empresa'], reglas: [['certificado'], ['certificados']] },
 ];
+
+/** Las herramientas de datos que se reconocen por regla, sin modelo: las que no necesitan un nombre. */
+export const herramientaDeDatosPorReglas = (pregunta: string): HerramientaDeDatos | null => {
+  const t = normalizar(pregunta);
+  let mejor: { id: HerramientaDeDatos; palabras: number } | null = null;
+  for (const h of HERRAMIENTAS) {
+    if (!esHerramientaDeDatos(h.id) || !h.reglas) continue;
+    for (const grupo of h.reglas) {
+      const palabras = grupo.map(normalizar);
+      if (!palabras.every((p) => new RegExp(`\\b${p}`).test(t))) continue;
+      if (!mejor || palabras.length > mejor.palabras) mejor = { id: h.id, palabras: palabras.length };
+    }
+  }
+  return mejor?.id ?? null;
+};
 
 export const herramienta = (id: string): Herramienta | undefined => HERRAMIENTAS.find((h) => h.id === id);
 
@@ -234,6 +254,13 @@ export const normalizarArgumentos = (
       default:
         break;
     }
+  }
+
+  // La empresa nombrada en la pregunta, si la herramienta la acepta y el modelo
+  // no la trajo. Inframaq no cuenta: es la planta, no la dueña de los pedidos.
+  if (acepta('empresa') && !args.companyId) {
+    const nombrada = ALIAS_EMPRESA.find((e) => e.companyId !== COMPANY_PILOTO && e.alias.some((a) => new RegExp(`\\b${a}\\b`).test(t)));
+    if (nombrada) args.companyId = nombrada.companyId;
   }
 
   // Las fechas que el código sabe leer mandan (salvo en el historial, donde

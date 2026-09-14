@@ -141,8 +141,10 @@ export interface Material {
 // Lo que vive en un tanque no es un agregado: por nombre (con las faltas de
 // ortografía reales: «GASHOL») y por unidad (galones). Mismo criterio que el
 // reporte del cron (`excludedAsLiquid`).
-const ES_LIQUIDO = /\b(pen|gasoh?ol|gashol|petroleo|petróleo|diesel|asfalto|aceite|emulsion|emulsión|combustible)\b/i;
-const UNIDAD_LIQUIDA = /^(gl|gls|gal|galon|galones|l|lt|lts|litros)$/i;
+export const ES_LIQUIDO = /\b(pen|gasoh?ol|gashol|petroleo|petróleo|diesel|asfalto|aceite|emulsion|emulsión|combustible)\b/i;
+export const UNIDAD_LIQUIDA = /^(gl|gls|gal|galon|galones|l|lt|lts|litros)$/i;
+/** ¿Es un agregado (arena, piedra, confitillo…) y no algo que vive en un tanque? */
+export const esAgregado = (nombre: string, unidad: string): boolean => !ES_LIQUIDO.test(nombre) && !UNIDAD_LIQUIDA.test(String(unidad || '').trim());
 
 /**
  * El stock de agregados de las empresas del piloto que lo llevan. Inframaq no
@@ -157,7 +159,7 @@ export const materiales = async (empresas: Array<{ companyId: string; nombre: st
     .sort({ name: 1 })
     .lean()) as Doc[];
   return docs
-    .filter((d) => !ES_LIQUIDO.test(String(d.name || '')) && !UNIDAD_LIQUIDA.test(String(d.unit || '').trim()))
+    .filter((d) => esAgregado(String(d.name || ''), String(d.unit || '')))
     .map((d) => {
       const reorden = num(d.reorderPoint);
       return {

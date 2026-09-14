@@ -82,6 +82,8 @@ export const promptSeleccion = (hoy: string): string => {
     ej('cuántas salidas de piedra hubo la semana pasada en globofast', 'kardex', [['nombre', 'piedra'], ['desde', lunesPasado], ['hasta', domingoPasado], ['empresa', 'globofast']]),
     ej('cuántos pedidos tuvo constroad la semana pasada', 'pedidos', [['empresa', 'constroad'], ['desde', lunesPasado], ['hasta', domingoPasado]]),
     ej('quién nos vende el petróleo', 'proveedores', [['nombre', 'petróleo']]),
+    ej('cuántos agregados llegaron hoy', 'ingresos_agregados', [['desde', hoy], ['hasta', hoy]]),
+    ej('qué pedidos no tienen certificado cargado', 'certificados_pendientes', []),
     ej('cómo estará el clima en ate el jueves', 'weather', [['distrito', 'ate'], ['fecha', jueves]]),
     ej('gracias lila', 'ninguna', []),
   ].join('\n');

@@ -1,4 +1,4 @@
-import { fichaClientes, fichaKardex, fichaPedidos, fichaProveedores } from './fichas';
+import { fichaCertificados, fichaClientes, fichaIngresos, fichaKardex, fichaPedidos, fichaProveedores } from './fichas';
 
 describe('fichas', () => {
   it('cliente: nombre, RUC, contacto y últimos pedidos; sin cuentas bancarias', () => {
@@ -86,5 +86,34 @@ describe('fichas', () => {
       {}
     );
     expect(f).toContain('MEJORAMIENTO DEL SERVICIO DE MOVILIDAD URBANA DE LAS URB. L…: 250 de 250 m³');
+  });
+});
+
+describe('ingresos y certificados', () => {
+  it('lo que llegó, por proveedor y material, con quién lo trajo', () => {
+    const f = fichaIngresos(
+      {
+        desde: '2026-09-14', hasta: '2026-09-14', totalIngresos: 4, total: 95, unidad: 'm³',
+        proveedores: [
+          { proveedor: 'NOR BUILDING', transportista: 'SAUL GIRARDO', empresa: 'Globofast', unidad: 'm³', total: 75, materiales: [{ material: 'ARENA SECUNDARIA', unidad: 'm³', cantidad: 75, ingresos: 3 }] },
+          { proveedor: 'AGREXA SAC', empresa: 'Globofast', unidad: 'm³', total: 20, materiales: [{ material: 'CONFITILLO', unidad: 'm³', cantidad: 20, ingresos: 1 }] },
+        ],
+      },
+      '2026-09-14'
+    );
+    expect(f).toContain('🚚 *Ingresos de agregados hoy*: 4 ingreso(s), 95 m³');
+    expect(f).toContain('*NOR BUILDING* (transporta SAUL GIRARDO) · Globofast — 75 m³\n• ARENA SECUNDARIA: 75 m³ en 3 ingresos');
+    expect(f).toContain('*AGREXA SAC* · Globofast — 20 m³\n• CONFITILLO: 20 m³');
+    expect(fichaIngresos({ desde: '2026-09-13', hasta: '2026-09-13', proveedores: [], totalIngresos: 0, total: 0, unidad: 'm³' }, '2026-09-14')).toBe('No hay ingresos de agregados registrados el domingo 13/09 en el kardex.');
+  });
+
+  it('certificados pendientes: por cliente cuando hay varios; plano con uno', () => {
+    const uno = { fecha: '2026-07-10', empresa: 'CONSTROAD SAC', cliente: 'MERIDIANA S.A.C.', obra: 'VENTANILLA- SECTOR 280', m3: 18, nota: '' };
+    expect(fichaCertificados({ pedidos: [uno], truncado: false })).toBe('📄 *1 pedido(s) sin certificado cargado*\n*MERIDIANA S.A.C.* · CONSTROAD SAC\n• 10/07 VENTANILLA- SECTOR 280 18 m³');
+    const varios = fichaCertificados({ pedidos: [uno, { ...uno, cliente: 'RENATO', obra: 'CAÑETE', m3: 15, fecha: '2026-08-05', nota: 'falta densidad' }, { ...uno, cliente: 'RENATO', fecha: '2026-08-06' }], truncado: false }, 'CONSTROAD SAC');
+    expect(varios).toContain('📄 *3 pedido(s) de CONSTROAD SAC sin certificado cargado*');
+    expect(varios.indexOf('*RENATO* · CONSTROAD SAC — 2')).toBeLessThan(varios.indexOf('*MERIDIANA S.A.C.* · CONSTROAD SAC — 1'));
+    expect(varios).toContain('• 05/08 CAÑETE 15 m³ — falta densidad');
+    expect(fichaCertificados({ pedidos: [], truncado: false })).toContain('todos los que lo exigen ya lo tienen cargado');
   });
 });
