@@ -8,7 +8,7 @@ import { fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ult
 import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
 import { ALIAS_EMPRESA } from './catalogo.js';
 import { SIN_AGREGADOS, consumosDelDia, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
-import { distritoDe, diasHasta, pronosticoHorario, pronosticoSemanal, textoClima, textoClimaSemanal, textoFueraDeAlcance } from './clima.js';
+import { distritoDe, diasHasta, pronosticoHorario, pronosticoSemanal, riesgoPorDistrito, textoClima, textoClimaSemanal, textoFueraDeAlcance, textoRiesgoDistritos } from './clima.js';
 import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { hoyLima, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
@@ -32,6 +32,9 @@ export { esConsulta };
  */
 // Más alto que el del checklist: rutear mal una pregunta es peor que decir «no entendí».
 const UMBRAL_RUTEO = 0.88;
+
+/** Desde cuántas palabras una pregunta va primero al modelo y no a las reglas. */
+const PALABRAS_PARA_MODELO = 12;
 
 /** Las consultas que hablan de UN día: con un rango en la pregunta, es la programación o el historial del rango. */
 const esDeUnDia = (clave: ClaveConsulta | null): boolean => clave === 'orders_day' || clave === 'dispatch_summary' || clave === 'day_progress';
@@ -160,6 +163,12 @@ const armarRespuesta = async (
     }
     return { texto: '', archivos };
   }
+  if (clave === 'weather_districts') {
+    // Un día concreto, o la semana (también cuando la pregunta trae varios días: «martes, miércoles y jueves»).
+    const unDia = params.rango !== 'semana' && (params.fecha || /\bhoy\b/.test(pregunta) || params.day === 'tomorrow') && !/\b(y|,)\s*(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b/i.test(pregunta);
+    if (unDia && diasHasta(fecha, hoyLima()) === null) return { texto: textoFueraDeAlcance(fecha) };
+    return { texto: textoRiesgoDistritos(await riesgoPorDistrito(unDia ? (diasHasta(fecha, hoyLima()) ?? 1) : 7), unDia ? fecha : undefined) };
+  }
   if (clave === 'weather') {
     const distrito = distritoDe(pregunta);
     if (params.rango === 'semana') return { texto: textoClimaSemanal(await pronosticoSemanal(distrito)) };
@@ -252,6 +261,7 @@ const EJEMPLO: Partial<Record<ClaveConsulta, string>> = {
   production_consume: 'los consumos de la producción',
   aggregates_stock: 'el stock de agregados',
   weather: 'el clima',
+  weather_districts: 'qué distritos tienen riesgo de lluvia',
   dispatch_summary: 'el resumen de despachos',
   help: 'la ayuda',
 };
@@ -275,7 +285,7 @@ interface Ruta {
  *
  * Lo general de la experiencia está acá, no en cada consulta.
  */
-const sinRuta = async (pregunta: string, quien: string, grupo: string): Promise<Ruta> => {
+const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRespaldo: ClaveConsulta | null = null): Promise<Ruta> => {
   const ultima = ultimaConsulta(quien, grupo);
   if (ultima && pareceContinuacion(pregunta)) {
     // La misma pregunta con el dato nuevo, y sin el dato viejo del mismo tipo.
@@ -297,6 +307,8 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string): Promise<
     }
     return { clave: eleccion.herramienta, pregunta, extra: comoParametros(eleccion.argumentos) };
   }
+  // Sin modelo (o sin respuesta suya), la regla que se dejó en espera.
+  if (reglaDeRespaldo) return { clave: reglaDeRespaldo, pregunta };
   const embed = await cargarModelo();
   if (embed) {
     const [mejor] = await clasificar(CATALOGO, [pregunta], embed);
@@ -331,7 +343,13 @@ export const atenderConsulta = async (
     let pregunta = preguntaLimpia(texto, numeroBot);
     // La lista negra gana sobre todo: ni reglas, ni modelo, ni embeddings ven un precio.
     const vetada = fueraDeCatalogo(pregunta);
-    let clave: ClaveConsulta | null = vetada ? null : rutearPorReglas(pregunta);
+    const porRegla = vetada ? null : rutearPorReglas(pregunta);
+    // Una pregunta LARGA la entiende mejor el modelo que la primera regla que
+    // pisa: «habrá producciones esta semana… ¿cómo estará el clima para planta
+    // y qué distritos están propensos a lluvia?» caía en «planta» → unidad en
+    // planta (14/09). Las reglas quedan de respaldo si el modelo no está.
+    const larga = pregunta.split(/\s+/).length > PALABRAS_PARA_MODELO;
+    let clave: ClaveConsulta | null = larga ? null : porRegla;
     let respuesta: Respuesta | undefined;
     let extra: Partial<Parametros> | undefined;
     // «Qué pedidos hay esta semana»: la regla dice «pedidos de hoy», pero el
@@ -342,7 +360,7 @@ export const atenderConsulta = async (
       recordarConsulta({ quien, grupo, clave: 'pedidos', pregunta });
       clave = null;
     }
-    if (!clave && !vetada && !respuesta) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo));
+    if (!clave && !vetada && !respuesta) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, larga ? porRegla : null));
     // Una consulta IMPLÍCITA (sin @lila, dentro del hilo) que no se entiende se
     // deja pasar en silencio: puede que no fuera para el agente.
     if (opciones.implicita && !clave && !respuesta) {

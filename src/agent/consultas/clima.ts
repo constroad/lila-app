@@ -228,3 +228,82 @@ export const textoClima = (p: PronosticoDia | null, ahoraHora: number): string =
   lineas.push(veredicto[nivel] ?? `Riesgo: ${nivel}.`);
   return lineas.join('\n');
 };
+
+/**
+ * RIESGO POR DISTRITO. José, 14/09/2026, en INFRAMAQ admin: «habrá
+ * producciones esta semana martes, miércoles y jueves, ¿cómo estará el clima
+ * para planta y qué distritos están propensos a lluvia?». Los 43 distritos
+ * del reporte de asfaltado en UNA llamada (Open-Meteo acepta listas de
+ * coordenadas), un veredicto por día con los mismos umbrales del reporte.
+ */
+export interface RiesgoDistrito {
+  name: string;
+  porDia: Array<{ fecha: string; nivel: string; probMax: number; mm: number }>;
+}
+
+export const riesgoPorDistrito = async (dias: number): Promise<{ fechas: string[]; distritos: RiesgoDistrito[] } | null> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WEATHER_ASPHALT_FORECAST.fetchTimeoutMs);
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?daily=precipitation_probability_max,precipitation_sum&timezone=America%2FLima&forecast_days=${Math.min(Math.max(dias, 1), MAX_DIAS)}` +
+      `&latitude=${LOCATIONS.map((l) => l.lat).join(',')}&longitude=${LOCATIONS.map((l) => l.lon).join(',')}`;
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+    const data = (await res.json()) as Array<{ daily?: { time: string[]; precipitation_probability_max: number[]; precipitation_sum: number[] } }>;
+    if (!Array.isArray(data) || data.length !== LOCATIONS.length) throw new Error('respuesta incompleta');
+    const fechas = data[0]?.daily?.time ?? [];
+    const distritos = LOCATIONS.map((l, i) => ({
+      name: i === 0 ? 'la planta' : l.name,
+      porDia: fechas.map((fecha, j) => {
+        const probMax = Number(data[i]?.daily?.precipitation_probability_max?.[j] ?? 0) || 0;
+        const mm = Number(data[i]?.daily?.precipitation_sum?.[j] ?? 0) || 0;
+        return { fecha, nivel: getCombinedRiskLevel(probMax, mm), probMax, mm };
+      }),
+    }));
+    return { fechas, distritos };
+  } catch (error) {
+    logger.warn(`[agente] clima por distrito: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const DIA_CORTO = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const diaCorto = (fecha: string): string => {
+  const [y, m, d] = fecha.split('-').map(Number);
+  return `${DIA_CORTO[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d}`;
+};
+
+/**
+ * Los distritos con riesgo, agrupados por nivel, y la planta aparte. Los que
+ * no tienen riesgo se cuentan, no se listan: la lista larga es la de los
+ * seguros, y no informa.
+ */
+export const textoRiesgoDistritos = (r: { fechas: string[]; distritos: RiesgoDistrito[] } | null, fecha?: string): string => {
+  if (!r) return 'No pude consultar el pronóstico ahora. Inténtalo de nuevo en un rato.';
+  const fechas = fecha ? r.fechas.filter((f) => f === fecha) : r.fechas;
+  if (fechas.length === 0) return textoFueraDeAlcance(fecha ?? r.fechas[0]);
+  const enRango = (d: RiesgoDistrito) => d.porDia.filter((x) => fechas.includes(x.fecha));
+  const conNivel = (d: RiesgoDistrito, nivel: string) => enRango(d).filter((x) => x.nivel === nivel).map((x) => diaCorto(x.fecha));
+  const planta = r.distritos[0];
+  const otros = r.distritos.slice(1);
+  const titulo = fechas.length === 1 ? `🌧 *Riesgo de lluvia por distrito — ${fechaLegible(fechas[0])}*` : `🌧 *Riesgo de lluvia por distrito — ${diaCorto(fechas[0])} al ${diaCorto(fechas[fechas.length - 1])}*`;
+  const lineas = [titulo];
+  const plantaAlto = conNivel(planta, 'high_risk');
+  const plantaModerado = conNivel(planta, 'moderate_risk');
+  lineas.push(
+    plantaAlto.length || plantaModerado.length
+      ? `🏭 Planta: ${[plantaAlto.length ? `⛔ ${plantaAlto.join(', ')}` : '', plantaModerado.length ? `⚠️ ${plantaModerado.join(', ')}` : ''].filter(Boolean).join(' · ')}`
+      : `🏭 Planta: ✅ sin riesgo ${fechas.length === 1 ? 'ese día' : 'en todo el rango'}`
+  );
+  const altos = otros.map((d) => ({ d, dias: conNivel(d, 'high_risk') })).filter((x) => x.dias.length);
+  const moderados = otros.map((d) => ({ d, dias: conNivel(d, 'moderate_risk') })).filter((x) => x.dias.length && !altos.some((a) => a.d === x.d));
+  if (altos.length) lineas.push(`⛔ Riesgo alto: ${altos.map((x) => `${x.d.name} (${x.dias.join(', ')})`).join(' · ')}`);
+  if (moderados.length) lineas.push(`⚠️ Con precaución: ${moderados.map((x) => `${x.d.name} (${x.dias.join(', ')})`).join(' · ')}`);
+  const seguros = otros.length - altos.length - moderados.length;
+  lineas.push(altos.length || moderados.length ? `✅ Sin riesgo: los otros ${seguros} distritos.` : `✅ Sin riesgo de lluvia en los ${otros.length} distritos.`);
+  lineas.push('Pregúntame por un distrito y un día para ver las franjas horarias.');
+  return lineas.join('\n');
+};

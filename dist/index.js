@@ -9216,9 +9216,14 @@ var init_catalogo = __esm({
         reglas: [["agregado"], ["stock"], ["arena"], ["piedra"], ["grava"], ["confitillo"], ["cancha"], ["material"]]
       },
       {
+        id: "weather_districts",
+        seSatisfaceCon: ["que distritos estan propensos a lluvia", "en que distritos va a llover esta semana", "donde hay riesgo de lluvia", "que zonas tienen lluvia", "riesgo de lluvia por distrito"],
+        reglas: [["distritos"], ["que distrito"], ["propensos"], ["zonas", "lluvia"], ["donde", "llover"], ["donde", "lluvia"], ["donde", "llueve"]]
+      },
+      {
         id: "weather",
         seSatisfaceCon: ["como esta el clima", "como estara el clima manana en ate", "va a llover hoy", "hay riesgo de lluvia", "estara soleado", "pronostico para lurigancho"],
-        reglas: [["clima"], ["lluvia"], ["llover"], ["llueve"], ["lloviendo"], ["soleado"], ["nublado"], ["garua"], ["gar\xFAa"], ["pronostico"], ["pron\xF3stico"], ["tiempo", "hoy"], ["tiempo", "manana"], ["tiempo", "ma\xF1ana"], ["riesgo", "lluvia"], ["lluvia", "hoy"], ["lluvia", "manana"], ["lluvia", "ma\xF1ana"], ["clima", "hoy"], ["clima", "manana"], ["clima", "ma\xF1ana"]]
+        reglas: [["clima"], ["lluvia"], ["llover"], ["llueve"], ["lloviendo"], ["soleado"], ["nublado"], ["garua"], ["gar\xFAa"], ["pronostico"], ["pron\xF3stico"], ["tiempo", "hoy"], ["tiempo", "manana"], ["tiempo", "ma\xF1ana"], ["riesgo", "lluvia"], ["lluvia", "hoy"], ["lluvia", "manana"], ["lluvia", "ma\xF1ana"], ["clima", "hoy"], ["clima", "manana"], ["clima", "ma\xF1ana"], ["clima", "planta"], ["lluvia", "planta"], ["llover", "planta"]]
       },
       {
         id: "dispatch_summary",
@@ -9363,7 +9368,7 @@ var init_catalogo = __esm({
       for (const entrada of CATALOGO) {
         for (const grupo of entrada.reglas) {
           const palabras = grupo.map(normalizar);
-          if (!palabras.every((palabra) => t44.includes(palabra))) continue;
+          if (!palabras.every((palabra) => new RegExp(`\\b${palabra.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(t44))) continue;
           if (!mejor || palabras.length > mejor.palabras) mejor = { id: entrada.id, palabras: palabras.length };
         }
       }
@@ -9548,6 +9553,7 @@ var init_responder = __esm({
       "\u2022 c\xF3mo est\xE1 el clima en Lurigancho",
       "\u2022 va a llover el martes en Ate",
       "\u2022 clima de la semana en Comas \xB7 clima el 20 de septiembre _(hasta 16 d\xEDas)_",
+      "\u2022 qu\xE9 distritos est\xE1n propensos a lluvia esta semana",
       "",
       "\u{1F5C2} *Clientes, proveedores e historial*",
       "\u2022 el tel\xE9fono / RUC / direcci\xF3n del cliente Cobe\xF1as",
@@ -9639,6 +9645,7 @@ var init_responder = __esm({
         case "production_consume":
         case "aggregates_stock":
         case "weather":
+        case "weather_districts":
           return vacio ?? "";
         case "dispatch_summary": {
           const bloques = vista.orders.map((o37) => {
@@ -10449,7 +10456,7 @@ var init_planta = __esm({
 });
 
 // src/agent/consultas/clima.ts
-var cielo, distritoDe, URL_BASE, MAX_DIAS, diasHasta, pedir, pronosticoHorario, pronosticoSemanal, ICONO, textoClimaSemanal, textoFueraDeAlcance, franjasDeRiesgo, hh, textoClima;
+var cielo, distritoDe, URL_BASE, MAX_DIAS, diasHasta, pedir, pronosticoHorario, pronosticoSemanal, ICONO, textoClimaSemanal, textoFueraDeAlcance, franjasDeRiesgo, hh, textoClima, riesgoPorDistrito, DIA_CORTO, diaCorto, textoRiesgoDistritos;
 var init_clima = __esm({
   "src/agent/consultas/clima.ts"() {
     init_logger();
@@ -10606,6 +10613,61 @@ var init_clima = __esm({
         high_risk: "\u26D4 No apto para asfaltar: riesgo alto de lluvia."
       };
       lineas.push(veredicto[nivel] ?? `Riesgo: ${nivel}.`);
+      return lineas.join("\n");
+    };
+    riesgoPorDistrito = async (dias) => {
+      const controller2 = new AbortController();
+      const timer3 = setTimeout(() => controller2.abort(), WEATHER_ASPHALT_FORECAST.fetchTimeoutMs);
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?daily=precipitation_probability_max,precipitation_sum&timezone=America%2FLima&forecast_days=${Math.min(Math.max(dias, 1), MAX_DIAS)}&latitude=${LOCATIONS.map((l57) => l57.lat).join(",")}&longitude=${LOCATIONS.map((l57) => l57.lon).join(",")}`;
+        const res = await fetch(url, { signal: controller2.signal });
+        if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length !== LOCATIONS.length) throw new Error("respuesta incompleta");
+        const fechas = data[0]?.daily?.time ?? [];
+        const distritos = LOCATIONS.map((l57, i50) => ({
+          name: i50 === 0 ? "la planta" : l57.name,
+          porDia: fechas.map((fecha, j50) => {
+            const probMax = Number(data[i50]?.daily?.precipitation_probability_max?.[j50] ?? 0) || 0;
+            const mm = Number(data[i50]?.daily?.precipitation_sum?.[j50] ?? 0) || 0;
+            return { fecha, nivel: getCombinedRiskLevel(probMax, mm), probMax, mm };
+          })
+        }));
+        return { fechas, distritos };
+      } catch (error) {
+        logger_default.warn(`[agente] clima por distrito: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      } finally {
+        clearTimeout(timer3);
+      }
+    };
+    DIA_CORTO = ["dom", "lun", "mar", "mi\xE9", "jue", "vie", "s\xE1b"];
+    diaCorto = (fecha) => {
+      const [y65, m59, d67] = fecha.split("-").map(Number);
+      return `${DIA_CORTO[new Date(Date.UTC(y65, m59 - 1, d67)).getUTCDay()]} ${d67}`;
+    };
+    textoRiesgoDistritos = (r39, fecha) => {
+      if (!r39) return "No pude consultar el pron\xF3stico ahora. Int\xE9ntalo de nuevo en un rato.";
+      const fechas = fecha ? r39.fechas.filter((f64) => f64 === fecha) : r39.fechas;
+      if (fechas.length === 0) return textoFueraDeAlcance(fecha ?? r39.fechas[0]);
+      const enRango = (d67) => d67.porDia.filter((x63) => fechas.includes(x63.fecha));
+      const conNivel = (d67, nivel) => enRango(d67).filter((x63) => x63.nivel === nivel).map((x63) => diaCorto(x63.fecha));
+      const planta = r39.distritos[0];
+      const otros = r39.distritos.slice(1);
+      const titulo = fechas.length === 1 ? `\u{1F327} *Riesgo de lluvia por distrito \u2014 ${fechaLegible(fechas[0])}*` : `\u{1F327} *Riesgo de lluvia por distrito \u2014 ${diaCorto(fechas[0])} al ${diaCorto(fechas[fechas.length - 1])}*`;
+      const lineas = [titulo];
+      const plantaAlto = conNivel(planta, "high_risk");
+      const plantaModerado = conNivel(planta, "moderate_risk");
+      lineas.push(
+        plantaAlto.length || plantaModerado.length ? `\u{1F3ED} Planta: ${[plantaAlto.length ? `\u26D4 ${plantaAlto.join(", ")}` : "", plantaModerado.length ? `\u26A0\uFE0F ${plantaModerado.join(", ")}` : ""].filter(Boolean).join(" \xB7 ")}` : `\u{1F3ED} Planta: \u2705 sin riesgo ${fechas.length === 1 ? "ese d\xEDa" : "en todo el rango"}`
+      );
+      const altos = otros.map((d67) => ({ d: d67, dias: conNivel(d67, "high_risk") })).filter((x63) => x63.dias.length);
+      const moderados = otros.map((d67) => ({ d: d67, dias: conNivel(d67, "moderate_risk") })).filter((x63) => x63.dias.length && !altos.some((a49) => a49.d === x63.d));
+      if (altos.length) lineas.push(`\u26D4 Riesgo alto: ${altos.map((x63) => `${x63.d.name} (${x63.dias.join(", ")})`).join(" \xB7 ")}`);
+      if (moderados.length) lineas.push(`\u26A0\uFE0F Con precauci\xF3n: ${moderados.map((x63) => `${x63.d.name} (${x63.dias.join(", ")})`).join(" \xB7 ")}`);
+      const seguros = otros.length - altos.length - moderados.length;
+      lineas.push(altos.length || moderados.length ? `\u2705 Sin riesgo: los otros ${seguros} distritos.` : `\u2705 Sin riesgo de lluvia en los ${otros.length} distritos.`);
+      lineas.push("Preg\xFAntame por un distrito y un d\xEDa para ver las franjas horarias.");
       return lineas.join("\n");
     };
   }
@@ -11087,7 +11149,7 @@ var init_datos = __esm({
 });
 
 // src/agent/llm/herramientas.ts
-var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
+var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, textoConFecha, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
 var init_herramientas = __esm({
   "src/agent/llm/herramientas.ts"() {
     init_catalogo();
@@ -11115,6 +11177,7 @@ var init_herramientas = __esm({
       { id: "production_consume", descripcion: "consumos de una producci\xF3n", argumentos: ["fecha"] },
       { id: "aggregates_stock", descripcion: "stock actual de agregados: arena, piedra, confitillo", argumentos: [] },
       { id: "weather", descripcion: "clima, lluvia, pron\xF3stico en un distrito", argumentos: ["distrito", "fecha"] },
+      { id: "weather_districts", descripcion: "qu\xE9 distritos o zonas tienen riesgo de lluvia (todos los distritos, un d\xEDa o la semana)", argumentos: ["fecha"] },
       { id: "help", descripcion: "qu\xE9 puede hacer Lila", argumentos: [] },
       { id: "clientes", descripcion: "datos de UN cliente: RUC, contacto, tel\xE9fono, correo, direcci\xF3n, sus \xFAltimos pedidos", argumentos: ["nombre"] },
       { id: "proveedores", descripcion: "datos de UN proveedor: RUC, contacto, tel\xE9fono, qu\xE9 vende o transporta", argumentos: ["nombre"] },
@@ -11156,6 +11219,7 @@ var init_herramientas = __esm({
       }
       return void 0;
     };
+    textoConFecha = (t44) => /\d/.test(t44) || MESES2.some((m59) => new RegExp(`\\b${m59}\\b`).test(t44)) || /\bse[pt]?tiembre\b/.test(t44);
     empresaPorAlias = (valor) => {
       const v55 = normalizar(valor);
       return ALIAS_EMPRESA.find((e29) => e29.alias.some((a49) => v55 === a49 || new RegExp(`\\b${a49}\\b`).test(v55)))?.companyId;
@@ -11219,7 +11283,7 @@ var init_herramientas = __esm({
           case "fecha":
           case "desde":
           case "hasta": {
-            if (acepta(campo) && fechaValida(valor, hoy)) args[campo] = valor;
+            if (acepta(campo) && fechaValida(valor, hoy) && textoConFecha(t44)) args[campo] = valor;
             break;
           }
           default:
@@ -12365,7 +12429,7 @@ __export(consultas_exports, {
   atenderEleccion: () => atenderEleccion,
   esConsulta: () => esConsulta
 });
-var UMBRAL_RUTEO, esDeUnDia, comoParametros, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, conImagen, armarRespuesta, empresasDelPiloto, informesDeLaVista, UMBRAL_SUGERENCIA, EJEMPLO, sinRuta, atenderConsulta, atenderContinuacion, atenderEleccion;
+var UMBRAL_RUTEO, PALABRAS_PARA_MODELO, esDeUnDia, comoParametros, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, conImagen, armarRespuesta, empresasDelPiloto, informesDeLaVista, UMBRAL_SUGERENCIA, EJEMPLO, sinRuta, atenderConsulta, atenderContinuacion, atenderEleccion;
 var init_consultas = __esm({
   "src/agent/consultas/index.ts"() {
     init_logger();
@@ -12387,6 +12451,7 @@ var init_consultas = __esm({
     init_tiempo();
     init_detector();
     UMBRAL_RUTEO = 0.88;
+    PALABRAS_PARA_MODELO = 12;
     esDeUnDia = (clave2) => clave2 === "orders_day" || clave2 === "dispatch_summary" || clave2 === "day_progress";
     comoParametros = (a49) => ({
       ...a49.fecha ? { fecha: a49.fecha } : {},
@@ -12480,6 +12545,11 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         }
         return { texto: "", archivos };
       }
+      if (clave2 === "weather_districts") {
+        const unDia = params.rango !== "semana" && (params.fecha || /\bhoy\b/.test(pregunta) || params.day === "tomorrow") && !/\b(y|,)\s*(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b/i.test(pregunta);
+        if (unDia && diasHasta(fecha, hoyLima()) === null) return { texto: textoFueraDeAlcance(fecha) };
+        return { texto: textoRiesgoDistritos(await riesgoPorDistrito(unDia ? diasHasta(fecha, hoyLima()) ?? 1 : 7), unDia ? fecha : void 0) };
+      }
       if (clave2 === "weather") {
         const distrito = distritoDe(pregunta);
         if (params.rango === "semana") return { texto: textoClimaSemanal(await pronosticoSemanal(distrito)) };
@@ -12556,10 +12626,11 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       production_consume: "los consumos de la producci\xF3n",
       aggregates_stock: "el stock de agregados",
       weather: "el clima",
+      weather_districts: "qu\xE9 distritos tienen riesgo de lluvia",
       dispatch_summary: "el resumen de despachos",
       help: "la ayuda"
     };
-    sinRuta = async (pregunta, quien, grupo) => {
+    sinRuta = async (pregunta, quien, grupo, reglaDeRespaldo = null) => {
       const ultima = ultimaConsulta(quien, grupo);
       if (ultima && pareceContinuacion(pregunta)) {
         const fusionada = fusionar(pregunta, ultima.pregunta, LOCATIONS.map((l57) => l57.name), ALIAS_EMPRESA.flatMap((e29) => e29.alias));
@@ -12577,6 +12648,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         }
         return { clave: eleccion.herramienta, pregunta, extra: comoParametros(eleccion.argumentos) };
       }
+      if (reglaDeRespaldo) return { clave: reglaDeRespaldo, pregunta };
       const embed = await cargarModelo();
       if (embed) {
         const [mejor] = await clasificar(CATALOGO, [pregunta], embed);
@@ -12600,7 +12672,9 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         await empezarAEscribir(grupo, alcance);
         let pregunta = preguntaLimpia(texto2, numeroBot);
         const vetada = fueraDeCatalogo(pregunta);
-        let clave2 = vetada ? null : rutearPorReglas(pregunta);
+        const porRegla = vetada ? null : rutearPorReglas(pregunta);
+        const larga = pregunta.split(/\s+/).length > PALABRAS_PARA_MODELO;
+        let clave2 = larga ? null : porRegla;
         let respuesta;
         let extra;
         const rango2 = esDeUnDia(clave2) ? argumentosDeRango(pregunta) : null;
@@ -12609,7 +12683,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
           recordarConsulta({ quien, grupo, clave: "pedidos", pregunta });
           clave2 = null;
         }
-        if (!clave2 && !vetada && !respuesta) ({ clave: clave2, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo));
+        if (!clave2 && !vetada && !respuesta) ({ clave: clave2, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, larga ? porRegla : null));
         if (opciones.implicita && !clave2 && !respuesta) {
           logger_default.info(`[agente] consulta impl\xEDcita de ${quien} sin ruta, se deja pasar: \xAB${pregunta}\xBB`);
           return;

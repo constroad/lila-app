@@ -31,6 +31,7 @@ export type ClaveConsulta =
   | 'production_consume'
   | 'aggregates_stock'
   | 'weather'
+  | 'weather_districts'
   | 'dispatch_summary'
   | 'help';
 
@@ -120,9 +121,14 @@ export const CATALOGO: EntradaCatalogo[] = [
     reglas: [['agregado'], ['stock'], ['arena'], ['piedra'], ['grava'], ['confitillo'], ['cancha'], ['material']],
   },
   {
+    id: 'weather_districts',
+    seSatisfaceCon: ['que distritos estan propensos a lluvia', 'en que distritos va a llover esta semana', 'donde hay riesgo de lluvia', 'que zonas tienen lluvia', 'riesgo de lluvia por distrito'],
+    reglas: [['distritos'], ['que distrito'], ['propensos'], ['zonas', 'lluvia'], ['donde', 'llover'], ['donde', 'lluvia'], ['donde', 'llueve']],
+  },
+  {
     id: 'weather',
     seSatisfaceCon: ['como esta el clima', 'como estara el clima manana en ate', 'va a llover hoy', 'hay riesgo de lluvia', 'estara soleado', 'pronostico para lurigancho'],
-    reglas: [['clima'], ['lluvia'], ['llover'], ['llueve'], ['lloviendo'], ['soleado'], ['nublado'], ['garua'], ['garúa'], ['pronostico'], ['pronóstico'], ['tiempo', 'hoy'], ['tiempo', 'manana'], ['tiempo', 'mañana'], ['riesgo', 'lluvia'], ['lluvia', 'hoy'], ['lluvia', 'manana'], ['lluvia', 'mañana'], ['clima', 'hoy'], ['clima', 'manana'], ['clima', 'mañana']],
+    reglas: [['clima'], ['lluvia'], ['llover'], ['llueve'], ['lloviendo'], ['soleado'], ['nublado'], ['garua'], ['garúa'], ['pronostico'], ['pronóstico'], ['tiempo', 'hoy'], ['tiempo', 'manana'], ['tiempo', 'mañana'], ['riesgo', 'lluvia'], ['lluvia', 'hoy'], ['lluvia', 'manana'], ['lluvia', 'mañana'], ['clima', 'hoy'], ['clima', 'manana'], ['clima', 'mañana'], ['clima', 'planta'], ['lluvia', 'planta'], ['llover', 'planta']],
   },
   {
     id: 'dispatch_summary',
@@ -332,7 +338,10 @@ export const rutearPorReglas = (pregunta: string): ClaveConsulta | null => {
   for (const entrada of CATALOGO) {
     for (const grupo of entrada.reglas) {
       const palabras = grupo.map(normalizar);
-      if (!palabras.every((palabra) => t.includes(palabra))) continue;
+      // Por PALABRA (o comienzo de palabra: «despacho» vale por «despachos»),
+      // no por subcadena: «pen» dentro de «propensos» mandaba «¿qué distritos
+      // están propensos a lluvia?» a los tanques (14/09).
+      if (!palabras.every((palabra) => new RegExp(`\\b${palabra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(t))) continue;
       if (!mejor || palabras.length > mejor.palabras) mejor = { id: entrada.id, palabras: palabras.length };
     }
   }

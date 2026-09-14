@@ -56,6 +56,7 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
   { id: 'production_consume', descripcion: 'consumos de una producción', argumentos: ['fecha'] },
   { id: 'aggregates_stock', descripcion: 'stock actual de agregados: arena, piedra, confitillo', argumentos: [] },
   { id: 'weather', descripcion: 'clima, lluvia, pronóstico en un distrito', argumentos: ['distrito', 'fecha'] },
+  { id: 'weather_districts', descripcion: 'qué distritos o zonas tienen riesgo de lluvia (todos los distritos, un día o la semana)', argumentos: ['fecha'] },
   { id: 'help', descripcion: 'qué puede hacer Lila', argumentos: [] },
   { id: 'clientes', descripcion: 'datos de UN cliente: RUC, contacto, teléfono, correo, dirección, sus últimos pedidos', argumentos: ['nombre'] },
   { id: 'proveedores', descripcion: 'datos de UN proveedor: RUC, contacto, teléfono, qué vende o transporta', argumentos: ['nombre'] },
@@ -132,6 +133,8 @@ export const rangoDe = (pregunta: string, hoy: string): { desde: string; hasta: 
   }
   return undefined;
 };
+
+const textoConFecha = (t: string): boolean => /\d/.test(t) || MESES.some((m) => new RegExp(`\\b${m}\\b`).test(t)) || /\bse[pt]?tiembre\b/.test(t);
 
 const empresaPorAlias = (valor: string): string | undefined => {
   const v = normalizar(valor);
@@ -222,7 +225,10 @@ export const normalizarArgumentos = (
       case 'fecha':
       case 'desde':
       case 'hasta': {
-        if (acepta(campo) && fechaValida(valor, hoy)) args[campo] = valor;
+        // Una fecha del modelo solo si la pregunta trae con qué armarla: un
+        // número o un mes. «Clima para planta esta semana» → «2026-09-01» era
+        // un invento (14/09); lo que el código sabe leer lo pone después.
+        if (acepta(campo) && fechaValida(valor, hoy) && textoConFecha(t)) args[campo] = valor;
         break;
       }
       default:

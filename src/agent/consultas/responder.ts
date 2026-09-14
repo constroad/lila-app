@@ -159,6 +159,7 @@ export const AYUDA = [
   '• cómo está el clima en Lurigancho',
   '• va a llover el martes en Ate',
   '• clima de la semana en Comas · clima el 20 de septiembre _(hasta 16 días)_',
+  '• qué distritos están propensos a lluvia esta semana',
   '',
   '🗂 *Clientes, proveedores e historial*',
   '• el teléfono / RUC / dirección del cliente Cobeñas',
@@ -266,6 +267,7 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
     case 'production_consume':
     case 'aggregates_stock':
     case 'weather':
+    case 'weather_districts':
       // Los resuelve index.ts con sus propias lecturas. Acá, solo si no hay pedidos.
       return vacio ?? '';
 

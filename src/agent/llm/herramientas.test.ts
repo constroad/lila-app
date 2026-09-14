@@ -60,7 +60,10 @@ describe('normalizarArgumentos', () => {
 
   it('un rango a medias se completa, y al revés se endereza; «ayer» manda', () => {
     expect(normalizarArgumentos('pedidos', [{ campo: 'desde', valor: '2026-09-01' }], 'los pedidos desde el 1', lunes)).toMatchObject({ desde: '2026-09-01', hasta: '2026-09-01' });
-    expect(normalizarArgumentos('pedidos', [{ campo: 'desde', valor: '2026-09-10' }, { campo: 'hasta', valor: '2026-09-01' }], 'los pedidos', lunes)).toMatchObject({ desde: '2026-09-01', hasta: '2026-09-10' });
+    expect(normalizarArgumentos('pedidos', [{ campo: 'desde', valor: '2026-09-10' }, { campo: 'hasta', valor: '2026-09-01' }], 'los pedidos del 10 al 1', lunes)).toMatchObject({ desde: '2026-09-01', hasta: '2026-09-10' });
+    // Sin un número ni un mes en la pregunta, una fecha del modelo es un invento.
+    expect(normalizarArgumentos('pedidos', [{ campo: 'desde', valor: '2026-09-10' }], 'los pedidos', lunes).desde).toBeUndefined();
+    expect(normalizarArgumentos('weather', [{ campo: 'fecha', valor: '2026-09-01' }], 'cómo estará el clima para planta esta semana', lunes).fecha).toBeUndefined();
     expect(normalizarArgumentos('kardex', [{ campo: 'desde', valor: '2026-09-01' }, { campo: 'nombre', valor: 'arena' }], 'salidas de arena de ayer', lunes)).toMatchObject({ desde: '2026-09-13', hasta: '2026-09-13' });
   });
 
