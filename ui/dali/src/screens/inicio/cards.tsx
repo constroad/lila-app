@@ -57,8 +57,8 @@ export function TarjetaEstado({ inicio, onCambiar, cambiando }: { inicio: Inicio
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 border-t border-stone-100 pt-3 md:hidden">
         <p className="flex min-w-0 items-center gap-1.5 whitespace-nowrap font-mono text-[13px] text-stone-700">
-          <Icon name="chat" className="shrink-0 text-lg text-teal-700" /> <span className="truncate">{telefonoLegible(a.numero)}</span>
-          {a.ultimoMensajeHaceMin !== null && <span className="shrink-0 text-stone-500"> · {haceLegible(a.ultimoMensajeHaceMin)}</span>}
+          <Icon name="chat" className="shrink-0 text-lg text-teal-700" /> <span className="shrink-0">{telefonoLegible(a.numero)}</span>
+          {a.ultimoMensajeHaceMin !== null && <span className="truncate text-stone-500"> · {haceLegible(a.ultimoMensajeHaceMin)}</span>}
         </p>
         <button type="button" className="min-h-9 shrink-0 whitespace-nowrap font-body text-sm font-semibold text-stone-600 underline underline-offset-4">
           Pausar 30 min

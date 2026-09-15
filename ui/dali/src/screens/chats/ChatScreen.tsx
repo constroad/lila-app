@@ -279,7 +279,7 @@ export function ChatScreen({ embebido = false }: { embebido?: boolean }) {
                 </div>
                 <dl className="mt-4 divide-y divide-stone-100 font-body text-[15px]">
                   <Dato k="A nombre de" v={`${lead.nombre}${lead.empresa ? ` · ${lead.empresa}` : ''}`} />
-                  <Dato k="Servicio" v={<span className="rounded-md bg-teal-50 px-2 py-0.5 font-semibold capitalize text-teal-800">{lead.servicio}</span>} />
+                  <Dato k="Servicio" v={<span className="rounded-md bg-teal-50 px-2 py-0.5 font-semibold first-letter:uppercase text-teal-800">{lead.servicio}</span>} />
                   {lead.cantidad && <Dato k="Cantidad" v={<span className="font-mono font-semibold">{lead.cantidad}</span>} />}
                   {lead.distrito && (
                     <Dato

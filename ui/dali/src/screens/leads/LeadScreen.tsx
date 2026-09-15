@@ -204,7 +204,7 @@ export function LeadScreen({ embebido = false }: { embebido?: boolean }) {
             {lead.cerradoEn && <span className="font-normal text-emerald-700"> · {lead.cerradoEn}</span>}
           </p>
           <dl className="mt-2 divide-y divide-stone-100 font-body text-[15px]">
-            <Fila k="Servicio" v={<span className="capitalize">{lead.servicio}</span>} />
+            <Fila k="Servicio" v={<span className="first-letter:uppercase">{lead.servicio}</span>} />
             {lead.cantidad && (
               <Fila
                 k={lead.cantidad.includes('m³') ? 'Cantidad' : 'Área'}
