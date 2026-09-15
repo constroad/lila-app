@@ -31,7 +31,7 @@ export const TEMAS: TemaAyuda[] = [
       'resumen de despachos de ayer (en imagen)',
       'cuántos m³ van · cuánto falta para terminar en planta / en campo',
       'a qué hora salió la 3 · quién maneja la 4 · cuánto falta para que llegue la 2',
-      'fotos y video de la unidad de placa AML838',
+      'fotos y video de la unidad de placa AML838 (las del despacho) · las fotos del control de pista de la unidad 1 (las del informe)',
     ],
   },
   {

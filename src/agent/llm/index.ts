@@ -168,7 +168,7 @@ export const responderConDatos = async (
  * (número), como con las unidades. El PDF que no está generado se genera al
  * momento (`informes.ts`), y se avisa que tarda.
  */
-const MAX_OPCIONES_INFORMES = 6;
+export const MAX_OPCIONES_INFORMES = 6;
 
 const responderInformes = async (args: Argumentos, pregunta: string, quien: string, grupo: string): Promise<{ texto: string; archivos?: Archivo[] }> => {
   const tipo = tipoDeInforme(pregunta);

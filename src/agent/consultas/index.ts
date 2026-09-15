@@ -13,9 +13,11 @@ import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { fechaDe, hoyLima, normalizar, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
-import { argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, herramientaDeDatosPorReglas, normalizarArgumentos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
+import { MAX_OPCIONES_INFORMES, argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, herramientaDeDatosPorReglas, normalizarArgumentos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
+import { buscarInformes, tipoDeInforme, type InformeEncontrado } from '../llm/informes.js';
+import { archivosDeFotos, cargarFotosDelInforme, fotosDeUnidad, todasLasFotos } from './fotos-informe.js';
 import { COMPANY_PILOTO, type AlcanceAgente } from '../checklist/alcance.js';
 
 export { esConsulta };
@@ -87,6 +89,44 @@ const respuestaGuias = async (vista: VistaDelDia, indice: number): Promise<Respu
     texto: `📄 *Guías y vales — ${o.cliente || o.companySlug}* · ${fechaLegible(vista.fecha)}: ${archivos.length} documento(s)${omitidos ? `, te mando ${enviar.length}; el resto está en Portal` : ''}.`,
     archivos: enviar.map((a) => ({ ...a, caption: a.nombre })),
   };
+};
+
+/**
+ * ¿Pide las fotos de un INFORME («del control de pista», «del panel
+ * fotográfico», «del informe de imprimación») y no las del despacho? 15/09,
+ * 09:15: «fotos y videos de la unidad 1 del control de pista» → salieron las
+ * del despacho (el camión en planta).
+ */
+const pideFotosDeInforme = (pregunta: string): boolean => Boolean(tipoDeInforme(pregunta)) || /\binforme\b/.test(normalizar(pregunta));
+
+/** Las fotos y videos de un informe del día (o de la fecha pedida), de una unidad si la nombran; si hay varios informes, pregunta cuál. */
+const respuestaFotosDeInforme = async (vista: VistaDelDia, params: Parametros, pregunta: string, quien: string, grupo: string): Promise<Respuesta> => {
+  const tipo = tipoDeInforme(pregunta);
+  const lista = await buscarInformes({ tipo: tipo?.codigo, desde: vista.fecha, hasta: vista.fecha, companyId: params.companyId }, MAX_OPCIONES_INFORMES);
+  const que = tipo ? `un ${tipo.nombre.toLowerCase()}` : 'informes';
+  if (!lista.length) return { texto: `No encuentro ${que} ${params.companyId ? 'de esa empresa ' : ''}para ${fechaLegible(vista.fecha)}.` };
+  const mandar = async (i: InformeEncontrado): Promise<Respuesta> => {
+    const fotos = await cargarFotosDelInforme(i.id);
+    const encabezado = `📷 *${i.nombreTipo}* · ${fechaLegible(i.fecha)} · ${i.empresa}${i.cliente ? ` · ${i.cliente}` : ''}`;
+    if (!fotos) return { texto: `No encuentro el informe *${i.nombreTipo}* de ${fechaLegible(i.fecha)}.` };
+    const conUnidad = identificaUnidad(params);
+    const u = conUnidad ? unidadPor(vista, params) : undefined;
+    const elegidas = conUnidad ? fotosDeUnidad(fotos, { dispatchId: u?.dispatchId, unitNumber: u?.unitNumber ?? params.unitNumber, plate: u?.plate ?? params.plate }) : todasLasFotos(fotos);
+    const de = u ? `Unidad ${u.unitNumber} (${u.plate || 'sin placa'})` : conUnidad ? `La unidad pedida` : 'Todas las secciones';
+    if (!elegidas.length) {
+      const total = todasLasFotos(fotos).length;
+      return { texto: `${encabezado}\nNo tiene fotos${conUnidad ? ' de esa unidad' : ''}${total && conUnidad ? `; tiene ${total} en total: pide «las fotos del ${i.nombreTipo.toLowerCase()}»` : ''}.` };
+    }
+    const archivos = archivosDeFotos(elegidas, i.companyId);
+    const { enviar, omitidos } = acotarArchivos(archivos);
+    const fotosN = archivos.filter((a) => a.tipo === 'image').length;
+    const videosN = archivos.filter((a) => a.tipo === 'video').length;
+    return { texto: `${encabezado}\n${de}: ${fotosN} foto(s) y ${videosN} video(s)${omitidos ? `; te mando ${enviar.length}, el resto está en Portal` : ''}.`, archivos: enviar };
+  };
+  if (lista.length === 1) return mandar(lista[0]);
+  const opciones = lista.map((i) => `${i.nombreTipo} · ${i.empresa}${i.cliente ? ` · ${i.cliente}` : ''}`);
+  preguntar({ quien, grupo, opciones, tipo: 'opciones', continuar: (n) => mandar(lista[n] ?? lista[0]) });
+  return { texto: textoPregunta(`Hay ${lista.length} informes ${fechaLegible(vista.fecha)}. ¿De cuál te mando las fotos?`, opciones) };
 };
 
 /** Fotos y videos de la unidad pedida. */
@@ -229,6 +269,9 @@ const armarRespuesta = async (
 
   if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace(quien, grupo, pregunta));
   if (clave === 'guias_day') return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
+  // Las fotos de un INFORME (control de pista, panel…) no son las del despacho,
+  // y no necesitan unidad: sin ella van todas las del informe.
+  if (clave === 'unit_media' && pideFotosDeInforme(pregunta)) return respuestaFotosDeInforme(vista, params, pregunta, quien, grupo);
   // Las consultas de una unidad sin unidad: se PREGUNTA, y la respuesta de la
   // persona («la 4», «AML838», «la última») completa esta misma consulta.
   const deUnidad = clave === 'unit_media' || clave === 'unit_departure' || clave === 'unit_driver' || clave === 'unit_eta';
