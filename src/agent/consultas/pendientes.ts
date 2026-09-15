@@ -40,7 +40,8 @@ export const preguntar = <T>(p: Omit<PreguntaPendiente<T>, 'creadaMs'>, ahoraMs 
 /** ¿Este texto nombra una unidad? Un número, una placa, o «la última / primera». */
 export const nombraUnidad = (texto: string): boolean => {
   const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  return /\b\d{1,2}\b/.test(t) || /\b[a-z]{3}[\s-]?\d{3}\b/.test(t) || /\b(ultim[oa]|primer[oa]?)\b/.test(t);
+  // Placa con dígito en el bloque de letras (A1Y-825), como en `extraerParametros`.
+  return /\b\d{1,2}\b/.test(t) || /\b[a-z][a-z0-9]{2}[\s-]?\d{3}\b/.test(t) || /\b(ultim[oa]|primer[oa]?)\b/.test(t);
 };
 
 /**

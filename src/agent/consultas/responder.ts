@@ -287,9 +287,12 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       }
       const forma = c.shape ? ` (tolva ${formaDeTolva(c.shape)})` : '';
       const quien = c.cubicator ? `, cubicó ${c.cubicator}` : '';
+      // «¿Cuándo fue cubicado?»: la fecha de la ficha, siempre, para no tener
+      // que preguntarlo aparte (15/09, 18:54).
+      const cuando = c.fecha ? ` el ${fechaLegible(c.fecha)}` : '';
       // El Portal guarda el cálculo crudo (26.413604870000004): dos decimales, como lo muestra su pantalla.
       const m3 = Math.round(c.m3 * 100) / 100;
-      return `🚛 La *Unidad ${u.unitNumber}* (${u.plate || c.plate}) cubica *${m3} m³*${forma}${quien}.${salio}`;
+      return `🚛 La *Unidad ${u.unitNumber}* (${u.plate || c.plate}) cubica *${m3} m³*${forma}${quien}${cuando}.${salio}`;
     }
 
     case 'unit_media': {

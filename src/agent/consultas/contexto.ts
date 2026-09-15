@@ -34,8 +34,33 @@ export const _resetContexto = (): void => hilos.clear();
 
 const k = (quien: string, grupo: string) => `${grupo}|${quien}`;
 
+/**
+ * EL HILO SOBREVIVE AL DEPLOY. Vivía solo en memoria: el 15/09 a las 18:49 un
+ * deploy borró el hilo de José y «¿sabes cuánto cubica ese volquete?» volvió a
+ * preguntar «¿De cuál unidad?» cuatro minutos después de haber hablado de la
+ * 9. Con 8–10 deploys por día, un hilo en memoria es un hilo que no existe.
+ * Se persiste como config del agente (Mongo), igual que el interruptor; quien
+ * arranca llama `hidratarHilos(await cargarConfig('hilos'))`. El guardado es
+ * fire-and-forget: una consulta nunca espera a la base.
+ */
+let persistir: ((hilos: UltimaConsulta[]) => void) | null = null;
+export const alCambiarHilos = (fn: ((hilos: UltimaConsulta[]) => void) | null): void => {
+  persistir = fn;
+};
+export const exportarHilos = (ms = Date.now()): UltimaConsulta[] => [...hilos.values()].filter((u) => ms - u.ms <= VIGENCIA_HILO_MS);
+export const hidratarHilos = (lista: UltimaConsulta[] | null | undefined, ms = Date.now()): number => {
+  let n = 0;
+  for (const u of lista ?? []) {
+    if (!u?.quien || !u.grupo || !u.pregunta || typeof u.ms !== 'number' || ms - u.ms > VIGENCIA_HILO_MS) continue;
+    hilos.set(k(u.quien, u.grupo), u);
+    n += 1;
+  }
+  return n;
+};
+
 export const recordarConsulta = (c: Omit<UltimaConsulta, 'ms'>, ms = Date.now()): void => {
   hilos.set(k(c.quien, c.grupo), { ...c, ms });
+  persistir?.(exportarHilos(ms));
 };
 
 /**

@@ -1,5 +1,5 @@
 import {
-  unidadHeredada, VIGENCIA_HILO_MS, _resetContexto, fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto';
+  unidadHeredada, alCambiarHilos, exportarHilos, hidratarHilos, VIGENCIA_HILO_MS, _resetContexto, fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto';
 
 /**
  * EL HILO. José, 13/09/2026: «no quiero que la mejores solo para este caso
@@ -112,5 +112,25 @@ describe('unidadHeredada — «ese volquete» dentro del hilo', () => {
     expect(unidadHeredada({ ordinal: 'ultima' })).toEqual({ ordinal: 'ultima' });
     expect(unidadHeredada({})).toBeNull();
     expect(unidadHeredada(null)).toBeNull();
+  });
+});
+
+describe('el hilo sobrevive al deploy', () => {
+  it('se exporta al cambiar, se rehidrata, y lo vencido no vuelve', () => {
+    _resetContexto();
+    const guardados: unknown[] = [];
+    alCambiarHilos((lista) => guardados.push(lista));
+    recordarConsulta({ quien: 'q', grupo: 'g', clave: 'unit_media', pregunta: 'video del volquete 9' }, 1_000_000);
+    expect(guardados).toHaveLength(1);
+    const exportados = exportarHilos(1_000_000);
+    _resetContexto();
+    expect(ultimaConsulta('q', 'g', 1_000_000)).toBeNull();
+    expect(hidratarHilos(exportados, 1_000_000)).toBe(1);
+    expect(ultimaConsulta('q', 'g', 1_000_000)?.pregunta).toBe('video del volquete 9');
+    // Más viejo que la vigencia: no se rehidrata. Basura: tampoco.
+    _resetContexto();
+    expect(hidratarHilos(exportados, 1_000_000 + VIGENCIA_HILO_MS + 1)).toBe(0);
+    expect(hidratarHilos([{ quien: '', grupo: 'g', clave: 'x', pregunta: 'p', ms: 1 } as never, null as never], 2)).toBe(0);
+    alCambiarHilos(null);
   });
 });

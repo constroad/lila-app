@@ -24,10 +24,16 @@ export interface Cubicacion {
   m3: number | null;
   shape?: string;
   cubicator?: string;
+  /** Cuándo se guardó la ficha (última actualización del volquete en el Portal), `YYYY-MM-DD`. */
+  fecha?: string;
 }
 
 type Doc = Record<string, unknown>;
 const texto = (v: unknown): string => String(v ?? '').trim();
+const fechaIso = (v: unknown): string | undefined => {
+  const d = v instanceof Date ? v : new Date(String(v || ''));
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString().slice(0, 10);
+};
 const num = (v: unknown): number | null => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -41,13 +47,14 @@ export const cubicacionDeDoc = (d: Doc | null): Cubicacion | null =>
         m3: num(d.m3),
         shape: texto(d.shape) || undefined,
         cubicator: texto(d.cubicator) || undefined,
+        fecha: fechaIso(d.updatedAt ?? d.createdAt),
       }
     : null;
 
 export const buscarCubicacion = async (p: { companyId: string; transportId?: string; plate?: string }): Promise<Cubicacion | null> => {
   if (!p.companyId) return null;
   const Transport = await getTransportModel();
-  const select = 'plate m3 shape cubicator';
+  const select = 'plate m3 shape cubicator createdAt updatedAt';
   if (p.transportId && /^[a-f\d]{24}$/i.test(p.transportId)) {
     const doc = (await Transport.findOne({ _id: p.transportId, companyId: p.companyId }).select(select).lean()) as Doc | null;
     if (doc) return cubicacionDeDoc(doc);

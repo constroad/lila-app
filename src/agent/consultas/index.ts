@@ -288,7 +288,13 @@ const armarRespuesta = async (
       grupo,
       opciones: [],
       tipo: 'unidad',
-      continuar: (_i, texto) => armarRespuesta(clave, `${pregunta} ${texto ?? ''}`, quien, grupo),
+      continuar: (_i, texto) => {
+        // El hilo queda con la pregunta COMPLETA («…ese volquete? Del volquete
+        // 9»): la siguiente («¿cuándo fue cubicado?») hereda la 9 de acá.
+        const completa = `${pregunta} ${texto ?? ''}`;
+        recordarConsulta({ quien, grupo, clave, pregunta: completa });
+        return armarRespuesta(clave, completa, quien, grupo);
+      },
     });
     return { texto: PREGUNTA_UNIDAD };
   }

@@ -16,6 +16,7 @@ import { avisarEnGrupo, enviarAOperaciones, enviarAprobado } from './emisor.js';
 import { cargarAprobadores, esAdmin, esAprobador } from './aprobadores.js';
 import { apagar, comandoInterruptor, encender, estadoInterruptor, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
 import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje, guardarPropuesta } from './persistencia.js';
+import { alCambiarHilos, hidratarHilos, type UltimaConsulta } from '../consultas/contexto.js';
 import { VENTANA_MS } from './almacen.js';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
 import { findOutgoingMessage } from '../../whatsapp/baileys/outgoing-messages.js';
@@ -458,18 +459,22 @@ export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
     return;
   }
   try {
-    const [mensajes, propuestas, interruptor] = await Promise.all([
+    const [mensajes, propuestas, interruptor, hilos] = await Promise.all([
       cargarMensajes(ahoraMs - VENTANA_MS),
       cargarPropuestas(ahoraMs - 7 * 24 * 3_600_000),
       cargarConfig<EstadoInterruptor>('interruptor'),
+      cargarConfig<UltimaConsulta[]>('hilos'),
     ]);
     hidratarMensajes(mensajes);
+    // El hilo de cada persona («ese volquete») también vuelve del deploy.
+    const hilosVivos = hidratarHilos(hilos, ahoraMs);
+    alCambiarHilos((lista) => void guardarConfig('hilos', lista));
     // Lo pendiente que ya venció mientras el proceso no corría se marca vencido
     // y se persiste, sin avisar: avisar es para lo que vence estando vivo.
     for (const vencida of hidratarPropuestas(propuestas, ahoraMs)) void guardarPropuesta(vencida);
     hidratarInterruptor(interruptor);
     logger.info(
-      `[agente] memoria rehidratada: ${mensajes.length} mensaje(s), ${propuestas.length} propuesta(s), ` +
+      `[agente] memoria rehidratada: ${mensajes.length} mensaje(s), ${propuestas.length} propuesta(s), ${hilosVivos} hilo(s), ` +
         `interruptor ${interruptor?.apagado ? 'APAGADO' : 'prendido'}`
     );
     // Los aprobadores se leen ya, para que la lista quede en el log antes del
