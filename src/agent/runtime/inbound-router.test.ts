@@ -117,6 +117,20 @@ describe('routeInboundMessage — gates (F1)', () => {
     expect(deshabilitado.savedInbound).toHaveLength(0);
   });
 
+  it('pausada desde el panel (pausedUntil futuro) no contesta ni persiste; vencida la pausa, sí', async () => {
+    const pausada = buildDeps({
+      botConfig: { enabled: true, vertical: 'restaurant', testNumbers: ['51902049935'], pausedUntil: new Date(RECEIVED_AT.getTime() + 60_000) },
+    });
+    expect(await routeInboundMessage(buildMessage(), pausada.deps)).toBe('paused');
+    expect(pausada.savedInbound).toHaveLength(0);
+    expect(pausada.sentTexts).toHaveLength(0);
+
+    const vencida = buildDeps({
+      botConfig: { enabled: true, vertical: 'restaurant', testNumbers: ['51902049935'], pausedUntil: new Date(RECEIVED_AT.getTime() - 1) },
+    });
+    expect(await routeInboundMessage(buildMessage(), vencida.deps)).toBe('replied');
+  });
+
   it('con allowlist activa, ignora números fuera de ella sin persistir nada', async () => {
     const fake = buildDeps();
     const outcome = await routeInboundMessage(

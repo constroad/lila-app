@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
+import { Interruptor } from '@/components/Interruptor';
 import type { IconName } from '@/components/icon-map';
 import { NOMBRE_ESTADO_LEAD, StatusPill, TONO_LEAD } from '@/components/StatusPill';
 import { cuando, diaCorto, numero, telefonoLegible } from '@/lib/format';
@@ -42,7 +43,7 @@ export function TarjetaEstado({ inicio, onCambiar, cambiando }: { inicio: Inicio
         <div className="flex items-center gap-3">
           <div className="hidden shrink-0 items-center gap-3 whitespace-nowrap rounded-full bg-stone-100 py-2 pl-4 pr-2 xl:flex">
             <span className="font-body text-sm text-stone-700">Recepción activa</span>
-            <Interruptor checked={a.encendido} onChange={onCambiar} disabled={cambiando} />
+            <Interruptor checked={a.encendido} onChange={onCambiar} disabled={cambiando} label={a.encendido ? 'Apagar a Dali' : 'Encender a Dali'} />
           </div>
           <button
             type="button"
@@ -51,7 +52,7 @@ export function TarjetaEstado({ inicio, onCambiar, cambiando }: { inicio: Inicio
             <Icon name="pause_circle" className="text-xl text-stone-500" /> Pausar 30 min
           </button>
           <div className="xl:hidden">
-            <Interruptor checked={a.encendido} onChange={onCambiar} disabled={cambiando} />
+            <Interruptor checked={a.encendido} onChange={onCambiar} disabled={cambiando} label={a.encendido ? 'Apagar a Dali' : 'Encender a Dali'} />
           </div>
         </div>
       </div>
@@ -65,22 +66,6 @@ export function TarjetaEstado({ inicio, onCambiar, cambiando }: { inicio: Inicio
         </button>
       </div>
     </section>
-  );
-}
-
-function Interruptor({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={checked ? 'Apagar a Dali' : 'Encender a Dali'}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={cn('relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60', checked ? 'bg-teal-700' : 'bg-stone-300')}
-    >
-      <span className={cn('absolute top-0.5 size-6 rounded-full bg-white shadow transition-transform', checked ? 'left-[22px]' : 'left-0.5')} />
-    </button>
   );
 }
 

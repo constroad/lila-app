@@ -1,6 +1,6 @@
 import { CONSTROAD } from './prompt.asfalto';
 import { GUION_ASFALTO, guionDe } from './guion.asfalto';
-import { interpretarRespuesta, leadDe, paso, resumenDe, senalesPorReglas, separarNombreEmpresa, validarExtraccion, type EstadoGuiado, type Extraccion } from './guiado';
+import { interpretarRespuesta, leadDe, paso, resumenDe, senalesPorReglas, separarNombreEmpresa, sinEmojis, validarExtraccion, type EstadoGuiado, type Extraccion } from './guiado';
 
 /**
  * EL FLUJO GUIADO, sin modelo: lo que Qwen habría extraído llega como dato y
@@ -283,6 +283,18 @@ describe('flujo guiado — la conversación del piloto (14/09), ahora con el gui
     expect(guionDe({ servicios: [{ id: 'venta', nombre: 'x', alias: 'x', preguntas: [{ campo: 'a', etiqueta: 'A', pregunta: '¿A?', tipo: 'opcion' }] }], cierre: [] })).toBe(GUION_ASFALTO); // opción sin opciones
     const propio = { servicios: [{ id: 'venta', nombre: 'mezcla', alias: '\\bmezcla\\b', preguntas: [{ campo: 'cantidad', etiqueta: 'Cantidad', pregunta: '¿Cuánto?', tipo: 'numero' }] }], cierre: [] };
     expect(guionDe(propio)).toBe(propio);
+  });
+
+  it('lo configurado en «Asistente» (A6) se usa: el saludo propio, el aviso fuera de horario y sin emojis', () => {
+    const sofia = { ...CONSTROAD, nombre: 'Asfaltos del Sur', asistente: 'Sofía', saludo: '¡Hola! Soy Sofía, de Asfaltos del Sur.', fueraDeHorario: 'Ahora estamos cerrados, pero te atiendo igual.', emojis: 'ninguno' as const };
+    let p = paso({}, validarExtraccion({}, 'hola'), sofia, null, false, 'hola');
+    expect(p.texto).toBe('¡Hola! Soy Sofía, de Asfaltos del Sur. Ahora estamos cerrados, pero te atiendo igual. ¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.');
+    p = paso({}, validarExtraccion({}, 'hola'), { ...sofia, fueraDeHorario: undefined }, null, true, 'hola');
+    expect(p.texto).toBe('¡Hola! Soy Sofía, de Asfaltos del Sur. ¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.');
+    // Sin saludo propio y sin emojis: el del guion, sin el 👋.
+    p = paso({}, validarExtraccion({}, 'hola'), { ...sofia, saludo: undefined, fueraDeHorario: undefined }, null, true, 'hola');
+    expect(p.texto).toBe('¡Hola! Soy Sofía, la asistente de Asfaltos del Sur. ¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.');
+    expect(sinEmojis('Solo puedo ayudarte con lo de asfalto 🙂 ¿En qué te ayudo?')).toBe('Solo puedo ayudarte con lo de asfalto ¿En qué te ayudo?');
   });
 
   it('todo en tuteo peruano', () => {

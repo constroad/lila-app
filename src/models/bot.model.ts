@@ -23,6 +23,12 @@ export interface IBotConfig {
   ownerNotifyTarget?: string;
   /** Guion de preguntas del agente de ventas (forma en `agent/ventas/guion.asfalto.ts`); ausente = default en código. */
   guion?: unknown;
+  /** Cómo se presenta Dali (forma en `agent/dali/asistente.ts` `PerfilAsistente`); ausente = el perfil del piloto. */
+  perfil?: unknown;
+  /** A quién y de qué se avisa (`AvisosAsistente`). */
+  avisos?: unknown;
+  /** Pausa del dueño desde el panel: hasta esta hora Dali no contesta a nadie. */
+  pausedUntil?: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -47,6 +53,9 @@ export const BotConfigSchema = new Schema<IBotConfig>(
     handoffPauseMinutes: { type: Number, default: 30 },
     ownerNotifyTarget: { type: String },
     guion: { type: Schema.Types.Mixed },
+    perfil: { type: Schema.Types.Mixed },
+    avisos: { type: Schema.Types.Mixed },
+    pausedUntil: { type: Date },
   },
   { collection: 'bot_configs', timestamps: true }
 );

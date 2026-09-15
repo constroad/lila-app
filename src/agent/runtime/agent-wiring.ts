@@ -15,6 +15,7 @@ import { JidRateLimiter } from './jid-rate-limit.js';
 import { saveInboundMessage, saveOutboundMessage } from './conversation.store.js';
 import type { AgentBotConfig, AgentInboundMessage, InboundRouterDeps } from './agent.types.js';
 import { atenderMensajeDelDueno, responderVentas } from '../ventas/index.js';
+import { destinoDeAvisos } from '../dali/asistente.js';
 
 interface AgentSocket {
   sendMessage(jid: string, content: { text: string }): Promise<unknown>;
@@ -78,6 +79,7 @@ async function resolveSessionContext(
     if (companyId) {
       const configModel = await getBotConfigModel();
       const stored = await configModel.findOne({ companyId }).lean();
+      const avisos = destinoDeAvisos(stored);
       botConfig = stored
         ? {
             enabled: Boolean(stored.enabled),
@@ -85,8 +87,12 @@ async function resolveSessionContext(
             greeting: stored.greeting,
             testNumbers: stored.testNumbers,
             handoffPauseMinutes: stored.handoffPauseMinutes,
-            ownerNotifyTarget: stored.ownerNotifyTarget,
+            ownerNotifyTarget: avisos.target,
+            notifyOn: avisos.casos,
             guion: stored.guion,
+            profile: stored.perfil,
+            companyName: (company as { name?: unknown } | null)?.name ? String((company as { name?: unknown }).name) : undefined,
+            pausedUntil: stored.pausedUntil ? new Date(stored.pausedUntil) : undefined,
           }
         : null;
     }

@@ -87,3 +87,53 @@ export interface ConversacionDetalle {
   mensajes: MensajeConversacion[];
   lead: LeadResumen | null;
 }
+
+/** A6 «Asistente» (`src/agent/dali/asistente.ts`). */
+export interface FranjaHoraria {
+  activo: boolean;
+  /** «08:00» */
+  desde: string;
+  hasta: string;
+}
+
+export interface HorarioAtencion {
+  semana: FranjaHoraria;
+  sabado: FranjaHoraria;
+  domingo: FranjaHoraria;
+}
+
+export interface ReglasAsistente {
+  sinPrecios: boolean;
+  sinPromesas: boolean;
+  escala: boolean;
+  zonaEstricta: boolean;
+}
+
+export interface PerfilAsistente {
+  asistente: string;
+  saludo: string;
+  tono: 'cercano' | 'formal';
+  emojis: 'pocos' | 'ninguno';
+  horario: HorarioAtencion;
+  fueraDeHorario: string;
+  zona: string;
+  reglas: ReglasAsistente;
+}
+
+export interface AvisosAsistente {
+  canal: 'grupo' | 'dueno';
+  numeroDueno: string;
+  casos: { leadNuevo: boolean; pideUrgente: boolean; fallo: boolean };
+}
+
+export interface Asistente {
+  enabled: boolean;
+  pausadoHasta?: string;
+  perfil: PerfilAsistente;
+  avisos: AvisosAsistente;
+  handoffPauseMinutes: number;
+  testNumbers: string[];
+  /** El JID del grupo de ventas conectado; vacío si no hay. */
+  ownerNotifyTarget: string;
+  empresa: { nombre: string; rubro: string; ciudad: string; numero: string };
+}

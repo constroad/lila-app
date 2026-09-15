@@ -13,6 +13,7 @@ const ChatsScreen = lazy(() => import('@/screens/chats/ChatsScreen').then((m) =>
 const ChatScreen = lazy(() => import('@/screens/chats/ChatScreen').then((m) => ({ default: m.ChatScreen })));
 const LeadsScreen = lazy(() => import('@/screens/leads/LeadsScreen').then((m) => ({ default: m.LeadsScreen })));
 const LeadScreen = lazy(() => import('@/screens/leads/LeadScreen').then((m) => ({ default: m.LeadScreen })));
+const AsistenteScreen = lazy(() => import('@/screens/asistente/AsistenteScreen').then((m) => ({ default: m.AsistenteScreen })));
 
 /** En móvil y tablet la conversación y el lead son pantallas enteras; en escritorio viven dentro de la lista. */
 const ChatMovil = () => (
@@ -109,24 +110,19 @@ export default function App() {
                   </Suspense>
                 }
               />
-              {[
-                '/asistente',
-                '/negocio',
-                '/servicios',
-                '/faq',
-                '/catalogo',
-                '/whatsapp',
-                '/probar',
-                '/equipo',
-                '/plan',
-                '/ajustes',
-                '/importar',
-                '/notificaciones',
-                '/reportes',
-                '/mas',
-              ].map((ruta) => (
-                <Route key={ruta} path={`${ruta}/*`} element={<PendienteScreen titulo={ruta.slice(1)} />} />
-              ))}
+              <Route
+                path="/asistente"
+                element={
+                  <Suspense fallback={null}>
+                    <AsistenteScreen />
+                  </Suspense>
+                }
+              />
+              {['/negocio', '/servicios', '/faq', '/catalogo', '/whatsapp', '/probar', '/equipo', '/plan', '/ajustes', '/importar', '/notificaciones', '/reportes', '/mas'].map(
+                (ruta) => (
+                  <Route key={ruta} path={`${ruta}/*`} element={<PendienteScreen titulo={ruta.slice(1)} />} />
+                )
+              )}
               <Route path="/" element={<Navigate to="/inicio" replace />} />
               <Route path="*" element={<Navigate to="/inicio" replace />} />
             </Route>

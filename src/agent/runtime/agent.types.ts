@@ -14,8 +14,16 @@ export interface AgentBotConfig {
   handoffPauseMinutes?: number;
   /** JID (grupo o persona) al que se avisan los leads y las escaladas. */
   ownerNotifyTarget?: string;
+  /** Qué avisar (A6 «Avisos»); ausente = todo. */
+  notifyOn?: { leadNuevo: boolean; pideUrgente: boolean; fallo: boolean };
   /** El guion de preguntas del vertical (`ventas/guion.asfalto.ts`); ausente = el default en código. */
   guion?: unknown;
+  /** Cómo se presenta la asistente (`dali/asistente.ts` `PerfilAsistente`); ausente = el perfil del piloto. */
+  profile?: unknown;
+  /** Con el que se presenta el guion; ausente = CONSTROAD. */
+  companyName?: string;
+  /** Pausa del dueño desde el panel: hasta entonces no se contesta a nadie. */
+  pausedUntil?: Date;
 }
 
 export interface AgentInboundMessage {
@@ -35,6 +43,7 @@ export type RouteOutcome =
   | 'non-text'
   | 'no-company'
   | 'bot-disabled'
+  | 'paused'
   | 'not-allowlisted'
   | 'rate-limited'
   | 'duplicate'

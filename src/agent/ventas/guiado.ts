@@ -444,6 +444,17 @@ export const paraGuardar = (guion: Guion, e: EstadoGuiado): Record<string, unkno
   return { ...e, ...sinVacios };
 };
 
+/** Un texto sin ningún emoji (A6 «Emojis: ninguno»), sin dejar dobles espacios. */
+export const sinEmojis = (texto: string): string => texto.replace(/ ?(?:\p{Extended_Pictographic}|\u200D|\uFE0F)+/gu, '').replace(/ {2,}/g, ' ').trim();
+
+/** El saludo de la primera vez: el configurado en «Asistente» (A6) o el del guion; fuera de horario, con su aviso. */
+const saludoDe = (negocio: NegocioAsfalto, cliente: ClienteParaGuiado | null, enHorario: boolean): string => {
+  const remate = negocio.emojis === 'ninguno' ? '.' : ' 👋';
+  const presentacion = negocio.saludo ? negocio.saludo : cliente ? `¡Hola, ${cliente.nombre}! Soy ${negocio.asistente}, de ${negocio.nombre}${remate}` : `¡Hola! Soy ${negocio.asistente}, la asistente de ${negocio.nombre}${remate}`;
+  const fuera = !enHorario && negocio.fueraDeHorario ? ` ${negocio.fueraDeHorario}` : '';
+  return `${presentacion}${fuera} `;
+};
+
 /**
  * Un paso del flujo: con lo que se sabía, el mensaje, lo que el modelo
  * extrajo y si el cliente ya es conocido, decide el estado nuevo y el texto.
@@ -456,6 +467,19 @@ export const paso = (
   enHorario: boolean,
   mensaje = '',
   guion: Guion = GUION_ASFALTO
+): PasoGuiado => {
+  const p = pasoGuiado(estado, x, negocio, cliente, enHorario, mensaje, guion);
+  return negocio.emojis === 'ninguno' ? { ...p, texto: sinEmojis(p.texto) } : p;
+};
+
+const pasoGuiado = (
+  estado: EstadoGuiado,
+  x: Extraccion,
+  negocio: NegocioAsfalto,
+  cliente: ClienteParaGuiado | null,
+  enHorario: boolean,
+  mensaje: string,
+  guion: Guion
 ): PasoGuiado => {
   const asesorCuando = enHorario ? 'hoy mismo' : `al abrir (${negocio.horario})`;
   const t = normalizar(mensaje);
@@ -520,7 +544,7 @@ export const paso = (
 
   const primeraVez = !e.saludado;
   e.saludado = true;
-  const saludo = primeraVez ? (cliente ? `¡Hola, ${cliente.nombre}! Soy ${negocio.asistente}, de ${negocio.nombre} 👋 ` : `¡Hola! Soy ${negocio.asistente}, la asistente de ${negocio.nombre} 👋 `) : '';
+  const saludo = primeraVez ? saludoDe(negocio, cliente, enHorario) : '';
   if (cliente) {
     if (!e.respuestas!.nombre) e.respuestas!.nombre = cliente.nombre;
     if (cliente.empresa && !e.empresa) e.empresa = cliente.empresa;

@@ -2,6 +2,7 @@ import { getBotConfigModel, getBotConversationMessageModel, getBotConversationMo
 import { getCompanyModel } from '../../database/models.js';
 import { quotaValidatorService } from '../../services/quota-validator.service.js';
 import { diaPeruano } from '../checklist/tiempo.js';
+import { pausada } from './asistente.js';
 import { leadDeConversacion, type LeadResumen } from './leads.js';
 import { miembrosDeEmpresa } from './miembros.js';
 
@@ -189,6 +190,7 @@ export const cargarInicio = async (companyId: string, usuario: { nombre: string;
     empresa: { companyId, nombre: texto(companyDoc?.name) || companyId, rubro: RUBRO[texto(config?.vertical)] ?? '', ciudad: texto((companyDoc?.contactInfo as Record<string, unknown> | undefined)?.city) },
     asistente: {
       encendido: Boolean(config?.enabled),
+      pausadoHasta: pausada(config, ahoraMs) ? new Date(config!.pausedUntil as Date).toISOString() : undefined,
       numero: texto(whatsappConfig.sender),
       ultimoMensajeHaceMin: minutosDesde(ultimoMensaje, ahoraMs),
       conectado: Boolean(texto(whatsappConfig.sender)),

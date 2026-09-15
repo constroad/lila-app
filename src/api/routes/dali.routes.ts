@@ -7,7 +7,8 @@ import { cabeceraCookie, cabeceraCookieBorrada, firmarSesion, requireDaliSession
 import { cargarInicio } from '../../agent/dali/inicio.js';
 import { cerrarConversacion, detalleDeConversacion, devolverConversacion, escribirAlCliente, listarConversaciones, tomarConversacion } from '../../agent/dali/conversaciones.js';
 import { ESTADOS_LEAD, agregarNotaALead, cambiarEstadoDeLead, detalleDeLead, listarLeads, type EstadoLead } from '../../agent/dali/leads.js';
-import { getBotConfigModel } from '../../database/bot.models.js';
+import { guardarAsistente, leerAsistente, minutosHastaManana, pausarAsistente, type CambiosAsistente } from '../../agent/dali/asistente.js';
+import { clearAgentSessionCache } from '../../agent/runtime/agent-wiring.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -58,12 +59,48 @@ router.get('/inicio', async (req: Request, res: Response) => {
   res.json(await cargarInicio(s.companyId, { nombre: s.name, rol: s.role }));
 });
 
+/** A6 «Asistente»: perfil, reglas, avisos, silencio al intervenir, números de prueba. */
+router.get('/asistente', async (req: Request, res: Response) => {
+  res.json(await leerAsistente(req.dali!.companyId));
+});
+
+const cambiosDelCuerpo = (cuerpo: unknown): CambiosAsistente => {
+  const b = (cuerpo ?? {}) as Record<string, unknown>;
+  return {
+    enabled: typeof b.enabled === 'boolean' ? b.enabled : undefined,
+    perfil: b.perfil && typeof b.perfil === 'object' ? (b.perfil as CambiosAsistente['perfil']) : undefined,
+    avisos: b.avisos && typeof b.avisos === 'object' ? (b.avisos as CambiosAsistente['avisos']) : undefined,
+    handoffPauseMinutes: typeof b.handoffPauseMinutes === 'number' ? b.handoffPauseMinutes : undefined,
+    testNumbers: Array.isArray(b.testNumbers) ? b.testNumbers.map(String) : undefined,
+  };
+};
+
+router.put('/asistente', async (req: Request, res: Response) => {
+  const asistente = await guardarAsistente(req.dali!.companyId, cambiosDelCuerpo(req.body), req.dali!.name);
+  // El runtime cachea la config 60 s: lo guardado vale en el siguiente mensaje.
+  clearAgentSessionCache();
+  res.json(asistente);
+});
+
 router.put('/asistente/estado', async (req: Request, res: Response) => {
-  const Config = await getBotConfigModel();
   const enabled = Boolean(req.body?.enabled);
-  await Config.updateOne({ companyId: req.dali!.companyId }, { $set: { enabled } });
+  const asistente = await guardarAsistente(req.dali!.companyId, { enabled }, req.dali!.name);
+  clearAgentSessionCache();
   logger.info(`[dali] ${req.dali!.name} ${enabled ? 'encendió' : 'apagó'} el asistente de ${req.dali!.companyId}`);
-  res.json({ ok: true, enabled });
+  res.json({ ok: true, enabled: asistente.enabled });
+});
+
+/** {minutos}: 30, 120, o 'manana' (hasta las 08:00 de Lima); 0 reanuda. */
+router.post('/asistente/pausa', async (req: Request, res: Response) => {
+  const pedido = req.body?.minutos;
+  const minutos = pedido === 'manana' ? minutosHastaManana() : Number(pedido);
+  if (!Number.isFinite(minutos) || minutos < 0) {
+    res.status(400).json({ error: 'Indica cuántos minutos, o «manana»' });
+    return;
+  }
+  const asistente = await pausarAsistente(req.dali!.companyId, minutos, req.dali!.name);
+  clearAgentSessionCache();
+  res.json(asistente);
 });
 
 router.get('/conversaciones', async (req: Request, res: Response) => {

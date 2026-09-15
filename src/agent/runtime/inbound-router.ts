@@ -67,6 +67,8 @@ export async function routeInboundMessage(
 
   const botConfig = await deps.getBotConfig(companyId);
   if (!botConfig || !botConfig.enabled) return 'bot-disabled';
+  // La pausa del panel («30 min», «hasta mañana»): ni se guarda ni se contesta.
+  if (botConfig.pausedUntil && botConfig.pausedUntil.getTime() > message.receivedAt.getTime()) return 'paused';
 
   // Un chat `@lid` no trae el número: se resuelve si se puede (grupos en
   // común); si no, el LID identifica al cliente igual y la allowlist del

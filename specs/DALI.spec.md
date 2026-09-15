@@ -256,9 +256,43 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
 - **Pantallas** (móvil/tablet/escritorio): P2 Entrar, P3 Código, A1 Inicio, A2
   Conversaciones (en escritorio, lista + chat + datos del lead en tres
   columnas), A3 Conversación, A4 Leads (tablero por estado y lista; en
-  escritorio, el lead elegido como panel a la derecha), A5 Lead. Las demás
-  responden «esta pantalla se está construyendo»; «Más» del móvil lista lo que
-  no cabe en la barra.
+  escritorio, el lead elegido como panel a la derecha), A5 Lead, **A6
+  Asistente** (abajo). Las demás responden «esta pantalla se está
+  construyendo»; «Más» del móvil lista lo que no cabe en la barra.
+- **A6 Asistente** (`ui/dali/src/screens/asistente/*`, comparada con
+  `A6-asistente.{MOBILE,TABLET,DESKTOP}.png`): estado y pausa (30 min, 2 h,
+  hasta mañana) al toque; identidad (nombre, saludo, tono, emojis), reglas
+  (precios, promesas, derivación, zona estricta + zona), horario (L–V, sábado,
+  domingo con horas cada media hora en 24 h; respuesta fuera de horario),
+  avisos (grupo conectado o número del dueño; qué casos), modo piloto
+  (`testNumbers`), y en tablet/escritorio la **vista previa** del primer
+  mensaje tal como saldría (`primerMensaje` espeja `saludoDe` de `guiado.ts`)
+  más el resumen de comportamiento. «Guardar cambios» va en la barra de
+  arriba (tablet y escritorio) y en un pie fijo (móvil); «Descartar» vuelve a
+  lo del servidor. La **barra superior** ahora la arma el cascarón con las
+  acciones que registra cada pantalla (`layout/barra.tsx`,
+  `useAccionesDeBarra`): las de configuración la muestran también en
+  escritorio, como en los diseños A6–A14; Chats/Leads siguen con la de tablet.
+  Piezas compartidas nuevas: `Interruptor` (antes privado de Inicio) y
+  `Segmentado`.
+  - **Backend** `src/agent/dali/asistente.ts` + rutas `GET/PUT /asistente`,
+    `POST /asistente/pausa` {minutos | 'manana' | 0}: `bot_configs.perfil`
+    (`PerfilAsistente`, con `reglas` adentro como dice §3), `bot_configs.avisos`,
+    `bot_configs.pausedUntil`. Todo lo guardado **lo usa el motor en el
+    siguiente mensaje** (`negocioDe` en `ventas/index.ts`, cache del runtime
+    invalidado al guardar): nombre de la asistente, saludo propio, aviso fuera
+    de horario, horario en horas (`enHorarioSegun`) y en texto, zona, nombre
+    de la empresa en los avisos; `emojis: 'ninguno'` los quita del guion
+    (`sinEmojis`); la pausa la corta el router (`'paused'`, sin persistir el
+    mensaje); `avisos.canal` decide el destino (grupo `ownerNotifyTarget` o
+    `numeroDueno@s.whatsapp.net`) y `avisos.casos` qué se avisa (lead, pide
+    persona, fallo). **Tono y reglas** se aplican solo en el prompt del modelo
+    grande (`promptAsfalto`): el guion guiado de Qwen habla de tú y cumple las
+    reglas siempre; la UI lo dice al pie de cada tarjeta. `greeting`/`tone`
+    viejos de `bot_configs` se heredan si no hay perfil.
+  - Tests: `asistente.test.ts` (perfil, avisos, destino, horario, negocio,
+    pausa), `guiado.test.ts` (saludo propio, fuera de horario, sin emojis),
+    `inbound-router.test.ts` (pausa).
 - **Backend** `src/agent/dali/*` + `src/api/routes/dali.routes.ts`:
   - **Sesión de prueba (decisión de José, 15/09: «no esperes un envío real de
     código, eso déjalo para el final»)**: el flujo de pantallas es el
@@ -301,13 +335,20 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
 - Cualquier miembro puede tomar/devolver/cerrar y escribir al cliente; el rol
   fino (§3 `bot_members.role`) se aplica cuando llegue Equipo (A16).
 
-**Sin verificar todavía:** tablet (768–1279) solo en el cascarón, no pantalla
-por pantalla; tema oscuro (tokens definidos, ninguna pantalla revisada en
-oscuro); `escribirAlCliente` de punta a punta (envía por WhatsApp: no se
-probó para no mandarle mensajes a nadie); PWA/instalable (F3 «done» lo pide).
+**Sin verificar todavía:** tema oscuro (tokens definidos, ninguna pantalla
+revisada en oscuro); `escribirAlCliente` de punta a punta (envía por
+WhatsApp: no se probó para no mandarle mensajes a nadie); PWA/instalable (F3
+«done» lo pide); en A6, el efecto real de una pausa y de un perfil distinto
+sobre una conversación de WhatsApp (se probó con tests y guardando/reanudando
+desde la pantalla contra la base, no con un mensaje del piloto); A6 en
+escritorio se miró en composición pero los clics se probaron en móvil (el
+navegador de la herramienta no mapea bien los clics con 1440 emulado); la
+barra superior en escritorio para Chats/Leads (A2 desktop la dibuja) queda
+para cuando se revisen esas pantallas.
 
-**Pendiente de F3:** P1, P4–P6, A6–A20, S1–S4, E1 con sus endpoints (§4);
-`dali.constroad.com` en el túnel (José); Lighthouse móvil.
+**Pendiente de F3:** P1, P4–P6, A7–A20, S1–S4, E1 con sus endpoints (§4);
+`dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
+«WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 
 ## 8) Riesgos y decisiones abiertas
 
