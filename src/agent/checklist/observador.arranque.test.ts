@@ -1,4 +1,4 @@
-import { esperarAlcance, paraOtraPersona } from './observador';
+import { citaAlBot, esperarAlcance, paraOtraPersona } from './observador';
 
 /**
  * EL HUECO DEL ARRANQUE. Las sesiones conectan de a una y la de inframaq —la
@@ -52,5 +52,16 @@ describe('paraOtraPersona', () => {
     expect(paraOtraPersona(con({ mentionedJid: ['188570740486215@lid', '244534046892225@lid'] }), bot)).toBe(false);
     expect(paraOtraPersona(con({}), bot)).toBe(false);
     expect(paraOtraPersona(undefined, bot)).toBe(false);
+  });
+});
+
+describe('citaAlBot', () => {
+  const bot = ['51949376824@s.whatsapp.net', '244534046892225@lid'];
+  const con = (contextInfo: Record<string, unknown>) => ({ extendedTextMessage: { text: 'x', contextInfo } }) as never;
+  it('responder (citar) a un mensaje del agente es hablarle; citar a otro, no', () => {
+    expect(citaAlBot(con({ stanzaId: '1', participant: '244534046892225@lid' }), bot)).toBe(true);
+    expect(citaAlBot(con({ stanzaId: '1', participant: '51949376824:3@s.whatsapp.net' }), bot)).toBe(true);
+    expect(citaAlBot(con({ stanzaId: '1', participant: '173066143440987@lid' }), bot)).toBe(false);
+    expect(citaAlBot(con({}), bot)).toBe(false);
   });
 });

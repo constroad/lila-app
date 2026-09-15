@@ -130,6 +130,12 @@ const mencionadosDe = (message: ContenidoEntrante | null | undefined): string[] 
  * cayeron como «pregunta dentro del hilo» y Lila contestó con el menú. Un
  * mensaje dirigido a otro nunca es una continuación.
  */
+/** ¿Este mensaje CITA (responde a) un mensaje del agente? Entonces es para el agente aunque no lo etiquete. */
+export const citaAlBot = (message: ContenidoEntrante | null | undefined, jidsBot: string[]): boolean => {
+  const citado = String(message?.extendedTextMessage?.contextInfo?.participant || '').replace(/:\d+@/, '@');
+  return Boolean(citado) && jidsBot.includes(citado);
+};
+
 export const paraOtraPersona = (message: ContenidoEntrante | null | undefined, jidsBot: string[]): boolean => {
   const esBot = (jid: string) => jidsBot.includes(String(jid || '').replace(/:\d+@/, '@'));
   const citado = String(message?.extendedTextMessage?.contextInfo?.participant || '');
@@ -238,12 +244,14 @@ export const observarParaChecklist = async (
               // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
               logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
             }
-            // Cualquier mensaje puede ser la respuesta a algo que el agente
-            // preguntó («la unidad 4», «2», «sí»), o la continuación de lo que
-            // esa persona preguntó hace un momento («¿y la 3?»). Nunca si le
-            // habla a otra persona.
-            if (paraOtraPersona(raw.message, await jidsPropios(bot))) return;
-            const fue = (await atenderEleccion(texto, quien, remoteJid, alcance)) || (await atenderContinuacion(texto, quien, remoteJid, alcance));
+            // Sin etiqueta, el agente atiende solo lo que le RESPONDEN: una
+            // cita a un mensaje suyo («¿y la 3?» respondiendo a su tabla), o la
+            // respuesta a algo que él preguntó («la unidad 4», «2», «sí»).
+            // José, 14/09: «mejor la gente debe responder cuando se le taguea».
+            const propios = await jidsPropios(bot);
+            if (paraOtraPersona(raw.message, propios)) return;
+            if (citaAlBot(raw.message, propios)) return atenderContinuacion(texto, quien, remoteJid, alcance, true);
+            const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
             if (!fue && /^\s*\d{1,2}\s*$/.test(texto) && esVoto(texto)) {
               await atenderVoto({ voto: texto, citaMsgId: '', quien }, alcance);
             }
@@ -278,11 +286,12 @@ export const observarParaChecklist = async (
               // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
               logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
             }
-            // «La unidad 4», «2», «sí»: la respuesta a algo que el agente preguntó;
-            // «¿y la 3?»: la continuación de lo que esa persona preguntó recién.
-            // Nunca si le habla a otra persona (cita o menciona a alguien más).
-            if (paraOtraPersona(raw.message, await jidsPropios(bot))) return;
-            (await atenderEleccion(texto, quien, remoteJid, alcance)) || (await atenderContinuacion(texto, quien, remoteJid, alcance));
+            // Sin etiqueta, solo lo que le RESPONDEN: una cita a un mensaje suyo
+            // o la respuesta a algo que él preguntó. Nunca si le habla a otro.
+            const propios = await jidsPropios(bot);
+            if (paraOtraPersona(raw.message, propios)) return;
+            if (citaAlBot(raw.message, propios)) return atenderContinuacion(texto, quien, remoteJid, alcance, true);
+            await atenderEleccion(texto, quien, remoteJid, alcance);
           })
           .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
       }

@@ -145,6 +145,13 @@ export const rangoDe = (pregunta: string, hoy: string): { desde: string; hasta: 
   // pedidos programados sí, así que el rango completo sirve a los dos.
   if (/\b(esta|de la|de esta|la|en la) semana\b/.test(t) || /\bsemana\b/.test(t)) return { desde: lunes, hasta: sumarDias(lunes, 6) };
   if (/\b(proximos|estos) dias\b/.test(t)) return { desde: hoy, hasta: sumarDias(hoy, 7) };
+  // UN DÍA CONCRETO GANA AL MES: «el despacho de mañana martes 15 de
+  // septiembre» se leía como «de septiembre» → el mes entero, y Globofast
+  // recibió la tabla de los 15 pedidos del mes por su pedido de mañana (14/09,
+  // 18:23). «mañana», «pasado mañana», «el martes», «15 de septiembre», «15/09».
+  if (/\bmanana\b/.test(t) && !/\bpasado manana\b/.test(t)) return { desde: sumarDias(hoy, 1), hasta: sumarDias(hoy, 1) };
+  const dia = fechaDe(pregunta, Date.UTC(y, m - 1, d, 17));
+  if (dia) return { desde: dia, hasta: dia };
   const mes = MESES.findIndex((nombre) => new RegExp(`\\b(en|de|del) (mes de )?${nombre === 'septiembre' ? 'se[pt]?tiembre' : nombre}\\b`).test(t));
   if (mes >= 0) {
     // «en agosto» es el agosto más reciente: el de este año si ya empezó, si no el del año pasado.

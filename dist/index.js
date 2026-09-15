@@ -13198,6 +13198,9 @@ var init_herramientas2 = __esm({
       if (/\bsemana pasada\b/.test(t44)) return { desde: sumarDias(lunes, -7), hasta: sumarDias(lunes, -1) };
       if (/\b(esta|de la|de esta|la|en la) semana\b/.test(t44) || /\bsemana\b/.test(t44)) return { desde: lunes, hasta: sumarDias(lunes, 6) };
       if (/\b(proximos|estos) dias\b/.test(t44)) return { desde: hoy, hasta: sumarDias(hoy, 7) };
+      if (/\bmanana\b/.test(t44) && !/\bpasado manana\b/.test(t44)) return { desde: sumarDias(hoy, 1), hasta: sumarDias(hoy, 1) };
+      const dia = fechaDe(pregunta, Date.UTC(y65, m59 - 1, d67, 17));
+      if (dia) return { desde: dia, hasta: dia };
       const mes = MESES2.findIndex((nombre) => new RegExp(`\\b(en|de|del) (mes de )?${nombre === "septiembre" ? "se[pt]?tiembre" : nombre}\\b`).test(t44));
       if (mes >= 0) {
         const anio = mes + 1 <= m59 ? y65 : y65 - 1;
@@ -14712,6 +14715,10 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
           logger_default.info(`[agente] consulta impl\xEDcita de ${quien} sin ruta cierta, se deja pasar: \xAB${pregunta}\xBB`);
           return;
         }
+        if (!respuesta && (!clave2 || clave2 === "help") && porRegla !== "help" && !pareceParaElAgente(pregunta)) {
+          logger_default.info(`[agente] menci\xF3n de ${quien} que no es pregunta ni pedido, se deja pasar: \xAB${pregunta}\xBB`);
+          return;
+        }
         respuesta = respuesta ?? await armarRespuesta(clave2, pregunta, quien, grupo, extra);
         if (clave2) recordarConsulta({ quien, grupo, clave: clave2, pregunta });
         logger_default.info(`[agente] consulta de ${quien}: \xAB${preguntaLimpia(texto4, numeroBot)}\xBB \u2192 ${clave2 ?? (respuesta ? "datos" : "none")}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
@@ -14722,15 +14729,14 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         await dejarDeEscribir(grupo);
       }
     };
-    atenderContinuacion = async (texto4, quien, grupo, alcance) => {
+    atenderContinuacion = async (texto4, quien, grupo, alcance, citaAlAgente = false) => {
+      if (!citaAlAgente) return false;
       const ultima = ultimaConsulta(quien, grupo);
-      if (!ultima) return false;
       const regla = rutearPorReglas(preguntaLimpia(texto4));
-      if (pareceContinuacion(texto4) || regla && regla !== "help") {
+      if (ultima && pareceContinuacion(texto4) || regla && regla !== "help") {
         await atenderConsulta(`@lila ${texto4}`, quien, grupo, alcance);
         return true;
       }
-      if (!pareceParaElAgente(texto4)) return false;
       await atenderConsulta(`@lila ${texto4}`, quien, grupo, alcance, void 0, { implicita: true });
       return true;
     };
@@ -14753,7 +14759,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
 });
 
 // src/agent/checklist/observador.ts
-var ALCANCE_TTL_MS, alcanceCache, _resetAlcanceCache, alcanceVigente, esperarAlcance, esDelBot, senderCache, senderPilotoCacheado, mencionadosDe, paraOtraPersona, vistos, yaVisto, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, jidsPropios, senderPiloto, jidPorNombre;
+var ALCANCE_TTL_MS, alcanceCache, _resetAlcanceCache, alcanceVigente, esperarAlcance, esDelBot, senderCache, senderPilotoCacheado, mencionadosDe, citaAlBot, paraOtraPersona, vistos, yaVisto, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, jidsPropios, senderPiloto, jidPorNombre;
 var init_observador = __esm({
   "src/agent/checklist/observador.ts"() {
     init_logger();
@@ -14808,6 +14814,10 @@ var init_observador = __esm({
       return valor;
     };
     mencionadosDe = (message) => (message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []).map(String);
+    citaAlBot = (message, jidsBot) => {
+      const citado = String(message?.extendedTextMessage?.contextInfo?.participant || "").replace(/:\d+@/, "@");
+      return Boolean(citado) && jidsBot.includes(citado);
+    };
     paraOtraPersona = (message, jidsBot) => {
       const esBot = (jid) => jidsBot.includes(String(jid || "").replace(/:\d+@/, "@"));
       const citado = String(message?.extendedTextMessage?.contextInfo?.participant || "");
@@ -14865,8 +14875,10 @@ var init_observador = __esm({
               if (/lila/i.test(texto4)) {
                 logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto4.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
-              if (paraOtraPersona(raw.message, await jidsPropios(bot))) return;
-              const fue = await atenderEleccion2(texto4, quien, remoteJid, alcance) || await atenderContinuacion2(texto4, quien, remoteJid, alcance);
+              const propios = await jidsPropios(bot);
+              if (paraOtraPersona(raw.message, propios)) return;
+              if (citaAlBot(raw.message, propios)) return atenderContinuacion2(texto4, quien, remoteJid, alcance, true);
+              const fue = await atenderEleccion2(texto4, quien, remoteJid, alcance);
               if (!fue && /^\s*\d{1,2}\s*$/.test(texto4) && esVoto(texto4)) {
                 await atenderVoto({ voto: texto4, citaMsgId: "", quien }, alcance);
               }
@@ -14890,8 +14902,10 @@ var init_observador = __esm({
               if (/lila/i.test(texto4)) {
                 logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto4.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
-              if (paraOtraPersona(raw.message, await jidsPropios(bot))) return;
-              await atenderEleccion2(texto4, quien, remoteJid, alcance) || await atenderContinuacion2(texto4, quien, remoteJid, alcance);
+              const propios = await jidsPropios(bot);
+              if (paraOtraPersona(raw.message, propios)) return;
+              if (citaAlBot(raw.message, propios)) return atenderContinuacion2(texto4, quien, remoteJid, alcance, true);
+              await atenderEleccion2(texto4, quien, remoteJid, alcance);
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
           }
           const ahora = Date.now();

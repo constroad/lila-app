@@ -105,6 +105,12 @@ describe('rangoDe', () => {
     ['los pedidos en setiembre', { desde: '2026-09-01', hasta: '2026-09-30' }],
     ['los pedidos de noviembre', { desde: '2025-11-01', hasta: '2025-11-30' }], // todavía no llegó: el del año pasado
     ['los pedidos de febrero', { desde: '2026-02-01', hasta: '2026-02-28' }],
+    // Un día concreto gana al mes (14/09, 18:23: Globofast recibió el mes entero por «el despacho de mañana»).
+    ['ya fue creado el despacho de mañana martes 15 de septiembre?', { desde: '2026-09-15', hasta: '2026-09-15' }],
+    ['el pedido de mañana ya está creado?', { desde: '2026-09-15', hasta: '2026-09-15' }],
+    ['qué hay pasado mañana', { desde: '2026-09-16', hasta: '2026-09-16' }],
+    ['los pedidos del 20 de septiembre', { desde: '2026-09-20', hasta: '2026-09-20' }],
+    ['qué se despacha el jueves', { desde: '2026-09-17', hasta: '2026-09-17' }],
     ['los pedidos', undefined],
   ])('«%s»', (pregunta, esperado) => {
     expect(rangoDe(pregunta, hoy)).toEqual(esperado);

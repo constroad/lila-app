@@ -423,6 +423,14 @@ export const atenderConsulta = async (
       logger.info(`[agente] consulta implícita de ${quien} sin ruta cierta, se deja pasar: «${pregunta}»`);
       return;
     }
+    // Etiquetada pero hablando DE ella, no CON ella («…la vayamos entrenando a
+    // @lila», «eso no puede responder @lila 😅», 14/09 18:27): no es pregunta
+    // ni pedido, ninguna regla la entendió y el modelo cayó en `help`. Silencio;
+    // el menú sale solo con «ayuda» o ante una pregunta que no se entendió.
+    if (!respuesta && (!clave || clave === 'help') && porRegla !== 'help' && !pareceParaElAgente(pregunta)) {
+      logger.info(`[agente] mención de ${quien} que no es pregunta ni pedido, se deja pasar: «${pregunta}»`);
+      return;
+    }
     respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo, extra));
     if (clave) recordarConsulta({ quien, grupo, clave, pregunta });
     logger.info(`[agente] consulta de ${quien}: «${preguntaLimpia(texto, numeroBot)}» → ${clave ?? (respuesta ? 'datos' : 'none')}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
@@ -435,29 +443,27 @@ export const atenderConsulta = async (
 };
 
 /**
- * Un mensaje SIN @lila de alguien que preguntó hace un momento: si parece una
- * continuación, se atiende como tal. Es lo que hace que «¿y la 3?» funcione.
+ * Un mensaje SIN @lila que RESPONDE (cita) a un mensaje del agente: se atiende
+ * como si lo etiquetara —«¿y la 3?» citando su tabla funciona—, en silencio si
+ * no se entiende. Sin cita no hay continuación: el 14/09 (18:11 y 18:27) los
+ * mensajes de José a otras personas, un minuto después de preguntarle algo,
+ * caían como «pregunta dentro del hilo» y Lila contestaba con el menú. José:
+ * «mejor la gente debe responder cuando se le taguea @lila o el número».
  */
 export const atenderContinuacion = async (
   texto: string,
   quien: string,
   grupo: string,
-  alcance: AlcanceAgente
+  alcance: AlcanceAgente,
+  citaAlAgente = false
 ): Promise<boolean> => {
+  if (!citaAlAgente) return false;
   const ultima = ultimaConsulta(quien, grupo);
-  if (!ultima) return false;
-  // Tres formas de seguir hablando sin volver a etiquetar al agente: un cambio
-  // de dato («¿y la 3?»), una consulta nueva que las REGLAS reconocen con
-  // certeza («ahora el resumen de líquidos»), o una PREGUNTA («¿hay
-  // programación esta semana?»). La pregunta va por todo el camino —modelo
-  // incluido— pero en silencio si no se entiende: dentro del hilo es casi
-  // seguro para el agente, y «casi» no alcanza para contestar «no lo tengo».
   const regla = rutearPorReglas(preguntaLimpia(texto));
-  if (pareceContinuacion(texto) || (regla && regla !== 'help')) {
+  if ((ultima && pareceContinuacion(texto)) || (regla && regla !== 'help')) {
     await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance);
     return true;
   }
-  if (!pareceParaElAgente(texto)) return false;
   await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance, undefined, { implicita: true });
   return true;
 };
