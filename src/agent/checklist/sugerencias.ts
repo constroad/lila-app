@@ -58,8 +58,15 @@ export const _resetPropuestas = (): void => {
 };
 
 /** Rehidratación desde la persistencia al arrancar. Reemplaza lo que haya. */
-export const hidratarPropuestas = (guardadas: Propuesta[]): void => {
+/**
+ * Al rehidratar, lo pendiente que YA venció se marca vencido en silencio y se
+ * devuelve para persistirlo: el 14/09 (21:20 y 21:40) cada reinicio volvía a
+ * «vencer» las mismas tres propuestas y a avisarlo en error tracking, porque el
+ * vencimiento solo vivía en memoria.
+ */
+export const hidratarPropuestas = (guardadas: Propuesta[], ahoraMs = Date.now()): Propuesta[] => {
   propuestas = [...guardadas].sort((a, b) => a.creadaMs - b.creadaMs).slice(-MAX_PROPUESTAS);
+  return expirar(ahoraMs);
 };
 
 const expirar = (ahoraMs: number): Propuesta[] => {

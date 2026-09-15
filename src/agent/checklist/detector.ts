@@ -117,10 +117,15 @@ export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => 
   const alcance = await alcanceVigente(ahoraMs);
   if (!alcance.grupoEscuchado) return 0;
 
-  // Lo que venció sin respuesta se dice: si no, una propuesta ignorada se
-  // confunde con una aprobada.
-  for (const vencida of vencidasAhora(ahoraMs)) {
-    await enviarAOperaciones(`⌛ Venció sin respuesta la propuesta para «${vencida.nombreDestino}» (${vencida.tipo}). No se mandó.`);
+  // Lo que venció sin respuesta se dice UNA vez y en una línea (si no, una
+  // propuesta ignorada se confunde con una aprobada), y se persiste vencido
+  // para que un reinicio no lo vuelva a vencer.
+  const vencidas = vencidasAhora(ahoraMs).filter((p) => p.destino);
+  for (const vencida of vencidas) void guardarPropuesta(vencida);
+  if (vencidas.length) {
+    const NOMBRE: Record<string, string> = { 'aviso-planta': 'aviso a planta', 'checklist-planta': 'checklist de planta', 'checklist-admin': 'checklist', 'aviso-mencion': 'aviso previo a planta', 'recordatorio-pedido': 'recordatorio de pedido' };
+    const lista = vencidas.map((p) => `${NOMBRE[p.tipo] ?? p.tipo} (${p.nombreDestino})`).join(', ');
+    await enviarAOperaciones(`⌛ Sin respuesta en 6 h, no se mandó: ${lista}.`);
   }
 
   const pedidos = await pedidosConArranque(ahoraMs);

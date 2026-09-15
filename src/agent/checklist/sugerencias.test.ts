@@ -127,11 +127,23 @@ describe('vigencia, repetición y memoria', () => {
   });
 
   it('rehidratar reemplaza la memoria con lo guardado, y las citas siguen funcionando', () => {
-    hidratarPropuestas([
-      { ...base, id: 'guardada', creadaMs: 1_000, estado: 'pendiente', msgId: 'MSG-G' },
-    ]);
+    hidratarPropuestas([{ ...base, id: 'guardada', creadaMs: 1_000, estado: 'pendiente', msgId: 'MSG-G' }], 2_000);
 
     expect(porMensaje('MSG-G')?.id).toBe('guardada');
     expect(decidir({ voto: '1', citaMsgId: 'MSG-G', ...admin }, 2_000).ok).toBe(true);
+  });
+
+  // 14/09, 21:20 y 21:40: cada reinicio volvía a «vencer» las mismas tres propuestas y lo avisaba.
+  it('rehidratar vence en silencio lo que ya venció, y lo devuelve para persistirlo; después ya no «vence» otra vez', () => {
+    const vencidas = hidratarPropuestas(
+      [
+        { ...base, id: 'vieja', creadaMs: 0, estado: 'pendiente' },
+        { ...base, id: 'fresca', firma: 'otra', creadaMs: VIGENCIA_MS, estado: 'pendiente' },
+      ],
+      VIGENCIA_MS + 1
+    );
+    expect(vencidas.map((p) => p.id)).toEqual(['vieja']);
+    expect(vencidas[0].estado).toBe('vencida');
+    expect(vencidasAhora(VIGENCIA_MS + 2).map((p) => p.id)).toEqual([]);
   });
 });

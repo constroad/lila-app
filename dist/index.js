@@ -10487,8 +10487,9 @@ var init_sugerencias = __esm({
     _resetPropuestas = () => {
       propuestas = [];
     };
-    hidratarPropuestas = (guardadas) => {
+    hidratarPropuestas = (guardadas, ahoraMs = Date.now()) => {
       propuestas = [...guardadas].sort((a49, b63) => a49.creadaMs - b63.creadaMs).slice(-MAX_PROPUESTAS);
+      return expirar(ahoraMs);
     };
     expirar = (ahoraMs) => {
       const vencidas = [];
@@ -14626,8 +14627,12 @@ var init_detector = __esm({
       }
       const alcance = await alcanceVigente(ahoraMs);
       if (!alcance.grupoEscuchado) return 0;
-      for (const vencida of vencidasAhora(ahoraMs)) {
-        await enviarAOperaciones(`\u231B Venci\xF3 sin respuesta la propuesta para \xAB${vencida.nombreDestino}\xBB (${vencida.tipo}). No se mand\xF3.`);
+      const vencidas = vencidasAhora(ahoraMs).filter((p64) => p64.destino);
+      for (const vencida of vencidas) void guardarPropuesta(vencida);
+      if (vencidas.length) {
+        const NOMBRE = { "aviso-planta": "aviso a planta", "checklist-planta": "checklist de planta", "checklist-admin": "checklist", "aviso-mencion": "aviso previo a planta", "recordatorio-pedido": "recordatorio de pedido" };
+        const lista = vencidas.map((p64) => `${NOMBRE[p64.tipo] ?? p64.tipo} (${p64.nombreDestino})`).join(", ");
+        await enviarAOperaciones(`\u231B Sin respuesta en 6 h, no se mand\xF3: ${lista}.`);
       }
       const pedidos = await pedidosConArranque(ahoraMs);
       const dias = agruparPorDia(pedidos);
@@ -15433,6 +15438,7 @@ var init_observador = __esm({
           return;
         }
         const propuesta = resultado.propuesta;
+        void guardarPropuesta(propuesta);
         if (propuesta.estado === "descartada") {
           logger_default.info(`[agente] propuesta ${propuesta.id} (${propuesta.tipo}) descartada por ${args.quien}`);
           await avisar2(`\u{1F5D1} Descartado. No se mand\xF3 a \xAB${propuesta.nombreDestino}\xBB.`);
@@ -15484,7 +15490,7 @@ var init_observador = __esm({
           cargarConfig("interruptor")
         ]);
         hidratarMensajes(mensajes2);
-        hidratarPropuestas(propuestas3);
+        for (const vencida of hidratarPropuestas(propuestas3, ahoraMs)) void guardarPropuesta(vencida);
         hidratarInterruptor(interruptor);
         logger_default.info(
           `[agente] memoria rehidratada: ${mensajes2.length} mensaje(s), ${propuestas3.length} propuesta(s), interruptor ${interruptor?.apagado ? "APAGADO" : "prendido"}`

@@ -15,7 +15,7 @@ import { decidir, esVoto, hidratarPropuestas, type MotivoRechazo } from './suger
 import { avisarEnGrupo, enviarAOperaciones, enviarAprobado } from './emisor.js';
 import { cargarAprobadores, esAdmin, esAprobador } from './aprobadores.js';
 import { apagar, comandoInterruptor, encender, estadoInterruptor, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
-import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje } from './persistencia.js';
+import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje, guardarPropuesta } from './persistencia.js';
 import { VENTANA_MS } from './almacen.js';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
 import { findOutgoingMessage } from '../../whatsapp/baileys/outgoing-messages.js';
@@ -362,6 +362,7 @@ const atenderVoto = async (
       return;
     }
     const propuesta = resultado.propuesta;
+    void guardarPropuesta(propuesta);
     if (propuesta.estado === 'descartada') {
       logger.info(`[agente] propuesta ${propuesta.id} (${propuesta.tipo}) descartada por ${args.quien}`);
       await avisar(`🗑 Descartado. No se mandó a «${propuesta.nombreDestino}».`);
@@ -430,7 +431,9 @@ export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
       cargarConfig<EstadoInterruptor>('interruptor'),
     ]);
     hidratarMensajes(mensajes);
-    hidratarPropuestas(propuestas);
+    // Lo pendiente que ya venció mientras el proceso no corría se marca vencido
+    // y se persiste, sin avisar: avisar es para lo que vence estando vivo.
+    for (const vencida of hidratarPropuestas(propuestas, ahoraMs)) void guardarPropuesta(vencida);
     hidratarInterruptor(interruptor);
     logger.info(
       `[agente] memoria rehidratada: ${mensajes.length} mensaje(s), ${propuestas.length} propuesta(s), ` +
