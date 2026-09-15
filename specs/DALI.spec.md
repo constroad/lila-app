@@ -236,6 +236,79 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
 | S4 | Admin · Salud | `/admin/salud` | `admin/salud` | proceso, sesiones, modelo |
 | E1 | Estados (vacíos, error, carga, banners, diálogos, toasts, offline) | — | — | componentes compartidos |
 
+## 7-bis) Estado de implementación (as-is al 15/09/2026)
+
+**Hecho y desplegado** (`31fc3aa`…`ccf7750`, lila `6075ff0`+):
+
+- **UI** en `ui/dali` (Vite 8 + React 19 + Tailwind v4 + shadcn/radix, fuentes
+  fontsource y Material Symbols autoalojados: cero red en runtime). Se compila
+  en `build.js` de lila (`npm ci --include=dev` porque el deploy corre con
+  `NODE_ENV=production`; si la UI no compila, lila igual se despliega y `/dali`
+  responde 404 «no compilada»). Servida por lila en **`/dali/`** (`src/api/dali-ui.ts`,
+  `DALI_HOSTS = ['dali.constroad.com']` redirige `/` → `/dali/`). El túnel para
+  `dali.constroad.com` sigue pendiente de José (§2.1, paso 3); mientras tanto,
+  `https://lila.constroad.com/dali/`.
+- **Diseños**: el HTML de Stitch de las 93 pantallas en `ui/dali/design/html`;
+  las capturas a resolución completa (39 MB) fuera del repo, en
+  `~/.cache/lila-app/dali-design/shots` (cómo bajarlas: `ui/dali/design/README.md`).
+  Cada pantalla se construyó con su captura abierta y se comparó por
+  composición (skill `constroad-premium-ui` §0).
+- **Pantallas** (móvil/tablet/escritorio): P2 Entrar, P3 Código, A1 Inicio, A2
+  Conversaciones (en escritorio, lista + chat + datos del lead en tres
+  columnas), A3 Conversación, A4 Leads (tablero por estado y lista; en
+  escritorio, el lead elegido como panel a la derecha), A5 Lead. Las demás
+  responden «esta pantalla se está construyendo»; «Más» del móvil lista lo que
+  no cabe en la barra.
+- **Backend** `src/agent/dali/*` + `src/api/routes/dali.routes.ts`:
+  - **Sesión de prueba (decisión de José, 15/09: «no esperes un envío real de
+    código, eso déjalo para el final»)**: el flujo de pantallas es el
+    definitivo (`auth/codigo` → `auth/verificar` → cookie `dali_session`,
+    JWT de lila con `app: 'dali'`, 14 días, `HttpOnly`, `Secure` detrás de
+    https), pero sin constroad-auth (F2) **el código de seis cifras no viaja:
+    queda en el log de lila** (`[dali] código de acceso para <identidad> (…): 123456`)
+    y quien opera lila se lo pasa a la persona. Vale 10 min y un solo uso;
+    cinco intentos lo queman; a quien no es miembro se le contesta igual que a
+    quien sí. Rate limit 10/min por IP en `auth/*`. En F2 lo único que cambia
+    es el canal.
+  - `bot_members` (`miembros.ts`): identidad (teléfono sin «+» o correo) →
+    empresa y rol. Semilla por `scripts/dali-miembro.ts`; hoy José (celular y
+    correo) como `owner` de `constroad`.
+  - `inicio.ts`: métricas de hoy vs ayer por día peruano, «piden atención»
+    (escaladas, con el último mensaje del cliente y chips del lead), últimos
+    leads, plan (uso real de `subscription.usage.whatsappMessages`; límite −1
+    = sin límite). `conversaciones.ts`: lista (con el último mensaje en un
+    solo aggregate), detalle, tomar (pausa de handoff del runtime), devolver,
+    cerrar, escribir al cliente (sale por la sesión de la empresa y pausa a
+    Dali). `leads.ts`: `bot_leads` (estado, cotización, notas, historial) por
+    conversación; el lead se lee juntando `bot_conversations.lead` (lo que dijo
+    el cliente) y el trabajo del dueño.
+  - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
+    identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
+    lead). Suite completa en verde (913 + 333).
+- **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
+  → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
+  sin sesión → 401.
+
+**Decisiones tomadas al construir:**
+- P2 en Stitch usa `slate` + `brand`; el resto del sistema usa `stone` +
+  `teal`. Se unificó en `stone`/`teal` (los tokens del design system mandan).
+- Las «variantes» que Stitch dibuja debajo de una pantalla (P2 «variante
+  correo», P3 «enlace mágico») son estados de la misma pantalla, no tarjetas:
+  se implementan como estado (método WhatsApp/correo).
+- Los nombres de servicio del guion son minúsculas y con paréntesis
+  («asfaltado (colocación)»); en títulos van en oración y sin paréntesis
+  («Asfaltado 600 m² · Lurín»).
+- Cualquier miembro puede tomar/devolver/cerrar y escribir al cliente; el rol
+  fino (§3 `bot_members.role`) se aplica cuando llegue Equipo (A16).
+
+**Sin verificar todavía:** tablet (768–1279) solo en el cascarón, no pantalla
+por pantalla; tema oscuro (tokens definidos, ninguna pantalla revisada en
+oscuro); `escribirAlCliente` de punta a punta (envía por WhatsApp: no se
+probó para no mandarle mensajes a nadie); PWA/instalable (F3 «done» lo pide).
+
+**Pendiente de F3:** P1, P4–P6, A6–A20, S1–S4, E1 con sus endpoints (§4);
+`dali.constroad.com` en el túnel (José); Lighthouse móvil.
+
 ## 8) Riesgos y decisiones abiertas
 
 - **Dominio y marca:** piloto en `dali.constroad.com` (§2.1); el dominio
