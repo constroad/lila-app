@@ -19,6 +19,7 @@ import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarM
 import { VENTANA_MS } from './almacen.js';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
 import { findOutgoingMessage } from '../../whatsapp/baileys/outgoing-messages.js';
+import { preguntaLimpia } from '../consultas/catalogo.js';
 
 /**
  * El oído del agente: mira los mensajes del grupo piloto y NADA MÁS.
@@ -227,36 +228,11 @@ export const observarParaChecklist = async (
           await atenderInterruptor(comando, quien, remoteJid, alcance);
           continue;
         }
-        // Un voto cita una propuesta; una elección es un número suelto tras una
-        // pregunta del agente. El voto se prueba primero: si cita, es voto.
-        if (esVoto(texto) && citaDe(raw.message)) {
-          await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance);
-          continue;
-        }
+        // Un voto cita una PROPUESTA. Si cita otra cosa (la pregunta «¿lo
+        // genero? 1/2/3» del agente), no es voto y sigue a las consultas.
+        if (esVoto(texto) && citaDe(raw.message) && (await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance))) continue;
         // Las consultas también se atienden acá: es nuestro grupo (José, 13/09).
-        void import('../consultas/index.js')
-          .then(async ({ esConsulta, atenderConsulta, atenderEleccion, atenderContinuacion }) => {
-            const bot = await senderPilotoCacheado();
-            if (esConsulta(texto, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
-              return atenderConsulta(texto, quien, remoteJid, alcance, bot);
-            }
-            if (/lila/i.test(texto)) {
-              // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
-              logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
-            }
-            // Sin etiqueta, el agente atiende solo lo que le RESPONDEN: una
-            // cita a un mensaje suyo («¿y la 3?» respondiendo a su tabla), o la
-            // respuesta a algo que él preguntó («la unidad 4», «2», «sí»).
-            // José, 14/09: «mejor la gente debe responder cuando se le taguea».
-            const propios = await jidsPropios(bot);
-            if (paraOtraPersona(raw.message, propios)) return;
-            if (citaAlBot(raw.message, propios)) return atenderContinuacion(texto, quien, remoteJid, alcance, true);
-            const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
-            if (!fue && /^\s*\d{1,2}\s*$/.test(texto) && esVoto(texto)) {
-              await atenderVoto({ voto: texto, citaMsgId: '', quien, origen: remoteJid }, alcance);
-            }
-          })
-          .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
+        void atenderComoConsulta(raw, texto, quien, remoteJid, alcance, { votosSueltos: true });
         continue;
       }
 
@@ -278,28 +254,9 @@ export const observarParaChecklist = async (
         }
         // Las propuestas ahora se publican acá (José, 14/09): el voto —«1» o
         // «3» citando la propuesta— también se atiende acá, y solo de un admin.
-        if (esVoto(texto) && citaDe(raw.message)) {
-          await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance);
-          continue;
-        }
-        void import('../consultas/index.js')
-          .then(async ({ esConsulta, atenderConsulta, atenderEleccion, atenderContinuacion }) => {
-            const bot = await senderPilotoCacheado();
-            if (esConsulta(texto, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
-              return atenderConsulta(texto, quien, remoteJid, alcance, bot);
-            }
-            if (/lila/i.test(texto)) {
-              // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
-              logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
-            }
-            // Sin etiqueta, solo lo que le RESPONDEN: una cita a un mensaje suyo
-            // o la respuesta a algo que él preguntó. Nunca si le habla a otro.
-            const propios = await jidsPropios(bot);
-            if (paraOtraPersona(raw.message, propios)) return;
-            if (citaAlBot(raw.message, propios)) return atenderContinuacion(texto, quien, remoteJid, alcance, true);
-            await atenderEleccion(texto, quien, remoteJid, alcance);
-          })
-          .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
+        // Si lo citado no es una propuesta, no es voto: sigue a las consultas.
+        if (esVoto(texto) && citaDe(raw.message) && (await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance))) continue;
+        void atenderComoConsulta(raw, texto, quien, remoteJid, alcance, { votosSueltos: false });
       }
 
       const ahora = Date.now();
@@ -337,10 +294,66 @@ export const observarParaChecklist = async (
  *
  * Nunca lanza: cuelga del listener de Baileys.
  */
+/** Un mensaje corto —un número, «sí», «la 4», una placa— es la respuesta a una pregunta, no una consulta nueva. */
+const RESPUESTA_CORTA_PALABRAS = 3;
+
+/**
+ * LO QUE LE DICEN AL AGENTE, en este orden:
+ *
+ * 1. La respuesta a algo que él preguntó («¿lo genero? 1/2/3», «¿de cuál
+ *    unidad?», «¿sí?»): con o sin `@lila`, con o sin cita. El 15/09 a las 09:12
+ *    «@ConstRoad 3» se tomó por una consulta nueva y volvió a preguntar, y «3»
+ *    citando la pregunta se tomó por un voto; el enlace nunca se generó. Solo
+ *    si el mensaje es corto: «@lila qué pedidos hay hoy» con una pregunta
+ *    pendiente sigue siendo una consulta.
+ * 2. Una consulta etiquetada (`@lila …`, el número, la mención).
+ * 3. Sin etiqueta, solo lo que le RESPONDEN: una cita a un mensaje suyo («¿y la
+ *    3?» respondiendo a su tabla) o la respuesta a una pregunta suya (larga).
+ *    Nunca si le habla a otra persona (José, 14/09: «mejor la gente debe
+ *    responder cuando se le taguea»).
+ * 4. En operaciones, un número suelto puede ser un voto sin cita.
+ */
+export const atenderComoConsulta = async (
+  raw: { message?: unknown },
+  texto: string,
+  quien: string,
+  remoteJid: string,
+  alcance: AlcanceAgente,
+  opciones: { votosSueltos: boolean }
+): Promise<void> => {
+  try {
+    const { esConsulta, atenderConsulta, atenderEleccion, atenderContinuacion } = await import('../consultas/index.js');
+    const bot = await senderPilotoCacheado();
+    const propios = await jidsPropios(bot);
+    const mensaje = raw.message as ContenidoEntrante | null | undefined;
+    if (paraOtraPersona(mensaje, propios)) return;
+    const limpio = preguntaLimpia(texto, bot);
+    if (limpio.split(/\s+/).filter(Boolean).length <= RESPUESTA_CORTA_PALABRAS && (await atenderEleccion(limpio, quien, remoteJid, alcance))) return;
+    if (esConsulta(texto, bot, mencionadosDe(mensaje), propios)) {
+      await atenderConsulta(texto, quien, remoteJid, alcance, bot);
+      return;
+    }
+    if (/lila/i.test(texto)) {
+      // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
+      logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(mensaje), bot, jidsBot: propios })}`);
+    }
+    if (citaAlBot(mensaje, propios)) {
+      await atenderContinuacion(texto, quien, remoteJid, alcance, true);
+      return;
+    }
+    const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
+    if (!fue && opciones.votosSueltos && /^\s*\d{1,2}\s*$/.test(texto) && esVoto(texto)) {
+      await atenderVoto({ voto: texto, citaMsgId: '', quien, origen: remoteJid }, alcance);
+    }
+  } catch (error) {
+    logger.warn(`[agente] consulta no atendida: ${String(error)}`);
+  }
+};
+
 const atenderVoto = async (
   args: { voto: string; citaMsgId: string; quien: string; origen?: string },
   alcance: AlcanceAgente
-): Promise<void> => {
+): Promise<boolean> => {
   // Se contesta donde se votó: en INFRAMAQ admin o en operaciones.
   const origen = args.origen || GROUP_ERRORS_TRACKING;
   const avisar = (texto: string) => avisarEnGrupo(origen, texto, alcance);
@@ -348,6 +361,10 @@ const atenderVoto = async (
     const aprobador = await esAprobador(args.quien, Date.now(), origen);
     const resultado = decidir({ ...args, esAprobador: aprobador });
     if (resultado.ok === false) {
+      // Un número que cita algo que NO es una propuesta —la pregunta «¿lo genero?
+      // 1/2/3» del agente— no es un voto: es la respuesta a esa pregunta, y le
+      // toca a las consultas (15/09, 09:12: «3» citando la pregunta se ignoró).
+      if (resultado.motivo === 'cita-desconocida' || resultado.motivo === 'sin-cita' || resultado.motivo === 'no-es-voto') return false;
       const explicacion: Record<MotivoRechazo, string> = {
         'sin-cita': 'sin citar ninguna propuesta: se ignora',
         'cita-desconocida': 'citando un mensaje que no es una propuesta: se ignora',
@@ -359,14 +376,14 @@ const atenderVoto = async (
       if (resultado.motivo === 'no-aprobador') {
         await avisar(origen === GROUP_ERRORS_TRACKING ? '🔒 Solo quien está en este grupo puede aprobar o descartar.' : '🔒 Solo un administrador de este grupo puede aprobar o descartar.');
       }
-      return;
+      return true;
     }
     const propuesta = resultado.propuesta;
     void guardarPropuesta(propuesta);
     if (propuesta.estado === 'descartada') {
       logger.info(`[agente] propuesta ${propuesta.id} (${propuesta.tipo}) descartada por ${args.quien}`);
       await avisar(`🗑 Descartado. No se mandó a «${propuesta.nombreDestino}».`);
-      return;
+      return true;
     }
     const enviada = await enviarAprobado(propuesta, alcance);
     for (const superada of cerrarSuperadas(propuesta)) void guardarPropuesta(superada);
@@ -375,12 +392,14 @@ const atenderVoto = async (
         ? `✅ Enviado a «${propuesta.nombreDestino}».`
         : `⛔ No se pudo mandar a «${propuesta.nombreDestino}»: revisá el log de lila.`
     );
+    return true;
   } catch (error) {
     logger.warn(
       `[agente] no pude atender el voto «${args.voto}» de ${args.quien}: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
+    return true;
   }
 };
 
