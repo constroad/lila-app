@@ -85,10 +85,13 @@ export const construirAvisoChecklist = (
     const pendientes = pendientesDe(dominio);
     const resueltos = revision.resueltos.filter((r) => r.domain === dominio);
     const encabezado = ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio]);
+    // Cómo se confirma, con ejemplos de lo que falta (Globofast, 14/09, 20:58: «¿cómo se confirma?»).
+    const ejemplos = pendientes.slice(0, 2).map((i) => `«${i.titulo} ok»`).join(', ');
     return [
       `${encabezado} — ${fechaLegible(contexto.fecha)} · ${quienes}${contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''} · ${cuando}`,
       `Por confirmar: ${pendientes.map((i) => i.titulo).join(' · ')}`,
       ...(resueltos.length ? [`✔ ${resueltos.map((r) => r.titulo).join(', ')}`] : []),
+      `Confirmen aquí mismo, ítem por ítem: ${ejemplos}.`,
     ].join('\n');
   }
 

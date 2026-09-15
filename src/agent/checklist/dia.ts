@@ -74,14 +74,18 @@ export const firmaDia = (dia: DiaDePlanta): string =>
  * LOS HORARIOS DE REVISIÓN, que son horarios y no reglas de máquina. José,
  * 13/09: «¿cada qué tiempo lo vas a enviar?» — la respuesta anterior era «cuando
  * cambia lo que falta, máximo 3, y re-propone a las 6 h», que es por lo que un
- * checklist llegó a las 00:40 para una producción de las 04:00.
+ * checklist llegó a las 00:40 para una producción de las 04:00. Y el 14/09
+ * (21:00): «debería llegar uno en la mañana y otro en la tarde, no queremos
+ * apanar todo el día con el mismo mensaje».
  *
- *   inicial        → 16:00 del día anterior: la revisión completa.
- *   recordatorio   → 20:00 del día anterior: solo lo que sigue sin confirmar.
- *   ultima-llamada → 2 h antes del arranque: solo lo crítico.
+ *   inicial        → 10:00 del día anterior: la revisión completa.
+ *   recordatorio   → 17:00 del día anterior: solo lo que sigue sin confirmar.
+ *   ultima-llamada → 2 h antes del arranque, solo lo crítico, y solo si cae
+ *                    entre las 06:00 y las 22:00: a las 02:30 nadie lee, y la
+ *                    reunión de las 04:00 ya está coordinada desde la tarde.
  *
  * Un pedido creado después de un horario dispara ese horario en el acto (es
- * el caso del 07/09: pedido a medianoche para las 04:00 → última llamada).
+ * el caso del 07/09: pedido a medianoche para las 04:00 → recordatorio).
  */
 export type Momento = 'inicial' | 'recordatorio' | 'ultima-llamada';
 
@@ -90,12 +94,19 @@ const diaAnterior = (fecha: string): string => {
   return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
 };
 
+/** Entre las 06:00 y las 22:00 de Lima. */
+export const enHorasDeGente = (ms: number): boolean => {
+  const hora = Number(new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', hour: '2-digit', hour12: false }).format(new Date(ms)));
+  return hora >= 6 && hora < 22;
+};
+
 export const momentosDelDia = (dia: DiaDePlanta): Array<{ momento: Momento; ms: number }> => {
   const anterior = diaAnterior(dia.fecha);
+  const ultima = dia.arranqueMs - 2 * 3_600_000;
   const momentos: Array<{ momento: Momento; ms: number }> = [
-    { momento: 'inicial', ms: instanteArranque(anterior, '16:00') ?? dia.arranqueMs - 12 * 3_600_000 },
-    { momento: 'recordatorio', ms: instanteArranque(anterior, '20:00') ?? dia.arranqueMs - 8 * 3_600_000 },
-    { momento: 'ultima-llamada', ms: dia.arranqueMs - 2 * 3_600_000 },
+    { momento: 'inicial', ms: instanteArranque(anterior, '10:00') ?? dia.arranqueMs - 18 * 3_600_000 },
+    { momento: 'recordatorio', ms: instanteArranque(anterior, '17:00') ?? dia.arranqueMs - 11 * 3_600_000 },
+    ...(enHorasDeGente(ultima) ? [{ momento: 'ultima-llamada' as const, ms: ultima }] : []),
   ];
   return momentos
     .filter((m) => m.ms < dia.arranqueMs)

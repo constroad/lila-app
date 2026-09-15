@@ -238,12 +238,19 @@ export const normalizarTexto = (texto: string): string =>
  * a medir contra mensajes reales; no es una apuesta a que las palabras clave
  * alcanzan, es el punto de partida contra el que se compara cualquier modelo.
  */
+/**
+ * Además de sus frases, todo ítem se confirma con su NOMBRE más «ok», «listo»,
+ * «confirmado» o «coordinado» («cuadrilla ok», «tren de asfalto listo»): es lo
+ * que el recordatorio propone como ejemplo (Globofast, 14/09: «¿cómo se
+ * confirma?»), así que tiene que funcionar tal cual.
+ */
+const REMATES_DE_CONFIRMACION = ['ok', 'okey', 'listo', 'lista', 'listos', 'listas', 'confirmado', 'confirmada', 'coordinado', 'coordinada', 'hecho', 'hecha', 'asegurado', 'asegurada'];
+
 export const itemSatisfecho = (item: ChecklistItem, mensajes: string[]): boolean => {
   const dichos = mensajes.map(normalizarTexto);
-  return item.seSatisfaceCon.some((frase) => {
-    const clave = normalizarTexto(frase);
-    return dichos.some((dicho) => dicho.includes(clave));
-  });
+  const titulo = normalizarTexto(item.titulo);
+  const porNombre = REMATES_DE_CONFIRMACION.map((r) => `${titulo} ${r}`);
+  return [...item.seSatisfaceCon.map(normalizarTexto), ...porNombre].some((clave) => dichos.some((dicho) => dicho.includes(clave)));
 };
 
 export interface EstadoItem {

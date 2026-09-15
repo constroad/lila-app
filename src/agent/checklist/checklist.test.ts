@@ -182,6 +182,7 @@ describe('el aviso al grupo de operaciones', () => {
       '📋 *Planta, por confirmar* — domingo 13/09 · 04:00 Globofast 91 m³ · 07:00 Constroad 45 m³ · total 136 m³ · arranca en 4 h',
       'Por confirmar: agregados · petróleo de planta · aviso a operadores · mantenimiento o riesgos · clima',
       '✔ gasohol',
+      'Confirmen aquí mismo, ítem por ítem: «agregados ok», «petróleo de planta ok».',
     ]);
     const campo = construirAvisoChecklist(r, contexto, 'obra')!;
     expect(campo).toContain('📋 *Campo, por confirmar* — domingo 13/09');
@@ -280,5 +281,17 @@ describe('la firma del aviso', () => {
     const r = evaluarRevision(CHECKLIST_PRODUCCION, []);
     expect(firmaAviso('2026-09-13', 'inicial', r)).not.toBe(firmaAviso('2026-09-13', 'recordatorio', r));
     expect(firmaAviso('2026-09-13', 'inicial', r)).not.toBe(firmaAviso('2026-09-14', 'inicial', r));
+  });
+});
+
+describe('confirmar por el nombre del ítem (Globofast, 14/09: «¿cómo se confirma?»)', () => {
+  it('«cuadrilla ok», «tren de asfalto listo», «comidas en campo coordinadas» confirman; «cuadrilla?» no', async () => {
+    const { itemSatisfecho, CHECKLIST_PRODUCCION } = await import('./checklist');
+    const de = (titulo: string) => CHECKLIST_PRODUCCION.find((i) => i.titulo === titulo)!;
+    expect(itemSatisfecho(de('cuadrilla'), ['cuadrilla ok'])).toBe(true);
+    expect(itemSatisfecho(de('tren de asfalto'), ['Tren de asfalto listo 👍'])).toBe(true);
+    expect(itemSatisfecho(de('comidas en campo'), ['comidas en campo coordinadas'])).toBe(true);
+    expect(itemSatisfecho(de('imprimación / riego de liga'), ['imprimación / riego de liga ok'])).toBe(true);
+    expect(itemSatisfecho(de('cuadrilla'), ['cuadrilla?', 'y la cuadrilla'])).toBe(false);
   });
 });

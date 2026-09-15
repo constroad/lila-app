@@ -57,25 +57,32 @@ describe('los horarios', () => {
   const [dia] = agruparPorDia([pedido({ id: 'g' })]);
   const lima = (fecha: string, hora: string) => instanteArranque(fecha, hora)!;
 
-  it('para las 04:00 del domingo: sábado 16:00, sábado 20:00 y domingo 02:00', () => {
+  // José, 14/09: uno en la mañana y otro en la tarde; la última llamada de
+  // las 02:00 no la lee nadie y la reunión de las 04:00 ya está coordinada.
+  it('para las 04:00 del domingo: sábado 10:00 y sábado 17:00; la última llamada de las 02:00 no existe', () => {
     expect(momentosDelDia(dia).map((m) => [m.momento, new Date(m.ms).toISOString()])).toEqual([
-      ['inicial', new Date(lima('2026-09-12', '16:00')).toISOString()],
-      ['recordatorio', new Date(lima('2026-09-12', '20:00')).toISOString()],
-      ['ultima-llamada', new Date(lima('2026-09-13', '02:00')).toISOString()],
+      ['inicial', new Date(lima('2026-09-12', '10:00')).toISOString()],
+      ['recordatorio', new Date(lima('2026-09-12', '17:00')).toISOString()],
     ]);
   });
 
-  it('antes de las 16:00 no toca nada: silencio', () => {
-    expect(momentoVigente(dia, lima('2026-09-12', '10:00'))).toBeNull();
+  it('para las 10:00 del domingo sí hay última llamada a las 08:00', () => {
+    const [manana] = agruparPorDia([pedido({ id: 'm', hora: '10:00', arranqueMs: lima('2026-09-13', '10:00') })]);
+    expect(momentosDelDia(manana).map((m) => m.momento)).toEqual(['inicial', 'recordatorio', 'ultima-llamada']);
+    expect(momentoVigente(manana, lima('2026-09-13', '08:30'))).toBe('ultima-llamada');
+  });
+
+  it('antes de las 10:00 no toca nada: silencio', () => {
+    expect(momentoVigente(dia, lima('2026-09-12', '09:00'))).toBeNull();
   });
 
   it('a cada hora le corresponde el último horario que pasó', () => {
-    expect(momentoVigente(dia, lima('2026-09-12', '16:20'))).toBe('inicial');
-    expect(momentoVigente(dia, lima('2026-09-12', '19:59'))).toBe('inicial');
-    expect(momentoVigente(dia, lima('2026-09-12', '20:00'))).toBe('recordatorio');
-    // El caso del 07/09: pedido a medianoche para las 04:00 → última llamada.
+    expect(momentoVigente(dia, lima('2026-09-12', '10:20'))).toBe('inicial');
+    expect(momentoVigente(dia, lima('2026-09-12', '16:59'))).toBe('inicial');
+    expect(momentoVigente(dia, lima('2026-09-12', '17:00'))).toBe('recordatorio');
+    // El caso del 07/09: pedido a medianoche para las 04:00 → el recordatorio de la tarde, en el acto.
     expect(momentoVigente(dia, lima('2026-09-13', '00:40'))).toBe('recordatorio');
-    expect(momentoVigente(dia, lima('2026-09-13', '02:30'))).toBe('ultima-llamada');
+    expect(momentoVigente(dia, lima('2026-09-13', '02:30'))).toBe('recordatorio');
   });
 
   it('después del arranque no se pregunta nada', () => {
@@ -83,9 +90,8 @@ describe('los horarios', () => {
     expect(momentoVigente(dia, lima('2026-09-13', '05:00'))).toBeNull();
   });
 
-  it('una producción a las 20:00 no tiene «recordatorio a las 20:00 del día anterior» después del arranque', () => {
+  it('una producción a las 08:00 tiene los tres horarios: 10:00 y 17:00 del sábado y 06:00 del domingo', () => {
     const [temprano] = agruparPorDia([pedido({ id: 'x', hora: '08:00', arranqueMs: lima('2026-09-13', '08:00') })]);
-    // 16:00 y 20:00 del sábado son antes de las 08:00 del domingo: valen los tres.
     expect(momentosDelDia(temprano)).toHaveLength(3);
   });
 });

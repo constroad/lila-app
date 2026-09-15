@@ -14,6 +14,7 @@ import {
   firmaAviso,
 } from './aviso.js';
 import { enviarAOperaciones, publicarPropuesta, responderEnGrupo } from './emisor.js';
+import { guardarPropuesta } from './persistencia.js';
 import {
   _resetPropuestas,
   pendientes,
@@ -273,8 +274,13 @@ const proponerRevisionDelDia = async (
       },
       ahoraMs
     );
-    // Marca del horario, independiente de lo pendiente: ver arriba.
-    proponer({ ...propuesta, firma: marca, texto: '', destino: '', nombreDestino: '' }, ahoraMs).estado = 'descartada';
+    // Marca del horario, independiente de lo pendiente: ver arriba. SE
+    // PERSISTE, como la pregunta directa: el 14/09 a las 21:00 el checklist de
+    // campo salió dos veces en 20 min porque un deploy en el medio reinició la
+    // memoria y la marca solo vivía ahí.
+    const marcador = proponer({ ...propuesta, firma: marca, texto: '', destino: '', nombreDestino: '' }, ahoraMs);
+    marcador.estado = 'descartada';
+    void guardarPropuesta(marcador);
 
     if (aPlanta) {
       await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
@@ -283,6 +289,7 @@ const proponerRevisionDelDia = async (
       propuesta.estado = enviado ? 'aprobada' : 'descartada';
       propuesta.decididaPor = 'agente';
       propuesta.decididaMs = ahoraMs;
+      void guardarPropuesta(propuesta);
     }
     presupuesto.restantes -= 1;
     nuevas += 1;
@@ -426,6 +433,7 @@ const proponerPorMenciones = async (
   propuesta.estado = enviado ? 'aprobada' : 'descartada';
   propuesta.decididaPor = 'agente';
   propuesta.decididaMs = ahoraMs;
+  void guardarPropuesta(propuesta);
   presupuesto.restantes -= 1;
   logger.info(`[agente] recordatorio ${propuesta.id}: pedidos sin hora por ${todas.length} mención(es) → «${propuesta.nombreDestino}»`);
   return 1;

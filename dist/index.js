@@ -10280,7 +10280,7 @@ var init_agent_wiring = __esm({
 });
 
 // src/agent/checklist/checklist.ts
-var VENCE_TARDE_ANTERIOR, CHECKLIST_PLANTA, CHECKLIST_CAMPO, CHECKLIST_PRODUCCION, normalizarTexto, itemSatisfecho;
+var VENCE_TARDE_ANTERIOR, CHECKLIST_PLANTA, CHECKLIST_CAMPO, CHECKLIST_PRODUCCION, normalizarTexto, REMATES_DE_CONFIRMACION, itemSatisfecho;
 var init_checklist = __esm({
   "src/agent/checklist/checklist.ts"() {
     VENCE_TARDE_ANTERIOR = 12 * 60;
@@ -10435,12 +10435,12 @@ var init_checklist = __esm({
     ];
     CHECKLIST_PRODUCCION = [...CHECKLIST_PLANTA, ...CHECKLIST_CAMPO];
     normalizarTexto = (texto5) => String(texto5 || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+    REMATES_DE_CONFIRMACION = ["ok", "okey", "listo", "lista", "listos", "listas", "confirmado", "confirmada", "coordinado", "coordinada", "hecho", "hecha", "asegurado", "asegurada"];
     itemSatisfecho = (item, mensajes2) => {
       const dichos = mensajes2.map(normalizarTexto);
-      return item.seSatisfaceCon.some((frase) => {
-        const clave2 = normalizarTexto(frase);
-        return dichos.some((dicho) => dicho.includes(clave2));
-      });
+      const titulo = normalizarTexto(item.titulo);
+      const porNombre = REMATES_DE_CONFIRMACION.map((r39) => `${titulo} ${r39}`);
+      return [...item.seSatisfaceCon.map(normalizarTexto), ...porNombre].some((clave2) => dichos.some((dicho) => dicho.includes(clave2)));
     };
   }
 });
@@ -14230,10 +14230,12 @@ var init_aviso = __esm({
         const pendientes3 = pendientesDe(dominio);
         const resueltos = revision.resueltos.filter((r39) => r39.domain === dominio);
         const encabezado = ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio]);
+        const ejemplos = pendientes3.slice(0, 2).map((i50) => `\xAB${i50.titulo} ok\xBB`).join(", ");
         return [
           `${encabezado} \u2014 ${fechaLegible(contexto.fecha)} \xB7 ${quienes}${contexto.pedidos.length > 1 ? ` \xB7 total ${contexto.totalCubos} m\xB3` : ""} \xB7 ${cuando}`,
           `Por confirmar: ${pendientes3.map((i50) => i50.titulo).join(" \xB7 ")}`,
-          ...resueltos.length ? [`\u2714 ${resueltos.map((r39) => r39.titulo).join(", ")}`] : []
+          ...resueltos.length ? [`\u2714 ${resueltos.map((r39) => r39.titulo).join(", ")}`] : [],
+          `Confirmen aqu\xED mismo, \xEDtem por \xEDtem: ${ejemplos}.`
         ].join("\n");
       }
       const lineas = [`${ENCABEZADO[contexto.momento]} \u2014 ${fechaLegible(contexto.fecha)}`, `${quienes}${contexto.pedidos.length > 1 ? ` \xB7 total ${contexto.totalCubos} m\xB3` : ""} \xB7 ${cuando}`];
@@ -14295,7 +14297,7 @@ var init_aviso = __esm({
 });
 
 // src/agent/checklist/dia.ts
-var agruparPorDia, firmaDia, diaAnterior, momentosDelDia, momentoVigente;
+var agruparPorDia, firmaDia, diaAnterior, enHorasDeGente, momentosDelDia, momentoVigente;
 var init_dia = __esm({
   "src/agent/checklist/dia.ts"() {
     init_tiempo();
@@ -14321,12 +14323,17 @@ var init_dia = __esm({
       const [y65, m59, d67] = fecha.split("-").map(Number);
       return new Date(Date.UTC(y65, m59 - 1, d67 - 1)).toISOString().slice(0, 10);
     };
+    enHorasDeGente = (ms2) => {
+      const hora3 = Number(new Intl.DateTimeFormat("es-PE", { timeZone: "America/Lima", hour: "2-digit", hour12: false }).format(new Date(ms2)));
+      return hora3 >= 6 && hora3 < 22;
+    };
     momentosDelDia = (dia) => {
       const anterior = diaAnterior(dia.fecha);
+      const ultima = dia.arranqueMs - 2 * 36e5;
       const momentos = [
-        { momento: "inicial", ms: instanteArranque(anterior, "16:00") ?? dia.arranqueMs - 12 * 36e5 },
-        { momento: "recordatorio", ms: instanteArranque(anterior, "20:00") ?? dia.arranqueMs - 8 * 36e5 },
-        { momento: "ultima-llamada", ms: dia.arranqueMs - 2 * 36e5 }
+        { momento: "inicial", ms: instanteArranque(anterior, "10:00") ?? dia.arranqueMs - 18 * 36e5 },
+        { momento: "recordatorio", ms: instanteArranque(anterior, "17:00") ?? dia.arranqueMs - 11 * 36e5 },
+        ...enHorasDeGente(ultima) ? [{ momento: "ultima-llamada", ms: ultima }] : []
       ];
       return momentos.filter((m59) => m59.ms < dia.arranqueMs).sort((a49, b63) => a49.ms - b63.ms);
     };
@@ -14538,6 +14545,7 @@ var init_detector = __esm({
     init_semantica();
     init_aviso();
     init_emisor();
+    init_persistencia();
     init_sugerencias();
     init_dia();
     init_tiempo();
@@ -14695,7 +14703,9 @@ var init_detector = __esm({
           },
           ahoraMs
         );
-        proponer({ ...propuesta, firma: marca, texto: "", destino: "", nombreDestino: "" }, ahoraMs).estado = "descartada";
+        const marcador = proponer({ ...propuesta, firma: marca, texto: "", destino: "", nombreDestino: "" }, ahoraMs);
+        marcador.estado = "descartada";
+        void guardarPropuesta(marcador);
         if (aPlanta) {
           await publicarPropuesta(propuesta, conPiePropuesta(texto5, propuesta.nombreDestino), alcance);
         } else {
@@ -14703,6 +14713,7 @@ var init_detector = __esm({
           propuesta.estado = enviado ? "aprobada" : "descartada";
           propuesta.decididaPor = "agente";
           propuesta.decididaMs = ahoraMs;
+          void guardarPropuesta(propuesta);
         }
         presupuesto.restantes -= 1;
         nuevas += 1;
@@ -14799,6 +14810,7 @@ var init_detector = __esm({
       propuesta.estado = enviado ? "aprobada" : "descartada";
       propuesta.decididaPor = "agente";
       propuesta.decididaMs = ahoraMs;
+      void guardarPropuesta(propuesta);
       presupuesto.restantes -= 1;
       logger_default.info(`[agente] recordatorio ${propuesta.id}: pedidos sin hora por ${todas.length} menci\xF3n(es) \u2192 \xAB${propuesta.nombreDestino}\xBB`);
       return 1;
