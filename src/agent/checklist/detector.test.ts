@@ -97,3 +97,16 @@ it('el presupuesto de avisos es conservador en F1', () => {
   // más. Tres por día de producción, y solo si el texto cambió.
   expect(MAX_AVISOS_POR_DIA).toBe(3);
 });
+
+describe('enHorarioDeOficina — las menciones se recuerdan cuando la gente carga pedidos', () => {
+  it('de 08:00 a 19:00 en Lima, y no a las 20:40 ni a las 3', async () => {
+    const { enHorarioDeOficina } = await import('./detector');
+    const lima = (hora: number) => Date.UTC(2026, 8, 14, hora + 5, 40); // Lima = UTC-5
+    expect(enHorarioDeOficina(lima(8))).toBe(true);
+    expect(enHorarioDeOficina(lima(15))).toBe(true);
+    expect(enHorarioDeOficina(lima(18))).toBe(true);
+    expect(enHorarioDeOficina(lima(19))).toBe(false);
+    expect(enHorarioDeOficina(lima(20))).toBe(false);
+    expect(enHorarioDeOficina(lima(3))).toBe(false);
+  });
+});

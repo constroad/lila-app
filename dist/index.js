@@ -14226,24 +14226,32 @@ var init_aviso = __esm({
       const faltan = contexto.minutosParaArranque;
       const cuando = faltan >= 0 ? `arranca en ${duracion(faltan)}` : `arranc\xF3 hace ${duracion(faltan)}`;
       const quienes = contexto.pedidos.map((p64) => `${p64.hora} ${p64.empresa} ${p64.cubos} m\xB3`).join(" \xB7 ");
-      const encabezado = dominio ? ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio].toLowerCase()) : ENCABEZADO[contexto.momento];
-      const lineas = [`${encabezado} \u2014 ${fechaLegible(contexto.fecha)}`, `${quienes}${contexto.pedidos.length > 1 ? ` \xB7 total ${contexto.totalCubos} m\xB3` : ""} \xB7 ${cuando}`];
+      if (dominio) {
+        const pendientes3 = pendientesDe(dominio);
+        const resueltos = revision.resueltos.filter((r39) => r39.domain === dominio);
+        const encabezado = ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio]);
+        return [
+          `${encabezado} \u2014 ${fechaLegible(contexto.fecha)} \xB7 ${quienes}${contexto.pedidos.length > 1 ? ` \xB7 total ${contexto.totalCubos} m\xB3` : ""} \xB7 ${cuando}`,
+          `Por confirmar: ${pendientes3.map((i50) => i50.titulo).join(" \xB7 ")}`,
+          ...resueltos.length ? [`\u2714 ${resueltos.map((r39) => r39.titulo).join(", ")}`] : []
+        ].join("\n");
+      }
+      const lineas = [`${ENCABEZADO[contexto.momento]} \u2014 ${fechaLegible(contexto.fecha)}`, `${quienes}${contexto.pedidos.length > 1 ? ` \xB7 total ${contexto.totalCubos} m\xB3` : ""} \xB7 ${cuando}`];
       for (const d67 of dominios) {
         const pendientes3 = pendientesDe(d67);
         if (pendientes3.length === 0) continue;
-        lineas.push("", dominio ? "Sin confirmar:" : `*${TITULO[d67]}* \u2014 sin confirmar:`);
+        lineas.push("", `*${TITULO[d67]}* \u2014 sin confirmar:`);
         lineas.push(...pendientes3.map((i50) => `\u2022 ${i50.pregunta}`));
       }
-      const resueltos = dominio ? revision.resueltos.filter((r39) => r39.domain === dominio) : revision.resueltos;
-      if (resueltos.length > 0) {
-        lineas.push("", `Ya confirmado: ${resueltos.map((r39) => r39.titulo).join(", ")} \u2714`);
+      if (revision.resueltos.length > 0) {
+        lineas.push("", `Ya confirmado: ${revision.resueltos.map((r39) => r39.titulo).join(", ")} \u2714`);
       }
       return lineas.join("\n");
     };
     ENCABEZADO_DOMINIO = {
-      inicial: (parte) => `\u{1F4CB} *Checklist de ${parte}*`,
-      recordatorio: (parte) => `\u23F0 *${parte[0].toUpperCase()}${parte.slice(1)} \u2014 sigue sin confirmar*`,
-      "ultima-llamada": (parte) => `\u{1F6A8} *${parte[0].toUpperCase()}${parte.slice(1)} \u2014 \xFAltima llamada, falta lo cr\xEDtico*`
+      inicial: (parte) => `\u{1F4CB} *${parte}, por confirmar*`,
+      recordatorio: (parte) => `\u23F0 *${parte}, sigue sin confirmar*`,
+      "ultima-llamada": (parte) => `\u{1F6A8} *${parte}, \xFAltima llamada*`
     };
     construirAvisoProduccion = (dia, opciones = {}) => {
       const titulo = opciones.actualizacion ? `\u{1F501} *Producci\xF3n de ${fechaLegible(dia.fecha)} \u2014 actualizaci\xF3n*` : `\u{1F4E2} *Producci\xF3n programada \u2014 ${fechaLegible(dia.fecha)}*`;
@@ -14273,13 +14281,7 @@ var init_aviso = __esm({
       for (const [id, p64] of a49) if (!b63.has(id)) frases.push(`se cae *${p64.empresa}* (${p64.hora})`);
       return frases.length ? `Cambio: ${frases.join("; ")}.` : "";
     };
-    conPiePropuesta = (texto5, nombreDestino) => [
-      `\u{1F4E8} *Propuesta para \xAB${nombreDestino}\xBB*`,
-      "Para enviarlo: mant\xE9n presionado este mensaje \u2192 *Responder* \u2192 *1*",
-      "Para descartar: igual, con *3*",
-      "",
-      texto5
-    ].join("\n");
+    conPiePropuesta = (texto5, nombreDestino) => [texto5, "", `\u{1F4E8} Para \xAB${nombreDestino}\xBB: mant\xE9n presionado este mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar.`].join("\n");
     firmaAviso = (fecha, momento, revision) => `${fecha}|${momento}|${revision.pendientes.map((i50) => i50.id).sort().join(",")}`;
   }
 });
@@ -14508,13 +14510,14 @@ __export(detector_exports, {
   _resetMenciones: () => _resetMenciones,
   correrDeteccion: () => correrDeteccion,
   diaPeruano: () => diaPeruano,
+  enHorarioDeOficina: () => enHorarioDeOficina,
   instanteArranque: () => instanteArranque,
   pedidosConArranque: () => pedidosConArranque,
   pedidosEnRango: () => pedidosEnRango,
   proponerAvisoManual: () => proponerAvisoManual,
   revisionDelDia: () => revisionDelDia
 });
-var nombresEmpresa, _resetDetector, pedidosConArranque, ultimaVersionDelDia, correrDeteccion, proponerAvisoDelDia, proponerAvisoManual, proponerRevisionDelDia, revisionDelDia, nombreEmpresa2, pedidosEnRango, MENCION_REPETIR_MS, propuestasDeMencion, _resetMenciones, recortar3, proponerPorMenciones;
+var nombresEmpresa, _resetDetector, pedidosConArranque, ultimaVersionDelDia, correrDeteccion, SIN_LIMITE, proponerAvisoDelDia, proponerAvisoManual, proponerRevisionDelDia, revisionDelDia, nombreEmpresa2, pedidosEnRango, MENCION_REPETIR_MS, propuestasDeMencion, _resetMenciones, proponerPorMenciones, enHorarioDeOficina;
 var init_detector = __esm({
   "src/agent/checklist/detector.ts"() {
     init_logger();
@@ -14587,19 +14590,21 @@ var init_detector = __esm({
       const pedidos = await pedidosConArranque(ahoraMs);
       const dias = agruparPorDia(pedidos);
       let nuevas = 0;
+      const presupuesto = { restantes: 1 };
       logger_default.info(
         `[agente] detecci\xF3n: ${pedidos.length} pedido(s) en ${dias.length} d\xEDa(s), ${observados(alcance.grupoEscuchado)} mensaje(s) observados del grupo, ${pendientes(ahoraMs).length} propuesta(s) esperando respuesta, d\xEDas ${dias.map((d67) => `${d67.fecha} (${d67.pedidos.map((p64) => `${p64.hora} ${p64.empresa} ${p64.cubos}m\xB3`).join(", ")})`).join(" | ") || "\u2014"}`
       );
       for (const dia of dias) {
         if (ahoraMs >= dia.arranqueMs + 60 * 6e4) continue;
-        nuevas += await proponerAvisoDelDia(dia, alcance, ahoraMs);
-        nuevas += await proponerRevisionDelDia(dia, alcance, ahoraMs);
+        nuevas += await proponerAvisoDelDia(dia, alcance, ahoraMs, presupuesto);
+        nuevas += await proponerRevisionDelDia(dia, alcance, ahoraMs, presupuesto);
       }
-      nuevas += await proponerPorMenciones(alcance, ahoraMs);
+      nuevas += await proponerPorMenciones(alcance, ahoraMs, presupuesto);
       return nuevas;
     };
-    proponerAvisoDelDia = async (dia, alcance, ahoraMs) => {
-      if (!alcance.grupoPlanta) return 0;
+    SIN_LIMITE = { restantes: Number.POSITIVE_INFINITY };
+    proponerAvisoDelDia = async (dia, alcance, ahoraMs, presupuesto = SIN_LIMITE) => {
+      if (!alcance.grupoPlanta || presupuesto.restantes <= 0) return 0;
       const firma = `${firmaDia(dia)}|aviso`;
       if (yaPropuesta("aviso-planta", firma, ahoraMs)) return 0;
       const anterior = ultimaVersionDelDia.get(dia.fecha);
@@ -14617,6 +14622,7 @@ var init_detector = __esm({
         ahoraMs
       );
       await publicarPropuesta(propuesta, conPiePropuesta(texto5, propuesta.nombreDestino), alcance);
+      presupuesto.restantes -= 1;
       ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
       logger_default.info(`[agente] propuesta ${propuesta.id}: ${cambio ? "actualizaci\xF3n" : "aviso"} de producci\xF3n ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB`);
       return 1;
@@ -14642,9 +14648,9 @@ var init_detector = __esm({
       logger_default.info(`[agente] propuesta ${propuesta.id}: aviso de producci\xF3n ${dia.fecha} a pedido \u2192 \xAB${propuesta.nombreDestino}\xBB`);
       return "";
     };
-    proponerRevisionDelDia = async (dia, alcance, ahoraMs) => {
+    proponerRevisionDelDia = async (dia, alcance, ahoraMs, presupuesto = SIN_LIMITE) => {
       const momento = momentoVigente(dia, ahoraMs);
-      if (!momento) return 0;
+      if (!momento || presupuesto.restantes <= 0) return 0;
       const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
       const utiles = filtrarMensajes(delGrupo);
       const revision = await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
@@ -14661,6 +14667,7 @@ var init_detector = __esm({
       };
       let nuevas = 0;
       for (const dominio of ["planta", "obra"]) {
+        if (presupuesto.restantes <= 0) break;
         const texto5 = construirAvisoChecklist(revision, contexto, dominio);
         if (!texto5) continue;
         const tipo = dominio === "planta" ? "checklist-planta" : "checklist-admin";
@@ -14689,6 +14696,7 @@ var init_detector = __esm({
           propuesta.decididaPor = "agente";
           propuesta.decididaMs = ahoraMs;
         }
+        presupuesto.restantes -= 1;
         nuevas += 1;
         logger_default.info(
           `[agente] ${aPlanta ? "propuesta" : "pregunta"} ${propuesta.id}: checklist de ${dominio === "planta" ? "planta" : "campo"} (${momento}) de ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB (${revision.pendientes.filter((i50) => i50.domain === dominio).length} pendientes, ${revision.semanticas.length} confirmaci\xF3n(es) entendidas por sem\xE1ntica, descartados: ${JSON.stringify(utiles.descartados)})`
@@ -14737,8 +14745,9 @@ var init_detector = __esm({
     MENCION_REPETIR_MS = 24 * 36e5;
     propuestasDeMencion = /* @__PURE__ */ new Map();
     _resetMenciones = () => propuestasDeMencion.clear();
-    recortar3 = (s59, max) => s59.length > max ? `${s59.slice(0, max - 1)}\u2026` : s59;
-    proponerPorMenciones = async (alcance, ahoraMs) => {
+    proponerPorMenciones = async (alcance, ahoraMs, presupuesto = SIN_LIMITE) => {
+      if (presupuesto.restantes <= 0) return 0;
+      if (!enHorarioDeOficina(ahoraMs)) return 0;
       const hoy = diaPeruano(ahoraMs);
       const menciones = detectarMenciones(mensajesDesde(alcance.grupoEscuchado, ahoraMs - VENTANA_MS)).filter((m59) => m59.hasta >= hoy);
       const sinPedido = [];
@@ -14758,29 +14767,37 @@ var init_detector = __esm({
       if (sinPedido.length === 0 && sinHora.length === 0) return 0;
       const todas = [...sinPedido, ...sinHora];
       const firma = todas.map(firmaMencion).join(";");
-      if (yaPropuesta("recordatorio-pedido", firma, ahoraMs)) return 0;
+      if (yaPropuesta("recordatorio-pedido", firma, ahoraMs) || yaPropuesta("aviso-mencion", firma, ahoraMs)) return 0;
       for (const m59 of todas) propuestasDeMencion.set(firmaMencion(m59), ahoraMs);
-      const citas = [...new Set(todas.map((m59) => m59.texto))].slice(0, 2).map((t44) => `\xAB${recortar3(t44.replace(/\s+/g, " "), 180)}\xBB`);
-      const contexto = `En \xAB${alcance.nombreGrupo || "el grupo"}\xBB dijeron: ${citas.join(" / ")}`;
-      let nuevas = 0;
+      const recordatorio = textoRecordatorioPedido(sinPedido, sinHora);
       if (sinPedido.length && alcance.grupoPlanta) {
         const texto5 = textoAvisoPrevio(sinPedido);
         const propuesta2 = proponer(
           { tipo: "aviso-mencion", fecha: sinPedido[0].desde, firma, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || "planta", texto: texto5 },
           ahoraMs
         );
-        await publicarPropuesta(propuesta2, [contexto, "No hay pedido en Portal: sin \xE9l no sale el aviso formal ni el checklist.", "", conPiePropuesta(texto5, propuesta2.nombreDestino)].join("\n"), alcance);
-        logger_default.info(`[agente] propuesta ${propuesta2.id}: aviso previo por ${sinPedido.length} menci\xF3n(es) \u2192 \xAB${propuesta2.nombreDestino}\xBB`);
-        nuevas += 1;
+        await publicarPropuesta(propuesta2, `${recordatorio}
+
+\u{1F4E8} \xBFAviso a \xAB${propuesta2.nombreDestino}\xBB de lo posible? Mant\xE9n presionado este mensaje \u2192 *Responder* \u2192 *1* para avisar, *3* para no.`, alcance);
+        presupuesto.restantes -= 1;
+        logger_default.info(`[agente] propuesta ${propuesta2.id}: recordatorio + aviso previo por ${todas.length} menci\xF3n(es) \u2192 \xAB${propuesta2.nombreDestino}\xBB`);
+        return 1;
       }
-      const recordatorio = textoRecordatorioPedido(sinPedido, sinHora);
       const propuesta = proponer(
         { tipo: "recordatorio-pedido", fecha: todas[0].desde, firma, destino: alcance.grupoEscuchado, nombreDestino: alcance.nombreGrupo || "admin", texto: recordatorio },
         ahoraMs
       );
-      await publicarPropuesta(propuesta, [sinPedido.length ? "" : contexto, conPiePropuesta(recordatorio, propuesta.nombreDestino)].filter(Boolean).join("\n"), alcance);
-      logger_default.info(`[agente] propuesta ${propuesta.id}: recordatorio de pedido por ${todas.length} menci\xF3n(es)${sinHora.length ? ` (${sinHora.length} sin hora)` : ""} \u2192 \xAB${propuesta.nombreDestino}\xBB`);
-      return nuevas + 1;
+      const enviado = await responderEnGrupo(alcance.grupoEscuchado, { texto: recordatorio }, alcance);
+      propuesta.estado = enviado ? "aprobada" : "descartada";
+      propuesta.decididaPor = "agente";
+      propuesta.decididaMs = ahoraMs;
+      presupuesto.restantes -= 1;
+      logger_default.info(`[agente] recordatorio ${propuesta.id}: pedidos sin hora por ${todas.length} menci\xF3n(es) \u2192 \xAB${propuesta.nombreDestino}\xBB`);
+      return 1;
+    };
+    enHorarioDeOficina = (ahoraMs) => {
+      const hora3 = Number(new Intl.DateTimeFormat("es-PE", { timeZone: "America/Lima", hour: "2-digit", hour12: false }).format(new Date(ahoraMs)));
+      return hora3 >= 8 && hora3 < 19;
     };
   }
 });

@@ -76,30 +76,44 @@ export const construirAvisoChecklist = (
   const cuando = faltan >= 0 ? `arranca en ${duracion(faltan)}` : `arrancó hace ${duracion(faltan)}`;
   const quienes = contexto.pedidos.map((p) => `${p.hora} ${p.empresa} ${p.cubos} m³`).join(' · ');
 
-  const encabezado = dominio ? ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio].toLowerCase()) : ENCABEZADO[contexto.momento];
-  const lineas = [`${encabezado} — ${fechaLegible(contexto.fecha)}`, `${quienes}${contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''} · ${cuando}`];
+  // UNA PARTE, CORTA (José, 14/09, 20:40, viendo cuatro mensajes largos a la
+  // vez: «mira todo lo que envió»): tres líneas, los pendientes por su nombre
+  // corto —quien confirma sabe qué es «gasohol» o «tren de asfalto»— y lo ya
+  // confirmado en una línea. La versión completa (sin dominio) queda para el
+  // detalle y las pruebas.
+  if (dominio) {
+    const pendientes = pendientesDe(dominio);
+    const resueltos = revision.resueltos.filter((r) => r.domain === dominio);
+    const encabezado = ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio]);
+    return [
+      `${encabezado} — ${fechaLegible(contexto.fecha)} · ${quienes}${contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''} · ${cuando}`,
+      `Por confirmar: ${pendientes.map((i) => i.titulo).join(' · ')}`,
+      ...(resueltos.length ? [`✔ ${resueltos.map((r) => r.titulo).join(', ')}`] : []),
+    ].join('\n');
+  }
+
+  const lineas = [`${ENCABEZADO[contexto.momento]} — ${fechaLegible(contexto.fecha)}`, `${quienes}${contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''} · ${cuando}`];
 
   // Por dominio, porque lo lee gente distinta: planta primero, campo después.
   for (const d of dominios) {
     const pendientes = pendientesDe(d);
     if (pendientes.length === 0) continue;
-    lineas.push('', dominio ? 'Sin confirmar:' : `*${TITULO[d]}* — sin confirmar:`);
+    lineas.push('', `*${TITULO[d]}* — sin confirmar:`);
     lineas.push(...pendientes.map((i) => `• ${i.pregunta}`));
   }
 
-  const resueltos = dominio ? revision.resueltos.filter((r) => r.domain === dominio) : revision.resueltos;
-  if (resueltos.length > 0) {
-    lineas.push('', `Ya confirmado: ${resueltos.map((r) => r.titulo).join(', ')} ✔`);
+  if (revision.resueltos.length > 0) {
+    lineas.push('', `Ya confirmado: ${revision.resueltos.map((r) => r.titulo).join(', ')} ✔`);
   }
 
   return lineas.join('\n');
 };
 
-/** El encabezado de una sola parte: «Checklist de planta», «Planta — sigue sin confirmar», «Planta — última llamada». */
+/** El encabezado de una sola parte: «Planta, por confirmar», «Planta, sigue sin confirmar», «Planta, última llamada». */
 const ENCABEZADO_DOMINIO: Record<ContextoRevision['momento'], (parte: string) => string> = {
-  inicial: (parte) => `📋 *Checklist de ${parte}*`,
-  recordatorio: (parte) => `⏰ *${parte[0].toUpperCase()}${parte.slice(1)} — sigue sin confirmar*`,
-  'ultima-llamada': (parte) => `🚨 *${parte[0].toUpperCase()}${parte.slice(1)} — última llamada, falta lo crítico*`,
+  inicial: (parte) => `📋 *${parte}, por confirmar*`,
+  recordatorio: (parte) => `⏰ *${parte}, sigue sin confirmar*`,
+  'ultima-llamada': (parte) => `🚨 *${parte}, última llamada*`,
 };
 
 export interface PedidoParaAviso {
@@ -167,13 +181,7 @@ export const describirCambio = (
  * lo que se va a mandar; nada se reescribe entre el «1» y el envío.
  */
 export const conPiePropuesta = (texto: string, nombreDestino: string): string =>
-  [
-    `📨 *Propuesta para «${nombreDestino}»*`,
-    'Para enviarlo: mantén presionado este mensaje → *Responder* → *1*',
-    'Para descartar: igual, con *3*',
-    '',
-    texto,
-  ].join('\n');
+  [texto, '', `📨 Para «${nombreDestino}»: mantén presionado este mensaje → *Responder* → *1* para enviarlo, *3* para descartar.`].join('\n');
 
 /**
  * LA FIRMA DEL AVISO, para no repetirlo.

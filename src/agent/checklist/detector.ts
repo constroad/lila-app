@@ -123,6 +123,11 @@ export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => 
   const pedidos = await pedidosConArranque(ahoraMs);
   const dias = agruparPorDia(pedidos);
   let nuevas = 0;
+  // UN MENSAJE POR PASADA al grupo (José, 14/09, 20:40: «mira todo lo que
+  // envió y a la misma hora, que era lo que te pedí que no quería»). Lo que
+  // no entra hoy sale en la siguiente pasada, 20 min después, en este orden:
+  // el aviso del día, el checklist de planta, el de campo, las menciones.
+  const presupuesto = { restantes: 1 };
 
   // UNA línea por corrida, siempre: «¿está escuchando?» se contesta con un grep.
   logger.info(
@@ -134,21 +139,26 @@ export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => 
 
   for (const dia of dias) {
     if (ahoraMs >= dia.arranqueMs + 60 * 60_000) continue; // arrancó hace más de 1 h: ya no se coordina, se produce
-    nuevas += await proponerAvisoDelDia(dia, alcance, ahoraMs);
-    nuevas += await proponerRevisionDelDia(dia, alcance, ahoraMs);
+    nuevas += await proponerAvisoDelDia(dia, alcance, ahoraMs, presupuesto);
+    nuevas += await proponerRevisionDelDia(dia, alcance, ahoraMs, presupuesto);
   }
 
-  nuevas += await proponerPorMenciones(alcance, ahoraMs);
+  nuevas += await proponerPorMenciones(alcance, ahoraMs, presupuesto);
 
   return nuevas;
 };
 
+/** Cuántos mensajes quedan por mandar en esta pasada. */
+type Presupuesto = { restantes: number };
+const SIN_LIMITE: Presupuesto = { restantes: Number.POSITIVE_INFINITY };
+
 const proponerAvisoDelDia = async (
   dia: DiaDePlanta,
   alcance: Awaited<ReturnType<typeof alcanceVigente>>,
-  ahoraMs: number
+  ahoraMs: number,
+  presupuesto: Presupuesto = SIN_LIMITE
 ): Promise<number> => {
-  if (!alcance.grupoPlanta) return 0;
+  if (!alcance.grupoPlanta || presupuesto.restantes <= 0) return 0;
   const firma = `${firmaDia(dia)}|aviso`;
   if (yaPropuesta('aviso-planta', firma, ahoraMs)) return 0;
 
@@ -167,6 +177,7 @@ const proponerAvisoDelDia = async (
     ahoraMs
   );
   await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
+  presupuesto.restantes -= 1;
   ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
   logger.info(`[agente] propuesta ${propuesta.id}: ${cambio ? 'actualización' : 'aviso'} de producción ${dia.fecha} → «${propuesta.nombreDestino}»`);
   return 1;
@@ -208,10 +219,11 @@ export const proponerAvisoManual = async (
 const proponerRevisionDelDia = async (
   dia: DiaDePlanta,
   alcance: Awaited<ReturnType<typeof alcanceVigente>>,
-  ahoraMs: number
+  ahoraMs: number,
+  presupuesto: Presupuesto = SIN_LIMITE
 ): Promise<number> => {
   const momento = momentoVigente(dia, ahoraMs);
-  if (!momento) return 0;
+  if (!momento || presupuesto.restantes <= 0) return 0;
 
   // Solo interesa lo que se dijo DESDE que el día existe: un «cuadrilla lista»
   // anterior a que se cargara el primer pedido hablaba de otro día.
@@ -239,6 +251,7 @@ const proponerRevisionDelDia = async (
   // proponérselo: se les está hablando a ellos.
   let nuevas = 0;
   for (const dominio of ['planta', 'obra'] as const) {
+    if (presupuesto.restantes <= 0) break;
     const texto = construirAvisoChecklist(revision, contexto, dominio);
     if (!texto) continue;
     const tipo = dominio === 'planta' ? 'checklist-planta' : 'checklist-admin';
@@ -271,6 +284,7 @@ const proponerRevisionDelDia = async (
       propuesta.decididaPor = 'agente';
       propuesta.decididaMs = ahoraMs;
     }
+    presupuesto.restantes -= 1;
     nuevas += 1;
     logger.info(
       `[agente] ${aPlanta ? 'propuesta' : 'pregunta'} ${propuesta.id}: checklist de ${dominio === 'planta' ? 'planta' : 'campo'} (${momento}) de ${dia.fecha} → «${propuesta.nombreDestino}» ` +
@@ -346,7 +360,6 @@ const propuestasDeMencion = new Map<string, number>();
 /** Solo para tests. */
 export const _resetMenciones = (): void => propuestasDeMencion.clear();
 
-const recortar = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 /**
  * LO QUE SE DIJO Y NO ES PEDIDO. José, 14/09: «muchas veces crean el pedido
@@ -360,8 +373,13 @@ const recortar = (s: string, max: number): string => (s.length > max ? `${s.slic
  */
 const proponerPorMenciones = async (
   alcance: Awaited<ReturnType<typeof alcanceVigente>>,
-  ahoraMs: number
+  ahoraMs: number,
+  presupuesto: Presupuesto = SIN_LIMITE
 ): Promise<number> => {
+  if (presupuesto.restantes <= 0) return 0;
+  // No es urgente: se dice en horario de oficina, no a las 20:40 junto con el
+  // checklist ni a las 3 de la mañana.
+  if (!enHorarioDeOficina(ahoraMs)) return 0;
   const hoy = diaPeruano(ahoraMs);
   const menciones = detectarMenciones(mensajesDesde(alcance.grupoEscuchado, ahoraMs - VENTANA_MS)).filter((m) => m.hasta >= hoy);
   const sinPedido: MencionDeProduccion[] = [];
@@ -381,29 +399,40 @@ const proponerPorMenciones = async (
   if (sinPedido.length === 0 && sinHora.length === 0) return 0;
   const todas = [...sinPedido, ...sinHora];
   const firma = todas.map(firmaMencion).join(';');
-  if (yaPropuesta('recordatorio-pedido', firma, ahoraMs)) return 0;
+  if (yaPropuesta('recordatorio-pedido', firma, ahoraMs) || yaPropuesta('aviso-mencion', firma, ahoraMs)) return 0;
   for (const m of todas) propuestasDeMencion.set(firmaMencion(m), ahoraMs);
 
-  // Lo que dijeron, textual, para que operaciones juzgue con el original a la vista.
-  const citas = [...new Set(todas.map((m) => m.texto))].slice(0, 2).map((t) => `«${recortar(t.replace(/\s+/g, ' '), 180)}»`);
-  const contexto = `En «${alcance.nombreGrupo || 'el grupo'}» dijeron: ${citas.join(' / ')}`;
-  let nuevas = 0;
+  // UN SOLO MENSAJE en el grupo (14/09: eran dos, y además citaban lo que el
+  // mismo grupo acababa de decir): el recordatorio de cargar los pedidos, y
+  // —si hay producciones sin pedido y un grupo de planta— la pregunta de si
+  // se avisa a planta lo posible, que se aprueba con el «1» de siempre.
+  const recordatorio = textoRecordatorioPedido(sinPedido, sinHora);
   if (sinPedido.length && alcance.grupoPlanta) {
     const texto = textoAvisoPrevio(sinPedido);
     const propuesta = proponer(
       { tipo: 'aviso-mencion', fecha: sinPedido[0].desde, firma, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || 'planta', texto },
       ahoraMs
     );
-    await publicarPropuesta(propuesta, [contexto, 'No hay pedido en Portal: sin él no sale el aviso formal ni el checklist.', '', conPiePropuesta(texto, propuesta.nombreDestino)].join('\n'), alcance);
-    logger.info(`[agente] propuesta ${propuesta.id}: aviso previo por ${sinPedido.length} mención(es) → «${propuesta.nombreDestino}»`);
-    nuevas += 1;
+    await publicarPropuesta(propuesta, `${recordatorio}\n\n📨 ¿Aviso a «${propuesta.nombreDestino}» de lo posible? Mantén presionado este mensaje → *Responder* → *1* para avisar, *3* para no.`, alcance);
+    presupuesto.restantes -= 1;
+    logger.info(`[agente] propuesta ${propuesta.id}: recordatorio + aviso previo por ${todas.length} mención(es) → «${propuesta.nombreDestino}»`);
+    return 1;
   }
-  const recordatorio = textoRecordatorioPedido(sinPedido, sinHora);
   const propuesta = proponer(
     { tipo: 'recordatorio-pedido', fecha: todas[0].desde, firma, destino: alcance.grupoEscuchado, nombreDestino: alcance.nombreGrupo || 'admin', texto: recordatorio },
     ahoraMs
   );
-  await publicarPropuesta(propuesta, [sinPedido.length ? '' : contexto, conPiePropuesta(recordatorio, propuesta.nombreDestino)].filter(Boolean).join('\n'), alcance);
-  logger.info(`[agente] propuesta ${propuesta.id}: recordatorio de pedido por ${todas.length} mención(es)${sinHora.length ? ` (${sinHora.length} sin hora)` : ''} → «${propuesta.nombreDestino}»`);
-  return nuevas + 1;
+  const enviado = await responderEnGrupo(alcance.grupoEscuchado, { texto: recordatorio }, alcance);
+  propuesta.estado = enviado ? 'aprobada' : 'descartada';
+  propuesta.decididaPor = 'agente';
+  propuesta.decididaMs = ahoraMs;
+  presupuesto.restantes -= 1;
+  logger.info(`[agente] recordatorio ${propuesta.id}: pedidos sin hora por ${todas.length} mención(es) → «${propuesta.nombreDestino}»`);
+  return 1;
+};
+
+/** De 08:00 a 19:00 en Lima: cuando la gente carga pedidos. */
+export const enHorarioDeOficina = (ahoraMs: number): boolean => {
+  const hora = Number(new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', hour: '2-digit', hour12: false }).format(new Date(ahoraMs)));
+  return hora >= 8 && hora < 19;
 };
