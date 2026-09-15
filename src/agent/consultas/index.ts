@@ -5,7 +5,7 @@ import { OPCIONES_PESTANAS, PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, ele
 import { crearEnlaceDelPedido, enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo, type PestanasEnlace } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta, textoRespuestaInvalida } from './pendientes.js';
 import { TEMAS, menuAyuda, temaPorPalabra, textoTema } from './ayuda.js';
-import { fusionar, pareceContinuacion, recordarConsulta, ultimaConsulta } from './contexto.js';
+import { fusionar, pareceContinuacion, recordarConsulta, ultimaConsulta, unidadHeredada } from './contexto.js';
 import { ALIAS_EMPRESA } from './catalogo.js';
 import { SIN_AGREGADOS, consumosDelDia, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
 import { NOMBRES_DE_DISTRITOS, diasHasta, distritosDe, lugarDesconocido, pronosticoHorario, pronosticoSemanal, riesgoPorDistrito, textoClima, textoClimaSemanal, textoFueraDeAlcance, textoLugarDesconocido, textoRiesgoDistritos } from './clima.js';
@@ -13,7 +13,7 @@ import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { fechaDe, hoyLima, normalizar, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
-import { buscarCubicacion, type Cubicacion } from './cubicacion.js';
+import { buscarCubicacion, empresaDeLaUnidad, type Cubicacion } from './cubicacion.js';
 import { MAX_OPCIONES_INFORMES, argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
@@ -276,6 +276,13 @@ const armarRespuesta = async (
   // persona («la 4», «AML838», «la última») completa esta misma consulta.
   const deUnidad = clave === 'unit_media' || clave === 'unit_departure' || clave === 'unit_driver' || clave === 'unit_eta' || clave === 'unit_capacity';
   if (deUnidad && !identificaUnidad(params)) {
+    // «Ese volquete»: la unidad de la pregunta anterior del hilo, si la tenía.
+    const anterior = ultimaConsulta(quien, grupo);
+    const heredada = unidadHeredada(anterior ? extraerParametros(anterior.pregunta) : null);
+    if (heredada) {
+      logger.info(`[agente] consulta de unidad sin unidad: hereda ${JSON.stringify(heredada)} de «${anterior!.pregunta}»`);
+      return armarRespuesta(clave, pregunta, quien, grupo, { ...extra, ...heredada });
+    }
     preguntar({
       quien,
       grupo,
@@ -306,8 +313,7 @@ const armarRespuesta = async (
 const cubicacionDe = async (vista: VistaDelDia, params: Parametros): Promise<Cubicacion | null> => {
   const u = unidadPor(vista, params);
   if (!u) return null;
-  const pedido = vista.orders.find((o) => o.units.includes(u));
-  return buscarCubicacion({ companyId: pedido?.companyId ?? '', transportId: u.transportId, plate: u.plate });
+  return buscarCubicacion({ companyId: empresaDeLaUnidad(u), transportId: u.transportId, plate: u.plate });
 };
 
 /** Las empresas del piloto con su nombre, para etiquetar el stock. */

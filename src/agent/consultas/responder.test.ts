@@ -38,9 +38,9 @@ describe('cubicaje de una unidad', () => {
     const r = responder('unit_capacity', {
       vista,
       params: { ...hoy, unitNumber: 1 },
-      cubicacion: { plate: 'AZJ910', m3: 25, shape: 'Concavo', cubicator: 'JUAN PEREZ' },
+      cubicacion: { plate: 'AZJ910', m3: 26.413604870000004, shape: 'Concavo', cubicator: 'JUAN PEREZ' },
     });
-    expect(r).toContain('*Unidad 1* (AZJ 910) cubica *25 m³*');
+    expect(r).toContain('*Unidad 1* (AZJ 910) cubica *26.41 m³*');
     expect(r).toContain('cóncava');
     expect(r).toContain('JUAN PEREZ');
     expect(r).toContain('salió con *25 m³*');

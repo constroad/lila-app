@@ -287,7 +287,9 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       }
       const forma = c.shape ? ` (tolva ${formaDeTolva(c.shape)})` : '';
       const quien = c.cubicator ? `, cubicó ${c.cubicator}` : '';
-      return `🚛 La *Unidad ${u.unitNumber}* (${u.plate || c.plate}) cubica *${c.m3} m³*${forma}${quien}.${salio}`;
+      // El Portal guarda el cálculo crudo (26.413604870000004): dos decimales, como lo muestra su pantalla.
+      const m3 = Math.round(c.m3 * 100) / 100;
+      return `🚛 La *Unidad ${u.unitNumber}* (${u.plate || c.plate}) cubica *${m3} m³*${forma}${quien}.${salio}`;
     }
 
     case 'unit_media': {

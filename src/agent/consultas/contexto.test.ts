@@ -1,4 +1,5 @@
-import { VIGENCIA_HILO_MS, _resetContexto, fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto';
+import {
+  unidadHeredada, VIGENCIA_HILO_MS, _resetContexto, fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto';
 
 /**
  * EL HILO. José, 13/09/2026: «no quiero que la mejores solo para este caso
@@ -101,5 +102,15 @@ describe('temaSinDato — lo que no se registra se dice de frente', () => {
     expect(temaSinDato('cuántos grados tiene el PEN')).toContain('no se registra');
     expect(temaSinDato('cuántos agregados llegaron hoy')).toBeNull();
     expect(temaSinDato('clima en Ate mañana')).toBeNull();
+  });
+});
+
+describe('unidadHeredada — «ese volquete» dentro del hilo', () => {
+  it('hereda placa, si no número, si no ordinal; sin nada, null', () => {
+    expect(unidadHeredada({ plate: 'A1Y825', unitNumber: 9 })).toEqual({ plate: 'A1Y825' });
+    expect(unidadHeredada({ unitNumber: 9 })).toEqual({ unitNumber: 9 });
+    expect(unidadHeredada({ ordinal: 'ultima' })).toEqual({ ordinal: 'ultima' });
+    expect(unidadHeredada({})).toBeNull();
+    expect(unidadHeredada(null)).toBeNull();
   });
 });

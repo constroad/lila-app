@@ -9,6 +9,15 @@
  */
 import { getTransportModel } from '../../database/models.js';
 import { normalizarPlaca } from './catalogo.js';
+import type { PedidoDelDiaVista, UnidadDelDia } from './vista.js';
+
+/**
+ * La empresa del pedido de la unidad. `unidadPor` devuelve una COPIA de la
+ * unidad con su `pedido` adentro: buscarla por referencia en `vista.orders`
+ * (`units.includes(u)`) nunca daba, el companyId salía vacío y la cubicación
+ * «no existía» con la ficha cargada (15/09, 18:36, A1Y825 = 26,41 m³).
+ */
+export const empresaDeLaUnidad = (u: UnidadDelDia & { pedido?: PedidoDelDiaVista }): string => u.pedido?.companyId ?? '';
 
 export interface Cubicacion {
   plate: string;

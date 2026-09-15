@@ -38,6 +38,22 @@ export const recordarConsulta = (c: Omit<UltimaConsulta, 'ms'>, ms = Date.now())
   hilos.set(k(c.quien, c.grupo), { ...c, ms });
 };
 
+/**
+ * «Ese volquete», «y quién la maneja», «cuánto cubica»: una consulta de unidad
+ * SIN unidad, dentro del hilo, hereda la unidad de la pregunta anterior de esa
+ * persona. 15/09 18:35: tras «dame el vídeo del volquete 9», «¿sabes cuánto
+ * cubica ese volquete?» volvió a preguntar «¿De cuál unidad?». PURO.
+ */
+export const unidadHeredada = (
+  anterior: { unitNumber?: number; plate?: string; ordinal?: 'ultima' | 'primera' } | null
+): { unitNumber?: number; plate?: string; ordinal?: 'ultima' | 'primera' } | null => {
+  if (!anterior) return null;
+  if (anterior.plate) return { plate: anterior.plate };
+  if (anterior.unitNumber) return { unitNumber: anterior.unitNumber };
+  if (anterior.ordinal) return { ordinal: anterior.ordinal };
+  return null;
+};
+
 export const ultimaConsulta = (quien: string, grupo: string, ms = Date.now()): UltimaConsulta | null => {
   const u = hilos.get(k(quien, grupo));
   if (!u) return null;
