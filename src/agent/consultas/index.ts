@@ -3,7 +3,7 @@ import { CATALOGO, esConsulta, especificidadDeRegla, extraerParametros, fueraDeC
 import { construirVista, type VistaDelDia } from './vista.js';
 import { OPCIONES_PESTANAS, PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, elegirPedido, etiquetaPedido, identificaUnidad, pestanasEnLaPregunta, responder, textoEnlace, unidadPor, type Respuesta } from './responder.js';
 import { crearEnlaceDelPedido, enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo, type PestanasEnlace } from './archivos.js';
-import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
+import { preguntar, responderPendiente, textoPregunta, textoRespuestaInvalida } from './pendientes.js';
 import { TEMAS, menuAyuda, temaPorPalabra, textoTema } from './ayuda.js';
 import { fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto.js';
 import { ALIAS_EMPRESA } from './catalogo.js';
@@ -521,6 +521,11 @@ export const atenderEleccion = async (
 ): Promise<boolean> => {
   const eleccion = responderPendiente(quien, grupo, texto);
   if (!eleccion) return false;
+  if (eleccion.invalida) {
+    logger.info(`[agente] ${quien} contestó «${eleccion.texto}» a una pregunta de ${eleccion.pregunta.opciones.length} opciones: se le pide un número válido`);
+    await responderEnGrupo(grupo, { texto: textoRespuestaInvalida(eleccion.pregunta) }, alcance);
+    return true;
+  }
   try {
     await empezarAEscribir(grupo, alcance);
     const respuesta = (await eleccion.pregunta.continuar(eleccion.indice, eleccion.texto)) as Respuesta;

@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { VIGENCIA_PREGUNTA_MS, _resetPendientes, nombraUnidad, preguntar, responderPendiente, textoPregunta } from './pendientes';
+import { VIGENCIA_PREGUNTA_MS, _resetPendientes, nombraUnidad, preguntar, responderPendiente, textoPregunta, textoRespuestaInvalida } from './pendientes';
 
 /**
  * «¿Cuál de los dos?» → «2». La respuesta es de ESA persona, en ESE grupo, y
@@ -19,12 +19,12 @@ describe('preguntas pendientes', () => {
     expect(responderPendiente('jose', 'g', '2', 2_000)).toBeNull();
   });
 
-  it('otra persona, otro grupo, o un número fuera de rango, no contestan', () => {
+  it('otra persona u otro grupo no contestan; un número fuera de rango es un intento inválido (se avisa)', () => {
     preguntar({ quien: 'jose', grupo: 'g', opciones: ['A', 'B'], continuar: cont }, 0);
 
     expect(responderPendiente('contador', 'g', '1', 1_000)).toBeNull();
     expect(responderPendiente('jose', 'otro', '1', 1_000)).toBeNull();
-    expect(responderPendiente('jose', 'g', '3', 1_000)).toBeNull();
+    expect(responderPendiente('jose', 'g', '3', 1_000)).toMatchObject({ invalida: true, texto: '3' });
     expect(responderPendiente('jose', 'g', 'si', 1_000)).toBeNull();
     // Sigue pendiente para la respuesta correcta.
     expect(responderPendiente('jose', 'g', '1', 1_000)?.indice).toBe(0);
@@ -89,5 +89,20 @@ describe('pregunta de texto libre', () => {
     expect(responderPendiente('a', 'g', 'x'.repeat(61), 2_000)).toBeNull();
     expect(responderPendiente('a', 'g', 'consorcio los pinos', 2_000)).toMatchObject({ indice: -1, texto: 'consorcio los pinos' });
     expect(responderPendiente('a', 'g', 'otra', 3_000)).toBeNull(); // ya se consumió
+  });
+});
+
+/** «5» con tres opciones es un intento de responder: se avisa y la pregunta sigue en pie (José, 15/09). */
+describe('un número que no es ninguna opción', () => {
+  beforeEach(() => _resetPendientes());
+  it('se marca como inválido sin consumir la pregunta; el siguiente número válido sí la contesta', () => {
+    preguntar({ quien: 'q', grupo: 'g', opciones: ['Solo producción', 'Producción + colocación', 'Producción + colocación + informes'], tipo: 'opciones', continuar: async () => 'ok' });
+    const invalida = responderPendiente('q', 'g', '5');
+    expect(invalida).toMatchObject({ indice: -1, texto: '5', invalida: true });
+    expect(textoRespuestaInvalida(invalida!.pregunta)).toBe('Responde con un número del *1* al *3*.');
+    expect(responderPendiente('q', 'g', '0')).toMatchObject({ invalida: true });
+    expect(responderPendiente('q', 'g', 'hola')).toBeNull(); // otra conversación, no un intento
+    expect(responderPendiente('q', 'g', '2')).toMatchObject({ indice: 1, texto: '2' });
+    expect(responderPendiente('q', 'g', '2')).toBeNull(); // ya se consumió
   });
 });

@@ -48,12 +48,20 @@ export const nombraUnidad = (texto: string): boolean => {
  * Devuelve la pregunta y lo elegido, o `null`. La pregunta se consume solo si
  * el texto la contesta: un «buenos días» en el medio no la cancela.
  */
+export interface RespuestaPendiente {
+  pregunta: PreguntaPendiente;
+  indice: number;
+  texto: string;
+  /** Un número que no es ninguna de las opciones («5» con tres opciones): se avisa y la pregunta sigue en pie. */
+  invalida?: boolean;
+}
+
 export const responderPendiente = (
   quien: string,
   grupo: string,
   texto: string,
   ahoraMs = Date.now()
-): { pregunta: PreguntaPendiente; indice: number; texto: string } | null => {
+): RespuestaPendiente | null => {
   const k = clave(quien, grupo);
   const p = pendientes.get(k);
   if (!p) return null;
@@ -81,11 +89,20 @@ export const responderPendiente = (
     pendientes.delete(k);
     return si ? { pregunta: p, indice: 0, texto: t } : null;
   }
-  const n = Number(String(texto || '').trim());
-  if (!Number.isInteger(n) || n < 1 || n > p.opciones.length) return null;
+  const t = String(texto || '').trim();
+  if (!/^\d{1,2}$/.test(t)) return null;
+  const n = Number(t);
+  // «5» con tres opciones es un intento de responder, no otra conversación: se
+  // dice cuáles valen y la pregunta sigue en pie (José, 15/09: «valida que
+  // respondan con un número válido»).
+  if (n < 1 || n > p.opciones.length) return { pregunta: p, indice: -1, texto: t, invalida: true };
   pendientes.delete(k);
-  return { pregunta: p, indice: n - 1, texto: String(texto || '').trim() };
+  return { pregunta: p, indice: n - 1, texto: t };
 };
+
+/** Qué se le dice a quien contesta con un número que no es ninguna opción. */
+export const textoRespuestaInvalida = (p: PreguntaPendiente): string =>
+  p.opciones.length === 1 ? 'Responde con *1*.' : `Responde con un número del *1* al *${p.opciones.length}*.`;
 
 export const textoPregunta = (encabezado: string, opciones: string[]): string =>
   [encabezado, ...opciones.map((o, i) => `${i + 1}. ${o}`), '', 'Responde con el número.'].join('\n');

@@ -11,7 +11,7 @@ import {
 } from './alcance.js';
 import { normalizarTexto } from './checklist.js';
 import { hidratarMensajes, recordarMensaje } from './almacen.js';
-import { cerrarSuperadas, decidir, esVoto, hidratarPropuestas, type MotivoRechazo } from './sugerencias.js';
+import { cerrarSuperadas, decidir, esVoto, hidratarPropuestas, porMensaje, type MotivoRechazo } from './sugerencias.js';
 import { avisarEnGrupo, enviarAOperaciones, enviarAprobado } from './emisor.js';
 import { cargarAprobadores, esAdmin, esAprobador } from './aprobadores.js';
 import { apagar, comandoInterruptor, encender, estadoInterruptor, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
@@ -225,6 +225,7 @@ export const observarParaChecklist = async (
         // Un voto cita una PROPUESTA. Si cita otra cosa (la pregunta «¿lo
         // genero? 1/2/3» del agente), no es voto y sigue a las consultas.
         if (esVoto(texto) && citaDe(raw.message) && (await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance))) continue;
+        if (await explicarVotoInvalido(texto, citaDe(raw.message), quien, remoteJid, alcance)) continue;
         // Las consultas también se atienden acá: es nuestro grupo (José, 13/09).
         void atenderComoConsulta(raw, texto, quien, remoteJid, alcance, { votosSueltos: true });
         continue;
@@ -250,6 +251,7 @@ export const observarParaChecklist = async (
         // «3» citando la propuesta— también se atiende acá, y solo de un admin.
         // Si lo citado no es una propuesta, no es voto: sigue a las consultas.
         if (esVoto(texto) && citaDe(raw.message) && (await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance))) continue;
+        if (await explicarVotoInvalido(texto, citaDe(raw.message), quien, remoteJid, alcance)) continue;
         void atenderComoConsulta(raw, texto, quien, remoteJid, alcance, { votosSueltos: false });
       }
 
@@ -288,6 +290,26 @@ export const observarParaChecklist = async (
  *
  * Nunca lanza: cuelga del listener de Baileys.
  */
+/**
+ * «2», «ok», «sí» citando una propuesta PENDIENTE: la persona quiso votar y no
+ * sabe cómo. Se le dice (José, 15/09: «valida que respondan con un número
+ * válido, 1 o 3»). Solo con una propuesta pendiente de verdad y solo con un
+ * mensaje corto que parezca una respuesta: citar el checklist para decirle
+ * algo a alguien («enlaza al grupo de certificados») sigue en silencio.
+ */
+export const pareceIntentoDeVoto = (texto: string): boolean => /^\s*(\d{1,2}|si|sí|no|ok|okey|dale|listo|aprobado|enviar|descartar)\s*[.!]?\s*$/i.test(String(texto || ''));
+
+export const explicarVotoInvalido = async (texto: string, citaMsgId: string, quien: string, grupo: string, alcance: AlcanceAgente): Promise<boolean> => {
+  if (!citaMsgId || esVoto(texto) || !pareceIntentoDeVoto(texto)) return false;
+  const propuesta = porMensaje(citaMsgId);
+  if (!propuesta || propuesta.estado !== 'pendiente') return false;
+  // A quien no puede aprobar no se le explica cómo: no le toca (y «1» ya le dice que solo un administrador).
+  if (!(await esAprobador(quien, Date.now(), grupo))) return false;
+  logger.info(`[agente] «${texto.trim()}» de ${quien} citando la propuesta ${propuesta.id}: no es 1 ni 3, se explica`);
+  await avisarEnGrupo(grupo, `Para «${propuesta.nombreDestino}» vale *1* (enviar) o *3* (descartar), respondiendo a la propuesta.`, alcance);
+  return true;
+};
+
 /** Un mensaje corto —un número, «sí», «la 4», una placa— es la respuesta a una pregunta, no una consulta nueva. */
 const RESPUESTA_CORTA_PALABRAS = 3;
 

@@ -23,6 +23,19 @@ jest.unstable_mockModule('../../services/whatsapp-direct.service.js', () => ({
   __esModule: true,
   WhatsAppDirectService: { selfJids: () => ['51949376824@s.whatsapp.net', '244534046892225@lid'], sendMessage: jest.fn(), setTyping: jest.fn() },
 }));
+const avisarEnGrupo = jest.fn(async () => undefined);
+jest.unstable_mockModule('./emisor.js', () => ({
+  __esModule: true,
+  avisarEnGrupo,
+  enviarAOperaciones: jest.fn(async () => undefined),
+  enviarAprobado: jest.fn(async () => true),
+}));
+jest.unstable_mockModule('./aprobadores.js', () => ({
+  __esModule: true,
+  cargarAprobadores: jest.fn(async () => undefined),
+  esAdmin: jest.fn(async () => true),
+  esAprobador: jest.fn(async (jid: string) => jid === '173066143440987@lid'),
+}));
 jest.unstable_mockModule('./persistencia.js', () => ({
   __esModule: true,
   guardarPropuesta: jest.fn(async () => undefined),
@@ -42,9 +55,12 @@ const alcance = { grupoEscuchado: ADMIN, nombreGrupo: 'INFRAMAQ admin', grupoPla
 const QUIEN = '173066143440987@lid';
 
 type Subject = typeof import('./observador.js');
+type Sugerencias = typeof import('./sugerencias.js');
 let observador: Subject;
+let sugerencias: Sugerencias;
 beforeAll(async () => {
   observador = await import('./observador.js');
+  sugerencias = await import('./sugerencias.js');
 });
 beforeEach(() => {
   atenderConsulta.mockClear();
@@ -102,5 +118,24 @@ describe('atenderComoConsulta', () => {
     expect(atenderEleccion).toHaveBeenCalledTimes(1); // solo la de siempre, no la corta
     expect(atenderConsulta).not.toHaveBeenCalled();
     atenderEleccion.mockImplementation(async (texto: string) => /^\s*[123]\s*$/.test(texto));
+  });
+});
+
+/** «2» u «ok» citando una propuesta pendiente: la persona quiso votar y no sabe cómo (José, 15/09: «valida que respondan con un número válido»). */
+describe('un voto que no es 1 ni 3', () => {
+  beforeEach(() => avisarEnGrupo.mockClear());
+  it('reconoce el intento', () => {
+    for (const t of ['2', '0', 'ok', 'sí', 'Si', 'dale', 'aprobado', '1.']) expect(observador.pareceIntentoDeVoto(t)).toBe(true);
+    for (const t of ['enlaza al grupo de certificados', 'sí, está confirmado', '¿y la 3?', '']) expect(observador.pareceIntentoDeVoto(t)).toBe(false);
+  });
+  it('a un aprobador se le dice que vale 1 o 3; sin propuesta pendiente citada, nada', async () => {
+    const propuesta = sugerencias.proponer({ tipo: 'aviso-planta', fecha: '2026-09-16', firma: 'f1', destino: 'p@g.us', nombreDestino: 'Inframaq Planta', texto: 'x' }, Date.now());
+    sugerencias.anotarMensaje(propuesta.id, 'msg-propuesta');
+    expect(await observador.explicarVotoInvalido('2', 'msg-propuesta', '173066143440987@lid', ADMIN, alcance)).toBe(true);
+    expect(avisarEnGrupo).toHaveBeenCalledWith(ADMIN, 'Para «Inframaq Planta» vale *1* (enviar) o *3* (descartar), respondiendo a la propuesta.', alcance);
+    expect(await observador.explicarVotoInvalido('2', 'otro-mensaje', '173066143440987@lid', ADMIN, alcance)).toBe(false);
+    expect(await observador.explicarVotoInvalido('2', 'msg-propuesta', '188570740486215@lid', ADMIN, alcance)).toBe(false); // no aprueba: silencio
+    expect(await observador.explicarVotoInvalido('1', 'msg-propuesta', '173066143440987@lid', ADMIN, alcance)).toBe(false); // «1» es un voto de verdad
+    expect(avisarEnGrupo).toHaveBeenCalledTimes(1);
   });
 });
