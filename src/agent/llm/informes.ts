@@ -74,11 +74,13 @@ export const tipoDeInforme = (pregunta: string): TipoInforme | undefined => {
 };
 
 /** Verbos de PEDIR el archivo. «Quiero ver cómo va la pista» no es pedir un PDF: esos van por el catálogo de siempre. */
-const VERBOS = ['dame', 'damelo', 'damela', 'manda', 'mandame', 'mandalo', 'mandala', 'envia', 'enviame', 'envialo', 'enviala', 'pasa', 'pasame', 'pasalo', 'pasala', 'comparte', 'compartelo', 'compartela', 'adjunta', 'adjuntame', 'descarga', 'descargame'];
+export const VERBOS = ['dame', 'damelo', 'damela', 'manda', 'mandame', 'mandalo', 'mandala', 'envia', 'enviame', 'envialo', 'enviala', 'pasa', 'pasame', 'pasalo', 'pasala', 'comparte', 'compartelo', 'compartela', 'adjunta', 'adjuntame', 'descarga', 'descargame'];
 const NOMBRES = ['informe', 'informes', 'ipp', 'pista', 'imprimacion', 'valorizacion', 'acta', 'panel', 'dossier', 'liquidacion', 'constancia', 'metrado', 'protocolo', 'contrato', 'pdf', 'reporte', 'solicitud', 'aprobacion', 'fresado', 'levantamiento', 'recepcion', 'reclamo', 'adicional'];
 
 /** Reglas verbo + nombre («dame el informe», «pásame el control de pista», «manda el pdf»), y «pdf» a secas. */
 export const REGLAS_INFORMES: string[][] = [...VERBOS.flatMap((v) => NOMBRES.map((n) => [v, n])), ['pdf'], ['ultimo', 'informe'], ['ultimos', 'informes']];
+/** Para que el ruteo por regla exija el verbo ENTERO: «descarga» no es «descargaron». */
+export const VERBOS_INFORMES = new Set(VERBOS);
 
 const RELLENO = new Set([
   ...VERBOS,
@@ -158,12 +160,21 @@ export const buscarInformes = async (
   // consulta «cuántos carros se descargaron en el control de pista» murió sin
   // respuesta. El arreglo de fondo es el índice `{companyId: 1, date: -1}` en
   // el modelo del Portal; hasta que exista, esto deja de tirar el query.
+  //
+  // El orden es SOLO por `date`, que es lo que cubre el índice
+  // `{companyId, date}` (Portal, 15/09/2026): con `updatedAt` de desempate el
+  // índice no alcanza y vuelve el sort bloqueante (así siguió muriendo a las
+  // 15:13 aun con `allowDiskUse`). El desempate se hace acá, sobre 200 docs.
   const docs = (await Informe.find(query)
-    .select('companyId serviceManagementId type status date responsible generatedDocuments')
-    .sort({ date: -1, updatedAt: -1 })
+    .select('companyId serviceManagementId type status date responsible generatedDocuments updatedAt')
+    .sort({ date: -1 })
     .limit(filtro.texto ? 200 : limite * 4)
     .allowDiskUse(true)
     .lean()) as Doc[];
+  docs.sort((a, b) => {
+    const d = fechaIso(b.date).localeCompare(fechaIso(a.date));
+    return d !== 0 ? d : String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? ''));
+  });
   if (!docs.length) return [];
   const idsServicio = [...new Set(docs.map((d) => texto(d.serviceManagementId)).filter(Boolean))];
   const servicios = (await Servicio.find({ _id: { $in: idsServicio } }).select('clientId projectName description').lean()) as Doc[];

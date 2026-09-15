@@ -28,6 +28,12 @@ describe('cuándo es un pedido de PDF y cuándo no', () => {
   it('pedir el archivo va a informes; preguntar cómo va o cuántos hay, no', () => {
     expect(herramientaDeDatosPorReglas('dame el informe de control de pista de los pinos')).toBe('informes');
     expect(herramientaDeDatosPorReglas('manda el pdf del ipp de ayer')).toBe('informes');
+    expect(herramientaDeDatosPorReglas('descárgame el control de pista de hoy')).toBe('informes');
+    // 15/09 15:13: «descargaron» empezaba con «descarga» (el verbo de bajar el
+    // PDF) y con «pista» al lado mandaba la pregunta al PDF. Los verbos son
+    // palabras enteras: descargaron es que bajaron el asfalto, no el archivo.
+    expect(herramientaDeDatosPorReglas('cuantos carros ya se descargaron en campo en el control dr pista?')).toBeNull();
+    expect(herramientaDeDatosPorReglas('cuántos carros descargados en pista')).toBeNull();
     expect(herramientaDeDatosPorReglas('pásame la valorización de comas')).toBe('informes');
     expect(herramientaDeDatosPorReglas('el pdf')).toBe('informes');
     expect(herramientaDeDatosPorReglas('quiero ver cómo va la pista')).toBeNull();

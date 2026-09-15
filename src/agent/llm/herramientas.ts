@@ -1,5 +1,5 @@
 import { ALIAS_EMPRESA, fechaConAnio, fechaDe, hoyLima, normalizar, normalizarPlaca, sumarDias, type ClaveConsulta } from '../consultas/catalogo.js';
-import { REGLAS_INFORMES } from './informes.js';
+import { REGLAS_INFORMES, VERBOS_INFORMES } from './informes.js';
 import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
 import { COMPANY_PILOTO } from '../checklist/alcance.js';
 
@@ -92,7 +92,11 @@ export const herramientaDeDatosPorReglas = (pregunta: string): HerramientaDeDato
     if (h.id === 'informes' && HABLA_DE_ENLACE.test(t)) continue;
     for (const grupo of h.reglas) {
       const palabras = grupo.map(normalizar);
-      if (!palabras.every((p) => new RegExp(`\\b${p}`).test(t))) continue;
+      // Por comienzo de palabra («informe» vale por «informes»), SALVO los verbos
+      // de pedir el archivo, que van enteros: «descargaron» empieza con
+      // «descarga» y con «pista» al lado mandaba «cuántos carros ya se
+      // descargaron en campo» al PDF del control de pista (15/09, 15:13).
+      if (!palabras.every((p) => new RegExp(`\\b${p}${VERBOS_INFORMES.has(p) ? '\\b' : ''}`).test(t))) continue;
       if (!mejor || palabras.length > mejor.palabras) mejor = { id: h.id, palabras: palabras.length };
     }
   }
