@@ -1,4 +1,5 @@
 import {
+  plantaYaAvisada,
   _resetPropuestas,
   anotarMensaje,
   cerrarSuperadas,
@@ -33,6 +34,20 @@ const admin = { quien: 'jose@s.whatsapp.net', esAprobador: true };
 const contador = { quien: 'contador@s.whatsapp.net', esAprobador: false };
 
 beforeEach(() => _resetPropuestas());
+
+describe('plantaYaAvisada — el aviso va antes que el checklist', () => {
+  it('solo cuenta un aviso APROBADO del día; uno vencido o pendiente no es un aviso', () => {
+    const firma = '2026-09-16|04:30 Globofast Solkali 200|aviso';
+    expect(plantaYaAvisada(firma)).toBe(false);
+    const pendiente = proponer({ tipo: 'aviso-planta', fecha: '2026-09-16', firma, destino: 'p@g.us', nombreDestino: 'planta', texto: '…' }, 1_000);
+    expect(plantaYaAvisada(firma)).toBe(false);
+    pendiente.estado = 'vencida';
+    expect(plantaYaAvisada(firma)).toBe(false);
+    const manual = proponer({ tipo: 'aviso-planta', fecha: '2026-09-16', firma: `${firma}|manual|2000`, destino: 'p@g.us', nombreDestino: 'planta', texto: '…' }, 2_000);
+    manual.estado = 'aprobada';
+    expect(plantaYaAvisada(firma)).toBe(true);
+  });
+});
 
 describe('decidir por cita', () => {
   it('un «1» citando la propuesta, de un admin, la aprueba', () => {

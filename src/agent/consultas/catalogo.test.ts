@@ -1,4 +1,5 @@
-import { especificidadDeRegla, esConsulta, extraerParametros, fechaDe, hablaEnPasado, normalizarPlaca, preguntaLimpia, rutearPorReglas, sumarDias } from './catalogo';
+import {
+  fueraDeCatalogo, especificidadDeRegla, esConsulta, extraerParametros, fechaDe, hablaEnPasado, normalizarPlaca, preguntaLimpia, rutearPorReglas, sumarDias } from './catalogo';
 
 /**
  * EL CATÁLOGO ES CERRADO Y EL RUTEO SE PUEDE LEER. Cada pregunta real de José
@@ -44,6 +45,17 @@ describe('¿le hablan al agente?', () => {
   it('la pregunta queda limpia para rutear', () => {
     expect(preguntaLimpia('@lila en qué carro va la 5')).toBe('en que carro va la 5');
     expect(preguntaLimpia('@51949376824 quién maneja la 3', '51949376824')).toBe('quien maneja la 3');
+  });
+});
+
+describe('lista negra: mandar A ALGUIEN, no pedir acá', () => {
+  it('«manda el pdf» es pedirlo; «mándale al chofer» o «envía al cliente» es repartir', () => {
+    expect(fueraDeCatalogo('manda el pdf del ipp de ayer')).toBe(false);
+    expect(fueraDeCatalogo('envíame el control de pista')).toBe(false);
+    expect(fueraDeCatalogo('mándale el vale al chofer')).toBe(true);
+    expect(fueraDeCatalogo('envía el pdf al cliente')).toBe(true);
+    expect(fueraDeCatalogo('manda a planta el teléfono de juan')).toBe(true);
+    expect(fueraDeCatalogo('reenvía esto al grupo')).toBe(true);
   });
 });
 

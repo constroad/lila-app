@@ -1,11 +1,11 @@
 import logger from '../../utils/logger.js';
-import { CATALOGO, esConsulta, especificidadDeRegla, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, temaSinDato, type ClaveConsulta, type Parametros } from './catalogo.js';
+import { CATALOGO, esConsulta, extraerParametros, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { construirVista, type VistaDelDia } from './vista.js';
 import { OPCIONES_PESTANAS, PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, elegirPedido, etiquetaPedido, identificaUnidad, pestanasEnLaPregunta, responder, textoEnlace, unidadPor, type Respuesta } from './responder.js';
 import { crearEnlaceDelPedido, enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo, type PestanasEnlace } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta, textoRespuestaInvalida } from './pendientes.js';
 import { TEMAS, menuAyuda, temaPorPalabra, textoTema } from './ayuda.js';
-import { fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto.js';
+import { fusionar, pareceContinuacion, recordarConsulta, ultimaConsulta } from './contexto.js';
 import { ALIAS_EMPRESA } from './catalogo.js';
 import { SIN_AGREGADOS, consumosDelDia, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
 import { NOMBRES_DE_DISTRITOS, diasHasta, distritosDe, lugarDesconocido, pronosticoHorario, pronosticoSemanal, riesgoPorDistrito, textoClima, textoClimaSemanal, textoFueraDeAlcance, textoLugarDesconocido, textoRiesgoDistritos } from './clima.js';
@@ -14,12 +14,16 @@ import { fechaDe, hoyLima, normalizar, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
 import { buscarCubicacion, type Cubicacion } from './cubicacion.js';
-import { MAX_OPCIONES_INFORMES, argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, herramientaDeDatosPorReglas, normalizarArgumentos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
+import { MAX_OPCIONES_INFORMES, argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import { buscarInformes, tipoDeInforme, type InformeEncontrado } from '../llm/informes.js';
 import { archivosDeFotos, cargarFotosDelInforme, fotosDeUnidad, todasLasFotos } from './fotos-informe.js';
 import { COMPANY_PILOTO, type AlcanceAgente } from '../checklist/alcance.js';
+import { esOrdenDeAvisoAPlanta } from './orden-planta.js';
+import { decidirRuta, esDeUnDia, seDejaPasar } from './decision.js';
+
+export { esOrdenDeAvisoAPlanta };
 
 export { esConsulta };
 
@@ -36,11 +40,6 @@ export { esConsulta };
 // Más alto que el del checklist: rutear mal una pregunta es peor que decir «no entendí».
 const UMBRAL_RUTEO = 0.88;
 
-/** Desde cuántas palabras una pregunta va primero al modelo y no a las reglas. */
-const PALABRAS_PARA_MODELO = 12;
-
-/** Las consultas que hablan de UN día: con un rango en la pregunta, es la programación o el historial del rango. */
-const esDeUnDia = (clave: ClaveConsulta | null): boolean => clave === 'orders_day' || clave === 'dispatch_summary' || clave === 'day_progress';
 
 /** Lo que el modelo generativo sacó de la pregunta, en el molde de siempre. */
 const comoParametros = (a: Argumentos): Partial<Parametros> => ({
@@ -432,19 +431,6 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRe
   return { clave: null, pregunta };
 };
 
-/**
- * «Manda/envía/avisa/pon el aviso (mensaje, programación, producción, pedidos)
- * a planta» — un verbo de mandar, «planta» y algo que mandar. «¿Qué unidad está
- * en planta?» o «clima para planta» no lo son.
- */
-export const esOrdenDeAvisoAPlanta = (pregunta: string): boolean => {
-  const t = normalizar(pregunta);
-  if (!/\bplanta\b/.test(t)) return false;
-  const verbo = /\b(manda|mandale|mandar|mandalo|envia|enviale|enviar|envialo|avisa|avisale|avisar|pon|publica|comparte|propon|proponme|prepara|arma|comunica|comunicale|pasa|pasale)\w*\b/.test(t);
-  const que = /\b(aviso|mensaje|programacion|produccion|producciones|pedido|pedidos|recordatorio|avisar|comunicado)\b/.test(t);
-  return verbo && que;
-};
-
 /** Lo que se contesta si la consulta revienta por dentro (base, red): honesto y sin stack. */
 export const MENSAJE_DE_FALLO = '⚠️ No pude responder ahora: algo falló al buscar los datos. Vuelve a preguntarme en un momento.';
 
@@ -460,10 +446,13 @@ export const atenderConsulta = async (
     // segundos, y la persona tiene que ver que algo pasa (José, 14/09).
     await empezarAEscribir(grupo, alcance);
     let pregunta = preguntaLimpia(texto, numeroBot);
+    // La decisión vive en `decision.ts` (misma precedencia, sin IO): es lo que
+    // el examen del corpus corre con cada pregunta real. Acá solo se ejecuta.
+    const decision = decidirRuta(pregunta);
     // «Manda el aviso a planta con la programación de mañana»: una ORDEN, no
     // una consulta. Se propone en este grupo y se manda con la aprobación de
     // siempre (José, 14/09: «si no me lo sugieres, yo debería poder pedirlo»).
-    if (esOrdenDeAvisoAPlanta(pregunta)) {
+    if (decision.tipo === 'orden_planta') {
       const { proponerAvisoManual } = await import('../checklist/detector.js');
       const fecha = fechaDe(pregunta) ?? sumarDias(hoyLima(), /\bhoy\b/.test(normalizar(pregunta)) ? 0 : 1);
       const respuestaTexto = await proponerAvisoManual(fecha, alcance);
@@ -473,49 +462,26 @@ export const atenderConsulta = async (
     }
     // Lo que no se registra se dice de frente, antes de que una palabra suelta
     // («llegó») lo mande a otra herramienta.
-    const sinDato = temaSinDato(pregunta);
-    if (sinDato) {
+    if (decision.tipo === 'sin_dato') {
       logger.info(`[agente] consulta de ${quien} sobre un dato que no se registra: «${pregunta}»`);
-      await responderEnGrupo(grupo, { texto: sinDato }, alcance);
+      await responderEnGrupo(grupo, { texto: decision.texto }, alcance);
       return;
     }
-    // La lista negra gana sobre todo: ni reglas, ni modelo, ni embeddings ven un precio.
-    const vetada = fueraDeCatalogo(pregunta);
+    const vetada = decision.tipo === 'vetada';
     const porRegla = vetada ? null : rutearPorReglas(pregunta);
-    // Una pregunta LARGA la entiende mejor el modelo que la primera regla que
-    // pisa: «habrá producciones esta semana… ¿cómo estará el clima para planta
-    // y qué distritos están propensos a lluvia?» caía en «planta» → unidad en
-    // planta (14/09). Las reglas quedan de respaldo si el modelo no está.
-    // …salvo que la regla sea de dos o más palabras («clima» + «planta»): esa
-    // es precisa aunque la pregunta sea larga (14/09, 13:49: el modelo mandó
-    // «y el clima en la molina… para asfaltar mañana» a los agregados).
-    const larga = pregunta.split(/\s+/).length > PALABRAS_PARA_MODELO && especificidadDeRegla(pregunta) < 2;
-    let clave: ClaveConsulta | null = larga ? null : porRegla;
+    let clave: ClaveConsulta | null = decision.tipo === 'catalogo' ? decision.clave : null;
     let respuesta: Respuesta | undefined;
     let extra: Partial<Parametros> | undefined;
-    // Las herramientas de datos que se reconocen por palabra y no necesitan un
-    // nombre («cuántos agregados llegaron hoy», «qué pedidos no tienen
-    // certificado») se contestan sin modelo, con las fechas que el código lee.
-    const porDatos = vetada || larga ? null : herramientaDeDatosPorReglas(pregunta);
-    if (porDatos) {
-      respuesta = await responderConDatos(porDatos, normalizarArgumentos(porDatos, [], pregunta), pregunta, quien, grupo);
-      recordarConsulta({ quien, grupo, clave: porDatos, pregunta });
-      clave = null;
+    if (decision.tipo === 'datos') {
+      respuesta = await responderConDatos(decision.herramienta, decision.argumentos, pregunta, quien, grupo);
+      recordarConsulta({ quien, grupo, clave: decision.herramienta, pregunta });
     }
-    // «Qué pedidos hay esta semana»: la regla dice «pedidos de hoy», pero el
-    // rango de la pregunta manda — es lo programado (o lo despachado) en ese rango.
-    const rango = esDeUnDia(clave) ? argumentosDeRango(pregunta) : null;
-    if (rango) {
-      respuesta = await responderConDatos('pedidos', rango, pregunta, quien, grupo);
-      recordarConsulta({ quien, grupo, clave: 'pedidos', pregunta });
-      clave = null;
-    }
-    if (!clave && !vetada && !respuesta) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, larga ? porRegla : null));
+    if (decision.tipo === 'modelo') ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, decision.reglaDeRespaldo));
     // Etiquetada pero hablando DE ella, no CON ella («…la vayamos entrenando a
     // @lila», «eso no puede responder @lila 😅», 14/09 18:27): no es pregunta
     // ni pedido, ninguna regla la entendió y el modelo cayó en `help`. Silencio;
     // el menú sale solo con «ayuda» o ante una pregunta que no se entendió.
-    if (!respuesta && (!clave || clave === 'help') && porRegla !== 'help' && !pareceParaElAgente(pregunta)) {
+    if (seDejaPasar(pregunta, clave, porRegla, Boolean(respuesta))) {
       logger.info(`[agente] mención de ${quien} que no es pregunta ni pedido, se deja pasar: «${pregunta}»`);
       return;
     }

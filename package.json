@@ -15,7 +15,8 @@
     "test:cjs": "jest --selectProjects cjs",
     "test:send": "node scripts/test-send-messages.js",
     "lint": "eslint src/**/*.ts",
-    "format": "prettier --write src/**/*.ts"
+    "format": "prettier --write src/**/*.ts",
+    "agente:examen": "tsx scripts/agente-examen.ts"
   },
   "keywords": [
     "whatsapp",

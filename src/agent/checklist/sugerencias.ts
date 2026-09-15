@@ -122,6 +122,17 @@ export const yaEnviada = (tipo: TipoPropuesta, firmaBase: string): Propuesta | u
   propuestas.find((p) => p.tipo === tipo && p.estado === 'aprobada' && p.firma.startsWith(firmaBase));
 
 /**
+ * ¿Planta ya recibió el AVISO de esa producción (el «Producción programada —
+ * reunión 30 min antes»)? Es lo primero que le llega a planta de un día; el
+ * checklist («por confirmar: PEN…») solo tiene sentido después. El 15/09 a las
+ * 17:00 el aviso del 16/09 había vencido sin respuesta, salió el checklist con
+ * su «responde 1 para enviarlo», José respondió 1 esperando el aviso, y a
+ * planta le llegó un checklist de una producción que nadie les había anunciado.
+ * `firmaBaseAviso` es `${firmaDia(dia)}|aviso` (la de `proponerAvisoDelDia`).
+ */
+export const plantaYaAvisada = (firmaBaseAviso: string): boolean => Boolean(yaEnviada('aviso-planta', firmaBaseAviso));
+
+/**
  * Al aprobarse una, las demás pendientes del mismo tipo, día y destino quedan
  * superadas: se cierran en silencio (no «vencen» con aviso). Devuelve las
  * cerradas para persistirlas.

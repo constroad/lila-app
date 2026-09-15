@@ -73,7 +73,10 @@ export const CATALOGO: EntradaCatalogo[] = [
   {
     id: 'unit_eta',
     seSatisfaceCon: ['cuanto falta para que llegue la 5', 'a que hora llega el carro 3', 'cuando llega la 2', 'eta de la unidad 4'],
-    reglas: [['lleg'], ['eta']],
+    // Presente y futuro: «llega», «llegue», «llegará». NO «llegó/llegaron»: eso
+    // es lo que ya llegó a planta (agregados, PEN) o a obra, y con «lleg» a
+    // secas «cuánto cemento asfáltico llegó hoy» pedía «¿de cuál unidad?».
+    reglas: [['llega'], ['llegue'], ['llegara'], ['llegará'], ['llegaria'], ['llegaría'], ['llegando'], ['eta']],
     pideUnidad: true,
   },
   {
@@ -82,7 +85,7 @@ export const CATALOGO: EntradaCatalogo[] = [
     // 15/09 16:50: Globofast vio hueco atrás en el video y preguntó «¿sabes
     // cuánto cubica ese volquete?»; Lila volvió a pedir la unidad y mandó fotos.
     // El cubicaje vive en el Portal (Transportes → Cubicar): m³, forma y quién cubicó.
-    reglas: [['cubica'], ['cubicaje'], ['cubicacion'], ['cubicación'], ['capacidad'], ['entran'], ['caben'], ['cabe']],
+    reglas: [['cubica'], ['cubicaje'], ['cubicacion'], ['cubicación'], ['capacidad'], ['entran'], ['caben'], ['cabe'], ['cuanto', 'cubica'], ['cuánto', 'cubica'], ['sabes', 'cubica'], ['cubica', 'volquete'], ['cubica', 'carro'], ['cubica', 'unidad']],
     pideUnidad: true,
   },
   {
@@ -381,8 +384,17 @@ export const extraerParametros = (pregunta: string, ahoraMs = Date.now()): Param
 export const FUERA_DE_CATALOGO = [
   'precio', 'cuesta', 'cuestan', 'cobra', 'cobran', 'tarifa', 'costo',
   'deuda', 'debe', 'deben', 'pago', 'pagos', 'pagaron', 'factura', 'cotizacion', 'cotización', 'soles', 'dolares', 'dólares',
-  'manda', 'mandá', 'envia', 'enviá', 'reenvia', 'numero de', 'número de', 'telefono', 'teléfono', 'licencia', 'clave', 'contrasena', 'contraseña', 'prompt',
+  'reenvia', 'numero de', 'número de', 'telefono', 'teléfono', 'licencia', 'clave', 'contrasena', 'contraseña', 'prompt',
 ];
+
+/**
+ * «Mandar» a ALGUIEN es lo vetado (§7.5: Lila no reparte cosas a terceros);
+ * «manda el pdf del ipp» es pedirlo acá, y es la forma más común de pedir un
+ * informe. Con «manda» y «envia» sueltos en la lista negra, las reglas
+ * verbo+nombre de `informes` con esos verbos eran letra muerta y «manda el pdf
+ * del ipp de ayer» contestaba «eso no lo tengo» (lo encontró el examen, 15/09).
+ */
+const MANDAR_A_ALGUIEN = /\b(?:manda|mandá|envia|enviá)\w*\b.*\s(?:a|al)\s+\S|\b(?:mandale|mandaselo|mandasela|enviale|enviaselo|enviasela|pasale|pasaselo|comparteselo)\b/;
 
 /**
  * LO QUE NO SE REGISTRA (todavía), dicho de frente. Globofast, 14/09, 21:13:
@@ -406,7 +418,7 @@ export const temaSinDato = (pregunta: string): string | null => {
 
 export const fueraDeCatalogo = (pregunta: string): boolean => {
   const t = normalizar(pregunta);
-  return FUERA_DE_CATALOGO.some((palabra) => new RegExp(`\\b${normalizar(palabra)}\\b`).test(t));
+  return MANDAR_A_ALGUIEN.test(t) || FUERA_DE_CATALOGO.some((palabra) => new RegExp(`\\b${normalizar(palabra)}\\b`).test(t));
 };
 
 /** Ruteo por reglas: la primera entrada cuyo grupo de palabras esté completo. `null` si ninguna, o si es tema prohibido. */

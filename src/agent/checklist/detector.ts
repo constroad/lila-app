@@ -25,6 +25,7 @@ import {
   vencidasAhora,
   yaEnviada,
   yaPropuesta,
+  plantaYaAvisada,
   type Propuesta,
 } from './sugerencias.js';
 import { agruparPorDia, firmaDia, momentoVigente, type DiaDePlanta, type PedidoDelDia } from './dia.js';
@@ -169,15 +170,17 @@ const proponerAvisoDelDia = async (
   dia: DiaDePlanta,
   alcance: Awaited<ReturnType<typeof alcanceVigente>>,
   ahoraMs: number,
-  presupuesto: Presupuesto = SIN_LIMITE
+  presupuesto: Presupuesto = SIN_LIMITE,
+  opciones: { aunqueVencida?: boolean } = {}
 ): Promise<number> => {
   if (!alcance.grupoPlanta || presupuesto.restantes <= 0) return 0;
   const firma = `${firmaDia(dia)}|aviso`;
   // Ya se mandó (a pedido o aprobada): no hay nada que proponer. Y lo que
   // venció sin respuesta no se vuelve a proponer solo: para eso está «@lila
-  // manda el aviso a planta».
+  // manda el aviso a planta»… salvo que llegue la hora del checklist de planta
+  // y planta siga sin aviso: ahí el aviso va primero (`aunqueVencida`).
   if (yaEnviada('aviso-planta', firma)) return 0;
-  if (yaPropuesta('aviso-planta', firma, ahoraMs, { incluirVencidas: true })) return 0;
+  if (yaPropuesta('aviso-planta', firma, ahoraMs, { incluirVencidas: !opciones.aunqueVencida })) return 0;
 
   const anterior = ultimaVersionDelDia.get(dia.fecha);
   const cambio = anterior ? describirCambio(anterior, dia.pedidos) : '';
@@ -291,6 +294,17 @@ const proponerRevisionDelDia = async (
     const marca = `${dia.fecha}|${momento}|${dominio}|`;
     if (yaPropuesta(tipo, marca, ahoraMs)) continue;
     const aPlanta = dominio === 'planta' && Boolean(alcance.grupoPlanta);
+    // EL AVISO VA PRIMERO. A planta no se le pide «confirmen PEN» de una
+    // producción que nadie les anunció. Si el aviso del día no salió (venció
+    // sin respuesta, se descartó), en el horario del checklist se vuelve a
+    // proponer el aviso, y el checklist queda para la siguiente pasada. 15/09,
+    // 17:00: José respondió «1» al checklist esperando que saliera el aviso.
+    if (aPlanta && !plantaYaAvisada(`${firmaDia(dia)}|aviso`)) {
+      const avisos = await proponerAvisoDelDia(dia, alcance, ahoraMs, presupuesto, { aunqueVencida: true });
+      if (avisos) logger.info(`[agente] checklist de planta del ${dia.fecha} espera: planta no tenía el aviso, se propuso primero`);
+      nuevas += avisos;
+      continue;
+    }
     const propuesta: Propuesta = proponer(
       {
         tipo,

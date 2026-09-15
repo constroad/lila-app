@@ -1,0 +1,395 @@
+[
+  {
+    "id": "2026-09-15-1226",
+    "incidente": "2026-09-15-1226",
+    "pregunta": "@lila cuantos carros ya se descargaron en campo en el control dr pista?",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "site_finish"
+    }
+  },
+  {
+    "id": "2026-09-15-1513",
+    "incidente": "2026-09-15-1513",
+    "pregunta": "@lila cuantos carros ya se descargaron en campo en el control dr pista?",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "site_finish"
+    },
+    "nota": "misma pregunta, segundo fallo: «descargaron» empezaba con el verbo «descarga» del PDF"
+  },
+  {
+    "id": "faltan-colocar-obra",
+    "pregunta": "@lila cuántos carros faltan por colocar en obra",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "site_finish"
+    }
+  },
+  {
+    "id": "2026-09-15-1648",
+    "incidente": "2026-09-15-1648",
+    "pregunta": "@lila del A1Y 825 dame el vídeo de cómo salió hoy de planta",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_media",
+      "params": {
+        "plate": "A1Y825"
+      }
+    }
+  },
+  {
+    "id": "2026-09-15-1650",
+    "incidente": "2026-09-15-1650",
+    "pregunta": "@lila en el vídeo puedo notar que hay hueco en la parte de atrás, no está lleno el volquete de 25 m3, sabes cuánto cubica ese volquete?",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_capacity"
+    }
+  },
+  {
+    "id": "cubicaje-placa",
+    "pregunta": "@lila cuánto cubica el T2T-809",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_capacity",
+      "params": {
+        "plate": "T2T809"
+      }
+    }
+  },
+  {
+    "id": "2026-09-15-1030-cita",
+    "incidente": "2026-09-15-1030",
+    "pregunta": "Enlaza al grupo de certificados",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "certificados_pendientes"
+    },
+    "nota": "Sin etiqueta no debe llegar acá (lo corta el observador); si llega, esto es lo que hace"
+  },
+  {
+    "id": "2026-09-15-1531-resumen",
+    "pregunta": "@ConstRoad puedes darme el resumen de los volquetes despachados el día de hoy",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "dispatch_summary"
+    }
+  },
+  {
+    "id": "2026-09-15-0634-pasado",
+    "incidente": "2026-09-15-0634",
+    "pregunta": "@lila qué empresa tuvo producción el 03 y 04 de setiembre",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "modelo"
+    },
+    "esperadoConModelo": {
+      "herramienta": "pedidos",
+      "argumentos": {
+        "desde": "2026-09-03",
+        "hasta": "2026-09-04"
+      }
+    },
+    "nota": "sin regla: la sigue el modelo; el código pone las fechas (03–04/09 de 2026, pasado)"
+  },
+  {
+    "id": "2026-09-15-0613-sabado",
+    "incidente": "2026-09-15-0613",
+    "pregunta": "@lila hubo pedidos el sábado 04/09?",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "orders_day",
+      "params": {
+        "fecha": "2026-09-04"
+      }
+    },
+    "nota": "un día ya pasado es el de este año (2026), no 2027"
+  },
+  {
+    "id": "2026-09-14-1911-manana",
+    "incidente": "2026-09-14-1911",
+    "pregunta": "@lila qué pedidos hay mañana martes 15",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "orders_day",
+      "params": {
+        "fecha": "2026-09-15"
+      }
+    }
+  },
+  {
+    "id": "pedidos-semana",
+    "pregunta": "@lila qué pedidos hay esta semana",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "pedidos"
+    }
+  },
+  {
+    "id": "2026-09-14-1349-clima-larga",
+    "incidente": "2026-09-14-1349",
+    "pregunta": "@lila habrá producciones esta semana? cómo estará el clima para planta y qué distritos están propensos a lluvia?",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "weather",
+      "params": {
+        "rango": "semana"
+      }
+    },
+    "nota": "larga, pero «clima»+«planta» es una regla de dos palabras: manda aunque sea larga (14/09 15:07)"
+  },
+  {
+    "id": "2026-09-14-1349-clima-molina",
+    "pregunta": "@lila y el clima en la molina para asfaltar mañana",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "weather"
+    }
+  },
+  {
+    "id": "2026-09-14-propensos",
+    "pregunta": "@lila qué distritos están propensos a lluvia?",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "weather_districts"
+    },
+    "nota": "«pen» dentro de «propensos» mandaba a los tanques"
+  },
+  {
+    "id": "2026-09-14-2125-pen",
+    "incidente": "2026-09-14-2125",
+    "pregunta": "@lila a qué temperatura está el PEN",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "sin_dato"
+    }
+  },
+  {
+    "id": "2026-09-15-informes-campo",
+    "incidente": "2026-09-15-informes-campo",
+    "pregunta": "@lila qué informes de campo se hicieron hoy",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "reports_status"
+    },
+    "nota": "«campo» a secas mandaba a la unidad en campo"
+  },
+  {
+    "id": "2026-09-15-0933-fotos-informe",
+    "incidente": "2026-09-15-0933",
+    "pregunta": "@lila muéstrame las fotos del control de pista",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_media"
+    },
+    "nota": "fotos de un informe: unit_media + pideFotosDeInforme, sin pedir unidad"
+  },
+  {
+    "id": "pdf-control-pista",
+    "pregunta": "@lila pásame el control de pista de los pinos",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "informes"
+    }
+  },
+  {
+    "id": "pdf-ipp-ayer",
+    "pregunta": "@lila manda el pdf del ipp de ayer",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "informes",
+      "argumentos": {
+        "fecha": "2026-09-14"
+      }
+    }
+  },
+  {
+    "id": "2026-09-14-1317-certificados",
+    "incidente": "2026-09-14-1317",
+    "pregunta": "@lila qué pedidos no tienen certificado",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "certificados_pendientes"
+    }
+  },
+  {
+    "id": "2026-09-14-1300-agregados",
+    "incidente": "2026-09-14-1300",
+    "pregunta": "@lila cuántos agregados llegaron hoy",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "ingresos_agregados"
+    }
+  },
+  {
+    "id": "2026-09-14-1309-liquidos",
+    "incidente": "2026-09-14-1309",
+    "pregunta": "@lila cuánto cemento asfáltico llegó hoy",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "modelo"
+    },
+    "nota": "líquidos no son una unidad («llegó» no es ETA) ni pasan por la regla de agregados; el modelo los manda a la recepción de insumos, que es donde se registran",
+    "esperadoConModelo": {
+      "herramienta": "ingresos_agregados"
+    }
+  },
+  {
+    "id": "2026-09-15-0712-stock-empresa",
+    "incidente": "2026-09-15-0712",
+    "pregunta": "@lila stock de agregados de globofast",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "aggregates_stock",
+      "params": {
+        "companyId": "globofas-s8k"
+      }
+    }
+  },
+  {
+    "id": "2026-09-15-0712-enlace",
+    "pregunta": "@lila generame el enlace del pedido de hoy de globofast",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "order_link"
+    }
+  },
+  {
+    "id": "enlace-con-informes",
+    "pregunta": "@lila pásame el enlace del pedido con informes",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "order_link"
+    },
+    "nota": "pide el ENLACE, no el PDF"
+  },
+  {
+    "id": "2026-09-14-orden-planta",
+    "incidente": "2026-09-14-1954",
+    "pregunta": "@lila manda el aviso a planta con la programación de mañana",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "orden_planta"
+    }
+  },
+  {
+    "id": "planta-unidad",
+    "pregunta": "@lila qué unidad está en planta?",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "plant_current_unit"
+    }
+  },
+  {
+    "id": "fecha-no-unidad",
+    "incidente": "2026-09-15-fecha-unidad",
+    "pregunta": "@lila fotos de la última unidad que salió el 4 de setiembre",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_media",
+      "params": {
+        "ordinal": "ultima",
+        "fecha": "2026-09-04"
+      }
+    },
+    "nota": "«el 4 de setiembre» no es la unidad 4"
+  },
+  {
+    "id": "quien-maneja",
+    "pregunta": "@lila quién maneja la 5",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_driver",
+      "params": {
+        "unitNumber": 5
+      }
+    }
+  },
+  {
+    "id": "van-250-no-placa",
+    "pregunta": "@lila cuántos m3 van, los 250 de hoy?",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "day_progress",
+      "params": {
+        "plate": null
+      }
+    },
+    "nota": "«los 250» no es una placa"
+  },
+  {
+    "id": "vetada-precio",
+    "pregunta": "@lila cuánto cuesta el m3 de asfalto",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "vetada"
+    }
+  },
+  {
+    "id": "2026-09-14-1827-hablan-de-ella",
+    "incidente": "2026-09-14-1827",
+    "pregunta": "eso no puede responder @lila 😅",
+    "hoy": "2026-09-14",
+    "esperado": {
+      "ruta": "modelo"
+    },
+    "nota": "sin ruta; después `seDejaPasar` la calla (no es pregunta)"
+  },
+  {
+    "id": "ayuda",
+    "pregunta": "@lila ayuda",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "help"
+    }
+  },
+  {
+    "id": "cliente-modelo",
+    "pregunta": "@lila el teléfono del cliente zapata",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "vetada"
+    },
+    "nota": "«teléfono» es lista negra §7.5 (datos de personas), aunque exista la herramienta clientes"
+  },
+  {
+    "id": "despachamos-cobenas",
+    "pregunta": "@lila qué le despachamos a cobeñas la semana pasada",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "modelo"
+    },
+    "esperadoConModelo": {
+      "herramienta": "pedidos"
+    }
+  }
+]
