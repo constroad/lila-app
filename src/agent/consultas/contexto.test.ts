@@ -93,3 +93,13 @@ describe('esOrdenDeAvisoAPlanta — «manda el aviso a planta» es una orden, no
     }
   });
 });
+
+describe('temaSinDato — lo que no se registra se dice de frente', () => {
+  it('la temperatura del cemento asfáltico no está en la base', async () => {
+    const { temaSinDato } = await import('./catalogo');
+    expect(temaSinDato('acaba de llegar una tancada de cemento asfáltico, a qué temperatura llegó y a qué hora estaría idónea para producir?')).toContain('temperatura');
+    expect(temaSinDato('cuántos grados tiene el PEN')).toContain('no se registra');
+    expect(temaSinDato('cuántos agregados llegaron hoy')).toBeNull();
+    expect(temaSinDato('clima en Ate mañana')).toBeNull();
+  });
+});

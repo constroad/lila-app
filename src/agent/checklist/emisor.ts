@@ -103,6 +103,18 @@ export const avisarEnGrupo = async (destino: string, texto: string, alcance: Alc
 export const responderEstado = avisarEnGrupo;
 
 /**
+ * Una PREGUNTA del agente al grupo que se escucha (el checklist de campo), con
+ * el id del mensaje: la respuesta que lo cite («sí, está confirmado») lo
+ * cierra entero. Respeta el interruptor, como toda salida que no es un aviso.
+ */
+export const preguntarEnGrupo = async (destino: string, texto: string, alcance: AlcanceAgente): Promise<string | null> => {
+  if (!AGENTE_ACTIVO || agenteApagado()) return null;
+  const jid = grupoDeConsultas(destino, alcance);
+  if (!jid) return null;
+  return (await mandar(jid, texto)) ?? '';
+};
+
+/**
  * «ESCRIBIENDO…» DESDE QUE SE ENTIENDE LA PREGUNTA, no desde que la respuesta
  * está lista. José, 14/09/2026: «para la generación de imágenes o de cosas
  * pesadas no me muestra inmediatamente escribiendo, lo cual al usuario lo hace

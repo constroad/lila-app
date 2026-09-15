@@ -312,6 +312,8 @@ export const observarParaChecklist = async (
         // Los mensajes del AGENTE no confirman nada: no se cierra a sí mismo los
         // ítems que acaba de abrir. Y no es `fromMe`: ver `esDelBot`.
         esPropio: delBot,
+        // A qué mensaje responde: «sí, está confirmado» citando un checklist lo cierra entero.
+        ...(citaDe(raw.message) ? { citaId: citaDe(raw.message) } : {}),
       };
       recordarMensaje(remoteJid, mensaje);
       // Y a Mongo, para que un deploy no lo borre. Fire-and-forget: nunca en el

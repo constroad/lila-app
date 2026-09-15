@@ -107,6 +107,7 @@ export const cargarMensajes = async (
       autor: String(d.autor || ''),
       ts: Number(d.ts) || 0,
       esPropio: Boolean(d.esPropio),
+      ...(d.citaId ? { citaId: String(d.citaId) } : {}),
     }));
   } catch (error) {
     avisar('no pude cargar mensajes', error);

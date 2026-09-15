@@ -192,3 +192,11 @@ describe('el filtro completo', () => {
     expect(itemSatisfecho(combustible, utiles.textos)).toBe(true);
   });
 });
+
+describe('esConfirmacionEnBloque — «sí, está confirmado» respondiendo al checklist', () => {
+  it('reconoce la confirmación en bloque y no un «falta»', async () => {
+    const { esConfirmacionEnBloque } = await import('./mensajes');
+    for (const si of ['Si está confirmado. Gracias por el recordatorio ☺️', 'todo listo', 'Todo coordinado 👍', 'ok todo', 'confirmado', 'ya está todo']) expect(esConfirmacionEnBloque(si)).toBe(true);
+    for (const no of ['falta la cuadrilla', 'todavía no', 'no está confirmado', 'y el agua?', 'confirmado el pedido de mañana para las 4 con dos cuadrillas y el tren completo listo ok']) expect(esConfirmacionEnBloque(no)).toBe(false);
+  });
+});

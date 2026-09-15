@@ -319,6 +319,26 @@ export const FUERA_DE_CATALOGO = [
   'manda', 'mandá', 'envia', 'enviá', 'reenvia', 'numero de', 'número de', 'telefono', 'teléfono', 'licencia', 'clave', 'contrasena', 'contraseña', 'prompt',
 ];
 
+/**
+ * LO QUE NO SE REGISTRA (todavía), dicho de frente. Globofast, 14/09, 21:13:
+ * «llegó una tancada de cemento asfáltico, ¿a qué temperatura llegó y a qué
+ * hora estaría idónea para producir?» → Lila contestó con los ingresos de
+ * agregados por el «llegó». No hay temperatura en la base; José: «indicaré a
+ * Dario que registre para tener esa información disponible». Hasta entonces,
+ * la respuesta honesta y lo que sí se puede ofrecer.
+ */
+export const SIN_DATO: Array<{ patron: RegExp; texto: string }> = [
+  {
+    patron: /\b(temperatura|temperaturas|grados|centigrados|calent(ar|ando|o)|enfri(ar|ando))\b/,
+    texto: 'La temperatura (del cemento asfáltico, de los tanques o de la mezcla) todavía no se registra en el sistema, así que no la tengo. Lo que sí te puedo dar: los galones de PEN y demás líquidos en los tanques («líquidos») y las llegadas de agregados del día.',
+  },
+];
+
+export const temaSinDato = (pregunta: string): string | null => {
+  const t = normalizar(pregunta);
+  return SIN_DATO.find((s) => s.patron.test(t))?.texto ?? null;
+};
+
 export const fueraDeCatalogo = (pregunta: string): boolean => {
   const t = normalizar(pregunta);
   return FUERA_DE_CATALOGO.some((palabra) => new RegExp(`\\b${normalizar(palabra)}\\b`).test(t));

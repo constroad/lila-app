@@ -142,3 +142,12 @@ describe('herramientas de datos por regla (sin modelo)', () => {
     expect(normalizarArgumentos('ingresos_agregados', [], 'qué llegó a inframaq esta semana', lunes)).toEqual({ desde: '2026-09-14', hasta: '2026-09-20' });
   });
 });
+
+describe('una llegada de líquidos no es de agregados (Globofast, 14/09: «llegó una tancada de cemento asfáltico»)', () => {
+  it('«llegó» con cemento asfáltico, PEN o petróleo no va a ingresos de agregados', () => {
+    expect(herramientaDeDatosPorReglas('acaba de llegar una tancada de cemento asfáltico, a qué temperatura llegó?')).toBeNull();
+    expect(herramientaDeDatosPorReglas('llegó el PEN?')).toBeNull();
+    expect(herramientaDeDatosPorReglas('cuántos agregados llegaron hoy')).toBe('ingresos_agregados');
+    expect(herramientaDeDatosPorReglas('llegó la arena?')).toBe('ingresos_agregados');
+  });
+});

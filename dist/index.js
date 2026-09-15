@@ -10628,7 +10628,8 @@ var init_persistencia = __esm({
           texto: String(d67.texto || ""),
           autor: String(d67.autor || ""),
           ts: Number(d67.ts) || 0,
-          esPropio: Boolean(d67.esPropio)
+          esPropio: Boolean(d67.esPropio),
+          ...d67.citaId ? { citaId: String(d67.citaId) } : {}
         }));
       } catch (error) {
         avisar("no pude cargar mensajes", error);
@@ -10719,7 +10720,7 @@ var init_interruptor = __esm({
 });
 
 // src/agent/checklist/emisor.ts
-var sender, mandar, enviarAOperaciones, publicarPropuesta, grupoDeConsultas, avisarEnGrupo, escribiendoEn, RENOVAR_ESCRIBIENDO_MS, TOPE_ESCRIBIENDO_MS, empezarAEscribir, dejarDeEscribir, responderEnGrupo, mandadas, enviarAprobado;
+var sender, mandar, enviarAOperaciones, publicarPropuesta, grupoDeConsultas, avisarEnGrupo, preguntarEnGrupo, escribiendoEn, RENOVAR_ESCRIBIENDO_MS, TOPE_ESCRIBIENDO_MS, empezarAEscribir, dejarDeEscribir, responderEnGrupo, mandadas, enviarAprobado;
 var init_emisor = __esm({
   "src/agent/checklist/emisor.ts"() {
     init_logger();
@@ -10766,6 +10767,12 @@ var init_emisor = __esm({
       if (!jid) return false;
       await mandar(jid, texto5);
       return true;
+    };
+    preguntarEnGrupo = async (destino, texto5, alcance) => {
+      if (!AGENTE_ACTIVO || agenteApagado()) return null;
+      const jid = grupoDeConsultas(destino, alcance);
+      if (!jid) return null;
+      return await mandar(jid, texto5) ?? "";
     };
     escribiendoEn = /* @__PURE__ */ new Map();
     RENOVAR_ESCRIBIENDO_MS = 7e3;
@@ -10914,7 +10921,7 @@ var init_aprobadores = __esm({
 });
 
 // src/agent/consultas/catalogo.ts
-var CATALOGO, normalizar2, esConsulta, preguntaLimpia, DIAS_SEMANA, MESES, hoyLima, sumarDias, fechaDe, ALIAS_EMPRESA, normalizarPlaca, extraerParametros, FUERA_DE_CATALOGO, fueraDeCatalogo, especificidadDeRegla, rutearPorReglas;
+var CATALOGO, normalizar2, esConsulta, preguntaLimpia, DIAS_SEMANA, MESES, hoyLima, sumarDias, fechaDe, ALIAS_EMPRESA, normalizarPlaca, extraerParametros, FUERA_DE_CATALOGO, SIN_DATO, temaSinDato, fueraDeCatalogo, especificidadDeRegla, rutearPorReglas;
 var init_catalogo = __esm({
   "src/agent/consultas/catalogo.ts"() {
     CATALOGO = [
@@ -11134,6 +11141,16 @@ var init_catalogo = __esm({
       "contrase\xF1a",
       "prompt"
     ];
+    SIN_DATO = [
+      {
+        patron: /\b(temperatura|temperaturas|grados|centigrados|calent(ar|ando|o)|enfri(ar|ando))\b/,
+        texto: "La temperatura (del cemento asf\xE1ltico, de los tanques o de la mezcla) todav\xEDa no se registra en el sistema, as\xED que no la tengo. Lo que s\xED te puedo dar: los galones de PEN y dem\xE1s l\xEDquidos en los tanques (\xABl\xEDquidos\xBB) y las llegadas de agregados del d\xEDa."
+      }
+    ];
+    temaSinDato = (pregunta) => {
+      const t44 = normalizar2(pregunta);
+      return SIN_DATO.find((s59) => s59.patron.test(t44))?.texto ?? null;
+    };
     fueraDeCatalogo = (pregunta) => {
       const t44 = normalizar2(pregunta);
       return FUERA_DE_CATALOGO.some((palabra) => new RegExp(`\\b${normalizar2(palabra)}\\b`).test(t44));
@@ -13394,7 +13411,7 @@ var init_informes = __esm({
 });
 
 // src/agent/llm/herramientas.ts
-var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, herramientaDeDatosPorReglas, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, textoConFecha, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
+var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, HABLA_DE_LIQUIDOS, herramientaDeDatosPorReglas, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, textoConFecha, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
 var init_herramientas2 = __esm({
   "src/agent/llm/herramientas.ts"() {
     init_catalogo();
@@ -13440,11 +13457,13 @@ var init_herramientas2 = __esm({
         reglas: REGLAS_INFORMES
       }
     ];
+    HABLA_DE_LIQUIDOS = /\b(cemento|pen|emulsion|mc-?30|petroleo|diesel|gasohol|gasolina|tancada|cisterna|liquido|liquidos|galones)\b/;
     herramientaDeDatosPorReglas = (pregunta) => {
       const t44 = normalizar2(pregunta);
       let mejor = null;
       for (const h65 of HERRAMIENTAS) {
         if (!esHerramientaDeDatos(h65.id) || !h65.reglas) continue;
+        if (h65.id === "ingresos_agregados" && HABLA_DE_LIQUIDOS.test(t44)) continue;
         for (const grupo of h65.reglas) {
           const palabras = grupo.map(normalizar2);
           if (!palabras.every((p64) => new RegExp(`\\b${p64}`).test(t44))) continue;
@@ -14147,10 +14166,16 @@ ${i50.servicio}` : ""}${pdf.generado ? "\n_(generado ahora)_" : ""}`;
 });
 
 // src/agent/checklist/mensajes.ts
-var NEGACIONES_PALABRA, NEGACIONES_PREFIJO, esPregunta, enPalabras, niegaFragmento, SEPARADOR_CLAUSULA, enClausulas, niega, clausulasUtiles, motivoDescarte, filtrarMensajes;
+var esConfirmacionEnBloque, NEGACIONES_PALABRA, NEGACIONES_PREFIJO, esPregunta, enPalabras, niegaFragmento, SEPARADOR_CLAUSULA, enClausulas, niega, clausulasUtiles, motivoDescarte, filtrarMensajes;
 var init_mensajes = __esm({
   "src/agent/checklist/mensajes.ts"() {
     init_checklist();
+    esConfirmacionEnBloque = (texto5) => {
+      const t44 = String(texto5 || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+      if (!t44 || t44.split(" ").length > 12) return false;
+      if (/\b(no|falta|faltan|pendiente|todavia|aun|nada)\b/.test(t44)) return false;
+      return /\b(si esta confirmado|esta confirmado|esta todo confirmado|todo confirmado|todo listo|todo ok|ok todo|todo bien|todo coordinado|todo en orden|confirmado todo|listo todo|ya esta todo|todos confirmados|todo conforme|confirmado|coordinado|listo)\b/.test(t44);
+    };
     NEGACIONES_PALABRA = ["no", "nada", "nadie", "tampoco", "sin", "aun", "todavia", "ni"];
     NEGACIONES_PREFIJO = ["falta", "cancel", "postergam", "suspend", "se cayo"];
     esPregunta = (texto5) => texto5.includes("?") || texto5.includes("\xBF");
@@ -14525,6 +14550,7 @@ __export(detector_exports, {
   _resetMenciones: () => _resetMenciones,
   correrDeteccion: () => correrDeteccion,
   diaPeruano: () => diaPeruano,
+  dominiosConfirmadosEnBloque: () => dominiosConfirmadosEnBloque,
   enHorarioDeOficina: () => enHorarioDeOficina,
   instanteArranque: () => instanteArranque,
   pedidosConArranque: () => pedidosConArranque,
@@ -14532,7 +14558,7 @@ __export(detector_exports, {
   proponerAvisoManual: () => proponerAvisoManual,
   revisionDelDia: () => revisionDelDia
 });
-var nombresEmpresa, _resetDetector, pedidosConArranque, ultimaVersionDelDia, correrDeteccion, SIN_LIMITE, proponerAvisoDelDia, proponerAvisoManual, proponerRevisionDelDia, revisionDelDia, nombreEmpresa2, pedidosEnRango, MENCION_REPETIR_MS, propuestasDeMencion, _resetMenciones, proponerPorMenciones, enHorarioDeOficina;
+var nombresEmpresa, _resetDetector, pedidosConArranque, ultimaVersionDelDia, correrDeteccion, SIN_LIMITE, proponerAvisoDelDia, proponerAvisoManual, proponerRevisionDelDia, revisionDelDia, dominiosConfirmadosEnBloque, conConfirmacionesEnBloque, nombreEmpresa2, pedidosEnRango, MENCION_REPETIR_MS, propuestasDeMencion, _resetMenciones, proponerPorMenciones, enHorarioDeOficina;
 var init_detector = __esm({
   "src/agent/checklist/detector.ts"() {
     init_logger();
@@ -14669,10 +14695,13 @@ var init_detector = __esm({
       if (!momento || presupuesto.restantes <= 0) return 0;
       const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
       const utiles = filtrarMensajes(delGrupo);
-      const revision = await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
-        soloCriticos: momento === "ultima-llamada",
-        negadas: utiles.negadas
-      });
+      const revision = conConfirmacionesEnBloque(
+        await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
+          soloCriticos: momento === "ultima-llamada",
+          negadas: utiles.negadas
+        }),
+        dominiosConfirmadosEnBloque(delGrupo, dia.fecha)
+      );
       const contexto = {
         fecha: dia.fecha,
         minutosParaArranque: Math.round((dia.arranqueMs - ahoraMs) / 6e4),
@@ -14709,10 +14738,11 @@ var init_detector = __esm({
         if (aPlanta) {
           await publicarPropuesta(propuesta, conPiePropuesta(texto5, propuesta.nombreDestino), alcance);
         } else {
-          const enviado = await responderEnGrupo(alcance.grupoEscuchado, { texto: texto5 }, alcance);
-          propuesta.estado = enviado ? "aprobada" : "descartada";
+          const msgId = await preguntarEnGrupo(alcance.grupoEscuchado, texto5, alcance);
+          propuesta.estado = msgId !== null ? "aprobada" : "descartada";
           propuesta.decididaPor = "agente";
           propuesta.decididaMs = ahoraMs;
+          if (msgId) anotarMensaje(propuesta.id, msgId);
           void guardarPropuesta(propuesta);
         }
         presupuesto.restantes -= 1;
@@ -14728,8 +14758,25 @@ var init_detector = __esm({
       if (!alcance.grupoEscuchado) return null;
       const dia = agruparPorDia(await pedidosConArranque(ahoraMs)).find((d67) => d67.fecha === fecha);
       if (!dia) return null;
-      const utiles = filtrarMensajes(mensajesDesde(alcance.grupoEscuchado, dia.creadoMs));
-      return evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, { negadas: utiles.negadas });
+      const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
+      const utiles = filtrarMensajes(delGrupo);
+      return conConfirmacionesEnBloque(await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, { negadas: utiles.negadas }), dominiosConfirmadosEnBloque(delGrupo, fecha));
+    };
+    dominiosConfirmadosEnBloque = (mensajes2, fecha) => {
+      const dominios = /* @__PURE__ */ new Set();
+      for (const m59 of mensajes2) {
+        if (m59.esPropio || !m59.citaId || !esConfirmacionEnBloque(m59.texto)) continue;
+        const citada = porMensaje(m59.citaId);
+        if (!citada || citada.fecha !== fecha) continue;
+        if (citada.tipo === "checklist-planta") dominios.add("planta");
+        if (citada.tipo === "checklist-admin") dominios.add("obra");
+      }
+      return dominios;
+    };
+    conConfirmacionesEnBloque = (revision, dominios) => {
+      if (!dominios.size) return revision;
+      const cerrados = revision.pendientes.filter((i50) => dominios.has(i50.domain));
+      return { ...revision, pendientes: revision.pendientes.filter((i50) => !dominios.has(i50.domain)), resueltos: [...revision.resueltos, ...cerrados] };
     };
     nombreEmpresa2 = async (companyId) => {
       const cacheado = nombresEmpresa.get(companyId);
@@ -15117,6 +15164,12 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
           if (respuestaTexto) await responderEnGrupo(grupo, { texto: respuestaTexto }, alcance);
           return;
         }
+        const sinDato = temaSinDato(pregunta);
+        if (sinDato) {
+          logger_default.info(`[agente] consulta de ${quien} sobre un dato que no se registra: \xAB${pregunta}\xBB`);
+          if (!opciones.implicita) await responderEnGrupo(grupo, { texto: sinDato }, alcance);
+          return;
+        }
         const vetada = fueraDeCatalogo(pregunta);
         const porRegla = vetada ? null : rutearPorReglas(pregunta);
         const larga = pregunta.split(/\s+/).length > PALABRAS_PARA_MODELO && especificidadDeRegla(pregunta) < 2;
@@ -15346,7 +15399,9 @@ var init_observador = __esm({
             ts: aMilisegundos(raw?.messageTimestamp, ahora),
             // Los mensajes del AGENTE no confirman nada: no se cierra a sí mismo los
             // ítems que acaba de abrir. Y no es `fromMe`: ver `esDelBot`.
-            esPropio: delBot
+            esPropio: delBot,
+            // A qué mensaje responde: «sí, está confirmado» citando un checklist lo cierra entero.
+            ...citaDe(raw.message) ? { citaId: citaDe(raw.message) } : {}
           };
           recordarMensaje(remoteJid, mensaje);
           void guardarMensaje(remoteJid, { ...mensaje, waId: String(raw?.key?.id || "") || void 0 });

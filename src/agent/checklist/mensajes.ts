@@ -20,7 +20,28 @@ export interface MensajeGrupo {
   ts: number;
   /** `true` si salió de una de NUESTRAS sesiones (`key.fromMe`). */
   esPropio: boolean;
+  /** Id del mensaje de WhatsApp que CITA (responde), si alguno: «sí, está confirmado» respondiendo al checklist. */
+  citaId?: string;
 }
+
+/**
+ * «Sí, está confirmado», «todo listo», «todo coordinado», «ok todo»: una
+ * confirmación EN BLOQUE. Vale solo respondiendo (citando) un checklist del
+ * agente: Globofast, 14/09, 21:01, respondió así al checklist de campo y el
+ * agente no lo entendió porque buscaba ítem por ítem.
+ */
+export const esConfirmacionEnBloque = (texto: string): boolean => {
+  const t = String(texto || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t || t.split(' ').length > 12) return false;
+  if (/\b(no|falta|faltan|pendiente|todavia|aun|nada)\b/.test(t)) return false;
+  return /\b(si esta confirmado|esta confirmado|esta todo confirmado|todo confirmado|todo listo|todo ok|ok todo|todo bien|todo coordinado|todo en orden|confirmado todo|listo todo|ya esta todo|todos confirmados|todo conforme|confirmado|coordinado|listo)\b/.test(t);
+};
 
 export type MotivoDescarte = 'propio' | 'vacio' | 'pregunta' | 'negacion';
 

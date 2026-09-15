@@ -110,3 +110,23 @@ describe('enHorarioDeOficina — las menciones se recuerdan cuando la gente carg
     expect(enHorarioDeOficina(lima(3))).toBe(false);
   });
 });
+
+describe('dominiosConfirmadosEnBloque — responder «sí, está confirmado» al checklist lo cierra entero', () => {
+  it('cierra la parte cuyo mensaje se cita, del mismo día, y nada más', async () => {
+    const { dominiosConfirmadosEnBloque } = await import('./detector');
+    const { _resetPropuestas, proponer, anotarMensaje } = await import('./sugerencias');
+    _resetPropuestas();
+    const campo = proponer({ tipo: 'checklist-admin', fecha: '2026-09-15', firma: 'x', destino: 'g@g.us', nombreDestino: 'admin', texto: '…' }, 1_000);
+    anotarMensaje(campo.id, 'MSG-CAMPO');
+    const planta = proponer({ tipo: 'checklist-planta', fecha: '2026-09-16', firma: 'y', destino: 'p@g.us', nombreDestino: 'planta', texto: '…' }, 1_000);
+    anotarMensaje(planta.id, 'MSG-PLANTA-16');
+    const mensajes = [
+      { texto: 'Si está confirmado. Gracias por el recordatorio ☺️', autor: 'globofast@lid', ts: 2_000, esPropio: false, citaId: 'MSG-CAMPO' },
+      { texto: 'todo listo', autor: 'x@lid', ts: 2_100, esPropio: false, citaId: 'MSG-PLANTA-16' }, // otro día
+      { texto: 'todo listo', autor: 'x@lid', ts: 2_200, esPropio: false }, // sin cita: no se sabe a qué
+      { texto: 'todo listo', autor: 'bot@lid', ts: 2_300, esPropio: true, citaId: 'MSG-CAMPO' }, // propio: no
+    ];
+    expect([...dominiosConfirmadosEnBloque(mensajes, '2026-09-15')]).toEqual(['obra']);
+    expect([...dominiosConfirmadosEnBloque(mensajes, '2026-09-16')]).toEqual(['planta']);
+  });
+});

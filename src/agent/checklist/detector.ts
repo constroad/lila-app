@@ -3,8 +3,8 @@ import { getOrderModel } from '../../database/models.js';
 import { AGENTE_ACTIVO, EMPRESAS_CON_PEDIDOS, destinoPermitido } from './alcance.js';
 import { alcanceVigente } from './observador.js';
 import { mensajesDesde, observados } from './almacen.js';
-import { filtrarMensajes } from './mensajes.js';
-import { CHECKLIST_PRODUCCION } from './checklist.js';
+import { esConfirmacionEnBloque, filtrarMensajes, type MensajeGrupo } from './mensajes.js';
+import { CHECKLIST_PRODUCCION, type ChecklistDomain, type ChecklistItem } from './checklist.js';
 import { evaluarRevisionSemantica } from './semantica.js';
 import {
   conPiePropuesta,
@@ -13,11 +13,13 @@ import {
   describirCambio,
   firmaAviso,
 } from './aviso.js';
-import { enviarAOperaciones, publicarPropuesta, responderEnGrupo } from './emisor.js';
+import { enviarAOperaciones, preguntarEnGrupo, publicarPropuesta, responderEnGrupo } from './emisor.js';
 import { guardarPropuesta } from './persistencia.js';
 import {
   _resetPropuestas,
+  anotarMensaje,
   pendientes,
+  porMensaje,
   proponer,
   propuestasDe,
   vencidasAhora,
@@ -230,10 +232,13 @@ const proponerRevisionDelDia = async (
   // anterior a que se cargara el primer pedido hablaba de otro día.
   const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
   const utiles = filtrarMensajes(delGrupo);
-  const revision = await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
-    soloCriticos: momento === 'ultima-llamada',
-    negadas: utiles.negadas,
-  });
+  const revision = conConfirmacionesEnBloque(
+    await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
+      soloCriticos: momento === 'ultima-llamada',
+      negadas: utiles.negadas,
+    }),
+    dominiosConfirmadosEnBloque(delGrupo, dia.fecha)
+  );
 
   const contexto = {
     fecha: dia.fecha,
@@ -285,10 +290,11 @@ const proponerRevisionDelDia = async (
     if (aPlanta) {
       await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
     } else {
-      const enviado = await responderEnGrupo(alcance.grupoEscuchado, { texto }, alcance);
-      propuesta.estado = enviado ? 'aprobada' : 'descartada';
+      const msgId = await preguntarEnGrupo(alcance.grupoEscuchado, texto, alcance);
+      propuesta.estado = msgId !== null ? 'aprobada' : 'descartada';
       propuesta.decididaPor = 'agente';
       propuesta.decididaMs = ahoraMs;
+      if (msgId) anotarMensaje(propuesta.id, msgId);
       void guardarPropuesta(propuesta);
     }
     presupuesto.restantes -= 1;
@@ -312,8 +318,34 @@ export const revisionDelDia = async (fecha: string, ahoraMs = Date.now()) => {
   if (!alcance.grupoEscuchado) return null;
   const dia = agruparPorDia(await pedidosConArranque(ahoraMs)).find((d) => d.fecha === fecha);
   if (!dia) return null;
-  const utiles = filtrarMensajes(mensajesDesde(alcance.grupoEscuchado, dia.creadoMs));
-  return evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, { negadas: utiles.negadas });
+  const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
+  const utiles = filtrarMensajes(delGrupo);
+  return conConfirmacionesEnBloque(await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, { negadas: utiles.negadas }), dominiosConfirmadosEnBloque(delGrupo, fecha));
+};
+
+/**
+ * «Sí, está confirmado» RESPONDIENDO al checklist de campo (o de planta):
+ * cierra todos los ítems de esa parte para ese día. Se sabe a qué checklist
+ * responde por el id del mensaje citado, que quedó anotado en la propuesta
+ * (Globofast, 14/09, 21:01, y José: «ya lo marca solo y deja de mandar los
+ * recordatorios» — tenía que ser verdad).
+ */
+export const dominiosConfirmadosEnBloque = (mensajes: MensajeGrupo[], fecha: string): Set<ChecklistDomain> => {
+  const dominios = new Set<ChecklistDomain>();
+  for (const m of mensajes) {
+    if (m.esPropio || !m.citaId || !esConfirmacionEnBloque(m.texto)) continue;
+    const citada = porMensaje(m.citaId);
+    if (!citada || citada.fecha !== fecha) continue;
+    if (citada.tipo === 'checklist-planta') dominios.add('planta');
+    if (citada.tipo === 'checklist-admin') dominios.add('obra');
+  }
+  return dominios;
+};
+
+const conConfirmacionesEnBloque = <R extends { pendientes: ChecklistItem[]; resueltos: ChecklistItem[] }>(revision: R, dominios: Set<ChecklistDomain>): R => {
+  if (!dominios.size) return revision;
+  const cerrados = revision.pendientes.filter((i) => dominios.has(i.domain));
+  return { ...revision, pendientes: revision.pendientes.filter((i) => !dominios.has(i.domain)), resueltos: [...revision.resueltos, ...cerrados] };
 };
 
 /**

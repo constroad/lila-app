@@ -1,5 +1,5 @@
 import logger from '../../utils/logger.js';
-import { CATALOGO, esConsulta, especificidadDeRegla, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
+import { CATALOGO, esConsulta, especificidadDeRegla, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, temaSinDato, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { construirVista, type VistaDelDia } from './vista.js';
 import { PREGUNTA_UNIDAD, acotarArchivos, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo } from './archivos.js';
@@ -405,6 +405,14 @@ export const atenderConsulta = async (
       const respuestaTexto = await proponerAvisoManual(fecha, alcance);
       logger.info(`[agente] orden de ${quien}: aviso a planta del ${fecha} → ${respuestaTexto ? 'no se propuso' : 'propuesto'}`);
       if (respuestaTexto) await responderEnGrupo(grupo, { texto: respuestaTexto }, alcance);
+      return;
+    }
+    // Lo que no se registra se dice de frente, antes de que una palabra suelta
+    // («llegó») lo mande a otra herramienta.
+    const sinDato = temaSinDato(pregunta);
+    if (sinDato) {
+      logger.info(`[agente] consulta de ${quien} sobre un dato que no se registra: «${pregunta}»`);
+      if (!opciones.implicita) await responderEnGrupo(grupo, { texto: sinDato }, alcance);
       return;
     }
     // La lista negra gana sobre todo: ni reglas, ni modelo, ni embeddings ven un precio.
