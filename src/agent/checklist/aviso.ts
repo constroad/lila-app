@@ -63,34 +63,43 @@ const ENCABEZADO: Record<ContextoRevision['momento'], string> = {
  */
 export const construirAvisoChecklist = (
   revision: Revision,
-  contexto: ContextoRevision
+  contexto: ContextoRevision,
+  /** Solo esa parte, con su propio encabezado: la lee otra gente (José, 14/09: mezclar planta y campo pierde el foco). */
+  dominio?: ChecklistDomain
 ): string | null => {
-  if (revision.pendientes.length === 0) return null;
+  const TITULO: Record<ChecklistDomain, string> = { planta: 'Planta', obra: 'Campo' };
+  const dominios = dominio ? [dominio] : (['planta', 'obra'] as ChecklistDomain[]);
+  const pendientesDe = (d: ChecklistDomain) => revision.pendientes.filter((i) => i.domain === d);
+  if (dominios.every((d) => pendientesDe(d).length === 0)) return null;
 
   const faltan = contexto.minutosParaArranque;
-  const cuando = faltan >= 0 ? `Arranca en ${duracion(faltan)}` : `Arrancó hace ${duracion(faltan)}`;
+  const cuando = faltan >= 0 ? `arranca en ${duracion(faltan)}` : `arrancó hace ${duracion(faltan)}`;
   const quienes = contexto.pedidos.map((p) => `${p.hora} ${p.empresa} ${p.cubos} m³`).join(' · ');
 
-  const lineas = [
-    `${ENCABEZADO[contexto.momento]} — ${fechaLegible(contexto.fecha)}`,
-    quienes + (contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''),
-    cuando,
-  ];
+  const encabezado = dominio ? ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio].toLowerCase()) : ENCABEZADO[contexto.momento];
+  const lineas = [`${encabezado} — ${fechaLegible(contexto.fecha)}`, `${quienes}${contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''} · ${cuando}`];
 
   // Por dominio, porque lo lee gente distinta: planta primero, campo después.
-  const TITULO: Record<ChecklistDomain, string> = { planta: 'Planta', obra: 'Campo' };
-  for (const dominio of ['planta', 'obra'] as ChecklistDomain[]) {
-    const pendientes = revision.pendientes.filter((i) => i.domain === dominio);
+  for (const d of dominios) {
+    const pendientes = pendientesDe(d);
     if (pendientes.length === 0) continue;
-    lineas.push('', `*${TITULO[dominio]}* — sin confirmar:`);
+    lineas.push('', dominio ? 'Sin confirmar:' : `*${TITULO[d]}* — sin confirmar:`);
     lineas.push(...pendientes.map((i) => `• ${i.pregunta}`));
   }
 
-  if (revision.resueltos.length > 0) {
-    lineas.push('', `Ya confirmado: ${revision.resueltos.map((r) => r.titulo).join(', ')} ✔`);
+  const resueltos = dominio ? revision.resueltos.filter((r) => r.domain === dominio) : revision.resueltos;
+  if (resueltos.length > 0) {
+    lineas.push('', `Ya confirmado: ${resueltos.map((r) => r.titulo).join(', ')} ✔`);
   }
 
   return lineas.join('\n');
+};
+
+/** El encabezado de una sola parte: «Checklist de planta», «Planta — sigue sin confirmar», «Planta — última llamada». */
+const ENCABEZADO_DOMINIO: Record<ContextoRevision['momento'], (parte: string) => string> = {
+  inicial: (parte) => `📋 *Checklist de ${parte}*`,
+  recordatorio: (parte) => `⏰ *${parte[0].toUpperCase()}${parte.slice(1)} — sigue sin confirmar*`,
+  'ultima-llamada': (parte) => `🚨 *${parte[0].toUpperCase()}${parte.slice(1)} — última llamada, falta lo crítico*`,
 };
 
 export interface PedidoParaAviso {

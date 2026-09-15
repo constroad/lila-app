@@ -23,7 +23,7 @@ import { randomUUID } from 'crypto';
  * `aviso-mencion` (a planta) y `recordatorio-pedido` (al grupo admin) nacen de
  * una producción MENCIONADA en el chat que todavía no es pedido (`menciones.ts`).
  */
-export type TipoPropuesta = 'aviso-planta' | 'checklist-admin' | 'aviso-mencion' | 'recordatorio-pedido';
+export type TipoPropuesta = 'aviso-planta' | 'checklist-admin' | 'checklist-planta' | 'aviso-mencion' | 'recordatorio-pedido';
 export type EstadoPropuesta = 'pendiente' | 'aprobada' | 'descartada' | 'vencida';
 
 export interface Propuesta {

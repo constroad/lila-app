@@ -14201,7 +14201,7 @@ var init_mensajes = __esm({
 });
 
 // src/agent/checklist/aviso.ts
-var duracion, ENCABEZADO, construirAvisoChecklist, construirAvisoProduccion, describirCambio, conPiePropuesta, firmaAviso;
+var duracion, ENCABEZADO, construirAvisoChecklist, ENCABEZADO_DOMINIO, construirAvisoProduccion, describirCambio, conPiePropuesta, firmaAviso;
 var init_aviso = __esm({
   "src/agent/checklist/aviso.ts"() {
     init_tiempo();
@@ -14217,27 +14217,32 @@ var init_aviso = __esm({
       recordatorio: "\u23F0 *Recordatorio \u2014 sigue sin confirmar*",
       "ultima-llamada": "\u{1F6A8} *\xDAltima llamada \u2014 falta lo cr\xEDtico*"
     };
-    construirAvisoChecklist = (revision, contexto) => {
-      if (revision.pendientes.length === 0) return null;
-      const faltan = contexto.minutosParaArranque;
-      const cuando = faltan >= 0 ? `Arranca en ${duracion(faltan)}` : `Arranc\xF3 hace ${duracion(faltan)}`;
-      const quienes = contexto.pedidos.map((p64) => `${p64.hora} ${p64.empresa} ${p64.cubos} m\xB3`).join(" \xB7 ");
-      const lineas = [
-        `${ENCABEZADO[contexto.momento]} \u2014 ${fechaLegible(contexto.fecha)}`,
-        quienes + (contexto.pedidos.length > 1 ? ` \xB7 total ${contexto.totalCubos} m\xB3` : ""),
-        cuando
-      ];
+    construirAvisoChecklist = (revision, contexto, dominio) => {
       const TITULO = { planta: "Planta", obra: "Campo" };
-      for (const dominio of ["planta", "obra"]) {
-        const pendientes3 = revision.pendientes.filter((i50) => i50.domain === dominio);
+      const dominios = dominio ? [dominio] : ["planta", "obra"];
+      const pendientesDe = (d67) => revision.pendientes.filter((i50) => i50.domain === d67);
+      if (dominios.every((d67) => pendientesDe(d67).length === 0)) return null;
+      const faltan = contexto.minutosParaArranque;
+      const cuando = faltan >= 0 ? `arranca en ${duracion(faltan)}` : `arranc\xF3 hace ${duracion(faltan)}`;
+      const quienes = contexto.pedidos.map((p64) => `${p64.hora} ${p64.empresa} ${p64.cubos} m\xB3`).join(" \xB7 ");
+      const encabezado = dominio ? ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio].toLowerCase()) : ENCABEZADO[contexto.momento];
+      const lineas = [`${encabezado} \u2014 ${fechaLegible(contexto.fecha)}`, `${quienes}${contexto.pedidos.length > 1 ? ` \xB7 total ${contexto.totalCubos} m\xB3` : ""} \xB7 ${cuando}`];
+      for (const d67 of dominios) {
+        const pendientes3 = pendientesDe(d67);
         if (pendientes3.length === 0) continue;
-        lineas.push("", `*${TITULO[dominio]}* \u2014 sin confirmar:`);
+        lineas.push("", dominio ? "Sin confirmar:" : `*${TITULO[d67]}* \u2014 sin confirmar:`);
         lineas.push(...pendientes3.map((i50) => `\u2022 ${i50.pregunta}`));
       }
-      if (revision.resueltos.length > 0) {
-        lineas.push("", `Ya confirmado: ${revision.resueltos.map((r39) => r39.titulo).join(", ")} \u2714`);
+      const resueltos = dominio ? revision.resueltos.filter((r39) => r39.domain === dominio) : revision.resueltos;
+      if (resueltos.length > 0) {
+        lineas.push("", `Ya confirmado: ${resueltos.map((r39) => r39.titulo).join(", ")} \u2714`);
       }
       return lineas.join("\n");
+    };
+    ENCABEZADO_DOMINIO = {
+      inicial: (parte) => `\u{1F4CB} *Checklist de ${parte}*`,
+      recordatorio: (parte) => `\u23F0 *${parte[0].toUpperCase()}${parte.slice(1)} \u2014 sigue sin confirmar*`,
+      "ultima-llamada": (parte) => `\u{1F6A8} *${parte[0].toUpperCase()}${parte.slice(1)} \u2014 \xFAltima llamada, falta lo cr\xEDtico*`
     };
     construirAvisoProduccion = (dia, opciones = {}) => {
       const titulo = opciones.actualizacion ? `\u{1F501} *Producci\xF3n de ${fechaLegible(dia.fecha)} \u2014 actualizaci\xF3n*` : `\u{1F4E2} *Producci\xF3n programada \u2014 ${fechaLegible(dia.fecha)}*`;
@@ -14653,31 +14658,42 @@ var init_detector = __esm({
         momento,
         grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado
       };
-      const texto5 = construirAvisoChecklist(revision, contexto);
-      if (!texto5) return 0;
-      const firma = firmaAviso(dia.fecha, momento, revision);
-      if (yaPropuesta("checklist-admin", firma, ahoraMs)) return 0;
-      if (yaPropuesta("checklist-admin", `${dia.fecha}|${momento}|`, ahoraMs)) return 0;
-      const propuesta = proponer(
-        {
-          tipo: "checklist-admin",
-          fecha: dia.fecha,
-          firma,
-          destino: alcance.grupoEscuchado,
-          nombreDestino: alcance.nombreGrupo || "admin",
-          texto: texto5
-        },
-        ahoraMs
-      );
-      proponer(
-        { ...propuesta, firma: `${dia.fecha}|${momento}|`, texto: "", destino: "", nombreDestino: "" },
-        ahoraMs
-      ).estado = "descartada";
-      await publicarPropuesta(propuesta, conPiePropuesta(texto5, propuesta.nombreDestino), alcance);
-      logger_default.info(
-        `[agente] propuesta ${propuesta.id}: checklist ${momento} de ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB (${revision.pendientes.length} pendientes, ${revision.semanticas.length} confirmaci\xF3n(es) entendidas por sem\xE1ntica, descartados: ${JSON.stringify(utiles.descartados)})`
-      );
-      return 1;
+      let nuevas = 0;
+      for (const dominio of ["planta", "obra"]) {
+        const texto5 = construirAvisoChecklist(revision, contexto, dominio);
+        if (!texto5) continue;
+        const tipo = dominio === "planta" ? "checklist-planta" : "checklist-admin";
+        const firma = `${firmaAviso(dia.fecha, momento, revision)}|${dominio}`;
+        if (yaPropuesta(tipo, firma, ahoraMs)) continue;
+        const marca = `${dia.fecha}|${momento}|${dominio}|`;
+        if (yaPropuesta(tipo, marca, ahoraMs)) continue;
+        const aPlanta = dominio === "planta" && Boolean(alcance.grupoPlanta);
+        const propuesta = proponer(
+          {
+            tipo,
+            fecha: dia.fecha,
+            firma,
+            destino: aPlanta ? alcance.grupoPlanta : alcance.grupoEscuchado,
+            nombreDestino: aPlanta ? alcance.nombreGrupoPlanta || "planta" : alcance.nombreGrupo || "admin",
+            texto: texto5
+          },
+          ahoraMs
+        );
+        proponer({ ...propuesta, firma: marca, texto: "", destino: "", nombreDestino: "" }, ahoraMs).estado = "descartada";
+        if (aPlanta) {
+          await publicarPropuesta(propuesta, conPiePropuesta(texto5, propuesta.nombreDestino), alcance);
+        } else {
+          const enviado = await responderEnGrupo(alcance.grupoEscuchado, { texto: texto5 }, alcance);
+          propuesta.estado = enviado ? "aprobada" : "descartada";
+          propuesta.decididaPor = "agente";
+          propuesta.decididaMs = ahoraMs;
+        }
+        nuevas += 1;
+        logger_default.info(
+          `[agente] ${aPlanta ? "propuesta" : "pregunta"} ${propuesta.id}: checklist de ${dominio === "planta" ? "planta" : "campo"} (${momento}) de ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB (${revision.pendientes.filter((i50) => i50.domain === dominio).length} pendientes, ${revision.semanticas.length} confirmaci\xF3n(es) entendidas por sem\xE1ntica, descartados: ${JSON.stringify(utiles.descartados)})`
+        );
+      }
+      return nuevas;
     };
     revisionDelDia = async (fecha, ahoraMs = Date.now()) => {
       const alcance = await alcanceVigente(ahoraMs);

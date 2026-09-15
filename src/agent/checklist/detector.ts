@@ -13,7 +13,7 @@ import {
   describirCambio,
   firmaAviso,
 } from './aviso.js';
-import { enviarAOperaciones, publicarPropuesta } from './emisor.js';
+import { enviarAOperaciones, publicarPropuesta, responderEnGrupo } from './emisor.js';
 import {
   _resetPropuestas,
   pendientes,
@@ -230,39 +230,55 @@ const proponerRevisionDelDia = async (
     momento,
     grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado,
   };
-  const texto = construirAvisoChecklist(revision, contexto);
-  if (!texto) return 0;
 
-  const firma = firmaAviso(dia.fecha, momento, revision);
-  if (yaPropuesta('checklist-admin', firma, ahoraMs)) return 0;
-  // Un horario se propone UNA vez, aunque lo pendiente cambie después: lo que
-  // cambia lo recoge el siguiente horario. Es lo que evita el goteo.
-  if (yaPropuesta('checklist-admin', `${dia.fecha}|${momento}|`, ahoraMs)) return 0;
+  // UNA PARTE POR QUIEN LA RESPONDE (José, 14/09: «lo mezclas con campo y
+  // planta y pierde el foco»). Lo de PLANTA (agregados, combustible, operadores,
+  // clima) se propone para el grupo de planta, con aprobación; lo de CAMPO
+  // (cuadrilla, tren, herramientas, comidas) se pregunta directo en INFRAMAQ
+  // admin, que es donde está la gente que lo responde — ahí no hay a quién
+  // proponérselo: se les está hablando a ellos.
+  let nuevas = 0;
+  for (const dominio of ['planta', 'obra'] as const) {
+    const texto = construirAvisoChecklist(revision, contexto, dominio);
+    if (!texto) continue;
+    const tipo = dominio === 'planta' ? 'checklist-planta' : 'checklist-admin';
+    const firma = `${firmaAviso(dia.fecha, momento, revision)}|${dominio}`;
+    if (yaPropuesta(tipo, firma, ahoraMs)) continue;
+    // Un horario se propone UNA vez, aunque lo pendiente cambie después: lo que
+    // cambia lo recoge el siguiente horario. Es lo que evita el goteo.
+    const marca = `${dia.fecha}|${momento}|${dominio}|`;
+    if (yaPropuesta(tipo, marca, ahoraMs)) continue;
+    const aPlanta = dominio === 'planta' && Boolean(alcance.grupoPlanta);
+    const propuesta: Propuesta = proponer(
+      {
+        tipo,
+        fecha: dia.fecha,
+        firma,
+        destino: aPlanta ? alcance.grupoPlanta : alcance.grupoEscuchado,
+        nombreDestino: aPlanta ? alcance.nombreGrupoPlanta || 'planta' : alcance.nombreGrupo || 'admin',
+        texto,
+      },
+      ahoraMs
+    );
+    // Marca del horario, independiente de lo pendiente: ver arriba.
+    proponer({ ...propuesta, firma: marca, texto: '', destino: '', nombreDestino: '' }, ahoraMs).estado = 'descartada';
 
-  const propuesta: Propuesta = proponer(
-    {
-      tipo: 'checklist-admin',
-      fecha: dia.fecha,
-      firma,
-      destino: alcance.grupoEscuchado,
-      nombreDestino: alcance.nombreGrupo || 'admin',
-      texto,
-    },
-    ahoraMs
-  );
-  // Marca del horario, independiente de lo pendiente: ver arriba.
-  proponer(
-    { ...propuesta, firma: `${dia.fecha}|${momento}|`, texto: '', destino: '', nombreDestino: '' },
-    ahoraMs
-  ).estado = 'descartada';
-
-  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
-  logger.info(
-    `[agente] propuesta ${propuesta.id}: checklist ${momento} de ${dia.fecha} → «${propuesta.nombreDestino}» ` +
-      `(${revision.pendientes.length} pendientes, ${revision.semanticas.length} confirmación(es) entendidas por semántica, ` +
-      `descartados: ${JSON.stringify(utiles.descartados)})`
-  );
-  return 1;
+    if (aPlanta) {
+      await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
+    } else {
+      const enviado = await responderEnGrupo(alcance.grupoEscuchado, { texto }, alcance);
+      propuesta.estado = enviado ? 'aprobada' : 'descartada';
+      propuesta.decididaPor = 'agente';
+      propuesta.decididaMs = ahoraMs;
+    }
+    nuevas += 1;
+    logger.info(
+      `[agente] ${aPlanta ? 'propuesta' : 'pregunta'} ${propuesta.id}: checklist de ${dominio === 'planta' ? 'planta' : 'campo'} (${momento}) de ${dia.fecha} → «${propuesta.nombreDestino}» ` +
+        `(${revision.pendientes.filter((i) => i.domain === dominio).length} pendientes, ${revision.semanticas.length} confirmación(es) entendidas por semántica, ` +
+        `descartados: ${JSON.stringify(utiles.descartados)})`
+    );
+  }
+  return nuevas;
 };
 
 /**

@@ -159,8 +159,7 @@ describe('el aviso al grupo de operaciones', () => {
     const aviso = construirAvisoChecklist(r, contexto)!;
 
     expect(aviso).toContain('📋 *Checklist de producción* — domingo 13/09');
-    expect(aviso).toContain('04:00 Globofast 91 m³ · 07:00 Constroad 45 m³ · total 136 m³');
-    expect(aviso).toContain('Arranca en 4 h');
+    expect(aviso).toContain('04:00 Globofast 91 m³ · 07:00 Constroad 45 m³ · total 136 m³ · arranca en 4 h');
     // Planta primero, campo después: lo lee gente distinta.
     expect(aviso.indexOf('*Planta* — sin confirmar:')).toBeLessThan(aviso.indexOf('*Campo* — sin confirmar:'));
     expect(aviso).toContain('• ¿Hay combustible (petróleo) suficiente?');
@@ -169,6 +168,30 @@ describe('el aviso al grupo de operaciones', () => {
     expect(aviso).not.toContain('¿Se programó a la cuadrilla?');
     expect(aviso).not.toContain('¿Hay gasohol?');
     expect(aviso).toContain('Ya confirmado: gasohol, cuadrilla ✔');
+  });
+
+  /**
+   * UNA PARTE POR QUIEN LA RESPONDE. José, 14/09 (20:00): «lo mezclas con campo
+   * y planta, pierde el foco». Lo de planta va a planta; lo de campo, al admin.
+   */
+  it('por dominio: solo esa parte, con su encabezado y solo lo confirmado de esa parte', () => {
+    const r = evaluarRevision(CHECKLIST_PRODUCCION, ['cuadrilla lista', 'hay gasohol']);
+    const planta = construirAvisoChecklist(r, contexto, 'planta')!;
+    expect(planta).toContain('📋 *Checklist de planta* — domingo 13/09');
+    expect(planta).toContain('• ¿Hay combustible (petróleo) suficiente?');
+    expect(planta).not.toContain('tren de asfalto');
+    expect(planta).not.toContain('*Planta*');
+    expect(planta).toContain('Ya confirmado: gasohol ✔');
+    const campo = construirAvisoChecklist(r, contexto, 'obra')!;
+    expect(campo).toContain('📋 *Checklist de campo* — domingo 13/09');
+    expect(campo).toContain('• ¿Tenemos el tren de asfalto listo?');
+    expect(campo).not.toContain('combustible');
+    expect(campo).toContain('Ya confirmado: cuadrilla ✔');
+    expect(construirAvisoChecklist(r, { ...contexto, momento: 'recordatorio' }, 'planta')).toContain('⏰ *Planta — sigue sin confirmar*');
+    expect(construirAvisoChecklist(r, { ...contexto, momento: 'ultima-llamada' }, 'obra')).toContain('🚨 *Campo — última llamada, falta lo crítico*');
+    // Con todo lo de una parte confirmado, esa parte calla.
+    const todoPlanta = evaluarRevision(CHECKLIST_PRODUCCION, CHECKLIST_PRODUCCION.filter((i) => i.domain === 'planta').flatMap((i) => i.seSatisfaceCon.slice(0, 1)));
+    expect(construirAvisoChecklist(todoPlanta, contexto, 'planta')).toBeNull();
   });
 
   it('el recordatorio y la última llamada se anuncian como tales', () => {
