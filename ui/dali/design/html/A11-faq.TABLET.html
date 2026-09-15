@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-100" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Preguntas frecuentes · Dali · CONSTROAD</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts: Public Sans (Headline/Display), DM Sans (Body/Label), JetBrains Mono (Numbers) -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {},
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "1rem",
+            "xl": "1.5rem",
+            "full": "9999px"
+          },
+          spacing: {},
+          fontFamily: {
+            headline: ["Public Sans", "sans-serif"],
+            display: ["Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .material-symbols-outlined.fill-1 {
+      font-variation-settings: 'FILL' 1;
+    }
+    /* Tabular nums for numeric counters */
+    .tabular-numbers {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="h-full font-body text-stone-900 antialiased flex bg-stone-100 overflow-x-hidden">
+<!-- ================================================================= -->
+<!-- 1. RAIL LATERAL IZQUIERDO (72px fijo según especificación tablet) -->
+<!-- ================================================================= -->
+<aside class="fixed top-0 left-0 h-full w-[72px] z-50 flex flex-col justify-between py-3 px-1 select-none bg-stone-50 border-r border-stone-200">
+<!-- Top: Logo e Isotipo -->
+<div class="flex flex-col items-center">
+<a class="group flex flex-col items-center justify-center p-2 rounded-xl hover:bg-stone-100 transition-colors" href="#">
+<div class="relative w-10 h-10 rounded-xl bg-teal-800 flex items-center justify-center text-white shadow-sm ring-2 ring-teal-700/20">
+<span class="font-headline font-bold text-lg tracking-tight">D</span>
+<span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-stone-50"></span>
+</div>
+<span class="font-headline font-bold text-[10px] text-teal-800 mt-1 tracking-tight">CONSTROAD</span>
+</a>
+<!-- Primary Navigation Rail (10 items con labels breves) -->
+<nav class="mt-4 flex flex-col gap-1 w-full items-center">
+<!-- Inicio -->
+<a class="w-14 h-12 flex flex-col items-center justify-center rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors" href="#" title="Inicio">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span class="text-[9px] font-medium leading-none mt-1">Inicio</span>
+</a>
+<!-- Chats -->
+<a class="w-14 h-12 flex flex-col items-center justify-center rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors" href="#" title="Chats">
+<span class="material-symbols-outlined text-[20px]">forum</span>
+<span class="text-[9px] font-medium leading-none mt-1">Chats</span>
+</a>
+<!-- Leads -->
+<a class="w-14 h-12 flex flex-col items-center justify-center rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors" href="#" title="Leads">
+<span class="material-symbols-outlined text-[20px]">contacts</span>
+<span class="text-[9px] font-medium leading-none mt-1">Leads</span>
+</a>
+<!-- Asistente -->
+<a class="w-14 h-12 flex flex-col items-center justify-center rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors" href="#" title="Asistente">
+<span class="material-symbols-outlined text-[20px]">smart_toy</span>
+<span class="text-[9px] font-medium leading-none mt-1">Asistente</span>
+</a>
+<!-- Negocio -->
+<a class="w-14 h-12 flex flex-col items-center justify-center rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors" href="#" title="Negocio">
+<span class="material-symbols-outlined text-[20px]">storefront</span>
+<span class="text-[9px] font-medium leading-none mt-1">Negocio</span>
+</a>
+<!-- Servicios -->
+<a class="w-14 h-12 flex flex-col items-center justify-center rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors" href="#" title="Servicios">
+<span class="material-symbols-outlined text-[20px]">construction</span>
+<span class="text-[9px] font-medium leading-none mt-1">Servicios</span>
+</a>
+<!-- FAQ (ACTIVO según Blueprint & Reglas) -->
+<a class="w-14 h-12 flex flex-col items-center justify-center bg-teal-50 text-teal-800 font-semibold rounded-lg border-l-4 border-teal-700 shadow-xs" href="#" title="Preguntas">
+<span class="material-symbols-outlined text-[20px] text-teal-800" style="font-variation-settings: 'FILL' 1;">quiz</span>
+<span class="text-[9px] font-semibold leading-none mt-1 text-teal-800">Preguntas</span>
+</a>
+<!-- Catálogo -->
+<a class="w-14 h-12 flex flex-col items-center justify-center rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors" href="#" title="Catálogo">
+<span class="material-symbols-outlined text-[20px]">inventory_2</span>
+<span class="text-[9px] font-medium leading-none mt-1">Catálogo</span>
+</a>
+<!-- WhatsApp -->
+<a class="w-14 h-12 flex flex-col items-center justify-center rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors" href="#" title="Canal">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+<span class="text-[9px] font-medium leading-none mt-1">Canal</span>
+</a>
+</nav>
+</div>
+<!-- Bottom: Ajustes, Plan & Perfil -->
+<div class="flex flex-col items-center gap-1 pt-2 border-t border-stone-200">
+<a class="w-14 h-10 flex flex-col items-center justify-center rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors" href="#" title="Ajustes">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+<span class="text-[8px] font-medium">Ajustes</span>
+</a>
+<div class="w-8 h-8 rounded-full bg-teal-100 text-teal-900 flex items-center justify-center text-xs font-bold ring-1 ring-teal-600/30" title="CONSTROAD Admin (Tú)">
+        CR
+      </div>
+</div>
+</aside>
+<!-- ================================================================= -->
+<!-- 2. ÁREA DE CONTENIDO PRINCIPAL (Optimizada para 834px tablet/desktop) -->
+<!-- ================================================================= -->
+<div class="flex-1 ml-[72px] min-h-screen flex flex-col bg-stone-100">
+<!-- Top Status / Announcement Bar (Si aplica) -->
+<header class="bg-white border-b border-stone-200 sticky top-0 z-40 px-6 py-3 flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<div class="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span>Dali conectado · WhatsApp +51 987 654 321</span>
+</div>
+</div>
+<div class="flex items-center space-x-3">
+<a class="text-xs font-medium text-stone-600 hover:text-teal-800 flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-stone-100" href="https://wa.me/51987654321" target="_blank">
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+<span>Ver en WhatsApp</span>
+</a>
+<button class="text-stone-500 hover:text-stone-800 p-1.5 rounded-lg hover:bg-stone-100" title="Ayuda">
+<span class="material-symbols-outlined text-[20px]">help_outline</span>
+</button>
+</div>
+</header>
+<main class="flex-1 p-6 max-w-[1240px] w-full mx-auto space-y-6">
+<!-- Cabecera de Página y Acciones Principales -->
+<section class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+<div>
+<div class="flex items-center gap-3">
+<h1 class="font-headline text-2xl font-bold text-stone-900 tracking-tight">Preguntas frecuentes</h1>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-800 border border-teal-200 tabular-numbers">
+              5 activas · 3 sugeridas
+            </span>
+</div>
+<p class="text-stone-600 text-sm mt-1">
+            Lo que Dali responde tal cual, sin inventar. Si la pregunta del cliente se parece, responde con esto.
+          </p>
+</div>
+<div class="flex items-center gap-2.5 self-start md:self-auto">
+<!-- Botón Secundario: Importar desde Excel -->
+<button class="h-10 px-3.5 inline-flex items-center gap-2 bg-white border border-stone-200 rounded-lg text-xs font-medium text-stone-700 hover:bg-stone-50 active:scale-[0.98] transition shadow-2xs">
+<span class="material-symbols-outlined text-[18px] text-stone-500">upload_file</span>
+<span>Importar desde Excel</span>
+</button>
+<!-- Botón Primario: Agregar pregunta -->
+<button class="h-10 px-4 inline-flex items-center gap-2 bg-teal-800 hover:bg-teal-900 active:scale-[0.98] transition text-white text-xs font-medium rounded-lg shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Agregar pregunta</span>
+</button>
+</div>
+</section>
+<!-- Barra de Filtro y Búsqueda Inmediata -->
+<section class="flex items-center gap-3 bg-white p-2 rounded-xl border border-stone-200 shadow-2xs">
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-[20px]">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-stone-50 border-none rounded-lg text-sm text-stone-900 placeholder:text-stone-400 focus:bg-white focus:ring-2 focus:ring-teal-700 focus:outline-none transition" placeholder="Buscar en preguntas o respuestas..." type="text"/>
+</div>
+<div class="flex items-center gap-1 border-l border-stone-200 pl-3">
+<button class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-teal-800 bg-teal-50 border border-teal-200">Todas (8)</button>
+<button class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:bg-stone-100">Activas (5)</button>
+<button class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:bg-stone-100">Sugeridas (3)</button>
+</div>
+</section>
+<!-- ============================================================= -->
+<!-- BLOQUE "SUGERIDAS POR DALI" (Banner ámbar con preguntas no resueltas) -->
+<!-- ============================================================= -->
+<section class="bg-amber-50 border border-amber-200 rounded-xl p-4 sm:p-5 shadow-2xs">
+<div class="flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[20px]">lightbulb</span>
+</div>
+<div class="flex-1">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+<h2 class="font-headline font-semibold text-stone-900 text-sm">
+                Estas preguntas las hicieron tus clientes y Dali no supo responder
+              </h2>
+<span class="text-[11px] font-medium text-amber-800">Actualizado hace 2 horas</span>
+</div>
+<p class="text-stone-600 text-xs mt-0.5">
+              Agrégalas a la lista para que Dali aprenda y atienda de inmediato la próxima vez por WhatsApp.
+            </p>
+<!-- Lista de items sugeridos -->
+<div class="mt-3.5 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+<!-- Item 1 -->
+<div class="bg-white/90 border border-amber-200/80 rounded-lg p-3 flex flex-col justify-between hover:bg-white transition shadow-xs">
+<div class="flex items-start justify-between gap-2">
+<span class="font-medium text-xs text-stone-900 leading-snug">"¿Trabajan los sábados?"</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 tabular-numbers">
+                    3 veces
+                  </span>
+</div>
+<div class="mt-3 flex items-center justify-between pt-2 border-t border-stone-100">
+<span class="text-[10px] text-stone-500">Último: Hoy 11:20</span>
+<button class="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-900 hover:underline">
+<span>Responder</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="bg-white/90 border border-amber-200/80 rounded-lg p-3 flex flex-col justify-between hover:bg-white transition shadow-xs">
+<div class="flex items-start justify-between gap-2">
+<span class="font-medium text-xs text-stone-900 leading-snug">"¿Hacen pistas en provincia?"</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 tabular-numbers">
+                    2 veces
+                  </span>
+</div>
+<div class="mt-3 flex items-center justify-between pt-2 border-t border-stone-100">
+<span class="text-[10px] text-stone-500">Último: Ayer 16:45</span>
+<button class="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-900 hover:underline">
+<span>Responder</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="bg-white/90 border border-amber-200/80 rounded-lg p-3 flex flex-col justify-between hover:bg-white transition shadow-xs">
+<div class="flex items-start justify-between gap-2">
+<span class="font-medium text-xs text-stone-900 leading-snug">"¿Cuánto demora asfaltar 500 m²?"</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 tabular-numbers">
+                    2 veces
+                  </span>
+</div>
+<div class="mt-3 flex items-center justify-between pt-2 border-t border-stone-100">
+<span class="text-[10px] text-stone-500">Último: Lun 14 sep</span>
+<button class="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-900 hover:underline">
+<span>Responder</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ============================================================= -->
+<!-- 3. DISPOSICIÓN PRINCIPAL: LISTA FAQ + PANEL LATERAL PROBAR RESPUESTA -->
+<!-- ============================================================= -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- COLUMNA IZQUIERDA: Tarjetas de Preguntas Frecuentes (Span 7) -->
+<div class="lg:col-span-7 space-y-3.5">
+<div class="flex items-center justify-between px-1">
+<h2 class="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+              Respuestas configuradas (5)
+            </h2>
+<span class="text-xs text-stone-400">Arrastra para reorganizar prioridad</span>
+</div>
+<!-- FAQ Card 1 (Expandida y destacada) -->
+<article class="bg-white border border-stone-200 rounded-xl p-4 sm:p-5 shadow-2xs hover:border-stone-300 transition relative">
+<div class="flex items-start justify-between gap-3">
+<div class="flex items-start gap-3">
+<button class="text-stone-400 hover:text-stone-600 mt-1 cursor-grab" title="Mover posición">
+<span class="material-symbols-outlined text-[18px]">drag_indicator</span>
+</button>
+<div>
+<h3 class="font-headline font-bold text-stone-900 text-base leading-snug">
+                    ¿Qué incluye el asfaltado?
+                  </h3>
+<p class="text-stone-700 text-xs sm:text-sm mt-2 leading-relaxed bg-stone-50/80 p-3 rounded-lg border border-stone-100">
+                    Incluye la mezcla asfáltica, el transporte a obra, la colocación con máquina y la compactación. La imprimación se cotiza aparte si la base es nueva.
+                  </p>
+</div>
+</div>
+<!-- Switch y Menú de Acciones -->
+<div class="flex items-center gap-2 shrink-0">
+<!-- Toggle Switch (Activo) -->
+<label class="relative inline-flex items-center cursor-pointer" title="Desactivar o activar respuesta">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+<button class="p-1.5 text-stone-500 hover:text-teal-800 rounded-lg hover:bg-stone-100 transition" title="Editar respuesta">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</div>
+<!-- Chips de "¿También se pregunta así?" -->
+<div class="mt-3.5 pt-3 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center gap-2">
+<span class="text-[11px] font-semibold text-stone-500 uppercase tracking-tight shrink-0">
+                ¿También se pregunta así?
+              </span>
+<div class="flex flex-wrap gap-1.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700 hover:bg-stone-200">
+                  "qué incluye el servicio"
+                </span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700 hover:bg-stone-200">
+                  "incluye compactado"
+                </span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700 hover:bg-stone-200">
+                  "precio incluye transporte"
+                </span>
+<button class="text-teal-700 text-xs font-medium hover:underline inline-flex items-center gap-0.5 ml-1">
+<span class="material-symbols-outlined text-[14px]">add</span> Variante
+                </button>
+</div>
+</div>
+</article>
+<!-- FAQ Card 2 -->
+<article class="bg-white border border-stone-200 rounded-xl p-4 sm:p-5 shadow-2xs hover:border-stone-300 transition">
+<div class="flex items-start justify-between gap-3">
+<div class="flex items-start gap-3">
+<button class="text-stone-400 hover:text-stone-600 mt-1 cursor-grab">
+<span class="material-symbols-outlined text-[18px]">drag_indicator</span>
+</button>
+<div>
+<h3 class="font-headline font-bold text-stone-900 text-sm sm:text-base leading-snug">
+                    ¿Cuál es el espesor recomendado para un estacionamiento?
+                  </h3>
+<p class="text-stone-700 text-xs sm:text-sm mt-1.5 leading-relaxed bg-stone-50/80 p-2.5 rounded-lg border border-stone-100">
+                    Para autos y camionetas, 2 pulgadas; con camiones, 3 pulgadas.
+                  </p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+<button class="p-1.5 text-stone-500 hover:text-teal-800 rounded-lg hover:bg-stone-100 transition" title="Editar">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-stone-100 flex flex-wrap items-center gap-1.5">
+<span class="text-[11px] font-semibold text-stone-500 uppercase tracking-tight">Variantes:</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700">
+                "espesor cochera"
+              </span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700">
+                "cuántas pulgadas"
+              </span>
+</div>
+</article>
+<!-- FAQ Card 3 -->
+<article class="bg-white border border-stone-200 rounded-xl p-4 sm:p-5 shadow-2xs hover:border-stone-300 transition">
+<div class="flex items-start justify-between gap-3">
+<div class="flex items-start gap-3">
+<button class="text-stone-400 hover:text-stone-600 mt-1 cursor-grab">
+<span class="material-symbols-outlined text-[18px]">drag_indicator</span>
+</button>
+<div>
+<h3 class="font-headline font-bold text-stone-900 text-sm sm:text-base leading-snug">
+                    ¿Dónde está la planta?
+                  </h3>
+<p class="text-stone-700 text-xs sm:text-sm mt-1.5 leading-relaxed bg-stone-50/80 p-2.5 rounded-lg border border-stone-100">
+                    En Cajamarquilla, Lurigancho. Se puede recoger mezcla en planta de lunes a sábado desde las 7:00.
+                  </p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+<button class="p-1.5 text-stone-500 hover:text-teal-800 rounded-lg hover:bg-stone-100 transition" title="Editar">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-stone-100 flex flex-wrap items-center gap-1.5">
+<span class="text-[11px] font-semibold text-stone-500 uppercase tracking-tight">Variantes:</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700">
+                "dirección de planta"
+              </span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700">
+                "recojo en Lurigancho"
+              </span>
+</div>
+</article>
+<!-- FAQ Card 4 -->
+<article class="bg-white border border-stone-200 rounded-xl p-4 sm:p-5 shadow-2xs hover:border-stone-300 transition">
+<div class="flex items-start justify-between gap-3">
+<div class="flex items-start gap-3">
+<button class="text-stone-400 hover:text-stone-600 mt-1 cursor-grab">
+<span class="material-symbols-outlined text-[18px]">drag_indicator</span>
+</button>
+<div>
+<h3 class="font-headline font-bold text-stone-900 text-sm sm:text-base leading-snug">
+                    ¿Hacen trabajos fuera de Lima?
+                  </h3>
+<p class="text-stone-700 text-xs sm:text-sm mt-1.5 leading-relaxed bg-stone-50/80 p-2.5 rounded-lg border border-stone-100">
+                    Sí, previa evaluación del asesor. Cuéntame el distrito o la ciudad y lo revisa.
+                  </p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+<button class="p-1.5 text-stone-500 hover:text-teal-800 rounded-lg hover:bg-stone-100 transition" title="Editar">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</div>
+</article>
+<!-- FAQ Card 5 -->
+<article class="bg-white border border-stone-200 rounded-xl p-4 sm:p-5 shadow-2xs hover:border-stone-300 transition">
+<div class="flex items-start justify-between gap-3">
+<div class="flex items-start gap-3">
+<button class="text-stone-400 hover:text-stone-600 mt-1 cursor-grab">
+<span class="material-symbols-outlined text-[18px]">drag_indicator</span>
+</button>
+<div>
+<h3 class="font-headline font-bold text-stone-900 text-sm sm:text-base leading-snug">
+                    ¿Emiten factura?
+                  </h3>
+<p class="text-stone-700 text-xs sm:text-sm mt-1.5 leading-relaxed bg-stone-50/80 p-2.5 rounded-lg border border-stone-100">
+                    Sí, factura electrónica con IGV.
+                  </p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+<button class="p-1.5 text-stone-500 hover:text-teal-800 rounded-lg hover:bg-stone-100 transition" title="Editar">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-stone-100 flex flex-wrap items-center gap-1.5">
+<span class="text-[11px] font-semibold text-stone-500 uppercase tracking-tight">Variantes:</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700">
+                "dan factura"
+              </span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700">
+                "precio con IGV"
+              </span>
+</div>
+</article>
+</div>
+<!-- ============================================================= -->
+<!-- COLUMNA DERECHA: TARJETA / DRAWER "PROBAR EN VIVO" (Span 5)   -->
+<!-- ============================================================= -->
+<div class="lg:col-span-5 sticky top-20">
+<div class="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs flex flex-col gap-4">
+<!-- Header del simulador -->
+<div class="border-b border-stone-100 pb-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-teal-600"></span>
+<h3 class="font-headline font-bold text-stone-900 text-base">Probar respuesta de Dali</h3>
+</div>
+<span class="text-[11px] font-medium bg-stone-100 text-stone-600 px-2 py-0.5 rounded">Simulador</span>
+</div>
+<p class="text-stone-500 text-xs mt-1">
+                Simula cómo respondería el asistente por WhatsApp con tus reglas actuales.
+              </p>
+</div>
+<!-- Input de prueba interactiva -->
+<div class="space-y-1.5">
+<label class="block text-xs font-medium text-stone-700">
+                Escribe una pregunta como cliente:
+              </label>
+<div class="relative">
+<input class="w-full px-3.5 py-2.5 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-700 focus:outline-none transition font-body" type="text" value="sábados atienden?"/>
+<button class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-teal-800 hover:bg-teal-50 rounded-lg" title="Ejecutar prueba">
+<span class="material-symbols-outlined text-[20px]">send</span>
+</button>
+</div>
+</div>
+<!-- Coincidencia detectada (Confidence Score) -->
+<div class="bg-teal-50/70 border border-teal-200/80 rounded-xl p-3 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-800 text-[18px]">verified</span>
+<div>
+<div class="text-xs font-bold text-teal-900">Coincidencia alta (92 %)</div>
+<div class="text-[11px] text-teal-700">Disparador: "¿Dónde está la planta?" + Atención sábados</div>
+</div>
+</div>
+<span class="text-[10px] font-mono bg-teal-200/60 text-teal-900 px-2 py-0.5 rounded font-semibold tabular-numbers">0.92</span>
+</div>
+<!-- Transcripción simulada estilo WhatsApp -->
+<div class="bg-stone-100/70 border border-stone-200 rounded-xl p-4 space-y-3.5 font-body">
+<div class="text-center">
+<span class="text-[10px] uppercase font-semibold text-stone-400 bg-white px-2 py-0.5 rounded-full border border-stone-200">
+                  Simulación de WhatsApp
+                </span>
+</div>
+<!-- Mensaje del Cliente -->
+<div class="flex justify-start">
+<div class="max-w-[85%] bg-white rounded-2xl rounded-tl-none p-3 border border-stone-200 shadow-2xs">
+<div class="text-[10px] font-medium text-stone-500 mb-0.5">Cliente (WhatsApp)</div>
+<p class="text-xs text-stone-900 leading-relaxed">
+                    Hola buenas, los sábados atienden o sólo entre semana?
+                  </p>
+<div class="text-[10px] text-stone-400 text-right mt-1 font-mono">11:42 a.m.</div>
+</div>
+</div>
+<!-- Mensaje de Dali (Asistente en Verde Suave) -->
+<div class="flex justify-end">
+<div class="max-w-[88%] bg-teal-50/90 rounded-2xl rounded-tr-none p-3 border border-teal-200 shadow-2xs">
+<div class="flex items-center justify-between gap-2 mb-1">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+<span class="text-[10px] font-bold text-teal-800 tracking-tight">Dali · Asistente CONSTROAD</span>
+</div>
+<span class="text-[9px] bg-teal-100 text-teal-800 px-1 rounded font-mono">FAQ</span>
+</div>
+<p class="text-xs text-stone-800 leading-relaxed">
+                    ¡Hola! En CONSTROAD atendemos pedidos y despachos en planta de <strong>lunes a sábado desde las 7:00 a.m.</strong> Para obras de asfaltado los fines de semana coordinamos previamente con el asesor. ¿Deseas cotizar mezcla o servicio completo?
+                  </p>
+<div class="flex items-center justify-end gap-1 text-[10px] text-teal-800/70 mt-1.5 font-mono">
+<span>11:42 a.m.</span>
+<span class="material-symbols-outlined text-[13px] text-teal-700" style="font-variation-settings: 'FILL' 1;">done_all</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Botones de Acción de calibración -->
+<div class="flex items-center gap-2 pt-1">
+<button class="flex-1 py-2 px-3 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-semibold text-stone-700 flex items-center justify-center gap-1.5 transition">
+<span class="material-symbols-outlined text-[16px]">add_circle_outline</span>
+<span>Añadir como variante</span>
+</button>
+<button class="py-2 px-3 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-semibold text-stone-700 flex items-center justify-center gap-1.5 transition" title="Calibrar umbral de coincidencia">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+<span>Umbral</span>
+</button>
+</div>
+<div class="bg-stone-50 p-2.5 rounded-lg border border-stone-200/80 text-[11px] text-stone-500 flex items-center gap-2">
+<span class="material-symbols-outlined text-stone-400 text-[16px]">info</span>
+<span>Si la certeza es menor a <strong>75 %</strong>, Dali escala la duda al dueño directamente.</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

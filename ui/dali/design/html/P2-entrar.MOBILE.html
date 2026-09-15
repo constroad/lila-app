@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es-PE">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entrar a Dali</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Public Sans', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E', // Color corporativo primario Dali
+              800: '#115E59',
+              900: '#134E4A',
+            },
+            surface: {
+              bg: '#F8FAFC',
+              card: '#FFFFFF',
+              border: '#E2E8F0',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Public Sans', sans-serif;
+      background-color: #F4F6F8;
+      color: #0F172A;
+      -webkit-font-smoothing: antialiased;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-100 flex flex-col items-center justify-start py-8 px-4 sm:px-0">
+
+  <!-- Mobile Container (390px) -->
+  <main class="w-full max-w-[390px] mx-auto flex flex-col space-y-6">
+
+    <!-- Tarjeta Principal: Acceso con WhatsApp -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 flex flex-col">
+      
+      <!-- Logo y Encabezado Dali -->
+      <header class="flex flex-col items-center text-center pt-2 pb-6">
+        <div class="flex items-center gap-2.5 mb-5">
+          <div class="w-10 h-10 rounded-xl bg-brand-700 flex items-center justify-center text-white shadow-sm shadow-brand-700/20 font-bold text-xl tracking-tight">
+            D
+          </div>
+          <div class="flex items-baseline gap-1">
+            <span class="text-2xl font-bold tracking-tight text-slate-900">dali</span>
+            <span class="text-sm font-semibold text-brand-700">.pe</span>
+          </div>
+        </div>
+
+        <h1 class="text-2xl font-bold text-slate-900 tracking-tight mb-2">
+          Entra a Dali
+        </h1>
+        <p class="text-[14px] text-slate-600 leading-relaxed max-w-[280px]">
+          Te mandamos un código por WhatsApp o un enlace al correo. <span class="font-semibold text-slate-800">Sin contraseñas.</span>
+        </p>
+      </header>
+
+      <!-- Selector segmentado -->
+      <div class="bg-slate-100 p-1 rounded-xl flex items-center mb-5 border border-slate-200/60" role="tablist" aria-label="Método de acceso">
+        <button type="button" role="tab" aria-selected="true" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-white text-slate-900 font-semibold text-xs shadow-xs transition-all border border-slate-200/50">
+          <span class="material-symbols-outlined text-emerald-600 text-[18px]">chat</span>
+          <span>Número de WhatsApp</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-slate-500 font-medium text-xs hover:text-slate-800 transition-colors">
+          <span class="material-symbols-outlined text-[18px]">mail</span>
+          <span>Correo</span>
+        </button>
+      </div>
+
+      <!-- Formulario WhatsApp -->
+      <form class="flex flex-col space-y-4" onsubmit="event.preventDefault();">
+        <div class="flex flex-col space-y-1.5">
+          <label for="whatsapp-phone" class="text-xs font-semibold text-slate-700 flex items-center justify-between">
+            <span>Número de celular</span>
+            <span class="text-[11px] font-normal text-slate-500">Perú (+51)</span>
+          </label>
+          
+          <div class="relative flex items-center rounded-xl border border-slate-300 bg-white focus-within:border-brand-700 focus-within:ring-2 focus-within:ring-brand-700/15 transition-all overflow-hidden shadow-2xs">
+            <div class="flex items-center gap-1.5 pl-3.5 pr-2.5 py-2.5 border-r border-slate-200 bg-slate-50 select-none text-xs font-semibold text-slate-700">
+              <span class="text-sm">🇵🇪</span>
+              <span>+51</span>
+            </div>
+            <input 
+              id="whatsapp-phone"
+              type="tel" 
+              inputmode="numeric" 
+              autocomplete="tel-national" 
+              placeholder="9xx xxx xxx"
+              class="w-full px-3.5 py-2.5 text-[15px] font-medium text-slate-900 placeholder-slate-400 bg-transparent outline-none tracking-wide"
+            />
+          </div>
+          <p class="text-[11px] text-slate-500 flex items-center gap-1 pt-0.5">
+            <span class="material-symbols-outlined text-[14px] text-brand-700">check_circle</span>
+            Recibirás un código de 6 dígitos por WhatsApp oficial.
+          </p>
+        </div>
+
+        <!-- Botón de acción primario (Ancho completo) -->
+        <button 
+          type="submit" 
+          class="w-full h-11 rounded-xl bg-brand-700 hover:bg-brand-800 active:scale-[0.99] text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+        >
+          <span>Enviar código</span>
+          <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+        </button>
+      </form>
+
+      <!-- Enlace a registro -->
+      <div class="mt-6 pt-5 border-t border-slate-100 text-center">
+        <p class="text-xs text-slate-600">
+          ¿Tu negocio todavía no está en Dali?
+          <a href="#" class="font-semibold text-brand-700 hover:text-brand-800 hover:underline inline-flex items-center ml-0.5">
+            Crea tu cuenta
+          </a>
+        </p>
+      </div>
+
+      <!-- Pie de términos legales -->
+      <footer class="mt-5 text-center px-2">
+        <p class="text-[11px] leading-normal text-slate-400">
+          Al entrar aceptas los 
+          <a href="#" class="underline hover:text-slate-600">Términos</a> y la 
+          <a href="#" class="underline hover:text-slate-600">Política de privacidad</a> de Dali.
+        </p>
+      </footer>
+
+    </div>
+
+    <!-- Variante Visible en Pantalla: Entrada con Correo -->
+    <div class="bg-white/90 backdrop-blur rounded-2xl border border-dashed border-slate-300 p-5 flex flex-col relative shadow-xs">
+      <!-- Tag / Chip de variante -->
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-brand-600"></span>
+          <span class="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Variante: Correo</span>
+        </div>
+        <span class="text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full font-medium">Enlace mágico</span>
+      </div>
+
+      <!-- Selector en estado 'Correo seleccionado' -->
+      <div class="bg-slate-100 p-1 rounded-xl flex items-center mb-4 border border-slate-200/60 opacity-95">
+        <div class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-slate-500 font-medium text-xs">
+          <span class="material-symbols-outlined text-[16px]">chat</span>
+          <span>Número</span>
+        </div>
+        <div class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-white text-slate-900 font-semibold text-xs shadow-2xs border border-slate-200/50">
+          <span class="material-symbols-outlined text-brand-700 text-[16px]">mail</span>
+          <span>Correo</span>
+        </div>
+      </div>
+
+      <!-- Formulario Correo -->
+      <form class="flex flex-col space-y-3.5" onsubmit="event.preventDefault();">
+        <div class="flex flex-col space-y-1.5">
+          <label for="email-input" class="text-xs font-semibold text-slate-700">
+            Correo corporativo o personal
+          </label>
+          <div class="relative flex items-center rounded-xl border border-slate-300 bg-white focus-within:border-brand-700 focus-within:ring-2 focus-within:ring-brand-700/15 transition-all overflow-hidden shadow-2xs">
+            <span class="material-symbols-outlined text-slate-400 pl-3 text-[18px]">alternate_email</span>
+            <input 
+              id="email-input"
+              type="email" 
+              autocomplete="email" 
+              placeholder="nombre@empresa.pe" 
+              value="jose@constroad.com"
+              class="w-full pl-2.5 pr-3.5 py-2.5 text-[14px] font-medium text-slate-900 placeholder-slate-400 bg-transparent outline-none"
+            />
+          </div>
+          <p class="text-[11px] text-slate-500 flex items-center gap-1 pt-0.5">
+            <span class="material-symbols-outlined text-[14px] text-brand-700">mark_email_read</span>
+            Te mandamos un enlace instantáneo para acceder sin clave.
+          </p>
+        </div>
+
+        <!-- Botón Correo -->
+        <button 
+          type="submit" 
+          class="w-full h-11 rounded-xl bg-brand-700 hover:bg-brand-800 active:scale-[0.99] text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+        >
+          <span class="material-symbols-outlined text-[18px]">send</span>
+          <span>Enviarme el enlace</span>
+        </button>
+      </form>
+
+      <!-- Enlace adicional -->
+      <div class="mt-4 text-center">
+        <p class="text-[11px] text-slate-500">
+          ¿Prefieres entrar por WhatsApp? 
+          <a href="#" class="font-semibold text-brand-700 hover:underline">Usa tu celular</a>
+        </p>
+      </div>
+    </div>
+
+    <!-- Indicador de confianza / pie de marca de agua -->
+    <div class="text-center py-2">
+      <p class="text-[11px] text-slate-400 font-medium">
+        Dali Perú · Asistente con IA para WhatsApp
+      </p>
+    </div>
+
+  </main>
+
+</body>
+</html>

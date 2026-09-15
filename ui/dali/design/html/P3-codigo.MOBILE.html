@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-stone-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Código de verificación - Dali</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            teal: {
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E48',
+              50: '#F0FDFA',
+              100: '#CCFBF1'
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .caret-blink {
+      animation: blink 1s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-stone-100 flex flex-col justify-start items-center p-0 sm:py-6 text-stone-800 antialiased selection:bg-teal-100 selection:text-teal-900">
+
+  <!-- Mobile Screen Container (390px fixed width viewport constraint) -->
+  <main class="w-full max-w-[390px] min-h-screen bg-white sm:rounded-3xl sm:shadow-xl sm:border sm:border-stone-200/80 flex flex-col justify-between overflow-hidden relative">
+
+    <!-- Top decorative subtle ambient glow -->
+    <div class="absolute top-0 inset-x-0 h-44 bg-gradient-to-b from-teal-50/70 via-stone-50/30 to-transparent pointer-events-none"></div>
+
+    <!-- Main Scrollable Area with 16px lateral padding as requested -->
+    <div class="px-4 pt-5 pb-8 flex-1 flex flex-col relative z-10">
+
+      <!-- Status Bar Simulation / Brand Header -->
+      <header class="flex flex-col items-center justify-center pt-2 pb-5">
+        <div class="flex items-center gap-2">
+          <!-- Dali Brand Mark -->
+          <div class="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center text-white font-bold text-lg shadow-sm shadow-teal-700/20">
+            D
+          </div>
+          <span class="text-xl font-extrabold tracking-tight text-stone-900">dali<span class="text-teal-700">.pe</span></span>
+        </div>
+        <div class="mt-1 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <p class="text-[11px] font-medium tracking-wide uppercase text-stone-400">Asistente oficial para WhatsApp</p>
+        </div>
+      </header>
+
+      <!-- Primary Card: Verificación por WhatsApp -->
+      <section class="bg-white rounded-2xl border border-stone-200/90 shadow-sm p-4 sm:p-5 flex flex-col">
+        
+        <!-- Back Navigation Link -->
+        <div class="mb-4">
+          <a href="#" class="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-500 hover:text-teal-700 transition-colors py-1 group">
+            <span class="material-symbols-outlined text-[16px] transition-transform group-hover:-translate-x-0.5">arrow_back</span>
+            <span>Cambiar número</span>
+          </a>
+        </div>
+
+        <!-- WhatsApp Badge -->
+        <div class="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full bg-teal-50 border border-teal-100/80 text-teal-800 text-[11px] font-semibold tracking-wide mb-2.5">
+          <span class="material-symbols-outlined text-[14px] text-teal-700">chat</span>
+          <span>WhatsApp Oficial</span>
+        </div>
+
+        <!-- Title & Subtitle -->
+        <h1 class="text-xl font-bold tracking-tight text-stone-900">
+          Revisa tu WhatsApp
+        </h1>
+        <p class="mt-1 text-[13px] leading-relaxed text-stone-600">
+          Te mandamos un código de 6 dígitos al <span class="font-semibold text-stone-900 whitespace-nowrap">+51 902 049 935</span>
+        </p>
+
+        <!-- 6 OTP Big Input Boxes -->
+        <div class="mt-5">
+          <div class="flex items-center justify-between gap-1.5">
+            <!-- Box 1 (Filled: 4) -->
+            <div class="w-[50px] h-[58px] rounded-xl border-2 border-stone-200 bg-stone-50/70 flex items-center justify-center font-mono-code text-2xl font-bold text-stone-900 transition-all shadow-inner">
+              4
+            </div>
+            <!-- Box 2 (Filled: 8) -->
+            <div class="w-[50px] h-[58px] rounded-xl border-2 border-stone-200 bg-stone-50/70 flex items-center justify-center font-mono-code text-2xl font-bold text-stone-900 transition-all shadow-inner">
+              8
+            </div>
+            <!-- Box 3 (Filled: 1) -->
+            <div class="w-[50px] h-[58px] rounded-xl border-2 border-stone-200 bg-stone-50/70 flex items-center justify-center font-mono-code text-2xl font-bold text-stone-900 transition-all shadow-inner">
+              1
+            </div>
+            <!-- Box 4 (Active / Focused with cursor) -->
+            <div class="w-[50px] h-[58px] rounded-xl border-2 border-teal-700 bg-teal-50/20 flex items-center justify-center font-mono-code text-2xl font-bold text-teal-800 ring-4 ring-teal-100/60 shadow-sm relative">
+              <span class="w-[2px] h-6 bg-teal-700 rounded-full caret-blink"></span>
+            </div>
+            <!-- Box 5 (Empty) -->
+            <div class="w-[50px] h-[58px] rounded-xl border border-stone-200 bg-white flex items-center justify-center font-mono-code text-2xl text-stone-300">
+              <span class="w-1.5 h-1.5 rounded-full bg-stone-300"></span>
+            </div>
+            <!-- Box 6 (Empty) -->
+            <div class="w-[50px] h-[58px] rounded-xl border border-stone-200 bg-white flex items-center justify-center font-mono-code text-2xl text-stone-300">
+              <span class="w-1.5 h-1.5 rounded-full bg-stone-300"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Primary Full-Width Action Button -->
+        <button type="button" class="w-full mt-5 h-12 bg-teal-700 hover:bg-teal-800 active:scale-[0.99] text-white font-semibold rounded-xl text-[15px] flex items-center justify-center gap-2 shadow-md shadow-teal-700/25 transition-all">
+          <span>Entrar</span>
+          <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+        </button>
+
+        <!-- Resend Counter & Secondary Alternative Link -->
+        <div class="mt-4 pt-1 flex flex-col items-center gap-2 text-center">
+          <div class="inline-flex items-center gap-1.5 text-xs text-stone-500">
+            <span>¿No llegó?</span>
+            <span class="font-medium text-stone-400 inline-flex items-center gap-1 bg-stone-100 px-2 py-0.5 rounded-md">
+              <span class="material-symbols-outlined text-[14px]">timer</span>
+              Reenviar en 0:42
+            </span>
+          </div>
+
+          <button type="button" class="text-xs font-semibold text-teal-700 hover:text-teal-800 hover:underline transition-colors flex items-center gap-1 py-1">
+            <span class="material-symbols-outlined text-[15px]">mail</span>
+            <span>Recibirlo por correo</span>
+          </button>
+        </div>
+
+        <!-- Security Badge / Expiration Note -->
+        <div class="mt-4 p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 flex items-start gap-2 text-amber-900">
+          <span class="material-symbols-outlined text-[16px] text-amber-600 shrink-0 mt-0.5">lock</span>
+          <p class="text-[11.5px] leading-tight font-medium text-amber-800">
+            El código vence en 10 minutos y solo sirve una vez.
+          </p>
+        </div>
+
+      </section>
+
+      <!-- Divider / Context separator -->
+      <div class="my-4 flex items-center gap-3">
+        <div class="h-px bg-stone-200 flex-1"></div>
+        <span class="text-[11px] font-semibold text-stone-400 uppercase tracking-wider">o también</span>
+        <div class="h-px bg-stone-200 flex-1"></div>
+      </div>
+
+      <!-- Secondary Card: Variante Enlace por Correo -->
+      <section class="bg-stone-50/80 rounded-2xl border border-stone-200 p-4 flex flex-col relative overflow-hidden">
+        
+        <!-- Header of the Variant Card -->
+        <div class="flex items-center justify-between mb-3">
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-stone-200/80 text-stone-700 text-[11px] font-semibold">
+            <span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+            <span>Variante: enlace por correo</span>
+          </div>
+          <span class="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-100/60 px-2 py-0.5 rounded-md">
+            <span class="material-symbols-outlined text-[13px]">magic_button</span>
+            Enlace mágico
+          </span>
+        </div>
+
+        <div class="flex items-start gap-3 mt-1">
+          <!-- Envelope Icon Container -->
+          <div class="w-10 h-10 rounded-xl bg-teal-100/80 border border-teal-200/60 text-teal-800 flex items-center justify-center shrink-0 shadow-sm">
+            <span class="material-symbols-outlined text-[20px]">mark_email_read</span>
+          </div>
+
+          <div class="flex-1 min-w-0">
+            <h2 class="text-sm font-bold text-stone-900 tracking-tight">
+              Revisa tu correo
+            </h2>
+            <p class="mt-1 text-xs text-stone-600 leading-relaxed">
+              Abre el enlace que te mandamos a <span class="font-semibold text-stone-800 break-all">jose@constroad.com</span>. Vence en 15 minutos.
+            </p>
+          </div>
+        </div>
+
+        <!-- Secondary Full-Width Action Button -->
+        <button type="button" class="w-full mt-4 h-10 bg-white hover:bg-stone-100 active:bg-stone-200 border border-stone-300 text-stone-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition-colors">
+          <span class="material-symbols-outlined text-[16px] text-stone-500">replay</span>
+          <span>Reenviar enlace</span>
+        </button>
+
+      </section>
+
+      <!-- Trust Footer / Security Info -->
+      <footer class="mt-5 text-center flex flex-col items-center gap-1 text-[11px] text-stone-400">
+        <div class="inline-flex items-center gap-1.5 text-stone-500 font-medium">
+          <span class="material-symbols-outlined text-[13px] text-emerald-600">verified_user</span>
+          <span>Acceso cifrado y seguro para Perú (+51)</span>
+        </div>
+        <p class="text-[10.5px] text-stone-400">
+          Dali.pe © 2025 · Meta Cloud API Oficial
+        </p>
+      </footer>
+
+    </div>
+
+  </main>
+
+</body>
+</html>

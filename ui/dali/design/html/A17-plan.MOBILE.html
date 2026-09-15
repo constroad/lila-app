@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Plan y uso - Dali Perú | CONSTROAD</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Outfit:wght@400;500;600;700;800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+            },
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              200: '#99F6E4',
+              300: '#5EEAD4',
+              400: '#2DD4BF',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+            },
+            amber: {
+              50: '#FFFBEB',
+              100: '#FEF3C7',
+              200: '#FDE68A',
+              300: '#FCD34D',
+              400: '#FBBF24',
+              500: '#F59E0B',
+              600: '#D97706',
+              700: '#B45309',
+              800: '#92400E',
+            },
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "1rem",
+            "xl": "1.5rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Outfit", "Public Sans", "sans-serif"],
+            display: ["Outfit", "Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    body {
+      background-color: #FAFAF9;
+      color: #1C1917;
+      font-family: 'DM Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="min-h-screen bg-stone-50 flex justify-center text-stone-900 antialiased selection:bg-teal-100 selection:text-teal-900">
+<!-- Mobile Wrapper 390px -->
+<div class="w-full max-w-[390px] min-h-screen bg-stone-50 flex flex-col relative pb-24 border-x border-stone-200/60 shadow-sm">
+<!-- Top Bar Navigation (Shared Component Specification) -->
+<header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 px-4 py-3 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<button aria-label="Volver" class="w-9 h-9 rounded-full flex items-center justify-center text-stone-700 hover:bg-stone-100 active:scale-95 transition-all -ml-1" type="button">
+<span class="material-symbols-outlined text-[22px]" data-icon="arrow_back">arrow_back</span>
+</button>
+<div>
+<h1 class="font-headline font-bold text-base leading-tight text-stone-900 tracking-tight">Plan y uso</h1>
+<p class="text-[11px] font-medium text-stone-500 flex items-center gap-1 leading-none mt-0.5">
+<span>CONSTROAD</span>
+<span class="w-1 h-1 rounded-full bg-stone-300"></span>
+<span>Asfalto y Obras</span>
+</p>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button aria-label="Ayuda sobre facturación" class="w-8 h-8 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-100 transition-colors" type="button">
+<span class="material-symbols-outlined text-xl" data-icon="help">help</span>
+</button>
+<button aria-label="Notificaciones" class="w-8 h-8 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-100 transition-colors relative" type="button">
+<span class="material-symbols-outlined text-xl" data-icon="notifications">notifications</span>
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600 absolute top-2 right-2"></span>
+</button>
+</div>
+</header>
+<!-- Main Content Container (16px horizontal padding) -->
+<main class="px-4 pt-4 space-y-4">
+<!-- TARJETA 1: PLAN ACTUAL -->
+<section class="bg-white rounded-xl p-4 border border-stone-200">
+<div class="flex items-center justify-between pb-3 border-b border-stone-100">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-teal-800 text-[18px]" data-icon="verified">verified</span>
+<span class="text-[11px] uppercase tracking-wider font-semibold text-stone-600">Suscripción activa</span>
+</div>
+<span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-2 py-0.5 rounded-full text-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+            Activo
+          </span>
+</div>
+<div class="mt-3 flex items-baseline justify-between">
+<div>
+<h2 class="font-headline text-2xl font-bold text-stone-900 tracking-tight">Plan Negocio</h2>
+<p class="text-xs text-stone-500 mt-0.5">Asistente Dali atendiendo 24/7 en tu WhatsApp</p>
+</div>
+<div class="text-right">
+<div class="font-mono text-2xl font-bold text-teal-800 tracking-tight leading-none">S/ 149</div>
+<span class="text-[11px] text-stone-500 font-medium">al mes</span>
+</div>
+</div>
+<div class="mt-3.5 bg-stone-50 rounded-lg p-2.5 border border-stone-100 flex items-start gap-2">
+<span class="material-symbols-outlined text-stone-500 text-[17px] mt-0.5" data-icon="calendar_month">calendar_month</span>
+<div class="text-[12px] text-stone-600 leading-snug">
+<span class="font-semibold text-stone-800">Se renueva el 1 oct 2025</span> · Débito automático vía transferencia BCP o Yape Empresas.
+          </div>
+</div>
+<div class="mt-4 flex flex-col gap-2">
+<button class="w-full h-11 bg-teal-800 hover:bg-teal-900 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 active:scale-[0.99] transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[19px]" data-icon="upgrade">upgrade</span>
+<span>Cambiar de plan</span>
+</button>
+<button class="w-full h-10 bg-white hover:bg-stone-50 text-stone-700 border border-stone-200 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 active:scale-[0.99] transition-all" type="button">
+<span class="material-symbols-outlined text-[17px] text-stone-500" data-icon="receipt_long">receipt_long</span>
+<span>Ver comprobantes y facturas</span>
+</button>
+</div>
+</section>
+<!-- TARJETA 2: USO DE ESTE MES -->
+<section class="bg-white rounded-xl p-4 border border-stone-200 space-y-4">
+<div class="flex items-center justify-between">
+<div>
+<h3 class="font-headline font-bold text-base text-stone-900">Uso de este mes</h3>
+<p class="text-[11px] text-stone-500">Cierre: 30 de septiembre 23:59</p>
+</div>
+<span class="text-xs font-mono font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+            61% global
+          </span>
+</div>
+<!-- Métrica 1: Conversaciones -->
+<div class="space-y-1.5 pt-1">
+<div class="flex justify-between items-baseline text-xs">
+<span class="font-medium text-stone-700 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-teal-800 text-[16px]" data-icon="forum">forum</span>
+              Conversaciones con clientes
+            </span>
+<span class="font-mono text-xs text-stone-800">
+<strong class="font-bold text-teal-900 text-sm">612</strong> / 1 000
+            </span>
+</div>
+<!-- Barra de progreso -->
+<div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+<div class="bg-teal-700 h-2 rounded-full transition-all duration-500" style="width: 61.2%"></div>
+</div>
+<div class="flex justify-between text-[11px] text-stone-500">
+<span>61% consumido</span>
+<span class="font-medium text-teal-800">388 disponibles</span>
+</div>
+</div>
+<!-- Métrica 2: Números Conectados -->
+<div class="space-y-1.5 pt-2 border-t border-stone-100">
+<div class="flex justify-between items-center text-xs">
+<span class="font-medium text-stone-700 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-500 text-[16px]" data-icon="phone_iphone">phone_iphone</span>
+              Números WhatsApp conectados
+            </span>
+<div class="flex items-center gap-1.5">
+<span class="font-mono font-bold text-xs text-stone-800">1 / 1</span>
+<span class="text-[10px] uppercase font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200">Límite</span>
+</div>
+</div>
+<div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+<div class="bg-amber-600 h-2 rounded-full" style="width: 100%"></div>
+</div>
+<p class="text-[11px] text-stone-600 font-mono flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            Línea activa: +51 949 376 824 (CONSTROAD)
+          </p>
+</div>
+<!-- Métrica 3: Miembros del Equipo -->
+<div class="space-y-1.5 pt-2 border-t border-stone-100">
+<div class="flex justify-between items-baseline text-xs">
+<span class="font-medium text-stone-700 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-500 text-[16px]" data-icon="badge">badge</span>
+              Miembros del equipo
+            </span>
+<span class="font-mono font-bold text-xs text-stone-800">3 / 5</span>
+</div>
+<div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+<div class="bg-teal-700 h-2 rounded-full" style="width: 60%"></div>
+</div>
+<p class="text-[11px] text-stone-500">
+            José (Dueño), Carlos (Ventas), Lucía (Cotizaciones)
+          </p>
+</div>
+<!-- Métrica 4: Mensajes Dali -->
+<div class="pt-2 border-t border-stone-100 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center text-teal-800">
+<span class="material-symbols-outlined text-[19px]" data-icon="smart_toy">smart_toy</span>
+</div>
+<div>
+<span class="text-xs font-medium text-stone-800 block">Mensajes enviados por Dali</span>
+<span class="font-mono text-sm font-bold text-stone-900">1 840 respuestas</span>
+</div>
+</div>
+<span class="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+            Sin límite
+          </span>
+</div>
+<!-- Banner protector Dali -->
+<div class="bg-amber-50/80 border border-amber-200 rounded-xl p-3 flex gap-2.5 items-start">
+<span class="material-symbols-outlined text-amber-700 text-[20px] shrink-0 mt-0.5" data-icon="security">security</span>
+<div>
+<span class="text-xs font-bold text-amber-900 block">Protección contra pérdida de ventas</span>
+<p class="text-[11px] text-amber-800 leading-relaxed mt-0.5">
+              Si llegas a las 1 000 conversaciones, Dali seguirá recibiendo mensajes sin responder y te enviará una alerta inmediata para que tomes el control sin perder contratos de asfalto.
+            </p>
+</div>
+</div>
+</section>
+<!-- TARJETA 3: GRÁFICO HISTÓRICO SEMANAL -->
+<section class="bg-white rounded-xl p-4 border border-stone-200">
+<div class="flex items-center justify-between mb-3">
+<div>
+<h3 class="font-headline font-bold text-sm text-stone-900">Conversaciones por semana</h3>
+<p class="text-[11px] text-stone-500">Últimas 8 semanas de actividad</p>
+</div>
+<span class="font-mono text-[11px] font-semibold text-stone-700 bg-stone-100 px-2 py-0.5 rounded">
+            ~125/sem
+          </span>
+</div>
+<!-- Barras de gráfica SVG / Flex layout -->
+<div class="pt-4 pb-1">
+<div class="h-28 flex items-end justify-between gap-1.5 px-1 border-b border-stone-200 pb-1">
+<!-- S1 -->
+<div class="flex-1 flex flex-col items-center gap-1 group">
+<span class="font-mono text-[9px] text-stone-400 group-hover:text-stone-700">96</span>
+<div class="w-full bg-teal-200 rounded-t h-[52px]"></div>
+<span class="font-mono text-[10px] text-stone-500 mt-1">S1</span>
+</div>
+<!-- S2 -->
+<div class="flex-1 flex flex-col items-center gap-1 group">
+<span class="font-mono text-[9px] text-stone-400 group-hover:text-stone-700">110</span>
+<div class="w-full bg-teal-200 rounded-t h-[60px]"></div>
+<span class="font-mono text-[10px] text-stone-500 mt-1">S2</span>
+</div>
+<!-- S3 -->
+<div class="flex-1 flex flex-col items-center gap-1 group">
+<span class="font-mono text-[9px] text-stone-400 group-hover:text-stone-700">88</span>
+<div class="w-full bg-teal-200 rounded-t h-[48px]"></div>
+<span class="font-mono text-[10px] text-stone-500 mt-1">S3</span>
+</div>
+<!-- S4 -->
+<div class="flex-1 flex flex-col items-center gap-1 group">
+<span class="font-mono text-[9px] text-stone-400 group-hover:text-stone-700">121</span>
+<div class="w-full bg-teal-300 rounded-t h-[66px]"></div>
+<span class="font-mono text-[10px] text-stone-500 mt-1">S4</span>
+</div>
+<!-- S5 -->
+<div class="flex-1 flex flex-col items-center gap-1 group">
+<span class="font-mono text-[9px] text-stone-400 group-hover:text-stone-700">134</span>
+<div class="w-full bg-teal-400 rounded-t h-[73px]"></div>
+<span class="font-mono text-[10px] text-stone-500 mt-1">S5</span>
+</div>
+<!-- S6 -->
+<div class="flex-1 flex flex-col items-center gap-1 group">
+<span class="font-mono text-[9px] text-stone-400 group-hover:text-stone-700">140</span>
+<div class="w-full bg-teal-500 rounded-t h-[77px]"></div>
+<span class="font-mono text-[10px] text-stone-500 mt-1">S6</span>
+</div>
+<!-- S7 -->
+<div class="flex-1 flex flex-col items-center gap-1 group">
+<span class="font-mono text-[9px] text-stone-400 group-hover:text-stone-700">152</span>
+<div class="w-full bg-teal-600 rounded-t h-[83px]"></div>
+<span class="font-mono text-[10px] text-stone-500 mt-1">S7</span>
+</div>
+<!-- S8 (Actual - Pico) -->
+<div class="flex-1 flex flex-col items-center gap-1 relative">
+<span class="font-mono text-[10px] font-bold text-teal-800">161</span>
+<div class="w-full bg-teal-800 rounded-t h-[94px] relative ring-2 ring-teal-700/20">
+<div class="w-1.5 h-1.5 bg-amber-400 rounded-full mx-auto mt-1"></div>
+</div>
+<span class="font-mono text-[10px] font-bold text-teal-900 mt-1">S8</span>
+</div>
+</div>
+</div>
+<div class="mt-2.5 flex items-center justify-between text-[11px] text-stone-500">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-sm bg-teal-800"></span>
+<span>Semana en curso (Pico de consultas por m² de asfalto)</span>
+</div>
+<span class="font-semibold text-emerald-700">+18% vs ant.</span>
+</div>
+</section>
+<!-- TARJETA 4: COMPARATIVA DE PLANES -->
+<section class="bg-white rounded-xl p-4 border border-stone-200">
+<div class="flex items-center justify-between mb-3">
+<div>
+<h3 class="font-headline font-bold text-base text-stone-900">Planes para crecer</h3>
+<p class="text-[11px] text-stone-500">Escala según aumenten tus obras y cotizaciones</p>
+</div>
+<span class="material-symbols-outlined text-stone-400 text-xl" data-icon="trending_up">trending_up</span>
+</div>
+<!-- Tarjetas de planes lado a lado o stack vertical optimizado para 390px -->
+<div class="space-y-3">
+<!-- Tarjeta Plan Negocio (Actual) -->
+<div class="border-2 border-stone-200 rounded-xl p-3.5 bg-stone-50/70 relative">
+<span class="absolute top-3 right-3 text-[10px] font-semibold text-teal-800 bg-teal-100/80 px-2 py-0.5 rounded-full border border-teal-200">
+              Tu plan actual
+            </span>
+<div class="text-xs uppercase font-semibold text-stone-500 tracking-wider">Plan Negocio</div>
+<div class="flex items-baseline gap-1 mt-0.5">
+<span class="font-mono text-xl font-bold text-stone-900">S/ 149</span>
+<span class="text-xs text-stone-500">/ mes</span>
+</div>
+<ul class="mt-3 space-y-1.5 text-xs text-stone-600">
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="check_circle">check_circle</span>
+<span><strong>1 línea de WhatsApp</strong> conectada</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="check_circle">check_circle</span>
+<span>Hasta <strong>1 000 conversaciones</strong>/mes</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="check_circle">check_circle</span>
+<span>Catálogo de asfalto y preguntas frecuentes</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="check_circle">check_circle</span>
+<span>Hasta 5 accesos para tu equipo de ventas</span>
+</li>
+</ul>
+</div>
+<!-- Tarjeta Plan Crecimiento (Upgrade recomendado) -->
+<div class="border-2 border-teal-800 rounded-xl p-3.5 bg-teal-50/20 relative shadow-sm">
+<div class="flex items-center justify-between">
+<div class="text-xs uppercase font-bold text-teal-800 tracking-wider">Plan Crecimiento</div>
+<span class="text-[10px] font-bold text-white bg-amber-600 px-2 py-0.5 rounded-full shadow-xs">
+                RECOMENDADO
+              </span>
+</div>
+<div class="flex items-baseline gap-1 mt-0.5">
+<span class="font-mono text-2xl font-bold text-teal-950">S/ 299</span>
+<span class="text-xs text-stone-500 font-medium">/ mes (+ IGV con factura)</span>
+</div>
+<ul class="mt-3 space-y-1.5 text-xs text-stone-700">
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="check_circle">check_circle</span>
+<span><strong>3 líneas de WhatsApp</strong> (Ventas, Planta, Soporte)</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="check_circle">check_circle</span>
+<span><strong>5 000 conversaciones</strong>/mes</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="check_circle">check_circle</span>
+<span>Usuarios de equipo <strong>ilimitados</strong></span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="check_circle">check_circle</span>
+<span>Exportación de cotizaciones a Excel</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="check_circle">check_circle</span>
+<span>Atención prioritaria por WhatsApp con asesor Dali</span>
+</li>
+</ul>
+<button class="mt-4 w-full h-11 bg-teal-800 hover:bg-teal-900 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 active:scale-[0.99] transition-all" type="button">
+<span>Pasar a Plan Crecimiento</span>
+<span class="material-symbols-outlined text-[18px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</section>
+<!-- TARJETA 5: HISTORIAL DE PAGOS Y FACTURAS -->
+<section class="bg-white rounded-xl p-4 border border-stone-200">
+<div class="flex items-center justify-between mb-3">
+<div>
+<h3 class="font-headline font-bold text-base text-stone-900">Historial de pagos</h3>
+<p class="text-[11px] text-stone-500">Emitidos a nombre de CONSTROAD S.A.C.</p>
+</div>
+<span class="material-symbols-outlined text-stone-500 text-xl" data-icon="history">history</span>
+</div>
+<div class="space-y-2.5">
+<!-- Recibo 1 -->
+<div class="p-2.5 rounded-lg border border-stone-200 hover:border-stone-300 transition-colors flex items-center justify-between bg-stone-50/50">
+<div class="space-y-0.5">
+<div class="text-xs font-semibold text-stone-900 flex items-center gap-1.5">
+<span>1 sep 2025</span>
+<span class="w-1 h-1 rounded-full bg-stone-300"></span>
+<span class="text-stone-500 font-normal">Transferencia BCP</span>
+</div>
+<div class="text-[11px] text-stone-500 font-mono">F001-0004289 · Plan Negocio</div>
+</div>
+<div class="text-right flex items-center gap-2">
+<div>
+<span class="font-mono text-xs font-bold text-stone-900">S/ 149</span>
+<span class="block text-[10px] text-emerald-700 font-semibold">Pagado</span>
+</div>
+<button class="p-1 text-stone-500 hover:text-teal-800 rounded active:scale-95" title="Descargar comprobante" type="button">
+<span class="material-symbols-outlined text-[19px]" data-icon="download">download</span>
+</button>
+</div>
+</div>
+<!-- Recibo 2 -->
+<div class="p-2.5 rounded-lg border border-stone-200 hover:border-stone-300 transition-colors flex items-center justify-between bg-stone-50/50">
+<div class="space-y-0.5">
+<div class="text-xs font-semibold text-stone-900 flex items-center gap-1.5">
+<span>1 ago 2025</span>
+<span class="w-1 h-1 rounded-full bg-stone-300"></span>
+<span class="text-stone-500 font-normal">Yape Empresas</span>
+</div>
+<div class="text-[11px] text-stone-500 font-mono">F001-0003891 · Plan Negocio</div>
+</div>
+<div class="text-right flex items-center gap-2">
+<div>
+<span class="font-mono text-xs font-bold text-stone-900">S/ 149</span>
+<span class="block text-[10px] text-emerald-700 font-semibold">Pagado</span>
+</div>
+<button class="p-1 text-stone-500 hover:text-teal-800 rounded active:scale-95" title="Descargar comprobante" type="button">
+<span class="material-symbols-outlined text-[19px]" data-icon="download">download</span>
+</button>
+</div>
+</div>
+<!-- Recibo 3 -->
+<div class="p-2.5 rounded-lg border border-stone-200 hover:border-stone-300 transition-colors flex items-center justify-between bg-stone-50/50">
+<div class="space-y-0.5">
+<div class="text-xs font-semibold text-stone-900 flex items-center gap-1.5">
+<span>15 jul 2025</span>
+<span class="w-1 h-1 rounded-full bg-stone-300"></span>
+<span class="text-stone-500 font-normal">Setup Inicial</span>
+</div>
+<div class="text-[11px] text-stone-500 font-mono">F001-0003210 · Carga Asfalto</div>
+</div>
+<div class="text-right flex items-center gap-2">
+<div>
+<span class="font-mono text-xs font-bold text-stone-900">S/ 300</span>
+<span class="block text-[10px] text-emerald-700 font-semibold">Pagado</span>
+</div>
+<button class="p-1 text-stone-500 hover:text-teal-800 rounded active:scale-95" title="Descargar comprobante" type="button">
+<span class="material-symbols-outlined text-[19px]" data-icon="download">download</span>
+</button>
+</div>
+</div>
+</div>
+<div class="mt-3 pt-3 border-t border-stone-100 flex items-center justify-between">
+<button class="text-xs font-semibold text-teal-800 hover:text-teal-900 flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]" data-icon="folder_zip">folder_zip</span>
+<span>Descargar todo en PDF (.zip)</span>
+</button>
+<span class="text-[11px] text-stone-500 font-mono">3 recibos</span>
+</div>
+<!-- Datos fiscales pie -->
+<div class="mt-3 bg-stone-100/70 p-2.5 rounded text-[11px] text-stone-600 space-y-0.5">
+<p class="font-medium text-stone-800">Facturado a: CONSTROAD S.A.C.</p>
+<p class="font-mono text-[10px] text-stone-500">RUC 20604819201 · Lima, Perú</p>
+<p class="text-[10px] text-stone-500 pt-1 border-t border-stone-200/60">Servicio operado por Dali Asistentes Perú S.A.C.</p>
+</div>
+</section>
+<!-- Mensaje soporte / ayuda tuteo -->
+<div class="text-center py-2">
+<p class="text-xs text-stone-500">
+          ¿Tienes dudas sobre tu facturación o necesitas más líneas?
+        </p>
+<button class="mt-1 text-xs font-semibold text-teal-800 hover:underline inline-flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[15px]" data-icon="support_agent">support_agent</span>
+          Habla con tu asesor Dali por WhatsApp
+        </button>
+</div>
+</main>
+<!-- BottomNavBar (Shared Component Specification: 5 tabs, 'Más' active, fixed bottom) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-1 max-w-[390px] mx-auto bg-white border-t border-stone-200">
+<!-- Inicio -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors w-16 active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-[22px]" data-icon="home">home</span>
+<span class="text-[11px] font-label mt-0.5">Inicio</span>
+</a>
+<!-- Chats -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors w-16 active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-[22px]" data-icon="chat">chat</span>
+<span class="text-[11px] font-label mt-0.5">Chats</span>
+</a>
+<!-- Leads -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors w-16 active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-[22px]" data-icon="group">group</span>
+<span class="text-[11px] font-label mt-0.5">Leads</span>
+</a>
+<!-- Asistente -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors w-16 active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-[22px]" data-icon="smart_toy">smart_toy</span>
+<span class="text-[11px] font-label mt-0.5">Asistente</span>
+</a>
+<!-- Más (ACTIVE TAB: Plan y uso is under 'Más') -->
+<a class="flex flex-col items-center justify-center text-teal-800 font-semibold py-1 w-16 active:scale-95 transition-transform duration-150 relative" href="#">
+<span class="material-symbols-outlined text-[22px]" data-icon="more_horiz" style="font-variation-settings: 'FILL' 1;">more_horiz</span>
+<span class="text-[11px] font-label mt-0.5">Más</span>
+<span class="w-1 h-1 rounded-full bg-teal-800 mt-0.5"></span>
+</a>
+</nav>
+</div>
+</body></html>

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-100" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Probar a Dali - CONSTROAD</title>
+<!-- Fonts: Outfit (Titulares), DM Sans (Cuerpo), JetBrains Mono (Datos) -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Outfit:wght@400;500;600;700;800&amp;family=Public+Sans:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            teal: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              200: '#99f6e4',
+              300: '#5eead4',
+              400: '#2dd4bf',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e', /* Brand Primary */
+              800: '#115e59',
+              900: '#134e4a',
+              950: '#042f2e',
+            },
+            amber: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309',
+            },
+            stone: {
+              50: '#fafaf9',
+              100: '#f5f5f4',
+              200: '#e7e5e4',
+              300: '#d6d3d1',
+              400: '#a8a29e',
+              500: '#78716c',
+              600: '#57534e',
+              700: '#44403c',
+              800: '#292524',
+              900: '#1c1917',
+            }
+          },
+          borderRadius: {
+            DEFAULT: "0.5rem",
+            lg: "1rem",
+            xl: "1.5rem",
+            full: "9999px"
+          },
+          fontFamily: {
+            headline: ["Outfit", "Public Sans", "sans-serif"],
+            display: ["Outfit", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .material-symbols-fill {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Pattern sutil de fondo de chat simulado */
+    .whatsapp-bg-pattern {
+      background-color: #efeae2;
+      background-image: radial-gradient(#dfd7cc 0.75px, transparent 0.75px), radial-gradient(#dfd7cc 0.75px, #efeae2 0.75px);
+      background-size: 20px 20px;
+      background-position: 0 0, 10px 10px;
+    }
+    /* Custom scrollbar estilizada y compacta */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #d6d3d1;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="h-full bg-stone-100 font-body text-stone-900 antialiased overflow-hidden flex justify-center">
+<!-- Tablet Frame Container (Optimizado estrictamente para 834px de ancho) -->
+<div class="w-full max-w-[834px] h-full flex bg-stone-50 shadow-2xl border-x border-stone-200 overflow-hidden relative">
+<!-- 1. Rail lateral izquierdo fijo (72px) para formato Tablet -->
+<aside class="w-[72px] h-full flex flex-col justify-between items-center py-4 bg-white border-r border-stone-200 shrink-0 z-30 select-none">
+<!-- Bloque Superior: Isotipo Dali -->
+<div class="flex flex-col items-center gap-4 w-full">
+<!-- Brand Logo / Avatar Selector -->
+<a class="group flex flex-col items-center focus:outline-none" href="#" title="Dali · CONSTROAD">
+<div class="w-10 h-10 rounded-xl bg-teal-700 flex items-center justify-center text-white shadow-sm transition-transform duration-150 group-active:scale-95">
+<span class="font-headline font-bold text-lg tracking-tight">D</span>
+</div>
+<span class="text-[10px] font-headline font-semibold text-stone-700 mt-1 tracking-tight">Dali</span>
+</a>
+<div class="w-8 h-[1px] bg-stone-200"></div>
+<!-- Navegación vertical compacta de iconos y labels -->
+<nav class="flex flex-col items-center gap-1 w-full px-1">
+<!-- Inicio -->
+<a class="w-14 h-12 rounded-lg flex flex-col items-center justify-center text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors" href="#" title="Inicio">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span class="text-[9px] font-medium leading-tight mt-0.5 tracking-tight">Inicio</span>
+</a>
+<!-- Chats -->
+<a class="w-14 h-12 rounded-lg flex flex-col items-center justify-center text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors relative" href="#" title="Conversaciones">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+<span class="text-[9px] font-medium leading-tight mt-0.5 tracking-tight">Chats</span>
+<span class="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-amber-500"></span>
+</a>
+<!-- Leads -->
+<a class="w-14 h-12 rounded-lg flex flex-col items-center justify-center text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors" href="#" title="Leads">
+<span class="material-symbols-outlined text-[20px]">group</span>
+<span class="text-[9px] font-medium leading-tight mt-0.5 tracking-tight">Leads</span>
+</a>
+<!-- Asistente -->
+<a class="w-14 h-12 rounded-lg flex flex-col items-center justify-center text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors" href="#" title="Asistente">
+<span class="material-symbols-outlined text-[20px]">smart_toy</span>
+<span class="text-[9px] font-medium leading-tight mt-0.5 tracking-tight">Asistente</span>
+</a>
+<!-- Servicios -->
+<a class="w-14 h-12 rounded-lg flex flex-col items-center justify-center text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors" href="#" title="Servicios">
+<span class="material-symbols-outlined text-[20px]">construction</span>
+<span class="text-[9px] font-medium leading-tight mt-0.5 tracking-tight">Servicios</span>
+</a>
+<!-- FAQ -->
+<a class="w-14 h-12 rounded-lg flex flex-col items-center justify-center text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors" href="#" title="Preguntas frecuentes">
+<span class="material-symbols-outlined text-[20px]">quiz</span>
+<span class="text-[9px] font-medium leading-tight mt-0.5 tracking-tight">FAQ</span>
+</a>
+<!-- WhatsApp -->
+<a class="w-14 h-12 rounded-lg flex flex-col items-center justify-center text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors" href="#" title="WhatsApp">
+<span class="material-symbols-outlined text-[20px]">link</span>
+<span class="text-[9px] font-medium leading-tight mt-0.5 tracking-tight">WhatsApp</span>
+</a>
+<!-- TAB ACTIVO: Probar a Dali -->
+<a class="w-14 h-12 rounded-lg flex flex-col items-center justify-center bg-teal-50 text-teal-700 font-semibold border border-teal-200/80 shadow-xs relative" href="#" title="Probar a Dali">
+<span class="material-symbols-outlined text-[20px] text-teal-700 material-symbols-fill">play_circle</span>
+<span class="text-[9px] font-semibold leading-tight mt-0.5 text-teal-800 tracking-tight">Probar</span>
+<span class="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-teal-700 rounded-r-md"></span>
+</a>
+</nav>
+</div>
+<!-- Bloque Inferior: Notificaciones, Ajustes y Avatar CONSTROAD -->
+<div class="flex flex-col items-center gap-2 w-full pt-2 border-t border-stone-200">
+<button class="w-10 h-10 rounded-lg flex items-center justify-center text-stone-600 hover:bg-stone-100 transition-colors" title="Ajustes" type="button">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<div class="relative group cursor-pointer" title="CONSTROAD (Lima, Perú)">
+<div class="w-9 h-9 rounded-full bg-stone-800 text-stone-100 flex items-center justify-center text-xs font-headline font-bold ring-2 ring-stone-200 hover:ring-teal-600 transition-all">
+            CR
+          </div>
+<span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-teal-600 ring-2 ring-white"></span>
+</div>
+</div>
+</aside>
+<!-- 2. Contenedor Principal (762px de ancho en Tablet 834px) -->
+<div class="flex-1 flex flex-col h-full overflow-hidden bg-stone-50">
+<!-- TopAppBar Compacta con Breadcrumb y Badges -->
+<header class="h-14 px-5 bg-white border-b border-stone-200 flex items-center justify-between shrink-0">
+<div class="flex items-center gap-2.5 text-xs text-stone-500">
+<span class="font-medium text-stone-700">CONSTROAD</span>
+<span class="text-stone-400">/</span>
+<span>Asistente</span>
+<span class="text-stone-400">/</span>
+<span class="font-semibold text-teal-700">Probar a Dali</span>
+</div>
+<div class="flex items-center gap-2.5">
+<!-- Chip de Estado: Modo Sandbox -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-50 border border-teal-200 text-teal-800 text-[11px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse"></span>
+<span>Modo Sandbox (Simulador activo)</span>
+</div>
+<!-- Ayuda rápida -->
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-stone-500 hover:bg-stone-100 hover:text-stone-800 transition-colors" title="Ayuda">
+<span class="material-symbols-outlined text-[18px]">help_outline</span>
+</button>
+</div>
+</header>
+<!-- Barra de Título y Controles del Simulador -->
+<div class="px-5 pt-3.5 pb-3 bg-white border-b border-stone-200 shrink-0">
+<div class="flex items-start justify-between gap-4">
+<div>
+<h1 class="font-headline font-bold text-xl text-stone-900 tracking-tight leading-tight">
+              Probar a Dali
+            </h1>
+<p class="text-xs text-stone-600 mt-0.5">
+              Escríbele como lo haría un cliente. No se guarda como lead ni avisa a nadie.
+            </p>
+</div>
+<!-- Botón de Reiniciar Conversación -->
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-100 active:scale-95 text-xs font-medium transition-all shadow-xs shrink-0" type="button">
+<span class="material-symbols-outlined text-[16px] text-stone-500">refresh</span>
+<span>Reiniciar conversación</span>
+</button>
+</div>
+<!-- Segmented Control de Perfil & Aviso -->
+<div class="flex items-center justify-between mt-3 pt-2.5 border-t border-stone-100">
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-label uppercase tracking-wider text-stone-500">Simular como:</span>
+<div class="inline-flex p-0.5 rounded-lg bg-stone-100 border border-stone-200 text-xs">
+<button class="px-2.5 py-1 rounded-md bg-white text-teal-800 font-medium shadow-xs flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px] text-teal-600 material-symbols-fill">check_circle</span>
+<span>Cliente nuevo</span>
+</button>
+<button class="px-2.5 py-1 rounded-md text-stone-600 hover:text-stone-900 font-normal" type="button">
+                Juan Carlos (Consorcio Los Pinos)
+              </button>
+</div>
+</div>
+<div class="flex items-center gap-1 text-[11px] text-stone-500 italic">
+<span class="material-symbols-outlined text-[14px] text-stone-400">info</span>
+<span>Reglas vigentes de CONSTROAD</span>
+</div>
+</div>
+</div>
+<!-- 3. Área de Contenido en 2 Columnas (834px Tablet Layout) -->
+<main class="flex-1 flex overflow-hidden p-4 gap-4 bg-stone-100/70">
+<!-- COLUMNA IZQUIERDA: Widget Simulador WhatsApp (Aprox 390px) -->
+<section class="w-[390px] flex flex-col bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden shrink-0">
+<!-- WhatsApp Top Bar -->
+<div class="h-12 bg-teal-800 text-white px-3.5 flex items-center justify-between shrink-0 select-none shadow-xs">
+<div class="flex items-center gap-2.5">
+<div class="relative">
+<div class="w-8 h-8 rounded-full bg-teal-900/80 border border-teal-600 flex items-center justify-center font-headline font-bold text-xs text-white">
+                  D
+                </div>
+<span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-teal-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-[8px] text-white material-symbols-fill">check</span>
+</span>
+</div>
+<div class="flex flex-col leading-none">
+<div class="flex items-center gap-1">
+<span class="font-headline font-semibold text-xs text-white">Dali · CONSTROAD</span>
+</div>
+<span class="text-[10px] text-teal-200 font-normal mt-0.5">● en línea (simulado)</span>
+</div>
+</div>
+<div class="flex items-center gap-1 text-teal-100">
+<button class="p-1.5 hover:bg-teal-700/60 rounded-full" title="Videollamada simulada" type="button">
+<span class="material-symbols-outlined text-[17px]">videocam</span>
+</button>
+<button class="p-1.5 hover:bg-teal-700/60 rounded-full" title="Llamada" type="button">
+<span class="material-symbols-outlined text-[17px]">call</span>
+</button>
+<button class="p-1.5 hover:bg-teal-700/60 rounded-full" title="Más opciones" type="button">
+<span class="material-symbols-outlined text-[17px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Canvas de Conversación (WhatsApp Canvas) -->
+<div class="flex-1 p-3.5 overflow-y-auto whatsapp-bg-pattern flex flex-col gap-2.5 text-xs">
+<!-- Separador de Fecha Centrado -->
+<div class="flex justify-center my-1">
+<span class="px-2.5 py-0.5 rounded bg-white/90 shadow-xs border border-stone-200/60 text-[10px] font-mono uppercase tracking-wider text-stone-600">
+                HOY · LIMA, PERÚ
+              </span>
+</div>
+<!-- Banner cifrado simulado WhatsApp -->
+<div class="mx-4 p-1.5 rounded-lg bg-amber-50/90 border border-amber-200/60 text-[10px] text-amber-800 text-center flex items-center justify-center gap-1 leading-tight shadow-xs">
+<span class="material-symbols-outlined text-[12px] text-amber-700">lock</span>
+<span>Entorno de prueba Dali. Los mensajes simulan la API oficial de WhatsApp.</span>
+</div>
+<!-- 1. Burbuja Cliente (Derecha) -->
+<div class="flex justify-end">
+<div class="max-w-[85%] rounded-lg rounded-tr-xs bg-[#d9fdd3] text-stone-900 p-2.5 shadow-xs border border-emerald-200/40">
+<p class="text-[13px] leading-relaxed">
+                  necesito asfaltar el patio de mi almacén
+                </p>
+<div class="flex items-center justify-end gap-1 mt-1 text-[10px] text-stone-500 font-mono">
+<span>10:41 a.m.</span>
+<span class="material-symbols-outlined text-[14px] text-sky-600 material-symbols-fill">done_all</span>
+</div>
+</div>
+</div>
+<!-- 2. Burbuja Dali (Izquierda) -->
+<div class="flex justify-start">
+<div class="max-w-[88%] rounded-lg rounded-tl-xs bg-white text-stone-900 p-2.5 shadow-xs border border-stone-200/80">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="px-1.5 py-0.2 rounded bg-teal-100 text-teal-800 font-bold text-[9px] tracking-wide">DALI</span>
+<span class="text-[10px] text-stone-400">Asistente oficial</span>
+</div>
+<p class="text-[13px] leading-relaxed">
+                  ¡Hola! Soy Dali, la asistente de CONSTROAD 👋 Con gusto te ayudo con asfaltado (colocación). ¿Cuántos m² necesitas asfaltar, aproximadamente?
+                </p>
+<div class="flex items-center justify-end mt-1 text-[10px] text-stone-400 font-mono">
+<span>10:41 a.m.</span>
+</div>
+</div>
+</div>
+<!-- 3. Burbuja Cliente (Derecha) -->
+<div class="flex justify-end">
+<div class="max-w-[85%] rounded-lg rounded-tr-xs bg-[#d9fdd3] text-stone-900 p-2.5 shadow-xs border border-emerald-200/40">
+<p class="text-[13px] leading-relaxed">
+                  son como 600 m2 en Lurín
+                </p>
+<div class="flex items-center justify-end gap-1 mt-1 text-[10px] text-stone-500 font-mono">
+<span>10:42 a.m.</span>
+<span class="material-symbols-outlined text-[14px] text-sky-600 material-symbols-fill">done_all</span>
+</div>
+</div>
+</div>
+<!-- 4. Burbuja Dali (Izquierda con opciones de espesor) -->
+<div class="flex justify-start">
+<div class="max-w-[90%] rounded-lg rounded-tl-xs bg-white text-stone-900 p-2.5 shadow-xs border border-stone-200/80">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="px-1.5 py-0.2 rounded bg-teal-100 text-teal-800 font-bold text-[9px] tracking-wide">DALI</span>
+<span class="text-[10px] text-stone-400">Respuesta automatizada</span>
+</div>
+<p class="text-[13px] leading-relaxed">
+                  Perfecto: <strong>600 m² en Lurín</strong>. ¿Qué espesor buscas?
+                </p>
+<div class="mt-1.5 space-y-0.5 text-[12px] bg-stone-50 p-2 rounded border border-stone-100 text-stone-700">
+<p>• <strong>1 pulgada</strong> para tráfico ligero (patios, cocheras)</p>
+<p>• <strong>2 pulgadas</strong> para calles y estacionamientos</p>
+<p>• <strong>3 pulgadas</strong> para tráfico pesado</p>
+</div>
+<p class="text-[12px] text-stone-600 mt-1.5">
+                  Si no sabes, dime qué vehículos van a circular y te recomiendo.
+                </p>
+<div class="flex items-center justify-end mt-1 text-[10px] text-stone-400 font-mono">
+<span>10:42 a.m.</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Barra Inferior de Entrada estilo WhatsApp -->
+<div class="p-2.5 bg-[#f0f2f5] border-t border-stone-200 flex items-center gap-2 shrink-0">
+<button class="p-1.5 text-stone-500 hover:text-stone-700" title="Emoji" type="button">
+<span class="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
+</button>
+<button class="p-1.5 text-stone-500 hover:text-stone-700" title="Adjuntar documento o foto" type="button">
+<span class="material-symbols-outlined text-[20px]">attach_file</span>
+</button>
+<div class="flex-1 relative">
+<input class="w-full h-9 pl-3 pr-3 text-xs bg-white border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-700 focus:border-teal-700 text-stone-900 placeholder:text-stone-400" placeholder="Escribe como cliente..." type="text" value="Será para camiones de 15 toneladas..."/>
+</div>
+<button class="w-9 h-9 rounded-full bg-teal-700 hover:bg-teal-800 active:scale-95 text-white flex items-center justify-center shadow-sm transition-all" title="Enviar mensaje de prueba" type="button">
+<span class="material-symbols-outlined text-[17px]">send</span>
+</button>
+</div>
+</section>
+<!-- COLUMNA DERECHA: Panel de Inspección "Lo que Dali entendió" (Aprox 340px) -->
+<section class="flex-1 flex flex-col bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+<!-- Encabezado del Panel -->
+<div class="px-4 py-3 border-b border-stone-200 flex items-center justify-between bg-stone-50/70 shrink-0">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-700 text-[18px]">psychology</span>
+<h2 class="font-headline font-semibold text-sm text-stone-900">
+                Lo que Dali entendió
+              </h2>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-100/70 text-teal-800 text-[10px] font-semibold tracking-wide uppercase">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600 animate-ping"></span>
+              En vivo
+            </span>
+</div>
+<!-- Contenido deslizable del Inspector -->
+<div class="flex-1 p-3.5 overflow-y-auto space-y-4">
+<!-- Bloque 1: Variables Extraídas de Calificación -->
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-label font-bold uppercase tracking-wider text-stone-500">
+                  Variables capturadas (Cotizador)
+                </span>
+<span class="text-[11px] font-mono text-stone-500">3 de 7 campos</span>
+</div>
+<div class="bg-stone-50 rounded-lg border border-stone-200 divide-y divide-stone-200/70 text-xs">
+<!-- Servicio Detectado -->
+<div class="p-2.5 flex items-center justify-between">
+<div>
+<div class="text-[11px] text-stone-500">Servicio detectado</div>
+<div class="font-medium text-stone-900">Asfaltado en caliente</div>
+</div>
+<div class="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-mono">
+<span class="material-symbols-outlined text-[13px] text-emerald-600 material-symbols-fill">check_circle</span>
+<span>98% certeza</span>
+</div>
+</div>
+<!-- Metrado / Área -->
+<div class="p-2.5 flex items-center justify-between">
+<div>
+<div class="text-[11px] text-stone-500">Área / Metrado</div>
+<div class="font-medium font-mono text-stone-900">600 m²</div>
+</div>
+<span class="inline-flex items-center gap-0.5 text-emerald-700 text-[11px] font-medium">
+<span class="material-symbols-outlined text-[14px]">check</span> Validado
+                  </span>
+</div>
+<!-- Ubicación -->
+<div class="p-2.5 flex items-center justify-between">
+<div>
+<div class="text-[11px] text-stone-500">Ubicación de obra</div>
+<div class="font-medium text-stone-900">Lurín, Lima</div>
+</div>
+<span class="inline-flex items-center gap-0.5 text-emerald-700 text-[11px] font-medium">
+<span class="material-symbols-outlined text-[14px]">check</span> En cobertura
+                  </span>
+</div>
+<!-- Espesor de Carpeta (Esperando respuesta) -->
+<div class="p-2.5 flex items-center justify-between bg-amber-50/50">
+<div>
+<div class="text-[11px] text-amber-800 font-medium">Espesor de carpeta</div>
+<div class="font-semibold text-amber-900 italic">Esperando respuesta del cliente...</div>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium text-[10px] flex items-center gap-1 border border-amber-300">
+<span class="material-symbols-outlined text-[12px] animate-spin">sync</span>
+<span>Pendiente</span>
+</span>
+</div>
+<!-- Terreno / Imprimación -->
+<div class="p-2.5 flex items-center justify-between text-stone-400">
+<div>
+<div class="text-[11px]">Tipo de base / Imprimación</div>
+<div class="text-stone-500">No mencionado aún</div>
+</div>
+<span class="text-[10px] font-mono text-stone-400">Paso posterior</span>
+</div>
+</div>
+</div>
+<!-- Bloque 2: Siguiente Objetivo del Guion -->
+<div class="p-3 rounded-lg bg-teal-50/60 border border-teal-200">
+<div class="flex items-center justify-between mb-1.5">
+<span class="text-[10px] font-label uppercase tracking-wider font-bold text-teal-800">
+                  Paso activo del guion (5 de 10)
+                </span>
+<span class="text-[10px] font-mono font-semibold text-teal-700">Regla #ASF-04</span>
+</div>
+<p class="text-xs font-semibold text-stone-900">
+                Determinar espesor según carga vehicular
+              </p>
+<div class="mt-2 flex flex-wrap gap-1">
+<span class="px-2 py-0.5 rounded bg-white border border-teal-200 text-teal-900 text-[10px]">1 pulgada (ligero)</span>
+<span class="px-2 py-0.5 rounded bg-white border border-teal-200 text-teal-900 text-[10px]">2 pulgadas (regular)</span>
+<span class="px-2 py-0.5 rounded bg-white border border-teal-200 text-teal-900 text-[10px]">3 pulgadas (pesado)</span>
+</div>
+</div>
+<!-- Bloque 3: Señales y Guardianes de IA (Filtros en tiempo real) -->
+<div class="space-y-1.5">
+<span class="text-[11px] font-label font-bold uppercase tracking-wider text-stone-500">
+                Guardianes y Detección
+              </span>
+<div class="grid grid-cols-2 gap-1.5">
+<div class="p-2 rounded bg-stone-50 border border-stone-200 flex items-center justify-between text-[11px]">
+<span class="text-stone-600">Preguntó precio:</span>
+<span class="font-medium text-stone-500">No</span>
+</div>
+<div class="p-2 rounded bg-stone-50 border border-stone-200 flex items-center justify-between text-[11px]">
+<span class="text-stone-600">Pide asesor humano:</span>
+<span class="font-medium text-stone-500">No</span>
+</div>
+<div class="p-2 rounded bg-stone-50 border border-stone-200 flex items-center justify-between text-[11px]">
+<span class="text-stone-600">Spam / Fuera de tema:</span>
+<span class="font-medium text-stone-500">No</span>
+</div>
+<div class="p-2 rounded bg-emerald-50 border border-emerald-200 flex items-center justify-between text-[11px]">
+<span class="text-emerald-900 font-medium">Intención comercial:</span>
+<span class="font-mono font-bold text-emerald-700">Alta (0.94)</span>
+</div>
+</div>
+</div>
+<!-- Bloque 4: Feedback y Depuración Rápida -->
+<div class="pt-2 border-t border-stone-200">
+<div class="flex items-center justify-between">
+<button class="inline-flex items-center gap-1 text-xs text-amber-700 hover:text-amber-800 font-medium" type="button">
+<span class="material-symbols-outlined text-[15px]">flag</span>
+<span>Reportar respuesta rara</span>
+</button>
+<a class="inline-flex items-center gap-0.5 text-xs text-teal-700 hover:text-teal-800 font-medium" href="#">
+<span>Editar guion</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</a>
+</div>
+<!-- Mini caja de feedback en línea -->
+<div class="mt-2">
+<input class="w-full h-8 px-2.5 text-[11px] bg-stone-50 border border-stone-200 rounded-md placeholder:text-stone-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-teal-700 text-stone-800" placeholder="¿Qué debería haber respondido Dali aquí? (para afinar)" type="text"/>
+</div>
+</div>
+</div>
+<!-- Pie del Inspector: Estado de la base de datos de CONSTROAD -->
+<div class="px-4 py-2 bg-stone-50 border-t border-stone-200 flex items-center justify-between text-[11px] text-stone-500 shrink-0 font-mono">
+<span>Catálogo: v2.4 (14 Mar)</span>
+<span class="text-teal-700 font-medium">Dali v1.8 (Activo)</span>
+</div>
+</section>
+</main>
+</div>
+</div>
+</body></html>

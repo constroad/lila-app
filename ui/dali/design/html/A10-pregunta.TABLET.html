@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Editor Pregunta - Dali Tablet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            teal: {
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 22;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 22;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #e2e8f0;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #cbd5e1;
+    }
+  </style>
+</head>
+<body class="bg-stone-100 text-stone-800 font-sans antialiased overflow-hidden flex h-screen w-full max-w-[834px] mx-auto relative border-x border-stone-200">
+
+  <!-- RAIL LATERAL IZQUIERDO (72px) -->
+  <aside class="w-[72px] bg-stone-900 text-white flex flex-col items-center py-3 select-none shrink-0 z-20 justify-between h-full border-r border-stone-800">
+    <!-- Top: Logo Dali -->
+    <div class="flex flex-col items-center gap-4 w-full">
+      <div class="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center font-bold text-white text-lg tracking-tight shadow-sm">
+        D
+      </div>
+
+      <!-- Nav Items -->
+      <nav class="flex flex-col items-center gap-1 w-full px-1.5 overflow-y-auto max-h-[calc(100vh-190px)] scrollbar-none">
+        <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition">
+          <span class="material-symbols-outlined text-[20px]">dashboard</span>
+          <span class="text-[9px] font-medium mt-0.5 tracking-tight">Inicio</span>
+        </a>
+        <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition relative">
+          <span class="material-symbols-outlined text-[20px]">chat</span>
+          <span class="text-[9px] font-medium mt-0.5 tracking-tight">Chats</span>
+          <span class="absolute top-1 right-2 w-2 h-2 bg-amber-500 rounded-full"></span>
+        </a>
+        <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition">
+          <span class="material-symbols-outlined text-[20px]">contacts</span>
+          <span class="text-[9px] font-medium mt-0.5 tracking-tight">Leads</span>
+        </a>
+        <!-- ACTIVO: Asistente -->
+        <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg bg-teal-700/90 text-white transition shadow-inner">
+          <span class="material-symbols-outlined fill text-[20px]">smart_toy</span>
+          <span class="text-[9px] font-semibold mt-0.5 tracking-tight">Asistente</span>
+        </a>
+        <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition">
+          <span class="material-symbols-outlined text-[20px]">storefront</span>
+          <span class="text-[9px] font-medium mt-0.5 tracking-tight">Negocio</span>
+        </a>
+        <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition">
+          <span class="material-symbols-outlined text-[20px]">construction</span>
+          <span class="text-[9px] font-medium mt-0.5 tracking-tight">Servicios</span>
+        </a>
+        <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition">
+          <span class="material-symbols-outlined text-[20px]">quiz</span>
+          <span class="text-[9px] font-medium mt-0.5 tracking-tight">FAQ</span>
+        </a>
+        <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition">
+          <span class="material-symbols-outlined text-[20px]">inventory_2</span>
+          <span class="text-[9px] font-medium mt-0.5 tracking-tight">Catálogo</span>
+        </a>
+        <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition">
+          <span class="material-symbols-outlined text-[20px]">forum</span>
+          <span class="text-[9px] font-medium mt-0.5 tracking-tight">WhatsApp</span>
+        </a>
+      </nav>
+    </div>
+
+    <!-- Bottom Nav Items -->
+    <div class="flex flex-col items-center gap-1 w-full px-1.5 pt-2 border-t border-stone-800 shrink-0">
+      <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white transition">
+        <span class="material-symbols-outlined text-[19px]">group</span>
+        <span class="text-[9px] font-medium tracking-tight">Equipo</span>
+      </a>
+      <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white transition">
+        <span class="material-symbols-outlined text-[19px]">credit_card</span>
+        <span class="text-[9px] font-medium tracking-tight">Plan</span>
+      </a>
+      <a href="#" class="flex flex-col items-center justify-center w-full py-1.5 rounded-lg text-stone-400 hover:text-white transition">
+        <span class="material-symbols-outlined text-[19px]">settings</span>
+        <span class="text-[9px] font-medium tracking-tight">Ajustes</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- CONTENEDOR PRINCIPAL: FONDO ATENUADO CON EL GUION DE ATENCIÓN (354px visibles) -->
+  <main class="flex-1 bg-stone-50 h-full overflow-hidden flex flex-col relative select-none">
+    <!-- Topbar superior -->
+    <header class="h-14 bg-white border-b border-stone-200 px-5 flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-2.5">
+        <span class="text-xs font-semibold text-stone-500 uppercase tracking-wider">Asistente</span>
+        <span class="text-stone-300">/</span>
+        <span class="text-xs font-semibold text-stone-800">Guion de atención</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 bg-teal-50 text-teal-700 rounded-full border border-teal-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse"></span>
+          Dali activo
+        </span>
+      </div>
+    </header>
+
+    <!-- Contenido del guion (lista de fondo atenuada) -->
+    <div class="flex-1 overflow-y-auto p-5 opacity-40 blur-[0.4px] pointer-events-none">
+      <div class="max-w-xl mb-4">
+        <div class="flex items-center justify-between mb-1">
+          <h1 class="text-lg font-bold text-stone-900">Asfaltado y Pavimentación</h1>
+          <span class="text-xs text-stone-500">10 preguntas configuradas</span>
+        </div>
+        <p class="text-xs text-stone-600">Dali recopila estos datos en WhatsApp antes de derivar la cotización formal al asesor comercial.</p>
+      </div>
+
+      <!-- Lista de pasos del guion -->
+      <div class="space-y-2.5">
+        <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm flex items-start gap-3">
+          <span class="w-6 h-6 rounded-lg bg-stone-100 text-stone-600 text-xs font-bold flex items-center justify-center shrink-0">1</span>
+          <div class="flex-1">
+            <div class="text-xs font-semibold text-stone-900">¿Para qué tipo de obra necesitas el asfaltado?</div>
+            <div class="text-[11px] text-stone-500 mt-0.5">Dato: <span class="font-mono text-stone-700">tipo_obra</span> · Opciones (3)</div>
+          </div>
+        </div>
+
+        <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm flex items-start gap-3">
+          <span class="w-6 h-6 rounded-lg bg-stone-100 text-stone-600 text-xs font-bold flex items-center justify-center shrink-0">2</span>
+          <div class="flex-1">
+            <div class="text-xs font-semibold text-stone-900">¿Aproximadamente cuántos m² tiene el área a intervenir?</div>
+            <div class="text-[11px] text-stone-500 mt-0.5">Dato: <span class="font-mono text-stone-700">metrado_m2</span> · Número</div>
+          </div>
+        </div>
+
+        <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm flex items-start gap-3">
+          <span class="w-6 h-6 rounded-lg bg-stone-100 text-stone-600 text-xs font-bold flex items-center justify-center shrink-0">3</span>
+          <div class="flex-1">
+            <div class="text-xs font-semibold text-stone-900">¿En qué distrito o zona de Lima se ubica el trabajo?</div>
+            <div class="text-[11px] text-stone-500 mt-0.5">Dato: <span class="font-mono text-stone-700">ubicacion</span> · Texto</div>
+          </div>
+        </div>
+
+        <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm flex items-start gap-3">
+          <span class="w-6 h-6 rounded-lg bg-stone-100 text-stone-600 text-xs font-bold flex items-center justify-center shrink-0">4</span>
+          <div class="flex-1">
+            <div class="text-xs font-semibold text-stone-900">¿El terreno ya cuenta con base afirmada y compactada?</div>
+            <div class="text-[11px] text-stone-500 mt-0.5">Dato: <span class="font-mono text-stone-700">base_lista</span> · Sí / No</div>
+          </div>
+        </div>
+
+        <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm flex items-start gap-3">
+          <span class="w-6 h-6 rounded-lg bg-stone-100 text-stone-600 text-xs font-bold flex items-center justify-center shrink-0">5</span>
+          <div class="flex-1">
+            <div class="text-xs font-semibold text-stone-900">¿Qué espesor de carpeta asfáltica necesitas?</div>
+            <div class="text-[11px] text-stone-500 mt-0.5">Dato: <span class="font-mono text-stone-700">espesor</span> · Opciones (3)</div>
+          </div>
+        </div>
+
+        <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm flex items-start gap-3">
+          <span class="w-6 h-6 rounded-lg bg-stone-100 text-stone-600 text-xs font-bold flex items-center justify-center shrink-0">6</span>
+          <div class="flex-1">
+            <div class="text-xs font-semibold text-stone-900">¿Requieres servicio de imprimación previa?</div>
+            <div class="text-[11px] text-stone-500 mt-0.5">Dato: <span class="font-mono text-stone-700">imprimacion</span> · Sí / No</div>
+          </div>
+        </div>
+
+        <!-- PASO 7 (EL QUE ESTAMOS EDITANDO) -->
+        <div class="bg-teal-50 p-3.5 rounded-xl border-2 border-teal-600 shadow-sm flex items-start gap-3">
+          <span class="w-6 h-6 rounded-lg bg-teal-600 text-white text-xs font-bold flex items-center justify-center shrink-0">7</span>
+          <div class="flex-1">
+            <div class="text-xs font-bold text-teal-900">¿Con MC-30 o con riego de liga?</div>
+            <div class="text-[11px] text-teal-700 mt-0.5 font-medium">Dato: <span class="font-mono">imprimante</span> · Editando en panel lateral →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Backdrop oscurecido sobre el contenido de fondo -->
+    <div class="absolute inset-0 bg-stone-950/20 backdrop-blur-[1px] z-10"></div>
+  </main>
+
+  <!-- DRAWER DERECHO DE 480 PX: EDITOR PREGUNTA 7 DE 10 -->
+  <section class="w-[480px] bg-white h-full z-30 shadow-2xl border-l border-stone-200 flex flex-col shrink-0">
+    <!-- Header del Drawer -->
+    <div class="px-5 py-3.5 border-b border-stone-200 flex items-center justify-between bg-white shrink-0">
+      <div class="flex items-center gap-2">
+        <span class="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center font-bold text-xs">
+          7
+        </span>
+        <div>
+          <h2 class="text-base font-bold text-stone-900 tracking-tight leading-tight">Editar pregunta 7 de 10</h2>
+          <p class="text-[11px] text-stone-500 leading-none mt-0.5">Guion: Asfaltado y Pavimentación</p>
+        </div>
+      </div>
+      <button class="w-8 h-8 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-700 flex items-center justify-center transition" title="Cerrar panel">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+
+    <!-- Cuerpo con scroll -->
+    <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+
+      <!-- CAMPO 1: Lo que Dali pregunta -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+            <span>Lo que Dali pregunta</span>
+            <span class="text-teal-600">*</span>
+          </label>
+          <span class="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            Mensaje WhatsApp
+          </span>
+        </div>
+        <div class="relative">
+          <textarea rows="3" class="w-full text-xs text-stone-800 bg-white border border-stone-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-teal-600 shadow-sm leading-relaxed transition resize-none">¿Con MC-30 o con riego de liga? (el MC-30, asfalto líquido, va en base nueva; el riego de liga, emulsión, sobre pavimento existente)</textarea>
+        </div>
+        <p class="text-[11px] text-stone-500 flex items-center gap-1">
+          <span class="material-symbols-outlined text-[14px] text-stone-400">info</span>
+          Dali enviará este mensaje tal cual por WhatsApp al llegar a este paso.
+        </p>
+      </div>
+
+      <!-- CAMPO 2: Nombre del dato -->
+      <div class="space-y-1.5 bg-stone-50 p-3 rounded-xl border border-stone-200">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold text-stone-800">Nombre del dato</label>
+          <span class="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-stone-200 text-stone-700">variable</span>
+        </div>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400">
+            <span class="font-mono text-xs text-teal-700 font-semibold">{ }</span>
+          </div>
+          <input type="text" value="Imprimante" class="w-full pl-8 pr-3 py-2 text-xs font-medium text-stone-900 bg-white border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-teal-600 shadow-sm">
+        </div>
+        <p class="text-[11px] text-stone-500">Así aparece en el resumen y en el aviso al asesor.</p>
+      </div>
+
+      <!-- CAMPO 3: Tipo de respuesta (selector segmentado) -->
+      <div class="space-y-1.5">
+        <label class="text-xs font-bold text-stone-800">Tipo de respuesta</label>
+        <div class="grid grid-cols-4 gap-1 p-1 bg-stone-100 rounded-xl border border-stone-200">
+          <button type="button" class="py-1.5 px-2 rounded-lg text-xs font-medium text-stone-600 hover:text-stone-900 transition flex items-center justify-center gap-1">
+            <span class="material-symbols-outlined text-[15px]">tag</span>
+            <span>Número</span>
+          </button>
+          <button type="button" class="py-1.5 px-2 rounded-lg text-xs font-medium text-stone-600 hover:text-stone-900 transition flex items-center justify-center gap-1">
+            <span class="material-symbols-outlined text-[15px]">text_fields</span>
+            <span>Texto</span>
+          </button>
+          <button type="button" class="py-1.5 px-2 rounded-lg text-xs font-medium text-stone-600 hover:text-stone-900 transition flex items-center justify-center gap-1">
+            <span class="material-symbols-outlined text-[15px]">check_circle</span>
+            <span>Sí / No</span>
+          </button>
+          <!-- SELECCIONADO: Opciones -->
+          <button type="button" class="py-1.5 px-2 rounded-lg text-xs font-bold bg-teal-700 text-white shadow-sm flex items-center justify-center gap-1">
+            <span class="material-symbols-outlined text-[15px]">tune</span>
+            <span>Opciones</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- CAMPO 4: Opciones (lista editable con chips de palabras reconocibles) -->
+      <div class="space-y-2 bg-stone-50/70 p-3 rounded-xl border border-stone-200">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold text-stone-800 flex items-center gap-1">
+            <span>Opciones reconocibles</span>
+            <span class="text-stone-400 font-normal text-[11px]">(2 definidas)</span>
+          </label>
+          <span class="text-[10px] text-teal-700 font-medium">Reconocimiento semántico activo</span>
+        </div>
+
+        <!-- Fila 1: MC-30 -->
+        <div class="bg-white p-2.5 rounded-lg border border-stone-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-teal-600"></span>
+              <span class="text-xs font-bold text-stone-900">MC-30</span>
+              <span class="text-[11px] text-stone-400">(asfalto líquido)</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button type="button" class="p-1 text-stone-400 hover:text-stone-600 rounded">
+                <span class="material-symbols-outlined text-[16px]">edit</span>
+              </button>
+              <button type="button" class="p-1 text-stone-400 hover:text-rose-600 rounded">
+                <span class="material-symbols-outlined text-[16px]">delete</span>
+              </button>
+            </div>
+          </div>
+          <!-- Chips palabras clave -->
+          <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md text-[11px] border border-stone-200">
+              mc
+              <span class="material-symbols-outlined text-[12px] text-stone-400 hover:text-stone-700 cursor-pointer">close</span>
+            </span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md text-[11px] border border-stone-200">
+              mc-30
+              <span class="material-symbols-outlined text-[12px] text-stone-400 hover:text-stone-700 cursor-pointer">close</span>
+            </span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md text-[11px] border border-stone-200">
+              líquido
+              <span class="material-symbols-outlined text-[12px] text-stone-400 hover:text-stone-700 cursor-pointer">close</span>
+            </span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md text-[11px] border border-stone-200">
+              "la primera"
+              <span class="material-symbols-outlined text-[12px] text-stone-400 hover:text-stone-700 cursor-pointer">close</span>
+            </span>
+            <button type="button" class="inline-flex items-center gap-0.5 px-2 py-0.5 bg-white hover:bg-teal-50 text-teal-700 rounded-md text-[11px] border border-dashed border-teal-300 font-medium transition">
+              <span class="material-symbols-outlined text-[13px]">add</span>
+              Palabra clave
+            </button>
+          </div>
+        </div>
+
+        <!-- Fila 2: Riego de liga -->
+        <div class="bg-white p-2.5 rounded-lg border border-stone-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-teal-600"></span>
+              <span class="text-xs font-bold text-stone-900">riego de liga</span>
+              <span class="text-[11px] text-stone-400">(emulsión asfáltica)</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button type="button" class="p-1 text-stone-400 hover:text-stone-600 rounded">
+                <span class="material-symbols-outlined text-[16px]">edit</span>
+              </button>
+              <button type="button" class="p-1 text-stone-400 hover:text-rose-600 rounded">
+                <span class="material-symbols-outlined text-[16px]">delete</span>
+              </button>
+            </div>
+          </div>
+          <!-- Chips palabras clave -->
+          <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md text-[11px] border border-stone-200">
+              riego
+              <span class="material-symbols-outlined text-[12px] text-stone-400 hover:text-stone-700 cursor-pointer">close</span>
+            </span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md text-[11px] border border-stone-200">
+              liga
+              <span class="material-symbols-outlined text-[12px] text-stone-400 hover:text-stone-700 cursor-pointer">close</span>
+            </span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md text-[11px] border border-stone-200">
+              emulsión
+              <span class="material-symbols-outlined text-[12px] text-stone-400 hover:text-stone-700 cursor-pointer">close</span>
+            </span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md text-[11px] border border-stone-200">
+              "la segunda"
+              <span class="material-symbols-outlined text-[12px] text-stone-400 hover:text-stone-700 cursor-pointer">close</span>
+            </span>
+            <button type="button" class="inline-flex items-center gap-0.5 px-2 py-0.5 bg-white hover:bg-teal-50 text-teal-700 rounded-md text-[11px] border border-dashed border-teal-300 font-medium transition">
+              <span class="material-symbols-outlined text-[13px]">add</span>
+              Palabra clave
+            </button>
+          </div>
+        </div>
+
+        <!-- Botón Agregar opción -->
+        <button type="button" class="w-full py-2 bg-white hover:bg-stone-100 text-teal-700 text-xs font-semibold rounded-lg border border-dashed border-stone-300 flex items-center justify-center gap-1.5 transition">
+          <span class="material-symbols-outlined text-[16px]">add_circle</span>
+          <span>Agregar opción</span>
+        </button>
+      </div>
+
+      <!-- CAMPO 5: Solo preguntar si… (condición) -->
+      <div class="bg-amber-50/70 p-3 rounded-xl border border-amber-200 space-y-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[16px] text-amber-700">alt_route</span>
+            <label class="text-xs font-bold text-amber-950">Solo preguntar si…</label>
+          </div>
+          <button type="button" class="text-[11px] font-semibold text-amber-800 hover:text-rose-700 underline transition">
+            Quitar condición
+          </button>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[10px] text-stone-600 font-medium block mb-1">Pregunta previa</label>
+            <select class="w-full text-xs bg-white border border-amber-300 rounded-lg py-1.5 px-2.5 text-stone-800 font-medium focus:ring-1 focus:ring-teal-600 focus:outline-none">
+              <option selected>Imprimación</option>
+              <option>Base afirmada</option>
+              <option>Espesor de carpeta</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[10px] text-stone-600 font-medium block mb-1">Valor esperado</label>
+            <select class="w-full text-xs bg-white border border-amber-300 rounded-lg py-1.5 px-2.5 text-stone-800 font-medium focus:ring-1 focus:ring-teal-600 focus:outline-none">
+              <option selected>es "sí"</option>
+              <option>es "no"</option>
+              <option>está definido</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- CAMPO 6: Si no entendió la respuesta, dice -->
+      <div class="space-y-1 bg-stone-50 p-3 rounded-xl border border-stone-200">
+        <label class="text-xs font-bold text-stone-800 block">Si no entendió la respuesta, dice</label>
+        <input type="text" value="MC-30 o riego de liga." class="w-full py-2 px-3 text-xs text-stone-800 bg-white border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-600 shadow-sm font-normal">
+        <p class="text-[11px] text-stone-500">Repregunta corta cuando la respuesta del cliente es ambigua.</p>
+      </div>
+
+      <!-- CAMPO 7: Si el cliente pregunta qué es -->
+      <div class="space-y-1 bg-stone-50 p-3 rounded-xl border border-stone-200">
+        <label class="text-xs font-bold text-stone-800 block">Si el cliente pregunta qué es</label>
+        <textarea rows="2" class="w-full py-2 px-3 text-xs text-stone-800 bg-white border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-600 shadow-sm leading-relaxed resize-none">El MC-30 es asfalto líquido de curado medio, para imprimar base nueva; el riego de liga es una emulsión que pega el asfalto nuevo sobre pavimento existente.</textarea>
+        <p class="text-[11px] text-stone-500">Explicación técnica que Dali entrega al vuelo si el cliente duda.</p>
+      </div>
+
+      <!-- CAMPO 8: Switch reconocimiento anticipado -->
+      <div class="bg-teal-50/50 p-3 rounded-xl border border-teal-200/80 flex items-center justify-between gap-3">
+        <div class="space-y-0.5">
+          <div class="text-xs font-semibold text-stone-900 leading-snug">
+            Se puede reconocer aunque no se haya preguntado
+          </div>
+          <div class="text-[11px] text-stone-500 leading-snug">
+            Si el cliente lo dice antes en el chat, Dali guarda el dato y salta este paso automáticamente.
+          </div>
+        </div>
+        <!-- Switch Encendido -->
+        <label class="relative inline-flex items-center cursor-pointer shrink-0">
+          <input type="checkbox" checked class="sr-only peer">
+          <div class="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-700"></div>
+        </label>
+      </div>
+
+    </div>
+
+    <!-- BOTONES AL PIE (FIJOS) -->
+    <div class="p-4 bg-white border-t border-stone-200 flex items-center justify-between shrink-0 shadow-lg">
+      <!-- Botón Eliminar pregunta (rojo, texto) a la izquierda -->
+      <button type="button" class="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg transition">
+        <span class="material-symbols-outlined text-[17px]">delete</span>
+        <span>Eliminar pregunta</span>
+      </button>
+
+      <!-- Cancelar y Guardar (primario) a la derecha -->
+      <div class="flex items-center gap-2">
+        <button type="button" class="px-3.5 py-2 text-xs font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-xl transition">
+          Cancelar
+        </button>
+        <button type="button" class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-700 hover:bg-teal-800 rounded-xl shadow-sm transition active:scale-[0.98]">
+          <span class="material-symbols-outlined text-[16px]">check</span>
+          <span>Guardar cambios</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>

@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dali Admin — Consola de Empresas</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&amp;family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&amp;family=Public+Sans:ital,wght@0,100..900;1,100..900&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              200: '#99F6E4',
+              300: '#5EEAD4',
+              400: '#2DD4BF',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E', // Dali Primary
+              800: '#115E59',
+              900: '#134E4A',
+              950: '#042F2E'
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.75rem",
+            "xl": "1rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Public Sans", "sans-serif"],
+            display: ["Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+    }
+    .material-symbols-fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .font-tabular {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="bg-stone-100 text-stone-900 font-body antialiased h-full overflow-hidden flex flex-row">
+<!-- 1. LEFT SIDEBAR: Consola de Administración (256px / w-64) -->
+<aside class="w-64 bg-stone-900 text-stone-300 flex flex-col justify-between h-screen shrink-0 border-r border-stone-800 z-30 select-none">
+<div class="flex flex-col">
+<!-- Top Brand Anchor Header -->
+<div class="p-5 border-b border-stone-800">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-teal-700 flex items-center justify-center text-white font-headline font-bold text-lg shadow-sm">
+              D
+            </div>
+<div>
+<span class="font-headline font-bold text-white text-base tracking-tight leading-none block">Dali Admin</span>
+<span class="text-[11px] text-stone-400 font-medium leading-none">Consola Maestro</span>
+</div>
+</div>
+<span class="bg-teal-950 text-teal-400 text-[10px] font-semibold tracking-wider px-2 py-0.5 rounded border border-teal-800/60 uppercase">
+            ADMIN
+          </span>
+</div>
+<!-- Region & Status Pills -->
+<div class="mt-3 flex items-center justify-between text-xs bg-stone-800/60 px-2.5 py-1.5 rounded-lg border border-stone-750">
+<div class="flex items-center gap-1.5 text-stone-300">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
+<span class="font-mono text-[11px]">sa-east-1 (Lima)</span>
+</div>
+<span class="text-teal-400 font-medium font-mono text-[11px]">99.8%</span>
+</div>
+</div>
+<!-- Navigation Modules -->
+<div class="px-3 py-4">
+<p class="px-3 text-[10px] font-semibold uppercase tracking-wider text-stone-400 mb-2 font-headline">
+          Administración
+        </p>
+<nav class="space-y-1">
+<!-- Empresas (Active) -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg bg-teal-700 text-white font-medium shadow-sm transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-teal-100">domain</span>
+<span class="text-sm">Empresas</span>
+</div>
+<span class="bg-teal-800/80 text-teal-100 text-xs px-2 py-0.5 rounded-full font-mono font-medium">11</span>
+</a>
+<!-- Verticales -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-stone-300 hover:bg-stone-800/70 hover:text-white transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-stone-400 group-hover:text-stone-200">category</span>
+<span class="text-sm">Verticales</span>
+</div>
+<span class="bg-stone-800 text-stone-400 text-xs px-2 py-0.5 rounded-full font-mono">5</span>
+</a>
+<!-- Salud del sistema -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-stone-300 hover:bg-stone-800/70 hover:text-white transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-stone-400 group-hover:text-stone-200">monitor_heart</span>
+<span class="text-sm">Salud del sistema</span>
+</div>
+<span class="text-emerald-400 text-[11px] font-medium font-mono bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded">99.8%</span>
+</a>
+<!-- Cuentas y accesos -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-stone-300 hover:bg-stone-800/70 hover:text-white transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-stone-400 group-hover:text-stone-200">manage_accounts</span>
+<span class="text-sm">Cuentas y accesos</span>
+</div>
+</a>
+</nav>
+</div>
+</div>
+<!-- Bottom Cluster: Usage Metric Card & Operator Profile -->
+<div class="p-3 border-t border-stone-800 space-y-3">
+<!-- Monthly Global Consumption Card -->
+<div class="bg-stone-800/80 rounded-xl p-3 border border-stone-700/60">
+<div class="flex items-center justify-between text-xs mb-1.5">
+<span class="text-stone-300 font-medium">Meta WhatsApp Oficial</span>
+<span class="text-[11px] text-teal-400 font-medium">5 conectadas</span>
+</div>
+<div class="w-full bg-stone-700 h-1.5 rounded-full overflow-hidden mb-2">
+<div class="bg-teal-500 h-full rounded-full" style="width: 25.4%"></div>
+</div>
+<div class="flex items-center justify-between text-[11px] font-mono text-stone-300 mb-2">
+<span>3,552 / 14,000 msgs</span>
+<span class="text-stone-400 font-sans">25.4%</span>
+</div>
+<div class="pt-2 border-t border-stone-700/60 flex items-center justify-between text-xs">
+<span class="text-stone-400">MRR consolidado</span>
+<span class="font-mono font-semibold text-white">S/ 3,120 <span class="text-[10px] text-stone-400 font-sans font-normal">+ IGV</span></span>
+</div>
+</div>
+<!-- Superadmin Profile -->
+<div class="flex items-center justify-between pt-1 px-1">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-full bg-stone-700 border border-stone-600 flex items-center justify-center text-xs font-semibold text-stone-200 shrink-0">
+            OP
+          </div>
+<div class="min-w-0">
+<p class="text-xs font-medium text-white truncate">Operador Dali</p>
+<p class="text-[10px] text-stone-400 truncate">Soporte N2 Lima</p>
+</div>
+</div>
+<button class="p-1.5 text-stone-400 hover:text-rose-400 transition-colors rounded-lg hover:bg-stone-800" title="Cerrar sesión">
+<span class="material-symbols-outlined text-[18px]">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- 2. MAIN WORKSPACE CONTENT -->
+<main class="flex-1 flex flex-col h-screen overflow-hidden bg-stone-50">
+<!-- Topbar Administrativo -->
+<header class="bg-white border-b border-stone-200 px-6 py-3 shrink-0 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<nav class="flex items-center text-xs text-stone-500 space-x-1.5 font-medium">
+<span class="hover:text-stone-800 cursor-pointer">Administración</span>
+<span class="material-symbols-outlined text-[14px] text-stone-400">chevron_right</span>
+<span class="text-stone-900 font-semibold">Directorio de Empresas</span>
+</nav>
+</div>
+<div class="flex items-center gap-3">
+<!-- Live AWS Status Indicator -->
+<div class="hidden sm:flex items-center gap-2 bg-stone-100 px-3 py-1.5 rounded-full border border-stone-200 text-xs text-stone-700 font-mono">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span>Región Lima (AWS sa-east-1)</span>
+</div>
+<!-- Notifications -->
+<button class="relative p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition-colors" title="Notificaciones del sistema">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white"></span>
+</button>
+</div>
+</header>
+<!-- Content Workspace -->
+<div class="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
+<!-- Screen Header with Primary Action -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+<div>
+<h1 class="text-2xl font-headline font-bold text-stone-900 tracking-tight">Empresas</h1>
+<p class="text-sm text-stone-500 mt-0.5">
+<span class="font-medium text-emerald-700">8 activas</span> · 
+            <span class="font-medium text-stone-700">2 en prueba</span> · 
+            <span class="font-medium text-rose-700">1 sin conectar</span>
+<span class="text-stone-400">(11 registradas en total)</span>
+</p>
+</div>
+<div class="flex items-center gap-2.5">
+<button class="bg-teal-700 hover:bg-teal-800 text-white rounded-lg px-4 py-2 text-sm font-medium flex items-center gap-2 transition-all shadow-sm active:scale-95" id="openDrawerBtn">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>+ Nueva empresa</span>
+</button>
+</div>
+</div>
+<!-- Filters & Search Toolbar -->
+<div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm flex flex-col lg:flex-row gap-3 items-center justify-between">
+<!-- Search Input -->
+<div class="relative w-full lg:w-96">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-stone-400 text-[18px]">search</span>
+<input class="w-full pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-xs md:text-sm text-stone-800 placeholder-stone-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700 focus:border-teal-700 transition" placeholder="Buscar por nombre, RUC, teléfono o dueño..." type="text"/>
+</div>
+<!-- Filters group -->
+<div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
+<!-- Category Filter Pills / Dropdown -->
+<div class="relative inline-block text-left">
+<select class="text-xs bg-stone-50 border border-stone-200 text-stone-700 font-medium rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 cursor-pointer">
+<option>Todos los rubros (11)</option>
+<option>Asfalto (3)</option>
+<option>Restaurante (2)</option>
+<option>Grifo (2)</option>
+<option>Lubricentro (1)</option>
+<option>Servicios (3)</option>
+</select>
+</div>
+<!-- Status Filter -->
+<div class="relative inline-block text-left">
+<select class="text-xs bg-stone-50 border border-stone-200 text-stone-700 font-medium rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 cursor-pointer">
+<option>Todos los estados</option>
+<option>Conectado</option>
+<option>Sin conectar</option>
+<option>Desconectado</option>
+<option>Pausado</option>
+</select>
+</div>
+<!-- Refresh Button -->
+<button class="p-2 border border-stone-200 hover:bg-stone-100 text-stone-600 rounded-lg transition-colors flex items-center justify-center" title="Actualizar listado">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+</button>
+</div>
+</div>
+<!-- Main Directory Table Card -->
+<div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-stone-50/80 border-b border-stone-200 text-[11px] uppercase tracking-wider text-stone-500 font-semibold font-headline">
+<th class="py-3 px-4">Empresa</th>
+<th class="py-3 px-4">Rubro</th>
+<th class="py-3 px-4">Línea WhatsApp</th>
+<th class="py-3 px-4">Estado Asistente</th>
+<th class="py-3 px-4">Plan contratado</th>
+<th class="py-3 px-4">Uso del mes</th>
+<th class="py-3 px-4">Último mensaje</th>
+<th class="py-3 px-4 text-right">Acciones</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-stone-150 text-sm">
+<!-- Fila 1: CONSTROAD -->
+<tr class="hover:bg-stone-50/80 transition-colors">
+<td class="py-3 px-4">
+<div class="font-semibold text-stone-900 font-headline">CONSTROAD</div>
+<div class="text-xs text-stone-500">Lima, Perú · RUC 20601839211</div>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700 border border-stone-200">
+                    Asfalto
+                  </span>
+</td>
+<td class="py-3 px-4">
+<div class="font-mono text-xs text-stone-800 font-medium">+51 949 376 824</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full mt-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Conectado
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200/60">
+<span class="w-2 h-2 rounded-full bg-teal-600"></span> Atendiendo
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs font-medium text-stone-800">Plan Negocio</span>
+<div class="text-[11px] text-stone-400">S/ 189/mes</div>
+</td>
+<td class="py-3 px-4">
+<div class="w-32">
+<div class="flex justify-between text-xs font-mono mb-1">
+<span class="text-stone-700 font-medium">612 / 1 000</span>
+<span class="text-stone-500">61%</span>
+</div>
+<div class="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+<div class="bg-teal-700 h-full rounded-full" style="width: 61%"></div>
+</div>
+</div>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs text-stone-600 font-mono">hace 3 min</span>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-medium rounded-lg border border-teal-200 transition">
+<span>Abrir panel</span>
+<span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</button>
+</td>
+</tr>
+<!-- Fila 2: Inframaq -->
+<tr class="hover:bg-stone-50/80 transition-colors">
+<td class="py-3 px-4">
+<div class="font-semibold text-stone-900 font-headline">Inframaq</div>
+<div class="text-xs text-stone-500">Lurín, Lima · RUC 20554910283</div>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700 border border-stone-200">
+                    Asfalto
+                  </span>
+</td>
+<td class="py-3 px-4">
+<div class="font-mono text-xs text-stone-800 font-medium">+51 903 124 919</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full mt-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Conectado
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+<span class="w-2 h-2 rounded-full bg-amber-500"></span> Pausado
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs font-medium text-stone-800">Plan Negocio</span>
+<div class="text-[11px] text-stone-400">S/ 189/mes</div>
+</td>
+<td class="py-3 px-4">
+<div class="w-32">
+<div class="flex justify-between text-xs font-mono mb-1">
+<span class="text-stone-700 font-medium">88 / 1 000</span>
+<span class="text-stone-500">9%</span>
+</div>
+<div class="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+<div class="bg-teal-700 h-full rounded-full" style="width: 9%"></div>
+</div>
+</div>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs text-stone-600 font-mono">hace 1 h</span>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg hover:bg-stone-100 transition" title="Opciones">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Fila 3: Pollería Don Beto -->
+<tr class="hover:bg-stone-50/80 transition-colors">
+<td class="py-3 px-4">
+<div class="font-semibold text-stone-900 font-headline">Pollería Don Beto</div>
+<div class="text-xs text-stone-500">Surco, Lima · 2 sedes</div>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200/60">
+                    Restaurante
+                  </span>
+</td>
+<td class="py-3 px-4">
+<div class="font-mono text-xs text-stone-800 font-medium">+51 987 222 333</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full mt-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Conectado
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200/60">
+<span class="w-2 h-2 rounded-full bg-teal-600"></span> Atendiendo
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs font-medium text-stone-800">Plan Crecimiento</span>
+<div class="text-[11px] text-stone-400">S/ 349/mes</div>
+</td>
+<td class="py-3 px-4">
+<div class="w-32">
+<div class="flex justify-between text-xs font-mono mb-1">
+<span class="text-stone-700 font-medium">2 140 / 5 000</span>
+<span class="text-stone-500">43%</span>
+</div>
+<div class="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+<div class="bg-teal-700 h-full rounded-full" style="width: 43%"></div>
+</div>
+</div>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs text-stone-600 font-mono">hace 1 min</span>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg hover:bg-stone-100 transition" title="Opciones">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Fila 4: Grifo San Martín -->
+<tr class="hover:bg-stone-50/80 transition-colors bg-rose-50/20">
+<td class="py-3 px-4">
+<div class="font-semibold text-stone-900 font-headline">Grifo San Martín</div>
+<div class="text-xs text-stone-500">Carabayllo, Lima</div>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700 border border-stone-200">
+                    Grifo
+                  </span>
+</td>
+<td class="py-3 px-4">
+<div class="font-mono text-xs text-stone-400 italic">—</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full mt-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span> Sin conectar
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-stone-100 text-stone-600 border border-stone-200">
+<span class="w-2 h-2 rounded-full bg-stone-400"></span> Apagado
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs font-semibold text-stone-800">Prueba</span>
+<div class="text-[11px] text-amber-700 font-medium">día 9 de 14</div>
+</td>
+<td class="py-3 px-4">
+<div class="w-32">
+<div class="flex justify-between text-xs font-mono mb-1">
+<span class="text-stone-400">0 msgs</span>
+<span class="text-stone-400">0%</span>
+</div>
+<div class="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+<div class="bg-stone-400 h-full rounded-full" style="width: 0%"></div>
+</div>
+</div>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs text-stone-400 font-mono">—</span>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="inline-flex items-center gap-1 px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-medium rounded-lg transition shadow-sm">
+<span class="material-symbols-outlined text-[14px]">qr_code_2</span>
+<span>Reconectar QR</span>
+</button>
+</td>
+</tr>
+<!-- Fila 5: Lubricentro Ruedas -->
+<tr class="hover:bg-stone-50/80 transition-colors">
+<td class="py-3 px-4">
+<div class="font-semibold text-stone-900 font-headline">Lubricentro Ruedas</div>
+<div class="text-xs text-stone-500">Ate Vitarte · RUC 10428901921</div>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-800 border border-blue-200/60">
+                    Lubricentro
+                  </span>
+</td>
+<td class="py-3 px-4">
+<div class="font-mono text-xs text-stone-800 font-medium">+51 955 444 111</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full mt-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Conectado
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200/60">
+<span class="w-2 h-2 rounded-full bg-teal-600"></span> Atendiendo
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs font-medium text-stone-800">Plan Negocio</span>
+<div class="text-[11px] text-stone-400">S/ 189/mes</div>
+</td>
+<td class="py-3 px-4">
+<div class="w-32">
+<div class="flex justify-between text-xs font-mono mb-1">
+<span class="text-stone-700 font-medium">310 / 1 000</span>
+<span class="text-stone-500">31%</span>
+</div>
+<div class="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+<div class="bg-teal-700 h-full rounded-full" style="width: 31%"></div>
+</div>
+</div>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs text-stone-600 font-mono">hace 20 min</span>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg hover:bg-stone-100 transition" title="Opciones">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Fila 6: Constructora JC -->
+<tr class="hover:bg-stone-50/80 transition-colors">
+<td class="py-3 px-4">
+<div class="font-semibold text-stone-900 font-headline">Constructora JC</div>
+<div class="text-xs text-stone-500">Puente Piedra, Lima</div>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700 border border-stone-200">
+                    Asfalto
+                  </span>
+</td>
+<td class="py-3 px-4">
+<div class="font-mono text-xs text-stone-800 font-medium">+51 944 000 222</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full mt-0.5 border border-amber-200/50">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Desconectado
+                  </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300">
+<span class="material-symbols-outlined text-[14px] text-amber-700">warning</span>
+<span>Requiere QR</span>
+</span>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs font-medium text-stone-800">Plan Negocio</span>
+<div class="text-[11px] text-stone-400">S/ 189/mes</div>
+</td>
+<td class="py-3 px-4">
+<div class="w-32">
+<div class="flex justify-between text-xs font-mono mb-1">
+<span class="text-stone-700 font-medium">402 / 1 000</span>
+<span class="text-stone-500">40%</span>
+</div>
+<div class="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+<div class="bg-teal-700 h-full rounded-full" style="width: 40%"></div>
+</div>
+</div>
+</td>
+<td class="py-3 px-4">
+<span class="text-xs text-stone-600 font-mono">ayer</span>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-medium rounded-lg transition">
+<span class="material-symbols-outlined text-[14px]">notification_important</span>
+<span>Avisar al dueño</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination Bar -->
+<div class="px-6 py-3.5 bg-stone-50 border-t border-stone-200 flex items-center justify-between text-xs text-stone-600">
+<div>
+            Mostrando <span class="font-semibold text-stone-900">6</span> de <span class="font-semibold text-stone-900">11</span> empresas
+          </div>
+<div class="flex items-center gap-2">
+<button class="px-3 py-1.5 bg-white border border-stone-200 rounded-md text-stone-400 cursor-not-allowed text-xs font-medium">
+              Anterior
+            </button>
+<span class="font-mono px-2 text-stone-700 font-semibold">1 de 2</span>
+<button class="px-3 py-1.5 bg-white border border-stone-200 hover:bg-stone-100 rounded-md text-stone-700 text-xs font-medium transition">
+              Siguiente
+            </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- 3. DRAWER LATERAL DERECHO (480px / Formulario de Alta Nueva Empresa) -->
+<div class="fixed inset-0 bg-stone-950/40 backdrop-blur-[2px] z-40 transition-opacity duration-200 flex justify-end" id="drawerOverlay">
+<div class="w-full max-w-[480px] bg-white h-full shadow-2xl flex flex-col justify-between border-l border-stone-200 transform transition-transform duration-300" id="drawerPanel">
+<!-- Drawer Header -->
+<div class="p-6 border-b border-stone-200 flex items-center justify-between shrink-0 bg-stone-50/50">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+<span class="material-symbols-outlined text-teal-700">add_business</span>
+</div>
+<div>
+<h2 class="text-base font-headline font-bold text-stone-900">Nueva empresa</h2>
+<p class="text-xs text-stone-500">Dar de alta a un cliente en Dali</p>
+</div>
+</div>
+<button class="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-lg transition-colors" id="closeDrawerBtn">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Drawer Scrollable Form Body -->
+<div class="flex-1 overflow-y-auto p-6 space-y-6">
+<!-- Nombre de la Empresa -->
+<div class="space-y-1.5">
+<label class="block text-xs font-semibold uppercase tracking-wider text-stone-700 font-headline">
+            Nombre de la empresa <span class="text-rose-500">*</span>
+</label>
+<input class="w-full px-3.5 py-2.5 text-sm bg-white border border-stone-300 rounded-lg text-stone-900 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 transition font-medium" type="text" value="Transportes &amp; Mezclas Perú"/>
+<p class="text-[11px] text-stone-500">
+            Aparecerá en el saludo de WhatsApp del asistente.
+          </p>
+</div>
+<!-- Rubro de Negocio -->
+<div class="space-y-1.5">
+<label class="block text-xs font-semibold uppercase tracking-wider text-stone-700 font-headline">
+            Rubro de negocio <span class="text-rose-500">*</span>
+</label>
+<div class="relative">
+<select class="w-full px-3.5 py-2.5 text-sm bg-white border border-stone-300 rounded-lg text-stone-900 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 transition appearance-none cursor-pointer">
+<option selected="">Asfalto y construcción (mezcla, fletes, m²)</option>
+<option>Restaurantes y pollerías</option>
+<option>Grifos y estaciones de servicio</option>
+<option>Lubricentro y mecánica rápida</option>
+<option>Servicios profesionales</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-stone-400">expand_more</span>
+</div>
+<!-- Banner Informativo Guion Dali -->
+<div class="mt-2 bg-teal-50 border border-teal-200/80 rounded-lg p-3 text-xs text-teal-900 flex items-start gap-2.5">
+<span class="text-teal-700 text-sm shrink-0 mt-0.5">✨</span>
+<p class="leading-relaxed">
+              Carga automáticamente guion y <span class="font-semibold">22 preguntas de asfalto</span> (m², imprimación, tiempo de secado y traslado).
+            </p>
+</div>
+</div>
+<!-- Plan Contratado (Radio Cards) -->
+<div class="space-y-2">
+<label class="block text-xs font-semibold uppercase tracking-wider text-stone-700 font-headline">
+            Plan contratado <span class="text-rose-500">*</span>
+</label>
+<div class="grid grid-cols-1 gap-2.5">
+<!-- Opción 1: Prueba -->
+<label class="flex items-center justify-between p-3 border border-stone-200 rounded-xl hover:bg-stone-50 cursor-pointer transition">
+<div class="flex items-center gap-3">
+<input class="text-teal-700 focus:ring-teal-700 h-4 w-4 border-stone-300" name="plan" type="radio"/>
+<div>
+<div class="text-xs font-semibold text-stone-900">Prueba</div>
+<div class="text-[11px] text-stone-500">14 días · Gratis</div>
+</div>
+</div>
+<span class="text-xs font-medium text-stone-400">S/ 0</span>
+</label>
+<!-- Opción 2: Negocio (SELECCIONADO) -->
+<label class="flex items-center justify-between p-3 border-2 border-teal-700 bg-teal-50/40 rounded-xl cursor-pointer transition relative">
+<div class="flex items-center gap-3">
+<input checked="" class="text-teal-700 focus:ring-teal-700 h-4 w-4 border-stone-300" name="plan" type="radio"/>
+<div>
+<div class="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                    Plan Negocio
+                    <span class="bg-teal-700 text-white text-[9px] uppercase px-1.5 py-0.2 rounded font-mono">Recomendado</span>
+</div>
+<div class="text-[11px] text-stone-600">1 000 msgs incluidos</div>
+</div>
+</div>
+<div class="text-right">
+<span class="text-xs font-bold text-teal-800 font-mono">S/ 189</span>
+<span class="text-[10px] text-stone-500 block">/mes</span>
+</div>
+</label>
+<!-- Opción 3: Crecimiento -->
+<label class="flex items-center justify-between p-3 border border-stone-200 rounded-xl hover:bg-stone-50 cursor-pointer transition">
+<div class="flex items-center gap-3">
+<input class="text-teal-700 focus:ring-teal-700 h-4 w-4 border-stone-300" name="plan" type="radio"/>
+<div>
+<div class="text-xs font-semibold text-stone-900">Plan Crecimiento</div>
+<div class="text-[11px] text-stone-500">5 000 msgs incluidos</div>
+</div>
+</div>
+<div class="text-right">
+<span class="text-xs font-semibold text-stone-900 font-mono">S/ 349</span>
+<span class="text-[10px] text-stone-500 block">/mes</span>
+</div>
+</label>
+</div>
+</div>
+<!-- SECCIÓN: DATOS DEL DUEÑO / ADMINISTRADOR -->
+<div class="pt-4 border-t border-stone-200 space-y-4">
+<p class="text-[10px] font-bold uppercase tracking-wider text-stone-400 font-headline">
+            Datos del dueño / Administrador
+          </p>
+<!-- Nombre del titular -->
+<div class="space-y-1">
+<label class="block text-xs font-semibold text-stone-700">Nombre completo del titular</label>
+<input class="w-full px-3.5 py-2 text-sm bg-white border border-stone-300 rounded-lg text-stone-900 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 transition" type="text" value="Carlos Mendoza Ramos"/>
+</div>
+<!-- WhatsApp del negocio -->
+<div class="space-y-1">
+<label class="block text-xs font-semibold text-stone-700">WhatsApp del negocio (Línea Dali)</label>
+<div class="flex items-center rounded-lg border border-stone-300 bg-white focus-within:ring-2 focus-within:ring-teal-700 focus-within:border-teal-700 overflow-hidden">
+<div class="bg-stone-100 px-3 py-2 border-r border-stone-200 text-xs text-stone-700 font-medium flex items-center gap-1.5 shrink-0">
+<span>🇵🇪</span>
+<span class="font-mono font-semibold">+51</span>
+</div>
+<input class="w-full px-3 py-2 text-sm border-0 text-stone-900 font-mono focus:ring-0" type="text" value="984 321 004"/>
+</div>
+<p class="text-[11px] text-stone-500">
+              Número donde el bot responderá las cotizaciones de asfalto.
+            </p>
+</div>
+<!-- Correo de acceso -->
+<div class="space-y-1">
+<label class="block text-xs font-semibold text-stone-700">Correo electrónico de acceso</label>
+<input class="w-full px-3.5 py-2 text-sm bg-white border border-stone-300 rounded-lg text-stone-900 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 transition font-sans" type="email" value="cmendoza@mezclasperu.com"/>
+</div>
+<!-- Checkbox Envío Invitación Inmediata -->
+<div class="bg-stone-50 p-3.5 rounded-xl border border-stone-200">
+<label class="flex items-start gap-2.5 cursor-pointer">
+<input checked="" class="mt-0.5 rounded border-stone-300 text-teal-700 focus:ring-teal-700 h-4 w-4" type="checkbox"/>
+<div class="text-xs text-stone-700 leading-tight">
+<span class="font-semibold text-stone-900 block mb-0.5">Enviar invitación de acceso inmediato</span>
+                Le llegará un mensaje de WhatsApp y correo con su enlace mágico para ingresar y escanear el QR.
+              </div>
+</label>
+</div>
+</div>
+</div>
+<!-- Drawer Footer Actions -->
+<div class="p-5 border-t border-stone-200 bg-stone-50 flex items-center justify-end gap-3 shrink-0">
+<button class="px-4 py-2 text-xs font-medium text-stone-700 hover:bg-stone-200/80 rounded-lg transition-colors border border-stone-300 bg-white" id="cancelDrawerBtn">
+          Cancelar
+        </button>
+<button class="px-5 py-2 text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 rounded-lg shadow-sm transition active:scale-95 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span>Crear empresa</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Interactive script for Drawer Toggle -->
+<script>
+    const drawerOverlay = document.getElementById('drawerOverlay');
+    const drawerPanel = document.getElementById('drawerPanel');
+    const openDrawerBtn = document.getElementById('openDrawerBtn');
+    const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+    const cancelDrawerBtn = document.getElementById('cancelDrawerBtn');
+
+    function openDrawer() {
+      drawerOverlay.classList.remove('pointer-events-none', 'opacity-0');
+      drawerPanel.classList.remove('translate-x-full');
+    }
+
+    function closeDrawer() {
+      drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
+      drawerPanel.classList.add('translate-x-full');
+    }
+
+    openDrawerBtn.addEventListener('click', openDrawer);
+    closeDrawerBtn.addEventListener('click', closeDrawer);
+    cancelDrawerBtn.addEventListener('click', closeDrawer);
+
+    // Close when clicking outside drawer panel
+    drawerOverlay.addEventListener('click', (e) => {
+      if (e.target === drawerOverlay) {
+        closeDrawer();
+      }
+    });
+
+    // Keyboard ESC close
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeDrawer();
+      }
+    });
+  </script>
+</body></html>

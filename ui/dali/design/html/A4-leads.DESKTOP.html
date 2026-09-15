@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leads - Dali CONSTROAD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              DEFAULT: '#0F766E',
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A'
+            },
+            surface: '#FFFFFF',
+            'surface-ground': '#F8FAFC'
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            headline: ['Plus Jakarta Sans', 'Inter', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 20;
+    }
+    /* Custom scrollbar for kanban horizontal overflow */
+    .kanban-scroll::-webkit-scrollbar {
+      height: 8px;
+    }
+    .kanban-scroll::-webkit-scrollbar-track {
+      background: #F1F5F9;
+      border-radius: 9999px;
+    }
+    .kanban-scroll::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 9999px;
+    }
+    .kanban-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans h-full antialiased flex overflow-hidden">
+
+  <!-- SIDEBAR IZQUIERDO (256px fijo) -->
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 h-screen select-none z-30">
+    <!-- Header Marca Dali + Selector Negocio -->
+    <div class="p-4 border-b border-slate-100 flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-teal-800 flex items-center justify-center text-white font-headline font-bold text-lg shadow-sm">
+            D
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="font-headline font-bold text-slate-900 text-base tracking-tight">Dali</span>
+              <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-100">Perú</span>
+            </div>
+            <span class="text-xs text-slate-500">Asistente WhatsApp</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[11px] font-medium border border-emerald-100">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          En línea
+        </div>
+      </div>
+
+      <!-- Selector Negocio CONSTROAD -->
+      <div class="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-colors cursor-pointer">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-7 h-7 rounded-lg bg-slate-900 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
+            CR
+          </div>
+          <div class="truncate">
+            <p class="text-xs font-semibold text-slate-900 truncate">CONSTROAD S.A.C.</p>
+            <p class="text-[11px] text-slate-500 truncate">Asfaltos y Pavimentos · Lima</p>
+          </div>
+        </div>
+        <span class="material-symbols-outlined text-slate-400 text-lg">unfold_more</span>
+      </div>
+    </div>
+
+    <!-- Navegación con scroll -->
+    <nav class="flex-1 overflow-y-auto px-3 py-3 space-y-5 text-xs">
+      <!-- SECCIÓN OPERACIÓN -->
+      <div>
+        <p class="px-3 pb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Operación</p>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">dashboard</span>
+            <span>Inicio</span>
+          </a>
+          <a href="#" class="flex items-center justify-between px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-[19px]">forum</span>
+              <span>Conversaciones</span>
+            </div>
+            <span class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-amber-100 text-amber-800">2</span>
+          </a>
+          <!-- Activo: Leads -->
+          <a href="#" class="flex items-center justify-between px-3 py-2 rounded-lg bg-teal-50 text-teal-800 font-semibold border-l-4 border-teal-700 shadow-xs">
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-[19px] fill text-teal-700">contacts</span>
+              <span class="text-teal-900">Leads</span>
+            </div>
+            <span class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-teal-700 text-white">12</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- SECCIÓN CONFIGURAR -->
+      <div>
+        <p class="px-3 pb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Configurar</p>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">smart_toy</span>
+            <span>Asistente (Guion)</span>
+          </a>
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">storefront</span>
+            <span>Negocio</span>
+          </a>
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">construction</span>
+            <span>Servicios</span>
+          </a>
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">quiz</span>
+            <span>Preguntas frecuentes</span>
+          </a>
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">inventory_2</span>
+            <span>Catálogo</span>
+          </a>
+          <a href="#" class="flex items-center justify-between px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-[19px]">cell_tower</span>
+              <span>WhatsApp</span>
+            </div>
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          </a>
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">play_circle</span>
+            <span>Probar a Dali</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- SECCIÓN CUENTA -->
+      <div>
+        <p class="px-3 pb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Cuenta</p>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">group</span>
+            <span>Equipo</span>
+          </a>
+          <a href="#" class="flex items-center justify-between px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-[19px]">analytics</span>
+              <span>Plan y uso</span>
+            </div>
+            <span class="text-[10px] text-slate-400 font-mono">61%</span>
+          </a>
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">notifications</span>
+            <span>Notificaciones</span>
+          </a>
+          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[19px]">settings</span>
+            <span>Ajustes</span>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Footer perfil de usuario -->
+    <div class="p-3 border-t border-slate-200/80 bg-slate-50/50 flex items-center justify-between">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-8 h-8 rounded-full bg-teal-100 text-teal-800 font-semibold text-xs flex items-center justify-center flex-shrink-0">
+          JP
+        </div>
+        <div class="truncate">
+          <p class="text-xs font-semibold text-slate-900 truncate">José Paredes</p>
+          <p class="text-[10px] text-slate-500 truncate">Administrador</p>
+        </div>
+      </div>
+      <button class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title="Cerrar sesión">
+        <span class="material-symbols-outlined text-[18px]">logout</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- CONTENEDOR PRINCIPAL DERECHO -->
+  <div class="flex-1 flex flex-col h-screen overflow-hidden">
+
+    <!-- TOPBAR SUPERIOR (Breadcrumbs, estado sincronización y acciones rápidas) -->
+    <header class="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between flex-shrink-0 z-20">
+      <div class="flex items-center gap-2 text-xs">
+        <span class="text-slate-400 font-medium">CONSTROAD</span>
+        <span class="text-slate-300">/</span>
+        <span class="text-slate-400 font-medium">Operación</span>
+        <span class="text-slate-300">/</span>
+        <span class="text-slate-800 font-semibold bg-slate-100 px-2 py-0.5 rounded-md">Leads WhatsApp</span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- Badge WhatsApp Línea Oficial -->
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="font-medium">WhatsApp: +51 949 376 824</span>
+        </div>
+
+        <div class="h-4 w-px bg-slate-200"></div>
+
+        <!-- Exportar Excel -->
+        <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs transition-colors">
+          <span class="material-symbols-outlined text-[16px] text-slate-500">file_download</span>
+          <span>Exportar</span>
+        </button>
+
+        <!-- Botón Nuevo Lead -->
+        <button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 rounded-lg shadow-sm transition-all active:scale-95">
+          <span class="material-symbols-outlined text-[16px]">person_add</span>
+          <span>Nuevo lead</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ÁREA DE CONTENIDO (Max width 1120px + Drawer a la derecha) -->
+    <div class="flex-1 flex overflow-hidden">
+
+      <!-- COLUMNA PRINCIPAL DE TRABAJO (LEADS) -->
+      <main class="flex-1 overflow-y-auto p-6 bg-slate-50 flex flex-col">
+        <div class="max-w-[1120px] w-full mx-auto space-y-4 flex-1 flex flex-col">
+
+          <!-- ENCABEZADO DE PÁGINA + RESUMEN SEMANAL -->
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-3">
+                <h1 class="font-headline font-extrabold text-2xl text-slate-900 tracking-tight">Leads</h1>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800 border border-teal-200">CONSTROAD</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-1">
+                <strong class="font-semibold text-slate-700">12 esta semana</strong> · <span class="text-teal-700 font-medium">3 listos para cotizar</span>
+              </p>
+            </div>
+
+            <!-- TOGGLE TABLERO | LISTA -->
+            <div class="inline-flex items-center p-1 bg-white border border-slate-200 rounded-lg shadow-xs">
+              <button class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md bg-teal-50 text-teal-800 border border-teal-200/80 shadow-xs">
+                <span class="material-symbols-outlined text-[16px] fill text-teal-700">view_kanban</span>
+                Tablero
+              </button>
+              <button class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 rounded-md hover:bg-slate-50 transition-colors">
+                <span class="material-symbols-outlined text-[16px]">format_list_bulleted</span>
+                Lista
+              </button>
+            </div>
+          </div>
+
+          <!-- BARRA DE BÚSQUEDA Y FILTROS -->
+          <div class="bg-white p-3 rounded-xl border border-slate-200/90 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <!-- Buscador -->
+            <div class="relative flex-1 min-w-[240px]">
+              <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]">search</span>
+              <input type="text" placeholder="Buscar por cliente, empresa o distrito de Lima..." class="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all placeholder:text-slate-400">
+            </div>
+
+            <!-- Filtros por servicio -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[11px] font-semibold text-slate-400 uppercase mr-1">Servicio:</span>
+              <button class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-teal-800 text-white shadow-xs">
+                Todos <span class="ml-1 opacity-80 font-normal">12</span>
+              </button>
+              <button class="px-2.5 py-1 text-xs font-medium rounded-lg text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 transition-colors">
+                Asfaltado <span class="ml-1 text-slate-400">6</span>
+              </button>
+              <button class="px-2.5 py-1 text-xs font-medium rounded-lg text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 transition-colors">
+                Venta de mezcla <span class="ml-1 text-slate-400">4</span>
+              </button>
+              <button class="px-2.5 py-1 text-xs font-medium rounded-lg text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 transition-colors">
+                Transporte <span class="ml-1 text-slate-400">2</span>
+              </button>
+            </div>
+
+            <!-- Indicador IA Dali -->
+            <div class="hidden lg:flex items-center gap-1.5 text-[11px] text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-100">
+              <span class="material-symbols-outlined text-[15px] text-teal-600">smart_toy</span>
+              <span>Dali califica en WhatsApp en tiempo real</span>
+            </div>
+          </div>
+
+          <!-- TABLERO KANBAN DE 5 COLUMNAS -->
+          <div class="flex-1 kanban-scroll overflow-x-auto pb-4 pt-1">
+            <div class="grid grid-cols-5 gap-3.5 min-w-[1020px] items-start">
+
+              <!-- COLUMNA 1: NUEVO (3) -->
+              <div class="bg-slate-100/80 rounded-xl p-2.5 border border-slate-200/70 flex flex-col gap-2.5 min-h-[560px]">
+                <!-- Header columna -->
+                <div class="flex items-center justify-between px-1 py-0.5">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <h3 class="font-headline font-bold text-xs text-slate-900 uppercase tracking-wide">Nuevo</h3>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900">3</span>
+                  </div>
+                  <button class="text-slate-400 hover:text-slate-600 p-0.5" title="Añadir lead">
+                    <span class="material-symbols-outlined text-[16px]">add</span>
+                  </button>
+                </div>
+
+                <!-- Tarjeta 1: Luis Paredes (Seleccionada para detalle en drawer) -->
+                <div class="bg-white rounded-xl p-3 border-2 border-teal-700 shadow-sm cursor-pointer hover:shadow-md transition-all relative">
+                  <!-- Tag seleccionado -->
+                  <div class="absolute -top-2.5 right-3 bg-teal-700 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shadow-xs">
+                    Revisando
+                  </div>
+
+                  <!-- Encabezado tarjeta -->
+                  <div class="flex items-start justify-between gap-1 mb-1.5">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+                      Asfaltado 600 m²
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-medium">hoy 10:42</span>
+                  </div>
+
+                  <!-- Datos cliente -->
+                  <div class="space-y-0.5 mt-1">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">Luis Paredes</h4>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">corporate_fare</span>
+                      Transportes Paredes S.A.C.
+                    </p>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">location_on</span>
+                      Lurín · Espesor 2" con MC-30
+                    </p>
+                  </div>
+
+                  <!-- Check Confirmado + Pill WhatsApp -->
+                  <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span class="material-symbols-outlined text-[13px] text-emerald-600 font-bold">check_circle</span>
+                      Confirmado
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-[10px] text-teal-800 font-medium bg-teal-50/70 px-1.5 py-0.5 rounded border border-teal-100">
+                      <span class="material-symbols-outlined text-[12px] text-emerald-600 fill">chat</span>
+                      WhatsApp
+                    </span>
+                  </div>
+
+                  <!-- CTA Cotizar directo -->
+                  <button class="w-full mt-2 py-1.5 px-2 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-xs">
+                    <span class="material-symbols-outlined text-[14px]">request_quote</span>
+                    Cotizar ahora
+                  </button>
+                </div>
+
+                <!-- Tarjeta 2: +51 902 049 935 -->
+                <div class="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1.5">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+                      Asfaltado 3 000 m²
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-medium">hoy 10:40</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">+51 902 049 935</h4>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">person</span>
+                      Cliente nuevo (sin empresa)
+                    </p>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">location_on</span>
+                      Lurín · Patio de maniobras
+                    </p>
+                  </div>
+                  <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
+                      Pendiente espesor
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-[10px] text-teal-800 font-medium bg-teal-50/70 px-1.5 py-0.5 rounded border border-teal-100">
+                      <span class="material-symbols-outlined text-[12px] text-emerald-600 fill">chat</span>
+                      WhatsApp
+                    </span>
+                  </div>
+                  <div class="mt-2 grid grid-cols-2 gap-1.5">
+                    <button class="py-1 px-2 text-[10px] font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md flex items-center justify-center gap-1">
+                      <span class="material-symbols-outlined text-[12px]">chat</span> Ver chat
+                    </button>
+                    <button class="py-1 px-2 text-[10px] font-medium text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-md flex items-center justify-center gap-1">
+                      <span class="material-symbols-outlined text-[12px]">call</span> Llamar
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Tarjeta 3: Luis Paredes (Comas) -->
+                <div class="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1.5">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                      Venta de mezcla 40 cubos
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-medium">ayer 18:20</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">Luis Paredes</h4>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">person</span>
+                      Contratista independiente
+                    </p>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">location_on</span>
+                      Comas · En caliente a obra
+                    </p>
+                  </div>
+                  <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] text-slate-500">Revisando metrado</span>
+                    <span class="inline-flex items-center gap-1 text-[10px] text-teal-800 font-medium bg-teal-50/70 px-1.5 py-0.5 rounded border border-teal-100">
+                      <span class="material-symbols-outlined text-[12px] text-emerald-600 fill">chat</span>
+                      WhatsApp
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- COLUMNA 2: CONTACTADO (2) -->
+              <div class="bg-slate-100/80 rounded-xl p-2.5 border border-slate-200/70 flex flex-col gap-2.5 min-h-[560px]">
+                <div class="flex items-center justify-between px-1 py-0.5">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                    <h3 class="font-headline font-bold text-xs text-slate-900 uppercase tracking-wide">Contactado</h3>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900">2</span>
+                  </div>
+                  <button class="text-slate-400 hover:text-slate-600 p-0.5">
+                    <span class="material-symbols-outlined text-[16px]">add</span>
+                  </button>
+                </div>
+
+                <!-- Tarjeta 1: Juan Carlos -->
+                <div class="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1.5">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                      Venta de mezcla 40 m³
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-medium">ayer 14:15</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">Juan Carlos</h4>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">corporate_fare</span>
+                      Consorcio Los Pinos
+                    </p>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">location_on</span>
+                      Ate · Despacho en planta
+                    </p>
+                  </div>
+                  <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">En negociación</span>
+                    <span class="inline-flex items-center gap-1 text-[10px] text-teal-800 font-medium bg-teal-50/70 px-1.5 py-0.5 rounded border border-teal-100">
+                      <span class="material-symbols-outlined text-[12px] text-emerald-600 fill">chat</span>
+                      WhatsApp
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Tarjeta 2: Carlos ✓ -->
+                <div class="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1.5">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-sky-50 text-sky-800 border border-sky-200">
+                      Transporte 20 m³
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-medium">ayer 11:30</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">Carlos</h4>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">local_shipping</span>
+                      Cajamarquilla → Surco
+                    </p>
+                    <p class="text-[11px] text-slate-500">Flete confirmado</p>
+                  </div>
+                  <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span class="material-symbols-outlined text-[13px] text-emerald-600 font-bold">check_circle</span>
+                      Confirmado
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-[10px] text-teal-800 font-medium bg-teal-50/70 px-1.5 py-0.5 rounded border border-teal-100">
+                      <span class="material-symbols-outlined text-[12px] text-emerald-600 fill">chat</span>
+                      WhatsApp
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- COLUMNA 3: COTIZADO (4) -->
+              <div class="bg-slate-100/80 rounded-xl p-2.5 border border-slate-200/70 flex flex-col gap-2.5 min-h-[560px]">
+                <div class="flex items-center justify-between px-1 py-0.5">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                    <h3 class="font-headline font-bold text-xs text-slate-900 uppercase tracking-wide">Cotizado</h3>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900">4</span>
+                  </div>
+                  <button class="text-slate-400 hover:text-slate-600 p-0.5">
+                    <span class="material-symbols-outlined text-[16px]">add</span>
+                  </button>
+                </div>
+
+                <!-- Tarjeta 1: María Torres -->
+                <div class="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+                      Asfaltado 1 200 m²
+                    </span>
+                    <span class="text-[10px] text-slate-400">12 sep</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">María Torres</h4>
+                    <p class="text-[11px] text-slate-500">Villa El Salvador</p>
+                  </div>
+                  <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] text-slate-400">Presupuesto:</span>
+                    <span class="font-headline font-extrabold text-xs text-slate-900">S/ 48 600</span>
+                  </div>
+                  <div class="mt-1 flex items-center justify-between">
+                    <span class="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium">PDF enviado</span>
+                    <span class="text-[10px] text-slate-400">Hace 2 días</span>
+                  </div>
+                </div>
+
+                <!-- Tarjeta 2: Grupo Vial SAC -->
+                <div class="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                      Venta de mezcla 80 m³
+                    </span>
+                    <span class="text-[10px] text-slate-400">11 sep</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">Grupo Vial SAC</h4>
+                    <p class="text-[11px] text-slate-500">Callao · Planta Callao</p>
+                  </div>
+                  <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] text-slate-400">Presupuesto:</span>
+                    <span class="font-headline font-extrabold text-xs text-slate-900">S/ 31 200</span>
+                  </div>
+                  <div class="mt-1 flex items-center justify-between">
+                    <span class="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-medium">Revisando gerencia</span>
+                    <span class="text-[10px] text-slate-400">11 sep</span>
+                  </div>
+                </div>
+
+                <!-- Tarjeta 3: Ing. Roberto M. -->
+                <div class="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+                      Asfaltado 450 m²
+                    </span>
+                    <span class="text-[10px] text-slate-400">10 sep</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">Ing. Roberto M.</h4>
+                    <p class="text-[11px] text-slate-500">San Juan de Lurigancho</p>
+                  </div>
+                  <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] text-slate-400">Con imprimación:</span>
+                    <span class="font-headline font-extrabold text-xs text-slate-900">S/ 22 400</span>
+                  </div>
+                </div>
+
+                <!-- Tarjeta 4: Constructora Andes -->
+                <div class="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-purple-50 text-purple-800 border border-purple-200">
+                      Transporte + Colocación
+                    </span>
+                    <span class="text-[10px] text-slate-400">09 sep</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">Constructora Andes</h4>
+                    <p class="text-[11px] text-slate-500">Chorrillos · 30 m³</p>
+                  </div>
+                  <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] text-slate-400">Total:</span>
+                    <span class="font-headline font-extrabold text-xs text-slate-900">S/ 14 500</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- COLUMNA 4: GANADO (2) -->
+              <div class="bg-slate-100/80 rounded-xl p-2.5 border border-slate-200/70 flex flex-col gap-2.5 min-h-[560px]">
+                <div class="flex items-center justify-between px-1 py-0.5">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-teal-600"></span>
+                    <h3 class="font-headline font-bold text-xs text-slate-900 uppercase tracking-wide">Ganado</h3>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-teal-100 text-teal-900">2</span>
+                  </div>
+                  <button class="text-slate-400 hover:text-slate-600 p-0.5">
+                    <span class="material-symbols-outlined text-[16px]">add</span>
+                  </button>
+                </div>
+
+                <!-- Tarjeta 1: Constructora JC -->
+                <div class="bg-white rounded-xl p-3 border border-emerald-200 shadow-xs hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+                      Asfaltado 900 m²
+                    </span>
+                    <span class="text-[10px] text-slate-400">8 sep</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">Constructora JC</h4>
+                    <p class="text-[11px] text-slate-500">Ate · Obras civiles</p>
+                  </div>
+                  <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                    <span class="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
+                      <span class="material-symbols-outlined text-[12px]">verified</span> Cerrada
+                    </span>
+                    <span class="font-headline font-extrabold text-xs text-emerald-700">S/ 36 900</span>
+                  </div>
+                  <p class="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[12px] text-slate-400">payments</span>
+                    Anticipo recibido
+                  </p>
+                </div>
+
+                <!-- Tarjeta 2: Inversiones San Martín -->
+                <div class="bg-white rounded-xl p-3 border border-emerald-200 shadow-xs hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1">
+                    <span class="px-2 py-0.5 text-[11px] font-bold rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+                      Mezcla 120 m³
+                    </span>
+                    <span class="text-[10px] text-slate-400">6 sep</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-900">Inversiones San Martín</h4>
+                    <p class="text-[11px] text-slate-500">Lurín · En caliente</p>
+                  </div>
+                  <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                    <span class="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
+                      <span class="material-symbols-outlined text-[12px]">verified</span> Cerrada
+                    </span>
+                    <span class="font-headline font-extrabold text-xs text-emerald-700">S/ 46 800</span>
+                  </div>
+                  <p class="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[12px] text-slate-400">schedule</span>
+                    Despacho programado
+                  </p>
+                </div>
+              </div>
+
+              <!-- COLUMNA 5: PERDIDO (1) -->
+              <div class="bg-slate-100/80 rounded-xl p-2.5 border border-slate-200/70 flex flex-col gap-2.5 min-h-[560px]">
+                <div class="flex items-center justify-between px-1 py-0.5">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                    <h3 class="font-headline font-bold text-xs text-slate-900 uppercase tracking-wide">Perdido</h3>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-100 text-rose-900">1</span>
+                  </div>
+                  <button class="text-slate-400 hover:text-slate-600 p-0.5">
+                    <span class="material-symbols-outlined text-[16px]">add</span>
+                  </button>
+                </div>
+
+                <!-- Tarjeta 1: Chorrillos (Transporte 10 m³) -->
+                <div class="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs opacity-85 hover:opacity-100 hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all">
+                  <div class="flex items-start justify-between gap-1 mb-1">
+                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                      Transporte 10 m³
+                    </span>
+                    <span class="text-[10px] text-slate-400">5 sep</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <h4 class="font-headline font-bold text-xs text-slate-700 italic">Cliente sin nombre</h4>
+                    <p class="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[13px] text-slate-400">location_on</span>
+                      Chorrillos
+                    </p>
+                  </div>
+                  <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <span class="inline-flex items-center gap-1 text-[10px] text-rose-700 font-medium bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                      <span class="material-symbols-outlined text-[12px]">cancel</span>
+                      Motivo: precio
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                      <span class="material-symbols-outlined text-[12px]">chat</span>
+                      WhatsApp
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </main>
+
+      <!-- DRAWER DERECHO DE DETALLE DEL LEAD (480px) -->
+      <!-- Representa el lead seleccionado "Luis Paredes" calificado por Dali -->
+      <aside class="w-[440px] xl:w-[480px] bg-white border-l border-slate-200 flex flex-col flex-shrink-0 h-full shadow-lg z-20 overflow-hidden">
+        
+        <!-- Header del Drawer -->
+        <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-full bg-teal-100 text-teal-800 font-headline font-bold text-sm flex items-center justify-center flex-shrink-0 border border-teal-200">
+              LP
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <h3 class="font-headline font-bold text-slate-900 text-sm truncate">Luis Paredes</h3>
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              </div>
+              <p class="text-[11px] text-slate-500 truncate">Transportes Paredes S.A.C. · RUC 2060183921</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors" title="Abrir en pestaña completa">
+              <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+            </button>
+            <button class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors" title="Cerrar drawer">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Contenido scrolleable del Drawer -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-5">
+
+          <!-- Banner de estado Dali -->
+          <div class="p-3 bg-teal-50/80 rounded-xl border border-teal-200 flex items-start gap-3">
+            <span class="material-symbols-outlined text-teal-700 text-[20px] mt-0.5">verified</span>
+            <div class="flex-1 text-xs">
+              <div class="flex items-center justify-between">
+                <p class="font-semibold text-teal-900">Lead calificado al 100%</p>
+                <span class="text-[10px] font-bold px-1.5 py-0.2 bg-teal-200/60 text-teal-800 rounded">Listo para cotizar</span>
+              </div>
+              <p class="text-teal-700 text-[11px] mt-0.5">Dali recopiló los 4 datos técnicos clave en WhatsApp sin intervención humana.</p>
+            </div>
+          </div>
+
+          <!-- FICHA TÉCNICA CAPTURADA -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="font-headline font-bold text-xs uppercase tracking-wider text-slate-400">Requerimiento de obra</h4>
+              <span class="text-[11px] text-slate-400 font-mono">ID: CR-2025-0894</span>
+            </div>
+
+            <div class="bg-slate-50 rounded-xl border border-slate-200/80 p-3 space-y-2.5 text-xs">
+              <div class="grid grid-cols-2 gap-3 pb-2 border-b border-slate-200/60">
+                <div>
+                  <span class="text-[10px] font-semibold text-slate-400 uppercase">Servicio</span>
+                  <p class="font-bold text-slate-900 mt-0.5">Asfaltado en caliente</p>
+                </div>
+                <div>
+                  <span class="text-[10px] font-semibold text-slate-400 uppercase">Metrado solicitado</span>
+                  <p class="font-bold text-teal-800 font-headline text-sm mt-0.5">600 m²</p>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3 pb-2 border-b border-slate-200/60">
+                <div>
+                  <span class="text-[10px] font-semibold text-slate-400 uppercase">Ubicación</span>
+                  <p class="font-semibold text-slate-800 mt-0.5">Lurín, Lima Sur</p>
+                </div>
+                <div>
+                  <span class="text-[10px] font-semibold text-slate-400 uppercase">Espesor sugerido</span>
+                  <p class="font-semibold text-slate-800 mt-0.5">2" (Tráfico pesado)</p>
+                </div>
+              </div>
+
+              <div>
+                <span class="text-[10px] font-semibold text-slate-400 uppercase">Imprimación / Base</span>
+                <p class="font-medium text-slate-700 mt-0.5">Imprimación asfáltica MC-30 (Base compactada lista)</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- COTIZADOR RÁPIDO SEGÚN TARIFAS CONSTROAD -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="font-headline font-bold text-xs uppercase tracking-wider text-slate-400">Presupuesto preliminar</h4>
+              <span class="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Tarifario 2025</span>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2.5 shadow-xs">
+              <div class="space-y-1.5 text-xs">
+                <div class="flex justify-between text-slate-600">
+                  <span>Asfalto 2" colocación (600 m² x S/ 38.00)</span>
+                  <span class="font-mono text-slate-900 font-medium">S/ 22,800.00</span>
+                </div>
+                <div class="flex justify-between text-slate-600">
+                  <span>Imprimación MC-30 (600 m² x S/ 6.50)</span>
+                  <span class="font-mono text-slate-900 font-medium">S/ 3,900.00</span>
+                </div>
+                <div class="flex justify-between text-slate-600">
+                  <span>Flete maquinaria a Lurín (planta CONSTROAD)</span>
+                  <span class="font-mono text-slate-900 font-medium">S/ 1,200.00</span>
+                </div>
+              </div>
+
+              <div class="pt-2 border-t border-slate-100 flex items-baseline justify-between">
+                <div>
+                  <p class="text-xs font-bold text-slate-900">Total estimado (+ IGV):</p>
+                  <p class="text-[10px] text-slate-400">Sujeto a inspección técnica</p>
+                </div>
+                <span class="font-headline font-extrabold text-lg text-teal-800 font-mono">S/ 27,900.00</span>
+              </div>
+
+              <button class="w-full py-2 px-3 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors">
+                <span class="material-symbols-outlined text-[16px]">send</span>
+                Enviar cotización formal PDF a WhatsApp
+              </button>
+            </div>
+          </div>
+
+          <!-- HISTORIAL / ÚLTIMO MENSAJE WHATSAPP -->
+          <div>
+            <h4 class="font-headline font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">Último mensaje recibido</h4>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-xs">
+              <p class="text-slate-700 italic">
+                “Hola José, ya tengo el metrado exacto: son 600 m² de asfaltado en caliente en Lurín. ¿Me confirmas precio de mezcla con la emulsión rápida hoy mismo?”
+              </p>
+              <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+                <span>Hoy 10:42 a.m. · WhatsApp</span>
+                <a href="#" class="text-teal-700 font-medium hover:underline flex items-center gap-0.5">
+                  Ver conversación completa
+                  <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- NOTAS INTERNAS DEL EQUIPO -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <h4 class="font-headline font-bold text-xs uppercase tracking-wider text-slate-400">Nota interna</h4>
+              <button class="text-[11px] font-semibold text-teal-700 hover:text-teal-800">+ Añadir nota</button>
+            </div>
+            <textarea placeholder="Escribe un apunte sobre este cliente (visita a obra, disponibilidad de rodillo, condiciones de pago)..." rows="2" class="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all placeholder:text-slate-400"></textarea>
+          </div>
+
+        </div>
+
+        <!-- Footer fijo del Drawer: Acciones Rápidas -->
+        <div class="p-4 border-t border-slate-200 bg-white flex items-center justify-between gap-2 flex-shrink-0">
+          <div class="flex items-center gap-1.5">
+            <button class="px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200">
+              Mover a Contactado
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="px-4 py-2 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors border border-teal-200 flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">chat</span>
+              Tomar conversación
+            </button>
+          </div>
+        </div>
+
+      </aside>
+
+    </div>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Configuración de Asistente - Dali</title>
+<!-- Google Fonts: Outfit, DM Sans, JetBrains Mono, Public Sans -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Outfit:wght@500;600;700&amp;family=Public+Sans:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            teal: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              200: '#99f6e4',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a'
+            }
+          },
+          borderRadius: {
+            DEFAULT: "0.5rem",
+            lg: "1rem",
+            xl: "1.5rem",
+            full: "9999px"
+          },
+          spacing: {},
+          fontFamily: {
+            headline: ["Public Sans", "Outfit", "sans-serif"],
+            display: ["Public Sans", "Outfit", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          },
+          fontSize: {}
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-smoothing: antialiased;
+    }
+    body {
+      -webkit-tap-highlight-color: transparent;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+    .font-tabular {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-body antialiased min-h-screen pb-36">
+<!-- Mobile Viewport Container (390px constrained) -->
+<div class="max-w-[390px] mx-auto min-h-screen bg-stone-50 dark:bg-stone-950 relative shadow-2xl overflow-x-hidden">
+<!-- Top App Bar (From Shared Components JSON Anchor) -->
+<header class="sticky top-0 z-40 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 px-4 h-14 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<button aria-label="Volver" class="w-9 h-9 -ml-1.5 flex items-center justify-center rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 transition-colors">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<div>
+<div class="flex items-center gap-1.5">
+<h1 class="font-headline font-semibold text-lg text-stone-900 dark:text-stone-100 tracking-tight leading-tight">Asistente</h1>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-800">
+              v2.4
+            </span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-teal-700 dark:text-teal-400 font-label text-sm font-medium hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded transition-colors active:opacity-80">
+          Guardar cambios
+        </button>
+</div>
+</header>
+<!-- Subheader: Business Info & WhatsApp Online Status -->
+<div class="bg-white dark:bg-stone-900 px-4 py-3 border-b border-stone-200 dark:border-stone-800">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-lg bg-stone-900 text-amber-500 font-headline font-bold flex items-center justify-center text-xs tracking-wider">
+            C
+          </div>
+<div>
+<span class="text-xs font-semibold text-stone-900 dark:text-stone-100">CONSTROAD</span>
+<span class="text-[11px] text-stone-500 block -mt-0.5">Asfaltos y Pavimentos · Lima</span>
+</div>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[11px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+<span class="font-mono text-[10px] font-tabular">+51 949 376 824</span>
+</div>
+</div>
+<p class="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+        Configura cómo se presenta y se comporta Dali cuando atiende a tus clientes por WhatsApp en CONSTROAD.
+      </p>
+</div>
+<!-- Main Content Canvas -->
+<main class="p-4 space-y-4">
+<!-- 1. Tarjeta: Estado del Asistente -->
+<section class="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-4 shadow-sm">
+<div class="flex items-start justify-between gap-3">
+<div class="flex-1">
+<div class="flex items-center gap-2">
+<h2 class="font-headline font-bold text-sm text-stone-900 dark:text-stone-100">Estado de Dali</h2>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-800 border border-teal-200 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-800">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+                Atendiendo
+              </span>
+</div>
+<p class="text-xs text-stone-500 mt-1">Dali responde cotizaciones y requerimientos en tiempo real.</p>
+</div>
+<!-- Toggle switch -->
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+</div>
+<hr class="my-3.5 border-stone-100 dark:border-stone-800"/>
+<!-- Quick pause chips -->
+<div>
+<label class="block text-[11px] font-semibold tracking-wider uppercase text-stone-500 mb-2">Pausar atención temporalmente</label>
+<div class="grid grid-cols-3 gap-2">
+<button class="py-1.5 px-2 text-xs font-medium rounded-lg border border-teal-700 bg-teal-50 text-teal-800 text-center font-tabular transition-colors" type="button">
+              30 min
+            </button>
+<button class="py-1.5 px-2 text-xs font-medium rounded-lg border border-stone-200 dark:border-stone-700 hover:bg-stone-50 text-stone-600 dark:text-stone-300 text-center font-tabular transition-colors" type="button">
+              2 horas
+            </button>
+<button class="py-1.5 px-2 text-xs font-medium rounded-lg border border-stone-200 dark:border-stone-700 hover:bg-stone-50 text-stone-600 dark:text-stone-300 text-center transition-colors" type="button">
+              Hasta mañana
+            </button>
+</div>
+</div>
+<!-- Human override rule -->
+<div class="mt-4 pt-3 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between gap-3">
+<div class="flex-1">
+<span class="text-xs font-medium text-stone-800 dark:text-stone-200 block">Silencio al intervenir</span>
+<p class="text-[11px] text-stone-500 leading-tight">Si respondes tú desde el celular, Dali se silencia.</p>
+</div>
+<select class="text-xs font-mono font-medium rounded-lg border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 py-1.5 px-2.5 text-stone-800 dark:text-stone-200 focus:ring-1 focus:ring-teal-700">
+<option selected="">30 min</option>
+<option>1 hora</option>
+<option>Hasta nuevo aviso</option>
+</select>
+</div>
+</section>
+<!-- 2. Tarjeta: Identidad y Personalidad -->
+<section class="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-4 shadow-sm space-y-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-700 dark:text-teal-400" data-icon="badge">badge</span>
+<h2 class="font-headline font-bold text-sm text-stone-900 dark:text-stone-100">Identidad y Personalidad</h2>
+</div>
+<!-- Nombre -->
+<div>
+<label class="block text-xs font-medium text-stone-700 dark:text-stone-300 mb-1">Nombre del asistente</label>
+<div class="relative">
+<input class="w-full h-10 text-sm rounded-lg border border-stone-300 dark:border-stone-700 px-3 bg-white dark:bg-stone-800 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 transition" type="text" value="Dali"/>
+<span class="absolute right-3 top-2.5 text-stone-400 text-xs font-mono">Defecto</span>
+</div>
+<span class="text-[11px] text-stone-400 mt-1 block">Tus clientes verán este nombre en los mensajes.</span>
+</div>
+<!-- Saludo Inicial -->
+<div>
+<div class="flex justify-between items-center mb-1">
+<label class="block text-xs font-medium text-stone-700 dark:text-stone-300">Saludo de bienvenida</label>
+<span class="text-[11px] font-mono text-stone-400">92/160</span>
+</div>
+<textarea class="w-full text-xs rounded-lg border border-stone-300 dark:border-stone-700 p-2.5 bg-white dark:bg-stone-800 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 leading-relaxed text-stone-800 dark:text-stone-200" rows="3">¡Hola! Soy Dali, la asistente de CONSTROAD 👋 ¿En qué te ayudo hoy con tu requerimiento de asfalto?</textarea>
+</div>
+<!-- Tono de voz -->
+<div>
+<label class="block text-xs font-medium text-stone-700 dark:text-stone-300 mb-1.5">Tono de conversación</label>
+<div class="grid grid-cols-2 p-1 bg-stone-100 dark:bg-stone-800 rounded-lg text-xs font-medium text-center">
+<button class="py-1.5 rounded-md bg-white dark:bg-stone-900 text-teal-800 dark:text-teal-300 shadow-sm border border-stone-200 dark:border-stone-700 font-semibold" type="button">
+              Cercano (tuteo)
+            </button>
+<button class="py-1.5 text-stone-500 dark:text-stone-400 hover:text-stone-900 transition-colors" type="button">
+              Formal (usted)
+            </button>
+</div>
+</div>
+<!-- Uso de emojis -->
+<div>
+<label class="block text-xs font-medium text-stone-700 dark:text-stone-300 mb-1.5">Uso de emojis</label>
+<div class="grid grid-cols-2 p-1 bg-stone-100 dark:bg-stone-800 rounded-lg text-xs font-medium text-center">
+<button class="py-1.5 rounded-md bg-white dark:bg-stone-900 text-teal-800 dark:text-teal-300 shadow-sm border border-stone-200 dark:border-stone-700 font-semibold" type="button">
+              Moderado (1-2)
+            </button>
+<button class="py-1.5 text-stone-500 dark:text-stone-400 hover:text-stone-900 transition-colors" type="button">
+              Ninguno
+            </button>
+</div>
+</div>
+</section>
+<!-- 3. Tarjeta: Horarios de Atención -->
+<section class="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-4 shadow-sm space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-700 dark:text-teal-400" data-icon="schedule">schedule</span>
+<h2 class="font-headline font-bold text-sm text-stone-900 dark:text-stone-100">Horario de atención</h2>
+</div>
+<span class="text-[11px] font-mono text-stone-500">GMT-5 Lima</span>
+</div>
+<p class="text-xs text-stone-500 -mt-1">Define cuándo responde Dali de forma inmediata.</p>
+<div class="divide-y divide-stone-100 dark:divide-stone-800">
+<!-- Lun - Vie -->
+<div class="py-2.5 flex items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<input checked="" class="rounded border-stone-300 text-teal-700 focus:ring-teal-700 h-4 w-4" type="checkbox"/>
+<span class="text-xs font-medium text-stone-800 dark:text-stone-200">Lunes a Viernes</span>
+</div>
+<div class="flex items-center gap-1 font-mono text-xs text-stone-600 dark:text-stone-300 bg-stone-50 dark:bg-stone-800 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 font-tabular">
+<span>08:00</span>
+<span class="text-stone-400">-</span>
+<span>18:00</span>
+</div>
+</div>
+<!-- Sábado -->
+<div class="py-2.5 flex items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<input checked="" class="rounded border-stone-300 text-teal-700 focus:ring-teal-700 h-4 w-4" type="checkbox"/>
+<span class="text-xs font-medium text-stone-800 dark:text-stone-200">Sábados</span>
+</div>
+<div class="flex items-center gap-1 font-mono text-xs text-stone-600 dark:text-stone-300 bg-stone-50 dark:bg-stone-800 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 font-tabular">
+<span>08:00</span>
+<span class="text-stone-400">-</span>
+<span>13:00</span>
+</div>
+</div>
+<!-- Domingo -->
+<div class="py-2.5 flex items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<input class="rounded border-stone-300 text-teal-700 focus:ring-teal-700 h-4 w-4" type="checkbox"/>
+<span class="text-xs font-medium text-stone-400 dark:text-stone-500">Domingos</span>
+</div>
+<span class="text-[11px] text-stone-400 font-medium italic">Cerrado (despacho coordinado)</span>
+</div>
+</div>
+<!-- Fuera de horario -->
+<div class="pt-2">
+<label class="block text-xs font-medium text-stone-700 dark:text-stone-300 mb-1">Respuesta automática fuera de turno</label>
+<textarea class="w-full text-xs rounded-lg border border-stone-300 dark:border-stone-700 p-2 bg-stone-50 dark:bg-stone-800/60 text-stone-700 dark:text-stone-300 focus:ring-teal-700 focus:border-teal-700" rows="2">¡Hola! He tomado todos los datos de tu obra en Lima. Nuestro asesor comercial te llamará a primera hora (08:00 a.m.).</textarea>
+<span class="text-[11px] text-stone-400 mt-1 block">Dali sigue registrando los metros cuadrados y ubicación aunque esté cerrado.</span>
+</div>
+</section>
+<!-- 4. Tarjeta: Reglas de Negocio (Asfaltos) -->
+<section class="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-4 shadow-sm space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-700 dark:text-teal-400" data-icon="policy">policy</span>
+<div>
+<h2 class="font-headline font-bold text-sm text-stone-900 dark:text-stone-100">Reglas críticas de negocio</h2>
+<p class="text-[11px] text-stone-500">Límites y criterio para el rubro pavimentación</p>
+</div>
+</div>
+<div class="space-y-3 pt-1">
+<!-- Regla 1 -->
+<div class="flex items-start justify-between gap-3 pb-3 border-b border-stone-100 dark:border-stone-800">
+<div>
+<p class="text-xs font-semibold text-stone-900 dark:text-stone-100">Nunca dar precios cerrados por chat</p>
+<p class="text-[11px] text-stone-500 mt-0.5 leading-snug">Los calcula el asesor técnico según metrado real, espesor e imprimación MC-30.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+</div>
+<!-- Regla 2 -->
+<div class="flex items-start justify-between gap-3 pb-3 border-b border-stone-100 dark:border-stone-800">
+<div>
+<p class="text-xs font-semibold text-stone-900 dark:text-stone-100">Nunca prometer entrega inmediata</p>
+<p class="text-[11px] text-stone-500 mt-0.5 leading-snug">Aclara siempre que el cargador y la cuadrilla se programan con 24h de anticipación.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+</div>
+<!-- Regla 3 -->
+<div class="flex items-start justify-between gap-3 pb-3 border-b border-stone-100 dark:border-stone-800">
+<div>
+<p class="text-xs font-semibold text-stone-900 dark:text-stone-100">Pase inmediato a persona</p>
+<p class="text-[11px] text-stone-500 mt-0.5 leading-snug">Si el cliente escribe "persona", "asesor" o si muestra molestia reiterada.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+</div>
+<!-- Regla 4 -->
+<div class="flex items-start justify-between gap-3">
+<div>
+<p class="text-xs font-semibold text-stone-900 dark:text-stone-100">Zona de cobertura estricta</p>
+<p class="text-[11px] text-stone-500 mt-0.5 leading-snug">Lima Metropolitana y Callao. Fuera de radio deriva para costeo de flete.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+</div>
+</div>
+</section>
+<!-- 5. Tarjeta: Avisos y Notificaciones -->
+<section class="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-4 shadow-sm space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-amber-600 dark:text-amber-500" data-icon="notifications_active">notifications_active</span>
+<div>
+<h2 class="font-headline font-bold text-sm text-stone-900 dark:text-stone-100">Avisos urgentes</h2>
+<p class="text-[11px] text-stone-500">¿A quién avisa Dali cuando entra un pedido?</p>
+</div>
+</div>
+<div class="space-y-2 pt-1">
+<!-- Radio option 1 -->
+<label class="flex items-center justify-between p-2.5 rounded-lg border border-teal-600 bg-teal-50/50 dark:bg-teal-950/20 cursor-pointer">
+<div class="flex items-center gap-2.5">
+<input checked="" class="text-teal-700 focus:ring-teal-700" name="notify_channel" type="radio"/>
+<div>
+<span class="text-xs font-semibold text-stone-900 dark:text-stone-100 block">Grupo de WhatsApp de ventas</span>
+<span class="text-[11px] text-stone-500 font-mono">Ventas CONSTROAD (4 integrantes)</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-teal-700 text-sm" data-icon="group">group</span>
+</label>
+<!-- Radio option 2 -->
+<label class="flex items-center justify-between p-2.5 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/40 cursor-pointer">
+<div class="flex items-center gap-2.5">
+<input class="text-teal-700 focus:ring-teal-700" name="notify_channel" type="radio"/>
+<div>
+<span class="text-xs font-semibold text-stone-800 dark:text-stone-200 block">Número personal del dueño</span>
+<span class="text-[11px] text-stone-400 font-mono">+51 981 223 940 (Ing. Ramos)</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-stone-400 text-sm" data-icon="person">person</span>
+</label>
+</div>
+<!-- Checkbox triggers -->
+<div class="pt-2">
+<span class="block text-[11px] font-semibold uppercase tracking-wider text-stone-500 mb-2">Disparar alerta en estos casos</span>
+<div class="space-y-2">
+<label class="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-300 cursor-pointer">
+<input checked="" class="rounded border-stone-300 text-teal-700 focus:ring-teal-700" type="checkbox"/>
+<span>Lead nuevo con metrado y dirección recolectada</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-300 cursor-pointer">
+<input checked="" class="rounded border-stone-300 text-teal-700 focus:ring-teal-700" type="checkbox"/>
+<span>Cliente pide llamada urgente con un técnico</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-300 cursor-pointer">
+<input checked="" class="rounded border-stone-300 text-teal-700 focus:ring-teal-700" type="checkbox"/>
+<span>WhatsApp desconectado (alerta roja inmediata)</span>
+</label>
+</div>
+</div>
+</section>
+<!-- 6. Tarjeta: Modo Piloto (Pruebas) -->
+<section class="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-4 shadow-sm space-y-3 mb-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-stone-500" data-icon="science">science</span>
+<h2 class="font-headline font-bold text-sm text-stone-900 dark:text-stone-100">Modo Piloto</h2>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+            Pruebas seguras
+          </span>
+</div>
+<p class="text-xs text-stone-500 leading-snug">
+          Si agregas números aquí, Dali solo responderá a ellos. Los clientes reales no recibirán mensajes automáticos hasta que desactives esta lista.
+        </p>
+<!-- Chips de teléfonos autorizados -->
+<div class="flex flex-wrap gap-2 pt-1">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono text-stone-800 dark:text-stone-200">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+<span>+51 902 049 935</span>
+<button class="text-stone-400 hover:text-red-600 ml-0.5" title="Quitar">
+<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono text-stone-800 dark:text-stone-200">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+<span>+51 949 376 824</span>
+<button class="text-stone-400 hover:text-red-600 ml-0.5" title="Quitar">
+<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</button>
+</div>
+</div>
+<button class="w-full py-2 border border-dashed border-stone-300 dark:border-stone-700 hover:border-teal-700 rounded-lg text-xs font-medium text-teal-700 dark:text-teal-400 flex items-center justify-center gap-1.5 transition" type="button">
+<span class="material-symbols-outlined text-base" data-icon="add">add</span>
+          Agregar número de prueba
+        </button>
+</section>
+</main>
+<!-- Floating Action Footer (Guardar Cambios) -->
+<div class="fixed bottom-16 left-0 right-0 max-w-[390px] mx-auto px-4 py-2.5 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-t border-stone-200 dark:border-stone-800 z-40">
+<div class="flex items-center gap-2">
+<button class="flex-1 h-11 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white font-label font-medium text-sm rounded-xl transition shadow flex items-center justify-center gap-2" type="button">
+<span class="material-symbols-outlined text-base" data-icon="check">check</span>
+          Guardar cambios
+        </button>
+<button class="h-11 px-3 border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 font-label font-medium text-xs rounded-xl transition" type="button">
+          Descartar
+        </button>
+</div>
+</div>
+<!-- Bottom Navigation Bar (5 Items: Exact Match to Shared Components JSON) -->
+<!-- Asistente is active based on page identity and intent -->
+<nav aria-label="Navegación principal" class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-2 max-w-md mx-auto bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800">
+<!-- 1. Inicio -->
+<a class="flex flex-col items-center justify-center text-stone-500 dark:text-stone-400 font-normal py-1 hover:text-teal-700 dark:hover:text-teal-400 transition-colors active:scale-95 duration-150" href="#inicio">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label text-xs font-medium mt-0.5">Inicio</span>
+</a>
+<!-- 2. Chats -->
+<a class="flex flex-col items-center justify-center text-stone-500 dark:text-stone-400 font-normal py-1 hover:text-teal-700 dark:hover:text-teal-400 transition-colors active:scale-95 duration-150 relative" href="#chats">
+<div class="relative">
+<span class="material-symbols-outlined" data-icon="chat">chat</span>
+<span class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-600 text-white rounded-full text-[9px] flex items-center justify-center font-mono font-bold">2</span>
+</div>
+<span class="font-label text-xs font-medium mt-0.5">Chats</span>
+</a>
+<!-- 3. Leads -->
+<a class="flex flex-col items-center justify-center text-stone-500 dark:text-stone-400 font-normal py-1 hover:text-teal-700 dark:hover:text-teal-400 transition-colors active:scale-95 duration-150" href="#leads">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-label text-xs font-medium mt-0.5">Leads</span>
+</a>
+<!-- 4. Asistente (ACTIVE STATE) -->
+<a aria-current="page" class="flex flex-col items-center justify-center text-teal-700 dark:text-teal-400 font-semibold py-1 active:scale-95 transition-transform duration-150" href="#asistente">
+<span class="material-symbols-outlined" data-icon="smart_toy" data-weight="fill" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+<span class="font-label text-xs font-medium mt-0.5">Asistente</span>
+</a>
+<!-- 5. Más -->
+<a class="flex flex-col items-center justify-center text-stone-500 dark:text-stone-400 font-normal py-1 hover:text-teal-700 dark:hover:text-teal-400 transition-colors active:scale-95 duration-150" href="#mas">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+<span class="font-label text-xs font-medium mt-0.5">Más</span>
+</a>
+</nav>
+</div>
+</body></html>

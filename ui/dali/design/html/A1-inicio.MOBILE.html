@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-100" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Dali — Panel de Control | CONSTROAD</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts: Outfit (Titulares), DM Sans (Cuerpo), JetBrains Mono (Datos numéricos) -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&amp;family=JetBrains+Mono:wght@400..700&amp;family=Outfit:wght@500;600;700;800&amp;family=Public+Sans:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Theme Configuration -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+            },
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+            },
+            amber: {
+              50: '#FFFBEB',
+              100: '#FEF3C7',
+              500: '#F59E0B',
+              600: '#D97706',
+              700: '#B45309',
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.75rem",
+            "xl": "1rem",
+            "2xl": "1.25rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            "headline": ["Outfit", "Public Sans", "sans-serif"],
+            "display": ["Outfit", "sans-serif"],
+            "body": ["DM Sans", "sans-serif"],
+            "label": ["DM Sans", "sans-serif"],
+            "mono": ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .num-tabular {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Safe-area insets for mobile app experience */
+    .safe-bottom {
+      padding-bottom: env(safe-area-inset-bottom, 16px);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body text-stone-900 bg-stone-100 antialiased min-h-screen flex justify-center selection:bg-teal-100 selection:text-teal-900">
+<!-- Mobile Viewport Canvas Container (390px max-width) -->
+<div class="w-full max-w-[390px] bg-stone-50 min-h-screen flex flex-col relative shadow-xl overflow-x-hidden border-x border-stone-200/60 pb-24">
+<!-- 1. Top Bar / Compact Header -->
+<header class="sticky top-0 z-40 bg-stone-50/95 backdrop-blur-md px-4 pt-3.5 pb-2.5 flex items-center justify-between border-b border-stone-200">
+<div class="flex items-center gap-3">
+<!-- Avatar -->
+<div class="relative flex-shrink-0">
+<div class="w-10 h-10 rounded-full bg-teal-800 text-stone-100 font-headline font-bold text-sm flex items-center justify-center ring-2 ring-stone-200">
+            JA
+          </div>
+<span class="absolute bottom-0 right-0 w-3 h-3 bg-emerald-600 border-2 border-white rounded-full"></span>
+</div>
+<!-- Saludo y Negocio -->
+<div>
+<h1 class="font-headline font-bold text-stone-900 text-lg leading-tight tracking-tight">Hola, José</h1>
+<p class="font-label text-xs font-semibold tracking-wider text-stone-500 uppercase">CONSTROAD</p>
+</div>
+</div>
+<!-- Action: Notifications with Amber Badge -->
+<div class="flex items-center gap-1.5">
+<button aria-label="Notificaciones" class="relative w-10 h-10 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-200/70 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[23px]">notifications</span>
+<span class="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-amber-600 text-[10px] font-bold font-mono text-white ring-2 ring-stone-50">
+            2
+          </span>
+</button>
+</div>
+</header>
+<!-- Main Mobile Content Canvas -->
+<main class="flex-1 px-4 pt-4 space-y-4">
+<!-- 2. Assistant Status Card: "Dali está atendiendo" -->
+<div class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-sm">
+<div class="flex items-center justify-between gap-2">
+<!-- Status pill & Indicator -->
+<div class="flex items-center gap-2">
+<span class="relative flex h-3 w-3">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-600"></span>
+</span>
+<span class="font-headline font-semibold text-stone-900 text-sm tracking-tight">Dali está atendiendo</span>
+</div>
+<!-- Switch Toggle (Active / Enabled) -->
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" id="assistantToggle" type="checkbox"/>
+<div class="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-700"></div>
+</label>
+</div>
+<!-- Meta info: Phone + Heartbeat -->
+<div class="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between text-xs text-stone-600">
+<div class="flex items-center gap-1 truncate font-mono text-[11px]">
+<span class="material-symbols-outlined text-[14px] text-emerald-700">chat</span>
+<span class="truncate">+51 949 376 824 · hace 3 min</span>
+</div>
+<!-- Subtle Pause Action -->
+<button class="text-stone-600 hover:text-stone-900 font-medium text-xs underline decoration-stone-300 underline-offset-2 flex-shrink-0 active:opacity-70 transition-opacity">
+            Pausar 30 min
+          </button>
+</div>
+</div>
+<!-- 3. Metrics Section: Grid 2x2 -->
+<section>
+<div class="flex items-center justify-between mb-2">
+<h2 class="font-label text-xs font-semibold text-stone-500 uppercase tracking-wider">Métricas de hoy</h2>
+<span class="font-mono text-[11px] text-stone-600">Actualizado ahora</span>
+</div>
+<div class="grid grid-cols-2 gap-2.5">
+<!-- Metric 1: Conversaciones -->
+<div class="bg-white rounded-xl border border-stone-200 p-3 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-stone-600 mb-1">
+<span class="font-label text-xs font-medium">Conversaciones</span>
+<span class="material-symbols-outlined text-stone-400 text-lg">chat_bubble</span>
+</div>
+<div class="flex items-baseline justify-between mt-0.5">
+<span class="font-mono text-2xl font-bold text-stone-900 num-tabular">14</span>
+<span class="inline-flex items-center text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                ↑ 3 vs ayer
+              </span>
+</div>
+</div>
+<!-- Metric 2: Leads nuevos -->
+<div class="bg-white rounded-xl border border-stone-200 p-3 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-stone-600 mb-1">
+<span class="font-label text-xs font-medium">Leads nuevos</span>
+<span class="material-symbols-outlined text-stone-400 text-lg">person_add</span>
+</div>
+<div class="flex items-baseline justify-between mt-0.5">
+<span class="font-mono text-2xl font-bold text-stone-900 num-tabular">5</span>
+<span class="inline-flex items-center text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                ↑ 2
+              </span>
+</div>
+</div>
+<!-- Metric 3: Sin responder (Amber Alert) -->
+<div class="bg-amber-50/50 rounded-xl border border-amber-200/90 p-3 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-amber-800 mb-1">
+<span class="font-label text-xs font-semibold">Sin responder</span>
+<span class="material-symbols-outlined text-amber-700 text-lg">front_hand</span>
+</div>
+<div class="flex items-baseline justify-between mt-0.5">
+<span class="font-mono text-2xl font-bold text-amber-700 num-tabular">1</span>
+<span class="inline-flex items-center text-[11px] font-semibold text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded-full">
+                Pide ayuda
+              </span>
+</div>
+</div>
+<!-- Metric 4: Tiempo de respuesta -->
+<div class="bg-white rounded-xl border border-stone-200 p-3 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-stone-600 mb-1">
+<span class="font-label text-xs font-medium">Tiempo de resp.</span>
+<span class="material-symbols-outlined text-stone-400 text-lg">bolt</span>
+</div>
+<div class="flex items-baseline justify-between mt-0.5">
+<span class="font-mono text-2xl font-bold text-stone-900 num-tabular">9<span class="text-sm font-normal text-stone-500 ml-0.5">s</span></span>
+<span class="text-[11px] font-medium text-stone-500">
+                Inmediato
+              </span>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. Section: Piden tu atención (Intervention needed) -->
+<section class="space-y-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<h2 class="font-label text-xs font-semibold text-stone-500 uppercase tracking-wider">Piden tu atención</h2>
+<span class="bg-amber-600 text-white font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full leading-relaxed">2</span>
+</div>
+<span class="text-xs text-amber-700 font-medium">Prioritario</span>
+</div>
+<div class="space-y-2">
+<!-- Item 1: Escalación Luis Paredes -->
+<div class="bg-white rounded-xl border border-amber-300/80 p-3 shadow-sm flex items-center justify-between gap-3">
+<div class="min-w-0 flex-1">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-amber-600 text-base flex-shrink-0">front_hand</span>
+<p class="font-headline font-semibold text-sm text-stone-900 truncate">Luis Paredes</p>
+<span class="text-stone-400 text-xs truncate">· Transportes P.</span>
+</div>
+<p class="text-xs text-stone-600 mt-1 truncate">
+                Pidió hablar con una persona <span class="font-mono text-stone-400">· 12 min</span>
+</p>
+</div>
+<button class="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-label text-xs font-semibold rounded-lg shadow-sm active:scale-95 transition-transform flex-shrink-0">
+              Tomar
+            </button>
+</div>
+<!-- Item 2: Mensaje fuera de tema -->
+<div class="bg-white rounded-xl border border-stone-200 p-3 shadow-sm flex items-center justify-between gap-3">
+<div class="min-w-0 flex-1">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-400 text-base flex-shrink-0">help_outline</span>
+<p class="font-mono font-medium text-xs text-stone-800 truncate">+51 902 049 935</p>
+</div>
+<p class="text-xs text-stone-600 mt-1 truncate">
+                3 mensajes fuera de tema <span class="font-mono text-stone-400">· 40 min</span>
+</p>
+</div>
+<button class="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 font-label text-xs font-semibold rounded-lg border border-stone-200 active:scale-95 transition-transform flex-shrink-0">
+              Ver
+            </button>
+</div>
+</div>
+</section>
+<!-- 5. Section: Últimos leads -->
+<section class="space-y-2">
+<div class="flex items-center justify-between">
+<h2 class="font-label text-xs font-semibold text-stone-500 uppercase tracking-wider">Últimos leads</h2>
+<a class="text-xs font-semibold text-teal-700 hover:text-teal-800 transition-colors" href="#">
+            Ver todos
+          </a>
+</div>
+<div class="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100 shadow-sm overflow-hidden">
+<!-- Lead 1 -->
+<div class="p-3 hover:bg-stone-50 transition-colors">
+<div class="flex items-start justify-between gap-2">
+<div class="min-w-0 flex-1">
+<p class="font-headline font-semibold text-sm text-stone-900 truncate">Asfaltado 600 m² · Lurín</p>
+<div class="flex items-center gap-1.5 text-xs text-stone-600 mt-0.5 truncate">
+<span class="truncate">Luis Paredes</span>
+<span class="text-stone-300">·</span>
+<span class="font-mono text-[11px] text-stone-600">hoy 10:42</span>
+</div>
+</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded-full flex-shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                Nuevo
+              </span>
+</div>
+</div>
+<!-- Lead 2 -->
+<div class="p-3 hover:bg-stone-50 transition-colors">
+<div class="flex items-start justify-between gap-2">
+<div class="min-w-0 flex-1">
+<p class="font-headline font-semibold text-sm text-stone-900 truncate">Venta de mezcla 40 m³ · Ate</p>
+<div class="flex items-center gap-1.5 text-xs text-stone-600 mt-0.5 truncate">
+<span class="truncate">Juan Carlos (Consorcio Los Pinos)</span>
+<span class="text-stone-300">·</span>
+<span class="font-mono text-[11px] text-stone-600">ayer</span>
+</div>
+</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-800 bg-teal-50 border border-teal-200/70 px-2 py-0.5 rounded-full flex-shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+                Contactado
+              </span>
+</div>
+</div>
+<!-- Lead 3 -->
+<div class="p-3 hover:bg-stone-50 transition-colors">
+<div class="flex items-start justify-between gap-2">
+<div class="min-w-0 flex-1">
+<p class="font-headline font-semibold text-sm text-stone-900 truncate">Transporte 20 m³ · Cajamarquilla → Surco</p>
+<div class="flex items-center gap-1.5 text-xs text-stone-600 mt-0.5 truncate">
+<span class="truncate">Carlos</span>
+<span class="text-stone-300">·</span>
+<span class="font-mono text-[11px] text-stone-600">ayer</span>
+</div>
+</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-stone-700 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded-full flex-shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-stone-400"></span>
+                Cotizado
+              </span>
+</div>
+</div>
+</div>
+</section>
+<!-- 6. Card: Uso del plan -->
+<div class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<div>
+<p class="font-headline font-semibold text-xs text-stone-900">Plan Negocio</p>
+<p class="text-[11px] text-stone-500">Se renueva el 1 oct</p>
+</div>
+<span class="font-mono text-xs font-bold text-teal-800 num-tabular">61% consumido</span>
+</div>
+<!-- Progress bar -->
+<div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden border border-stone-200">
+<div class="bg-teal-700 h-2 rounded-full transition-all duration-500" style="width: 61%"></div>
+</div>
+<div class="flex items-center justify-between mt-2 text-[11px] font-mono text-stone-500">
+<span>612 mensajes usados</span>
+<span>1 000 límite mensual</span>
+</div>
+</div>
+</main>
+<!-- 7. Shared Component: BottomNavBar (Fixed docked 5 tabs, 'Inicio' active) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-1 max-w-[390px] mx-auto bg-white border-t border-stone-200 shadow-sm safe-bottom" style="left: 50%; transform: translateX(-50%);">
+<!-- Tab 1: Inicio (Active) -->
+<a class="flex flex-col items-center justify-center text-teal-800 font-semibold py-1 hover:text-teal-700 transition-colors active:scale-95 transition-transform duration-150 flex-1" href="#">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-label text-xs font-semibold mt-0.5">Inicio</span>
+</a>
+<!-- Tab 2: Chats (Inactive) -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95 transition-transform duration-150 flex-1" href="#">
+<span class="material-symbols-outlined text-[22px]">chat</span>
+<span class="font-label text-xs font-medium mt-0.5">Chats</span>
+</a>
+<!-- Tab 3: Leads (Inactive) -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95 transition-transform duration-150 flex-1" href="#">
+<span class="material-symbols-outlined text-[22px]">group</span>
+<span class="font-label text-xs font-medium mt-0.5">Leads</span>
+</a>
+<!-- Tab 4: Asistente (Inactive) -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95 transition-transform duration-150 flex-1" href="#">
+<span class="material-symbols-outlined text-[22px]">smart_toy</span>
+<span class="font-label text-xs font-medium mt-0.5">Asistente</span>
+</a>
+<!-- Tab 5: Más (Inactive) -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95 transition-transform duration-150 flex-1" href="#">
+<span class="material-symbols-outlined text-[22px]">more_horiz</span>
+<span class="font-label text-xs font-medium mt-0.5">Más</span>
+</a>
+</nav>
+</div>
+</body></html>

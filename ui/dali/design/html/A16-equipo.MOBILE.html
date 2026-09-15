@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Equipo - CONSTROAD · Dali</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+              950: '#042F2E',
+            },
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      width: 390px;
+      margin: 0 auto;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #71717A;
+      -webkit-font-smoothing: antialiased;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Hide scrollbar for neat preview */
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex justify-center bg-stone-200">
+  <!-- Mobile Container (390px fixed frame) -->
+  <div class="w-[390px] min-h-screen bg-stone-50 flex flex-col relative text-stone-800 shadow-2xl overflow-hidden pb-20">
+    
+    <!-- Top Bar / Compact Header -->
+    <header class="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-stone-200 px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-600 active:scale-95 transition-transform" aria-label="Atrás">
+          <span class="material-symbols-outlined text-xl">arrow_back</span>
+        </button>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] font-bold tracking-wider text-teal-700 uppercase bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200/60">CONSTROAD</span>
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          </div>
+          <p class="text-xs text-stone-500 font-medium">Asistente Dali · v2.4</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-600 relative" aria-label="Notificaciones">
+          <span class="material-symbols-outlined text-xl">notifications</span>
+          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white"></span>
+        </button>
+        <button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-600" aria-label="Ayuda">
+          <span class="material-symbols-outlined text-xl">help_outline</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Screen Content (Background behind drawer) -->
+    <main class="flex-1 px-4 pt-4 pb-6 select-none opacity-45 pointer-events-none transition-opacity">
+      
+      <!-- Titular & Subtítulo -->
+      <div class="mb-4">
+        <div class="flex items-center justify-between gap-2">
+          <h1 class="text-2xl font-bold text-stone-900 tracking-tight">Equipo</h1>
+          <span class="text-xs bg-stone-200/80 text-stone-700 font-semibold px-2.5 py-1 rounded-full">4 integrantes</span>
+        </div>
+        <p class="text-xs text-stone-500 mt-1 leading-relaxed">
+          Quién puede entrar a este panel y quién recibe los avisos de nuevos prospectos.
+        </p>
+      </div>
+
+      <!-- Botón Primario a Ancho Completo -->
+      <button class="w-full h-11 bg-teal-700 hover:bg-teal-800 active:scale-[0.99] text-white font-semibold rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm transition-all mb-4">
+        <span class="material-symbols-outlined text-lg">person_add</span>
+        Invitar miembro
+      </button>
+
+      <!-- Resumen / Explicación de Roles -->
+      <div class="bg-teal-50/80 border border-teal-200/80 rounded-2xl p-3.5 mb-4">
+        <div class="flex items-center gap-1.5 text-teal-900 font-bold text-xs mb-1.5">
+          <span class="material-symbols-outlined text-teal-700 text-base">verified_user</span>
+          Roles y permisos
+        </div>
+        <div class="text-[12px] text-stone-600 space-y-1 leading-snug">
+          <p><strong class="font-semibold text-stone-900">Dueño:</strong> todo.</p>
+          <p><strong class="font-semibold text-stone-900">Ventas:</strong> conversaciones, leads y tomar el control; no cambia la configuración.</p>
+          <p><strong class="font-semibold text-stone-900">Solo lectura:</strong> mira, no toca.</p>
+        </div>
+      </div>
+
+      <!-- Lista de Miembros en Tarjetas -->
+      <div class="space-y-3">
+        <h2 class="text-xs font-bold text-stone-500 uppercase tracking-wider px-1">Miembros activos</h2>
+
+        <!-- Miembro 1: José Zena (Dueño) -->
+        <div class="bg-white rounded-2xl border border-stone-200/90 p-3.5 shadow-sm space-y-2.5">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-teal-700 text-white font-bold flex items-center justify-center text-sm shadow-inner">
+                JZ
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <h3 class="text-sm font-bold text-stone-900 leading-none">José Zena</h3>
+                  <span class="text-[10px] bg-stone-100 text-stone-600 font-medium px-1.5 py-0.5 rounded">Tú</span>
+                </div>
+                <p class="text-xs text-stone-500 mt-0.5">jose@constroad.com</p>
+              </div>
+            </div>
+            <button class="text-stone-400 p-1">
+              <span class="material-symbols-outlined text-lg">more_vert</span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between pt-2 border-t border-stone-100 text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="text-stone-400 text-[11px]">Rol:</span>
+              <span class="font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/60">Dueño</span>
+            </div>
+            <div class="flex items-center gap-1 text-[11px] text-stone-400">
+              <span class="material-symbols-outlined text-xs">schedule</span>
+              hoy 09:12
+            </div>
+          </div>
+        </div>
+
+        <!-- Miembro 2: Carla Ríos (Ventas) -->
+        <div class="bg-white rounded-2xl border border-stone-200/90 p-3.5 shadow-sm space-y-2.5">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-amber-600 text-white font-bold flex items-center justify-center text-sm">
+                CR
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-stone-900 leading-none">Carla Ríos</h3>
+                <p class="text-xs text-stone-500 mt-0.5">+51 987 111 222</p>
+              </div>
+            </div>
+            <button class="text-stone-400 p-1">
+              <span class="material-symbols-outlined text-lg">more_vert</span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between pt-2 border-t border-stone-100 text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="text-stone-400 text-[11px]">Rol:</span>
+              <span class="font-semibold text-stone-700 bg-stone-100 px-2 py-0.5 rounded-md">Ventas</span>
+            </div>
+            <div class="flex items-center gap-1 text-[11px] text-stone-400">
+              <span class="material-symbols-outlined text-xs">schedule</span>
+              ayer
+            </div>
+          </div>
+        </div>
+
+        <!-- Miembro 3: Miguel Torres (Ventas) -->
+        <div class="bg-white rounded-2xl border border-stone-200/90 p-3.5 shadow-sm space-y-2.5">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm">
+                MT
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-stone-900 leading-none">Miguel Torres</h3>
+                <p class="text-xs text-stone-500 mt-0.5">miguel@constroad.com</p>
+              </div>
+            </div>
+            <button class="text-stone-400 p-1">
+              <span class="material-symbols-outlined text-lg">more_vert</span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between pt-2 border-t border-stone-100 text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="text-stone-400 text-[11px]">Rol:</span>
+              <span class="font-semibold text-stone-700 bg-stone-100 px-2 py-0.5 rounded-md">Ventas</span>
+            </div>
+            <div class="flex items-center gap-1 text-[11px] text-stone-400">
+              <span class="material-symbols-outlined text-xs">schedule</span>
+              hace 5 días
+            </div>
+          </div>
+        </div>
+
+        <!-- Miembro Pendiente: Ana -->
+        <div class="bg-amber-50/50 rounded-2xl border border-dashed border-amber-300/80 p-3.5 shadow-sm space-y-2.5">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center text-sm border border-amber-200">
+                <span class="material-symbols-outlined text-lg">mail</span>
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-1.5 py-0.5 rounded tracking-wide uppercase">Pendiente</span>
+                  <p class="text-xs font-semibold text-stone-800">ana@constroad.com</p>
+                </div>
+                <p class="text-[11px] text-stone-500 mt-0.5">Invitada hace 2 días</p>
+              </div>
+            </div>
+            <button class="px-2.5 py-1 text-xs font-bold text-teal-700 bg-white border border-teal-600/30 rounded-lg hover:bg-teal-50 shadow-xs">
+              Reenviar
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- BACKDROP FOR DRAWER -->
+    <div class="absolute inset-0 bg-stone-900/40 z-30 transition-opacity backdrop-blur-[2px]"></div>
+
+    <!-- DRAWER / HOJA "INVITAR" (ABIERTO) -->
+    <div class="absolute bottom-14 left-0 right-0 z-40 bg-white rounded-t-3xl shadow-2xl border-t border-stone-200 max-h-[85vh] flex flex-col animate-in slide-in-from-bottom duration-300">
+      <!-- Drag handle -->
+      <div class="w-full flex justify-center pt-2.5 pb-1 cursor-grab">
+        <div class="w-10 h-1 rounded-full bg-stone-300"></div>
+      </div>
+
+      <!-- Drawer Header -->
+      <div class="px-4 pb-3 pt-1 flex items-center justify-between border-b border-stone-100">
+        <div>
+          <h2 class="text-base font-bold text-stone-900 leading-tight">Invitar miembro</h2>
+          <p class="text-[11px] text-stone-500">Agrega a un colaborador a CONSTROAD</p>
+        </div>
+        <button class="w-7 h-7 flex items-center justify-center rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500" aria-label="Cerrar">
+          <span class="material-symbols-outlined text-base">close</span>
+        </button>
+      </div>
+
+      <!-- Drawer Form Body -->
+      <div class="px-4 py-3.5 space-y-3.5 overflow-y-auto">
+        
+        <!-- Segmented Tab Selector: Por WhatsApp | Por correo -->
+        <div>
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">Método de invitación</label>
+          <div class="grid grid-cols-2 p-1 bg-stone-100 rounded-xl border border-stone-200/80">
+            <button class="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold bg-white text-teal-800 shadow-xs transition-all border border-stone-200/60">
+              <span class="material-symbols-outlined text-sm text-teal-700">chat</span>
+              Por WhatsApp
+            </button>
+            <button class="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:text-stone-900 transition-all">
+              <span class="material-symbols-outlined text-sm text-stone-400">mail</span>
+              Por correo
+            </button>
+          </div>
+        </div>
+
+        <!-- Input según método (WhatsApp) -->
+        <div>
+          <label class="block text-xs font-semibold text-stone-800 mb-1">
+            Número de WhatsApp del colaborador
+          </label>
+          <div class="relative flex items-center">
+            <div class="absolute left-3 flex items-center gap-1.5 pointer-events-none text-stone-600 font-semibold text-xs border-r border-stone-200 pr-2">
+              <span>🇵🇪</span>
+              <span>+51</span>
+            </div>
+            <input type="tel" 
+                   value="984 321 004" 
+                   placeholder="999 888 777" 
+                   class="w-full pl-20 pr-3.5 py-2.5 rounded-xl border border-teal-600/80 bg-white text-stone-900 text-sm font-medium focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none transition-all shadow-xs" />
+          </div>
+          <p class="text-[11px] text-stone-400 mt-1">Ingresa los 9 dígitos sin el código de país.</p>
+        </div>
+
+        <!-- Selector de Rol -->
+        <div>
+          <label class="block text-xs font-semibold text-stone-800 mb-1">
+            Rol asignado
+          </label>
+          <div class="relative">
+            <select class="w-full appearance-none pl-3.5 pr-9 py-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 text-xs font-semibold focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none transition-all">
+              <option value="ventas" selected>Ventas (atiende chats, leads y deriva pedidos)</option>
+              <option value="dueno">Dueño (acceso total a configuración y WhatsApp)</option>
+              <option value="lectura">Solo lectura (ve estadísticas y reportes)</option>
+            </select>
+            <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-stone-500 flex items-center">
+              <span class="material-symbols-outlined text-base">expand_more</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Checkbox: Recibe los avisos de leads -->
+        <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-stone-50 border border-stone-200/80 cursor-pointer hover:bg-stone-100/70 transition-colors">
+          <input type="checkbox" checked class="mt-0.5 w-4 h-4 text-teal-700 rounded border-stone-300 focus:ring-teal-600 accent-teal-700" />
+          <div class="text-left">
+            <span class="block text-xs font-semibold text-stone-800 leading-tight">Recibe los avisos de leads</span>
+            <span class="block text-[11px] text-stone-500 mt-0.5 leading-snug">
+              Dali le mandará una notificación por WhatsApp cada vez que entre una cotización urgente.
+            </span>
+          </div>
+        </label>
+
+        <!-- Vigencia y aviso -->
+        <div class="flex items-center gap-1.5 text-[11px] text-stone-500 px-0.5">
+          <span class="material-symbols-outlined text-xs text-amber-600">info</span>
+          <span>Le llega un enlace que vence en <strong class="font-semibold text-stone-700">24 h</strong>.</span>
+        </div>
+
+        <!-- Botón Primario a Ancho Completo -->
+        <div class="pt-1">
+          <button class="w-full h-11 bg-teal-700 hover:bg-teal-800 active:scale-[0.99] text-white font-semibold rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm transition-all">
+            <span class="material-symbols-outlined text-lg">send</span>
+            Enviar invitación
+          </button>
+          <button class="w-full py-2 text-xs font-medium text-stone-500 hover:text-stone-700 text-center transition-colors">
+            Cancelar
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- BOTTOM NAVBAR (5 Pestañas Móvil: Inicio, Chats, Leads, Asistente, Más [ACTIVA]) -->
+    <nav class="fixed bottom-0 left-0 right-0 mx-auto w-[390px] h-14 bg-white border-t border-stone-200 z-50 flex items-center justify-around px-1 select-none">
+      <!-- 1. Inicio -->
+      <a href="#" class="flex flex-col items-center justify-center w-16 py-1 text-stone-400 hover:text-stone-600 transition-colors">
+        <span class="material-symbols-outlined text-xl">home</span>
+        <span class="text-[10px] font-medium mt-0.5">Inicio</span>
+      </a>
+
+      <!-- 2. Chats -->
+      <a href="#" class="flex flex-col items-center justify-center w-16 py-1 text-stone-400 hover:text-stone-600 transition-colors relative">
+        <span class="material-symbols-outlined text-xl">forum</span>
+        <span class="text-[10px] font-medium mt-0.5">Chats</span>
+      </a>
+
+      <!-- 3. Leads -->
+      <a href="#" class="flex flex-col items-center justify-center w-16 py-1 text-stone-400 hover:text-stone-600 transition-colors">
+        <span class="material-symbols-outlined text-xl">contacts</span>
+        <span class="text-[10px] font-medium mt-0.5">Leads</span>
+      </a>
+
+      <!-- 4. Asistente -->
+      <a href="#" class="flex flex-col items-center justify-center w-16 py-1 text-stone-400 hover:text-stone-600 transition-colors">
+        <span class="material-symbols-outlined text-xl">smart_toy</span>
+        <span class="text-[10px] font-medium mt-0.5">Asistente</span>
+      </a>
+
+      <!-- 5. Más (ACTIVA EN VERDE TEAL) -->
+      <a href="#" class="flex flex-col items-center justify-center w-16 py-1 text-teal-800 font-semibold transition-colors relative">
+        <span class="material-symbols-outlined text-xl fill-icon text-teal-700">more_horiz</span>
+        <span class="text-[10px] font-bold text-teal-800 mt-0.5">Más</span>
+        <span class="absolute -top-0.5 right-4 w-1.5 h-1.5 rounded-full bg-teal-700"></span>
+      </a>
+    </nav>
+
+  </div>
+</body>
+</html>

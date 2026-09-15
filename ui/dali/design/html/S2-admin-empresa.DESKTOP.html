@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-stone-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Empresa — CONSTROAD (Admin Dali)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            body: ['"Inter"', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              200: '#99F6E4',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="h-full font-sans antialiased text-stone-900 bg-stone-100/70 flex overflow-hidden">
+
+  <!-- SIDEBAR IZQUIERDO DE ADMINISTRACIÓN (256px) -->
+  <aside class="w-64 bg-stone-900 text-stone-300 flex flex-col justify-between shrink-0 h-full border-r border-stone-800 z-30 select-none">
+    <div class="flex flex-col">
+      <!-- Marca Dali Superadmin -->
+      <div class="h-16 flex items-center justify-between px-5 border-b border-stone-800">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-brand-700 text-white font-bold flex items-center justify-center text-lg shadow-sm shadow-brand-900/50">
+            D
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="font-extrabold text-white text-base tracking-tight">Dali</span>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-800 text-brand-400 border border-stone-700 uppercase tracking-wide">Admin</span>
+            </div>
+            <p class="text-[11px] text-stone-400">Plataforma Perú · v2.4</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contexto / Región -->
+      <div class="px-5 py-3 border-b border-stone-800/80 bg-stone-950/40 flex items-center justify-between text-xs">
+        <span class="text-stone-400 font-medium">Lima (AWS sa-east-1)</span>
+        <span class="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          Operativo
+        </span>
+      </div>
+
+      <!-- Navegación Principal Superadmin -->
+      <nav class="p-3 space-y-1">
+        <p class="px-3 pt-3 pb-1.5 text-[10px] font-bold text-stone-400 uppercase tracking-wider">Módulos centrales</p>
+        
+        <!-- Empresas (ACTIVA) -->
+        <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-xl bg-brand-700 text-white font-semibold text-sm shadow-sm shadow-brand-950/40">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-[20px] fill">apartment</span>
+            <span>Empresas</span>
+          </div>
+          <span class="text-xs bg-brand-800 text-brand-100 font-bold px-2 py-0.5 rounded-full">11</span>
+        </a>
+
+        <!-- Verticales -->
+        <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-stone-400 hover:text-stone-200 hover:bg-stone-800/60 transition-colors font-medium text-sm">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-[20px]">category</span>
+            <span>Verticales</span>
+          </div>
+          <span class="text-xs bg-stone-800 text-stone-400 px-2 py-0.5 rounded-full">4</span>
+        </a>
+
+        <!-- Salud del sistema -->
+        <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-stone-400 hover:text-stone-200 hover:bg-stone-800/60 transition-colors font-medium text-sm">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-[20px]">monitor_heart</span>
+            <span>Salud del sistema</span>
+          </div>
+          <span class="text-[11px] font-bold text-emerald-400">99.8%</span>
+        </a>
+
+        <!-- Cuentas y accesos -->
+        <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-stone-400 hover:text-stone-200 hover:bg-stone-800/60 transition-colors font-medium text-sm">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-[20px]">manage_accounts</span>
+            <span>Cuentas</span>
+          </div>
+        </a>
+      </nav>
+    </div>
+
+    <!-- Footer de Superadmin -->
+    <div class="p-3 border-t border-stone-800 bg-stone-950/30">
+      <div class="p-2.5 rounded-xl bg-stone-800/60 border border-stone-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-stone-700 flex items-center justify-center text-xs font-bold text-stone-200">
+            OP
+          </div>
+          <div class="overflow-hidden">
+            <p class="text-xs font-semibold text-stone-200 truncate">Operador Dali</p>
+            <p class="text-[11px] text-stone-400 truncate">Soporte N2 · Perú</p>
+          </div>
+        </div>
+        <button title="Cerrar sesión" class="text-stone-400 hover:text-stone-200 p-1 rounded-lg hover:bg-stone-700/60">
+          <span class="material-symbols-outlined text-[18px]">logout</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CONTENEDOR PRINCIPAL DE CONTENIDO (Flex Column, scrollable) -->
+  <div class="flex-1 flex flex-col h-full overflow-hidden">
+
+    <!-- BARRA SUPERIOR DE PLATAFORMA -->
+    <header class="h-16 bg-white border-b border-stone-200 px-8 flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-3 text-sm">
+        <a href="#" class="inline-flex items-center gap-1.5 font-semibold text-stone-600 hover:text-brand-700 transition-colors">
+          <span class="material-symbols-outlined text-[18px]">arrow_back</span>
+          <span>Volver a Empresas</span>
+        </a>
+        <span class="text-stone-300">/</span>
+        <span class="text-stone-400 font-mono text-xs">ID: EMP-8492</span>
+        <span class="text-stone-300">/</span>
+        <span class="text-stone-700 font-medium">CONSTROAD Asfalto y Pavimentación</span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+          <span>Línea activa (+51 949 376 824)</span>
+        </div>
+        <div class="h-4 w-px bg-stone-200"></div>
+        <button class="p-2 text-stone-500 hover:text-stone-800 rounded-lg hover:bg-stone-100 transition-colors" title="Ver logs en crudo">
+          <span class="material-symbols-outlined text-[20px]">terminal</span>
+        </button>
+        <button class="p-2 text-stone-500 hover:text-stone-800 rounded-lg hover:bg-stone-100 transition-colors" title="Ayuda y documentación interna">
+          <span class="material-symbols-outlined text-[20px]">help_outline</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ÁREA DE CONTENIDO PRINCIPAL (Centrado max-w-[1120px]) -->
+    <main class="flex-1 overflow-y-auto p-8 bg-stone-100/60">
+      <div class="max-w-[1120px] mx-auto space-y-6">
+
+        <!-- CABECERA DE LA EMPRESA -->
+        <div class="bg-white rounded-2xl p-6 border border-stone-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex items-start gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-stone-900 text-white flex items-center justify-center font-black text-xl tracking-tight shrink-0 shadow-md">
+              CR
+            </div>
+            <div>
+              <div class="flex flex-wrap items-center gap-2.5">
+                <h1 class="text-2xl font-extrabold text-stone-900 tracking-tight">CONSTROAD</h1>
+                <span class="px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-700 text-xs font-semibold border border-stone-200">
+                  Asfalto
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 text-xs font-bold border border-teal-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+                  Plan Negocio
+                </span>
+                <span class="text-xs text-stone-400 font-mono">RUC: 20604819201</span>
+              </div>
+              <p class="text-xs text-stone-500 mt-1 flex items-center gap-2">
+                <span>Lima, Perú</span>
+                <span>·</span>
+                <span>Creado el 10 sep 2024</span>
+                <span>·</span>
+                <span class="text-emerald-700 font-medium">Atendiendo activamente</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Acciones de Cabecera -->
+          <div class="flex items-center gap-2.5 shrink-0">
+            <!-- Botón primario: Abrir su panel como el dueño -->
+            <button class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-700 hover:bg-brand-800 text-white text-sm font-bold shadow-sm transition-all active:scale-[0.98]">
+              <span class="material-symbols-outlined text-[19px]">open_in_new</span>
+              <span>Abrir su panel</span>
+            </button>
+
+            <!-- Menú de Acciones de Control -->
+            <div class="relative group">
+              <button class="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-stone-300 hover:bg-stone-50 text-stone-700 transition-colors" title="Más acciones">
+                <span class="material-symbols-outlined text-[20px]">more_vert</span>
+              </button>
+              
+              <!-- Dropdown Hover/Focus simulado -->
+              <div class="hidden group-hover:block absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-lg border border-stone-200 py-1.5 z-40 text-xs font-medium">
+                <button class="w-full text-left px-3.5 py-2 hover:bg-stone-50 text-stone-700 flex items-center gap-2.5">
+                  <span class="material-symbols-outlined text-[18px] text-amber-600">pause_circle</span>
+                  <span>Pausar asistente 30 min</span>
+                </button>
+                <button class="w-full text-left px-3.5 py-2 hover:bg-amber-50 text-amber-800 flex items-center gap-2.5">
+                  <span class="material-symbols-outlined text-[18px] text-amber-600">block</span>
+                  <span>Suspender empresa</span>
+                </button>
+                <div class="my-1 border-t border-stone-100"></div>
+                <button class="w-full text-left px-3.5 py-2 hover:bg-rose-50 text-rose-600 flex items-center gap-2.5 font-semibold">
+                  <span class="material-symbols-outlined text-[18px] text-rose-600">delete</span>
+                  <span>Eliminar empresa</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FILA DE 4 ESTADÍSTICAS -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Stat 1: Conversaciones -->
+          <div class="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between text-stone-500 mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider">Conversaciones</span>
+              <span class="material-symbols-outlined text-[18px] text-stone-400">chat_bubble_outline</span>
+            </div>
+            <div>
+              <div class="flex items-baseline gap-1.5">
+                <span class="text-3xl font-extrabold text-stone-900 tracking-tight">612</span>
+                <span class="text-stone-400 font-semibold text-sm">/ 1 000</span>
+              </div>
+              <!-- Barra de progreso -->
+              <div class="w-full bg-stone-100 h-2 rounded-full mt-3 overflow-hidden">
+                <div class="bg-brand-700 h-2 rounded-full" style="width: 61.2%"></div>
+              </div>
+              <div class="flex items-center justify-between text-[11px] text-stone-500 mt-1.5">
+                <span>61% usado</span>
+                <span>Restan 388 msjs</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stat 2: Leads del mes -->
+          <div class="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between text-stone-500 mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider">Leads del mes</span>
+              <span class="material-symbols-outlined text-[18px] text-stone-400">person_search</span>
+            </div>
+            <div>
+              <div class="flex items-baseline gap-2">
+                <span class="text-3xl font-extrabold text-stone-900 tracking-tight">38</span>
+                <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  +14% vs semana previa
+                </span>
+              </div>
+              <p class="text-[11px] text-stone-500 mt-3">3 listos para cotizar hoy en obra</p>
+              <div class="text-[11px] text-stone-400 mt-1">Tasa de calificación: 84%</div>
+            </div>
+          </div>
+
+          <!-- Stat 3: Miembros -->
+          <div class="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between text-stone-500 mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider">Miembros</span>
+              <span class="material-symbols-outlined text-[18px] text-stone-400">group</span>
+            </div>
+            <div>
+              <div class="flex items-baseline gap-2">
+                <span class="text-3xl font-extrabold text-stone-900 tracking-tight">3</span>
+                <span class="text-xs text-stone-500 font-medium">activos en el panel</span>
+              </div>
+              <div class="flex items-center gap-1.5 mt-3">
+                <div class="flex -space-x-1.5">
+                  <div class="w-6 h-6 rounded-full bg-stone-800 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">JZ</div>
+                  <div class="w-6 h-6 rounded-full bg-brand-700 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">CR</div>
+                  <div class="w-6 h-6 rounded-full bg-amber-600 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">MT</div>
+                </div>
+                <span class="text-[11px] text-stone-500 ml-1">1 admin · 2 ventas</span>
+              </div>
+              <p class="text-[11px] text-stone-400 mt-1">Límite del plan: hasta 5</p>
+            </div>
+          </div>
+
+          <!-- Stat 4: Modelo IA Local -->
+          <div class="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between text-stone-500 mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider">Modelo IA</span>
+              <span class="material-symbols-outlined text-[18px] text-brand-600">psychology</span>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xl font-extrabold text-stone-900 tracking-tight">Local (Qwen)</span>
+              </div>
+              <div class="mt-2.5">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                  Sin costo por mensaje
+                </span>
+              </div>
+              <p class="text-[11px] text-stone-400 mt-2">Latencia: 850ms · Servidor local</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- GRID DE 2 COLUMNAS PARA TARJETAS DETALLADAS -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+          <!-- COLUMNA IZQUIERDA (7 cols) -->
+          <div class="lg:col-span-7 space-y-6">
+
+            <!-- TARJETA: WhatsApp -->
+            <div class="bg-white rounded-2xl p-6 border border-stone-200/80 shadow-sm">
+              <div class="flex items-center justify-between pb-4 border-b border-stone-100">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[20px]">chat</span>
+                  </div>
+                  <div>
+                    <h2 class="text-base font-bold text-stone-900">Canal WhatsApp</h2>
+                    <p class="text-xs text-stone-500">Conexión oficial para atención de prospectos</p>
+                  </div>
+                </div>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
+                  <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                  Conectado
+                </span>
+              </div>
+
+              <div class="py-4 space-y-3">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-stone-500">Número oficial:</span>
+                  <span class="font-mono font-bold text-stone-900 text-base">+51 949 376 824</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-stone-500">Dispositivo vinculado:</span>
+                  <span class="font-medium text-stone-800 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[16px] text-stone-400">phone_iphone</span>
+                    iPhone de José (Admin)
+                  </span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-stone-500">Sesión iniciada:</span>
+                  <span class="text-stone-700 text-xs">10 sep 2024 (hace 4 días)</span>
+                </div>
+              </div>
+
+              <div class="pt-4 border-t border-stone-100 flex items-center justify-end gap-2.5">
+                <button class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-stone-200 hover:bg-stone-50 text-stone-700 text-xs font-semibold transition-colors">
+                  <span class="material-symbols-outlined text-[16px]">qr_code_2</span>
+                  <span>Ver QR</span>
+                </button>
+                <button class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-semibold transition-colors">
+                  <span class="material-symbols-outlined text-[16px]">link_off</span>
+                  <span>Desconectar</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- TARJETA: Configuración del Asistente (Solo lectura con enlace a editar) -->
+            <div class="bg-white rounded-2xl p-6 border border-stone-200/80 shadow-sm">
+              <div class="flex items-center justify-between pb-4 border-b border-stone-100">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[20px]">smart_toy</span>
+                  </div>
+                  <div>
+                    <h2 class="text-base font-bold text-stone-900">Configuración del asistente</h2>
+                    <p class="text-xs text-stone-500">Reglas de negocio y tono en WhatsApp</p>
+                  </div>
+                </div>
+                <!-- Enlace para editar -->
+                <button class="inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-800 hover:underline">
+                  <span class="material-symbols-outlined text-[16px]">edit</span>
+                  <span>Editar configuración</span>
+                </button>
+              </div>
+
+              <div class="py-4 divide-y divide-stone-100 text-xs sm:text-sm">
+                <div class="py-2.5 flex items-center justify-between">
+                  <span class="text-stone-500">Nombre del asistente</span>
+                  <span class="font-bold text-stone-900">Dali</span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between">
+                  <span class="text-stone-500">Tono de voz</span>
+                  <span class="font-medium text-stone-800 bg-stone-100 px-2 py-0.5 rounded text-xs">Cercano (tuteo peruano)</span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between">
+                  <span class="text-stone-500">Da precios en chat</span>
+                  <span class="font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded text-xs border border-amber-200">No (deriva a cotización técnica)</span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between">
+                  <span class="text-stone-500">Avisos urgentes a</span>
+                  <span class="font-semibold text-brand-800 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[15px]">groups</span>
+                    Grupo 'Ventas CONSTROAD'
+                  </span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between">
+                  <span class="text-stone-500">Números de prueba</span>
+                  <span class="font-mono text-stone-700 text-xs">+51 902 049 935</span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between">
+                  <span class="text-stone-500">Pausa al escribir el dueño</span>
+                  <span class="font-bold text-stone-900">30 min de espera</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- TARJETA: Base de Conocimiento -->
+            <div class="bg-white rounded-2xl p-6 border border-stone-200/80 shadow-sm">
+              <div class="flex items-center justify-between pb-4 border-b border-stone-100">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[20px]">menu_book</span>
+                  </div>
+                  <div>
+                    <h2 class="text-base font-bold text-stone-900">Conocimiento</h2>
+                    <p class="text-xs text-stone-500">Datos cargados para que Dali responda y califique</p>
+                  </div>
+                </div>
+                <span class="text-[11px] text-stone-400 font-medium">Vectorizado OK</span>
+              </div>
+
+              <!-- Badges de Datos -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 py-4">
+                <div class="p-3 bg-stone-50 rounded-xl border border-stone-200/60 text-center">
+                  <div class="text-2xl font-black text-stone-900">4</div>
+                  <div class="text-xs text-stone-500 font-medium">Servicios</div>
+                </div>
+                <div class="p-3 bg-stone-50 rounded-xl border border-stone-200/60 text-center">
+                  <div class="text-2xl font-black text-stone-900">22</div>
+                  <div class="text-xs text-stone-500 font-medium">Preguntas</div>
+                </div>
+                <div class="p-3 bg-stone-50 rounded-xl border border-stone-200/60 text-center">
+                  <div class="text-2xl font-black text-stone-900">12</div>
+                  <div class="text-xs text-stone-500 font-medium">FAQ</div>
+                </div>
+                <div class="p-3 bg-stone-50 rounded-xl border border-stone-200/60 text-center">
+                  <div class="text-2xl font-black text-stone-900">8</div>
+                  <div class="text-xs text-stone-500 font-medium">Catálogo</div>
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-stone-100 flex items-center justify-between text-xs">
+                <span class="text-stone-500">Última importación: <strong class="text-stone-700">12 sep 2024, 09:14 a.m.</strong></span>
+                <button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-200 bg-brand-50 hover:bg-brand-100 text-brand-800 font-bold transition-colors">
+                  <span class="material-symbols-outlined text-[16px]">upload_file</span>
+                  <span>Reimportar Excel</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- COLUMNA DERECHA (5 cols) -->
+          <div class="lg:col-span-5 space-y-6">
+
+            <!-- TARJETA: Plan y Pagos -->
+            <div class="bg-white rounded-2xl p-6 border border-stone-200/80 shadow-sm">
+              <div class="flex items-center justify-between pb-3 border-b border-stone-100">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-brand-700 text-[20px]">payments</span>
+                  <h2 class="text-base font-bold text-stone-900">Plan y pagos</h2>
+                </div>
+                <span class="text-xs font-bold text-brand-800 bg-brand-50 px-2 py-0.5 rounded-full">Al día</span>
+              </div>
+
+              <div class="py-4 space-y-3.5">
+                <div class="flex items-baseline justify-between">
+                  <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">Plan actual</span>
+                  <div class="text-right">
+                    <span class="text-lg font-black text-stone-900">Plan Negocio</span>
+                    <span class="text-xs text-stone-500 block">S/ 149 / mes</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between text-xs py-1 border-t border-stone-100">
+                  <span class="text-stone-500">Próxima renovación:</span>
+                  <span class="font-bold text-stone-800">1 oct 2024</span>
+                </div>
+
+                <div class="flex items-center justify-between text-xs py-1 border-t border-stone-100">
+                  <span class="text-stone-500">Último pago registrado:</span>
+                  <span class="font-medium text-stone-800">1 sep 2024 (BCP)</span>
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-stone-100 flex items-center gap-2.5">
+                <button class="flex-1 py-2 px-3 rounded-xl bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold text-center shadow-sm transition-colors flex items-center justify-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px]">receipt_long</span>
+                  <span>Registrar pago</span>
+                </button>
+                <button class="py-2 px-3 rounded-xl border border-stone-200 hover:bg-stone-50 text-stone-700 text-xs font-semibold transition-colors">
+                  Cambiar plan
+                </button>
+              </div>
+            </div>
+
+            <!-- TARJETA: Actividad Reciente -->
+            <div class="bg-white rounded-2xl p-6 border border-stone-200/80 shadow-sm">
+              <div class="flex items-center justify-between pb-3 border-b border-stone-100">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-stone-600 text-[20px]">history</span>
+                  <h2 class="text-base font-bold text-stone-900">Actividad reciente</h2>
+                </div>
+                <span class="text-[11px] text-stone-400">En tiempo real</span>
+              </div>
+
+              <div class="py-3">
+                <ul class="space-y-3.5 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-stone-100">
+                  <!-- Item 1: Escalada -->
+                  <li class="relative pl-6 text-xs">
+                    <span class="absolute left-0 top-1 w-4 h-4 rounded-full bg-amber-100 border-2 border-amber-500"></span>
+                    <div class="flex items-baseline justify-between">
+                      <strong class="text-amber-900 font-bold">Escalada a humano</strong>
+                      <span class="text-[10px] text-stone-400 font-medium">hoy 10:41</span>
+                    </div>
+                    <p class="text-stone-600 mt-0.5">Cliente Luis Paredes pidió hablar con asesor por asfalto 600 m² en Lurín.</p>
+                  </li>
+
+                  <!-- Item 2: Inicio sesión -->
+                  <li class="relative pl-6 text-xs">
+                    <span class="absolute left-0 top-1 w-4 h-4 rounded-full bg-stone-100 border-2 border-stone-400"></span>
+                    <div class="flex items-baseline justify-between">
+                      <strong class="text-stone-800 font-semibold">Inicio de sesión</strong>
+                      <span class="text-[10px] text-stone-400 font-medium">hoy 09:12</span>
+                    </div>
+                    <p class="text-stone-600 mt-0.5">José entró al panel desde su celular (Android · Lima).</p>
+                  </li>
+
+                  <!-- Item 3: Importación Excel -->
+                  <li class="relative pl-6 text-xs">
+                    <span class="absolute left-0 top-1 w-4 h-4 rounded-full bg-emerald-100 border-2 border-emerald-600"></span>
+                    <div class="flex items-baseline justify-between">
+                      <strong class="text-emerald-900 font-semibold">Importación de Excel</strong>
+                      <span class="text-[10px] text-stone-400 font-medium">12 sep 09:14</span>
+                    </div>
+                    <p class="text-stone-600 mt-0.5">41 elementos procesados y vectorizados sin errores.</p>
+                  </li>
+
+                  <!-- Item 4: Vinculación WhatsApp -->
+                  <li class="relative pl-6 text-xs">
+                    <span class="absolute left-0 top-1 w-4 h-4 rounded-full bg-brand-100 border-2 border-brand-700"></span>
+                    <div class="flex items-baseline justify-between">
+                      <strong class="text-brand-900 font-semibold">Número vinculado</strong>
+                      <span class="text-[10px] text-stone-400 font-medium">10 sep</span>
+                    </div>
+                    <p class="text-stone-600 mt-0.5">WhatsApp +51 949 376 824 conectado exitosamente con QR.</p>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- TARJETA: Notas Internas del Operador -->
+            <div class="bg-amber-50/50 rounded-2xl p-6 border border-amber-200/80 shadow-sm">
+              <div class="flex items-center justify-between pb-3 border-b border-amber-200/60">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-amber-800 text-[20px]">lock</span>
+                  <h2 class="text-sm font-bold text-amber-950">Notas internas del operador</h2>
+                </div>
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                  Privado Dali
+                </span>
+              </div>
+
+              <div class="py-3 space-y-2.5">
+                <label for="internal-note" class="sr-only">Nota interna</label>
+                <textarea id="internal-note" rows="3" class="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-brand-700 shadow-inner resize-none font-medium">Cliente piloto. Quiere el pack de restaurante para su otra empresa (Cevichería del Norte).</textarea>
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] text-stone-500 italic">Solo visible para soporte de Dali.</span>
+                  <button class="px-3.5 py-1.5 rounded-lg bg-stone-900 hover:bg-black text-white text-xs font-bold transition-colors shadow-sm">
+                    Guardar nota
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ZONA DE SUSPENSIÓN / PELIGRO -->
+            <div class="bg-rose-50/40 rounded-2xl p-4 border border-rose-200 flex items-center justify-between text-xs">
+              <div>
+                <p class="font-bold text-rose-900">Suspender empresa</p>
+                <p class="text-stone-500 text-[11px]">Pausa el bot y retira acceso al panel.</p>
+              </div>
+              <button class="px-3 py-1.5 rounded-lg border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-bold text-xs transition-colors">
+                Suspender
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </main>
+
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-50" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Entra a Dali · Acceso seguro para tu negocio en Perú</title>
+<!-- Material Symbols Google Font -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            teal: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              200: '#99f6e4',
+              300: '#5eead4',
+              400: '#2dd4bf',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0F766E', // Primario Dali
+              800: '#115e59',
+              900: '#134e4a',
+              950: '#042f2e'
+            },
+            amber: {
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309'
+            },
+            stone: {
+              50: '#fafaf9',
+              100: '#f5f5f4',
+              200: '#e7e5e4',
+              300: '#d6d3d1',
+              400: '#a8a29e',
+              500: '#78716c',
+              600: '#57534e',
+              700: '#44403c',
+              800: '#292524',
+              900: '#1c1917'
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.75rem",
+            "xl": "1rem",
+            "2xl": "1.25rem",
+            "3xl": "1.5rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            "headline": ["Public Sans", "sans-serif"],
+            "display": ["Public Sans", "sans-serif"],
+            "body": ["DM Sans", "sans-serif"],
+            "label": ["DM Sans", "sans-serif"],
+            "mono": ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .num-tabular {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Estilo sutil de micro-textura */
+    .bg-canvas {
+      background-color: #FAFAF9;
+      background-image: radial-gradient(#E7E5E4 0.75px, transparent 0.75px);
+      background-size: 24px 24px;
+    }
+  </style>
+</head>
+<body class="min-h-full bg-canvas text-stone-900 font-body antialiased flex flex-col justify-between selection:bg-teal-100 selection:text-teal-900">
+<!-- ================= TOP APP BAR (Shared Component Minimal Layout) ================= -->
+<header class="w-full bg-white/95 backdrop-blur-sm border-b border-stone-200 sticky top-0 z-30 transition-all">
+<div class="w-full max-w-[834px] mx-auto px-6 h-16 flex items-center justify-between">
+<!-- Brand Logo / Isotipo -->
+<div class="flex items-center gap-3">
+<a class="flex items-center gap-2.5 group transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-700/20 rounded-lg p-1" href="#">
+<div class="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center text-white font-headline font-extrabold text-xl shadow-sm tracking-tighter transition-colors group-hover:bg-teal-800">
+            D
+          </div>
+<div class="flex items-baseline gap-1.5">
+<span class="font-headline text-xl font-bold tracking-tight text-teal-700">dali.pe</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-teal-50 text-teal-800 border border-teal-200/60 font-mono">
+              PERÚ
+            </span>
+</div>
+</a>
+</div>
+<!-- Live Infrastructure Status & Help Action -->
+<div class="flex items-center gap-4">
+<!-- Live Pill: Servidor Lima API -->
+<div class="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-stone-100/90 border border-stone-200 text-xs text-stone-600 font-medium" title="Conexión encriptada con endpoints locales">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+</span>
+<span class="font-mono text-[11px] text-stone-700">Lima (PE) · WhatsApp Cloud API</span>
+</div>
+<!-- Trailing action: Ayuda -->
+<a class="inline-flex items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-teal-700 transition-colors py-1.5 px-2 rounded-lg hover:bg-stone-100 active:scale-95" href="#soporte">
+<span class="material-symbols-outlined text-stone-500" data-icon="help_outline">help_outline</span>
+<span>Ayuda</span>
+</a>
+</div>
+</div>
+</header>
+<!-- ================= MAIN CONTENT CANVAS (Tablet Optimized ~834px Frame) ================= -->
+<main class="w-full flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-10 md:py-14">
+<div class="w-full max-w-[540px] flex flex-col gap-8 mx-auto">
+<!-- ================= PRIMARY LOGIN CARD (WhatsApp Flow - Default) ================= -->
+<section class="bg-white rounded-3xl border border-stone-200/90 shadow-[0_4px_24px_rgba(0,0,0,0.03)] p-6 sm:p-8 relative overflow-hidden">
+<!-- Header del Formulario -->
+<div class="space-y-2 mb-6">
+<div class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-teal-700 bg-teal-50 border border-teal-200/50 px-2.5 py-1 rounded-full">
+<span class="material-symbols-outlined text-teal-700 text-sm" data-icon="lock" style="font-size: 15px;">lock</span>
+            Acceso Seguro
+          </div>
+<h1 class="font-headline text-2xl sm:text-3xl font-bold tracking-tight text-stone-900">
+            Entra a Dali
+          </h1>
+<p class="font-body text-stone-600 text-sm sm:text-base leading-relaxed">
+            Te mandamos un código por WhatsApp o un enlace al correo. Sin contraseñas que recordar.
+          </p>
+</div>
+<!-- Segmented Tab Switcher (WhatsApp / Correo) -->
+<div class="p-1 bg-stone-100 rounded-xl flex items-center gap-1 mb-6 border border-stone-200/70" role="tablist">
+<!-- WhatsApp Tab (Active) -->
+<button aria-selected="true" class="flex-1 py-2 px-3 rounded-lg bg-white text-teal-900 font-medium text-sm shadow-sm flex items-center justify-center gap-2 border border-stone-200/60 transition-all" role="tab" type="button">
+<!-- WhatsApp Chat Icon -->
+<span class="material-symbols-outlined text-teal-700" data-icon="chat" style="font-variation-settings: 'FILL' 1;">chat</span>
+<span>Número de WhatsApp</span>
+</button>
+<!-- Correo Tab (Inactive - anchor to email variant) -->
+<a aria-selected="false" class="flex-1 py-2 px-3 rounded-lg text-stone-600 hover:text-stone-900 font-normal text-sm flex items-center justify-center gap-2 hover:bg-stone-200/50 transition-all" href="#variante-correo" role="tab">
+<span class="material-symbols-outlined text-stone-500" data-icon="mail">mail</span>
+<span>Correo</span>
+</a>
+</div>
+<!-- WhatsApp Input Form Flow -->
+<form class="space-y-5" onsubmit="event.preventDefault();">
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<label class="block font-label text-xs font-semibold tracking-wider text-stone-700 uppercase" for="phone-input">
+                Número de Celular
+              </label>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600 border border-stone-200">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                Perú (+51)
+              </span>
+</div>
+<!-- Input Group with Phone Prefix -->
+<div class="relative flex rounded-xl border border-stone-300 focus-within:border-teal-700 focus-within:ring-2 focus-within:ring-teal-700/20 bg-white transition-all overflow-hidden shadow-xs">
+<div class="inline-flex items-center gap-2 px-3.5 bg-stone-50 border-r border-stone-200 text-stone-700 text-sm font-mono font-medium select-none">
+<!-- Peruvian Flag Representation -->
+<span class="inline-flex w-4 h-3 rounded-[2px] overflow-hidden border border-stone-300 shadow-xs" title="Bandera del Perú">
+<span class="w-1/3 h-full bg-red-600"></span>
+<span class="w-1/3 h-full bg-white"></span>
+<span class="w-1/3 h-full bg-red-600"></span>
+</span>
+<span>+51</span>
+</div>
+<input class="w-full border-0 px-3.5 py-3 text-stone-900 font-mono text-base tracking-wide placeholder:text-stone-400 focus:ring-0 focus:outline-none num-tabular" id="phone-input" maxlength="11" name="phone" placeholder="987 654 321" type="tel" value="984 120 892"/>
+<div class="pr-3 flex items-center pointer-events-none text-teal-700">
+<span class="material-symbols-outlined text-teal-600" data-icon="verified_user" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+</div>
+</div>
+<!-- Trust Helper Message -->
+<div class="flex items-start gap-2 pt-1">
+<span class="material-symbols-outlined text-emerald-600 text-base shrink-0 mt-0.5" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<p class="text-xs text-stone-600 leading-snug">
+                Recibirás un código seguro de 6 dígitos por WhatsApp oficial del asistente Dali.
+              </p>
+</div>
+</div>
+<!-- Botón de Acción Principal -->
+<button class="w-full h-12 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-[0.99] text-white font-headline font-semibold text-base flex items-center justify-center gap-2 shadow-sm shadow-teal-900/10 transition-all focus:outline-none focus:ring-2 focus:ring-teal-700 focus:ring-offset-2" type="submit">
+<span>Enviar código</span>
+<span class="material-symbols-outlined text-xl transition-transform group-hover:translate-x-0.5" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</form>
+<!-- Registro alternativo / Onboarding link -->
+<div class="mt-6 pt-5 border-t border-stone-100 text-center">
+<p class="text-xs sm:text-sm text-stone-600">
+            ¿Tu negocio todavía no está en Dali? 
+            <a class="font-semibold text-teal-700 hover:text-teal-800 hover:underline transition-colors ml-1" href="#registro">
+              Crea tu cuenta
+            </a>
+</p>
+</div>
+<!-- Micro disclaimer legal -->
+<p class="mt-4 text-center text-[11px] text-stone-600 leading-relaxed max-w-sm mx-auto">
+          Al entrar aceptas los <a class="underline hover:text-stone-700" href="#terminos">Términos de servicio</a> y la <a class="underline hover:text-stone-700" href="#privacidad">Política de privacidad</a> de Dali Perú.
+        </p>
+</section>
+<!-- ================= SECOND CARD VARIANT (Magic Link / Correo) ================= -->
+<section class="bg-white/70 backdrop-blur-xs rounded-3xl border border-dashed border-stone-300 p-6 sm:p-7 relative transition-all hover:bg-white hover:border-solid hover:shadow-xs" id="variante-correo">
+<!-- Badge identificador de variante y Enlace Mágico -->
+<div class="flex items-center justify-between mb-4">
+<div class="inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold uppercase tracking-wider text-stone-500 bg-stone-100 px-2.5 py-1 rounded-full border border-stone-200">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-700"></span>
+            VARIANTE: CORREO
+          </div>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60 font-label">
+<span class="material-symbols-outlined text-amber-700 text-sm" data-icon="magic_button">magic_button</span>
+            Enlace mágico
+          </span>
+</div>
+<!-- Segmented Tab with Email Selected -->
+<div class="p-1 bg-stone-100/90 rounded-xl flex items-center gap-1 mb-5 border border-stone-200/60">
+<a class="flex-1 py-1.5 px-3 rounded-lg text-stone-600 hover:text-stone-900 font-normal text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all" href="#">
+<span class="material-symbols-outlined text-stone-400 text-sm" data-icon="chat">chat</span>
+<span>WhatsApp</span>
+</a>
+<button class="flex-1 py-1.5 px-3 rounded-lg bg-white text-stone-900 font-medium text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 border border-stone-200/70" type="button">
+<span class="material-symbols-outlined text-teal-700 text-sm" data-icon="mail" style="font-variation-settings: 'FILL' 1;">mail</span>
+<span>Correo corporativo</span>
+</button>
+</div>
+<!-- Email Form Flow -->
+<form class="space-y-4" onsubmit="event.preventDefault();">
+<div class="space-y-1.5">
+<label class="block font-label text-xs font-semibold tracking-wider text-stone-700 uppercase" for="email-input">
+              Correo corporativo o personal
+            </label>
+<div class="relative flex items-center rounded-xl border border-stone-300 focus-within:border-teal-700 focus-within:ring-2 focus-within:ring-teal-700/20 bg-white transition-all overflow-hidden">
+<span class="pl-3.5 text-stone-400 flex items-center">
+<span class="material-symbols-outlined text-lg" data-icon="alternate_email">alternate_email</span>
+</span>
+<input class="w-full border-0 pl-2.5 pr-4 py-2.5 text-stone-800 font-body text-sm focus:ring-0 focus:outline-none" id="email-input" placeholder="gerencia@constroad.pe" type="email" value="luis.paredes@transportesparedes.pe"/>
+</div>
+<p class="text-xs text-stone-600 flex items-center gap-1.5 pt-0.5">
+<span class="material-symbols-outlined text-stone-400 text-sm" data-icon="forward_to_inbox">forward_to_inbox</span>
+              Te mandamos un enlace instantáneo para acceder sin tener que escribir una clave.
+            </p>
+</div>
+<!-- Secondary Action Button -->
+<button class="w-full h-11 rounded-xl bg-stone-900 hover:bg-stone-800 active:scale-[0.99] text-white font-headline font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-xs" type="submit">
+<span class="material-symbols-outlined text-base" data-icon="send">send</span>
+<span>Enviarme el enlace</span>
+</button>
+</form>
+<!-- Switch back to WhatsApp anchor -->
+<div class="mt-4 pt-3 text-center border-t border-stone-200/50">
+<a class="inline-flex items-center gap-1.5 text-xs text-teal-700 font-medium hover:underline" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="smartphone">smartphone</span>
+            ¿Prefieres entrar por WhatsApp? Usa tu número celular
+          </a>
+</div>
+</section>
+<!-- Security / Credibility Anchor Card -->
+<div class="px-5 py-3.5 rounded-2xl bg-teal-50/60 border border-teal-100 flex items-center justify-between text-xs text-teal-900">
+<div class="flex items-center gap-2.5">
+<span class="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center text-teal-800 shrink-0">
+<span class="material-symbols-outlined text-base" data-icon="security" style="font-variation-settings: 'FILL' 1;">security</span>
+</span>
+<div>
+<p class="font-semibold text-stone-900">Encriptación de extremo a extremo</p>
+<p class="text-stone-600 text-[11px]">Tus conversaciones y pedidos comerciales están respaldados con token seguro.</p>
+</div>
+</div>
+<span class="inline-flex items-center gap-1 font-mono text-[11px] text-teal-800 bg-white px-2 py-1 rounded-md border border-teal-200/60 shrink-0 ml-2 font-medium">
+<span class="material-symbols-outlined text-teal-700 text-xs" data-icon="cloud_done">cloud_done</span>
+          SSL 256-bit
+        </span>
+</div>
+</div>
+</main>
+<!-- ================= FOOTER (Shared Component Alignment) ================= -->
+<footer class="w-full bg-white border-t border-stone-200 mt-auto">
+<div class="w-full max-w-[834px] mx-auto px-6 py-6 flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+<!-- Copyright & Brand description -->
+<div class="flex flex-col sm:flex-row items-center gap-2 text-xs text-stone-600">
+<span class="font-headline font-semibold text-stone-800">© 2025 Dali.pe</span>
+<span class="hidden sm:inline text-stone-300">·</span>
+<span class="font-body">Asistente de WhatsApp para negocios en Perú</span>
+</div>
+<!-- Links and Meta Partner Badge -->
+<div class="flex flex-wrap items-center justify-center gap-4 text-xs font-body text-stone-600">
+<a class="hover:text-teal-700 transition-colors" href="#terminos">Términos de servicio</a>
+<a class="hover:text-teal-700 transition-colors" href="#privacidad">Privacidad</a>
+<a class="hover:text-teal-700 transition-colors" href="#soporte">Soporte</a>
+<!-- Official Partner Tag -->
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-stone-100 text-stone-700 border border-stone-200 font-medium text-[11px]">
+<span class="material-symbols-outlined text-teal-700 text-xs" data-icon="check_circle">check_circle</span>
+          Meta Tech Provider
+        </span>
+</div>
+</div>
+</footer>
+</body></html>

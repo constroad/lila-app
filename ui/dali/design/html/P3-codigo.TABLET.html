@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-stone-100/70">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Código de verificación - Dali (Tablet 834px)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 450, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-symbols-outlined.fill-1 {
+      font-variation-settings: 'FILL' 1, 'wght' 450, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="min-h-screen font-sans text-stone-800 antialiased flex flex-col justify-between p-6 sm:p-10 md:p-12 selection:bg-brand-100 selection:text-brand-900">
+
+  <!-- Header minimalista sin sidebars ni tabs -->
+  <header class="w-full max-w-[620px] mx-auto flex items-center justify-between pt-2 pb-6">
+    <div class="flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-xl shadow-sm tracking-tight">
+        D
+      </div>
+      <div>
+        <span class="text-xl font-extrabold tracking-tight text-stone-900">dali<span class="text-brand-700">.pe</span></span>
+        <span class="block text-[10px] uppercase font-bold tracking-widest text-stone-400">Asistente de WhatsApp</span>
+      </div>
+    </div>
+
+    <!-- Indicador de entorno seguro / oficial -->
+    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span>WhatsApp Cloud API Oficial</span>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal Centrado para Tablet 834px -->
+  <main class="w-full max-w-[620px] mx-auto my-auto flex flex-col gap-6">
+
+    <!-- Tarjeta Principal: Código de verificación de WhatsApp -->
+    <div class="bg-white rounded-3xl p-8 sm:p-10 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.03)] border border-stone-200/80 relative overflow-hidden">
+      
+      <!-- Botón Volver / Cambiar número -->
+      <div class="mb-6">
+        <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-500 hover:text-stone-900 transition-colors group px-1 py-0.5 rounded-md hover:bg-stone-50">
+          <span class="material-symbols-outlined text-base transition-transform group-hover:-translate-x-0.5">arrow_back</span>
+          <span>Cambiar número</span>
+        </button>
+      </div>
+
+      <!-- Encabezado de la pantalla -->
+      <div class="mb-8">
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-700 text-[11px] font-bold tracking-wide uppercase mb-3">
+          <span class="material-symbols-outlined text-[14px]">chat</span>
+          <span>WhatsApp Oficial</span>
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-stone-900 tracking-tight mb-2">
+          Revisa tu WhatsApp
+        </h1>
+        <p class="text-stone-600 text-sm sm:text-base leading-relaxed">
+          Te mandamos un código de 6 dígitos al <span class="font-bold text-stone-900 whitespace-nowrap">+51 902 049 935</span>
+        </p>
+      </div>
+
+      <!-- Formulario de Código OTP -->
+      <form onsubmit="event.preventDefault();" class="space-y-7">
+        
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <label class="block text-[11px] font-bold uppercase tracking-wider text-stone-400">
+              Código de seguridad
+            </label>
+            <span class="text-xs font-medium text-stone-400">6 dígitos</span>
+          </div>
+
+          <!-- 6 Casillas Grandes de Código OTP -->
+          <div class="grid grid-cols-6 gap-2.5 sm:gap-3.5">
+            <!-- Casilla 1 -->
+            <div class="aspect-square rounded-2xl border-2 border-brand-700 bg-brand-50/30 flex items-center justify-center font-mono text-2xl sm:text-3xl font-bold text-stone-900 shadow-sm ring-4 ring-brand-700/10">
+              4
+            </div>
+            <!-- Casilla 2 -->
+            <div class="aspect-square rounded-2xl border-2 border-brand-700 bg-brand-50/30 flex items-center justify-center font-mono text-2xl sm:text-3xl font-bold text-stone-900 shadow-sm ring-4 ring-brand-700/10">
+              8
+            </div>
+            <!-- Casilla 3 -->
+            <div class="aspect-square rounded-2xl border-2 border-brand-700 bg-brand-50/30 flex items-center justify-center font-mono text-2xl sm:text-3xl font-bold text-stone-900 shadow-sm ring-4 ring-brand-700/10">
+              1
+            </div>
+            <!-- Casilla 4 (Activa con cursor titilante) -->
+            <div class="aspect-square rounded-2xl border-2 border-brand-600 bg-white flex items-center justify-center font-mono text-2xl sm:text-3xl font-bold text-brand-700 shadow-sm ring-4 ring-brand-600/15 relative">
+              <span class="inline-block w-0.5 h-7 sm:h-8 bg-brand-700 rounded-full animate-pulse"></span>
+            </div>
+            <!-- Casilla 5 -->
+            <div class="aspect-square rounded-2xl border-2 border-stone-200 bg-stone-50/60 flex items-center justify-center font-mono text-2xl sm:text-3xl font-bold text-stone-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-stone-200"></span>
+            </div>
+            <!-- Casilla 6 -->
+            <div class="aspect-square rounded-2xl border-2 border-stone-200 bg-stone-50/60 flex items-center justify-center font-mono text-2xl sm:text-3xl font-bold text-stone-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-stone-200"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Botón Primario Entrar -->
+        <div>
+          <button type="submit" class="w-full h-13 py-3.5 px-6 rounded-2xl bg-brand-700 hover:bg-brand-800 text-white font-bold text-base shadow-sm hover:shadow transition-all duration-150 flex items-center justify-center gap-2 group active:scale-[0.99]">
+            <span>Entrar</span>
+            <span class="material-symbols-outlined text-xl transition-transform group-hover:translate-x-1">arrow_forward</span>
+          </button>
+        </div>
+
+        <!-- Reenvío de código y opción de correo -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1 border-t border-stone-100 text-xs sm:text-sm">
+          <div class="flex items-center gap-1.5 text-stone-500">
+            <span>¿No llegó?</span>
+            <span class="inline-flex items-center gap-1 font-semibold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">
+              <span class="material-symbols-outlined text-[15px]">schedule</span>
+              <span>Reenviar en 0:42</span>
+            </span>
+          </div>
+
+          <a href="#" class="font-bold text-brand-700 hover:text-brand-800 hover:underline flex items-center gap-1.5 py-1">
+            <span class="material-symbols-outlined text-[16px]">mail</span>
+            <span>Recibirlo por correo</span>
+          </a>
+        </div>
+
+        <!-- Aviso pequeño con candado -->
+        <div class="rounded-xl bg-amber-50/90 border border-amber-200/80 p-3 sm:p-3.5 flex items-start sm:items-center gap-2.5 text-amber-900">
+          <span class="material-symbols-outlined text-amber-600 text-lg shrink-0 mt-0.5 sm:mt-0">lock</span>
+          <p class="text-xs font-medium leading-tight">
+            El código vence en 10 minutos y solo sirve una vez.
+          </p>
+        </div>
+
+      </form>
+    </div>
+
+    <!-- Segunda Tarjeta: Ejemplo etiquetado "Variante: enlace por correo" -->
+    <div class="bg-white/95 rounded-2xl p-5 sm:p-6 border border-dashed border-stone-300 shadow-sm relative">
+      
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-brand-600"></span>
+          <span class="text-xs font-bold uppercase tracking-wider text-stone-500">
+            Variante: enlace por correo
+          </span>
+        </div>
+        <span class="text-[11px] font-medium bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full">
+          Enlace mágico
+        </span>
+      </div>
+
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        
+        <div class="flex items-start gap-3.5">
+          <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 border border-brand-100 flex items-center justify-center shrink-0 mt-0.5">
+            <span class="material-symbols-outlined text-xl">mark_email_read</span>
+          </div>
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-stone-900">
+              Revisa tu correo
+            </h2>
+            <p class="text-xs sm:text-sm text-stone-600 mt-0.5 leading-normal">
+              Abre el enlace que te mandamos a <span class="font-semibold text-stone-900 underline decoration-stone-300">jose@constroad.com</span>. Vence en 15 minutos.
+            </p>
+          </div>
+        </div>
+
+        <div class="w-full sm:w-auto shrink-0 pt-2 sm:pt-0">
+          <button type="button" class="w-full sm:w-auto h-10 px-4 rounded-xl border border-stone-300 hover:border-stone-400 bg-white hover:bg-stone-50 text-stone-700 font-semibold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5 active:scale-[0.98]">
+            <span class="material-symbols-outlined text-[16px]">refresh</span>
+            <span>Reenviar enlace</span>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer Institucional Discreto -->
+  <footer class="w-full max-w-[620px] mx-auto pt-6 pb-2 text-center text-xs text-stone-400 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-stone-200/60 mt-4">
+    <div class="flex items-center gap-1.5">
+      <span class="font-semibold text-stone-500">Dali Perú</span>
+      <span>·</span>
+      <span>Asistencia automatizada para WhatsApp Business</span>
+    </div>
+    <div class="flex items-center gap-4 text-[11px]">
+      <a href="#" class="hover:text-stone-600 transition-colors">Privacidad</a>
+      <a href="#" class="hover:text-stone-600 transition-colors">Términos</a>
+      <a href="#" class="hover:text-stone-600 transition-colors">Ayuda</a>
+    </div>
+  </footer>
+
+</body>
+</html>

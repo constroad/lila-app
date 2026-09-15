@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-100" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Dali - Detalle de Conversación | CONSTROAD</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Outfit:wght@500;600;700&amp;family=Public+Sans:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              teal: "#0F766E",
+              tealDark: "#115E59",
+              tealLight: "#CCFBF1",
+              tealSubtle: "#F0FDFA",
+              amber: "#D97706",
+              amberBg: "#FEF3C7",
+              amberLight: "#FFFBEB"
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "1rem",
+            "xl": "1.5rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Public Sans", "Outfit", "sans-serif"],
+            display: ["Outfit", "Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1;
+    }
+    /* Estilo sutil de fondo de chat estilo WhatsApp en tonos cálidos */
+    .chat-bg {
+      background-color: #F7F5F2;
+      background-image: radial-gradient(#E7E5E4 0.75px, transparent 0.75px), radial-gradient(#E7E5E4 0.75px, #F7F5F2 0.75px);
+      background-size: 24px 24px;
+      background-position: 0 0, 12px 12px;
+    }
+    /* Scroll suave oculto para móvil */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="h-full bg-stone-200 font-body text-stone-900 antialiased flex justify-center selection:bg-teal-100 selection:text-teal-900">
+<!-- Contenedor del dispositivo móvil (390px viewport idóneo) -->
+<main class="w-full max-w-[390px] h-full bg-white flex flex-col relative shadow-2xl overflow-hidden border-x border-stone-300/40">
+<!-- 1. CABECERA MÓVIL FIJA -->
+<header class="sticky top-0 z-30 bg-white border-b border-stone-200 px-3 py-2.5 flex items-center justify-between gap-2 shrink-0">
+<div class="flex items-center gap-2 min-w-0">
+<button aria-label="Volver a los chats" class="text-stone-600 hover:text-stone-900 p-1 -ml-1 rounded-full hover:bg-stone-100 active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<!-- Avatar cliente -->
+<div class="relative shrink-0">
+<div class="w-10 h-10 rounded-full bg-stone-200 border border-stone-300 flex items-center justify-center font-display font-bold text-stone-700 text-sm">
+            LP
+          </div>
+<!-- Dot de estado de canal WhatsApp -->
+<span class="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" title="Conectado vía WhatsApp"></span>
+</div>
+<!-- Info Contacto & Badge -->
+<div class="min-w-0 flex flex-col justify-center">
+<div class="flex items-center gap-1.5">
+<h1 class="font-display font-bold text-stone-900 text-sm tracking-tight truncate">Luis Paredes</h1>
+<!-- Pill Ámbar: Pide atención -->
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+              Pide atención
+            </span>
+</div>
+<p class="text-[11px] text-stone-500 truncate font-normal">
+            Transportes Paredes · <span class="font-mono">+51 902 049 935</span>
+</p>
+</div>
+</div>
+<!-- Acciones Cabecera -->
+<div class="flex items-center gap-0.5 shrink-0 text-stone-600">
+<button aria-label="Llamar o abrir canal WhatsApp" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 active:scale-95 text-stone-700 transition" type="button">
+<span class="material-symbols-outlined text-[20px]">call</span>
+</button>
+<button aria-label="Más opciones" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 active:scale-95 text-stone-700 transition" type="button">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</header>
+<!-- 2. BANNER DE ATENCIÓN PRIORITARIA -->
+<section class="bg-amber-50 border-b border-amber-200 px-3.5 py-2.5 flex items-center justify-between gap-3 shrink-0 shadow-sm">
+<div class="flex items-center gap-2 min-w-0">
+<div class="w-7 h-7 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 shrink-0">
+<span class="material-symbols-outlined text-[18px]">waving_hand</span>
+</div>
+<p class="text-xs text-amber-950 font-medium leading-tight">
+          Pidió hablar con una persona <span class="text-amber-800 font-semibold block sm:inline">hace 12 min</span>
+</p>
+</div>
+<button class="shrink-0 bg-teal-800 hover:bg-teal-900 active:scale-95 text-white font-medium text-xs px-3 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1" type="button">
+<span>Tomar</span>
+<span class="material-symbols-outlined text-[16px]">person_check</span>
+</button>
+</section>
+<!-- ÁREA DE CONTENIDO PRINCIPAL: SCROLLABLE -->
+<div class="flex-1 overflow-y-auto chat-bg flex flex-col px-3 py-2 space-y-3 no-scrollbar">
+<!-- 3. FICHA RESUMEN DE DATOS DEL LEAD CAPTURADOS -->
+<section class="bg-white rounded-xl border border-stone-300 p-3 shadow-sm transition">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-teal-800 text-[18px]">verified</span>
+<span class="font-headline font-bold text-xs uppercase tracking-wider text-stone-700">Ficha del Lead</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-800 border border-teal-200">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-700"></span>
+            Lead calificado
+          </span>
+</div>
+<!-- Rejilla con datos clave identificados -->
+<div class="grid grid-cols-3 gap-2 bg-stone-50 rounded-lg p-2 border border-stone-200 text-xs">
+<div>
+<span class="text-[10px] text-stone-500 uppercase tracking-tight block">Servicio</span>
+<span class="font-medium text-stone-900">Colocación</span>
+</div>
+<div>
+<span class="text-[10px] text-stone-500 uppercase tracking-tight block">Área estimada</span>
+<span class="font-mono font-semibold text-stone-900">3,000 m²</span>
+</div>
+<div>
+<span class="text-[10px] text-stone-500 uppercase tracking-tight block">Ubicación</span>
+<span class="font-medium text-stone-900 truncate block">Lurín, Lima</span>
+</div>
+</div>
+<!-- Acciones rápidas para el asesor -->
+<div class="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
+<button class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-md transition whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[14px]">visibility</span>
+            Ver lead
+          </button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-stone-700 hover:bg-stone-100 rounded-md transition whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[14px]">smart_toy</span>
+            Devolver a Dali
+          </button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-stone-700 hover:bg-stone-100 rounded-md transition whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+            Cerrar
+          </button>
+<button class="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-stone-500 hover:text-stone-800 rounded-md transition" type="button">
+<span class="material-symbols-outlined text-[14px]">note_add</span>
+</button>
+</div>
+</section>
+<!-- 4. TRANSCRIPCIÓN DE CHAT ESTILO WHATSAPP -->
+<!-- Separador de día centrado -->
+<div class="flex items-center justify-center my-1">
+<span class="bg-stone-200/90 text-stone-600 text-[10px] font-medium tracking-wide uppercase px-2.5 py-0.5 rounded-full shadow-xs">
+          HOY
+        </span>
+</div>
+<!-- Mensaje 1: Cliente -->
+<div class="flex flex-col items-start max-w-[85%] self-start">
+<div class="bg-white text-stone-900 rounded-2xl rounded-tl-sm px-3 py-2 shadow-xs border border-stone-200/80 text-sm leading-snug">
+<p>Vi el anuncio en instagram sobre asfalto</p>
+<div class="flex justify-end mt-1 text-[10px] font-mono text-stone-400">
+            10:37
+          </div>
+</div>
+</div>
+<!-- Mensaje 2: Dali (Asistente) -->
+<div class="flex flex-col items-end max-w-[88%] self-end">
+<div class="bg-teal-50/90 text-stone-900 rounded-2xl rounded-tr-sm px-3 py-2 shadow-xs border border-teal-200 text-sm leading-snug">
+<!-- Tag de Dali en la burbuja -->
+<div class="flex items-center gap-1 text-[11px] font-semibold text-teal-800 mb-1 pb-1 border-b border-teal-100">
+<span class="material-symbols-outlined text-[14px]">smart_toy</span>
+<span>Dali · Asistente CONSTROAD</span>
+</div>
+<p>¡Hola! Soy Dali, la asistente de CONSTROAD 👋 ¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.</p>
+<div class="flex items-center justify-end gap-1 mt-1 text-[10px] text-teal-800/80 font-mono">
+<span>10:37</span>
+<span class="material-symbols-outlined text-[14px] text-teal-700 fill">done_all</span>
+</div>
+</div>
+</div>
+<!-- Mensaje 3: Cliente -->
+<div class="flex flex-col items-start max-w-[85%] self-start">
+<div class="bg-white text-stone-900 rounded-2xl rounded-tl-sm px-3 py-2 shadow-xs border border-stone-200/80 text-sm leading-snug">
+<p>Para Lurín 150 m3 cuánto?</p>
+<div class="flex justify-end mt-1 text-[10px] font-mono text-stone-400">
+            10:38
+          </div>
+</div>
+</div>
+<!-- Mensaje 4: Dali (Asistente) -->
+<div class="flex flex-col items-end max-w-[88%] self-end">
+<div class="bg-teal-50/90 text-stone-900 rounded-2xl rounded-tr-sm px-3 py-2 shadow-xs border border-teal-200 text-sm leading-snug">
+<div class="flex items-center gap-1 text-[11px] font-semibold text-teal-800 mb-1 pb-1 border-b border-teal-100">
+<span class="material-symbols-outlined text-[14px]">smart_toy</span>
+<span>Dali · Asistente CONSTROAD</span>
+</div>
+<p>El precio depende de la cantidad y la ubicación; con estos datos el asesor te cotiza. Con gusto te ayudo con venta de mezcla asfáltica. Perfecto: 150 m3, en Lurín.</p>
+<p class="mt-1 text-stone-800">¿Para qué es la mezcla: una vía, un estacionamiento, un patio, una zona industrial…?</p>
+<div class="flex items-center justify-end gap-1 mt-1 text-[10px] text-teal-800/80 font-mono">
+<span>10:38</span>
+<span class="material-symbols-outlined text-[14px] text-teal-700 fill">done_all</span>
+</div>
+</div>
+</div>
+<!-- Mensaje 5: Cliente -->
+<div class="flex flex-col items-start max-w-[85%] self-start">
+<div class="bg-white text-stone-900 rounded-2xl rounded-tl-sm px-3 py-2 shadow-xs border border-stone-200/80 text-sm leading-snug">
+<p>Y si es asfaltado para 3000 m2?</p>
+<div class="flex justify-end mt-1 text-[10px] font-mono text-stone-400">
+            10:40
+          </div>
+</div>
+</div>
+<!-- Mensaje 6: Dali (Asistente) -->
+<div class="flex flex-col items-end max-w-[88%] self-end">
+<div class="bg-teal-50/90 text-stone-900 rounded-2xl rounded-tr-sm px-3 py-2 shadow-xs border border-teal-200 text-sm leading-snug">
+<div class="flex items-center gap-1 text-[11px] font-semibold text-teal-800 mb-1 pb-1 border-b border-teal-100">
+<span class="material-symbols-outlined text-[14px]">smart_toy</span>
+<span>Dali · Asistente CONSTROAD</span>
+</div>
+<p>Perfecto, entonces asfaltado (colocación). Anotado: 3000 m2.</p>
+<p class="mt-1 text-stone-800">¿Qué espesor buscas? 1" para tráfico ligero, 2" para calles y estacionamientos, 3" para tráfico pesado.</p>
+<div class="flex items-center justify-end gap-1 mt-1 text-[10px] text-teal-800/80 font-mono">
+<span>10:40</span>
+<span class="material-symbols-outlined text-[14px] text-teal-700 fill">done_all</span>
+</div>
+</div>
+</div>
+<!-- Mensaje 7: Cliente (Pide humano) -->
+<div class="flex flex-col items-start max-w-[85%] self-start">
+<div class="bg-white text-stone-900 rounded-2xl rounded-tl-sm px-3 py-2 shadow-xs border border-amber-300 text-sm leading-snug">
+<p class="font-medium text-stone-900">quiero hablar con una persona</p>
+<div class="flex justify-end mt-1 text-[10px] font-mono text-stone-400">
+            10:41
+          </div>
+</div>
+</div>
+<!-- Mensaje 8: Dali (Cierre de IA y escalado) -->
+<div class="flex flex-col items-end max-w-[88%] self-end">
+<div class="bg-teal-50/90 text-stone-900 rounded-2xl rounded-tr-sm px-3 py-2 shadow-xs border border-teal-200 text-sm leading-snug">
+<div class="flex items-center gap-1 text-[11px] font-semibold text-teal-800 mb-1 pb-1 border-b border-teal-100">
+<span class="material-symbols-outlined text-[14px]">smart_toy</span>
+<span>Dali · Asistente CONSTROAD</span>
+</div>
+<p>Claro. Un asesor de CONSTROAD te escribe por aquí hoy mismo.</p>
+<div class="flex items-center justify-end gap-1 mt-1 text-[10px] text-teal-800/80 font-mono">
+<span>10:41</span>
+<span class="material-symbols-outlined text-[14px] text-teal-700 fill">done_all</span>
+</div>
+</div>
+</div>
+<!-- Evento del sistema: Dali en pausa -->
+<div class="flex justify-center my-2">
+<div class="bg-stone-100 border border-stone-300/80 text-stone-600 rounded-full px-3 py-1 flex items-center gap-1.5 shadow-xs text-[11px]">
+<span class="material-symbols-outlined text-amber-600 text-[14px]">pause_circle</span>
+<span>Dali se puso en pausa · se avisó al grupo de ventas</span>
+</div>
+</div>
+</div>
+<!-- 5. BARRA DE ENTRADA DE TEXTO PARA EL ASESOR -->
+<div class="bg-white border-t border-stone-200 p-2.5 shrink-0">
+<div class="flex items-center gap-1.5">
+<!-- Respuestas rápidas / Adjuntar -->
+<button aria-label="Respuestas rápidas" class="w-9 h-9 flex items-center justify-center text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-full transition active:scale-95" type="button">
+<span class="material-symbols-outlined text-[22px]">bolt</span>
+</button>
+<!-- Input de mensaje -->
+<div class="flex-1 relative">
+<input class="w-full h-10 pl-3.5 pr-8 bg-stone-50 border border-stone-300 rounded-xl text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-teal-700 focus:border-teal-700 transition" placeholder="Escribe como CONSTROAD…" type="text"/>
+<button aria-label="Adjuntar archivo o cotización" class="absolute right-2 top-2 text-stone-400 hover:text-stone-600" type="button">
+<span class="material-symbols-outlined text-[18px]">attach_file</span>
+</button>
+</div>
+<!-- Botón enviar principal -->
+<button aria-label="Enviar mensaje" class="w-10 h-10 bg-teal-800 hover:bg-teal-900 active:scale-95 text-white rounded-xl flex items-center justify-center shadow-sm transition" type="button">
+<span class="material-symbols-outlined text-[20px]">send</span>
+</button>
+</div>
+<!-- Microcopy informativo del comportamiento de Dali -->
+<p class="text-[10px] text-stone-500 text-center mt-1.5 flex items-center justify-center gap-1 font-normal">
+<span class="material-symbols-outlined text-[13px] text-teal-800">info</span>
+<span>Al escribir, Dali se calla 30 min en esta conversación</span>
+</p>
+</div>
+<!-- 6. BARRA INFERIOR DE 5 PESTAÑAS (Mapeo estricto del Shared Components JSON) -->
+<!-- Contexto activo determinado: "Chats" activo en teal, resto inactivo -->
+<nav class="w-full z-20 flex justify-around items-center px-2 py-1 max-w-md mx-auto bg-white border-t border-stone-200">
+<!-- Inicio -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined text-[22px]">home</span>
+<span class="font-label text-xs font-medium mt-0.5">Inicio</span>
+</a>
+<!-- Chats (ACTIVA según la jerarquía de la pantalla actual) -->
+<a class="flex flex-col items-center justify-center text-teal-800 font-semibold py-1 active:scale-95 transition-transform" href="#">
+<span class="material-symbols-outlined text-[22px] fill">chat</span>
+<span class="font-label text-xs font-semibold mt-0.5">Chats</span>
+</a>
+<!-- Leads -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined text-[22px]">group</span>
+<span class="font-label text-xs font-medium mt-0.5">Leads</span>
+</a>
+<!-- Asistente -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined text-[22px]">smart_toy</span>
+<span class="font-label text-xs font-medium mt-0.5">Asistente</span>
+</a>
+<!-- Más -->
+<a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined text-[22px]">more_horiz</span>
+<span class="font-label text-xs font-medium mt-0.5">Más</span>
+</a>
+</nav>
+</main>
+</body></html>

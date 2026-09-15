@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+
+<html class="scroll-smooth" lang="es-PE">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dali — Asistente de WhatsApp para negocios de Perú</title>
+<!-- Google Fonts: Inter & DM Sans / Public Sans -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Google Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', '"Inter"', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
+          },
+          colors: {
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              200: '#99F6E4',
+              300: '#5EEAD4',
+              400: '#2DD4BF',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+              950: '#042F2E',
+            },
+            amber: {
+              500: '#F59E0B',
+              600: '#D97706',
+              700: '#B45309',
+            },
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+              950: '#0C0A09',
+            }
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Pattern de WhatsApp sutil para el mockup */
+    .wa-bg-pattern {
+      background-color: #EFEAE2;
+      background-image: radial-gradient(#d1c7b7 0.75px, transparent 0.75px);
+      background-size: 16px 16px;
+    }
+  </style>
+</head>
+<body class="bg-stone-50 text-stone-800 font-sans antialiased min-h-screen flex flex-col items-center">
+<!-- Contenedor optimizado para visualización en tablet de 834px -->
+<div class="w-full max-w-[834px] min-h-screen bg-white shadow-sm flex flex-col">
+<!-- 1. BARRA SUPERIOR (Pública, sin pestañas del panel) -->
+<header class="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-stone-200/80 px-6 py-3.5 transition-all">
+<div class="flex items-center justify-between">
+<!-- Logo dali.pe -->
+<div class="flex items-center gap-2">
+<div class="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-xl tracking-tight shadow-sm">
+            D
+          </div>
+<div class="flex items-baseline gap-1.5"><span class="text-xl font-extrabold tracking-tight text-stone-950">dali</span><span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">.pe (Perú)</span></div>
+</div>
+<!-- Enlaces centrales -->
+<nav class="flex items-center gap-6 text-sm font-medium text-stone-600">
+<a class="hover:text-teal-700 transition-colors" href="#como-funciona">Cómo funciona</a>
+<a class="hover:text-teal-700 transition-colors" href="#rubros">Rubros</a>
+<a class="hover:text-teal-700 transition-colors" href="#precios">Precios</a>
+</nav>
+<!-- Botones de acción -->
+<div class="flex items-center gap-3">
+<button class="text-sm font-semibold text-stone-700 hover:text-stone-900 px-3 py-2 rounded-lg hover:bg-stone-100 transition-colors" type="button">
+            Entrar
+          </button>
+<a class="inline-flex items-center justify-center text-sm font-bold text-white bg-teal-700 hover:bg-teal-800 active:scale-[0.98] transition-all px-4 py-2 rounded-lg shadow-sm" href="#probar">
+            Probar gratis
+          </a>
+</div>
+</div>
+</header>
+<!-- 2. HERO SECTION -->
+<section class="px-7 pt-10 pb-12 bg-gradient-to-b from-teal-50/40 via-white to-stone-50 border-b border-stone-200/70">
+<div class="space-y-8">
+<!-- Textos Hero -->
+<div class="text-center max-w-2xl mx-auto space-y-4">
+<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-100/70 border border-teal-200 text-teal-900 text-xs font-semibold">
+<span class="w-2 h-2 rounded-full bg-teal-600 animate-pulse"></span>
+            Asistente con IA conectado al WhatsApp oficial de tu negocio
+          </div>
+<h1 class="text-3xl sm:text-4xl font-extrabold text-stone-950 tracking-tight leading-[1.2]">
+            Tu negocio responde por WhatsApp <br class="hidden sm:inline"/>
+<span class="text-teal-700 underline decoration-teal-300 decoration-wavy decoration-2">aunque tú estés en obra</span>
+</h1>
+<p class="text-base sm:text-lg text-stone-600 font-normal leading-relaxed max-w-xl mx-auto">Dali atiende a tus clientes, junta los datos de cada pedido y te avisa al instante. <strong class="text-stone-900 font-semibold">Tú solo cotizas.</strong></p>
+<!-- CTAs -->
+<div class="flex items-center justify-center gap-3 pt-2">
+<a class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-teal-700 text-white font-bold text-sm hover:bg-teal-800 shadow-md shadow-teal-700/20 active:scale-[0.98] transition-all" href="#probar">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+              Probar gratis por 14 días
+            </a>
+<a class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-stone-800 font-semibold text-sm border border-stone-300 hover:bg-stone-50 shadow-sm active:scale-[0.98] transition-all" href="#demo">
+<span class="material-symbols-outlined text-[20px] text-teal-700">play_circle</span>
+              Ver una demo
+            </a>
+</div>
+<div class="flex items-center justify-center gap-4 text-xs text-stone-500 pt-1">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px] text-teal-700">check_circle</span> Sin tarjeta de crédito</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px] text-teal-700">check_circle</span> Conexión en 2 minutos</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px] text-teal-700">check_circle</span> Español de Perú con tuteo</span>
+</div>
+</div>
+<!-- Maqueta interactiva visual de WhatsApp Real -->
+<div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl border border-stone-300 overflow-hidden ring-1 ring-black/5">
+<!-- WhatsApp Header -->
+<div class="bg-teal-800 text-white px-4 py-3 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="relative">
+<div class="w-10 h-10 rounded-full bg-stone-900 text-white flex items-center justify-center font-bold text-xs border border-teal-600 shadow-inner">
+                  CR
+                </div>
+<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-teal-800"></span>
+</div>
+<div>
+<div class="flex items-center gap-1.5 leading-tight">
+<span class="font-bold text-sm tracking-tight">CONSTROAD Asfaltos</span>
+<span class="material-symbols-outlined text-[15px] text-teal-300 fill">verified</span>
+</div>
+<p class="text-[11px] text-teal-100 flex items-center gap-1">
+<span>en línea</span>
+<span class="opacity-60">• Dali Asistente Oficial</span>
+</p>
+</div>
+</div>
+<div class="flex items-center gap-2 text-teal-100">
+<span class="material-symbols-outlined text-[20px] cursor-pointer hover:text-white">call</span>
+<span class="material-symbols-outlined text-[20px] cursor-pointer hover:text-white">more_vert</span>
+</div>
+</div>
+<!-- WhatsApp Chat Body -->
+<div class="wa-bg-pattern p-4 space-y-3 min-h-[300px] flex flex-col justify-end text-[13px] leading-relaxed">
+<!-- Fecha -->
+<div class="text-center my-1">
+<span class="bg-white/80 backdrop-blur-sm text-stone-600 text-[10px] font-medium px-2.5 py-1 rounded-full uppercase tracking-wider shadow-2xs">
+                Hoy · Lima, Perú
+              </span>
+</div>
+<!-- Burbuja 1: Cliente -->
+<div class="flex justify-end">
+<div class="bg-[#E7FFDB] text-stone-900 px-3.5 py-2 rounded-2xl rounded-tr-xs max-w-[82%] shadow-2xs relative">
+<p>Necesito asfaltar 600 m² en Lurín</p>
+<div class="flex items-center justify-end gap-1 mt-0.5 text-[10px] text-stone-500 font-mono">
+<span>10:41 a. m.</span>
+<span class="text-teal-600 font-bold">✓✓</span>
+</div>
+</div>
+</div>
+<!-- Burbuja 2: Dali responde -->
+<div class="flex justify-start">
+<div class="bg-white text-stone-900 px-3.5 py-2.5 rounded-2xl rounded-tl-xs max-w-[88%] shadow-2xs space-y-1">
+<div class="flex items-center gap-1 text-[11px] font-bold text-teal-800 uppercase tracking-wider">
+<span class="material-symbols-outlined text-[14px]">smart_toy</span>
+<span>Dali (Asistente de CONSTROAD)</span>
+</div>
+<p>
+                  ¡Hola! Soy Dali, la asistente de CONSTROAD 👋 Con gusto te ayudamos. ¿Qué espesor buscas? 1", 2" o 3"…
+                </p>
+<div class="flex items-center justify-end text-[10px] text-stone-400 font-mono pt-0.5">
+<span>10:41 a. m.</span>
+</div>
+</div>
+</div>
+<!-- Burbuja 3: Cliente responde -->
+<div class="flex justify-end">
+<div class="bg-[#E7FFDB] text-stone-900 px-3.5 py-2 rounded-2xl rounded-tr-xs max-w-[82%] shadow-2xs">
+<p class="font-medium">2 pulgadas</p>
+<div class="flex items-center justify-end gap-1 mt-0.5 text-[10px] text-stone-500 font-mono">
+<span>10:42 a. m.</span>
+<span class="text-teal-600 font-bold">✓✓</span>
+</div>
+</div>
+</div>
+<!-- Burbuja 4: Dali pregunta siguiente -->
+<div class="flex justify-start">
+<div class="bg-white text-stone-900 px-3.5 py-2.5 rounded-2xl rounded-tl-xs max-w-[88%] shadow-2xs space-y-1">
+<div class="flex items-center gap-1 text-[11px] font-bold text-teal-800 uppercase tracking-wider">
+<span class="material-symbols-outlined text-[14px]">smart_toy</span>
+<span>Dali</span>
+</div>
+<p>
+                  Perfecto: espesor 2". ¿La base ya está preparada (afirmado compactado) o es terreno natural?
+                </p>
+<div class="flex items-center justify-end text-[10px] text-stone-400 font-mono pt-0.5">
+<span>10:42 a. m.</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Barra de aviso de lead capturado abajo del mock -->
+<div class="bg-stone-900 text-white px-4 py-2.5 flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400"></span><span class="text-stone-300">Aviso al WhatsApp del dueño: <strong class="text-white font-medium">Lead calificado (600 m² · Lurín)</strong></span></div><span class="font-mono text-teal-400 text-[11px] font-bold">Listo para cotizar</span></div>
+</div>
+</div>
+</section>
+<!-- 3. FRANJA DE CONFIANZA -->
+<section class="py-8 px-6 bg-stone-100/70 border-b border-stone-200">
+<div class="text-center space-y-3">
+<p class="text-xs font-semibold uppercase tracking-wider text-stone-500">
+          Ya atiende a empresas en Lima y provincias
+        </p>
+<div class="flex items-center justify-center gap-8 sm:gap-14 flex-wrap">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded bg-stone-800"></span>
+<span class="text-base font-extrabold tracking-tight text-stone-800">CONSTROAD</span>
+<span class="text-[11px] text-stone-500 font-medium hidden sm:inline">(Asfalto &amp; Obras)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded bg-amber-600"></span>
+<span class="text-base font-extrabold tracking-tight text-stone-800">INFRAMAQ</span>
+<span class="text-[11px] text-stone-500 font-medium hidden sm:inline">(Maquinaria pesada)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded bg-teal-600"></span>
+<span class="text-base font-extrabold tracking-tight text-stone-800">GLOBOFAST</span>
+<span class="text-[11px] text-stone-500 font-medium hidden sm:inline">(Logística &amp; Envíos)</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. CÓMO FUNCIONA EN 3 PASOS -->
+<section class="py-14 px-8 border-b border-stone-200" id="como-funciona">
+<div class="space-y-10">
+<div class="text-center max-w-xl mx-auto space-y-2">
+<span class="text-xs font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
+            Fácil y sin enredos técnicos
+          </span>
+<h2 class="text-2xl sm:text-3xl font-bold text-stone-950 tracking-tight">
+            Cómo funciona Dali en 3 pasos
+          </h2>
+<p class="text-sm sm:text-base text-stone-600">
+            No necesitas saber de programación. Si sabes mandar un mensaje por WhatsApp, puedes configurar a Dali.
+          </p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Paso 1 -->
+<div class="bg-stone-50 rounded-2xl p-6 border border-stone-200/80 hover:border-teal-500/50 hover:shadow-md transition-all space-y-4">
+<div class="w-12 h-12 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-lg">
+<span class="material-symbols-outlined text-[28px]">qr_code_scanner</span>
+</div>
+<div class="space-y-1.5">
+<span class="text-xs font-bold text-teal-700 uppercase tracking-wider">Paso 01</span>
+<h3 class="text-lg font-bold text-stone-900">1. Conecta tu WhatsApp</h3>
+<p class="text-sm text-stone-600 leading-relaxed">
+                Escaneas un código QR desde la app de WhatsApp de tu empresa como si abrieras WhatsApp Web. Listo en 2 minutos.
+              </p>
+</div>
+<div class="pt-2 text-xs font-medium text-stone-500 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-teal-600">timer</span>
+              2 minutos sin cambiar de chip
+            </div>
+</div>
+<!-- Paso 2 -->
+<div class="bg-stone-50 rounded-2xl p-6 border border-stone-200/80 hover:border-teal-500/50 hover:shadow-md transition-all space-y-4">
+<div class="w-12 h-12 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-lg">
+<span class="material-symbols-outlined text-[28px]">description</span>
+</div>
+<div class="space-y-1.5">
+<span class="text-xs font-bold text-amber-700 uppercase tracking-wider">Paso 02</span>
+<h3 class="text-lg font-bold text-stone-900">2. Cuéntale de tu negocio</h3>
+<p class="text-sm text-stone-600 leading-relaxed">
+                Sube tu catálogo en Excel o llena la ficha rápida: qué servicios das, qué preguntas hacerle al cliente y qué datos juntar.
+              </p>
+</div>
+<div class="pt-2 text-xs font-medium text-stone-500 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-amber-600">upload_file</span>
+              Plantilla lista para tu rubro
+            </div>
+</div>
+<!-- Paso 3 -->
+<div class="bg-stone-50 rounded-2xl p-6 border border-stone-200/80 hover:border-teal-500/50 hover:shadow-md transition-all space-y-4">
+<div class="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-lg">
+<span class="material-symbols-outlined text-[28px]">notifications_active</span>
+</div>
+<div class="space-y-1.5">
+<span class="text-xs font-bold text-emerald-700 uppercase tracking-wider">Paso 03</span>
+<h3 class="text-lg font-bold text-stone-900">3. Dali atiende y te avisa</h3>
+<p class="text-sm text-stone-600 leading-relaxed">
+                Dali guía la conversación con amabilidad y te manda el resumen ordenado a tu celular con el metrado, lugar y teléfono.
+              </p>
+</div>
+<div class="pt-2 text-xs font-medium text-stone-500 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+              Leads listos para cotizar
+            </div>
+</div>
+</div>
+</div>
+</section>
+<!-- 5. UN ASISTENTE PARA CADA RUBRO -->
+<section class="py-14 px-8 bg-stone-50/60 border-b border-stone-200" id="rubros">
+<div class="space-y-10">
+<div class="text-center max-w-xl mx-auto space-y-2">
+<span class="text-xs font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
+            Vocabulario y lógica peruana
+          </span>
+<h2 class="text-2xl sm:text-3xl font-bold text-stone-950 tracking-tight">
+            Un asistente preparado para cada rubro
+          </h2>
+<p class="text-sm sm:text-base text-stone-600">
+            Dali no da respuestas genéricas de robot. Conoce los términos y preguntas clave de las industrias operativas en Perú.
+          </p>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+<!-- Tarjeta 1: Asfalto y construcción -->
+<div class="bg-white p-6 rounded-2xl border border-stone-200 shadow-2xs hover:shadow-md transition-all space-y-3">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
+<span class="material-symbols-outlined">construction</span>
+</div>
+<div>
+<h3 class="font-bold text-base text-stone-900">Asfalto y construcción</h3>
+<span class="text-xs font-semibold text-teal-700">Guion de cotización técnica</span>
+</div>
+</div>
+<p class="text-xs sm:text-sm text-stone-600 leading-relaxed">
+              Junta área (m²), distrito o provincia, espesor de carpeta (1", 2", 3"), estado de base y requerimiento de imprimación (MC-30 o emulsión).
+            </p>
+<div class="bg-stone-50 rounded-lg p-2.5 text-xs text-stone-700 font-mono flex items-center gap-2 border border-stone-200">
+<span class="material-symbols-outlined text-[16px] text-teal-700">chat</span>
+              «¿La base ya está afirmada o requiere nivelación?»
+            </div>
+</div>
+<!-- Tarjeta 2: Restaurantes -->
+<div class="bg-white p-6 rounded-2xl border border-stone-200 shadow-2xs hover:shadow-md transition-all space-y-3">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-orange-50 text-orange-700 flex items-center justify-center">
+<span class="material-symbols-outlined">restaurant</span>
+</div>
+<div>
+<h3 class="font-bold text-base text-stone-900">Restaurantes y pollerías</h3>
+<span class="text-xs font-semibold text-orange-700">Pedidos, reservas y delivery</span>
+</div>
+</div>
+<p class="text-xs sm:text-sm text-stone-600 leading-relaxed">
+              Toma pedidos del menú del día, complementos, dirección exacta de reparto, consulta método de pago (Yape, Plin, efectivo) y confirma comensales.
+            </p>
+<div class="bg-stone-50 rounded-lg p-2.5 text-xs text-stone-700 font-mono flex items-center gap-2 border border-stone-200">
+<span class="material-symbols-outlined text-[16px] text-orange-700">chat</span>
+              «¿Para cuántas personas y a qué dirección enviamos?»
+            </div>
+</div>
+<!-- Tarjeta 3: Grifos y lubricentros -->
+<div class="bg-white p-6 rounded-2xl border border-stone-200 shadow-2xs hover:shadow-md transition-all space-y-3">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center">
+<span class="material-symbols-outlined">local_gas_station</span>
+</div>
+<div>
+<h3 class="font-bold text-base text-stone-900">Grifos y lubricentros</h3>
+<span class="text-xs font-semibold text-blue-700">Citas de mantenimiento y precios</span>
+</div>
+</div>
+<p class="text-xs sm:text-sm text-stone-600 leading-relaxed">
+              Informa precios del día de combustibles y lubricantes, agenda citas para cambio de aceite, filtros y chequea horarios de atención por sede.
+            </p>
+<div class="bg-stone-50 rounded-lg p-2.5 text-xs text-stone-700 font-mono flex items-center gap-2 border border-stone-200">
+<span class="material-symbols-outlined text-[16px] text-blue-700">chat</span>
+              «¿Qué marca de auto y qué kilometraje tiene tu vehículo?»
+            </div>
+</div>
+<!-- Tarjeta 4: Servicios profesionales -->
+<div class="bg-white p-6 rounded-2xl border border-stone-200 shadow-2xs hover:shadow-md transition-all space-y-3">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center">
+<span class="material-symbols-outlined">handyman</span>
+</div>
+<div>
+<h3 class="font-bold text-base text-stone-900">Servicios y talleres</h3>
+<span class="text-xs font-semibold text-purple-700">Calificación previa para cotizar</span>
+</div>
+</div>
+<p class="text-xs sm:text-sm text-stone-600 leading-relaxed">
+              Filtra clientes curiosos de los que realmente tienen urgencia. Junta requerimiento, zona, fotos de la falla y avisa al técnico de turno.
+            </p>
+<div class="bg-stone-50 rounded-lg p-2.5 text-xs text-stone-700 font-mono flex items-center gap-2 border border-stone-200">
+<span class="material-symbols-outlined text-[16px] text-purple-700">chat</span>
+              «¿Para cuándo necesitas el servicio y en qué distrito?»
+            </div>
+</div>
+</div>
+</div>
+</section>
+<!-- 6. LO QUE NO HACE (HONESTIDAD) -->
+<section class="py-14 px-8 border-b border-stone-200 bg-white">
+<div class="space-y-8 max-w-2xl mx-auto">
+<div class="text-center space-y-2">
+<span class="text-xs font-bold uppercase tracking-wider text-stone-600 bg-stone-100 px-2.5 py-1 rounded-full border border-stone-200">
+            Transparencia total
+          </span>
+<h2 class="text-2xl sm:text-3xl font-bold text-stone-950 tracking-tight">
+            Lo que Dali NO hace (por tu seguridad)
+          </h2>
+<p class="text-sm text-stone-600">
+            A nadie le gusta una IA que promete imposibles o da precios equivocados a los clientes. Dali está diseñado con reglas claras y estrictas.
+          </p>
+</div>
+<div class="space-y-3.5">
+<!-- Item 1 -->
+<div class="flex items-start gap-3.5 p-4 rounded-xl bg-rose-50/50 border border-rose-100">
+<div class="w-8 h-8 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[20px]">block</span>
+</div>
+<div>
+<h3 class="text-sm font-bold text-stone-900">No inventa precios cerrados ni descuentos</h3>
+<p class="text-xs sm:text-sm text-stone-600 mt-0.5">
+                Dali junta los datos técnicos que tú necesitas (m², ubicación, espesor). No da presupuestos finales a menos que tú definas una tarifa fija exacta en el catálogo.
+              </p>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex items-start gap-3.5 p-4 rounded-xl bg-rose-50/50 border border-rose-100">
+<div class="w-8 h-8 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[20px]">event_busy</span>
+</div>
+<div>
+<h3 class="text-sm font-bold text-stone-900">No promete fechas de entrega ni disponibilidad falsa</h3>
+<p class="text-xs sm:text-sm text-stone-600 mt-0.5">
+                Consulta la fecha estimada en la que el cliente planea su obra o pedido, pero aclara con cordialidad que el despacho formal lo confirma el asesor técnico de tu empresa.
+              </p>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="flex items-start gap-3.5 p-4 rounded-xl bg-teal-50/60 border border-teal-100">
+<div class="w-8 h-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[20px]">person_check</span>
+</div>
+<div>
+<h3 class="text-sm font-bold text-stone-900">Pasa de inmediato a una persona cuando el cliente lo pide</h3>
+<p class="text-xs sm:text-sm text-stone-600 mt-0.5">
+                Si un cliente escribe "quiero hablar con el dueño" o "pásame con un asesor", Dali se calla automáticamente por 30 minutos y te manda una notificación prioritaria.
+              </p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- 7. PRECIOS -->
+<section class="py-14 px-8 bg-stone-50 border-b border-stone-200" id="precios">
+<div class="space-y-10">
+<div class="text-center max-w-xl mx-auto space-y-2">
+<span class="text-xs font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
+            Planes claros en Soles (PEN)
+          </span>
+<h2 class="text-2xl sm:text-3xl font-bold text-stone-950 tracking-tight">
+            Planes simples para negocios en marcha
+          </h2>
+<p class="text-sm sm:text-base text-stone-600">
+            Paga en soles por transferencia BCP, Interbank o Yape. Sin contratos de permanencia obligatoria.
+          </p>
+</div>
+<!-- Tabla de 2 Planes en columnas -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+<!-- Plan Negocio -->
+<div class="bg-white rounded-2xl p-6 border-2 border-teal-700 shadow-sm relative space-y-6 flex flex-col justify-between">
+<div class="absolute -top-3 right-6 bg-teal-700 text-white text-[11px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full shadow-xs">
+              Más popular en Perú
+            </div>
+<div class="space-y-4">
+<div>
+<h3 class="text-xl font-bold text-stone-900">Plan Negocio</h3>
+<p class="text-xs text-stone-500 mt-0.5">Para negocios con una línea de WhatsApp principal</p>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="text-base font-bold text-stone-600">S/</span>
+<span class="text-4xl font-extrabold text-stone-950 tracking-tight">149</span>
+<span class="text-sm text-stone-500 font-medium">/ mes</span>
+</div>
+<ul class="space-y-2.5 text-xs sm:text-sm text-stone-700 pt-2 border-t border-stone-100">
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span><strong>1 número de WhatsApp</strong> conectado</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span>Hasta <strong>1 000 conversaciones</strong> al mes</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span>Acceso a <strong>todos los rubros</strong> y guiones</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span>Avisos de leads a tu WhatsApp personal</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span>Carga de catálogo por Excel ilimitada</span>
+</li>
+</ul>
+</div>
+<a class="w-full text-center py-3 rounded-xl bg-teal-700 text-white font-bold text-sm hover:bg-teal-800 shadow-sm active:scale-[0.98] transition-all" href="#probar">
+              Probar 14 días gratis
+            </a>
+</div>
+<!-- Plan Crecimiento -->
+<div class="bg-white rounded-2xl p-6 border border-stone-200 shadow-2xs space-y-6 flex flex-col justify-between">
+<div class="space-y-4">
+<div>
+<h3 class="text-xl font-bold text-stone-900">Plan Crecimiento</h3>
+<p class="text-xs text-stone-500 mt-0.5">Para empresas con varias sedes o equipo comercial</p>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="text-base font-bold text-stone-600">S/</span>
+<span class="text-4xl font-extrabold text-stone-950 tracking-tight">299</span>
+<span class="text-sm text-stone-500 font-medium">/ mes</span>
+</div>
+<ul class="space-y-2.5 text-xs sm:text-sm text-stone-700 pt-2 border-t border-stone-100">
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span><strong>3 números de WhatsApp</strong> conectados</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span>Hasta <strong>5 000 conversaciones</strong> al mes</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span>Gestión para <strong>equipo comercial y vendedores</strong></span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span>Derivación por zonas (Norte, Sur, Provincias)</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-teal-700 font-bold">check</span>
+<span>Soporte prioritario por WhatsApp</span>
+</li>
+</ul>
+</div>
+<a class="w-full text-center py-3 rounded-xl bg-stone-900 text-white font-bold text-sm hover:bg-stone-800 shadow-sm active:scale-[0.98] transition-all" href="#probar">
+              Elegir Plan Crecimiento
+            </a>
+</div>
+</div>
+<!-- Banner Setup Opcional -->
+<div class="max-w-2xl mx-auto bg-amber-50/80 border border-amber-200 rounded-2xl p-5 flex items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined">support_agent</span>
+</div>
+<div>
+<h4 class="text-sm font-bold text-stone-900">¿No tienes tiempo para configurarlo?</h4>
+<p class="text-xs text-stone-600">Setup completo por nuestro equipo: cargamos tu catálogo, preguntas y dejamos a Dali 100% probado.</p>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="text-xs font-semibold text-stone-500 uppercase block">Pago único</span>
+<span class="text-base font-extrabold text-stone-900">S/ 300</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 8. CTA FINAL -->
+<section class="py-16 px-8 bg-gradient-to-br from-teal-800 to-teal-950 text-white text-center" id="probar">
+<div class="max-w-xl mx-auto space-y-6">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-700/60 border border-teal-500/40 text-teal-200 text-xs font-semibold">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+          Prueba gratuita sin compromisos
+        </div>
+<h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+          Empieza hoy, sin tarjeta
+        </h2>
+<p class="text-sm sm:text-base text-teal-100 leading-relaxed max-w-lg mx-auto">
+          Conecta tu WhatsApp en 2 minutos y comprueba cómo Dali recopila los datos de tus clientes mientras atiendes tus obras o tu negocio.
+        </p>
+<div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+<button class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-emerald-500 text-stone-950 font-extrabold text-sm hover:bg-emerald-400 active:scale-[0.98] shadow-lg shadow-emerald-950/40 transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+            Probar gratis por WhatsApp
+          </button>
+<a class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-teal-900/80 text-white font-semibold text-sm border border-teal-700 hover:bg-teal-900 transition-all" href="https://wa.me/51949376824" rel="noopener" target="_blank"><span class="material-symbols-outlined text-[18px]">support_agent</span> Hablar con un asesor en Lima</a>
+</div>
+<p class="text-xs text-teal-300/80 pt-1">
+          Dali no cobra nada durante los primeros 14 días. Puedes cancelar cuando quieras.
+        </p>
+</div>
+</section>
+<!-- 9. FOOTER -->
+<footer class="mt-auto bg-stone-900 text-stone-400 text-xs py-10 px-8 border-t border-stone-800">
+<div class="space-y-6">
+<div class="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-stone-800 pb-6">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-lg bg-teal-700 text-white flex items-center justify-center font-bold text-sm">
+              D
+            </div>
+<span class="text-base font-extrabold text-white tracking-tight">Dali</span>
+<span class="text-stone-500 font-normal">· un producto de Constroad Ingenieros · Lima, Perú</span>
+</div>
+<div class="flex items-center gap-6 text-stone-400">
+<a class="hover:text-white transition-colors" href="#">Términos del servicio</a>
+<a class="hover:text-white transition-colors" href="#">Privacidad</a>
+<a class="hover:text-teal-400 flex items-center gap-1 transition-colors" href="https://wa.me/51949376824">
+<span class="material-symbols-outlined text-[14px]">chat</span>
+              WhatsApp de soporte (+51 949 376 824)
+            </a>
+</div>
+</div>
+<div class="flex flex-col sm:flex-row items-center justify-between gap-2 text-stone-500 text-[11px]">
+<p>© 2025 Dali.pe — Desarrollado para empresas y contratistas de Lima y todo el Perú.</p>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<span>Servicio WhatsApp Cloud API operativo</span>
+</div>
+</div>
+</div>
+</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-stone-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leads - Dali CONSTROAD (Tablet 834px)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Plus Jakarta Sans & Material Symbols Outlined -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          },
+          colors: {
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              200: '#99F6E4',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+              950: '#042F2E',
+            },
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+              950: '#0C0A09',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 450, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-symbols-outlined.fill-1 {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Custom scrollbar for horizontal kanban */
+    .kanban-scroll::-webkit-scrollbar {
+      height: 6px;
+    }
+    .kanban-scroll::-webkit-scrollbar-track {
+      background: #f1f1ef;
+      border-radius: 9999px;
+    }
+    .kanban-scroll::-webkit-scrollbar-thumb {
+      background: #d6d3d1;
+      border-radius: 9999px;
+    }
+    .kanban-scroll::-webkit-scrollbar-thumb:hover {
+      background: #a8a29e;
+    }
+  </style>
+</head>
+<body class="h-full font-sans text-stone-800 bg-[#F6F6F5] antialiased overflow-hidden flex flex-row select-none">
+
+  <!-- ========================================================= -->
+  <!-- 1. COMPACT LEFT RAIL (72px) PARA TABLET (834px)           -->
+  <!-- ========================================================= -->
+  <aside class="w-[72px] shrink-0 h-full bg-white border-r border-stone-200 flex flex-col justify-between items-center py-3 z-30 shadow-[1px_0_4px_rgba(0,0,0,0.02)]">
+    <!-- Top Part: Dali Logo & Main Nav -->
+    <div class="flex flex-col items-center w-full">
+      <!-- Dali Brand / Logo Circle -->
+      <div class="mb-4 pt-1">
+        <div class="w-11 h-11 rounded-xl bg-teal-800 flex items-center justify-center text-white font-black text-xl tracking-tighter shadow-sm hover:scale-105 transition-transform">
+          D
+        </div>
+      </div>
+
+      <!-- Navigation Icons with Short Labels -->
+      <nav class="flex flex-col items-center gap-1 w-full px-1 overflow-y-auto max-h-[calc(100vh-175px)] no-scrollbar">
+        <!-- Inicio -->
+        <a href="#" class="w-full flex flex-col items-center justify-center py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-all group">
+          <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">dashboard</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Inicio</span>
+        </a>
+
+        <!-- Chats -->
+        <a href="#" class="w-full relative flex flex-col items-center justify-center py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-all group">
+          <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">forum</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Chats</span>
+          <span class="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white"></span>
+        </a>
+
+        <!-- Leads (ACTIVO) -->
+        <a href="#" class="w-full relative flex flex-col items-center justify-center py-2 rounded-xl bg-teal-50 text-teal-800 font-semibold shadow-xs border border-teal-100/80 transition-all">
+          <span class="material-symbols-outlined fill-1 text-[22px] text-teal-800">contacts</span>
+          <span class="text-[10px] font-bold tracking-tight mt-0.5 text-teal-900">Leads</span>
+          <span class="absolute left-0 top-2 bottom-2 w-1 bg-teal-700 rounded-r"></span>
+        </a>
+
+        <!-- Asistente -->
+        <a href="#" class="w-full flex flex-col items-center justify-center py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-all group">
+          <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">smart_toy</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Asistente</span>
+        </a>
+
+        <!-- Negocio -->
+        <a href="#" class="w-full flex flex-col items-center justify-center py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-all group">
+          <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">storefront</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Negocio</span>
+        </a>
+
+        <!-- Servicios -->
+        <a href="#" class="w-full flex flex-col items-center justify-center py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-all group">
+          <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">construction</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Servicios</span>
+        </a>
+
+        <!-- FAQ -->
+        <a href="#" class="w-full flex flex-col items-center justify-center py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-all group">
+          <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">quiz</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">FAQ</span>
+        </a>
+
+        <!-- Catálogo -->
+        <a href="#" class="w-full flex flex-col items-center justify-center py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-all group">
+          <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">menu_book</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Catálogo</span>
+        </a>
+
+        <!-- WhatsApp -->
+        <a href="#" class="w-full relative flex flex-col items-center justify-center py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-all group">
+          <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">chat</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">WhatsApp</span>
+          <span class="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+        </a>
+      </nav>
+    </div>
+
+    <!-- Bottom Part: Secondary Nav & User Avatar -->
+    <div class="flex flex-col items-center gap-1 w-full px-1 border-t border-stone-200/80 pt-2">
+      <!-- Equipo -->
+      <a href="#" class="w-full flex flex-col items-center justify-center py-1.5 rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors">
+        <span class="material-symbols-outlined text-[20px]">group</span>
+        <span class="text-[9px] font-medium">Equipo</span>
+      </a>
+      <!-- Plan -->
+      <a href="#" class="w-full flex flex-col items-center justify-center py-1.5 rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors">
+        <span class="material-symbols-outlined text-[20px]">credit_card</span>
+        <span class="text-[9px] font-medium">Plan</span>
+      </a>
+      <!-- Ajustes -->
+      <a href="#" class="w-full flex flex-col items-center justify-center py-1.5 rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors">
+        <span class="material-symbols-outlined text-[20px]">settings</span>
+        <span class="text-[9px] font-medium">Ajustes</span>
+      </a>
+
+      <!-- CONSTROAD Profile Avatar -->
+      <div class="mt-1 pt-1">
+        <div class="w-9 h-9 rounded-xl bg-stone-900 text-white font-bold text-xs flex items-center justify-center border border-stone-700 shadow-xs" title="CONSTROAD Asfalto - José Paredes">
+          CR
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========================================================= -->
+  <!-- 2. CONTENEDOR PRINCIPAL (ANCHO RESTANTE ~762px)            -->
+  <!-- ========================================================= -->
+  <main class="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-[#F8F8F7]">
+
+    <!-- Top Header Bar -->
+    <header class="h-16 px-6 bg-white border-b border-stone-200 flex items-center justify-between shrink-0">
+      <!-- Left: Breadcrumb / Status -->
+      <div class="flex items-center gap-2 text-xs text-stone-500">
+        <span class="font-bold text-stone-800 tracking-tight text-sm">CONSTROAD</span>
+        <span class="text-stone-300">/</span>
+        <span class="text-stone-600 font-medium">Operación</span>
+        <span class="text-stone-300">/</span>
+        <span class="text-teal-800 font-semibold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100">Leads WhatsApp</span>
+      </div>
+
+      <!-- Right: WhatsApp status pill & Action buttons -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-2.5 py-1 rounded-full text-xs font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>WhatsApp: <strong>+51 949 376 824</strong></span>
+        </div>
+
+        <button class="flex items-center gap-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg border border-stone-300/70 transition-colors">
+          <span class="material-symbols-outlined text-[16px]">file_download</span>
+          <span>Exportar</span>
+        </button>
+
+        <button class="flex items-center gap-1.5 text-xs font-semibold text-white bg-teal-800 hover:bg-teal-900 px-3.5 py-1.5 rounded-lg shadow-xs transition-colors">
+          <span class="material-symbols-outlined text-[16px]">person_add</span>
+          <span>Nuevo lead</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Subheader: Titulo + Subtitulo + Controles de Filtros + Switch Vista -->
+    <div class="px-6 pt-5 pb-3 bg-white border-b border-stone-200 shrink-0">
+      <!-- Row 1: Titulo & Toggle Tablero | Lista -->
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-bold tracking-tight text-stone-900">Leads</h1>
+            <span class="text-xs font-bold text-teal-800 bg-teal-100/70 px-2.5 py-0.5 rounded-full">
+              CONSTROAD
+            </span>
+          </div>
+          <p class="text-xs font-medium text-stone-500 mt-0.5">
+            <span class="font-semibold text-stone-700">12 esta semana</span> · <span class="text-teal-700 font-semibold">3 listos para cotizar</span>
+          </p>
+        </div>
+
+        <!-- Toggle de vista Tablero | Lista -->
+        <div class="flex items-center bg-stone-100 p-1 rounded-xl border border-stone-200 text-xs font-medium shadow-xs">
+          <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-stone-900 font-bold shadow-xs border border-stone-200/80 transition-all">
+            <span class="material-symbols-outlined text-[16px] text-teal-800">view_kanban</span>
+            <span>Tablero</span>
+          </button>
+          <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-stone-500 hover:text-stone-800 transition-colors">
+            <span class="material-symbols-outlined text-[16px]">format_list_bulleted</span>
+            <span>Lista</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Row 2: Buscador + Filtros por Servicio -->
+      <div class="flex items-center gap-3">
+        <!-- Buscador -->
+        <div class="relative w-64">
+          <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-[18px]">search</span>
+          <input 
+            type="text" 
+            placeholder="Buscar por cliente, empresa o zona..."
+            value=""
+            class="w-full pl-8 pr-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all"
+          />
+        </div>
+
+        <!-- Filtros de Servicio -->
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs font-medium">
+          <!-- Todos -->
+          <button class="px-3 py-1.5 rounded-lg bg-teal-800 text-white font-semibold shadow-xs">
+            Todos <span class="ml-1 px-1.5 py-0.2 bg-teal-900/60 rounded-full text-[10px]">12</span>
+          </button>
+          <!-- Asfaltado -->
+          <button class="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors">
+            Asfaltado <span class="ml-1 text-stone-400 text-[11px]">6</span>
+          </button>
+          <!-- Venta de mezcla -->
+          <button class="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors">
+            Venta de mezcla <span class="ml-1 text-stone-400 text-[11px]">4</span>
+          </button>
+          <!-- Transporte -->
+          <button class="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors">
+            Transporte <span class="ml-1 text-stone-400 text-[11px]">2</span>
+          </button>
+        </div>
+
+        <!-- Info pill Dali -->
+        <div class="ml-auto hidden sm:flex items-center gap-1.5 text-[11px] text-teal-800 bg-teal-50/80 border border-teal-200/60 px-2.5 py-1 rounded-lg">
+          <span class="material-symbols-outlined text-[14px] text-teal-700">smart_toy</span>
+          <span>Dali califica en WhatsApp en tiempo real</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- 3. KANBAN BOARD (SCROLL HORIZONTAL OPTIMIZADO PARA TABLET) -->
+    <!-- ========================================================= -->
+    <div class="flex-1 overflow-x-auto kanban-scroll p-6 bg-[#F6F6F5]">
+      <div class="flex gap-4 min-w-[1360px] h-full items-start pb-4">
+
+        <!-- ========================================== -->
+        <!-- COLUMNA 1: NUEVO (3)                       -->
+        <!-- ========================================== -->
+        <div class="w-[280px] shrink-0 bg-stone-200/50 rounded-2xl p-2.5 flex flex-col max-h-full border border-stone-200/80">
+          <!-- Col Header -->
+          <div class="flex items-center justify-between px-2 py-1.5 mb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500 ring-4 ring-amber-100"></span>
+              <h2 class="text-xs font-bold text-stone-800 uppercase tracking-wider">Nuevo</h2>
+              <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[11px]">3</span>
+            </div>
+            <button class="text-stone-400 hover:text-stone-700 p-0.5 rounded-md hover:bg-stone-200/60 transition-colors">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+            </button>
+          </div>
+
+          <!-- Cards Stack -->
+          <div class="flex-1 overflow-y-auto space-y-2.5 pr-0.5">
+
+            <!-- Card 1.1: Luis Paredes (ACTIVO / SELECCIONADO PARA EL DRAWER) -->
+            <div class="bg-white p-3.5 rounded-xl border-2 border-teal-700 shadow-sm cursor-pointer hover:shadow-md transition-all relative">
+              <!-- Top tags: Service + Relative Date + WhatsApp pill -->
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                  Asfaltado 600 m²
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">hoy 10:42</span>
+              </div>
+
+              <!-- Main Info: Client & Company -->
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">Luis Paredes</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">apartment</span>
+                Transportes Paredes S.A.C.
+              </p>
+
+              <!-- Location & Specs -->
+              <div class="mt-2.5 pt-2 border-t border-stone-100 text-xs text-stone-600 space-y-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[14px] text-stone-400">location_on</span>
+                  <span class="font-medium text-stone-700">Lurín</span>
+                  <span class="text-stone-300">·</span>
+                  <span class="text-stone-500 text-[11px]">Espesor 2" con MC-30</span>
+                </div>
+              </div>
+
+              <!-- Confirmation check + WhatsApp channel badge -->
+              <div class="mt-2.5 flex items-center justify-between pt-1">
+                <div class="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/70">
+                  <span class="material-symbols-outlined fill-1 text-[13px] text-emerald-600">check_circle</span>
+                  <span>Confirmado</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+
+              <!-- Action button: Cotizar ahora -->
+              <button class="mt-3 w-full py-1.5 px-3 rounded-lg bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors">
+                <span class="material-symbols-outlined text-[15px]">description</span>
+                <span>Cotizar ahora</span>
+              </button>
+            </div>
+
+            <!-- Card 1.2: +51 902 049 935 (Sin empresa registrada) -->
+            <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs cursor-pointer hover:border-teal-600 hover:shadow-sm transition-all">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                  Asfaltado 3 000 m²
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">hoy 10:40</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">+51 902 049 935</h3>
+              <p class="text-xs text-stone-500 flex items-center gap-1 mt-0.5 italic">
+                Cliente nuevo (sin empresa)
+              </p>
+
+              <div class="mt-2.5 pt-2 border-t border-stone-100 text-xs text-stone-600 space-y-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[14px] text-stone-400">location_on</span>
+                  <span class="font-medium text-stone-700">Lurín</span>
+                  <span class="text-stone-300">·</span>
+                  <span class="text-stone-500 text-[11px]">Patio de maniobras</span>
+                </div>
+              </div>
+
+              <div class="mt-2.5 flex items-center justify-between pt-1">
+                <span class="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 font-medium">
+                  Pendiente espesor
+                </span>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+
+              <div class="mt-3 grid grid-cols-2 gap-1.5">
+                <button class="py-1 px-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold flex items-center justify-center gap-1 transition-colors">
+                  <span class="material-symbols-outlined text-[14px]">chat</span>
+                  <span>Ver chat</span>
+                </button>
+                <button class="py-1 px-2 rounded-lg bg-stone-800 hover:bg-stone-900 text-white text-xs font-semibold flex items-center justify-center gap-1 transition-colors">
+                  <span class="material-symbols-outlined text-[14px]">call</span>
+                  <span>Llamar</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Card 1.3: Carlos Mendoza / Luis Paredes mezcla -->
+            <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs cursor-pointer hover:border-teal-600 hover:shadow-sm transition-all">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                  Venta de mezcla 40 cubos
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">ayer 18:20</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">Luis Paredes</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">badge</span>
+                Contratista independiente
+              </p>
+
+              <div class="mt-2.5 pt-2 border-t border-stone-100 text-xs text-stone-600">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[14px] text-stone-400">location_on</span>
+                  <span class="font-medium text-stone-700">Comas</span>
+                  <span class="text-stone-300">·</span>
+                  <span class="text-stone-500 text-[11px]">En caliente a obra</span>
+                </div>
+              </div>
+
+              <div class="mt-2.5 flex items-center justify-between pt-1">
+                <span class="text-[10px] text-stone-500 font-medium">Revisando metrado</span>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- COLUMNA 2: CONTACTADO (2)                  -->
+        <!-- ========================================== -->
+        <div class="w-[280px] shrink-0 bg-stone-200/50 rounded-2xl p-2.5 flex flex-col max-h-full border border-stone-200/80">
+          <div class="flex items-center justify-between px-2 py-1.5 mb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-100"></span>
+              <h2 class="text-xs font-bold text-stone-800 uppercase tracking-wider">Contactado</h2>
+              <span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold text-[11px]">2</span>
+            </div>
+            <button class="text-stone-400 hover:text-stone-700 p-0.5 rounded-md hover:bg-stone-200/60 transition-colors">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto space-y-2.5 pr-0.5">
+
+            <!-- Card 2.1: Juan Carlos - Consorcio Los Pinos -->
+            <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs cursor-pointer hover:border-teal-600 hover:shadow-sm transition-all">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                  Venta de mezcla 40 m³
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">ayer 14:15</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">Juan Carlos</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">apartment</span>
+                Consorcio Los Pinos
+              </p>
+
+              <div class="mt-2.5 pt-2 border-t border-stone-100 text-xs text-stone-600">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[14px] text-stone-400">location_on</span>
+                  <span class="font-medium text-stone-700">Ate</span>
+                  <span class="text-stone-300">·</span>
+                  <span class="text-stone-500 text-[11px]">Despacho en planta</span>
+                </div>
+              </div>
+
+              <div class="mt-2.5 flex items-center justify-between pt-1">
+                <div class="flex items-center gap-1 text-[11px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                  <span class="material-symbols-outlined text-[13px]">hourglass_top</span>
+                  <span>En negociación</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 2.2: Transporte 20 m³ · Carlos (✓ confirmado) -->
+            <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs cursor-pointer hover:border-teal-600 hover:shadow-sm transition-all">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                  Transporte 20 m³
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">ayer 11:30</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">Carlos</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">local_shipping</span>
+                Cajamarquilla → Surco
+              </p>
+
+              <div class="mt-2.5 pt-2 border-t border-stone-100 text-xs text-stone-600">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[14px] text-stone-400">route</span>
+                  <span class="font-medium text-stone-700">Flete confirmado</span>
+                </div>
+              </div>
+
+              <div class="mt-2.5 flex items-center justify-between pt-1">
+                <div class="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/70">
+                  <span class="material-symbols-outlined fill-1 text-[13px] text-emerald-600">check_circle</span>
+                  <span>Confirmado</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- COLUMNA 3: COTIZADO (4)                    -->
+        <!-- ========================================== -->
+        <div class="w-[280px] shrink-0 bg-stone-200/50 rounded-2xl p-2.5 flex flex-col max-h-full border border-stone-200/80">
+          <div class="flex items-center justify-between px-2 py-1.5 mb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-teal-600 ring-4 ring-teal-100"></span>
+              <h2 class="text-xs font-bold text-stone-800 uppercase tracking-wider">Cotizado</h2>
+              <span class="px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 font-bold text-[11px]">4</span>
+            </div>
+            <button class="text-stone-400 hover:text-stone-700 p-0.5 rounded-md hover:bg-stone-200/60 transition-colors">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto space-y-2.5 pr-0.5">
+
+            <!-- Card 3.1: María Torres -->
+            <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs cursor-pointer hover:border-teal-600 hover:shadow-sm transition-all">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                  Asfaltado 1 200 m²
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">12 sep</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">María Torres</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">location_on</span>
+                Villa El Salvador
+              </p>
+
+              <!-- Monto Presupuesto -->
+              <div class="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between">
+                <span class="text-[11px] text-stone-500">Presupuesto:</span>
+                <span class="text-xs font-mono font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded">S/ 48 600</span>
+              </div>
+
+              <div class="mt-2 flex items-center justify-between pt-1">
+                <span class="text-[10px] text-teal-700 font-medium flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[13px]">picture_as_pdf</span>
+                  PDF enviado
+                </span>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3.2: Grupo Vial SAC -->
+            <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs cursor-pointer hover:border-teal-600 hover:shadow-sm transition-all">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                  Venta de mezcla 80 m³
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">11 sep</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">Grupo Vial SAC</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">location_on</span>
+                Callao
+              </p>
+
+              <div class="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between">
+                <span class="text-[11px] text-stone-500">Presupuesto:</span>
+                <span class="text-xs font-mono font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded">S/ 31 200</span>
+              </div>
+
+              <div class="mt-2 flex items-center justify-between pt-1">
+                <span class="text-[10px] text-stone-500 font-medium">Revisando gerencia</span>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3.3: Ing. Roberto M. -->
+            <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs cursor-pointer hover:border-teal-600 hover:shadow-sm transition-all">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                  Asfaltado 450 m²
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">10 sep</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">Ing. Roberto M.</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">location_on</span>
+                San Juan de Lurigancho
+              </p>
+
+              <div class="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between">
+                <span class="text-[11px] text-stone-500">Con imprimación:</span>
+                <span class="text-xs font-mono font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded">S/ 22 400</span>
+              </div>
+
+              <div class="mt-2 flex items-center justify-between pt-1">
+                <span class="text-[10px] text-stone-500 font-medium">Visita técnica agendada</span>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3.4: Constructora Andes -->
+            <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs cursor-pointer hover:border-teal-600 hover:shadow-sm transition-all">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                  Transporte + Colocación
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">09 sep</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">Constructora Andes</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">location_on</span>
+                Chorrillos · 30 m³
+              </p>
+
+              <div class="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between">
+                <span class="text-[11px] text-stone-500">Total:</span>
+                <span class="text-xs font-mono font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded">S/ 14 500</span>
+              </div>
+
+              <div class="mt-2 flex items-center justify-between pt-1">
+                <span class="text-[10px] text-stone-500 font-medium">Espera aprobación</span>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- COLUMNA 4: GANADO (2)                      -->
+        <!-- ========================================== -->
+        <div class="w-[280px] shrink-0 bg-stone-200/50 rounded-2xl p-2.5 flex flex-col max-h-full border border-stone-200/80">
+          <div class="flex items-center justify-between px-2 py-1.5 mb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100"></span>
+              <h2 class="text-xs font-bold text-stone-800 uppercase tracking-wider">Ganado</h2>
+              <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[11px]">2</span>
+            </div>
+            <button class="text-stone-400 hover:text-stone-700 p-0.5 rounded-md hover:bg-stone-200/60 transition-colors">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto space-y-2.5 pr-0.5">
+
+            <!-- Card 4.1: Constructora JC -->
+            <div class="bg-white p-3.5 rounded-xl border border-emerald-300 shadow-xs cursor-pointer hover:border-emerald-600 hover:shadow-sm transition-all bg-gradient-to-b from-emerald-50/20 to-white">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
+                  Asfaltado 900 m²
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">8 sep</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">Constructora JC</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">location_on</span>
+                Ate · Obra ejecutada
+              </p>
+
+              <div class="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between">
+                <span class="text-[11px] text-stone-500">Monto cerrado:</span>
+                <span class="text-xs font-mono font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded">S/ 36 900</span>
+              </div>
+
+              <div class="mt-2.5 flex items-center justify-between pt-1">
+                <div class="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                  <span class="material-symbols-outlined fill-1 text-[13px] text-emerald-600">handshake</span>
+                  <span>Anticipo recibido</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 4.2: Inversiones San Martín -->
+            <div class="bg-white p-3.5 rounded-xl border border-emerald-300 shadow-xs cursor-pointer hover:border-emerald-600 hover:shadow-sm transition-all bg-gradient-to-b from-emerald-50/20 to-white">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
+                  Mezcla 120 m³
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">6 sep</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-900 leading-tight">Inversiones San Martín</h3>
+              <p class="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">location_on</span>
+                Lurín · En caliente
+              </p>
+
+              <div class="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between">
+                <span class="text-[11px] text-stone-500">Monto cerrado:</span>
+                <span class="text-xs font-mono font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded">S/ 46 800</span>
+              </div>
+
+              <div class="mt-2.5 flex items-center justify-between pt-1">
+                <div class="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                  <span class="material-symbols-outlined fill-1 text-[13px] text-emerald-600">local_shipping</span>
+                  <span>Despacho listo</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- COLUMNA 5: PERDIDO (1)                     -->
+        <!-- ========================================== -->
+        <div class="w-[280px] shrink-0 bg-stone-200/50 rounded-2xl p-2.5 flex flex-col max-h-full border border-stone-200/80">
+          <div class="flex items-center justify-between px-2 py-1.5 mb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-stone-400 ring-4 ring-stone-200"></span>
+              <h2 class="text-xs font-bold text-stone-600 uppercase tracking-wider">Perdido</h2>
+              <span class="px-2 py-0.5 rounded-full bg-stone-200 text-stone-700 font-bold text-[11px]">1</span>
+            </div>
+            <button class="text-stone-400 hover:text-stone-700 p-0.5 rounded-md hover:bg-stone-200/60 transition-colors">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto space-y-2.5 pr-0.5">
+
+            <!-- Card 5.1: Transporte 10 m³ · Chorrillos · sin nombre -->
+            <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs cursor-pointer hover:border-stone-400 transition-all opacity-85 hover:opacity-100">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold text-stone-600 bg-stone-100 px-2 py-0.5 rounded-md">
+                  Transporte 10 m³
+                </span>
+                <span class="text-[11px] font-medium text-stone-400">5 sep</span>
+              </div>
+
+              <h3 class="text-sm font-bold text-stone-700 leading-tight">Sin nombre registrado</h3>
+              <p class="text-xs text-stone-500 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-stone-400">location_on</span>
+                Chorrillos
+              </p>
+
+              <!-- Motivo de pérdida -->
+              <div class="mt-2.5 pt-2 border-t border-stone-100">
+                <div class="flex items-center gap-1 text-[11px] text-rose-700 bg-rose-50 px-2 py-1 rounded-md border border-rose-200/60">
+                  <span class="material-symbols-outlined text-[13px]">cancel</span>
+                  <span>Motivo: <strong>precio menor de tercero</strong></span>
+                </div>
+              </div>
+
+              <div class="mt-2.5 flex items-center justify-between pt-1">
+                <span class="text-[10px] text-stone-400">Cerrado por asesor</span>
+                <div class="flex items-center gap-1 text-[10px] font-medium text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">
+                  <span class="material-symbols-outlined text-[12px]">chat</span>
+                  <span>WhatsApp</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- 4. DRAWER LATERAL (420px): DETALLE Y COTIZADOR RÁPIDO     -->
+  <!-- ========================================================= -->
+  <aside class="w-[420px] shrink-0 h-full bg-white border-l border-stone-200 flex flex-col shadow-xl z-40">
+    <!-- Drawer Header -->
+    <div class="p-4 border-b border-stone-200 flex items-center justify-between bg-stone-50/50">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs">
+          LP
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <h2 class="text-sm font-bold text-stone-900">Luis Paredes</h2>
+            <span class="w-2 h-2 rounded-full bg-emerald-500" title="En línea"></span>
+          </div>
+          <p class="text-[11px] text-stone-500">Transportes Paredes S.A.C. · RUC 2060183921</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1">
+        <button class="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100" title="Ver en WhatsApp Web">
+          <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+        </button>
+        <button class="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100" title="Cerrar panel">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Drawer Body -->
+    <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+
+      <!-- Status Banner: Lead Calificado por Dali -->
+      <div class="p-3 bg-teal-50 border border-teal-200/80 rounded-xl flex items-start gap-2.5">
+        <span class="material-symbols-outlined text-teal-700 text-[20px] shrink-0 mt-0.5">verified</span>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-teal-900 text-xs">Lead calificado al 100%</span>
+            <span class="text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded font-semibold">Listo para cotizar</span>
+          </div>
+          <p class="text-stone-600 text-[11px] mt-0.5">
+            Dali recopiló los 4 datos técnicos clave en WhatsApp sin intervención humana.
+          </p>
+        </div>
+      </div>
+
+      <!-- Ficha Técnica Resumida -->
+      <div class="border border-stone-200 rounded-xl p-3 bg-white shadow-xs">
+        <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-stone-100">
+          <span class="font-bold text-stone-800 text-[11px] uppercase tracking-wider">Requerimiento de Obra</span>
+          <span class="text-[10px] font-mono text-stone-400">ID: CR-2025-0894</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <div class="bg-stone-50 p-2 rounded-lg">
+            <span class="text-[10px] text-stone-400 block font-medium">Servicio</span>
+            <span class="font-bold text-stone-900 text-xs">Asfaltado en caliente</span>
+          </div>
+          <div class="bg-stone-50 p-2 rounded-lg">
+            <span class="text-[10px] text-stone-400 block font-medium">Metrado solicitado</span>
+            <span class="font-bold text-teal-800 text-xs font-mono">600 m²</span>
+          </div>
+          <div class="bg-stone-50 p-2 rounded-lg">
+            <span class="text-[10px] text-stone-400 block font-medium">Ubicación</span>
+            <span class="font-semibold text-stone-800 text-xs">Lurín, Lima Sur</span>
+          </div>
+          <div class="bg-stone-50 p-2 rounded-lg">
+            <span class="text-[10px] text-stone-400 block font-medium">Espesor sugerido</span>
+            <span class="font-semibold text-stone-800 text-xs">2" (Tráfico pesado)</span>
+          </div>
+          <div class="col-span-2 bg-stone-50 p-2 rounded-lg">
+            <span class="text-[10px] text-stone-400 block font-medium">Imprimación / Base</span>
+            <span class="font-semibold text-stone-800 text-xs">Imprimación asfáltica MC-30 (Base compactada lista)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cotizador Rápido de CONSTROAD -->
+      <div class="border border-teal-200 bg-gradient-to-b from-teal-50/40 to-white rounded-xl p-3 shadow-xs">
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-bold text-teal-900 text-xs flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[16px] text-teal-700">calculate</span>
+            Cotización formal CONSTROAD
+          </span>
+          <span class="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">Tarifa 2025</span>
+        </div>
+
+        <div class="space-y-1.5 text-xs text-stone-700">
+          <div class="flex justify-between py-1 border-b border-stone-100">
+            <span>Asfalto 2" colocación (600 m² × S/ 38.00)</span>
+            <span class="font-mono font-medium">S/ 22,800.00</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-stone-100">
+            <span>Imprimación MC-30 (600 m² × S/ 6.50)</span>
+            <span class="font-mono font-medium">S/ 3,900.00</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-stone-100">
+            <span>Flete maquinaria a Lurín (planta CONSTROAD)</span>
+            <span class="font-mono font-medium">S/ 1,200.00</span>
+          </div>
+          <div class="flex justify-between pt-1.5 text-sm font-bold text-stone-900">
+            <span>Total estimado (+ IGV):</span>
+            <span class="font-mono text-teal-800 text-base">S/ 27,900.00</span>
+          </div>
+        </div>
+
+        <button class="mt-3 w-full py-2 px-3 rounded-lg bg-teal-800 hover:bg-teal-900 text-white font-bold flex items-center justify-center gap-2 shadow-xs transition-colors">
+          <span class="material-symbols-outlined text-[16px]">send</span>
+          <span>Enviar cotización formal PDF a WhatsApp</span>
+        </button>
+      </div>
+
+      <!-- Resumen de Conversación en WhatsApp -->
+      <div class="border border-stone-200 rounded-xl p-3 bg-white">
+        <span class="font-bold text-stone-800 text-[11px] uppercase tracking-wider block mb-2">Último mensaje recibido</span>
+        <div class="bg-stone-50 p-2.5 rounded-lg border border-stone-200/80">
+          <p class="text-xs text-stone-700 italic">
+            "Hola José, ya tengo el metrado exacto: son 600 m² de asfaltado en caliente en Lurín. ¿Me confirmas precio de mezcla con la emulsión rápida hoy mismo?"
+          </p>
+          <span class="text-[10px] text-stone-400 block text-right mt-1">Hoy 10:42 a.m. · WhatsApp</span>
+        </div>
+
+        <!-- Acciones directas -->
+        <div class="grid grid-cols-2 gap-2 mt-3">
+          <button class="py-1.5 px-2 bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors">
+            <span class="material-symbols-outlined text-[15px]">chat</span>
+            <span>Ver historial chat</span>
+          </button>
+          <button class="py-1.5 px-2 bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors">
+            <span class="material-symbols-outlined text-[15px]">edit_note</span>
+            <span>Nota interna</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Drawer Footer Actions -->
+    <div class="p-3 border-t border-stone-200 bg-white flex items-center justify-between gap-2">
+      <div class="flex items-center gap-1">
+        <button class="text-xs text-stone-500 hover:text-stone-800 px-2.5 py-1.5 rounded-lg hover:bg-stone-100 transition-colors">
+          Mover a Contactado
+        </button>
+      </div>
+      <button class="text-xs font-bold text-teal-800 hover:text-teal-900 px-3 py-1.5 rounded-lg hover:bg-teal-50 border border-teal-200 transition-colors">
+        Tomar conversación
+      </button>
+    </div>
+  </aside>
+
+</body>
+</html>

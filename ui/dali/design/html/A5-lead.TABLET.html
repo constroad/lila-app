@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lead - Detalle Tablet (CONSTROAD Dali)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .material-symbols-outlined.fill-1 {
+      font-variation-settings: 'FILL' 1, 'wght' 500;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #e2e8f0;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #cbd5e1;
+    }
+  </style>
+</head>
+<body class="bg-stone-100 text-stone-900 font-sans h-full flex overflow-hidden antialiased text-sm">
+
+  <!-- RAIL LATERAL IZQUIERDO: 72px colapsado con iconos y labels compactos -->
+  <aside class="w-[72px] bg-white border-r border-stone-200 flex flex-col items-center py-3.5 z-20 shrink-0 select-none">
+    <!-- Dali Brand Icon / Header -->
+    <div class="mb-5 flex flex-col items-center">
+      <div class="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+        D
+      </div>
+      <span class="text-[10px] font-semibold text-stone-500 tracking-wider mt-1 uppercase">Dali</span>
+    </div>
+
+    <!-- Menú de navegación Tablet (iconos + etiqueta corta) -->
+    <nav class="flex-1 w-full flex flex-col items-center space-y-1 px-1 overflow-y-auto">
+      <!-- Inicio -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[20px] group-hover:scale-105 transition-transform">home</span>
+        <span class="text-[10px] font-medium mt-0.5">Inicio</span>
+      </a>
+      
+      <!-- Chats -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors relative group">
+        <span class="material-symbols-outlined text-[20px] group-hover:scale-105 transition-transform">chat</span>
+        <span class="text-[10px] font-medium mt-0.5">Chats</span>
+        <span class="absolute top-1.5 right-3.5 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white"></span>
+      </a>
+
+      <!-- Leads (ACTIVO) -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg bg-brand-50 text-brand-700 font-semibold border-l-4 border-brand-700 transition-colors shadow-sm">
+        <span class="material-symbols-outlined fill-1 text-[20px]">group</span>
+        <span class="text-[10px] mt-0.5 font-bold">Leads</span>
+      </a>
+
+      <!-- Asistente -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[20px] group-hover:scale-105 transition-transform">smart_toy</span>
+        <span class="text-[10px] font-medium mt-0.5">Asistente</span>
+      </a>
+
+      <!-- Negocio -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[20px] group-hover:scale-105 transition-transform">storefront</span>
+        <span class="text-[10px] font-medium mt-0.5">Negocio</span>
+      </a>
+
+      <!-- Servicios -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[20px] group-hover:scale-105 transition-transform">construction</span>
+        <span class="text-[10px] font-medium mt-0.5">Servicios</span>
+      </a>
+
+      <!-- FAQ -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[20px] group-hover:scale-105 transition-transform">quiz</span>
+        <span class="text-[10px] font-medium mt-0.5">FAQ</span>
+      </a>
+
+      <!-- Catálogo -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[20px] group-hover:scale-105 transition-transform">menu_book</span>
+        <span class="text-[10px] font-medium mt-0.5">Catálogo</span>
+      </a>
+
+      <!-- WhatsApp -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[20px] group-hover:scale-105 transition-transform">cell_tower</span>
+        <span class="text-[10px] font-medium mt-0.5">WhatsApp</span>
+      </a>
+
+      <div class="w-8 border-t border-stone-200 my-2"></div>
+
+      <!-- Equipo -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[19px]">group_add</span>
+        <span class="text-[10px] mt-0.5">Equipo</span>
+      </a>
+
+      <!-- Plan -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[19px]">credit_card</span>
+        <span class="text-[10px] mt-0.5">Plan</span>
+      </a>
+
+      <!-- Ajustes -->
+      <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-50 transition-colors group">
+        <span class="material-symbols-outlined text-[19px]">settings</span>
+        <span class="text-[10px] mt-0.5">Ajustes</span>
+      </a>
+    </nav>
+
+    <!-- Footer Avatar / Empresa CONSTROAD -->
+    <div class="pt-2 border-t border-stone-100 w-full flex flex-col items-center">
+      <div class="w-8 h-8 rounded-lg bg-stone-900 text-stone-200 font-bold text-xs flex items-center justify-center cursor-pointer hover:bg-stone-800" title="CONSTROAD S.A.C.">
+        CR
+      </div>
+    </div>
+  </aside>
+
+  <!-- CONTENIDO PRINCIPAL: Layout de tablet 834px con panel central y drawer derecho de 420px -->
+  <div class="flex-1 flex flex-col min-w-0 bg-stone-50 overflow-hidden">
+    
+    <!-- TOP BAR DE CONTEXTO / BREADCRUMBS -->
+    <header class="h-14 bg-white border-b border-stone-200 px-5 flex items-center justify-between shrink-0">
+      <div class="flex items-center space-x-3">
+        <a href="#" class="p-1.5 -ml-1.5 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition-colors flex items-center" title="Volver al tablero de Leads">
+          <span class="material-symbols-outlined text-xl">arrow_back</span>
+        </a>
+        <div class="flex items-center space-x-2 text-xs">
+          <span class="font-bold text-stone-800">CONSTROAD</span>
+          <span class="text-stone-300">/</span>
+          <a href="#" class="text-stone-500 hover:text-brand-700 font-medium">Leads WhatsApp</a>
+          <span class="text-stone-300">/</span>
+          <span class="text-stone-900 font-semibold bg-stone-100 px-2 py-0.5 rounded text-[11px]">CR-2025-0894</span>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <div class="flex items-center space-x-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full text-xs font-medium border border-emerald-200/80">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>WhatsApp conectado</span>
+        </div>
+        <button class="p-1.5 text-stone-400 hover:text-stone-600 rounded-lg hover:bg-stone-100 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">help_outline</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- CABECERA DEL LEAD: Título, Status pill dropdown, y WhatsApp primary CTA -->
+    <div class="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm">
+      <div class="flex items-center space-x-4">
+        <div>
+          <div class="flex items-center space-x-3">
+            <h1 class="text-xl font-bold text-stone-900 tracking-tight">Asfaltado 600 m² · Lurín</h1>
+            
+            <!-- Pill de estado: "Nuevo" (ámbar) con menú selector -->
+            <div class="relative inline-block text-left">
+              <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-colors">
+                <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                <span>Nuevo</span>
+                <span class="material-symbols-outlined text-[16px] text-amber-700">arrow_drop_down</span>
+              </button>
+            </div>
+          </div>
+          <div class="text-xs text-stone-500 mt-1 flex items-center space-x-2">
+            <span>ID: <strong class="text-stone-700 font-medium">CR-2025-0894</strong></span>
+            <span>•</span>
+            <span>Ingresó hoy 10:37 a.m. vía Campaña Instagram Ads (Lima Sur)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botón primario: Escribir por WhatsApp -->
+      <div class="flex items-center space-x-2.5">
+        <button type="button" class="inline-flex items-center space-x-2 bg-brand-700 hover:bg-brand-800 active:scale-95 text-white font-semibold px-4 py-2.5 rounded-lg shadow-sm transition-all text-xs">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+          </svg>
+          <span>Escribir por WhatsApp</span>
+        </button>
+
+        <button type="button" class="p-2 border border-stone-200 text-stone-600 hover:text-stone-900 hover:bg-stone-50 rounded-lg transition-colors" title="Opciones adicionales">
+          <span class="material-symbols-outlined text-[19px]">more_vert</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- CUERPO DIVIDIDO: Columna principal izquierda con scroll (Ficha técnica y notas) + Panel lateral fijo (420px) Cotizador/Historial -->
+    <div class="flex-1 flex overflow-hidden">
+      
+      <!-- COLUMNA IZQUIERDA: Tarjeta Cliente, Lo que Dali juntó, Notas agregadas después -->
+      <main class="flex-1 overflow-y-auto p-6 space-y-5">
+        
+        <!-- TARJETA: Cliente -->
+        <div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center space-x-3.5">
+              <div class="w-12 h-12 rounded-full bg-teal-50 text-teal-800 font-bold text-base flex items-center justify-center border border-teal-200 shrink-0">
+                LP
+              </div>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <h2 class="text-base font-bold text-stone-900">Luis Paredes</h2>
+                  <span class="w-2 h-2 rounded-full bg-emerald-500" title="En línea en WhatsApp"></span>
+                </div>
+                <p class="text-xs text-stone-600 font-medium">Transportes Paredes S.A.C.</p>
+                <div class="flex items-center space-x-2.5 mt-1.5">
+                  <span class="text-xs font-mono text-stone-700 font-medium">+51 902 049 935</span>
+                  <span class="inline-flex items-center text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                    Verificado
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Botón de acción: Ver conversación -->
+            <div class="flex items-center space-x-2">
+              <a href="#" class="inline-flex items-center space-x-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 px-3 py-2 rounded-lg transition-colors border border-stone-200">
+                <span class="material-symbols-outlined text-[17px] text-stone-600">chat</span>
+                <span>Ver conversación</span>
+              </a>
+              <a href="tel:+51902049935" class="p-2 text-stone-600 hover:text-stone-900 bg-stone-50 hover:bg-stone-100 border border-stone-200 rounded-lg transition-colors" title="Llamar directo">
+                <span class="material-symbols-outlined text-[18px]">call</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="mt-3 pt-3 border-t border-stone-100 flex items-center justify-between text-xs text-stone-500">
+            <span class="flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px] text-amber-600">campaign</span>
+              Cliente nuevo (llegó por publicidad en Instagram · Campaña Lurín Sur)
+            </span>
+            <span class="text-[11px] text-stone-400">Atendido por Dali v2.4</span>
+          </div>
+        </div>
+
+        <!-- TARJETA: Lo que Dali juntó (12 datos técnicos con check verde) -->
+        <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-3.5 bg-white border-b border-stone-200 flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
+                <span class="material-symbols-outlined text-[18px]">smart_toy</span>
+              </div>
+              <h3 class="font-bold text-stone-900 text-sm">Lo que Dali juntó</h3>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-semibold px-2 py-0.5 bg-stone-100 text-stone-700 rounded-full border border-stone-200">
+                12 datos
+              </span>
+              <div class="flex items-center space-x-1 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                <span class="material-symbols-outlined text-[15px] text-emerald-600">check_circle</span>
+                <span>Confirmado por el cliente · hoy 10:42</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Grid de Especificaciones técnicas recopiladas -->
+          <div class="p-5">
+            <div class="grid grid-cols-2 gap-x-6 gap-y-3">
+              
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Servicio</span>
+                <span class="text-xs font-semibold text-stone-900">Asfaltado (colocación)</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Área</span>
+                <span class="text-xs font-bold text-brand-800 bg-teal-50 px-2 py-0.5 rounded">600 m²</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Lugar</span>
+                <span class="text-xs font-semibold text-stone-900">Lurín (Lima Sur)</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Espesor</span>
+                <span class="text-xs font-semibold text-stone-900">2&quot; (Tráfico pesado)</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Base</span>
+                <span class="text-xs font-semibold text-stone-900">Preparada y compactada</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Superficie</span>
+                <span class="text-xs font-semibold text-stone-900">Pavimento existente</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Imprimación</span>
+                <span class="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Sí</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Imprimante</span>
+                <span class="text-xs font-semibold text-stone-900">Riego de liga (emulsión)</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Aplicación</span>
+                <span class="text-xs font-semibold text-stone-900">Barra regadora</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Fresado</span>
+                <span class="text-xs font-medium text-stone-500">No requiere</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Terreno</span>
+                <span class="text-xs font-semibold text-stone-900">Plano</span>
+              </div>
+
+              <div class="flex items-baseline justify-between py-1.5 border-b border-stone-100">
+                <span class="text-xs text-stone-500 font-normal">Para cuándo</span>
+                <span class="text-xs font-semibold text-brand-700">Fines de octubre</span>
+              </div>
+
+              <div class="col-span-2 flex items-baseline justify-between pt-2">
+                <span class="text-xs text-stone-500 font-normal">A nombre de</span>
+                <span class="text-xs font-semibold text-stone-900">Luis Paredes (Transportes Paredes S.A.C.)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TARJETA: Notas que agregó después -->
+        <div class="bg-amber-50/60 rounded-xl border border-amber-200/90 p-4 shadow-sm relative">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <span class="material-symbols-outlined text-amber-700 text-[18px]">comment</span>
+              <span class="text-xs font-bold text-amber-900">Notas que agregó después</span>
+            </div>
+            <span class="text-[11px] font-semibold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded">hoy 10:52</span>
+          </div>
+
+          <div class="bg-white rounded-lg p-3 border border-amber-200/60 flex items-start space-x-3">
+            <div class="w-6 h-6 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+              <span class="material-symbols-outlined text-[15px]">chat</span>
+            </div>
+            <div class="flex-1">
+              <p class="text-xs italic text-stone-800 font-medium">
+                &ldquo;¿Y me pueden incluir la señalización?&rdquo;
+              </p>
+              <div class="flex items-center justify-between mt-1 text-[11px] text-stone-500">
+                <span class="flex items-center gap-1 font-semibold text-emerald-700 uppercase text-[10px] tracking-wide">
+                  WhatsApp • Mensaje posterior enviado en el mismo chat
+                </span>
+                <button class="text-brand-700 hover:underline font-semibold text-[11px]">
+                  + Agregar al presupuesto
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NOTAS INTERNAS DEL EQUIPO -->
+        <div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center space-x-2">
+              <span class="material-symbols-outlined text-stone-600 text-[18px]">edit_note</span>
+              <h4 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Notas internas</h4>
+            </div>
+            <span class="text-[11px] text-stone-400">Solo visible para CONSTROAD</span>
+          </div>
+          
+          <div class="space-y-3">
+            <textarea rows="2" placeholder="Agregar nota interna sobre este cliente, acceso a obra o condiciones de pago..." class="w-full text-xs p-3 rounded-lg border border-stone-200 focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600 bg-stone-50/50 resize-none"></textarea>
+            
+            <div class="flex justify-end">
+              <button type="button" class="inline-flex items-center space-x-1.5 bg-brand-700 hover:bg-brand-800 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">save</span>
+                <span>Guardar nota</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </main>
+
+      <!-- PANEL LATERAL (DRAWER) DE 420px: Cotización, Historial de eventos y Acciones Rápidas -->
+      <aside class="w-[420px] bg-white border-l border-stone-200 flex flex-col shrink-0 overflow-y-auto shadow-sm">
+        
+        <!-- HEADER DEL PANEL LATERAL -->
+        <div class="p-4 border-b border-stone-200 flex items-center justify-between bg-stone-50/70 shrink-0">
+          <div class="flex items-center space-x-2">
+            <span class="material-symbols-outlined text-stone-700 text-[20px]">request_quote</span>
+            <span class="font-bold text-stone-900 text-sm">Cotización formal y Cierre</span>
+          </div>
+          <span class="text-[11px] font-semibold text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded">
+            Ficha activa
+          </span>
+        </div>
+
+        <div class="p-5 space-y-6 flex-1">
+          
+          <!-- TARJETA: Cotización -->
+          <div class="bg-stone-50/80 rounded-xl border border-stone-200 p-4 space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="material-symbols-outlined text-brand-700 text-[18px]">receipt_long</span>
+                <h4 class="font-bold text-stone-900 text-xs uppercase tracking-wider">Cotización</h4>
+              </div>
+              <span class="text-[11px] font-semibold text-stone-500 bg-white border border-stone-200 px-2 py-0.5 rounded">
+                Por enviar
+              </span>
+            </div>
+
+            <!-- Campo Monto (S/) -->
+            <div>
+              <label class="block text-[11px] font-semibold text-stone-700 mb-1">Monto de la obra (S/)</label>
+              <div class="relative rounded-lg shadow-sm">
+                <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <span class="text-stone-500 font-bold text-xs">S/</span>
+                </div>
+                <input type="text" placeholder="0.00" class="block w-full rounded-lg border-stone-300 pl-9 pr-12 py-2 text-sm font-semibold text-stone-900 focus:border-brand-600 focus:ring-brand-600 border bg-white" />
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                  <span class="text-stone-400 text-[11px]">con IGV</span>
+                </div>
+              </div>
+              <p class="text-[10px] text-stone-500 mt-1">Sugerido según tarifario 2025: S/ 27,900.00 (+ flete)</p>
+            </div>
+
+            <!-- Campos Fechas: Enviada el y Válida hasta -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-semibold text-stone-700 mb-1">Enviada el</label>
+                <div class="relative">
+                  <input type="date" class="block w-full rounded-lg border-stone-300 py-1.5 px-2.5 text-xs text-stone-800 border bg-white focus:border-brand-600 focus:ring-brand-600" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-stone-700 mb-1">Válida hasta</label>
+                <div class="relative">
+                  <input type="date" class="block w-full rounded-lg border-stone-300 py-1.5 px-2.5 text-xs text-stone-800 border bg-white focus:border-brand-600 focus:ring-brand-600" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Botón secundario: Adjuntar PDF -->
+            <div class="pt-1">
+              <button type="button" class="w-full flex items-center justify-center space-x-2 py-2.5 px-3 rounded-lg border border-dashed border-stone-300 bg-white hover:bg-stone-100/80 text-stone-700 font-semibold text-xs transition-colors">
+                <span class="material-symbols-outlined text-[18px] text-brand-700">attach_file</span>
+                <span>Adjuntar PDF de cotización</span>
+              </button>
+            </div>
+
+            <!-- Botón de acción comercial -->
+            <button type="button" class="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-lg bg-brand-700 hover:bg-brand-800 text-white font-bold text-xs transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[17px]">send</span>
+              <span>Enviar cotización a WhatsApp</span>
+            </button>
+          </div>
+
+          <!-- TARJETA: Historial del Lead -->
+          <div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center space-x-2">
+                <span class="material-symbols-outlined text-stone-600 text-[18px]">history</span>
+                <h4 class="font-bold text-stone-900 text-xs uppercase tracking-wider">Historial</h4>
+              </div>
+              <span class="text-[11px] text-stone-400">Hoy</span>
+            </div>
+
+            <!-- Timeline de eventos requeridos -->
+            <div class="relative pl-5 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-stone-200">
+              
+              <!-- Evento 1: hoy 10:42 Dali cerró el lead confirmado -->
+              <div class="relative">
+                <div class="absolute -left-5 top-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-50"></div>
+                <div>
+                  <div class="flex items-baseline justify-between">
+                    <span class="text-xs font-bold text-stone-900">Dali cerró el lead confirmado</span>
+                    <span class="text-[10px] font-semibold text-emerald-700">hoy 10:42</span>
+                  </div>
+                  <p class="text-[11px] text-stone-500 mt-0.5">Se recopilaron los 12 datos clave para la cotización técnica de obra.</p>
+                </div>
+              </div>
+
+              <!-- Evento 2: hoy 10:38 Dali avisó al grupo Ventas -->
+              <div class="relative">
+                <div class="absolute -left-5 top-0.5 w-3 h-3 rounded-full bg-brand-600 ring-4 ring-brand-50"></div>
+                <div>
+                  <div class="flex items-baseline justify-between">
+                    <span class="text-xs font-semibold text-stone-800">Dali avisó al grupo Ventas</span>
+                    <span class="text-[10px] text-stone-500 font-medium">hoy 10:38</span>
+                  </div>
+                  <p class="text-[11px] text-stone-500 mt-0.5">Notificación enviada al grupo de WhatsApp comercial de CONSTROAD.</p>
+                </div>
+              </div>
+
+              <!-- Evento 3: hoy 10:37 Primer mensaje -->
+              <div class="relative">
+                <div class="absolute -left-5 top-0.5 w-3 h-3 rounded-full bg-stone-400 ring-4 ring-stone-100"></div>
+                <div>
+                  <div class="flex items-baseline justify-between">
+                    <span class="text-xs font-semibold text-stone-700">Primer mensaje</span>
+                    <span class="text-[10px] text-stone-400">hoy 10:37</span>
+                  </div>
+                  <p class="text-[11px] text-stone-500 mt-0.5">Cliente inició la conversación desde anuncio en Instagram.</p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Mover etapa del pipeline rápido -->
+          <div class="p-3 bg-stone-50 rounded-xl border border-stone-200">
+            <span class="block text-[11px] font-semibold text-stone-600 mb-2">Acciones de gestión:</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" class="py-1.5 px-2 bg-white hover:bg-stone-100 border border-stone-200 text-stone-700 rounded text-xs font-medium transition-colors">
+                Mover a Contactado
+              </button>
+              <button type="button" class="py-1.5 px-2 bg-white hover:bg-stone-100 border border-stone-200 text-stone-700 rounded text-xs font-medium transition-colors">
+                Marcar Ganado
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </aside>
+
+    </div>
+
+  </div>
+
+</body>
+</html>

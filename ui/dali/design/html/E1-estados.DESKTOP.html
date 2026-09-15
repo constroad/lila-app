@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Estados del Sistema — Dali UI Kit | CONSTROAD</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:ital,wght@0,300..900;1,300..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {},
+          borderRadius: {
+            DEFAULT: "0.5rem",
+            lg: "1rem",
+            xl: "1.5rem",
+            full: "9999px"
+          },
+          spacing: {},
+          fontFamily: {
+            headline: ["Public Sans"],
+            display: ["Public Sans"],
+            body: ["DM Sans"],
+            label: ["DM Sans"]
+          },
+          fontSize: {}
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background-color: #FAFAF9;
+      color: #1C1917;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-mono-tabular {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="bg-stone-50 min-h-screen text-stone-900 antialiased selection:bg-teal-100 selection:text-teal-900 pb-20">
+<!-- Subdued Spec Sheet Container (1120px canvas centered) -->
+<div class="max-w-[1120px] mx-auto px-6 pt-10">
+<!-- Header & Breadcrumbs -->
+<header class="mb-10 pb-8 border-b border-stone-200">
+<div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+<nav class="flex items-center gap-2 text-xs font-medium text-stone-500">
+<span class="text-stone-700 font-semibold flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-teal-600 inline-block"></span>
+            Dali UI Kit
+          </span>
+<span class="text-stone-300">/</span>
+<span class="text-stone-500">Especificación de Componentes</span>
+<span class="text-stone-300">/</span>
+<span class="text-teal-800 font-medium">Estados del Sistema</span>
+</nav>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200/80">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse"></span>
+            12 estados activos
+          </span>
+<span class="px-2.5 py-1 rounded-full text-xs font-medium bg-stone-100 text-stone-600 border border-stone-200">
+            v2.4 · CONSTROAD
+          </span>
+</div>
+</div>
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+<div>
+<h1 class="font-headline text-3xl font-bold text-stone-900 tracking-tight">
+            Estados del Sistema — Dali
+          </h1>
+<p class="text-stone-600 text-sm mt-2 max-w-2xl leading-relaxed">
+            Guía unificada de estados vacíos, banners de advertencia, respuestas de red y diálogos de confirmación para el panel web de Dali en Perú. Adaptada al lenguaje cercano de negocios operativos como CONSTROAD.
+          </p>
+</div>
+<!-- Token Badges / Color Reference Bar -->
+<div class="flex flex-wrap items-center gap-2.5 bg-white p-2.5 rounded-xl border border-stone-200 shadow-sm">
+<div class="flex items-center gap-1.5 pr-2.5 border-r border-stone-200 text-xs">
+<span class="w-3.5 h-3.5 rounded bg-teal-700 inline-block shadow-sm"></span>
+<span class="text-stone-700 font-medium font-mono-tabular">Teal #0F766E</span>
+</div>
+<div class="flex items-center gap-1.5 pr-2.5 border-r border-stone-200 text-xs">
+<span class="w-3.5 h-3.5 rounded bg-amber-600 inline-block shadow-sm"></span>
+<span class="text-stone-700 font-medium font-mono-tabular">Ámbar #D97706</span>
+</div>
+<div class="flex items-center gap-1.5 pr-2.5 border-r border-stone-200 text-xs">
+<span class="w-3.5 h-3.5 rounded bg-red-600 inline-block shadow-sm"></span>
+<span class="text-stone-700 font-medium font-mono-tabular">Rojo #DC2626</span>
+</div>
+<div class="flex items-center gap-1.5 text-xs">
+<span class="w-3.5 h-3.5 rounded bg-stone-100 border border-stone-300 inline-block shadow-sm"></span>
+<span class="text-stone-600 font-medium font-mono-tabular">Piedra #FAFAF9</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Content Sections Flow -->
+<div class="space-y-12">
+<!-- ==========================================
+           SECCIÓN 1: BANNERS Y AVISOS GLOBALES
+           ========================================== -->
+<section class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-bold uppercase tracking-[0.08em] text-stone-500">Sección 01</span>
+<span class="text-stone-300">·</span>
+<h2 class="text-sm font-semibold text-stone-800">Banners y avisos globales persistentes</h2>
+</div>
+<span class="text-xs text-stone-500">Ancho completo de visualización (1120px)</span>
+</div>
+<!-- Estado 12: Fuera de línea (Offline) -->
+<div class="space-y-1.5">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+            12 · FUERA DE LÍNEA (OFFLINE)
+          </div>
+<div class="w-full bg-stone-900 text-stone-100 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-sm border border-stone-800">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-stone-800 flex items-center justify-center text-stone-300">
+<span class="material-symbols-outlined text-[20px]" data-icon="wifi_off">wifi_off</span>
+</div>
+<div>
+<p class="text-sm font-medium text-white">
+                  Sin conexión · lo que cambies se guarda cuando vuelva el internet
+                </p>
+<p class="text-xs text-stone-400">
+                  Dali continúa atendiendo desde los servidores de WhatsApp Cloud API.
+                </p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium bg-stone-800 text-stone-300 border border-stone-700">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                Modo local
+              </span>
+</div>
+</div>
+</div>
+<!-- Estado 05: Banner Número Desconectado -->
+<div class="space-y-1.5 pt-2">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+            05 · BANNER: NÚMERO DESCONECTADO
+          </div>
+<div class="w-full bg-rose-50 border border-rose-200 text-rose-900 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="flex items-start sm:items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-rose-100 border border-rose-200 flex items-center justify-center text-rose-700 shrink-0">
+<span class="material-symbols-outlined text-[22px]" data-icon="error_outline">error_outline</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-rose-950">
+                  Tu WhatsApp está desconectado desde hace 2 h. Dali no está atendiendo.
+                </p>
+<p class="text-xs text-rose-700 mt-0.5">
+                  Los clientes que escriban al <span class="font-mono-tabular font-medium">+51 949 376 824</span> no recibirán respuestas hasta revalidar la sesión.
+                </p>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+<button class="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg px-4 py-2 font-medium text-sm transition-colors shadow-sm active:scale-95" type="button">
+<span class="material-symbols-outlined text-[18px]" data-icon="qr_code_scanner">qr_code_scanner</span>
+                Vincular ahora
+              </button>
+</div>
+</div>
+</div>
+<!-- Estado 06: Banner Límite del Plan -->
+<div class="space-y-1.5 pt-2">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+            06 · BANNER: LÍMITE DEL PLAN
+          </div>
+<div class="w-full bg-amber-50 border border-amber-200 text-amber-950 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="flex items-start sm:items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+<span class="material-symbols-outlined text-[22px]" data-icon="notifications_active">notifications_active</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-amber-950">
+                  Usaste 980 de 1 000 conversaciones este mes. Dali dejará de responder al llegar al límite.
+                </p>
+<p class="text-xs text-amber-800 mt-0.5">
+                  Te quedan solo 20 conversaciones disponibles antes de la pausa automática del servicio.
+                </p>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+<button class="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 font-medium text-sm transition-colors shadow-sm active:scale-95" type="button">
+<span class="material-symbols-outlined text-[18px]" data-icon="arrow_upward">arrow_upward</span>
+                Ampliar plan
+              </button>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+           SECCIÓN 2: ESTADOS VACÍOS DE MÓDULOS
+           ========================================== -->
+<section class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-bold uppercase tracking-[0.08em] text-stone-500">Sección 02</span>
+<span class="text-stone-300">·</span>
+<h2 class="text-sm font-semibold text-stone-800">Estados vacíos iniciales y de filtrado</h2>
+</div>
+<span class="text-xs text-stone-500">Patrones modulares de 2 columnas</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Estado 01: Sin conversaciones todavía -->
+<div class="space-y-1.5">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+              01 · SIN CONVERSACIONES TODAVÍA
+            </div>
+<div class="bg-white border border-stone-200 rounded-xl p-8 flex flex-col items-center text-center justify-center min-h-[300px] shadow-sm">
+<div class="w-14 h-14 rounded-full bg-stone-100 flex items-center justify-center text-stone-400 mb-4 border border-stone-200/80">
+<span class="material-symbols-outlined text-[28px]" data-icon="chat_bubble_outline">chat_bubble_outline</span>
+</div>
+<h3 class="font-headline font-semibold text-base text-stone-900 mb-1">
+                Todavía nadie te escribe
+              </h3>
+<p class="text-sm text-stone-500 max-w-xs mb-6 leading-relaxed">
+                Cuando un cliente escriba al <span class="font-mono-tabular font-medium text-stone-700">+51 949 376 824</span>, la conversación aparece aquí.
+              </p>
+<button class="inline-flex items-center gap-2 border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 rounded-lg px-4 py-2 text-sm font-medium transition-colors active:scale-95 shadow-xs" type="button">
+<span class="material-symbols-outlined text-[18px] text-teal-700" data-icon="send">send</span>
+                Probar a Dali
+              </button>
+</div>
+</div>
+<!-- Estado 02: WhatsApp sin conectar -->
+<div class="space-y-1.5">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+              02 · WHATSAPP SIN CONECTAR
+            </div>
+<div class="bg-white border border-stone-200 rounded-xl p-8 flex flex-col items-center text-center justify-center min-h-[300px] shadow-sm relative overflow-hidden">
+<div class="relative mb-4">
+<div class="w-14 h-14 rounded-full bg-stone-100 flex items-center justify-center text-stone-400 border border-stone-200/80">
+<span class="material-symbols-outlined text-[28px]" data-icon="cell_tower">cell_tower</span>
+</div>
+<span class="w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white absolute bottom-0 right-0" title="Desconectado"></span>
+</div>
+<h3 class="font-headline font-semibold text-base text-stone-900 mb-1">
+                Conecta tu número
+              </h3>
+<p class="text-sm text-stone-500 max-w-xs mb-6 leading-relaxed">
+                Dali necesita tu WhatsApp para atender a tus clientes de CONSTROAD en tiempo real.
+              </p>
+<button class="inline-flex items-center gap-2 bg-teal-700 hover:bg-teal-800 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm active:scale-95" type="button">
+<span class="material-symbols-outlined text-[18px]" data-icon="qr_code_scanner">qr_code_scanner</span>
+                Conectar WhatsApp
+              </button>
+</div>
+</div>
+<!-- Estado 03: Sin Leads -->
+<div class="space-y-1.5">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+              03 · SIN LEADS
+            </div>
+<div class="bg-white border border-stone-200 rounded-xl p-8 flex flex-col items-center text-center justify-center min-h-[300px] shadow-sm">
+<div class="w-14 h-14 rounded-full bg-teal-50 flex items-center justify-center text-teal-700 mb-4 border border-teal-100">
+<span class="material-symbols-outlined text-[28px]" data-icon="filter_center_focus">filter_center_focus</span>
+</div>
+<h3 class="font-headline font-semibold text-base text-stone-900 mb-1">
+                Aún no hay leads
+              </h3>
+<p class="text-sm text-stone-500 max-w-xs mb-3 leading-relaxed">
+                Aparecen cuando Dali junta los datos de un pedido o consulta por chat.
+              </p>
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-teal-50 border border-teal-200/60 text-teal-800 text-xs font-medium">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle">check_circle</span>
+                Dali pedirá: nombre, empresa y volumen m²
+              </div>
+</div>
+</div>
+<!-- Estado 04: Sin resultados de búsqueda -->
+<div class="space-y-1.5">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+              04 · SIN RESULTADOS DE BÚSQUEDA
+            </div>
+<div class="bg-white border border-stone-200 rounded-xl p-8 flex flex-col items-center text-center justify-center min-h-[300px] shadow-sm">
+<div class="w-14 h-14 rounded-full bg-stone-100 flex items-center justify-center text-stone-400 mb-4 border border-stone-200/80">
+<span class="material-symbols-outlined text-[28px]" data-icon="search">search</span>
+</div>
+<h3 class="font-headline font-semibold text-base text-stone-900 mb-1">
+                Nada con «Luis Pérez»
+              </h3>
+<p class="text-sm text-stone-500 max-w-xs mb-5 leading-relaxed">
+                Prueba con otro nombre o número telefónico en el directorio.
+              </p>
+<button class="text-xs font-semibold text-teal-700 hover:text-teal-800 underline underline-offset-4 decoration-teal-300 transition-colors" type="button">
+                Limpiar búsqueda
+              </button>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+           SECCIÓN 3: TRANSACCIONALES Y CONECTIVIDAD
+           ========================================== -->
+<section class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-bold uppercase tracking-[0.08em] text-stone-500">Sección 03</span>
+<span class="text-stone-300">·</span>
+<h2 class="text-sm font-semibold text-stone-800">Estados transaccionales y de red</h2>
+</div>
+<span class="text-xs text-stone-500">Comportamiento asíncrono y fallos</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Estado 07: Cargando (Skeleton Animado) -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+                07 · CARGANDO (SKELETON ANIMADO)
+              </span>
+<span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-stone-100 text-stone-500 border border-stone-200">
+                Skeleton animado
+              </span>
+</div>
+<div class="bg-white border border-stone-200 rounded-xl p-6 shadow-sm min-h-[300px] flex flex-col justify-center">
+<div class="space-y-4 animate-pulse">
+<!-- Row 1 -->
+<div class="flex items-center gap-3.5 pb-3 border-b border-stone-100">
+<div class="w-10 h-10 rounded-full bg-stone-200 shrink-0"></div>
+<div class="flex-1 space-y-2">
+<div class="h-3.5 bg-stone-200 rounded w-2/5"></div>
+<div class="h-2.5 bg-stone-100 rounded w-4/5"></div>
+</div>
+<div class="h-3 bg-stone-100 rounded w-12 shrink-0"></div>
+</div>
+<!-- Row 2 -->
+<div class="flex items-center gap-3.5 pb-3 border-b border-stone-100">
+<div class="w-10 h-10 rounded-full bg-stone-200 shrink-0"></div>
+<div class="flex-1 space-y-2">
+<div class="h-3.5 bg-stone-200 rounded w-1/3"></div>
+<div class="h-2.5 bg-stone-100 rounded w-3/4"></div>
+</div>
+<div class="h-3 bg-stone-100 rounded w-10 shrink-0"></div>
+</div>
+<!-- Row 3 -->
+<div class="flex items-center gap-3.5">
+<div class="w-10 h-10 rounded-full bg-stone-200 shrink-0"></div>
+<div class="flex-1 space-y-2">
+<div class="h-3.5 bg-stone-200 rounded w-1/2"></div>
+<div class="h-2.5 bg-stone-100 rounded w-2/3"></div>
+</div>
+<div class="h-3 bg-stone-100 rounded w-14 shrink-0"></div>
+</div>
+</div>
+<p class="text-center text-xs text-stone-400 mt-5">
+                Cargando conversaciones recientes de CONSTROAD...
+              </p>
+</div>
+</div>
+<!-- Estado 08: Error de Conexión -->
+<div class="space-y-1.5">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+              08 · ERROR DE CONEXIÓN
+            </div>
+<div class="bg-white border border-stone-200 rounded-xl p-8 flex flex-col items-center text-center justify-center min-h-[300px] shadow-sm">
+<div class="w-14 h-14 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 mb-4 border border-rose-100">
+<span class="material-symbols-outlined text-[28px]" data-icon="cloud_off">cloud_off</span>
+</div>
+<h3 class="font-headline font-semibold text-base text-stone-900 mb-1">
+                No pudimos cargar esto
+              </h3>
+<p class="text-sm text-stone-500 max-w-xs mb-6 leading-relaxed">
+                Revisa tu internet y vuelve a intentar. Si el problema continúa, consúltanos.
+              </p>
+<button class="inline-flex items-center gap-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors shadow-sm active:scale-95" type="button">
+<span class="material-symbols-outlined text-[18px]" data-icon="refresh">refresh</span>
+                Reintentar
+              </button>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+           SECCIÓN 4: SEGURIDAD, DIÁLOGOS Y FEEDBACK
+           ========================================== -->
+<section class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-bold uppercase tracking-[0.08em] text-stone-500">Sección 04</span>
+<span class="text-stone-300">·</span>
+<h2 class="text-sm font-semibold text-stone-800">Seguridad, diálogos y retroalimentación</h2>
+</div>
+<span class="text-xs text-stone-500">Permisos, confirmaciones y avisos temporales</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Estado 11: Sin permiso (Control de Roles) -->
+<div class="space-y-1.5">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+              11 · SIN PERMISO (CONTROL DE ROLES)
+            </div>
+<div class="bg-white border border-stone-200 rounded-xl p-8 flex flex-col items-center text-center justify-center min-h-[300px] shadow-sm">
+<div class="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 mb-4 border border-amber-200/70">
+<span class="material-symbols-outlined text-[28px]" data-icon="lock">lock</span>
+</div>
+<h3 class="font-headline font-semibold text-base text-stone-900 mb-1">
+                Esto lo cambia el dueño
+              </h3>
+<p class="text-sm text-stone-500 max-w-xs mb-5 leading-relaxed">
+                Pídele a <span class="font-medium text-stone-800">José Zena</span> que te dé el rol de Dueño para editar esta sección del negocio.
+              </p>
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-100 text-stone-600 border border-stone-200 text-xs font-medium">
+<span class="w-2 h-2 rounded-full bg-stone-400"></span>
+                Actualmente tienes el rol: Operador
+              </div>
+</div>
+</div>
+<!-- Estado 10: Confirmación destructiva (Diálogo modal) -->
+<div class="space-y-1.5">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+              10 · CONFIRMACIÓN DESTRUCTIVA (DIÁLOGO MODAL)
+            </div>
+<div class="bg-stone-100/70 border border-stone-300/80 rounded-xl p-6 min-h-[300px] flex items-center justify-center">
+<!-- Modal Card with soft elevated shadow -->
+<div class="bg-white rounded-xl border border-stone-200 p-5 shadow-lg w-full max-w-sm">
+<div class="flex items-start gap-3.5 mb-4">
+<div class="w-10 h-10 rounded-full bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]" data-icon="warning">warning</span>
+</div>
+<div>
+<h4 class="font-headline font-bold text-stone-900 text-base">
+                      ¿Desconectar el número?
+                    </h4>
+<p class="text-xs text-stone-500 mt-1 leading-relaxed">
+                      Dali dejará de atender hasta que lo vincules de nuevo. Los clientes no recibirán respuestas por WhatsApp.
+                    </p>
+</div>
+</div>
+<div class="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+<button class="px-3.5 py-2 text-xs font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors" type="button">
+                    Cancelar
+                  </button>
+<button class="bg-red-600 hover:bg-red-700 text-white rounded-lg px-4 py-2 text-xs font-medium transition-colors shadow-xs active:scale-95" type="button">
+                    Desconectar
+                  </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Estado 09: Guardado (Toast de Confirmación) - Ancho completo -->
+<div class="space-y-1.5 pt-4">
+<div class="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+            09 · GUARDADO (TOAST DE CONFIRMACIÓN)
+          </div>
+<div class="bg-white border border-stone-200 rounded-xl p-8 flex flex-col items-center justify-center shadow-sm relative overflow-hidden">
+<!-- Simulated toast floating in viewport -->
+<div class="inline-flex items-center gap-3 bg-teal-900 text-white px-5 py-3 rounded-xl shadow-lg border border-teal-800 animate-bounce transition-all duration-300">
+<span class="w-5 h-5 rounded-full bg-teal-700 flex items-center justify-center text-white shrink-0">
+<span class="material-symbols-outlined text-[15px]" data-icon="check" style="font-variation-settings: 'FILL' 1;">check</span>
+</span>
+<span class="text-sm font-medium tracking-tight">Cambios guardados · Listo</span>
+<span class="text-xs text-teal-300/80 pl-2 border-l border-teal-800 font-mono-tabular">CONSTROAD</span>
+</div>
+<p class="text-xs text-stone-400 mt-4 text-center">
+              Aviso flotante no bloqueante · Se oculta automáticamente a los 3.5 segundos
+            </p>
+</div>
+</div>
+</section>
+</div>
+<!-- Footer Specs / Dali Design System Brand Note -->
+<footer class="mt-16 pt-8 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-500">
+<div class="flex items-center gap-2">
+<span class="font-headline font-bold text-stone-800 text-sm tracking-tight">Dali</span>
+<span class="text-stone-300">|</span>
+<span>Sistema de diseño para asistentes de WhatsApp en Perú</span>
+</div>
+<div class="flex items-center gap-4">
+<span>Negocio muestra: <strong class="text-stone-700">CONSTROAD Asfalto y Pavimentación</strong></span>
+<span class="text-stone-300">·</span>
+<span class="font-mono-tabular">Lima, Perú</span>
+</div>
+</footer>
+</div>
+</body></html>

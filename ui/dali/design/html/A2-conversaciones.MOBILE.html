@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html class="h-full" lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>Conversaciones | CONSTROAD · Dali</title>
+  <!-- Google Fonts: Outfit, DM Sans, JetBrains Mono -->
+  <link href="https://fonts.googleapis.com" rel="preconnect"/>
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Public+Sans:wght@600;700;800&display=swap" rel="stylesheet"/>
+  <!-- Material Symbols Outlined -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917'
+            },
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              200: '#99F6E4',
+              300: '#5EEAD4',
+              400: '#2DD4BF',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E', // Primario Dali
+              800: '#115E59',
+              900: '#134E4A'
+            },
+            amber: {
+              50: '#FFFBEB',
+              100: '#FEF3C7',
+              200: '#FDE68A',
+              300: '#FCD34D',
+              400: '#FBBF24',
+              500: '#F59E0B',
+              600: '#D97706',
+              700: '#B45309'
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "1rem",
+            "xl": "1.5rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Outfit", "Public Sans", "sans-serif"],
+            display: ["Outfit", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .material-symbols-fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .num-tabular {
+      font-variant-numeric: tabular-nums;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-stone-100 text-stone-900 font-body min-h-screen flex justify-center antialiased selection:bg-teal-100 selection:text-teal-900">
+  <!-- Mobile Frame (390px viewport estándar) -->
+  <div class="w-full max-w-[390px] bg-stone-50 min-h-screen relative flex flex-col shadow-2xl border-x border-stone-200">
+    
+    <!-- TopAppBar Compacta -->
+    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-stone-200">
+      <div class="flex justify-between items-center w-full px-4 h-14">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-stone-900 text-amber-400 flex items-center justify-center font-headline font-bold text-xs shadow-sm border border-stone-800 tracking-wider">
+            CR
+          </div>
+          <div>
+            <span class="block font-headline text-xs font-bold tracking-tight text-stone-900 leading-none">CONSTROAD</span>
+            <span class="block text-[10px] text-stone-500 font-medium leading-tight">Dali WhatsApp · En línea</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <!-- Indicador WhatsApp conectado -->
+          <div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 mr-1">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="text-[10px] font-semibold text-emerald-800">Conectado</span>
+          </div>
+          <button aria-label="Notificaciones" class="relative w-8 h-8 flex items-center justify-center rounded-lg text-stone-600 hover:bg-stone-100 active:scale-95 transition-all" type="button">
+            <span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+            <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500"></span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main class="flex-1 px-4 pt-3.5 pb-24 space-y-3.5">
+      
+      <!-- Título y contador -->
+      <section class="flex items-center justify-between">
+        <div>
+          <h1 class="font-headline font-bold text-2xl tracking-tight text-stone-900">Conversaciones</h1>
+          <p class="text-xs text-stone-500">Chats en vivo sincronizados con WhatsApp</p>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100/80 text-amber-900 border border-amber-300/70">
+            <span class="material-symbols-outlined text-sm text-amber-700" data-icon="front_hand">front_hand</span>
+            2 requieren atención
+          </span>
+        </div>
+      </section>
+
+      <!-- Buscador -->
+      <section class="relative flex items-center">
+        <span class="absolute left-3 text-stone-400 material-symbols-outlined text-[18px] pointer-events-none" data-icon="search">search</span>
+        <input class="w-full h-10 pl-9 pr-3 text-xs bg-white rounded-xl border border-stone-200 placeholder-stone-400 focus:border-teal-700 focus:ring-1 focus:ring-teal-700 transition-all outline-none text-stone-900 shadow-2xs" placeholder="Buscar por nombre o número..." type="text"/>
+      </section>
+
+      <!-- Filtros como Chips horizontales con scroll -->
+      <section class="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
+        <!-- Todas (Activa) -->
+        <button class="px-3 py-1.5 rounded-full text-xs font-semibold bg-teal-700 text-white shadow-xs whitespace-nowrap transition-colors flex items-center gap-1" type="button">
+          <span>Todas</span>
+          <span class="bg-teal-800/80 text-[10px] px-1.5 py-0.2 rounded-full">6</span>
+        </button>
+        
+        <!-- Piden atención con badge 2 -->
+        <button class="px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 whitespace-nowrap transition-colors flex items-center gap-1.5" type="button">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+          <span>Piden atención</span>
+          <span class="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full leading-tight">2</span>
+        </button>
+
+        <!-- Dali atendiendo -->
+        <button class="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-stone-600 border border-stone-200 hover:bg-stone-50 whitespace-nowrap transition-colors flex items-center gap-1" type="button">
+          <span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+          <span>Dali atendiendo</span>
+        </button>
+
+        <!-- Persona a cargo -->
+        <button class="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-stone-600 border border-stone-200 hover:bg-stone-50 whitespace-nowrap transition-colors" type="button">
+          <span>Persona a cargo</span>
+        </button>
+
+        <!-- Cerradas -->
+        <button class="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-stone-600 border border-stone-200 hover:bg-stone-50 whitespace-nowrap transition-colors" type="button">
+          <span>Cerradas</span>
+        </button>
+      </section>
+
+      <!-- Lista de Conversaciones (Tarjetas clicables) -->
+      <section class="space-y-2" id="conversaciones-list">
+
+        <!-- 1. Luis Paredes · Transportes Paredes (Pide atención, sin leer) -->
+        <article class="bg-amber-50/60 hover:bg-amber-50 border border-amber-300/80 rounded-2xl p-3 shadow-2xs transition-all active:scale-[0.99] cursor-pointer relative" onclick="abrirDetalleLuis()">
+          <!-- Barra lateral de acento ámbar -->
+          <div class="absolute left-0 top-3 bottom-3 w-1 bg-amber-500 rounded-r-full"></div>
+          <div class="flex items-start gap-3 pl-1">
+            <!-- Avatar con iniciales LP + punto de no leído -->
+            <div class="relative shrink-0">
+              <div class="w-11 h-11 rounded-full bg-amber-200/80 border border-amber-300 text-amber-900 flex items-center justify-center font-headline font-bold text-sm">
+                LP
+              </div>
+              <!-- Punto ámbar sin leer -->
+              <span class="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 border-2 border-white rounded-full flex items-center justify-center shadow-xs">
+                <span class="w-1.5 h-1.5 bg-white rounded-full"></span>
+              </span>
+            </div>
+
+            <!-- Contenido del mensaje -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <h2 class="font-headline font-bold text-sm text-stone-900 truncate">
+                  Luis Paredes
+                  <span class="font-normal text-stone-500 text-xs">· Transportes Paredes</span>
+                </h2>
+                <span class="text-[11px] font-semibold text-amber-900 num-tabular shrink-0">10:52</span>
+              </div>
+
+              <!-- Último mensaje truncado -->
+              <p class="text-xs text-stone-800 font-medium truncate mt-0.5 leading-snug">
+                "¿y me pueden incluir la señalización?"
+              </p>
+
+              <!-- Pill de estado y badges contextuales -->
+              <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-amber-200/60">
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500 text-white shadow-2xs">
+                  <span class="material-symbols-outlined text-[13px] text-white" data-icon="front_hand">front_hand</span>
+                  Pide atención
+                </span>
+                <span class="text-[11px] font-medium text-teal-800 flex items-center gap-0.5">
+                  Asfalto 600 m² · Lurín
+                  <span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- 2. +51 902 049 935 (Dali atendiendo) -->
+        <article class="bg-white hover:bg-stone-50 border border-stone-200 rounded-2xl p-3 shadow-2xs transition-all active:scale-[0.99] cursor-pointer">
+          <div class="flex items-start gap-3">
+            <div class="relative shrink-0">
+              <div class="w-11 h-11 rounded-full bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center font-mono font-bold text-xs">
+                935
+              </div>
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <h2 class="font-mono font-semibold text-xs text-stone-900 truncate">
+                  +51 902 049 935
+                </h2>
+                <span class="text-[11px] text-stone-400 num-tabular shrink-0">10:41</span>
+              </div>
+
+              <p class="text-xs text-stone-600 truncate mt-0.5 leading-snug">
+                <span class="font-semibold text-teal-700">Dali:</span> Déjame confirmar lo que tengo: • Servicio: asfaltado…
+              </p>
+
+              <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-stone-100">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-800 border border-teal-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse"></span>
+                  Dali atendiendo
+                </span>
+                <span class="text-[10px] text-stone-400 font-mono">Calificando lead</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- 3. Juan Carlos · Consorcio Los Pinos (Persona a cargo) -->
+        <article class="bg-white hover:bg-stone-50 border border-stone-200 rounded-2xl p-3 shadow-2xs transition-all active:scale-[0.99] cursor-pointer">
+          <div class="flex items-start gap-3">
+            <div class="relative shrink-0">
+              <div class="w-11 h-11 rounded-full bg-stone-100 border border-stone-200 text-stone-700 flex items-center justify-center font-headline font-bold text-xs">
+                JC
+              </div>
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <h2 class="font-headline font-semibold text-xs text-stone-900 truncate">
+                  Juan Carlos
+                  <span class="font-normal text-stone-500">· Consorcio Los Pinos</span>
+                </h2>
+                <span class="text-[11px] text-stone-400 num-tabular shrink-0">ayer</span>
+              </div>
+
+              <p class="text-xs text-stone-600 truncate mt-0.5 leading-snug">
+                <span class="font-semibold text-stone-900">Tú:</span> Te mando la cotización hoy
+              </p>
+
+              <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-stone-100">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-stone-100 text-stone-700 border border-stone-200">
+                  <span class="material-symbols-outlined text-[13px] text-stone-500" data-icon="person">person</span>
+                  Persona a cargo
+                </span>
+                <span class="text-[10px] text-stone-400">Atendido por José</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- 4. Carlos (Cerrada) -->
+        <article class="bg-white hover:bg-stone-50 border border-stone-200/80 rounded-2xl p-3 shadow-2xs opacity-90 transition-all active:scale-[0.99] cursor-pointer">
+          <div class="flex items-start gap-3">
+            <div class="relative shrink-0">
+              <div class="w-11 h-11 rounded-full bg-stone-100 border border-stone-200 text-stone-600 flex items-center justify-center font-headline font-semibold text-xs">
+                C
+              </div>
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <h2 class="font-headline font-semibold text-xs text-stone-800 truncate">
+                  Carlos
+                </h2>
+                <span class="text-[11px] text-stone-400 num-tabular shrink-0">ayer</span>
+              </div>
+
+              <p class="text-xs text-stone-500 truncate mt-0.5 leading-snug">
+                <span class="font-semibold text-stone-700">Dali:</span> Listo, Carlos. Un asesor te contacta hoy mismo…
+              </p>
+
+              <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-stone-100">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600 border border-stone-200">
+                  <span class="material-symbols-outlined text-[13px] text-stone-400" data-icon="check_circle">check_circle</span>
+                  Cerrada
+                </span>
+                <span class="text-[10px] text-stone-400">Transporte 20 m³</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- 5. +51 987 654 321 (En pausa) -->
+        <article class="bg-white hover:bg-stone-50 border border-stone-200 rounded-2xl p-3 shadow-2xs transition-all active:scale-[0.99] cursor-pointer">
+          <div class="flex items-start gap-3">
+            <div class="relative shrink-0">
+              <div class="w-11 h-11 rounded-full bg-stone-100 border border-stone-200 text-stone-700 flex items-center justify-center font-mono font-medium text-xs">
+                321
+              </div>
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <h2 class="font-mono font-medium text-xs text-stone-900 truncate">
+                  +51 987 654 321
+                </h2>
+                <span class="text-[11px] text-stone-400 num-tabular shrink-0">lun</span>
+              </div>
+
+              <p class="text-xs text-stone-500 truncate mt-0.5 leading-snug">
+                "hola?"
+              </p>
+
+              <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-stone-100">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-stone-100 text-stone-600 border border-stone-200">
+                  <span class="material-symbols-outlined text-[13px] text-stone-400" data-icon="pause_circle">pause_circle</span>
+                  En pausa
+                </span>
+                <span class="text-[10px] text-stone-400">Fuera de tema</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- 6. María Torres (Cerrada) -->
+        <article class="bg-white hover:bg-stone-50 border border-stone-200/80 rounded-2xl p-3 shadow-2xs opacity-90 transition-all active:scale-[0.99] cursor-pointer">
+          <div class="flex items-start gap-3">
+            <div class="relative shrink-0">
+              <div class="w-11 h-11 rounded-full bg-stone-100 border border-stone-200 text-stone-600 flex items-center justify-center font-headline font-semibold text-xs">
+                MT
+              </div>
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <h2 class="font-headline font-semibold text-xs text-stone-800 truncate">
+                  María Torres
+                </h2>
+                <span class="text-[11px] text-stone-400 num-tabular shrink-0">dom</span>
+              </div>
+
+              <p class="text-xs text-stone-500 truncate mt-0.5 leading-snug">
+                <span class="font-semibold text-stone-700">Dali:</span> Solo puedo ayudarte con lo de asfalto 🙂
+              </p>
+
+              <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-stone-100">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600 border border-stone-200">
+                  <span class="material-symbols-outlined text-[13px] text-stone-400" data-icon="check_circle">check_circle</span>
+                  Cerrada
+                </span>
+                <span class="text-[10px] text-stone-400">Consulta resuelta</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+      </section>
+    </main>
+
+    <!-- Modal / Drawer Vista Detalle Móvil (Transición al tocar la conversación de Luis Paredes) -->
+    <div class="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 transition-opacity duration-200 opacity-0 pointer-events-none flex flex-col justify-end" id="chat-detail-modal">
+      <div class="w-full max-w-[390px] mx-auto bg-white rounded-t-3xl shadow-2xl h-[94vh] flex flex-col transform transition-transform duration-300 translate-y-full border-t border-stone-200" id="chat-sheet">
+        
+        <!-- Header del Chat Abierto -->
+        <div class="px-4 py-3 bg-stone-50 border-b border-stone-200 rounded-t-3xl flex items-center justify-between">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <button class="w-8 h-8 -ml-1 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-200/60" onclick="cerrarDetalleLuis()" type="button">
+              <span class="material-symbols-outlined text-xl" data-icon="arrow_back">arrow_back</span>
+            </button>
+            <div class="w-9 h-9 rounded-full bg-amber-200 text-amber-900 flex items-center justify-center font-bold text-xs shrink-0">
+              LP
+            </div>
+            <div class="min-w-0">
+              <h3 class="font-headline font-bold text-xs text-stone-900 truncate">Luis Paredes</h3>
+              <p class="text-[10px] text-amber-800 font-semibold flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+                Pide hablar con una persona
+              </p>
+            </div>
+          </div>
+
+          <!-- Botón de ficha de lead y cerrar -->
+          <div class="flex items-center gap-1">
+            <button class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-teal-50 text-teal-800 border border-teal-200" onclick="toggleLeadCard()" type="button">
+              Ver datos
+            </button>
+            <button class="w-7 h-7 flex items-center justify-center rounded-full text-stone-400 hover:text-stone-700" onclick="cerrarDetalleLuis()" type="button">
+              <span class="material-symbols-outlined text-lg" data-icon="close">close</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Ficha flotante deslizable: Datos del lead capturados -->
+        <div class="bg-teal-50/90 border-b border-teal-200/80 px-4 py-2.5 text-xs text-stone-800 transition-all" id="lead-data-card">
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-1 text-teal-900 font-headline font-bold text-[11px] uppercase tracking-wider">
+              <span class="material-symbols-outlined text-sm text-teal-700" data-icon="assignment">assignment</span>
+              Datos del lead (capturados por Dali)
+            </div>
+            <span class="text-[10px] font-bold bg-teal-700 text-white px-1.5 py-0.2 rounded">Listo para cotizar</span>
+          </div>
+          <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-medium">
+            <div><span class="text-stone-500">Servicio:</span> <strong class="text-stone-900">Asfaltado</strong></div>
+            <div><span class="text-stone-500">Área:</span> <strong class="text-stone-900">600 m²</strong></div>
+            <div><span class="text-stone-500">Lugar:</span> <strong class="text-stone-900">Lurín</strong></div>
+            <div><span class="text-stone-500">Espesor:</span> <strong class="text-stone-900">2 pulgadas</strong></div>
+            <div><span class="text-stone-500">Base:</span> <strong class="text-stone-900">Preparada</strong></div>
+            <div><span class="text-stone-500">Imprimación:</span> <strong class="text-stone-900">Sí (riego liga)</strong></div>
+            <div class="col-span-2 pt-0.5 border-t border-teal-200/50 flex justify-between">
+              <span><span class="text-stone-500">Fecha obra:</span> fines de octubre</span>
+              <span><span class="text-stone-500">Empresa:</span> Transportes Paredes</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Área de Conversación estilo WhatsApp -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-3 bg-[#EFEAE2] bg-opacity-70 text-xs">
+          
+          <div class="text-center my-1">
+            <span class="bg-white/80 backdrop-blur-xs text-stone-500 text-[10px] px-2 py-0.5 rounded-full shadow-2xs">
+              Hoy · WhatsApp oficial CONSTROAD
+            </span>
+          </div>
+
+          <!-- Mensaje Cliente -->
+          <div class="flex flex-col items-start max-w-[82%]">
+            <span class="text-[10px] font-semibold text-stone-600 mb-0.5 ml-1">Luis Paredes</span>
+            <div class="bg-white text-stone-900 p-2.5 rounded-2xl rounded-tl-xs shadow-xs border border-stone-200/60 leading-relaxed">
+              Hola, buenas tardes. Necesito cotizar asfaltado para un patio de maniobras en Lurín, son unos 600 m².
+              <div class="text-[9px] text-stone-400 text-right mt-1">10:48 am</div>
+            </div>
+          </div>
+
+          <!-- Mensaje Dali Asistente -->
+          <div class="flex flex-col items-end max-w-[84%] ml-auto">
+            <div class="flex items-center gap-1 mr-1 mb-0.5">
+              <span class="material-symbols-outlined text-[12px] text-teal-700" data-icon="smart_toy">smart_toy</span>
+              <span class="text-[10px] font-bold text-teal-800">Dali (Asistente)</span>
+            </div>
+            <div class="bg-teal-50 text-stone-900 p-2.5 rounded-2xl rounded-tr-xs shadow-xs border border-teal-200 leading-relaxed">
+              ¡Hola Luis! Con gusto te ayudamos con el asfaltado para tu patio en Lurín. ¿El terreno ya cuenta con base afirmada o requieren perfilado y compactación previa?
+              <div class="text-[9px] text-teal-800 text-right mt-1 flex items-center justify-end gap-1">
+                <span>10:49 am</span>
+                <span class="material-symbols-outlined text-[13px] text-teal-600" data-icon="done_all">done_all</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensaje Cliente -->
+          <div class="flex flex-col items-start max-w-[82%]">
+            <span class="text-[10px] font-semibold text-stone-600 mb-0.5 ml-1">Luis Paredes</span>
+            <div class="bg-white text-stone-900 p-2.5 rounded-2xl rounded-tl-xs shadow-xs border border-stone-200/60 leading-relaxed">
+              Ya tiene base afirmada y compactada. Sería carpeta de 2 pulgadas con su riego de liga para fines de octubre.
+              <div class="text-[9px] text-stone-400 text-right mt-1">10:50 am</div>
+            </div>
+          </div>
+
+          <!-- Mensaje Cliente (Pide atención) -->
+          <div class="flex flex-col items-start max-w-[82%]">
+            <span class="text-[10px] font-semibold text-stone-600 mb-0.5 ml-1">Luis Paredes</span>
+            <div class="bg-amber-100/90 text-stone-900 p-2.5 rounded-2xl rounded-tl-xs shadow-xs border border-amber-300 leading-relaxed">
+              ¿y me pueden incluir la señalización y pintado de líneas amarillas? Quisiera coordinar directo con el encargado para que me envíen la cotización formal.
+              <div class="text-[9px] text-amber-800 text-right mt-1 font-medium">10:52 am</div>
+            </div>
+          </div>
+
+          <!-- Aviso de Sistema Dali -->
+          <div class="text-center my-1.5">
+            <span class="inline-flex items-center gap-1 bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-semibold px-2.5 py-1 rounded-full shadow-2xs">
+              <span class="material-symbols-outlined text-[13px]" data-icon="front_hand">front_hand</span>
+              Dali pausó la respuesta automática: cliente solicitó atención de una persona
+            </span>
+          </div>
+        </div>
+
+        <!-- Botones de Acción Móvil a ancho completo -->
+        <div class="p-3 bg-white border-t border-stone-200 space-y-2 shrink-0">
+          <button class="w-full h-11 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl font-headline font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all" type="button">
+            <span class="material-symbols-outlined text-lg" data-icon="chat">chat</span>
+            <span>Tomar la conversación</span>
+          </button>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <button class="w-full h-9 bg-white hover:bg-stone-50 border border-stone-200 text-stone-700 rounded-xl font-medium text-xs flex items-center justify-center gap-1 transition-colors" type="button">
+              <span class="material-symbols-outlined text-sm text-teal-700" data-icon="smart_toy">smart_toy</span>
+              <span>Devolver a Dali</span>
+            </button>
+            <button class="w-full h-9 bg-white hover:bg-stone-50 border border-stone-200 text-stone-600 hover:text-red-700 rounded-xl font-medium text-xs flex items-center justify-center gap-1 transition-colors" type="button">
+              <span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+              <span>Marcar cerrada</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BottomNavBar Fija (5 pestañas oficiales Dali: Inicio, Chats, Leads, Asistente, Más) -->
+    <!-- Pestaña 'Chats' / Conversaciones activa en verde teal según requerimiento -->
+    <nav class="fixed bottom-0 left-0 w-full z-40 flex justify-around items-center px-2 py-1 max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-stone-200 shadow-lg">
+      <!-- 1. Inicio -->
+      <a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95 duration-150 flex-1" href="#inicio">
+        <span class="material-symbols-outlined" data-icon="home">home</span>
+        <span class="font-label text-[11px] font-medium mt-0.5">Inicio</span>
+      </a>
+
+      <!-- 2. Chats (ACTIVA EN ESTA PANTALLA) -->
+      <a class="flex flex-col items-center justify-center text-teal-800 font-bold py-1 transition-colors active:scale-95 duration-150 flex-1 relative" href="#chats">
+        <span class="material-symbols-outlined material-symbols-fill" data-icon="chat" style="font-variation-settings: 'FILL' 1;">chat</span>
+        <span class="font-label text-[11px] font-bold mt-0.5">Chats</span>
+        <!-- Badge de no leídos en barra inferior -->
+        <span class="absolute top-1 right-5 w-2 h-2 rounded-full bg-amber-500"></span>
+      </a>
+
+      <!-- 3. Leads -->
+      <a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95 duration-150 flex-1" href="#leads">
+        <span class="material-symbols-outlined" data-icon="group">group</span>
+        <span class="font-label text-[11px] font-medium mt-0.5">Leads</span>
+      </a>
+
+      <!-- 4. Asistente -->
+      <a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95 duration-150 flex-1" href="#asistente">
+        <span class="material-symbols-outlined" data-icon="smart_toy">smart_toy</span>
+        <span class="font-label text-[11px] font-medium mt-0.5">Asistente</span>
+      </a>
+
+      <!-- 5. Más -->
+      <a class="flex flex-col items-center justify-center text-stone-500 font-normal py-1 hover:text-teal-700 transition-colors active:scale-95 duration-150 flex-1" href="#mas">
+        <span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+        <span class="font-label text-[11px] font-medium mt-0.5">Más</span>
+      </a>
+    </nav>
+  </div>
+
+  <!-- Interactividad para abrir y cerrar el detalle móvil -->
+  <script>
+    function abrirDetalleLuis() {
+      const modal = document.getElementById('chat-detail-modal');
+      const sheet = document.getElementById('chat-sheet');
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+      modal.classList.add('opacity-100', 'pointer-events-auto');
+      sheet.classList.remove('translate-y-full');
+      sheet.classList.add('translate-y-0');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function cerrarDetalleLuis() {
+      const modal = document.getElementById('chat-detail-modal');
+      const sheet = document.getElementById('chat-sheet');
+      modal.classList.add('opacity-0', 'pointer-events-none');
+      modal.classList.remove('opacity-100', 'pointer-events-auto');
+      sheet.classList.add('translate-y-full');
+      sheet.classList.remove('translate-y-0');
+      document.body.style.overflow = '';
+    }
+
+    function toggleLeadCard() {
+      const card = document.getElementById('lead-data-card');
+      if (card.classList.contains('hidden')) {
+        card.classList.remove('hidden');
+      } else {
+        card.classList.add('hidden');
+      }
+    }
+
+    // Cerrar tocando fondo
+    document.getElementById('chat-detail-modal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        cerrarDetalleLuis();
+      }
+    });
+  </script>
+</body>
+</html>

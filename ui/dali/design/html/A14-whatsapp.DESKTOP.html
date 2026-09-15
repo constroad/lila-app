@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>WhatsApp · Dali · CONSTROAD</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Public+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {},
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "1rem",
+            "xl": "1.5rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Public Sans", "sans-serif"],
+            display: ["Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 350, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Subtle dot grid for QR simulation */
+    .qr-pattern {
+      background-image: radial-gradient(#1c1917 2px, transparent 2px), radial-gradient(#1c1917 2px, #ffffff 2px);
+      background-size: 12px 12px;
+      background-position: 0 0, 6px 6px;
+    }
+  </style>
+</head>
+<body class="bg-[#FAFAF9] text-[#1C1917] font-body antialiased min-h-screen flex selection:bg-teal-100 selection:text-teal-900">
+<!-- ==================== 1. SIDEBAR (256px / Fixed) ==================== -->
+<aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-stone-200 z-40 flex flex-col justify-between shrink-0 select-none">
+<!-- Top Area: Brand & Navigation -->
+<div class="flex flex-col flex-1 overflow-y-auto">
+<!-- Brand Anchor Header -->
+<div class="px-5 py-4 flex items-center justify-between border-b border-stone-100">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-teal-800 text-white font-headline font-bold text-sm flex items-center justify-center tracking-tight shadow-sm">
+            CO
+          </div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-headline text-lg font-bold tracking-tight text-teal-800">Dali</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-stone-100 text-stone-600 border border-stone-200">v2.4</span>
+</div>
+<p class="text-xs text-stone-500 font-medium tracking-tight">CONSTROAD · Asfalto</p>
+</div>
+</div>
+<button class="text-stone-400 hover:text-stone-600 p-1 rounded-md hover:bg-stone-100 transition-colors" title="Cambiar negocio">
+<span class="material-symbols-outlined text-stone-400" data-icon="unfold_more">unfold_more</span>
+</button>
+</div>
+<!-- Navigation Links -->
+<nav class="p-3 space-y-5 text-sm">
+<!-- Grupo: OPERACIÓN -->
+<div>
+<div class="px-3 pb-1.5 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+            Operación
+          </div>
+<ul class="space-y-0.5">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Inicio</span>
+</a>
+</li>
+<li>
+<a class="flex items-center justify-between px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="chat">chat</span>
+<span>Conversaciones</span>
+</div>
+<span class="text-[11px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full tabular-nums">3</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span>Leads</span>
+</a>
+</li>
+</ul>
+</div>
+<!-- Grupo: CONFIGURAR -->
+<div>
+<div class="px-3 pb-1.5 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+            Configurar
+          </div>
+<ul class="space-y-0.5">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="smart_toy">smart_toy</span>
+<span>Asistente</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="storefront">storefront</span>
+<span>Negocio</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="construction">construction</span>
+<span>Servicios</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="quiz">quiz</span>
+<span>Preguntas frecuentes</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+<span>Catálogo</span>
+</a>
+</li>
+<!-- PESTAÑA ACTIVA: WhatsApp -->
+<li>
+<a aria-current="page" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-teal-50 text-teal-800 font-semibold border border-teal-200/60 shadow-xs" href="#">
+<span class="material-symbols-outlined text-teal-800" data-icon="link">link</span>
+<span>WhatsApp</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="play_circle">play_circle</span>
+<span>Probar a Dali</span>
+</a>
+</li>
+</ul>
+</div>
+<!-- Grupo: CUENTA -->
+<div>
+<div class="px-3 pb-1.5 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+            Cuenta
+          </div>
+<ul class="space-y-0.5">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="badge">badge</span>
+<span>Equipo</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="receipt_long">receipt_long</span>
+<span>Plan y uso</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span>Notificaciones</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Ajustes</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+</div>
+<!-- Bottom of Sidebar: Plan Status & Sign out -->
+<div class="p-3 border-t border-stone-200 bg-stone-50/50">
+<!-- Usage summary box -->
+<div class="p-2.5 rounded-lg bg-white border border-stone-200 mb-2">
+<div class="flex items-center justify-between text-xs mb-1">
+<span class="font-medium text-stone-700">Plan Negocio</span>
+<span class="font-mono text-stone-600 tabular-nums">61%</span>
+</div>
+<div class="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
+<div class="bg-teal-700 h-1.5 rounded-full" style="width: 61%"></div>
+</div>
+<p class="text-[11px] text-stone-500 mt-1.5 flex items-center justify-between">
+<span>610 / 1,000 chats</span>
+<a class="text-teal-700 font-medium hover:underline" href="#">Ampliar</a>
+</p>
+</div>
+<div class="flex items-center justify-between px-1 text-xs text-stone-500">
+<button class="flex items-center gap-1.5 py-1 text-stone-600 hover:text-stone-900 transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="help_outline">help_outline</span>
+<span>Ayuda</span>
+</button>
+<button class="flex items-center gap-1.5 py-1 text-stone-600 hover:text-red-700 transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="logout">logout</span>
+<span>Cerrar sesión</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- ==================== 2. MAIN CONTENT CANVAS ==================== -->
+<div class="ml-64 flex-1 flex flex-col min-w-0">
+<!-- Top Navigation Bar -->
+<header class="sticky top-0 z-30 bg-stone-50/95 backdrop-blur-sm border-b border-stone-200">
+<div class="max-w-[1120px] mx-auto px-8 h-16 flex items-center justify-between">
+<!-- Left: Search or breadcrumb hint -->
+<div class="flex items-center gap-2 text-xs text-stone-500">
+<span class="font-medium text-stone-700">CONSTROAD</span>
+<span>/</span>
+<span class="text-stone-900 font-semibold">Configurar WhatsApp</span>
+</div>
+<!-- Right: Status indicator + Actions -->
+<div class="flex items-center gap-4">
+<!-- Estado: Atendiendo (Pill animado) -->
+<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold shadow-xs">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+</span>
+<span>Estado: Atendiendo</span>
+</div>
+<!-- Secondary test action -->
+<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-stone-300 bg-white text-stone-700 hover:bg-stone-50 font-medium text-xs transition-colors shadow-xs">
+<span class="material-symbols-outlined text-stone-500 text-[18px]" data-icon="play_circle">play_circle</span>
+<span>Probar a Dali</span>
+</button>
+<!-- Quick notifications icon -->
+<button class="relative p-1.5 rounded-lg text-stone-500 hover:bg-stone-200/60 transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+</button>
+</div>
+</div>
+</header>
+<!-- Page Body Container (Centered max-w 1120px) -->
+<main class="flex-1 max-w-[1120px] w-full mx-auto px-8 py-8 space-y-6">
+<!-- Page Title & Header intro -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2">
+<div>
+<h1 class="font-headline text-2xl md:text-3xl font-bold tracking-tight text-stone-900">WhatsApp</h1>
+<p class="text-sm text-stone-600 mt-1">El número desde el que Dali atiende a tus clientes y registra cotizaciones.</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-stone-500 font-mono">ID Instancia: dali_pe_9493</span>
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-stone-300"></span>
+<span class="text-xs text-stone-500">Servidor Lima (AWS)</span>
+</div>
+</div>
+<!-- ================= CARD 1: ESTADO DE SESIÓN PRINCIPAL ================= -->
+<section class="bg-white rounded-xl border border-stone-200 p-6 shadow-xs">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+<!-- Lado Izquierdo: Teléfono, Estado y Metadatos -->
+<div class="flex items-start gap-4">
+<!-- WhatsApp Avatar Badge -->
+<div class="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0 shadow-xs">
+<!-- Official green WhatsApp iconography context -->
+<svg class="w-8 h-8 text-[#25D366]" fill="currentColor" viewbox="0 0 24 24">
+<path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.41a8.216 8.216 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.196 8.196 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.66c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.13-1.06-.39-2.01-1.24-.74-.66-1.24-1.48-1.39-1.73-.14-.25-.02-.39.11-.51.11-.11.25-.29.37-.44.13-.14.17-.25.25-.42.08-.17.04-.32-.02-.45s-.56-1.35-.77-1.85c-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.03 2.61.13.17 1.77 2.7 4.29 3.79.6.26 1.07.41 1.44.53.6.19 1.15.16 1.59.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.17-.48-.29z"></path>
+</svg>
+</div>
+<div class="space-y-1">
+<div class="flex flex-wrap items-center gap-2.5">
+<span class="font-mono text-xl font-bold text-stone-900 tracking-tight tabular-nums">+51 949 376 824</span>
+<span class="text-stone-400">·</span>
+<span class="font-medium text-stone-700 text-sm">CONSTROAD Asfaltos EIRL</span>
+<!-- Pill Conectado -->
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                  Conectado
+                </span>
+</div>
+<!-- Metadatos de conexión -->
+<p class="text-xs text-stone-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+<span>Conectado hace 3 días</span>
+<span>•</span>
+<span class="text-stone-700 font-medium">Último mensaje atendido hace 3 min</span>
+<span>•</span>
+<span class="flex items-center gap-1 text-stone-600">
+<span class="material-symbols-outlined text-[14px]" data-icon="smartphone">smartphone</span>
+                  iPhone de José (Admin)
+                </span>
+</p>
+</div>
+</div>
+<!-- Lado Derecho: Acciones -->
+<div class="flex items-center gap-2.5 shrink-0 self-start lg:self-center">
+<button class="px-4 py-2 text-xs font-semibold text-stone-700 hover:text-stone-900 bg-white border border-stone-300 hover:bg-stone-50 rounded-xl transition-all shadow-xs flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="refresh">refresh</span>
+<span>Reconectar</span>
+</button>
+<button class="px-3.5 py-2 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors">
+              Desconectar
+            </button>
+</div>
+</div>
+</section>
+<!-- ================= BENTO GRID: CALIDAD (COL 7) + VINCULACIÓN QR (COL 5) ================= -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- COLUMNA IZQUIERDA (7 COLS): Calidad & Envíos + Mensajes de Prueba -->
+<div class="lg:col-span-7 space-y-6">
+<!-- TARJETA 2: CALIDAD DEL NÚMERO Y ENVÍOS -->
+<section class="bg-white rounded-xl border border-stone-200 p-6 shadow-xs space-y-5">
+<div class="flex items-center justify-between border-b border-stone-100 pb-3">
+<div>
+<h2 class="font-headline font-bold text-stone-900 text-base">Calidad del número y envíos</h2>
+<p class="text-xs text-stone-500">Métricas de actividad en tiempo real hoy sábado</p>
+</div>
+<!-- Badge calidad -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+<span class="material-symbols-outlined text-[15px] text-emerald-600 fill-icon" data-icon="verified_user">verified_user</span>
+<span>Calidad: Óptimo</span>
+</div>
+</div>
+<!-- Métricas estadísticas -->
+<div class="grid grid-cols-3 gap-3">
+<div class="p-3.5 rounded-xl bg-stone-50 border border-stone-100">
+<span class="text-xs font-medium text-stone-500">Mensajes hoy</span>
+<div class="font-mono text-2xl font-bold text-stone-900 mt-1 tabular-nums">62</div>
+<div class="text-[11px] text-teal-700 font-medium mt-1 flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]" data-icon="trending_up">trending_up</span>
+<span>+14% vs ayer</span>
+</div>
+</div>
+<div class="p-3.5 rounded-xl bg-stone-50 border border-stone-100">
+<span class="text-xs font-medium text-stone-500">Enviados Dali</span>
+<div class="font-mono text-2xl font-bold text-stone-900 mt-1 tabular-nums">48</div>
+<div class="text-[11px] text-stone-500 mt-1">
+                  14 del cliente
+                </div>
+</div>
+<div class="p-3.5 rounded-xl bg-stone-50 border border-stone-100">
+<span class="text-xs font-medium text-stone-500">Fallidos</span>
+<div class="font-mono text-2xl font-bold text-stone-900 mt-1 tabular-nums text-emerald-700">0</div>
+<div class="text-[11px] text-emerald-700 font-medium mt-1 flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]" data-icon="check_circle">check_circle</span>
+<span>100% entregados</span>
+</div>
+</div>
+</div>
+<!-- Banner Informativo Antispam / Escudo de protección -->
+<div class="flex items-start gap-3 p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-950">
+<span class="material-symbols-outlined text-amber-700 text-[20px] shrink-0 mt-0.5" data-icon="shield">shield</span>
+<div class="leading-relaxed">
+<span class="font-semibold text-amber-900">WhatsApp protege a los usuarios de spam:</span> Dali solo responde conversaciones iniciadas por tus clientes o cotizaciones autorizadas. Nunca enviamos mensajes masivos sin solicitud previa para evitar bloqueos del número.
+              </div>
+</div>
+</section>
+<!-- TARJETA 5: MENSAJES DE PRUEBA -->
+<section class="bg-white rounded-xl border border-stone-200 p-6 shadow-xs space-y-4">
+<div>
+<h2 class="font-headline font-bold text-stone-900 text-base">Mensajes de prueba</h2>
+<p class="text-xs text-stone-500">Envíate un mensaje de prueba al celular para verificar que Dali responde en tiempo real.</p>
+</div>
+<form class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1" onsubmit="event.preventDefault(); alert('¡Mensaje de prueba enviado con éxito a tu WhatsApp!');">
+<div class="relative flex-1">
+<label class="sr-only" for="test-phone">Número para prueba</label>
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400 text-xs font-mono">
+                  🇵🇪 +51
+                </div>
+<input class="w-full pl-14 pr-3 py-2 text-sm font-mono text-stone-800 bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all tabular-nums" id="test-phone" placeholder="999 999 999" type="text" value="902 049 935"/>
+</div>
+<button class="px-5 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-semibold tracking-wide transition-all duration-150 shadow-xs active:scale-[0.98] flex items-center justify-center gap-1.5 shrink-0" type="submit">
+<span class="material-symbols-outlined text-[16px]" data-icon="send">send</span>
+<span>Enviar prueba</span>
+</button>
+</form>
+<div class="flex items-center gap-2 text-[11px] text-stone-500">
+<span class="material-symbols-outlined text-[14px] text-teal-700" data-icon="info">info</span>
+<span>Dali te enviará un saludo de prueba como si fueras un cliente nuevo pidiendo cotización de asfalto en frío.</span>
+</div>
+</section>
+<!-- TARJETA 4: HISTORIAL DE CONEXIÓN -->
+<section class="bg-white rounded-xl border border-stone-200 p-6 shadow-xs space-y-4">
+<div class="flex items-center justify-between border-b border-stone-100 pb-3">
+<div>
+<h2 class="font-headline font-bold text-stone-900 text-base">Historial de conexión</h2>
+<p class="text-xs text-stone-500">Eventos recientes de la sesión de WhatsApp Web</p>
+</div>
+<button class="text-xs text-teal-800 font-semibold hover:underline">Ver registro completo</button>
+</div>
+<!-- Timeline List -->
+<ol class="relative border-l border-stone-200 ml-3 space-y-5 py-1">
+<!-- Evento 1: Conectado hoy -->
+<li class="ml-6 group">
+<span class="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 ring-4 ring-white">
+<span class="material-symbols-outlined text-[13px] fill-icon" data-icon="check">check</span>
+</span>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+<span class="text-xs font-semibold text-stone-800">Conectado exitosamente</span>
+<time class="text-[11px] font-mono text-stone-500 tabular-nums">sáb 12 sep 08:14</time>
+</div>
+<p class="text-xs text-stone-500 mt-0.5">Sesión reanudada automáticamente desde iPhone de José.</p>
+</li>
+<!-- Evento 2: Desconectado sin internet -->
+<li class="ml-6 group">
+<span class="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-700 ring-4 ring-white">
+<span class="material-symbols-outlined text-[13px]" data-icon="wifi_off">wifi_off</span>
+</span>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+<span class="text-xs font-semibold text-stone-800">Desconectado (teléfono sin internet)</span>
+<time class="text-[11px] font-mono text-stone-500 tabular-nums">vie 11 sep 23:02</time>
+</div>
+<p class="text-xs text-stone-500 mt-0.5">El celular estuvo apagado o sin cobertura por 25 minutos. Dali pausó respuestas.</p>
+</li>
+<!-- Evento 3: Conectado ayer -->
+<li class="ml-6 group">
+<span class="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 ring-4 ring-white">
+<span class="material-symbols-outlined text-[13px] fill-icon" data-icon="check">check</span>
+</span>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+<span class="text-xs font-semibold text-stone-800">Conectado</span>
+<time class="text-[11px] font-mono text-stone-500 tabular-nums">vie 11 sep 07:55</time>
+</div>
+<p class="text-xs text-stone-500 mt-0.5">Inicio de jornada de atención matutina.</p>
+</li>
+<!-- Evento 4: Primera vinculación -->
+<li class="ml-6 group">
+<span class="absolute -left-2.5 flex items-center justify-center w-5 h-5 rounded-full bg-teal-100 text-teal-800 ring-4 ring-white">
+<span class="material-symbols-outlined text-[13px]" data-icon="qr_code_2">qr_code_2</span>
+</span>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+<span class="text-xs font-semibold text-stone-800">Sesión vinculada por primera vez</span>
+<time class="text-[11px] font-mono text-stone-500 tabular-nums">jue 10 sep 15:40</time>
+</div>
+<p class="text-xs text-stone-500 mt-0.5">Escaneado de código QR inicial al crear la cuenta CONSTROAD.</p>
+</li>
+</ol>
+</section>
+</div>
+<!-- COLUMNA DERECHA (5 COLS): VINCULACIÓN / RECONECTAR (DESPLEGADA) -->
+<div class="lg:col-span-5 space-y-6">
+<!-- TARJETA 3: VINCULAR OTRO DISPOSITIVO O RECONECTAR -->
+<section class="bg-white rounded-xl border border-stone-200 p-6 shadow-xs space-y-5">
+<div>
+<div class="flex items-center justify-between">
+<h2 class="font-headline font-bold text-stone-900 text-base">Vincular dispositivo</h2>
+<span class="text-[11px] font-medium text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200/50">Multi-dispositivo</span>
+</div>
+<p class="text-xs text-stone-500 mt-0.5">Escanea para cambiar el número o reanudar sesión.</p>
+</div>
+<!-- Selector de pestañas [QR | Código numérico] -->
+<div class="grid grid-cols-2 p-1 bg-stone-100 rounded-lg text-xs font-medium">
+<button class="py-1.5 px-3 rounded-md bg-white text-stone-900 shadow-xs font-semibold text-center transition-all">
+                Código QR
+              </button>
+<button class="py-1.5 px-3 rounded-md text-stone-600 hover:text-stone-900 text-center transition-all">
+                Código numérico
+              </button>
+</div>
+<!-- Contenedor del QR estilizado -->
+<div class="flex flex-col items-center justify-center p-5 rounded-xl bg-stone-50 border border-stone-200 text-center relative overflow-hidden">
+<!-- QR Graphic Wrapper -->
+<div class="relative w-48 h-48 bg-white p-3 rounded-xl border border-stone-200 shadow-xs flex items-center justify-center">
+<!-- Visual SVG QR Pattern -->
+<svg class="w-full h-full text-stone-800" fill="currentColor" viewbox="0 0 100 100">
+<!-- Top Left Finder Pattern -->
+<rect fill="none" height="28" rx="4" stroke="currentColor" stroke-width="5" width="28" x="5" y="5"></rect>
+<rect fill="currentColor" height="14" rx="2" width="14" x="12" y="12"></rect>
+<!-- Top Right Finder Pattern -->
+<rect fill="none" height="28" rx="4" stroke="currentColor" stroke-width="5" width="28" x="67" y="5"></rect>
+<rect fill="currentColor" height="14" rx="2" width="14" x="74" y="12"></rect>
+<!-- Bottom Left Finder Pattern -->
+<rect fill="none" height="28" rx="4" stroke="currentColor" stroke-width="5" width="28" x="5" y="67"></rect>
+<rect fill="currentColor" height="14" rx="2" width="14" x="12" y="74"></rect>
+<!-- Stylized Data Matrix Dots -->
+<circle cx="42" cy="10" r="3"></circle>
+<circle cx="52" cy="10" r="3"></circle>
+<circle cx="42" cy="20" r="3"></circle>
+<circle cx="57" cy="24" r="3"></circle>
+<circle cx="47" cy="32" r="3"></circle>
+<circle cx="10" cy="42" r="3"></circle>
+<circle cx="20" cy="42" r="3"></circle>
+<circle cx="15" cy="52" r="3"></circle>
+<circle cx="28" cy="54" r="3"></circle>
+<circle cx="42" cy="68" r="3"></circle>
+<circle cx="54" cy="68" r="3"></circle>
+<circle cx="42" cy="80" r="3"></circle>
+<circle cx="54" cy="88" r="3"></circle>
+<circle cx="70" cy="42" r="3"></circle>
+<circle cx="82" cy="42" r="3"></circle>
+<circle cx="70" cy="55" r="3"></circle>
+<circle cx="88" cy="55" r="3"></circle>
+<circle cx="80" cy="68" r="3"></circle>
+<circle cx="72" cy="82" r="3"></circle>
+<circle cx="88" cy="88" r="3"></circle>
+</svg>
+<!-- Center WhatsApp Badge Overlay -->
+<div class="absolute inset-0 m-auto w-10 h-10 rounded-xl bg-white border border-stone-200 shadow-md flex items-center justify-center">
+<svg class="w-6 h-6 text-[#25D366]" fill="currentColor" viewbox="0 0 24 24">
+<path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.41a8.216 8.216 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.196 8.196 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.66c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.13-1.06-.39-2.01-1.24-.74-.66-1.24-1.48-1.39-1.73-.14-.25-.02-.39.11-.51.11-.11.25-.29.37-.44.13-.14.17-.25.25-.42.08-.17.04-.32-.02-.45s-.56-1.35-.77-1.85c-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.03 2.61.13.17 1.77 2.7 4.29 3.79.6.26 1.07.41 1.44.53.6.19 1.15.16 1.59.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.17-.48-.29z"></path>
+</svg>
+</div>
+</div>
+<!-- Expire timer & refresh -->
+<div class="mt-3 flex items-center justify-between w-full max-w-xs px-2 text-xs text-stone-500">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]" data-icon="timer">timer</span>
+<span>Expira en <strong class="text-stone-800 font-mono">01:48</strong></span>
+</span>
+<button class="text-teal-800 font-semibold hover:underline flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="sync">sync</span>
+                  Actualizar QR
+                </button>
+</div>
+</div>
+<!-- Instrucciones en 3 pasos -->
+<div class="space-y-3 pt-1">
+<h3 class="text-xs font-bold text-stone-700 uppercase tracking-wider">Pasos para conectar:</h3>
+<ol class="space-y-2 text-xs text-stone-600">
+<li class="flex items-start gap-2.5">
+<span class="w-5 h-5 rounded-full bg-stone-100 border border-stone-200 text-stone-800 font-bold flex items-center justify-center shrink-0 text-[11px]">1</span>
+<span>Abre <strong>WhatsApp</strong> en el teléfono de tu negocio.</span>
+</li>
+<li class="flex items-start gap-2.5">
+<span class="w-5 h-5 rounded-full bg-stone-100 border border-stone-200 text-stone-800 font-bold flex items-center justify-center shrink-0 text-[11px]">2</span>
+<span>Toca <strong>Menú (⋮)</strong> o <strong>Configuración</strong> y elige <strong>Dispositivos vinculados</strong>.</span>
+</li>
+<li class="flex items-start gap-2.5">
+<span class="w-5 h-5 rounded-full bg-stone-100 border border-stone-200 text-stone-800 font-bold flex items-center justify-center shrink-0 text-[11px]">3</span>
+<span>Toca <strong>Vincular un dispositivo</strong> y apunta tu cámara a este código QR.</span>
+</li>
+</ol>
+</div>
+<div class="border-t border-stone-100 pt-3">
+<p class="text-[11px] text-stone-500 leading-normal">
+                ¿No puedes escanear con la cámara? <a class="text-teal-800 font-medium hover:underline" href="#">Vincular con tu número de teléfono (+51)</a>
+</p>
+</div>
+</section>
+<!-- Tips rápidos sobre el número -->
+<div class="p-4 rounded-xl bg-stone-100/70 border border-stone-200 text-xs text-stone-600 space-y-2">
+<div class="flex items-center gap-1.5 font-semibold text-stone-800">
+<span class="material-symbols-outlined text-teal-800 text-[18px]" data-icon="tips_and_updates">tips_and_updates</span>
+<span>Recomendación para CONSTROAD</span>
+</div>
+<p class="leading-relaxed">
+              Mantén el teléfono de CONSTROAD con batería y conexión Wi-Fi estable para que las cotizaciones urgentes no sufran retrasos.
+            </p>
+</div>
+</div>
+</div>
+<!-- ================= 6. BANNER DE ALERTA DE ESTADO ALTERNATIVO ================= -->
+<!-- Visualiza cómo reacciona el diseño si el teléfono se desconecta repentinamente -->
+<section class="mt-8 border border-red-200 bg-red-50/50 rounded-xl p-4 sm:p-5 shadow-xs transition-all">
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+<div class="flex items-start gap-3">
+<div class="w-9 h-9 rounded-lg bg-red-100 border border-red-200 text-red-700 flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[20px] fill-icon" data-icon="error">error</span>
+</div>
+<div>
+<h4 class="text-xs font-bold text-red-900 tracking-tight flex items-center gap-2">
+<span>Alerta de simulación: Desconectado desde hace 2 h</span>
+<span class="px-1.5 py-0.2 rounded text-[10px] bg-red-200 text-red-800 font-semibold uppercase">Pausa activa</span>
+</h4>
+<p class="text-xs text-red-800/90 mt-0.5 leading-relaxed">
+                Dali no está respondiendo mensajes nuevos en este momento. Vuelve a escanear el código QR para restaurar la atención automática.
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+<button class="w-full sm:w-auto px-4 py-2 bg-red-700 hover:bg-red-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 active:scale-98">
+<span class="material-symbols-outlined text-[16px]" data-icon="qr_code_scanner">qr_code_scanner</span>
+<span>Vincular ahora</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Espacio final de pie de página -->
+<div class="pt-6 pb-12 text-center text-xs text-stone-400 border-t border-stone-200">
+        Dali Asistente IA · Conexión segura punto a punto cifrada con WhatsApp Business Protocol
+      </div>
+</main>
+</div>
+</body></html>

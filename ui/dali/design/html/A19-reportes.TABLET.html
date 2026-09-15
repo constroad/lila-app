@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reportes - Dali CONSTROAD (Tablet 834px)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              200: '#99F6E4',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="h-full bg-stone-50 font-sans text-stone-800 antialiased overflow-x-hidden flex">
+
+  <!-- LEFT NAVIGATION RAIL (72px fixed) -->
+  <aside class="w-[72px] h-screen bg-white border-r border-stone-200 shrink-0 flex flex-col justify-between items-center py-4 fixed top-0 left-0 z-30 select-none">
+    <div class="flex flex-col items-center w-full">
+      <!-- Logo Dali -->
+      <div class="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-lg mb-4 shadow-sm">
+        D
+      </div>
+
+      <!-- Navigation Items -->
+      <nav class="flex flex-col items-center gap-1 w-full px-1">
+        <!-- Inicio -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">grid_view</span>
+          <span class="text-[9px] font-medium tracking-tight mt-0.5">Inicio</span>
+        </a>
+        <!-- Chats -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors relative">
+          <span class="material-symbols-outlined text-[20px]">chat_bubble_outline</span>
+          <span class="text-[9px] font-medium tracking-tight mt-0.5">Chats</span>
+          <span class="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-amber-500"></span>
+        </a>
+        <!-- Leads -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">group</span>
+          <span class="text-[9px] font-medium tracking-tight mt-0.5">Leads</span>
+        </a>
+        <!-- Reportes (ACTIVO) -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl bg-brand-50 text-brand-700 font-semibold border-l-2 border-brand-700">
+          <span class="material-symbols-outlined fill text-[20px]">bar_chart</span>
+          <span class="text-[9px] tracking-tight mt-0.5">Reportes</span>
+        </a>
+        <!-- Asistente -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">smart_toy</span>
+          <span class="text-[9px] font-medium tracking-tight mt-0.5">Asistente</span>
+        </a>
+        <!-- Negocio -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">storefront</span>
+          <span class="text-[9px] font-medium tracking-tight mt-0.5">Negocio</span>
+        </a>
+        <!-- Servicios -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">construction</span>
+          <span class="text-[9px] font-medium tracking-tight mt-0.5">Servicios</span>
+        </a>
+        <!-- FAQ -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">quiz</span>
+          <span class="text-[9px] font-medium tracking-tight mt-0.5">FAQ</span>
+        </a>
+        <!-- Catálogo -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">inventory_2</span>
+          <span class="text-[9px] font-medium tracking-tight mt-0.5">Catálogo</span>
+        </a>
+        <!-- WhatsApp -->
+        <a href="#" class="w-full flex flex-col items-center py-2 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">call</span>
+          <span class="text-[9px] font-medium tracking-tight mt-0.5">WhatsApp</span>
+        </a>
+      </nav>
+    </div>
+
+    <!-- Bottom Rail Items -->
+    <div class="flex flex-col items-center gap-1 w-full px-1 border-t border-stone-100 pt-2">
+      <!-- Equipo -->
+      <a href="#" class="w-full flex flex-col items-center py-1.5 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+        <span class="material-symbols-outlined text-[19px]">badge</span>
+        <span class="text-[9px] font-medium tracking-tight mt-0.5">Equipo</span>
+      </a>
+      <!-- Plan -->
+      <a href="#" class="w-full flex flex-col items-center py-1.5 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+        <span class="material-symbols-outlined text-[19px]">credit_card</span>
+        <span class="text-[9px] font-medium tracking-tight mt-0.5">Plan</span>
+      </a>
+      <!-- Ajustes -->
+      <a href="#" class="w-full flex flex-col items-center py-1.5 px-1 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors">
+        <span class="material-symbols-outlined text-[19px]">settings</span>
+        <span class="text-[9px] font-medium tracking-tight mt-0.5">Ajustes</span>
+      </a>
+
+      <!-- User avatar / company badge -->
+      <div class="mt-2 w-8 h-8 rounded-full bg-stone-900 text-white flex items-center justify-center font-bold text-xs">
+        CR
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN VIEW CONTAINER (Width: 834px layout space, 72px rail + 762px content) -->
+  <div class="pl-[72px] flex-1 flex flex-col min-h-screen bg-stone-50">
+
+    <!-- TOP HEADER -->
+    <header class="bg-white border-b border-stone-200 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
+      <div class="flex items-center gap-3">
+        <div class="text-xs text-stone-500 flex items-center gap-1.5">
+          <span class="font-semibold text-stone-800">CONSTROAD</span>
+          <span>/</span>
+          <span>Reportes</span>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          WhatsApp +51 949 376 824
+        </span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition-colors">
+          <span class="material-symbols-outlined text-[16px] text-stone-500">play_circle</span>
+          Probar a Dali
+        </button>
+        <button class="w-8 h-8 rounded-lg flex items-center justify-center text-stone-500 hover:bg-stone-100 relative">
+          <span class="material-symbols-outlined text-[18px]">notifications</span>
+          <span class="w-1.5 h-1.5 bg-amber-500 rounded-full absolute top-1.5 right-1.5"></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- CONTENT WRAPPER -->
+    <main class="p-6 max-w-[762px] mx-auto w-full space-y-5 pb-12">
+
+      <!-- TITLE & RANGE SELECTOR BAR -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight text-stone-900">Reportes</h1>
+          <p class="text-xs text-stone-500 mt-0.5">Resumen semanal de rendimiento y ventas de CONSTROAD</p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Rango de fecha con "Esta semana" activo -->
+          <div class="inline-flex p-1 bg-stone-200/80 rounded-xl text-xs font-medium">
+            <button class="px-3 py-1.5 rounded-lg bg-white font-semibold text-brand-800 shadow-sm transition-all">
+              Esta semana
+            </button>
+            <button class="px-3 py-1.5 rounded-lg text-stone-600 hover:text-stone-900 transition-colors">
+              Semana pasada
+            </button>
+            <button class="px-3 py-1.5 rounded-lg text-stone-600 hover:text-stone-900 transition-colors">
+              Últimos 30 días
+            </button>
+          </div>
+
+          <!-- Botón Descargar PDF -->
+          <button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-stone-300 bg-white text-stone-700 hover:bg-stone-50 text-xs font-semibold shadow-sm transition-colors">
+            <span class="material-symbols-outlined text-[16px] text-stone-500">picture_as_pdf</span>
+            <span>Descargar PDF</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ROW OF 4 KPIS -->
+      <div class="grid grid-cols-4 gap-3">
+        <!-- KPI 1 -->
+        <div class="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+          <div class="flex items-center justify-between text-stone-500">
+            <span class="text-xs font-medium">Conversaciones</span>
+            <span class="material-symbols-outlined text-[18px] text-stone-400">chat</span>
+          </div>
+          <div class="mt-2 flex items-baseline justify-between">
+            <span class="text-2xl font-bold text-stone-900 tracking-tight">161</span>
+            <span class="inline-flex items-center text-xs font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
+              ↑ 6%
+            </span>
+          </div>
+          <span class="text-[10px] text-stone-400 mt-1">vs. semana anterior</span>
+        </div>
+
+        <!-- KPI 2 -->
+        <div class="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+          <div class="flex items-center justify-between text-stone-500">
+            <span class="text-xs font-medium">Leads</span>
+            <span class="material-symbols-outlined text-[18px] text-stone-400">filter_alt</span>
+          </div>
+          <div class="mt-2 flex items-baseline justify-between">
+            <span class="text-2xl font-bold text-stone-900 tracking-tight">38</span>
+            <span class="inline-flex items-center text-xs font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
+              ↑ 12%
+            </span>
+          </div>
+          <span class="text-[10px] text-stone-400 mt-1">calificados por Dali</span>
+        </div>
+
+        <!-- KPI 3 -->
+        <div class="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+          <div class="flex items-center justify-between text-stone-500">
+            <span class="text-xs font-medium">Confirmados cliente</span>
+            <span class="material-symbols-outlined text-[18px] text-stone-400">check_circle</span>
+          </div>
+          <div class="mt-2 flex items-baseline justify-between">
+            <span class="text-2xl font-bold text-stone-900 tracking-tight">21</span>
+            <span class="inline-flex items-center text-xs font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded-md">
+              55%
+            </span>
+          </div>
+          <span class="text-[10px] text-stone-400 mt-1">tasa de conversión</span>
+        </div>
+
+        <!-- KPI 4 -->
+        <div class="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+          <div class="flex items-center justify-between text-stone-500">
+            <span class="text-xs font-medium">Atendidos por persona</span>
+            <span class="material-symbols-outlined text-[18px] text-stone-400">support_agent</span>
+          </div>
+          <div class="mt-2 flex items-baseline justify-between">
+            <span class="text-2xl font-bold text-stone-900 tracking-tight">9</span>
+            <span class="inline-flex items-center text-xs font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
+              ↓ 3
+            </span>
+          </div>
+          <span class="text-[10px] text-emerald-700 font-medium mt-1">+ autonomía del bot</span>
+        </div>
+      </div>
+
+      <!-- ROW 2: GRÁFICOS (Conversaciones por día + Leads por servicio) -->
+      <div class="grid grid-cols-12 gap-4">
+        <!-- Conversaciones por día (7 cols) -->
+        <div class="col-span-7 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <h2 class="text-xs font-bold uppercase tracking-wider text-stone-500">Conversaciones por día</h2>
+              <p class="text-xs text-stone-400">Pico semanal el jueves (31 chats)</p>
+            </div>
+            <span class="px-2 py-0.5 bg-stone-100 rounded-md text-[11px] font-semibold text-stone-600">Total: 161</span>
+          </div>
+
+          <!-- SVG Sparkline / Line Chart con datos lun-dom: 22, 28, 25, 31, 27, 18, 10 -->
+          <div class="relative pt-6 pb-2">
+            <svg viewBox="0 0 380 120" class="w-full h-32 overflow-visible">
+              <defs>
+                <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#0F766E" stop-opacity="0.25"></stop>
+                  <stop offset="100%" stop-color="#0F766E" stop-opacity="0.0"></stop>
+                </linearGradient>
+              </defs>
+
+              <!-- Grid horizontal lines -->
+              <line x1="0" y1="20" x2="380" y2="20" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="3 3"/>
+              <line x1="0" y1="60" x2="380" y2="60" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="3 3"/>
+              <line x1="0" y1="100" x2="380" y2="100" stroke="#f1f5f9" stroke-width="1"/>
+
+              <!-- Coordinates mapped for values: 22(y:58), 28(y:36), 25(y:47), 31(y:24), 27(y:40), 18(y:72), 10(y:100) -->
+              <!-- X positions: Lun:25, Mar:80, Mié:135, Jue:190, Vie:245, Sáb:300, Dom:355 -->
+              <polygon points="25,58 80,36 135,47 190,24 245,40 300,72 355,100 355,105 25,105" fill="url(#chartGradient)" />
+              <polyline points="25,58 80,36 135,47 190,24 245,40 300,72 355,100" fill="none" stroke="#0F766E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+
+              <!-- Points -->
+              <circle cx="25" cy="58" r="3.5" fill="#ffffff" stroke="#0F766E" stroke-width="2"/>
+              <circle cx="80" cy="36" r="3.5" fill="#ffffff" stroke="#0F766E" stroke-width="2"/>
+              <circle cx="135" cy="47" r="3.5" fill="#ffffff" stroke="#0F766E" stroke-width="2"/>
+              <!-- Peak Highlight on Jueves -->
+              <circle cx="190" cy="24" r="5" fill="#0F766E" stroke="#ffffff" stroke-width="2"/>
+              <circle cx="245" cy="40" r="3.5" fill="#ffffff" stroke="#0F766E" stroke-width="2"/>
+              <circle cx="300" cy="72" r="3.5" fill="#ffffff" stroke="#0F766E" stroke-width="2"/>
+              <circle cx="355" cy="100" r="3.5" fill="#ffffff" stroke="#0F766E" stroke-width="2"/>
+            </svg>
+
+            <!-- Peak Tooltip Badge -->
+            <div class="absolute top-1 left-[165px] bg-stone-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md pointer-events-none">
+              31 max
+            </div>
+
+            <!-- X Axis Labels -->
+            <div class="flex justify-between text-[11px] text-stone-500 font-medium px-2 mt-1">
+              <div class="text-center"><span class="block text-stone-700 font-semibold">Lun</span><span class="text-[9px] text-stone-400">22</span></div>
+              <div class="text-center"><span class="block text-stone-700 font-semibold">Mar</span><span class="text-[9px] text-stone-400">28</span></div>
+              <div class="text-center"><span class="block text-stone-700 font-semibold">Mié</span><span class="text-[9px] text-stone-400">25</span></div>
+              <div class="text-center"><span class="block text-brand-700 font-bold">Jue</span><span class="text-[9px] text-brand-700 font-bold">31</span></div>
+              <div class="text-center"><span class="block text-stone-700 font-semibold">Vie</span><span class="text-[9px] text-stone-400">27</span></div>
+              <div class="text-center"><span class="block text-stone-700 font-semibold">Sáb</span><span class="text-[9px] text-stone-400">18</span></div>
+              <div class="text-center"><span class="block text-stone-700 font-semibold">Dom</span><span class="text-[9px] text-stone-400">10</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Leads por servicio (5 cols) -->
+        <div class="col-span-5 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <h2 class="text-xs font-bold uppercase tracking-wider text-stone-500">Leads por servicio</h2>
+              <span class="text-[10px] text-brand-700 font-semibold bg-brand-50 px-1.5 py-0.5 rounded">Catálogo activo</span>
+            </div>
+            <p class="text-xs text-stone-400 mb-3">38 prospectos clasificados esta semana</p>
+
+            <!-- Bars list -->
+            <div class="space-y-2.5">
+              <!-- Asfaltado 19 -->
+              <div>
+                <div class="flex justify-between text-xs font-semibold text-stone-700 mb-1">
+                  <span class="truncate">Asfaltado y colocación</span>
+                  <span class="text-stone-900 ml-2">19 <span class="text-stone-400 text-[10px] font-normal">(50%)</span></span>
+                </div>
+                <div class="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-brand-700 rounded-full" style="width: 50%"></div>
+                </div>
+              </div>
+
+              <!-- Venta de mezcla 12 -->
+              <div>
+                <div class="flex justify-between text-xs font-semibold text-stone-700 mb-1">
+                  <span class="truncate">Venta de mezcla en caliente</span>
+                  <span class="text-stone-900 ml-2">12 <span class="text-stone-400 text-[10px] font-normal">(32%)</span></span>
+                </div>
+                <div class="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-teal-500 rounded-full" style="width: 32%"></div>
+                </div>
+              </div>
+
+              <!-- Transporte 6 -->
+              <div>
+                <div class="flex justify-between text-xs font-semibold text-stone-700 mb-1">
+                  <span class="truncate">Transporte y volquetes</span>
+                  <span class="text-stone-900 ml-2">6 <span class="text-stone-400 text-[10px] font-normal">(16%)</span></span>
+                </div>
+                <div class="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-teal-300 rounded-full" style="width: 16%"></div>
+                </div>
+              </div>
+
+              <!-- Fabricación 1 -->
+              <div>
+                <div class="flex justify-between text-xs font-semibold text-stone-700 mb-1">
+                  <span class="truncate">Fabricación de emulsión / otros</span>
+                  <span class="text-stone-900 ml-2">1 <span class="text-stone-400 text-[10px] font-normal">(2%)</span></span>
+                </div>
+                <div class="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-stone-300 rounded-full" style="width: 4%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
+            <span>Mayor margen: Asfaltado 2"</span>
+            <a href="#" class="text-brand-700 font-semibold hover:underline">Ver catálogo →</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 3: EMBUDO + LO QUE MÁS PREGUNTAN (2 Columns) -->
+      <div class="grid grid-cols-12 gap-4">
+        <!-- Embudo de Conversión (6 cols) -->
+        <div class="col-span-6 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="text-xs font-bold uppercase tracking-wider text-stone-500">Embudo de conversión</h2>
+              <p class="text-xs text-stone-400">De primer mensaje a obra ganada</p>
+            </div>
+            <span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold rounded-lg">
+              4% cierre final
+            </span>
+          </div>
+
+          <!-- Embudo Steps -->
+          <div class="space-y-2 flex-1 flex flex-col justify-between">
+            <!-- Paso 1 -->
+            <div class="p-2.5 rounded-xl bg-stone-50 border border-stone-100 flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="w-6 h-6 rounded-lg bg-stone-200 text-stone-700 text-xs font-bold flex items-center justify-center">1</span>
+                <div>
+                  <div class="text-xs font-semibold text-stone-800">Conversaciones iniciadas</div>
+                  <div class="text-[10px] text-stone-400">Total mensajes entrantes</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="text-xs font-bold text-stone-900">161</div>
+                <div class="text-[10px] text-stone-400">100%</div>
+              </div>
+            </div>
+
+            <div class="flex justify-center -my-1">
+              <span class="material-symbols-outlined text-stone-300 text-sm">arrow_downward</span>
+            </div>
+
+            <!-- Paso 2 -->
+            <div class="p-2.5 rounded-xl bg-teal-50/40 border border-teal-100/60 flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="w-6 h-6 rounded-lg bg-teal-100 text-brand-800 text-xs font-bold flex items-center justify-center">2</span>
+                <div>
+                  <div class="text-xs font-semibold text-stone-800">Servicio identificado</div>
+                  <div class="text-[10px] text-stone-500">Asfalto, mezcla o flete</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="text-xs font-bold text-stone-900">118</div>
+                <div class="text-[10px] text-brand-700 font-medium">73%</div>
+              </div>
+            </div>
+
+            <div class="flex justify-center -my-1">
+              <span class="material-symbols-outlined text-stone-300 text-sm">arrow_downward</span>
+            </div>
+
+            <!-- Paso 3 -->
+            <div class="p-2.5 rounded-xl bg-teal-50/70 border border-teal-100 flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="w-6 h-6 rounded-lg bg-teal-200/80 text-brand-900 text-xs font-bold flex items-center justify-center">3</span>
+                <div>
+                  <div class="text-xs font-semibold text-stone-800">Datos completos</div>
+                  <div class="text-[10px] text-stone-500">Metrado m², espesor y zona</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="text-xs font-bold text-stone-900">52</div>
+                <div class="text-[10px] text-brand-700 font-medium">32%</div>
+              </div>
+            </div>
+
+            <div class="flex justify-center -my-1">
+              <span class="material-symbols-outlined text-stone-300 text-sm">arrow_downward</span>
+            </div>
+
+            <!-- Paso 4 -->
+            <div class="p-2.5 rounded-xl bg-emerald-50/50 border border-emerald-100 flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="w-6 h-6 rounded-lg bg-emerald-200 text-emerald-900 text-xs font-bold flex items-center justify-center">4</span>
+                <div>
+                  <div class="text-xs font-semibold text-stone-800">Confirmados por cliente</div>
+                  <div class="text-[10px] text-stone-500">Cotización formal enviada</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="text-xs font-bold text-stone-900">21</div>
+                <div class="text-[10px] text-emerald-700 font-bold">13%</div>
+              </div>
+            </div>
+
+            <div class="flex justify-center -my-1">
+              <span class="material-symbols-outlined text-emerald-400 text-sm">arrow_downward</span>
+            </div>
+
+            <!-- Paso 5 -->
+            <div class="p-2.5 rounded-xl bg-emerald-100/60 border border-emerald-300/80 flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">5</span>
+                <div>
+                  <div class="text-xs font-bold text-stone-900">Ganados (Cierres)</div>
+                  <div class="text-[10px] text-emerald-800 font-medium">Anticipo recibido / contrato</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="text-xs font-black text-emerald-900">6</div>
+                <div class="text-[10px] text-emerald-700 font-bold">29% conv.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lo que más preguntan (6 cols) -->
+        <div class="col-span-6 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <h2 class="text-xs font-bold uppercase tracking-wider text-stone-500">Lo que más preguntan</h2>
+              <span class="material-symbols-outlined text-stone-400 text-[18px]">contact_support</span>
+            </div>
+            <p class="text-xs text-stone-400 mb-3">Temas recurrentes en WhatsApp</p>
+
+            <!-- Lista ordenada con conteo -->
+            <div class="space-y-2">
+              <!-- Item 1: Precio (44) -->
+              <div class="p-2.5 rounded-xl bg-stone-50 hover:bg-stone-100/80 transition-colors flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="w-5 h-5 rounded-md bg-teal-100 text-teal-800 text-[11px] font-bold flex items-center justify-center">1</span>
+                  <div>
+                    <span class="text-xs font-semibold text-stone-800 block">Precio y cotizaciones por m²</span>
+                    <span class="text-[10px] text-stone-400">Resuelto por guion y ficha</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <span class="text-xs font-bold text-stone-900 bg-white px-2 py-0.5 rounded-md border border-stone-200">44</span>
+                </div>
+              </div>
+
+              <!-- Item 2: Horario (12) -->
+              <div class="p-2.5 rounded-xl bg-stone-50 hover:bg-stone-100/80 transition-colors flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="w-5 h-5 rounded-md bg-stone-200 text-stone-700 text-[11px] font-bold flex items-center justify-center">2</span>
+                  <div>
+                    <span class="text-xs font-semibold text-stone-800 block">Horarios y días de atención</span>
+                    <span class="text-[10px] text-stone-400">Respuesta rápida activa</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <span class="text-xs font-bold text-stone-900 bg-white px-2 py-0.5 rounded-md border border-stone-200">12</span>
+                </div>
+              </div>
+
+              <!-- Item 3: Si trabajan sábados (9) -->
+              <div class="p-2.5 rounded-xl bg-stone-50 hover:bg-stone-100/80 transition-colors flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="w-5 h-5 rounded-md bg-stone-200 text-stone-700 text-[11px] font-bold flex items-center justify-center">3</span>
+                  <div>
+                    <span class="text-xs font-semibold text-stone-800 block">Si trabajan los días sábados</span>
+                    <span class="text-[10px] text-stone-400">Planta abierta hasta las 2 pm</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <span class="text-xs font-bold text-stone-900 bg-white px-2 py-0.5 rounded-md border border-stone-200">9</span>
+                </div>
+              </div>
+
+              <!-- Item 4: Zona/Provincia (7) -->
+              <div class="p-2.5 rounded-xl bg-stone-50 hover:bg-stone-100/80 transition-colors flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="w-5 h-5 rounded-md bg-stone-200 text-stone-700 text-[11px] font-bold flex items-center justify-center">4</span>
+                  <div>
+                    <span class="text-xs font-semibold text-stone-800 block">Zona o despachos a provincia</span>
+                    <span class="text-[10px] text-stone-400">Cañete, Chincha, Ica</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <span class="text-xs font-bold text-stone-900 bg-white px-2 py-0.5 rounded-md border border-stone-200">7</span>
+                </div>
+              </div>
+
+              <!-- Item 5: Qué incluye (6) -->
+              <div class="p-2.5 rounded-xl bg-stone-50 hover:bg-stone-100/80 transition-colors flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="w-5 h-5 rounded-md bg-stone-200 text-stone-700 text-[11px] font-bold flex items-center justify-center">5</span>
+                  <div>
+                    <span class="text-xs font-semibold text-stone-800 block">Qué incluye el servicio</span>
+                    <span class="text-[10px] text-stone-400">Maquinaria, rodillo, emulsión</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <span class="text-xs font-bold text-stone-900 bg-white px-2 py-0.5 rounded-md border border-stone-200">6</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-stone-100 mt-2 flex justify-between items-center text-xs">
+            <span class="text-stone-500 text-[11px]">88% de consultas resueltas sin derivar</span>
+            <a href="#" class="text-brand-700 font-semibold hover:underline text-[11px]">Configurar respuestas →</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 4: TARJETA ÁMBAR "Dali no supo responder" + TARJETA "Tiempo de atención" -->
+      <div class="grid grid-cols-12 gap-4">
+        <!-- Tarjeta Ámbar: Dali no supo responder (7 cols) -->
+        <div class="col-span-7 bg-amber-50/70 border border-amber-200/90 p-4 rounded-2xl flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[16px]">lightbulb</span>
+                </span>
+                <h2 class="text-xs font-bold uppercase tracking-wider text-amber-900">Dali no supo responder</h2>
+              </div>
+              <span class="px-2 py-0.5 bg-amber-100 text-amber-800 text-[11px] font-bold rounded-md">
+                5 preguntas
+              </span>
+            </div>
+
+            <p class="text-xs text-amber-900/90 leading-relaxed mb-3">
+              Tus clientes hicieron 5 preguntas técnicas sobre ensayos de asfalto y transporte que Dali aún no tiene en su base de conocimiento.
+            </p>
+
+            <div class="p-2.5 bg-white/80 rounded-xl border border-amber-200/60 mb-3 text-[11px] text-amber-950 space-y-1">
+              <div class="font-semibold text-amber-800 text-[10px] uppercase tracking-wide">Ejemplos recientes detectados:</div>
+              <div class="truncate">• "¿Tienen certificado de ensayo Marshall para PEN 60/70?"</div>
+              <div class="truncate">• "¿Hacen entrega de mezcla fría ensacada de 25 kg?"</div>
+            </div>
+          </div>
+
+          <!-- Botón Agregarlas a preguntas frecuentes -->
+          <button class="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold shadow-xs transition-colors">
+            <span class="material-symbols-outlined text-[16px]">add_circle</span>
+            <span>Agregarlas a preguntas frecuentes</span>
+          </button>
+        </div>
+
+        <!-- Tarjeta Tiempo de atención (5 cols) -->
+        <div class="col-span-5 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <h2 class="text-xs font-bold uppercase tracking-wider text-stone-500">Tiempos de atención</h2>
+              <span class="material-symbols-outlined text-stone-400 text-[18px]">schedule</span>
+            </div>
+            <p class="text-xs text-stone-400 mb-4">Velocidad del asistente y toma humana</p>
+
+            <div class="space-y-3.5">
+              <!-- Métrica 1: Respuesta promedio de Dali 8 s -->
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-brand-50/50 border border-brand-100/60">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-brand-100 text-brand-800 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[18px]">bolt</span>
+                  </div>
+                  <div>
+                    <div class="text-xs font-bold text-stone-800">Respuesta promedio Dali</div>
+                    <div class="text-[10px] text-stone-400">Atención 24/7 sin esperas</div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <span class="text-xl font-black text-brand-800">8</span>
+                  <span class="text-xs font-semibold text-brand-700 ml-0.5">s</span>
+                  <div class="text-[9px] text-emerald-600 font-medium">Inmediato</div>
+                </div>
+              </div>
+
+              <!-- Métrica 2: Tiempo hasta toma humana 24 min (↓ de 41) -->
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-stone-50 border border-stone-200">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-stone-200 text-stone-700 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[18px]">person_check</span>
+                  </div>
+                  <div>
+                    <div class="text-xs font-bold text-stone-800">Toma de asesor humano</div>
+                    <div class="text-[10px] text-stone-400">Cuando el cliente pide persona</div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="flex items-baseline justify-end">
+                    <span class="text-xl font-black text-stone-900">24</span>
+                    <span class="text-xs font-semibold text-stone-600 ml-0.5">min</span>
+                  </div>
+                  <div class="inline-flex items-center text-[10px] font-bold text-emerald-600">
+                    ↓ de 41 min
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-stone-100 mt-3 text-[10px] text-stone-400 text-center">
+            José Prado y el equipo comercial redujeron 17 minutos el tiempo de respuesta humana esta semana.
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+</body>
+</html>

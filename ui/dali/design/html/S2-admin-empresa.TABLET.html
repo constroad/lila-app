@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-100" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Superadmin Dali — CONSTROAD (Admin Tablet)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@500;600;700;800&amp;family=DM+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+            },
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              200: '#99F6E4',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+            },
+            amber: {
+              50: '#FFFBEB',
+              100: '#FEF3C7',
+              500: '#F59E0B',
+              600: '#D97706',
+              700: '#B45309',
+            },
+            emerald: {
+              50: '#ECFDF5',
+              100: '#D1FAE5',
+              600: '#059669',
+              700: '#047857',
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.75rem",
+            "xl": "1rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Public Sans", "sans-serif"],
+            display: ["Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 350, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+    }
+    .material-symbols-fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .num-tabular {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="h-full font-body text-stone-900 bg-[#F5F5F4] antialiased overflow-x-hidden">
+<!-- Contenedor general configurado para Tablet (ancho ideal 834px centrado) -->
+<div class="min-h-screen max-w-[834px] mx-auto flex bg-white shadow-2xl relative">
+<!-- 1. Rail lateral de navegación fija (72px) -->
+<aside class="w-[72px] shrink-0 border-r border-stone-200 bg-white flex flex-col justify-between items-center py-4 z-30 select-none">
+<div class="flex flex-col items-center w-full gap-5">
+<!-- Dali Isotipo -->
+<div class="relative group cursor-pointer">
+<div class="w-11 h-11 rounded-xl bg-teal-700 text-white flex items-center justify-center font-headline font-extrabold text-xl tracking-tight shadow-sm transition-transform group-hover:scale-105">
+            D
+          </div>
+<span class="absolute -bottom-1 -right-1 bg-amber-500 text-white text-[9px] font-bold px-1 rounded-full uppercase tracking-wider">
+            SA
+          </span>
+</div>
+<div class="w-8 h-px bg-stone-200"></div>
+<!-- Rail Items -->
+<nav class="flex flex-col gap-2 w-full px-2">
+<!-- Empresas (ACTIVO) -->
+<a class="w-full flex flex-col items-center justify-center py-2.5 rounded-lg bg-teal-50 text-teal-800 transition-colors" href="#" title="Empresas">
+<span class="material-symbols-outlined material-symbols-fill text-teal-700 mb-1">store</span>
+<span class="text-[11px] font-semibold tracking-tight font-body leading-none text-teal-800">Empresas</span>
+</a>
+<!-- Verticales -->
+<a class="w-full flex flex-col items-center justify-center py-2.5 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-50 transition-colors" href="#" title="Verticales">
+<span class="material-symbols-outlined mb-1">category</span>
+<span class="text-[11px] font-medium tracking-tight font-body leading-none text-stone-500">Verticales</span>
+</a>
+<!-- Salud -->
+<a class="w-full flex flex-col items-center justify-center py-2.5 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-50 transition-colors" href="#" title="Salud">
+<span class="material-symbols-outlined mb-1">monitor_heart</span>
+<span class="text-[11px] font-medium tracking-tight font-body leading-none text-stone-500">Salud</span>
+</a>
+<!-- Cuentas -->
+<a class="w-full flex flex-col items-center justify-center py-2.5 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-50 transition-colors" href="#" title="Cuentas">
+<span class="material-symbols-outlined mb-1">group</span>
+<span class="text-[11px] font-medium tracking-tight font-body leading-none text-stone-500">Cuentas</span>
+</a>
+</nav>
+</div>
+<!-- Pie del Rail -->
+<div class="flex flex-col items-center gap-3">
+<!-- Indicador de conexión de Dali -->
+<div class="flex items-center justify-center w-8 h-8 rounded-full bg-stone-50 hover:bg-stone-100 transition-colors" title="Servidor Superadmin activo">
+<span class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
+</span>
+</div>
+<!-- Avatar Operador Dali -->
+<div class="w-10 h-10 rounded-full bg-stone-800 text-stone-100 flex items-center justify-center text-xs font-semibold tracking-wider font-mono cursor-pointer ring-2 ring-stone-200" title="Operador Dali (Superadmin)">
+          OP
+        </div>
+</div>
+</aside>
+<!-- 2. Área principal de contenido (Ancho exacto 762px) -->
+<main class="w-[762px] flex-1 bg-[#FAFAF9] flex flex-col overflow-y-auto">
+<!-- Topbar sutil / Navegación y metadatos -->
+<header class="h-12 border-b border-stone-200 px-5 flex items-center justify-between bg-white shrink-0">
+<a class="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600 hover:text-teal-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-[17px]">arrow_back</span>
+<span>Volver a Empresas</span>
+</a>
+<div class="flex items-center gap-3 text-xs">
+<span class="inline-flex items-center gap-1 bg-stone-100 text-stone-600 font-mono px-2 py-0.5 rounded text-[11px] border border-stone-200">
+            ID: <span class="text-stone-900 font-medium">EMP-8492</span>
+</span>
+<span class="text-stone-300">|</span>
+<button class="inline-flex items-center gap-1 text-stone-500 hover:text-stone-800 transition-colors">
+<span class="material-symbols-outlined text-[16px]">help</span>
+<span>Soporte</span>
+</button>
+</div>
+</header>
+<!-- Cabecera de la Empresa -->
+<section class="p-5 pb-4 border-b border-stone-200 bg-white">
+<div class="flex items-start justify-between gap-4">
+<div>
+<div class="flex items-center gap-2.5 mb-1">
+<h1 class="text-2xl font-bold font-headline text-stone-900 tracking-tight leading-tight">
+                CONSTROAD
+              </h1>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-700 border border-stone-200">
+                Asfalto
+              </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-100">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+                Plan Negocio
+              </span>
+</div>
+<p class="text-xs text-stone-500 flex items-center gap-2 font-body">
+<span>Lima, Perú</span>
+<span>·</span>
+<span class="font-mono text-stone-600">RUC 20604819201</span>
+<span>·</span>
+<span>Creado el 10 sep</span>
+</p>
+</div>
+<!-- Acciones de cabecera -->
+<div class="flex items-center gap-2 shrink-0 pt-0.5">
+<!-- Impersonate Button -->
+<button class="inline-flex items-center gap-1.5 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-medium text-xs px-3.5 h-9 rounded-lg shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+<span>Abrir su panel</span>
+</button>
+<!-- Pausa Rápida -->
+<button class="inline-flex items-center justify-center w-9 h-9 border border-stone-200 rounded-lg text-stone-700 hover:bg-stone-50 transition-colors" title="Pausar bot de inmediato">
+<span class="material-symbols-outlined text-[18px]">pause</span>
+</button>
+<!-- Menú contextual de gestión -->
+<div class="relative">
+<button class="inline-flex items-center justify-center w-9 h-9 border border-stone-200 rounded-lg text-stone-700 hover:bg-stone-50 transition-colors" title="Más opciones de empresa">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<div class="p-5 space-y-5">
+<!-- 3. Fila de 4 KPIs / Estadísticas clave -->
+<section class="grid grid-cols-4 gap-3">
+<!-- KPI 1: Conversaciones -->
+<div class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-sm">
+<div class="flex items-center justify-between text-xs text-stone-500 mb-1.5">
+<span>Conversaciones</span>
+<span class="material-symbols-outlined text-stone-400 text-[16px]">chat_bubble</span>
+</div>
+<div class="text-xl font-bold font-mono text-stone-900 num-tabular tracking-tight">
+              612 <span class="text-xs font-normal text-stone-400 font-body">/ 1 000</span>
+</div>
+<div class="mt-2.5">
+<div class="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
+<div class="bg-teal-700 h-1.5 rounded-full" style="width: 61.2%"></div>
+</div>
+<div class="flex justify-between items-center text-[10px] text-stone-500 mt-1 font-mono">
+<span>61% usado</span>
+<span>Restan 388</span>
+</div>
+</div>
+</div>
+<!-- KPI 2: Leads Calificados -->
+<div class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-sm">
+<div class="flex items-center justify-between text-xs text-stone-500 mb-1.5">
+<span>Leads del mes</span>
+<span class="material-symbols-outlined text-stone-400 text-[16px]">group_add</span>
+</div>
+<div class="text-xl font-bold font-mono text-stone-900 num-tabular tracking-tight">
+              38
+            </div>
+<div class="mt-2 flex items-center text-[11px] font-medium text-emerald-700 gap-1">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>+14% vs semana previa</span>
+</div>
+</div>
+<!-- KPI 3: Miembros del equipo -->
+<div class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-sm">
+<div class="flex items-center justify-between text-xs text-stone-500 mb-1.5">
+<span>Miembros</span>
+<span class="material-symbols-outlined text-stone-400 text-[16px]">badge</span>
+</div>
+<div class="text-xl font-bold font-mono text-stone-900 num-tabular tracking-tight">
+              3 <span class="text-xs font-normal text-stone-400 font-body">activos</span>
+</div>
+<div class="mt-2 flex items-center -space-x-1.5">
+<span class="w-6 h-6 rounded-full bg-stone-700 text-white text-[10px] font-mono flex items-center justify-center border border-white font-medium">JZ</span>
+<span class="w-6 h-6 rounded-full bg-teal-800 text-white text-[10px] font-mono flex items-center justify-center border border-white font-medium">CR</span>
+<span class="w-6 h-6 rounded-full bg-amber-600 text-white text-[10px] font-mono flex items-center justify-center border border-white font-medium">MT</span>
+<span class="text-[10px] text-stone-500 ml-2 font-medium">1 admin · 2 ventas</span>
+</div>
+</div>
+<!-- KPI 4: Modelo IA -->
+<div class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-sm">
+<div class="flex items-center justify-between text-xs text-stone-500 mb-1.5">
+<span>Modelo IA</span>
+<span class="material-symbols-outlined text-stone-400 text-[16px]">neurology</span>
+</div>
+<div class="text-base font-bold font-headline text-stone-900 tracking-tight flex items-center gap-1.5">
+              Local (Qwen)
+            </div>
+<div class="mt-2 inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded-full text-[10px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              Sin costo por msj
+            </div>
+</div>
+</section>
+<!-- 4. Grid de contenido principal (2 columnas balanceadas para tablet) -->
+<div class="grid grid-cols-2 gap-4 items-start">
+<!-- COLUMNA IZQUIERDA -->
+<div class="space-y-4">
+<!-- Tarjeta: WhatsApp de la empresa -->
+<div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+<div class="flex items-center justify-between pb-3 border-b border-stone-100">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-[#25D366]/10 text-[#25D366] flex items-center justify-center">
+<span class="material-symbols-outlined text-[19px] material-symbols-fill">chat</span>
+</div>
+<div>
+<h3 class="text-xs font-bold uppercase tracking-wider text-stone-500">Canal WhatsApp</h3>
+<p class="font-mono text-sm font-semibold text-stone-900">+51 949 376 824</p>
+</div>
+</div>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                  Conectado
+                </span>
+</div>
+<div class="mt-3 flex items-center justify-between text-xs text-stone-600">
+<span class="text-stone-500">Dispositivo vinculado:</span>
+<span class="font-medium text-stone-800 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">smartphone</span>
+                  iPhone de José
+                </span>
+</div>
+<div class="mt-4 pt-3 border-t border-stone-100 flex items-center gap-2">
+<button class="flex-1 inline-flex items-center justify-center gap-1.5 border border-stone-200 hover:bg-stone-50 active:bg-stone-100 text-stone-700 text-xs font-medium h-8 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[15px]">qr_code_2</span>
+<span>Ver QR</span>
+</button>
+<button class="flex-1 inline-flex items-center justify-center gap-1.5 border border-stone-200 hover:bg-stone-50 active:bg-stone-100 text-stone-700 hover:text-red-700 text-xs font-medium h-8 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[15px]">link_off</span>
+<span>Desconectar</span>
+</button>
+</div>
+</div>
+<!-- Tarjeta: Configuración del asistente -->
+<div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+<div class="flex items-center justify-between pb-3 border-b border-stone-100">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-700 text-[18px]">smart_toy</span>
+<h3 class="text-xs font-bold uppercase tracking-wider text-stone-600">Configuración del asistente</h3>
+</div>
+<button class="text-xs font-semibold text-teal-700 hover:text-teal-800 hover:underline">
+                  Editar
+                </button>
+</div>
+<dl class="divide-y divide-stone-100 text-xs mt-1">
+<div class="py-2 flex items-center justify-between">
+<dt class="text-stone-500">Nombre del asistente</dt>
+<dd class="font-medium text-stone-900">Dali</dd>
+</div>
+<div class="py-2 flex items-center justify-between">
+<dt class="text-stone-500">Tono de voz</dt>
+<dd class="font-medium text-stone-900">Cercano (tuteo peruano)</dd>
+</div>
+<div class="py-2 flex items-center justify-between">
+<dt class="text-stone-500">Da precios en chat</dt>
+<dd class="font-medium text-stone-800 bg-stone-100 px-2 py-0.5 rounded text-[11px]">No (deriva a cotización)</dd>
+</div>
+<div class="py-2 flex items-center justify-between">
+<dt class="text-stone-500">Avisos urgentes a</dt>
+<dd class="font-medium text-stone-900 flex items-center gap-1 text-teal-800">
+<span class="material-symbols-outlined text-[14px]">groups</span>
+                    'Ventas CONSTROAD'
+                  </dd>
+</div>
+<div class="py-2 flex items-center justify-between">
+<dt class="text-stone-500">Números de prueba</dt>
+<dd class="font-mono font-medium text-stone-700">+51 902 049 935</dd>
+</div>
+<div class="py-2 flex items-center justify-between">
+<dt class="text-stone-500">Pausa al escribir dueño</dt>
+<dd class="font-medium text-stone-900">30 min de espera</dd>
+</div>
+</dl>
+</div>
+<!-- Tarjeta: Base de conocimiento -->
+<div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+<div class="flex items-center justify-between pb-3 border-b border-stone-100">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-700 text-[18px]">menu_book</span>
+<h3 class="text-xs font-bold uppercase tracking-wider text-stone-600">Base de conocimiento</h3>
+</div>
+<span class="text-[10px] text-stone-400 font-mono">Vectorizado OK</span>
+</div>
+<!-- Pills de métricas de contenido -->
+<div class="grid grid-cols-2 gap-2 mt-3 text-xs">
+<div class="bg-stone-50 border border-stone-200 rounded-lg p-2 flex items-center justify-between">
+<span class="text-stone-600">Servicios</span>
+<span class="font-mono font-bold text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200">4</span>
+</div>
+<div class="bg-stone-50 border border-stone-200 rounded-lg p-2 flex items-center justify-between">
+<span class="text-stone-600">Preguntas fijas</span>
+<span class="font-mono font-bold text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200">22</span>
+</div>
+<div class="bg-stone-50 border border-stone-200 rounded-lg p-2 flex items-center justify-between">
+<span class="text-stone-600">FAQ frecuentes</span>
+<span class="font-mono font-bold text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200">12</span>
+</div>
+<div class="bg-stone-50 border border-stone-200 rounded-lg p-2 flex items-center justify-between">
+<span class="text-stone-600">Catálogo ítems</span>
+<span class="font-mono font-bold text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200">8</span>
+</div>
+</div>
+<div class="mt-3.5 pt-3 border-t border-stone-100 flex items-center justify-between">
+<div class="text-[11px] text-stone-500">
+<span>Última importación:</span>
+<span class="font-medium text-stone-700">12 sep, 09:14</span>
+</div>
+<button class="inline-flex items-center gap-1 text-xs font-semibold text-teal-800 bg-stone-100 hover:bg-stone-200 px-2.5 py-1.5 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[15px]">upload_file</span>
+<span>Reimportar Excel</span>
+</button>
+</div>
+</div>
+</div>
+<!-- COLUMNA DERECHA -->
+<div class="space-y-4">
+<!-- Tarjeta: Plan y pagos -->
+<div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+<div class="flex items-center justify-between pb-3 border-b border-stone-100">
+<h3 class="text-xs font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-teal-700 text-[18px]">payments</span>
+                  Plan y suscripción
+                </h3>
+<span class="text-xs font-bold font-mono text-stone-900">S/ 149 / mes</span>
+</div>
+<div class="mt-3 space-y-2 text-xs">
+<div class="flex justify-between items-center">
+<span class="text-stone-500">Plan actual:</span>
+<span class="font-semibold text-stone-800">Plan Negocio</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-stone-500">Próxima renovación:</span>
+<span class="font-medium font-mono text-stone-800">1 oct 2024</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-stone-500">Último pago:</span>
+<span class="inline-flex items-center gap-1 font-mono text-stone-800">
+<span>1 sep 2024 (BCP)</span>
+<span class="material-symbols-outlined text-emerald-600 text-[15px]">verified</span>
+</span>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-stone-100 flex items-center gap-2">
+<button class="flex-1 inline-flex items-center justify-center gap-1 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-medium text-xs h-8 rounded-lg transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[15px]">receipt_long</span>
+<span>Registrar pago</span>
+</button>
+<button class="inline-flex items-center justify-center px-3 border border-stone-200 hover:bg-stone-50 text-stone-700 text-xs font-medium h-8 rounded-lg transition-colors">
+                  Cambiar plan
+                </button>
+</div>
+</div>
+<!-- Tarjeta: Actividad reciente (Timeline) -->
+<div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+<div class="flex items-center justify-between pb-3 border-b border-stone-100">
+<h3 class="text-xs font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-teal-700 text-[18px]">history</span>
+                  Actividad reciente
+                </h3>
+<a class="text-[11px] text-stone-500 hover:text-stone-800" href="#">Ver todo</a>
+</div>
+<ol class="relative border-l border-stone-200 ml-2 mt-3 space-y-3.5 text-xs">
+<!-- Evento 1 -->
+<li class="ml-4">
+<span class="absolute -left-1.5 mt-1 w-3 h-3 rounded-full bg-amber-500 ring-4 ring-white"></span>
+<div class="flex items-center gap-1 text-[11px] text-stone-400 font-mono">
+<span class="font-semibold text-amber-700">Hoy 10:41</span>
+<span>·</span>
+<span>Escalada a humano</span>
+</div>
+<p class="text-stone-700 mt-0.5 leading-snug">
+                    Cliente Luis Paredes pidió hablar con asesor por asfalto 600 m² en Lurín.
+                  </p>
+</li>
+<!-- Evento 2 -->
+<li class="ml-4">
+<span class="absolute -left-1.5 mt-1 w-3 h-3 rounded-full bg-stone-300 ring-4 ring-white"></span>
+<div class="flex items-center gap-1 text-[11px] text-stone-400 font-mono">
+<span>Hoy 09:12</span>
+<span>·</span>
+<span>Inicio de sesión</span>
+</div>
+<p class="text-stone-700 mt-0.5 leading-snug">
+                    José entró al panel desde su celular (Android · Lima).
+                  </p>
+</li>
+<!-- Evento 3 -->
+<li class="ml-4">
+<span class="absolute -left-1.5 mt-1 w-3 h-3 rounded-full bg-teal-600 ring-4 ring-white"></span>
+<div class="flex items-center gap-1 text-[11px] text-stone-400 font-mono">
+<span>12 sep 09:14</span>
+<span>·</span>
+<span>Importación Excel</span>
+</div>
+<p class="text-stone-700 mt-0.5 leading-snug">
+                    41 elementos procesados y vectorizados sin errores.
+                  </p>
+</li>
+<!-- Evento 4 -->
+<li class="ml-4">
+<span class="absolute -left-1.5 mt-1 w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-white"></span>
+<div class="flex items-center gap-1 text-[11px] text-stone-400 font-mono">
+<span>10 sep</span>
+<span>·</span>
+<span>Número vinculado</span>
+</div>
+<p class="text-stone-700 mt-0.5 leading-snug">
+                    WhatsApp +51 949 376 824 conectado exitosamente con QR.
+                  </p>
+</li>
+</ol>
+</div>
+<!-- Tarjeta: Notas internas del operador -->
+<div class="bg-amber-50/50 rounded-xl border border-amber-200/80 p-4 shadow-sm relative">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-amber-700 text-[18px]">lock</span>
+<h3 class="text-xs font-bold uppercase tracking-wider text-amber-900">Notas internas Dali</h3>
+</div>
+<span class="text-[10px] font-semibold bg-amber-200 text-amber-900 px-2 py-0.5 rounded">Privado</span>
+</div>
+<textarea class="w-full text-xs text-stone-800 bg-white border border-amber-200 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-amber-500 transition shadow-inner font-body" rows="2">Cliente piloto. Quiere el pack de restaurante para su otra empresa (Cevichería del Norte).</textarea>
+<div class="mt-2 flex items-center justify-between">
+<span class="text-[10px] text-stone-500 italic">Solo visible para soporte de Dali.</span>
+<button class="inline-flex items-center gap-1 bg-stone-900 hover:bg-black text-white text-[11px] font-medium px-3 py-1.5 rounded-md transition-colors">
+                  Guardar nota
+                </button>
+</div>
+</div>
+<!-- Zona de peligro / Banner de suspensión -->
+<div class="rounded-xl border border-red-200 bg-red-50/50 p-3.5 flex items-center justify-between">
+<div>
+<h4 class="text-xs font-bold text-red-900">Suspender empresa</h4>
+<p class="text-[11px] text-red-700 leading-tight">Pausa el bot de inmediato y retira el acceso al panel.</p>
+</div>
+<button class="inline-flex items-center gap-1 text-xs font-semibold text-red-700 border border-red-300 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors shrink-0">
+<span class="material-symbols-outlined text-[15px]">block</span>
+<span>Suspender</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Pie de pantalla institucional -->
+<footer class="mt-auto px-5 py-3 border-t border-stone-200 bg-white flex items-center justify-between text-[11px] text-stone-400 font-mono">
+<div>Dali Superadmin v2.4 · Entorno Producción</div>
+<div>Última sincronización: Hace 2 minutos</div>
+</footer>
+</main>
+</div>
+</body></html>

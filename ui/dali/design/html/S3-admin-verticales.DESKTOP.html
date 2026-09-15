@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-stone-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verticales - Admin Dali (Escritorio 1280px)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Public Sans', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+              950: '#042F2E',
+            },
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+              950: '#0C0A09',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Custom subtle scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #D6D3D1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #A8A29E;
+    }
+  </style>
+</head>
+<body class="h-full font-sans text-stone-800 antialiased flex bg-stone-100 selection:bg-teal-100 selection:text-teal-900">
+
+  <!-- SIDEBAR IZQUIERDO (256px) -->
+  <aside class="w-64 bg-stone-900 text-stone-300 flex flex-col flex-shrink-0 border-r border-stone-800 z-30">
+    <!-- Header Dali Superadmin -->
+    <div class="h-16 flex items-center justify-between px-5 border-b border-stone-800">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+          D
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-white tracking-tight text-base">Dali</span>
+            <span class="text-[10px] uppercase font-semibold tracking-wider px-1.5 py-0.5 rounded bg-stone-800 text-stone-400 border border-stone-700">Admin</span>
+          </div>
+          <p class="text-xs text-stone-400 leading-none mt-0.5">Superadministrador</p>
+        </div>
+      </div>
+      <div class="flex items-center">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="AWS Lima sa-east-1 activo"></span>
+      </div>
+    </div>
+
+    <!-- Región / Contexto de Plataforma -->
+    <div class="px-5 py-3 border-b border-stone-800/80 bg-stone-950/40 text-xs text-stone-400 flex items-center justify-between">
+      <div class="flex items-center gap-1.5">
+        <span class="material-symbols-outlined text-sm text-stone-500">dns</span>
+        <span>AWS sa-east-1 (Lima)</span>
+      </div>
+      <span class="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">v3.2</span>
+    </div>
+
+    <!-- Menú de Administración Principal -->
+    <nav class="flex-1 px-3 py-4 space-y-1">
+      <div class="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-stone-300">
+        Administración
+      </div>
+
+      <!-- Empresas -->
+      <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-lg text-stone-300 hover:text-white hover:bg-stone-800/80 transition-colors group">
+        <div class="flex items-center gap-3">
+          <span class="material-symbols-outlined text-xl text-stone-400 group-hover:text-white">store</span>
+          <span class="text-sm font-medium">Empresas</span>
+        </div>
+        <span class="text-xs font-mono px-2 py-0.5 rounded-full bg-stone-800 text-stone-400 border border-stone-700">11</span>
+      </a>
+
+      <!-- Verticales (ACTIVA EN VERDE / TEAL) -->
+      <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-lg bg-teal-700 text-white font-medium shadow-sm">
+        <div class="flex items-center gap-3">
+          <span class="material-symbols-outlined text-xl text-teal-200 fill">category</span>
+          <span class="text-sm">Verticales</span>
+        </div>
+        <span class="text-xs font-mono px-2 py-0.5 rounded-full bg-teal-800/80 text-teal-100 border border-teal-600/40">5</span>
+      </a>
+
+      <!-- Salud -->
+      <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-lg text-stone-300 hover:text-white hover:bg-stone-800/80 transition-colors group">
+        <div class="flex items-center gap-3">
+          <span class="material-symbols-outlined text-xl text-stone-400 group-hover:text-white">monitor_heart</span>
+          <span class="text-sm font-medium">Salud</span>
+        </div>
+        <span class="text-[11px] font-mono text-emerald-400">99.8%</span>
+      </a>
+
+      <!-- Cuentas -->
+      <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-lg text-stone-300 hover:text-white hover:bg-stone-800/80 transition-colors group">
+        <div class="flex items-center gap-3">
+          <span class="material-symbols-outlined text-xl text-stone-400 group-hover:text-white">manage_accounts</span>
+          <span class="text-sm font-medium">Cuentas</span>
+        </div>
+      </a>
+    </nav>
+
+    <!-- Footer Superadmin -->
+    <div class="p-3 border-t border-stone-800 bg-stone-950/50">
+      <div class="flex items-center justify-between p-2 rounded-lg bg-stone-900 border border-stone-800">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-teal-900/80 text-teal-300 flex items-center justify-center font-bold text-xs border border-teal-700/50">
+            OP
+          </div>
+          <div class="truncate">
+            <p class="text-xs font-medium text-white truncate">Operador Dali</p>
+            <p class="text-[10px] text-stone-400 truncate">Soporte N2 · Perú</p>
+          </div>
+        </div>
+        <button class="p-1 text-stone-400 hover:text-white rounded transition" title="Cerrar sesión">
+          <span class="material-symbols-outlined text-base">logout</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CONTENEDOR PRINCIPAL: ÁREA CENTRAL + DRAWER DERECHO -->
+  <div class="flex-1 flex overflow-hidden">
+    
+    <!-- ÁREA CENTRAL DE CONTENIDO (Scrollable, ancho max 1120px interior) -->
+    <main class="flex-1 overflow-y-auto bg-stone-100 flex flex-col">
+      
+      <!-- Barra Superior de Migas y Herramientas -->
+      <header class="h-16 bg-white border-b border-stone-200 px-8 flex items-center justify-between flex-shrink-0 sticky top-0 z-20">
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-stone-500 font-medium">Administración</span>
+          <span class="text-stone-300">/</span>
+          <span class="text-stone-900 font-semibold">Packs por Vertical</span>
+          <span class="px-2 py-0.5 text-xs font-mono font-medium rounded-full bg-teal-50 text-teal-800 border border-teal-200">v3.2 Producción</span>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2 text-xs text-stone-500 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>AWS sa-east-1 (Lima)</span>
+          </div>
+          <button class="p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition" title="Notificaciones del sistema">
+            <span class="material-symbols-outlined text-xl">notifications</span>
+          </button>
+          <button class="p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition" title="Ayuda técnica">
+            <span class="material-symbols-outlined text-xl">help_outline</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Contenido Interior (hasta 1120px) -->
+      <div class="w-full max-w-[1120px] mx-auto p-8 space-y-8 flex-1">
+        
+        <!-- Cabecera de Página -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-3">
+              <h1 class="text-2xl font-bold tracking-tight text-stone-900">Verticales</h1>
+              <span class="text-xs font-medium px-2.5 py-0.5 rounded-full bg-stone-200 text-stone-700">5 rubros</span>
+            </div>
+            <p class="text-sm text-stone-600 mt-1">
+              Cada rubro trae sus servicios, preguntas, preguntas frecuentes y plantilla de Excel de fábrica para arrancar en minutos.
+            </p>
+          </div>
+          <button class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-xl shadow-sm transition active:scale-[0.98]">
+            <span class="material-symbols-outlined text-lg">add</span>
+            Nuevo vertical
+          </button>
+        </div>
+
+        <!-- Filtros Rápidos / Tabs -->
+        <div class="flex items-center justify-between border-b border-stone-200 pb-3">
+          <div class="flex items-center gap-2">
+            <button class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 text-teal-800 border border-teal-200">
+              Preconfigurados (5)
+            </button>
+            <button class="px-3.5 py-1.5 text-xs font-medium rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 transition">
+              Personalizados (0)
+            </button>
+          </div>
+          <span class="text-xs text-stone-500">Mostrando 5 plantillas maestras</span>
+        </div>
+
+        <!-- TARJETAS DE VERTICAL (GRID) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <!-- 1. Asfalto y construcción (SELECCIONADA / EN EDICIÓN) -->
+          <div class="bg-white rounded-2xl p-5 border-2 border-teal-700 shadow-sm relative overflow-hidden flex flex-col justify-between">
+            <div class="absolute top-0 right-0 bg-teal-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-xl flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse"></span>
+              Editando ahora
+            </div>
+
+            <div>
+              <div class="flex items-start justify-between pr-24">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-2xl">construction</span>
+                  </div>
+                  <div>
+                    <h2 class="text-base font-bold text-stone-900">Asfalto y construcción</h2>
+                    <span class="inline-flex items-center gap-1 text-xs font-medium text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md mt-0.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+                      Modo: Junta datos para cotizar
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Especificaciones técnicas del pack -->
+              <div class="mt-4 p-3 bg-stone-50 rounded-xl border border-stone-200/80 text-xs text-stone-700 grid grid-cols-2 gap-2 font-mono">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Servicios:</span>
+                  <span class="font-bold text-stone-900">4 base</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Preguntas:</span>
+                  <span class="font-bold text-stone-900">22 preguntas</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">FAQ WhatsApp:</span>
+                  <span class="font-bold text-stone-900">12 respuestas</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Plantilla:</span>
+                  <span class="font-bold text-stone-900">Excel v3</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer de la tarjeta -->
+            <div class="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+              <div class="flex items-center gap-1.5 text-xs text-stone-600">
+                <span class="material-symbols-outlined text-sm text-stone-500">store</span>
+                <span class="font-semibold text-stone-800">3 empresas activas</span>
+                <span class="text-stone-400">(CONSTROAD, Inframaq…)</span>
+              </div>
+              <button class="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-700 text-white rounded-lg text-xs font-semibold hover:bg-teal-800 transition">
+                <span>Editar pack</span>
+                <span class="material-symbols-outlined text-sm">arrow_forward</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Restaurante -->
+          <div class="bg-white rounded-2xl p-5 border border-stone-200 hover:border-stone-300 shadow-sm transition flex flex-col justify-between">
+            <div>
+              <div class="flex items-start justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-orange-50 text-orange-700 border border-orange-200 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-2xl">restaurant</span>
+                  </div>
+                  <div>
+                    <h2 class="text-base font-bold text-stone-900">Restaurante y pollería</h2>
+                    <span class="inline-flex items-center gap-1 text-xs font-medium text-orange-800 bg-orange-50 px-2 py-0.5 rounded-md mt-0.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                      Modo: Toma pedidos del catálogo
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Especificaciones técnicas del pack -->
+              <div class="mt-4 p-3 bg-stone-50 rounded-xl border border-stone-200/80 text-xs text-stone-700 grid grid-cols-2 gap-2 font-mono">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Servicios:</span>
+                  <span class="font-bold text-stone-900">0 servicios</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Catálogo:</span>
+                  <span class="font-bold text-amber-700">Obligatorio</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">FAQ:</span>
+                  <span class="font-bold text-stone-900">9 respuestas</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Plantilla:</span>
+                  <span class="font-bold text-stone-900">Excel v1</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+              <div class="flex items-center gap-1.5 text-xs text-stone-600">
+                <span class="material-symbols-outlined text-sm text-stone-500">store</span>
+                <span class="font-semibold text-stone-800">1 empresa</span>
+                <span class="text-stone-400">(Pollería Don Beto)</span>
+              </div>
+              <button class="inline-flex items-center gap-1 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold transition">
+                <span>Ver pack</span>
+                <span class="material-symbols-outlined text-sm">chevron_right</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. Grifo y combustibles -->
+          <div class="bg-white rounded-2xl p-5 border border-stone-200 hover:border-stone-300 shadow-sm transition flex flex-col justify-between">
+            <div>
+              <div class="flex items-start justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-2xl">local_gas_station</span>
+                  </div>
+                  <div>
+                    <h2 class="text-base font-bold text-stone-900">Grifo y combustibles</h2>
+                    <span class="inline-flex items-center gap-1 text-xs font-medium text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md mt-0.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                      Modo: Informa (horarios, precios del día)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Especificaciones técnicas del pack -->
+              <div class="mt-4 p-3 bg-stone-50 rounded-xl border border-stone-200/80 text-xs text-stone-700 grid grid-cols-2 gap-2 font-mono">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">FAQ:</span>
+                  <span class="font-bold text-stone-900">6 respuestas</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Precios:</span>
+                  <span class="font-bold text-blue-800">Editables en 1-tap</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Servicios:</span>
+                  <span class="font-bold text-stone-900">0 base</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Plantilla:</span>
+                  <span class="font-bold text-stone-900">Excel v1</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+              <div class="flex items-center gap-1.5 text-xs text-stone-600">
+                <span class="material-symbols-outlined text-sm text-stone-500">store</span>
+                <span class="font-semibold text-stone-800">1 empresa</span>
+                <span class="text-stone-400">(Grifo San Martín)</span>
+              </div>
+              <button class="inline-flex items-center gap-1 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold transition">
+                <span>Ver pack</span>
+                <span class="material-symbols-outlined text-sm">chevron_right</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 4. Lubricentro y cambios de aceite -->
+          <div class="bg-white rounded-2xl p-5 border border-stone-200 hover:border-stone-300 shadow-sm transition flex flex-col justify-between">
+            <div>
+              <div class="flex items-start justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-2xl">car_repair</span>
+                  </div>
+                  <div>
+                    <h2 class="text-base font-bold text-stone-900">Lubricentro y talleres</h2>
+                    <span class="inline-flex items-center gap-1 text-xs font-medium text-purple-800 bg-purple-50 px-2 py-0.5 rounded-md mt-0.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                      Modo: Agenda citas y revisiones
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Especificaciones técnicas del pack -->
+              <div class="mt-4 p-3 bg-stone-50 rounded-xl border border-stone-200/80 text-xs text-stone-700 grid grid-cols-2 gap-2 font-mono">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Servicios:</span>
+                  <span class="font-bold text-stone-900">5 servicios</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Horarios:</span>
+                  <span class="font-bold text-stone-900">Atención en taller</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">FAQ:</span>
+                  <span class="font-bold text-stone-900">7 respuestas</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Plantilla:</span>
+                  <span class="font-bold text-stone-900">Excel v2</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+              <div class="flex items-center gap-1.5 text-xs text-stone-600">
+                <span class="material-symbols-outlined text-sm text-stone-500">store</span>
+                <span class="font-semibold text-stone-800">1 empresa</span>
+                <span class="text-stone-400">(Lubricentro Ruedas)</span>
+              </div>
+              <button class="inline-flex items-center gap-1 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold transition">
+                <span>Ver pack</span>
+                <span class="material-symbols-outlined text-sm">chevron_right</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 5. Servicios comerciales (genérico) -->
+          <div class="bg-white rounded-2xl p-5 border border-stone-200 hover:border-stone-300 shadow-sm transition flex flex-col justify-between md:col-span-2">
+            <div>
+              <div class="flex items-start justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-stone-100 text-stone-700 border border-stone-200 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-2xl">storefront</span>
+                  </div>
+                  <div>
+                    <h2 class="text-base font-bold text-stone-900">Servicios (genérico)</h2>
+                    <span class="inline-flex items-center gap-1 text-xs font-medium text-stone-700 bg-stone-100 px-2 py-0.5 rounded-md mt-0.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-stone-500"></span>
+                      Modo: Junta datos para cotizar
+                    </span>
+                  </div>
+                </div>
+                <span class="text-xs text-stone-600 bg-stone-100 px-2 py-1 rounded">Base en blanco para nuevos rubros</span>
+              </div>
+
+              <!-- Especificaciones técnicas del pack -->
+              <div class="mt-4 p-3 bg-stone-50 rounded-xl border border-stone-200/80 text-xs text-stone-700 grid grid-cols-2 md:grid-cols-4 gap-2 font-mono">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Servicios:</span>
+                  <span class="font-bold text-stone-900">1 servicio</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Preguntas:</span>
+                  <span class="font-bold text-stone-900">6 preguntas</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">FAQ:</span>
+                  <span class="font-bold text-stone-900">4 universales</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-stone-400">Plantilla:</span>
+                  <span class="font-bold text-stone-900">Excel universal</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+              <div class="flex items-center gap-1.5 text-xs text-stone-600">
+                <span class="material-symbols-outlined text-sm text-stone-400">store</span>
+                <span class="font-medium text-stone-500">0 empresas (plantilla neutra)</span>
+              </div>
+              <button class="inline-flex items-center gap-1 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold transition">
+                <span>Ver pack</span>
+                <span class="material-symbols-outlined text-sm">chevron_right</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Tabla comparativa de versiones desplegadas (Contexto plataforma) -->
+        <div class="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
+          <div class="p-4 border-b border-stone-200 flex items-center justify-between bg-stone-50/50">
+            <div>
+              <h2 class="text-sm font-bold text-stone-900">Historial de versiones maestras por rubro</h2>
+              <p class="text-xs text-stone-500">Control de migraciones y actualizaciones automáticas a clientes</p>
+            </div>
+            <span class="text-xs font-mono text-stone-500">Lima Cloud Engine v2.14</span>
+          </div>
+          
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr class="border-b border-stone-200 bg-stone-50 text-stone-500 font-medium">
+                <th class="py-2.5 px-4 font-semibold">Vertical</th>
+                <th class="py-2.5 px-4 font-semibold">Versión actual</th>
+                <th class="py-2.5 px-4 font-semibold">Empresas en esta versión</th>
+                <th class="py-2.5 px-4 font-semibold">Última actualización</th>
+                <th class="py-2.5 px-4 font-semibold text-right">Estado</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-stone-100 text-stone-700">
+              <tr class="hover:bg-teal-50/40 transition">
+                <td class="py-3 px-4 font-semibold text-stone-900 flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-teal-600"></span>
+                  Asfalto y construcción
+                </td>
+                <td class="py-3 px-4 font-mono font-medium text-teal-800">v3.2 (Estable)</td>
+                <td class="py-3 px-4">3 empresas (CONSTROAD, Inframaq, Constructora JC)</td>
+                <td class="py-3 px-4 text-stone-500">10 sep 2024, 14:20</td>
+                <td class="py-3 px-4 text-right">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800">
+                    Desplegado
+                  </span>
+                </td>
+              </tr>
+              <tr class="hover:bg-stone-50 transition">
+                <td class="py-3 px-4 font-medium text-stone-900">Restaurante y pollería</td>
+                <td class="py-3 px-4 font-mono text-stone-600">v1.4</td>
+                <td class="py-3 px-4">1 empresa (Pollería Don Beto)</td>
+                <td class="py-3 px-4 text-stone-500">28 ago 2024, 09:15</td>
+                <td class="py-3 px-4 text-right">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-700">
+                    Estable
+                  </span>
+                </td>
+              </tr>
+              <tr class="hover:bg-stone-50 transition">
+                <td class="py-3 px-4 font-medium text-stone-900">Grifo y combustibles</td>
+                <td class="py-3 px-4 font-mono text-stone-600">v1.1</td>
+                <td class="py-3 px-4">1 empresa (Grifo San Martín)</td>
+                <td class="py-3 px-4 text-stone-500">15 ago 2024, 18:00</td>
+                <td class="py-3 px-4 text-right">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-700">
+                    Estable
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- DRAWER DERECHO (480px): EDITOR DEL PACK "ASFALTO Y CONSTRUCCIÓN" -->
+    <aside class="w-[480px] bg-white border-l border-stone-200 flex flex-col flex-shrink-0 z-20 shadow-xl overflow-hidden">
+      
+      <!-- Cabecera del Drawer -->
+      <div class="p-5 border-b border-stone-200 bg-white">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center">
+              <span class="material-symbols-outlined text-base">construction</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base font-bold text-stone-900">Asfalto y construcción</h2>
+              <span class="text-xs font-mono font-medium px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 border border-stone-200">v3.2</span>
+            </div>
+          </div>
+          <button class="text-stone-400 hover:text-stone-700 p-1 rounded-lg transition" title="Cerrar panel">
+            <span class="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
+        <p class="text-xs text-stone-500 mt-1">
+          Configuración maestra que se inyecta automáticamente a cualquier cliente nuevo de este rubro.
+        </p>
+
+        <!-- Pestañas del Editor -->
+        <div class="flex items-center gap-1 mt-4 border-b border-stone-200 -mb-5 overflow-x-auto pb-0">
+          <button class="px-2.5 py-2 text-xs font-medium text-stone-500 hover:text-stone-800 transition border-b-2 border-transparent">
+            Servicios y guion (4)
+          </button>
+          <button class="px-2.5 py-2 text-xs font-medium text-stone-500 hover:text-stone-800 transition border-b-2 border-transparent">
+            Preguntas frecuentes (12)
+          </button>
+          <button class="px-2.5 py-2 text-xs font-medium text-stone-500 hover:text-stone-800 transition border-b-2 border-transparent">
+            Catálogo base (8)
+          </button>
+          <button class="px-2.5 py-2 text-xs font-medium text-stone-500 hover:text-stone-800 transition border-b-2 border-transparent">
+            Plantilla Excel
+          </button>
+          <!-- PESTAÑA ACTIVA: TEXTOS -->
+          <button class="px-2.5 py-2 text-xs font-bold text-teal-800 border-b-2 border-teal-700 bg-teal-50/50 rounded-t-md">
+            Textos WhatsApp
+          </button>
+        </div>
+      </div>
+
+      <!-- Contenido del Drawer (Pestaña Textos WhatsApp) - Scrollable -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-5 bg-stone-50/40">
+        
+        <!-- Notificación informativa -->
+        <div class="p-3.5 bg-teal-50 border border-teal-200 rounded-xl text-xs text-teal-900 flex items-start gap-2.5">
+          <span class="material-symbols-outlined text-teal-700 text-base mt-0.5">info</span>
+          <div>
+            <span class="font-semibold">Textos base de fábrica:</span> Al crear una empresa en este rubro, Dali adopta estos textos. Luego el dueño de la empresa puede personalizarlos desde su propio panel.
+          </div>
+        </div>
+
+        <!-- 1. Saludo inicial -->
+        <div class="bg-white p-4 rounded-xl border border-stone-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+              <span>Saludo inicial en WhatsApp</span>
+              <span class="text-red-500">*</span>
+            </label>
+            <span class="text-[10px] font-mono text-stone-400">124 / 240 car.</span>
+          </div>
+          <div class="relative">
+            <textarea rows="3" class="w-full text-xs font-sans text-stone-800 p-3 rounded-lg border border-stone-300 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 outline-none leading-relaxed bg-stone-50/30">¡Hola! Soy {asistente}, la asistente de {negocio} 👋 ¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.</textarea>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-stone-500">
+            <span class="material-symbols-outlined text-xs text-stone-400">data_object</span>
+            <span>Variables disponibles:</span>
+            <code class="px-1 py-0.5 bg-stone-100 text-stone-700 rounded text-[10px] font-mono">{asistente}</code>
+            <code class="px-1 py-0.5 bg-stone-100 text-stone-700 rounded text-[10px] font-mono">{negocio}</code>
+            <code class="px-1 py-0.5 bg-stone-100 text-stone-700 rounded text-[10px] font-mono">{horario}</code>
+          </div>
+        </div>
+
+        <!-- 2. Cuando preguntan precio -->
+        <div class="bg-white p-4 rounded-xl border border-stone-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+              <span>Cuando el cliente pregunta precio directo</span>
+            </label>
+            <span class="text-[10px] font-mono text-stone-400">98 / 200 car.</span>
+          </div>
+          <div class="relative">
+            <textarea rows="2" class="w-full text-xs font-sans text-stone-800 p-3 rounded-lg border border-stone-300 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 outline-none leading-relaxed bg-stone-50/30">El precio depende de la cantidad y la ubicación; con estos datos el asesor te cotiza.</textarea>
+          </div>
+          <p class="text-[11px] text-stone-500 flex items-center gap-1">
+            <span class="material-symbols-outlined text-xs text-amber-600">tips_and_updates</span>
+            <span>Evita que Dali invente tarifas cerradas sin saber metrado ni flete.</span>
+          </p>
+        </div>
+
+        <!-- 3. Mensaje de cierre -->
+        <div class="bg-white p-4 rounded-xl border border-stone-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+              <span>Cierre y confirmación de cotización</span>
+            </label>
+            <span class="text-[10px] font-mono text-stone-400">89 / 200 car.</span>
+          </div>
+          <div class="relative">
+            <textarea rows="2" class="w-full text-xs font-sans text-stone-800 p-3 rounded-lg border border-stone-300 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 outline-none leading-relaxed bg-stone-50/30">Listo, {nombre}. Un asesor de {negocio} te contacta {cuando} con la cotización.</textarea>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-stone-500">
+            <span class="material-symbols-outlined text-xs text-stone-400">bolt</span>
+            <span>Dispara la notificación al grupo de WhatsApp de la constructora.</span>
+          </div>
+        </div>
+
+        <!-- 4. Escalada a asesor humano -->
+        <div class="bg-white p-4 rounded-xl border border-stone-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+              <span>Escalada a asesor humano</span>
+            </label>
+            <span class="text-[10px] font-mono text-stone-400">96 / 200 car.</span>
+          </div>
+          <div class="relative">
+            <textarea rows="2" class="w-full text-xs font-sans text-stone-800 p-3 rounded-lg border border-stone-300 focus:ring-2 focus:ring-teal-700 focus:border-teal-700 outline-none leading-relaxed bg-stone-50/30">Te comunico al instante con un asesor del equipo de ventas para coordinar tu caso especial.</textarea>
+          </div>
+          <p class="text-[11px] text-stone-500">
+            Se envía cuando el cliente escribe "persona", "humano", "asesor" o si se detecta reclamo.
+          </p>
+        </div>
+
+        <!-- Alerta de impacto / Aviso para las empresas activas -->
+        <div class="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+          <div class="flex items-center gap-1.5 font-bold text-amber-950">
+            <span class="material-symbols-outlined text-sm text-amber-700">warning</span>
+            Aviso de impacto
+          </div>
+          <p class="text-[11px] text-amber-800 leading-relaxed">
+            Guardar una nueva versión <strong>v4</strong> actualizará el pack base para futuras empresas. Aplicar a las existentes modificará únicamente los guiones predeterminados en <strong>CONSTROAD, Inframaq y Constructora JC</strong> sin tocar sus precios ni datos específicos.
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Pie de acciones del Drawer -->
+      <div class="p-4 border-t border-stone-200 bg-white space-y-2">
+        <div class="flex items-center gap-2">
+          <button class="flex-1 py-2.5 px-4 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-[0.99] flex items-center justify-center gap-1.5">
+            <span class="material-symbols-outlined text-base">save</span>
+            Guardar versión v4
+          </button>
+          <button class="py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold rounded-xl transition" title="Descartar cambios">
+            Descartar
+          </button>
+        </div>
+
+        <button class="w-full py-2 px-3 border border-teal-700/40 text-teal-800 hover:bg-teal-50 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5">
+          <span class="material-symbols-outlined text-sm">published_with_changes</span>
+          Aplicar a las empresas que usan la v3
+        </button>
+      </div>
+
+    </aside>
+
+  </div>
+
+</body>
+</html>

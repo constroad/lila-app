@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-50" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ajustes · CONSTROAD | Panel Dali</title>
+<!-- Google Fonts: Public Sans, DM Sans & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:ital,wght@0,400..900;1,400..900&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917'
+            },
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              950: '#042F2E'
+            },
+            amber: {
+              50: '#FFFBEB',
+              500: '#F59E0B',
+              600: '#D97706',
+              700: '#B45309'
+            },
+            emerald: {
+              50: '#ECFDF5',
+              600: '#059669',
+              700: '#047857'
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.75rem",
+            "xl": "1rem",
+            "2xl": "1.25rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Public Sans", "sans-serif"],
+            display: ["Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+    }
+    .tabular-numbers {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="h-full font-body text-stone-900 bg-stone-50 antialiased selection:bg-teal-100 selection:text-teal-800">
+<div class="flex min-h-screen">
+<!-- ================= SIDEBAR (256px / w-64) ================= -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col justify-between shrink-0 bg-white border-r border-stone-200 z-40">
+<!-- Top Brand & Organization Header -->
+<div class="p-4 border-b border-stone-100">
+<div class="flex items-center justify-between pb-3">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-teal-700 flex items-center justify-center text-white font-headline font-bold text-lg shadow-sm">
+              D
+            </div>
+<div>
+<span class="font-headline text-lg font-bold tracking-tight text-teal-700">Dali</span>
+<span class="text-[10px] font-medium ml-1.5 px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 border border-stone-200">v2.4</span>
+</div>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600 mr-1.5 animate-pulse"></span>
+            Activo
+          </span>
+</div>
+<!-- Business Context Selector -->
+<button class="w-full mt-2 flex items-center justify-between p-2 rounded-lg border border-stone-200 bg-stone-50 hover:bg-stone-100 transition-colors text-left group">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="w-7 h-7 rounded-md bg-stone-800 text-white flex items-center justify-center font-headline text-xs font-bold shrink-0">
+              CR
+            </div>
+<div class="truncate">
+<p class="font-headline text-xs font-bold text-stone-900 truncate">CONSTROAD</p>
+<p class="text-[11px] text-stone-500 truncate">Asfaltos y Pavimentación</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-stone-400 group-hover:text-stone-700 shrink-0">unfold_more</span>
+</button>
+</div>
+<!-- Navigation Tree Grouped -->
+<div class="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+<!-- Section: OPERACIÓN -->
+<div>
+<p class="px-3 pb-1.5 text-[11px] font-semibold tracking-wider uppercase text-stone-400 font-label">Operación</p>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">dashboard</span>
+<span>Inicio</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">chat</span>
+<span class="flex-1">Conversaciones</span>
+<span class="text-xs px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-600 font-mono">14</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">group</span>
+<span class="flex-1">Leads</span>
+<span class="text-xs px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-mono font-medium">+3</span>
+</a>
+</div>
+</div>
+<!-- Section: CONFIGURAR -->
+<div>
+<p class="px-3 pb-1.5 text-[11px] font-semibold tracking-wider uppercase text-stone-400 font-label">Configurar</p>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">smart_toy</span>
+<span>Asistente</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">storefront</span>
+<span>Negocio</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">construction</span>
+<span>Servicios</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">quiz</span>
+<span>Preguntas frecuentes</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">menu_book</span>
+<span>Catálogo</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">link</span>
+<span>WhatsApp</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">play_circle</span>
+<span class="flex-1">Probar a Dali</span>
+<span class="w-2 h-2 rounded-full bg-teal-600"></span>
+</a>
+</div>
+</div>
+<!-- Section: CUENTA -->
+<div>
+<p class="px-3 pb-1.5 text-[11px] font-semibold tracking-wider uppercase text-stone-400 font-label">Cuenta</p>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">badge</span>
+<span>Equipo</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">receipt_long</span>
+<span>Plan y uso</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-600 font-normal hover:bg-stone-100 hover:text-stone-900 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-stone-500">notifications</span>
+<span>Notificaciones</span>
+</a>
+<!-- Active Tab: Ajustes -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-teal-50 text-teal-700 font-medium text-sm border border-teal-100/80" href="#">
+<span class="material-symbols-outlined text-teal-700 fill-icon">settings</span>
+<span>Ajustes</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Footer User Profile Info -->
+<div class="p-3 border-t border-stone-200 bg-stone-50/70">
+<div class="flex items-center justify-between p-1.5 rounded-lg">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-full bg-stone-200 text-stone-700 font-headline font-semibold text-xs flex items-center justify-center border border-stone-300">
+              JP
+            </div>
+<div class="truncate">
+<p class="text-xs font-medium text-stone-900 truncate">José Paredes</p>
+<p class="text-[11px] text-stone-500 truncate">Administrador</p>
+</div>
+</div>
+<button class="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-md transition-colors" title="Cerrar sesión">
+<span class="material-symbols-outlined text-lg">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- ================= MAIN WRAPPER ================= -->
+<div class="flex-1 ml-64 flex flex-col min-w-0">
+<!-- Top Contextual Bar -->
+<header class="sticky top-0 z-30 bg-stone-50/95 backdrop-blur-sm border-b border-stone-200 px-8 py-3.5 flex items-center justify-between">
+<!-- Breadcrumb & Organization Title -->
+<div class="flex items-center gap-2 text-sm text-stone-500">
+<span class="font-headline font-semibold text-stone-900">CONSTROAD</span>
+<span class="text-stone-300">/</span>
+<span>Cuenta</span>
+<span class="text-stone-300">/</span>
+<span class="text-stone-800 font-medium">Ajustes</span>
+</div>
+<!-- Right Quick Actions & Status -->
+<div class="flex items-center gap-3">
+<!-- WhatsApp Line Indicator Pill -->
+<div class="flex items-center gap-2 px-3 py-1 bg-white border border-stone-200 rounded-full text-xs text-stone-700 shadow-sm">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="text-stone-500 font-normal">Línea:</span>
+<span class="font-mono text-stone-800 font-medium tracking-tight">+51 949 376 824</span>
+</div>
+<!-- Notification Trigger -->
+<button class="w-9 h-9 flex items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors" title="Notificaciones del sistema">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<!-- Help Trigger -->
+<button class="w-9 h-9 flex items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors" title="Centro de ayuda y guía">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<!-- Quick Dali Test Button -->
+<a class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white border border-stone-200 text-stone-700 hover:border-stone-300 hover:bg-stone-50 text-xs font-medium transition-all shadow-sm" href="#">
+<span class="material-symbols-outlined text-teal-700 text-base">play_circle</span>
+<span>Probar a Dali</span>
+</a>
+</div>
+</header>
+<!-- Main Page Canvas -->
+<main class="flex-1 p-8 max-w-[1120px] w-full mx-auto">
+<!-- Header Page Title -->
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-7 border-b border-stone-200 gap-4">
+<div>
+<div class="flex items-center gap-3">
+<h1 class="font-headline text-2xl font-bold tracking-tight text-stone-900">Ajustes</h1>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-stone-200 text-stone-800">
+                Dueño
+              </span>
+</div>
+<p class="text-sm text-stone-600 mt-1">
+              Gestiona tu perfil personal, accesos seguros sin contraseña, preferencias y datos de tu cuenta.
+            </p>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-3.5 py-2 text-xs font-medium text-stone-600 hover:text-stone-900 bg-white border border-stone-200 hover:border-stone-300 rounded-lg shadow-sm transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-500 text-base">verified_user</span>
+<span>Términos y privacidad</span>
+</button>
+<button class="px-3.5 py-2 text-xs font-medium text-stone-600 hover:text-stone-900 bg-white border border-stone-200 hover:border-stone-300 rounded-lg shadow-sm transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-500 text-base">history</span>
+<span>Registro de auditoría</span>
+</button>
+</div>
+</div>
+<!-- Settings 2-Column Responsive Bento Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
+<!-- ================= LEFT COLUMN (Col 1 to 7) ================= -->
+<div class="lg:col-span-7 space-y-6">
+<!-- Card 1: Tu Perfil -->
+<div class="bg-white border border-stone-200 rounded-xl p-6 shadow-sm">
+<div class="flex items-start justify-between pb-4 border-b border-stone-100">
+<div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-700">account_circle</span>
+<h2 class="font-headline text-base font-bold text-stone-900">Tu perfil</h2>
+</div>
+<p class="text-xs text-stone-500 mt-0.5">Datos personales del administrador del negocio</p>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+<span class="material-symbols-outlined text-xs text-emerald-600">verified</span>
+                  Verificado por WhatsApp
+                </span>
+</div>
+<!-- Avatar & Identity Quick Row -->
+<div class="flex items-center gap-4 py-5 border-b border-stone-100">
+<div class="w-14 h-14 rounded-full bg-stone-900 text-white font-headline text-lg font-bold flex items-center justify-center shrink-0 shadow-sm ring-4 ring-stone-100">
+                  JZ
+                </div>
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<button class="px-3 py-1.5 rounded-lg border border-stone-200 text-stone-700 text-xs font-medium hover:bg-stone-50 transition-colors shadow-sm">
+                      Cambiar foto
+                    </button>
+<button class="px-2.5 py-1.5 rounded-lg text-stone-400 hover:text-stone-700 text-xs transition-colors">
+                      Quitar
+                    </button>
+</div>
+<p class="text-[11px] text-stone-400">JPG o PNG de máximo 2 MB. Aparece en el registro de conversaciones.</p>
+</div>
+</div>
+<!-- Form Inputs -->
+<form class="pt-5 space-y-4" onsubmit="event.preventDefault();">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Full Name -->
+<div>
+<label class="block text-xs font-semibold text-stone-700 mb-1">Nombre completo</label>
+<input class="w-full h-11 px-3.5 rounded-lg border border-stone-200 text-sm text-stone-900 focus:border-teal-700 focus:ring-1 focus:ring-teal-700 outline-none transition-all" type="text" value="José Zena"/>
+</div>
+<!-- Role -->
+<div>
+<label class="block text-xs font-semibold text-stone-700 mb-1">Cargo en la empresa</label>
+<input class="w-full h-11 px-3.5 rounded-lg border border-stone-200 text-sm text-stone-900 focus:border-teal-700 focus:ring-1 focus:ring-teal-700 outline-none transition-all" type="text" value="Administrador principal"/>
+</div>
+</div>
+<!-- Email -->
+<div>
+<label class="block text-xs font-semibold text-stone-700 mb-1">Correo electrónico</label>
+<div class="relative">
+<input class="w-full h-11 pl-10 pr-3.5 rounded-lg border border-stone-200 text-sm text-stone-900 focus:border-teal-700 focus:ring-1 focus:ring-teal-700 outline-none transition-all font-mono" type="email" value="jose@constroad.com"/>
+<span class="material-symbols-outlined absolute left-3 top-3 text-stone-400 text-lg">mail</span>
+</div>
+<p class="text-[11px] text-stone-400 mt-1">Usamos este correo para enviarte facturas de tu plan y enlaces mágicos.</p>
+</div>
+<!-- Phone / WhatsApp Contact -->
+<div>
+<div class="flex items-center justify-between mb-1">
+<label class="block text-xs font-semibold text-stone-700">WhatsApp de contacto personal</label>
+<span class="text-[11px] text-emerald-700 font-medium">Vinculado a alertas</span>
+</div>
+<div class="relative">
+<input class="w-full h-11 pl-10 pr-3.5 rounded-lg border border-stone-200 text-sm text-stone-900 font-mono tabular-numbers focus:border-teal-700 focus:ring-1 focus:ring-teal-700 outline-none transition-all" type="tel" value="+51 902 049 935"/>
+<span class="material-symbols-outlined absolute left-3 top-3 text-stone-400 text-lg">call</span>
+</div>
+<p class="text-[11px] text-stone-500 mt-1">
+                    Para alertas urgentes cuando un cliente pide hablar con una persona y para códigos de acceso instantáneos.
+                  </p>
+</div>
+<!-- Save Trigger -->
+<div class="pt-2 flex justify-end">
+<button class="px-5 py-2.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-medium text-xs shadow-sm transition-all active:scale-[0.99] flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-sm">check</span>
+<span>Guardar cambios</span>
+</button>
+</div>
+</form>
+</div>
+<!-- Card 2: Acceso y Seguridad -->
+<div class="bg-white border border-stone-200 rounded-xl p-6 shadow-sm">
+<div class="flex items-start justify-between pb-4 border-b border-stone-100">
+<div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-700">lock</span>
+<h2 class="font-headline text-base font-bold text-stone-900">Acceso y seguridad</h2>
+</div>
+<p class="text-xs text-stone-500 mt-0.5">Control de inicio de sesión sin contraseñas tradicionales</p>
+</div>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-teal-50 text-teal-700 border border-teal-200">
+<span class="material-symbols-outlined text-xs text-teal-600">key_off</span>
+                  Sin contraseña
+                </span>
+</div>
+<!-- Passwordless Explainer Callout -->
+<div class="mt-4 p-3.5 rounded-lg bg-stone-50 border border-stone-200/80 flex items-start gap-3">
+<span class="material-symbols-outlined text-stone-600 shrink-0 mt-0.5">shield</span>
+<div class="text-xs text-stone-600 leading-relaxed">
+<strong class="font-semibold text-stone-800">Entras con un código por WhatsApp o un enlace al correo.</strong>
+                  Nunca guardamos contraseñas vulnerables a filtraciones. Tu identidad se valida en el celular que tienes contigo.
+                </div>
+</div>
+<!-- Sessions List -->
+<div class="mt-5">
+<div class="flex items-center justify-between mb-3">
+<h3 class="text-xs font-semibold text-stone-800 uppercase tracking-wider font-label">Sesiones abiertas en Dali</h3>
+<span class="text-xs text-stone-400">2 sesiones activas</span>
+</div>
+<div class="space-y-2.5">
+<!-- Session 1: Current -->
+<div class="p-3.5 rounded-lg border border-teal-200/80 bg-teal-50/40 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-base">laptop_mac</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<p class="text-xs font-semibold text-stone-900">Chrome en macOS · Este dispositivo</p>
+<span class="px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                            Actual
+                          </span>
+</div>
+<p class="text-[11px] text-stone-500 mt-0.5">
+                          Lima, Perú · IP <span class="font-mono">190.237.42.18</span> · Conectado ahora
+                        </p>
+</div>
+</div>
+<span class="text-xs font-medium text-teal-700 bg-teal-100/70 px-2 py-1 rounded">Activo</span>
+</div>
+<!-- Session 2: Mobile -->
+<div class="p-3.5 rounded-lg border border-stone-200 bg-stone-50/50 flex items-center justify-between hover:bg-stone-50 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-stone-100 text-stone-700 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-base">smartphone</span>
+</div>
+<div>
+<p class="text-xs font-semibold text-stone-800">iPhone 14 de José · Safari móvil</p>
+<p class="text-[11px] text-stone-500 mt-0.5">
+                          Lima, Perú · Último movimiento hace 2 horas
+                        </p>
+</div>
+</div>
+<button class="px-2.5 py-1 text-xs text-stone-600 hover:text-red-700 hover:bg-red-50 rounded border border-stone-200 hover:border-red-200 transition-colors">
+                      Cerrar sesión
+                    </button>
+</div>
+</div>
+<!-- Terminate Others Action -->
+<div class="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+<p class="text-[11px] text-stone-400">¿No reconoces algún inicio de sesión?</p>
+<button class="px-3 py-1.5 text-xs font-medium text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200/80 rounded-lg transition-colors">
+                    Cerrar todas las demás sesiones
+                  </button>
+</div>
+</div>
+</div>
+</div>
+<!-- ================= RIGHT COLUMN (Col 8 to 12) ================= -->
+<div class="lg:col-span-5 space-y-6">
+<!-- Card 3: Preferencias del Sistema -->
+<div class="bg-white border border-stone-200 rounded-xl p-6 shadow-sm">
+<div class="flex items-center gap-2 pb-4 border-b border-stone-100">
+<span class="material-symbols-outlined text-teal-700">tune</span>
+<div>
+<h2 class="font-headline text-base font-bold text-stone-900">Preferencias</h2>
+<p class="text-xs text-stone-500">Configuración regional y visual del panel</p>
+</div>
+</div>
+<div class="pt-4 space-y-4">
+<!-- Language -->
+<div>
+<label class="block text-xs font-semibold text-stone-700 mb-1">Idioma del panel</label>
+<div class="relative">
+<select class="w-full h-10 px-3 pr-8 rounded-lg border border-stone-200 text-xs text-stone-900 bg-white focus:border-teal-700 focus:ring-1 focus:ring-teal-700 outline-none">
+<option selected="">Español (Perú) — Vocabulario y moneda local (S/)</option>
+<option disabled="">Español (Internacional)</option>
+<option disabled="">English (Próximamente)</option>
+</select>
+</div>
+<p class="text-[11px] text-stone-400 mt-1">Dali usará tuteo cercano y medidas habituales del mercado peruano (m², pulgadas, bolsas).</p>
+</div>
+<!-- Timezone -->
+<div>
+<label class="block text-xs font-semibold text-stone-700 mb-1">Zona horaria</label>
+<div class="flex items-center justify-between p-2.5 rounded-lg border border-stone-200 bg-stone-50 text-xs">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-stone-500 text-base">schedule</span>
+<span class="font-medium text-stone-800">América/Lima (GMT-5)</span>
+</div>
+<span class="text-[11px] font-mono text-stone-500 tabular-numbers">16:42 PET</span>
+</div>
+<p class="text-[11px] text-stone-400 mt-1">Define el horario laboral en el que Dali atiende sin descanso de noche.</p>
+</div>
+<!-- Appearance / Theme Selector -->
+<div>
+<label class="block text-xs font-semibold text-stone-700 mb-1.5">Tema de pantalla</label>
+<div class="grid grid-cols-3 gap-2 p-1 bg-stone-100 rounded-lg border border-stone-200/80 text-xs">
+<button class="py-1.5 rounded-md bg-white font-medium text-stone-900 shadow-sm flex items-center justify-center gap-1.5 border border-stone-200">
+<span class="material-symbols-outlined text-sm text-amber-600">light_mode</span>
+<span>Claro</span>
+</button>
+<button class="py-1.5 rounded-md text-stone-500 hover:text-stone-800 flex items-center justify-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-sm">dark_mode</span>
+<span>Oscuro</span>
+</button>
+<button class="py-1.5 rounded-md text-stone-500 hover:text-stone-800 flex items-center justify-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-sm">computer</span>
+<span>Sistema</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 4: Empresa y Suscripción -->
+<div class="bg-white border border-stone-200 rounded-xl p-6 shadow-sm">
+<div class="flex items-start justify-between pb-3 border-b border-stone-100">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-700">apartment</span>
+<h2 class="font-headline text-base font-bold text-stone-900">Empresa asociada</h2>
+</div>
+<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200 uppercase tracking-wide font-mono">
+                  Plan Negocio
+                </span>
+</div>
+<div class="pt-3 space-y-2.5">
+<div class="flex items-start justify-between text-xs">
+<span class="text-stone-500">Razón social:</span>
+<span class="font-semibold text-stone-900 text-right">CONSTROAD S.A.C.</span>
+</div>
+<div class="flex items-start justify-between text-xs">
+<span class="text-stone-500">RUC:</span>
+<span class="font-mono text-stone-800">20601234567</span>
+</div>
+<div class="flex items-start justify-between text-xs">
+<span class="text-stone-500">Rubro:</span>
+<span class="text-stone-800">Asfaltos y Pavimentos</span>
+</div>
+<div class="flex items-start justify-between text-xs">
+<span class="text-stone-500">Planta / Ubicación:</span>
+<span class="text-stone-800">Lurín, Lima</span>
+</div>
+<div class="flex items-start justify-between text-xs pt-1 border-t border-stone-100">
+<span class="text-stone-500">WhatsApp oficial:</span>
+<span class="font-mono text-emerald-700 font-medium">+51 949 376 824</span>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+<a class="text-xs font-medium text-teal-700 hover:text-teal-800 hover:underline flex items-center gap-1" href="#">
+<span>Ir a Negocio y Catálogo</span>
+<span class="material-symbols-outlined text-xs">arrow_forward</span>
+</a>
+<a class="text-xs font-medium text-stone-500 hover:text-stone-800" href="#">
+                  Ver facturas
+                </a>
+</div>
+</div>
+<!-- Card 5: Datos y Exportación -->
+<div class="bg-white border border-stone-200 rounded-xl p-6 shadow-sm">
+<div class="flex items-center gap-2 pb-3 border-b border-stone-100">
+<span class="material-symbols-outlined text-teal-700">download</span>
+<div>
+<h2 class="font-headline text-base font-bold text-stone-900">Datos y exportación</h2>
+<p class="text-xs text-stone-500">Descarga tu información para Excel o contabilidad</p>
+</div>
+</div>
+<div class="pt-4 space-y-3">
+<p class="text-xs text-stone-600 leading-relaxed">
+                  Puedes exportar el historial completo de clientes que Dali ha calificado y las conversaciones transcritas.
+                </p>
+<!-- Excel Export Trigger -->
+<button class="w-full h-11 px-4 rounded-lg border border-stone-200 hover:border-teal-600 bg-stone-50 hover:bg-white text-stone-800 text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 group">
+<span class="material-symbols-outlined text-emerald-700 group-hover:scale-110 transition-transform">table_view</span>
+<span>Descargar conversaciones y leads (.xlsx)</span>
+</button>
+<!-- Retention Note -->
+<div class="p-2.5 rounded-lg bg-amber-50/60 border border-amber-200/70 text-[11px] text-amber-800 flex items-start gap-2">
+<span class="material-symbols-outlined text-amber-600 text-sm mt-0.5">info</span>
+<span>Las grabaciones y chats se guardan por 90 días; los contactos calificados permanecen siempre.</span>
+</div>
+</div>
+</div>
+<!-- Card 6: Zona de Peligro -->
+<div class="bg-red-50/40 border border-red-200 rounded-xl p-6 shadow-sm">
+<div class="flex items-center gap-2 pb-3 border-b border-red-100">
+<span class="material-symbols-outlined text-red-600">warning</span>
+<h2 class="font-headline text-base font-bold text-red-900">Zona de peligro</h2>
+</div>
+<p class="text-xs text-stone-600 mt-3 leading-relaxed">
+                Si desconectas tu cuenta, Dali dejará de responder llamadas y WhatsApps en tu número oficial. Los clientes no recibirán cotizaciones automáticas.
+              </p>
+<div class="mt-4 flex flex-col gap-2">
+<button class="w-full px-3.5 py-2.5 rounded-lg border border-red-300 bg-white text-red-700 hover:bg-red-50 text-xs font-semibold transition-colors text-center shadow-sm">
+                  Eliminar la cuenta de CONSTROAD en Dali
+                </button>
+<p class="text-[10px] text-stone-400 text-center">
+                  Plazo de cortesía de 30 días para recuperar tus datos antes de borrado final.
+                </p>
+</div>
+</div>
+<!-- Sign Out Secondary Block -->
+<div class="pt-2">
+<button class="w-full h-11 px-4 rounded-xl border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 text-xs font-medium transition-colors flex items-center justify-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-stone-500 text-base">logout</span>
+<span>Cerrar sesión en este equipo</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Minimal Page Footer -->
+<footer class="mt-auto px-8 py-6 border-t border-stone-200 bg-white text-xs text-stone-400 flex flex-col md:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-2">
+<span class="font-headline font-semibold text-stone-700">Dali</span>
+<span>· Asistente inteligente para el rubro de construcción y servicios en Perú.</span>
+</div>
+<div class="flex items-center gap-4 text-stone-500">
+<a class="hover:text-stone-800 transition-colors" href="#">Soporte por WhatsApp (+51 988 234 112)</a>
+<span>·</span>
+<a class="hover:text-stone-800 transition-colors" href="#">Documentación de API</a>
+<span>·</span>
+<span>© 2025 Dali AI Labs</span>
+</div>
+</footer>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Verticales - Superadmin Dali</title>
+<!-- Google Fonts: Outfit & DM Sans & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Outfit:wght@500;600;700;800&amp;family=Public+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            stone: {
+              50: '#fafaf9',
+              100: '#f5f5f4',
+              200: '#e7e5e4',
+              300: '#d6d3d1',
+              400: '#a8a29e',
+              500: '#78716c',
+              600: '#57534e',
+              700: '#44403c',
+              800: '#292524',
+              900: '#1c1917',
+            },
+            teal: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              200: '#99f6e4',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+            },
+            amber: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309',
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.75rem",
+            "xl": "1rem",
+            "2xl": "1.25rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Outfit", "Public Sans", "sans-serif"],
+            display: ["Outfit", "Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      vertical-align: middle;
+      display: inline-block;
+      line-height: 1;
+    }
+    .material-symbols-outlined.fill-1 {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 20;
+    }
+    /* Hide scrollbars on horizontal tabs */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    body {
+      background-color: #FAFAF9;
+      color: #1C1917;
+      font-family: 'DM Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-stone-50 text-stone-900 min-h-screen antialiased flex justify-center selection:bg-teal-100 selection:text-teal-800">
+<!-- Mobile container viewport simulated to 390px (and responsive up to tablet preview) -->
+<div class="w-full max-w-[390px] min-h-screen bg-stone-50 pb-28 relative flex flex-col shadow-xl border-x border-stone-200">
+<!-- TopAppBar from Shared Components Specification -->
+<header class="fixed top-0 left-0 w-full max-w-[390px] left-1/2 -translate-x-1/2 z-40 flex items-center justify-between px-4 h-14 bg-white border-b border-stone-200">
+<div class="flex items-center gap-2.5">
+<!-- Leading Avatar -->
+<div class="w-8 h-8 rounded-full bg-teal-800 text-white flex items-center justify-center font-headline font-bold text-xs shadow-sm ring-2 ring-teal-600/20">
+          SD
+        </div>
+<div class="flex flex-col leading-tight">
+<span class="font-headline font-semibold text-base text-stone-900 tracking-tight">Superadmin Dali</span>
+<div class="flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse"></span>
+<span class="text-[11px] text-stone-500 font-medium">Lima GMT-5 · Modo plataforma</span>
+</div>
+</div>
+</div>
+<!-- Trailing Icon Action -->
+<button aria-label="Cambiar vista o perfil" class="w-8 h-8 flex items-center justify-center rounded-lg text-stone-600 hover:bg-stone-100 active:opacity-80 transition-colors" type="button">
+<span class="material-symbols-outlined text-xl">swap_horiz</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="mt-14 px-4 pt-4 flex flex-col gap-5">
+<!-- Section Header with Meta and Action Button -->
+<section class="flex flex-col gap-3">
+<div class="flex items-start justify-between">
+<div>
+<div class="flex items-center gap-2">
+<h1 class="font-headline font-bold text-2xl text-stone-900 tracking-tight">Verticales</h1>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-stone-200/80 text-stone-700">
+                5 rubros
+              </span>
+</div>
+<p class="text-xs text-stone-600 mt-1 leading-relaxed">
+              Cada rubro trae sus servicios, preguntas frecuentes y plantilla de Excel de fábrica para arrancar en minutos.
+            </p>
+</div>
+</div>
+<!-- Prominent Primary Action Button -->
+<button class="w-full h-11 bg-teal-800 hover:bg-teal-900 text-white font-medium text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-[0.99] transition-all" type="button">
+<span class="material-symbols-outlined text-lg">add_circle</span>
+<span>Nuevo vertical</span>
+</button>
+</section>
+<!-- Section 1: Tarjetas de verticales / rubros -->
+<section class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-stone-500 font-label">
+            Packs preconfigurados
+          </h2>
+<span class="text-xs font-medium text-stone-400 font-mono">1 activo en edición</span>
+</div>
+<!-- 1. Tarjeta Activa / Seleccionada (Asfalto y construcción) -->
+<article class="bg-white rounded-xl border-2 border-teal-700 p-3.5 shadow-sm flex flex-col gap-3 relative overflow-hidden transition-all">
+<!-- Active ribbon highlight indicator -->
+<div class="absolute top-0 right-0 bg-teal-700 text-white px-2.5 py-0.5 rounded-bl-lg text-[10px] font-semibold tracking-wide flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-200"></span>
+<span>Editando ahora</span>
+</div>
+<div class="flex flex-col gap-1 pr-24">
+<h3 class="font-headline font-bold text-base text-stone-900 tracking-tight">Asfalto y construcción</h3>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 text-[11px] font-semibold w-fit border border-teal-200/60">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-700"></span>
+<span>Junta datos para cotizar</span>
+</div>
+</div>
+<!-- Empresas usuarias -->
+<div class="bg-stone-50 rounded-lg p-2 flex items-start gap-1.5 border border-stone-200/70">
+<span class="material-symbols-outlined text-stone-500 text-base mt-0.5">store</span>
+<div class="text-xs text-stone-700 leading-snug">
+<strong class="font-semibold text-stone-900 font-mono">3 empresas activas</strong>
+<div class="text-[11px] text-stone-600 truncate mt-0.5">CONSTROAD, Inframaq, Constructora JC</div>
+</div>
+</div>
+<!-- Métricas del pack -->
+<div class="grid grid-cols-2 gap-2 text-xs text-stone-600 bg-stone-50/50 p-2 rounded-lg border border-dashed border-stone-200">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-teal-700 text-sm">inventory_2</span>
+<span><strong>4</strong> servicios base</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-teal-700 text-sm">quiz</span>
+<span><strong>22</strong> preguntas téc.</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-teal-700 text-sm">help_center</span>
+<span><strong>12</strong> FAQ WhatsApp</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-teal-700 text-sm">table_view</span>
+<span class="font-mono">Plantilla Excel v3</span>
+</div>
+</div>
+<!-- Acción -->
+<div class="flex items-center justify-between pt-1 border-t border-stone-100">
+<span class="text-[11px] text-stone-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-teal-700 text-sm">verified</span>
+<span>Pack oficial Dali</span>
+</span>
+<button class="px-3 py-1.5 bg-teal-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1 active:scale-95 transition-transform" type="button">
+<span>Editar pack</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</article>
+<!-- 2. Tarjeta: Restaurante y pollería -->
+<article class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-none flex flex-col gap-2.5 hover:border-stone-300 transition-colors">
+<div class="flex items-start justify-between gap-2">
+<div>
+<h3 class="font-headline font-bold text-sm text-stone-900 tracking-tight">Restaurante y pollería</h3>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 text-[11px] font-medium mt-1">
+<span>Toma pedidos del catálogo</span>
+</div>
+</div>
+<button class="px-2.5 py-1 text-teal-800 bg-teal-50 border border-teal-200/80 rounded-lg text-xs font-semibold hover:bg-teal-100/70 transition-colors" type="button">
+              Ver pack
+            </button>
+</div>
+<div class="text-[11px] text-stone-600 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-400 text-sm">storefront</span>
+<span>1 empresa activa (Pollería Don Beto)</span>
+</div>
+<p class="text-xs text-stone-500 leading-snug">
+            0 servicios de flujo largo · Catálogo con fotos obligatorio · 9 FAQ · Plantilla v1
+          </p>
+</article>
+<!-- 3. Tarjeta: Grifo y combustibles -->
+<article class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-none flex flex-col gap-2.5 hover:border-stone-300 transition-colors">
+<div class="flex items-start justify-between gap-2">
+<div>
+<h3 class="font-headline font-bold text-sm text-stone-900 tracking-tight">Grifo y combustibles</h3>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 text-[11px] font-medium mt-1">
+<span>Informa (horarios, precios del día)</span>
+</div>
+</div>
+<button class="px-2.5 py-1 text-teal-800 bg-teal-50 border border-teal-200/80 rounded-lg text-xs font-semibold hover:bg-teal-100/70 transition-colors" type="button">
+              Ver pack
+            </button>
+</div>
+<div class="text-[11px] text-stone-600 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-400 text-sm">local_gas_station</span>
+<span>1 empresa (Grifo San Martín)</span>
+</div>
+<p class="text-xs text-stone-500 leading-snug">
+            6 FAQ · Precios de combustible del día editables en 1 tap · Plantilla v1
+          </p>
+</article>
+<!-- 4. Tarjeta: Lubricentro y cambios de aceite -->
+<article class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-none flex flex-col gap-2.5 hover:border-stone-300 transition-colors">
+<div class="flex items-start justify-between gap-2">
+<div>
+<h3 class="font-headline font-bold text-sm text-stone-900 tracking-tight">Lubricentro y cambios de aceite</h3>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 text-[11px] font-medium mt-1">
+<span>Agenda citas</span>
+</div>
+</div>
+<button class="px-2.5 py-1 text-teal-800 bg-teal-50 border border-teal-200/80 rounded-lg text-xs font-semibold hover:bg-teal-100/70 transition-colors" type="button">
+              Ver pack
+            </button>
+</div>
+<div class="text-[11px] text-stone-600 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-400 text-sm">car_repair</span>
+<span>1 empresa (Lubricentro Ruedas)</span>
+</div>
+<p class="text-xs text-stone-500 leading-snug">
+            5 servicios · Horarios de atención · 7 FAQ · Plantilla v2
+          </p>
+</article>
+<!-- 5. Tarjeta: Servicios comerciales (genérico) -->
+<article class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-none flex flex-col gap-2.5 hover:border-stone-300 transition-colors">
+<div class="flex items-start justify-between gap-2">
+<div>
+<h3 class="font-headline font-bold text-sm text-stone-900 tracking-tight">Servicios comerciales (genérico)</h3>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 text-[11px] font-medium mt-1">
+<span>Junta datos para cotizar</span>
+</div>
+</div>
+<button class="px-2.5 py-1 text-teal-800 bg-teal-50 border border-teal-200/80 rounded-lg text-xs font-semibold hover:bg-teal-100/70 transition-colors" type="button">
+              Ver pack
+            </button>
+</div>
+<div class="text-[11px] text-stone-500 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-400 text-sm">domain</span>
+<span>0 empresas (base en blanco)</span>
+</div>
+<p class="text-xs text-stone-500 leading-snug">
+            1 servicio base · 6 preguntas universales · 4 FAQ
+          </p>
+</article>
+</section>
+<!-- Section 2: Editor del Pack "Asfalto y construcción" -->
+<section class="bg-white rounded-2xl border border-stone-200 p-4 flex flex-col gap-4 shadow-sm">
+<!-- Editor Header -->
+<div class="flex flex-col gap-1 pb-3 border-b border-stone-100">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-teal-800 font-label">Editor del pack</span>
+<span class="text-xs font-mono font-semibold text-stone-700 bg-stone-100 px-2 py-0.5 rounded-md">v3.2 (Estable)</span>
+</div>
+<h2 class="font-headline font-bold text-lg text-stone-900 tracking-tight">Asfalto y construcción</h2>
+<p class="text-xs text-stone-500">Configuración que se inyecta automáticamente a cualquier cliente nuevo del rubro.</p>
+</div>
+<!-- Horizontal Scrollable Tabs -->
+<div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+<button class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-stone-600 bg-stone-100 hover:bg-stone-200/70 transition-colors" type="button">
+            Servicios (4)
+          </button>
+<button class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-stone-600 bg-stone-100 hover:bg-stone-200/70 transition-colors" type="button">
+            Preguntas (12)
+          </button>
+<!-- Active Tab: Textos de WhatsApp -->
+<button class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-teal-800 shadow-sm flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-sm">chat</span>
+<span>Textos de WhatsApp</span>
+</button>
+<button class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-stone-600 bg-stone-100 hover:bg-stone-200/70 transition-colors" type="button">
+            Catálogo (8)
+          </button>
+<button class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-stone-600 bg-stone-100 hover:bg-stone-200/70 transition-colors" type="button">
+            Excel
+          </button>
+</div>
+<!-- Tab Explanatory Note -->
+<div class="bg-stone-50 rounded-xl p-3 border border-stone-200/70 text-xs text-stone-600 flex items-start gap-2">
+<span class="material-symbols-outlined text-teal-700 text-base mt-0.5 shrink-0">info</span>
+<p class="leading-relaxed">
+            Textos base que adopta el bot al asignarse a una empresa de este rubro. El dueño luego puede adaptarlos a su estilo.
+          </p>
+</div>
+<!-- Text Fields Form -->
+<div class="flex flex-col gap-4">
+<!-- Campo 1: Saludo inicial -->
+<div class="flex flex-col gap-1.5">
+<label class="text-xs font-semibold text-stone-900 flex items-center justify-between" for="saludo-input">
+<span>Saludo inicial en WhatsApp</span>
+<span class="text-[10px] text-teal-800 font-mono">Requerido</span>
+</label>
+<div class="relative">
+<textarea class="w-full text-xs text-stone-800 bg-stone-50 border border-stone-200 rounded-xl p-2.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700/30 focus:border-teal-700 leading-relaxed font-body" id="saludo-input" rows="3">¡Hola! Soy {asistente}, la asistente de {negocio} 👋 ¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.</textarea>
+</div>
+<div class="flex items-center justify-between text-[11px] text-stone-500">
+<span class="flex items-center gap-1 font-mono">
+<span class="material-symbols-outlined text-xs text-stone-400">data_object</span>
+<span>{asistente}, {negocio}, {horario}</span>
+</span>
+<span class="text-stone-400">127 caracteres</span>
+</div>
+</div>
+<!-- Campo 2: Precio directo -->
+<div class="flex flex-col gap-1.5">
+<label class="text-xs font-semibold text-stone-900" for="precio-input">
+              Cuando el cliente pregunta precio directo
+            </label>
+<textarea class="w-full text-xs text-stone-800 bg-stone-50 border border-stone-200 rounded-xl p-2.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700/30 focus:border-teal-700 leading-relaxed font-body" id="precio-input" rows="2">El precio depende de la cantidad y la ubicación; con estos datos el asesor te cotiza.</textarea>
+<p class="text-[11px] text-stone-500 leading-snug flex items-center gap-1">
+<span class="material-symbols-outlined text-xs text-amber-600">tips_and_updates</span>
+<span>Evita dar tarifas cerradas sin saber metrado y flete.</span>
+</p>
+</div>
+<!-- Campo 3: Cierre y confirmación -->
+<div class="flex flex-col gap-1.5">
+<label class="text-xs font-semibold text-stone-900" for="cierre-input">
+              Mensaje de cierre y confirmación de cotización
+            </label>
+<textarea class="w-full text-xs text-stone-800 bg-stone-50 border border-stone-200 rounded-xl p-2.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700/30 focus:border-teal-700 leading-relaxed font-body" id="cierre-input" rows="2">Listo, {nombre}. Un asesor de {negocio} te contacta {cuando} con la cotización.</textarea>
+<p class="text-[11px] text-stone-500 leading-snug flex items-center gap-1">
+<span class="material-symbols-outlined text-xs text-teal-700">notifications_active</span>
+<span>Dispara la alerta al grupo interno de WhatsApp de ventas.</span>
+</p>
+</div>
+<!-- Campo 4: Escalada a asesor -->
+<div class="flex flex-col gap-1.5">
+<label class="text-xs font-semibold text-stone-900" for="escalada-input">
+              Escalada a asesor humano
+            </label>
+<textarea class="w-full text-xs text-stone-800 bg-stone-50 border border-stone-200 rounded-xl p-2.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700/30 focus:border-teal-700 leading-relaxed font-body" id="escalada-input" rows="2">Te comunico al instante con un asesor del equipo de ventas para coordinar tu caso especial.</textarea>
+<p class="text-[11px] text-stone-500 leading-snug flex items-center gap-1">
+<span class="material-symbols-outlined text-xs text-stone-400">handshake</span>
+<span>Pasa el chat a estado "Persona a cargo".</span>
+</p>
+</div>
+</div>
+<!-- Banner de impacto / advertencia ámbar -->
+<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5">
+<span class="material-symbols-outlined text-amber-700 text-lg mt-0.5 shrink-0">warning</span>
+<div class="text-xs text-amber-900 leading-relaxed">
+<strong class="font-semibold text-amber-900 block mb-0.5">Aviso de impacto:</strong>
+            Actualizará las respuestas predeterminadas en <span class="font-semibold">CONSTROAD, Inframaq y Constructora JC</span> sin tocar sus números ni catálogo personalizado.
+          </div>
+</div>
+<!-- Botones de Guardado y Despliegue -->
+<div class="flex flex-col gap-2 pt-2 border-t border-stone-100">
+<button class="w-full h-11 bg-teal-800 hover:bg-teal-900 text-white font-medium text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-[0.99] transition-all" type="button">
+<span class="material-symbols-outlined text-lg">save</span>
+<span>Guardar versión v4</span>
+</button>
+<button class="w-full h-10 bg-white hover:bg-stone-50 border border-stone-300 text-stone-700 font-medium text-xs rounded-xl flex items-center justify-center gap-1.5 active:opacity-80 transition-all" type="button">
+<span class="material-symbols-outlined text-stone-500 text-base">sync</span>
+<span>Aplicar cambios a las 3 empresas que usan la v3</span>
+</button>
+</div>
+</section>
+<!-- Pie de información de sistema -->
+<footer class="text-center py-2">
+<p class="text-[11px] text-stone-400">Dali Superadmin · Engine v2.14 · Servidores Perú (Lima)</p>
+</footer>
+</main>
+<!-- BottomNavBar directly executed from Shared Components JSON -->
+<!-- Destination count: 4, Active item: Verticales (category) -->
+<nav class="fixed bottom-0 left-0 w-full max-w-[390px] left-1/2 -translate-x-1/2 z-50 flex justify-around items-center h-16 px-2 bg-white border-t border-stone-200">
+<!-- 1. Empresas (Inactive) -->
+<button class="flex flex-col items-center justify-center text-stone-500 font-normal gap-1 hover:text-teal-800 transition-colors active:scale-95 duration-150 flex-1 py-1" type="button">
+<span class="material-symbols-outlined text-xl">store</span>
+<span class="font-body text-xs font-medium tracking-tight">Empresas</span>
+</button>
+<!-- 2. Verticales (Active: matches current screen "Verticales") -->
+<button class="flex flex-col items-center justify-center text-teal-800 font-semibold gap-1 hover:text-teal-800 transition-colors active:scale-95 duration-150 flex-1 py-1 relative" type="button">
+<div class="relative">
+<span class="material-symbols-outlined text-xl fill-1">category</span>
+<span class="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-teal-800"></span>
+</div>
+<span class="font-body text-xs font-medium tracking-tight text-teal-800">Verticales</span>
+</button>
+<!-- 3. Salud (Inactive) -->
+<button class="flex flex-col items-center justify-center text-stone-500 font-normal gap-1 hover:text-teal-800 transition-colors active:scale-95 duration-150 flex-1 py-1" type="button">
+<span class="material-symbols-outlined text-xl">monitor_heart</span>
+<span class="font-body text-xs font-medium tracking-tight">Salud</span>
+</button>
+<!-- 4. Más (Inactive) -->
+<button class="flex flex-col items-center justify-center text-stone-500 font-normal gap-1 hover:text-teal-800 transition-colors active:scale-95 duration-150 flex-1 py-1" type="button">
+<span class="material-symbols-outlined text-xl">more_horiz</span>
+<span class="font-body text-xs font-medium tracking-tight">Más</span>
+</button>
+</nav>
+</div>
+</body></html>

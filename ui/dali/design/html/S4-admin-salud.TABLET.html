@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-50" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dali Admin - Salud del sistema</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {},
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "1rem",
+            "xl": "1.5rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Public Sans", "sans-serif"],
+            display: ["Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-size: 20px;
+      line-height: 1;
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1;
+    }
+    .num-tabular {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="h-full text-stone-900 font-body antialiased bg-stone-50 flex justify-center selection:bg-teal-100 selection:text-teal-900">
+<!-- Tablet Shell Frame (Optimized specifically for 834px tablet reference viewport) -->
+<div class="w-full max-w-[834px] min-h-screen bg-stone-50 flex flex-row relative shadow-xl overflow-x-hidden border-x border-stone-200">
+<!-- SHARED COMPONENT: SideNavBar (Rail docked left 72px) -->
+<aside class="fixed left-auto h-full w-[72px] flex flex-col items-center justify-between py-4 z-40 bg-white dark:bg-stone-900 border-r border-stone-200 dark:border-stone-800">
+<!-- Top Rail Cluster -->
+<div class="flex flex-col items-center w-full gap-5">
+<!-- Logo Dali Admin -->
+<a class="flex flex-col items-center group focus:outline-none" href="#" title="Dali Admin">
+<div class="w-10 h-10 rounded-xl bg-teal-700 flex items-center justify-center text-white shadow-sm transition-transform active:scale-95">
+<span class="font-headline font-extrabold text-xl tracking-tight leading-none">D</span>
+</div>
+<span class="mt-1 text-[9px] font-headline font-bold text-stone-600 tracking-wider uppercase">ADMIN</span>
+</a>
+<!-- Separator -->
+<div class="w-8 h-px bg-stone-200"></div>
+<!-- Rail Navigation Items -->
+<nav aria-label="Navegación lateral" class="w-full flex flex-col items-center gap-1.5">
+<!-- Empresas -->
+<a class="relative flex flex-col items-center justify-center gap-1 text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150 py-2 w-full" href="#">
+<div class="relative flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="domain">domain</span>
+<span class="absolute -top-1 -right-2.5 bg-stone-200 text-stone-700 text-[10px] font-mono font-medium px-1 rounded-full leading-tight">11</span>
+</div>
+<span class="font-label text-[11px] leading-tight">Empresas</span>
+</a>
+<!-- Verticales -->
+<a class="flex flex-col items-center justify-center gap-1 text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150 py-2 w-full" href="#">
+<span class="material-symbols-outlined" data-icon="category">category</span>
+<span class="font-label text-[11px] leading-tight">Verticales</span>
+</a>
+<!-- Salud (ACTIVE STATE strictly conforming to JSON style_active_navigation) -->
+<a aria-current="page" class="flex flex-col items-center justify-center gap-1 text-teal-700 font-medium py-2 w-full border-r-2 border-teal-700 bg-teal-50/50" href="#">
+<span class="material-symbols-outlined fill" data-icon="monitor_heart" style="font-variation-settings: 'FILL' 1;">monitor_heart</span>
+<span class="font-label text-[11px] leading-tight font-semibold">Salud</span>
+</a>
+<!-- Cuentas -->
+<a class="flex flex-col items-center justify-center gap-1 text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150 py-2 w-full" href="#">
+<span class="material-symbols-outlined" data-icon="manage_accounts">manage_accounts</span>
+<span class="font-label text-[11px] leading-tight">Cuentas</span>
+</a>
+</nav>
+</div>
+<!-- Bottom Rail Cluster -->
+<div class="flex flex-col items-center w-full gap-3">
+<!-- Ajustes Footer -->
+<a class="flex flex-col items-center justify-center gap-1 text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors duration-150 py-1.5 w-full" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label text-[10px] leading-tight">Ajustes</span>
+</a>
+<!-- Separator -->
+<div class="w-8 h-px bg-stone-200"></div>
+<!-- Node & Region indicator -->
+<div class="flex flex-col items-center group relative cursor-pointer" title="Región AWS sa-east-1 (Lima, PE)">
+<div class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100 animate-pulse"></div>
+<span class="text-[9px] font-mono text-stone-500 mt-1 font-medium">AWS-PE</span>
+</div>
+<!-- Superadmin Avatar -->
+<div class="w-8 h-8 rounded-full bg-stone-200 text-stone-700 font-headline font-semibold text-xs flex items-center justify-center ring-1 ring-stone-300">
+          OP
+        </div>
+</div>
+</aside>
+<!-- MAIN VIEW CANVAS (Calculated for 834px tablet layout: 72px rail + 762px canvas) -->
+<div class="flex-1 flex flex-col ml-[72px] min-w-0">
+<!-- SHARED COMPONENT: TopNavBar (Compact header per JSON specifications) -->
+<header class="flex justify-between items-center w-full px-5 py-3 sticky top-0 z-30 bg-stone-50/95 backdrop-blur-md border-b border-stone-200">
+<!-- Left Title & Context Breadcrumb -->
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5 text-xs text-stone-500 mb-0.5">
+<span>Administración</span>
+<span class="text-stone-300">/</span>
+<span class="font-medium text-stone-600">Infraestructura &amp; Servicio</span>
+</div>
+<div class="flex items-center gap-2.5">
+<h1 class="font-headline font-bold text-lg text-stone-900 tracking-tight">Salud del sistema</h1>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              Operativo
+            </span>
+</div>
+</div>
+<!-- Right Actions (Actualizar, status, trailing icons) -->
+<div class="flex items-center gap-2">
+<!-- Refresh meta -->
+<div class="hidden sm:flex items-center text-xs text-stone-500 gap-1 mr-1">
+<span class="material-symbols-outlined text-[16px] text-stone-400" data-icon="schedule">schedule</span>
+<span class="num-tabular">Actualizado hace 20 s</span>
+</div>
+<!-- Trailing Secondary Action: Actualizar -->
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-stone-700 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px] text-teal-700" data-icon="refresh">refresh</span>
+<span>Actualizar</span>
+</button>
+<!-- Trailing Primary Action: Revisar servicios -->
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-teal-700 rounded-lg hover:bg-teal-800 active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]" data-icon="cloud_done">cloud_done</span>
+<span class="hidden md:inline">Revisar servicios</span>
+<span class="md:hidden">Servicios</span>
+</button>
+</div>
+</header>
+<!-- Scrollable Dashboard Content Area -->
+<main class="flex-1 p-5 space-y-4">
+<!-- 1. Top KPI Bento Grid (4 compact metrics) -->
+<section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+<!-- KPI 1: Números activos -->
+<div class="bg-white border border-stone-200 rounded-xl p-3.5 shadow-none flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="text-xs text-stone-500 font-medium">Números activos</span>
+<span class="w-2 h-2 rounded-full bg-amber-500 ring-2 ring-amber-100"></span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="font-mono text-2xl font-bold text-stone-900 num-tabular">6 <span class="text-stone-400 text-lg font-normal">/ 7</span></span>
+</div>
+<div class="mt-1.5 flex items-center gap-1 text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 w-fit">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+<span class="font-medium">1 desconectado</span>
+</div>
+</div>
+<!-- KPI 2: Mensajes última hora -->
+<div class="bg-white border border-stone-200 rounded-xl p-3.5 shadow-none flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="text-xs text-stone-500 font-medium">Msjs. última hora</span>
+<span class="material-symbols-outlined text-teal-700 text-[18px]" data-icon="chat">chat</span>
+</div>
+<div class="mt-2 flex items-baseline">
+<span class="font-mono text-2xl font-bold text-stone-900 num-tabular">214</span>
+</div>
+<div class="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 w-fit">
+<span class="font-medium">+8% flujo fluido WhatsApp</span>
+</div>
+</div>
+<!-- KPI 3: Tiempo respuesta promedio -->
+<div class="bg-white border border-stone-200 rounded-xl p-3.5 shadow-none flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="text-xs text-stone-500 font-medium">Tiempo rpta. prom.</span>
+<span class="material-symbols-outlined text-stone-400 text-[18px]" data-icon="bolt">bolt</span>
+</div>
+<div class="mt-2 flex items-baseline">
+<span class="font-mono text-2xl font-bold text-stone-900 num-tabular">8.4 <span class="text-xs text-stone-500 font-sans font-normal">s</span></span>
+</div>
+<div class="mt-1.5 flex items-center gap-1 text-[11px] text-stone-600 bg-stone-100 px-2 py-0.5 rounded w-fit">
+<span class="num-tabular">Inferencia local + red</span>
+</div>
+</div>
+<!-- KPI 4: Errores últ. hora -->
+<div class="bg-white border border-stone-200 rounded-xl p-3.5 shadow-none flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="text-xs text-stone-500 font-medium">Errores últ. hora</span>
+<span class="material-symbols-outlined text-emerald-700 text-[18px]" data-icon="check_circle">check_circle</span>
+</div>
+<div class="mt-2 flex items-baseline">
+<span class="font-mono text-2xl font-bold text-emerald-700 num-tabular">0</span>
+</div>
+<div class="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 w-fit">
+<span>0 fallos de entrega</span>
+</div>
+</div>
+</section>
+<!-- 2. Dual-Column Tablet Grid (Left: IA & Sistema / Right: WhatsApp & Logs) -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+<!-- LEFT COLUMN: Motor Local & Servidor Mac Mini (md:col-span-6) -->
+<div class="md:col-span-6 space-y-4">
+<!-- Card 1: Modelo local Qwen -->
+<div class="bg-white border border-stone-200 rounded-xl p-4 shadow-none">
+<div class="flex items-center justify-between border-b border-stone-100 pb-3">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-700">
+<span class="material-symbols-outlined text-[16px]" data-icon="memory">memory</span>
+</div>
+<div>
+<h2 class="font-headline font-semibold text-sm text-stone-900 leading-tight">Modelo local</h2>
+<p class="text-[11px] text-stone-500 font-mono">Qwen2.5-1.5B-Instruct-4bit</p>
+</div>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                  Cargado
+                </span>
+</div>
+<!-- Specs Grid -->
+<div class="grid grid-cols-2 gap-3 my-3">
+<div class="bg-stone-50/80 rounded-lg p-2.5 border border-stone-100">
+<span class="text-[11px] text-stone-500 block">VRAM / RAM</span>
+<span class="font-mono text-xs font-semibold text-stone-800 mt-0.5 block num-tabular">1.2 GB</span>
+<span class="text-[10px] text-emerald-600 flex items-center gap-0.5 mt-0.5">
+<span class="material-symbols-outlined text-[12px]" data-icon="check">check</span>
+                    En caché activo
+                  </span>
+</div>
+<div class="bg-stone-50/80 rounded-lg p-2.5 border border-stone-100">
+<span class="text-[11px] text-stone-500 block">Última respuesta</span>
+<span class="font-mono text-xs font-semibold text-stone-800 mt-0.5 block num-tabular">hace 40 s</span>
+<span class="text-[10px] text-stone-500 truncate block mt-0.5">Lead de CONSTROAD</span>
+</div>
+</div>
+<!-- Footer with unload action -->
+<div class="pt-2 border-t border-stone-100 flex items-center justify-between text-xs">
+<span class="text-[11px] text-stone-500">Se descarga tras 5 min sin uso</span>
+<button class="px-2.5 py-1 text-xs font-medium text-stone-700 bg-white border border-stone-200 rounded-md hover:bg-stone-50 transition-colors" type="button">
+                  Descargar ahora
+                </button>
+</div>
+</div>
+<!-- Card 2: Servidor Físico Mac Mini M1 -->
+<div class="bg-white border border-stone-200 rounded-xl p-4 shadow-none">
+<div class="flex items-center justify-between mb-3">
+<div>
+<h2 class="font-headline font-semibold text-sm text-stone-900 leading-tight">Máquina física / Servidor</h2>
+<p class="text-[11px] text-stone-500">Apple Mac mini M1 · Lima, Perú</p>
+</div>
+<span class="px-2 py-0.5 bg-stone-100 text-stone-700 rounded text-[11px] font-mono font-medium">
+                  Uptime 12 días
+                </span>
+</div>
+<div class="space-y-3">
+<!-- RAM Metrics -->
+<div>
+<div class="flex justify-between text-xs mb-1">
+<span class="text-stone-600 font-medium">Memoria RAM (8 GB total)</span>
+<span class="font-mono text-stone-900 font-semibold num-tabular">6.1 GB (76%)</span>
+</div>
+<div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+<div class="bg-teal-600 h-2 rounded-full" style="width: 76%"></div>
+</div>
+</div>
+<!-- Swap Metrics with Amber accent -->
+<div>
+<div class="flex justify-between text-xs mb-1">
+<div class="flex items-center gap-1">
+<span class="text-stone-600 font-medium">Memoria Swap</span>
+<span class="text-[10px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-medium">moderado</span>
+</div>
+<span class="font-mono text-amber-700 font-semibold num-tabular">2.8 GB</span>
+</div>
+<div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+<div class="bg-amber-500 h-2 rounded-full" style="width: 42%"></div>
+</div>
+<p class="text-[10px] text-stone-500 mt-1">Uso de swap por buffers de WhatsApp y embeddings locales</p>
+</div>
+<!-- SSD Disk -->
+<div>
+<div class="flex justify-between text-xs mb-1">
+<span class="text-stone-600 font-medium">Disco SSD</span>
+<span class="font-mono text-stone-700 num-tabular">412 GB / 1 000 GB (41%)</span>
+</div>
+<div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+<div class="bg-stone-600 h-2 rounded-full" style="width: 41%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 3: Colas y Trabajos Redis / BullMQ -->
+<div class="bg-white border border-stone-200 rounded-xl p-4 shadow-none">
+<div class="flex items-center justify-between mb-3 border-b border-stone-100 pb-2.5">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-stone-500" data-icon="sync_alt">sync_alt</span>
+<h2 class="font-headline font-semibold text-sm text-stone-900">Colas y trabajos (BullMQ)</h2>
+</div>
+<span class="text-[11px] font-mono text-stone-500">Redis 7.2-Alpine</span>
+</div>
+<div class="space-y-2.5">
+<div class="flex items-center justify-between text-xs py-1 border-b border-stone-50">
+<span class="text-stone-600">Extracciones de intención</span>
+<span class="font-mono text-stone-700 font-medium num-tabular">0 <span class="text-[11px] text-emerald-600 font-sans">(Sin demoras)</span></span>
+</div>
+<div class="flex items-center justify-between text-xs py-1 border-b border-stone-50">
+<span class="text-stone-600">Avisos pendientes al dueño</span>
+<span class="font-mono text-stone-700 font-medium num-tabular">0 <span class="text-[11px] text-emerald-600 font-sans">(Despachados)</span></span>
+</div>
+<!-- Importación activa -->
+<div class="bg-stone-50 rounded-lg p-2.5 border border-stone-200">
+<div class="flex items-center justify-between text-xs mb-1">
+<span class="font-medium text-stone-800 flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600 animate-ping"></span>
+                      Importaciones en proceso
+                    </span>
+<span class="font-mono text-teal-700 font-semibold num-tabular">1 activa (60%)</span>
+</div>
+<p class="text-[11px] text-stone-500">Grifo San Martín · Excel de combustibles (v1.2)</p>
+<div class="w-full bg-stone-200 rounded-full h-1.5 mt-1.5 overflow-hidden">
+<div class="bg-teal-600 h-1.5 rounded-full transition-all duration-500" style="width: 60%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: Instancias de WhatsApp & Errores (md:col-span-6) -->
+<div class="md:col-span-6 space-y-4">
+<!-- Card 4: Instancias de WhatsApp -->
+<div class="bg-white border border-stone-200 rounded-xl p-4 shadow-none">
+<div class="flex items-center justify-between border-b border-stone-100 pb-3">
+<div>
+<h2 class="font-headline font-semibold text-sm text-stone-900 leading-tight">Instancias de WhatsApp</h2>
+<p class="text-[11px] text-stone-500">7 números enlazados</p>
+</div>
+<span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-semibold num-tabular">
+                  6 Activos
+                </span>
+</div>
+<!-- Lista de Números -->
+<div class="divide-y divide-stone-100 mt-1">
+<!-- 1. CONSTROAD -->
+<div class="py-2.5 flex items-center justify-between">
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-semibold text-xs text-stone-900">CONSTROAD</span>
+<span class="text-[11px] text-stone-500 font-mono">+51 949 376 824</span>
+</div>
+<span class="text-[10px] text-stone-400">Asfalto · Lurín</span>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                      Conectado
+                    </span>
+<span class="block text-[10px] text-stone-400 mt-0.5 num-tabular">hace 3 min</span>
+</div>
+</div>
+<!-- 2. Inframaq -->
+<div class="py-2.5 flex items-center justify-between">
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-semibold text-xs text-stone-900">Inframaq</span>
+<span class="text-[11px] text-stone-500 font-mono">+51 903 124 919</span>
+</div>
+<span class="text-[10px] text-stone-400">Maquinaria pesada</span>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                      Conectado
+                    </span>
+<span class="block text-[10px] text-stone-400 mt-0.5 num-tabular">hace 14 min</span>
+</div>
+</div>
+<!-- 3. Pollería Don Beto -->
+<div class="py-2.5 flex items-center justify-between">
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-semibold text-xs text-stone-900">Pollería Don Beto</span>
+<span class="text-[11px] text-stone-500 font-mono">+51 987 222 333</span>
+</div>
+<span class="text-[10px] text-stone-400">Restaurante · Delivery</span>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                      Conectado
+                    </span>
+<span class="block text-[10px] text-stone-400 mt-0.5 num-tabular">hace 1 min</span>
+</div>
+</div>
+<!-- 4. Constructora JC (DESCONECTADO - WARNING HIGHLIGHT) -->
+<div class="p-3 bg-amber-50/70 border border-amber-200 rounded-lg my-2">
+<div class="flex items-start justify-between">
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-bold text-xs text-stone-900">Constructora JC</span>
+<span class="text-[11px] text-stone-600 font-mono">+51 944 000 222</span>
+</div>
+<p class="text-[11px] text-amber-900 mt-0.5 font-medium">
+                        Teléfono sin conexión o apagado en obra
+                      </p>
+<span class="text-[10px] text-amber-700 block mt-0.5 num-tabular">Desconectado desde: ayer 23:02</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                      DESCONECTADO
+                    </span>
+</div>
+<div class="mt-2.5 pt-2 border-t border-amber-200/60 flex justify-end">
+<button class="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-semibold transition-colors shadow-xs" type="button">
+<span class="material-symbols-outlined text-[15px]" data-icon="notifications">notifications</span>
+<span>Avisar al dueño de nuevo</span>
+</button>
+</div>
+</div>
+<!-- 5. Otros 3 números colapsados -->
+<div class="pt-2 text-xs text-stone-500 flex items-center justify-between">
+<span class="text-[11px]">Grifo San Martín, Lubricentro Ruedas, Globofast</span>
+<span class="text-[11px] font-medium text-emerald-700 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    3 en línea
+                  </span>
+</div>
+</div>
+</div>
+<!-- Card 5: Errores recientes (Últimas 24h) -->
+<div class="bg-white border border-stone-200 rounded-xl p-4 shadow-none">
+<div class="flex items-center justify-between border-b border-stone-100 pb-2.5">
+<h2 class="font-headline font-semibold text-sm text-stone-900">Errores recientes (Últimas 24 h)</h2>
+<span class="text-[11px] font-mono text-stone-500">Total: 2 eventos</span>
+</div>
+<div class="space-y-3 mt-3">
+<!-- Error item 1 -->
+<div class="flex items-start gap-2.5 text-xs">
+<span class="material-symbols-outlined text-stone-400 mt-0.5 text-[16px]" data-icon="info">info</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="font-mono font-medium text-stone-800 text-[11px]">E11000 duplicado guardar mensaje</span>
+<span class="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-medium">Resuelto</span>
+</div>
+<p class="text-[11px] text-stone-500 mt-0.5">Manejado por upsert idempotente en MongoDB sin impacto.</p>
+<span class="text-[10px] text-stone-400 num-tabular">hoy 09:58</span>
+</div>
+</div>
+<!-- Error item 2 -->
+<div class="flex items-start gap-2.5 text-xs">
+<span class="material-symbols-outlined text-amber-600 mt-0.5 text-[16px]" data-icon="warning">warning</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="font-mono font-medium text-amber-800 text-[11px]">Número Constructora JC desconectado</span>
+<span class="text-[10px] text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded font-medium">Línea caída</span>
+</div>
+<p class="text-[11px] text-stone-500 mt-0.5">Teléfono sin internet en obra, esperando reconexión QR.</p>
+<span class="text-[10px] text-stone-400 num-tabular">ayer 23:02</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 6: Deploy & Versión -->
+<div class="bg-white border border-stone-200 rounded-xl p-3 shadow-none flex items-center justify-between text-xs">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+<div>
+<span class="font-semibold text-stone-900 font-headline">Deploy v2.14</span>
+<span class="text-stone-400 mx-1">·</span>
+<span class="font-mono text-[11px] text-stone-500">hash: 24338d0</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-stone-400 text-[11px] num-tabular">Desplegado hoy 16:34</span>
+<button class="text-teal-700 hover:text-teal-800 font-medium text-xs" type="button">Ver log</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Minimal Bottom Brand Footer -->
+<footer class="px-5 py-3 border-t border-stone-200 bg-stone-50 flex items-center justify-between text-xs text-stone-500">
+<div class="flex items-center gap-2">
+<span class="font-headline font-semibold text-stone-800">Dali</span>
+<span>· Consola de Superadministrador para Perú</span>
+</div>
+<div class="flex items-center gap-4 text-[11px]">
+<span>Zona horaria: America/Lima (PET)</span>
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-stone-300"></span>
+<span>Node.js v20.11 · Bun 1.1</span>
+</div>
+</footer>
+</div>
+</div>
+<script>
+    // Micro-interaction for refresh button
+    document.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const icon = this.querySelector('.material-symbols-outlined');
+        if (icon && (icon.textContent.trim() === 'refresh' || icon.getAttribute('data-icon') === 'refresh')) {
+          icon.classList.add('animate-spin');
+          setTimeout(() => {
+            icon.classList.remove('animate-spin');
+          }, 800);
+        }
+      });
+    });
+  </script>
+</body></html>

@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CONSTROAD - Catálogo | Dali Asistente WhatsApp</title>
+<!-- Google Fonts: Public Sans & DM Sans & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&amp;family=JetBrains+Mono:wght@400..700&amp;family=Public+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+            },
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              200: '#99F6E4',
+              300: '#5EEAD4',
+              400: '#2DD4BF',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+            },
+            amber: {
+              50: '#FFFBEB',
+              100: '#FEF3C7',
+              500: '#F59E0B',
+              600: '#D97706',
+              700: '#B45309',
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.75rem",
+            "xl": "1rem",
+            "2xl": "1.25rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Public Sans", "sans-serif"],
+            display: ["Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      vertical-align: middle;
+      font-size: 20px;
+      line-height: 1;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Hide scrollbar for category pills */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-[#FAFAF9] text-stone-900 font-body antialiased min-h-screen flex justify-center selection:bg-teal-100 selection:text-teal-900">
+<!-- Mobile Device Screen Container (390px canvas) -->
+<div class="w-full max-w-[390px] min-h-screen bg-stone-50 border-x border-stone-200 relative flex flex-col pb-24 shadow-sm">
+<!-- TopAppBar (Shared Component Anchor) -->
+<header class="bg-white dark:bg-stone-900 sticky top-0 z-40 flex justify-between items-center w-full px-4 h-14 border-b border-stone-200">
+<div class="flex items-center gap-2.5">
+<div aria-label="Logo de empresa CONSTROAD Asfalto" class="w-8 h-8 rounded-lg bg-teal-800 text-white flex items-center justify-center font-headline font-bold text-xs tracking-wider shadow-sm">
+          CR
+        </div>
+<div class="flex flex-col">
+<span class="font-headline text-base font-bold tracking-tight text-stone-900 leading-none">CONSTROAD</span>
+<span class="font-label text-[11px] text-stone-500 font-medium tracking-tight">Asfaltos y Obras · Lima</span>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button aria-label="Notificaciones" class="relative p-2 rounded-lg text-stone-600 hover:bg-stone-100 active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-stone-700">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-600 ring-2 ring-white"></span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 px-4 pt-4 pb-6 space-y-4">
+<!-- Cabecera de Página -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<h1 class="font-headline font-bold text-2xl text-stone-900 tracking-tight">Catálogo</h1>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200/60 font-mono">
+              8 ítems activos
+            </span>
+</div>
+<span class="inline-flex items-center gap-1 text-[11px] text-stone-500 font-medium">
+<span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+            Sincronizado
+          </span>
+</div>
+<p class="font-body text-xs text-stone-600 leading-relaxed">
+          Lo que vendes, para que Dali lo conozca. Los precios solo se muestran si lo permites en las opciones de cotización.
+        </p>
+<!-- Botones de Acción Primaria & Importar -->
+<div class="space-y-2 pt-1">
+<button class="w-full h-11 bg-teal-800 hover:bg-teal-900 text-white rounded-xl font-label font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-sm" onclick="openBottomSheet()" type="button">
+<span class="material-symbols-outlined text-lg">add</span>
+<span>Agregar ítem nuevo</span>
+</button>
+<button class="w-full h-10 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-xl font-label font-medium text-xs flex items-center justify-center gap-2 active:scale-[0.98] transition-all" type="button">
+<span class="material-symbols-outlined text-stone-500 text-base">upload_file</span>
+<span>Importar catálogo desde Excel</span>
+</button>
+</div>
+</section>
+<!-- Tarjeta de Política de Precios de WhatsApp -->
+<section class="p-3.5 bg-white rounded-xl border border-stone-200 space-y-2.5">
+<div class="flex items-start justify-between gap-3">
+<div class="space-y-1">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-stone-600 text-sm">attach_money</span>
+<span class="font-headline font-semibold text-xs text-stone-900">¿Dali puede dar precios?</span>
+</div>
+<p class="font-body text-[11px] text-stone-500 leading-normal">
+              Apagado: Dali avisa que el precio exacto lo confirma el asesor tras calcular metrado y flete.
+            </p>
+</div>
+<!-- Switch desactivado -->
+<div class="flex flex-col items-end shrink-0 pt-0.5">
+<button aria-checked="false" class="w-10 h-6 bg-stone-300 rounded-full relative p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-700" role="switch" type="button">
+<span class="w-5 h-5 bg-white rounded-full block shadow-sm transform transition-transform translate-x-0"></span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-stone-100">
+<span class="inline-flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase font-label px-2 py-0.5 rounded bg-stone-100 text-stone-600">
+<span class="material-symbols-outlined text-xs">lock</span> Precios ocultos en WhatsApp
+          </span>
+<span class="text-[11px] text-teal-800 font-medium hover:underline cursor-pointer">Configurar reglas</span>
+</div>
+</section>
+<!-- Buscador y Filtros -->
+<section class="space-y-2.5">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-lg">search</span>
+<input class="w-full h-10 pl-9 pr-8 text-xs bg-white border border-stone-200 rounded-xl placeholder:text-stone-400 text-stone-800 focus:border-teal-700 focus:ring-1 focus:ring-teal-700 font-body transition-all" placeholder="Buscar por ítem, código o especificación..." type="text"/>
+<button class="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs flex items-center" type="button">
+<span class="material-symbols-outlined text-base">tune</span>
+</button>
+</div>
+<!-- Horizontal Filter Pills -->
+<div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+<button class="shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-teal-800 text-white font-label" type="button">
+            Todas (8)
+          </button>
+<button class="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-white text-stone-600 border border-stone-200 hover:bg-stone-50 active:scale-95 transition-all font-label" type="button">
+            Mezcla asfáltica (3)
+          </button>
+<button class="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-white text-stone-600 border border-stone-200 hover:bg-stone-50 active:scale-95 transition-all font-label" type="button">
+            Servicios (4)
+          </button>
+<button class="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-white text-stone-600 border border-stone-200 hover:bg-stone-50 active:scale-95 transition-all font-label" type="button">
+            Transporte (1)
+          </button>
+</div>
+</section>
+<!-- Lista de Productos y Servicios (8 ítems) -->
+<section class="space-y-2.5 pt-1">
+<!-- Ítem 1 -->
+<article class="bg-white rounded-xl border border-stone-200 p-3 flex flex-col gap-2.5 hover:border-stone-300 transition-all">
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-lg object-cover border border-stone-200 shrink-0 bg-stone-100" data-alt="Close-up photograph of hot mix asphalt texture with steaming dark mineral aggregate and bitumen binding under clear bright sunlight, industrial road construction atmosphere in Lima Peru." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB10JdYuVznHX9yeCwyrc2e8iCX2FnzNuENRWWOz0QxRB2n7Mu8zeLQWGJyjRHd63AMKQPgW7SL5hY1cQlo3KNra1_orhwhUHgBNfvdkqRYHzRXmhDX5atMRu6bYdbxuEhqV54Xxe_DBiRGqg21nKtbOWZSqXYXqhl4HRreWG4zVRebG9F_cvhBrZt9oSAA3ly2U4JAW-OmWqt3xJEWPCo3ojr12Ptf_SOlDRpXj_TqqqNHfugcf1G9Kvo4YzC2VCf_idIxX2UuqHLI"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-1">
+<h2 class="font-headline font-semibold text-xs text-stone-900 truncate">Mezcla asfáltica en caliente</h2>
+<button class="text-teal-800 hover:text-teal-900 p-0.5 rounded text-xs font-semibold shrink-0" onclick="openBottomSheet()" type="button">
+                  Editar
+                </button>
+</div>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">Mezcla asfáltica</span>
+<span class="text-[10px] text-stone-400">·</span>
+<span class="text-[10px] font-mono text-stone-600">Por m³</span>
+</div>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-[10px] text-stone-500 font-label">Ref:</span>
+<span class="font-mono text-xs font-bold text-stone-900 tabular-nums">S/ 390.00</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-stone-100 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span class="text-stone-700 font-medium font-label">Disponible para cotizar</span>
+</div>
+<!-- Mini switch activo -->
+<button class="w-8 h-4.5 bg-teal-800 rounded-full relative p-0.5 focus:outline-none" type="button">
+<span class="w-3.5 h-3.5 bg-white rounded-full block shadow-sm transform translate-x-3.5 transition-transform"></span>
+</button>
+</div>
+</article>
+<!-- Ítem 2 -->
+<article class="bg-white rounded-xl border border-stone-200 p-3 flex flex-col gap-2.5 hover:border-stone-300 transition-all">
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-lg object-cover border border-stone-200 shrink-0 bg-stone-100" data-alt="Packaged cold mix asphalt bags stacked neatly on a construction warehouse pallet, realistic industrial daylight setting with dark stony texture visible." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJD-od1CWZJdYPars-emOsll6Xej4ucLSJtnd64z3IJcQOw24Zbrxxg6fNZ-g26nCf6plRgGkpvWf4Jk4Tfe2lXFLfMZ34CecOV0xw8kRwPo_VcvPa7SOrpZq-cRbVdrRgwjl5c29vSP980rF3cBkMCHFJ1BKJb5QCLqeeOYYNEqF9WsQEdJMIxOO9z5KBxLL4wYkFQP6aM0fxr6EFXza-zzu6C5Qi6aFCsyChHNziN6SGEEQ2YlZso4NEZJcQDtbyONvyhbC1D6W0"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-1">
+<h2 class="font-headline font-semibold text-xs text-stone-900 truncate">Mezcla asfáltica en frío (parches)</h2>
+<button class="text-teal-800 hover:text-teal-900 p-0.5 rounded text-xs font-semibold shrink-0" onclick="openBottomSheet()" type="button">
+                  Editar
+                </button>
+</div>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">Mezcla asfáltica</span>
+<span class="text-[10px] text-stone-400">·</span>
+<span class="text-[10px] font-mono text-stone-600">Por m³</span>
+</div>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-[10px] text-stone-500 font-label">Ref:</span>
+<span class="font-mono text-xs font-bold text-stone-900 tabular-nums">S/ 420.00</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-stone-100 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span class="text-stone-700 font-medium font-label">Disponible para cotizar</span>
+</div>
+<button class="w-8 h-4.5 bg-teal-800 rounded-full relative p-0.5 focus:outline-none" type="button">
+<span class="w-3.5 h-3.5 bg-white rounded-full block shadow-sm transform translate-x-3.5 transition-transform"></span>
+</button>
+</div>
+</article>
+<!-- Ítem 3 -->
+<article class="bg-white rounded-xl border border-stone-200 p-3 flex flex-col gap-2.5 hover:border-stone-300 transition-all">
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-lg object-cover border border-stone-200 shrink-0 bg-stone-100" data-alt="Macro photo of high performance polymer-modified asphalt concrete with granulated mineral grain and dark glossy bitumen coat in testing lab." src="https://lh3.googleusercontent.com/aida-public/AB6AXuADNEiIcaFLommk1zJkYMPdeHgEiTj9knTxd6BwvVkIgIn5vGUtwp_h-CAavK3jm7xCTgvEHA01ziOLvcnNF4UFH-Omv4cBrwT2h40f046C0sv-FNHzK4KbTPHv4B4nAAX6esRlbNZEzhWBM5wXPUUCBdTtCqC7y7q7ukeb6UP4VKXe2H_1BTzKGD9e_xlH3PLX5U--R2Gr2WESWhV0fDiQ-K06htxARzgJWFes17Jxs9E1H90irWxbRtHLUQ9hmtQ0yFgzsjDmmBV0"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-1">
+<h2 class="font-headline font-semibold text-xs text-stone-900 truncate">Mezcla modificada con polímeros</h2>
+<button class="text-teal-800 hover:text-teal-900 p-0.5 rounded text-xs font-semibold shrink-0" onclick="openBottomSheet()" type="button">
+                  Editar
+                </button>
+</div>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">Mezcla asfáltica</span>
+<span class="text-[10px] text-stone-400">·</span>
+<span class="text-[10px] font-mono text-stone-600">Por m³</span>
+</div>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-[10px] text-stone-500 font-label">Ref:</span>
+<span class="font-mono text-xs font-bold text-stone-900 tabular-nums">S/ 480.00</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-stone-100 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+<span class="text-amber-700 font-medium font-label">Bajo pedido especial</span>
+</div>
+<button class="w-8 h-4.5 bg-teal-800 rounded-full relative p-0.5 focus:outline-none" type="button">
+<span class="w-3.5 h-3.5 bg-white rounded-full block shadow-sm transform translate-x-3.5 transition-transform"></span>
+</button>
+</div>
+</article>
+<!-- Ítem 4 -->
+<article class="bg-white rounded-xl border border-stone-200 p-3 flex flex-col gap-2.5 hover:border-stone-300 transition-all">
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-lg object-cover border border-stone-200 shrink-0 bg-stone-100" data-alt="Heavy road roller compactor machine paving two inch thick fresh hot asphalt on a Peruvian roadway project during daytime." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_GqC45lWGKcmkACb4H4vwHPxllG02zR3mH9q3h1oRlHTUQgQBL8706L1XbCDdAZd4yPAHprOb0RDGF7QUhGJyIWaghAe-xpu2ZMfNc2W1zfBWSNvwWoefi8bmT5Nr1-0F8EEE68-3StTa4IJNdfXRwewrYqX_yirGiESHTmIfPk-GznwM0spK1I9UK_F3Qk-3Kem9OoDMvVdaDtkEXQNfoO3dblPLe7pS_4-LkuBwFZQxHVgLzX0KewS2Btp4V6ZALOHSrHvkQpMw"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-1">
+<h2 class="font-headline font-semibold text-xs text-stone-900 truncate">Colocación de asfalto 2"</h2>
+<button class="text-teal-800 hover:text-teal-900 p-0.5 rounded text-xs font-semibold shrink-0" onclick="openBottomSheet()" type="button">
+                  Editar
+                </button>
+</div>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">Servicios</span>
+<span class="text-[10px] text-stone-400">·</span>
+<span class="text-[10px] font-mono text-stone-600">Por m²</span>
+</div>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-[10px] text-stone-500 font-label">Ref:</span>
+<span class="font-mono text-xs font-bold text-stone-900 tabular-nums">S/ 38.00</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-stone-100 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span class="text-stone-700 font-medium font-label">Disponible para cotizar</span>
+</div>
+<button class="w-8 h-4.5 bg-teal-800 rounded-full relative p-0.5 focus:outline-none" type="button">
+<span class="w-3.5 h-3.5 bg-white rounded-full block shadow-sm transform translate-x-3.5 transition-transform"></span>
+</button>
+</div>
+</article>
+<!-- Ítem 5 -->
+<article class="bg-white rounded-xl border border-stone-200 p-3 flex flex-col gap-2.5 hover:border-stone-300 transition-all">
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-lg object-cover border border-stone-200 shrink-0 bg-stone-100" data-alt="Asphalt distributor tanker truck spraying uniform MC-30 liquid cutback bitumen prime coat on prepared road gravel subgrade." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2qffOC_RJ9c_-fqu23HA1fSj5HOda4Bhj8v17N9WP8fE_lDPXFqmNzU4irPQMH6NLz72tF73Oi_ZtloB3yj1fbvzNt1WZqXMT_i5tGPqr7lggRaHTSlyC6QFnycv2gllZjxM2F3GatP8gplkg_zPTzYacwfQqns3LgbO8iREXdt828IGfPp6DBiomGTkGk-v3zCcf_Vg6h1h18mRwtZwckIiLjYjXLpfM5y0NllLQohONjjxW9JyiymtL0Xdql7RT7pyK5xbOFpXR"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-1">
+<h2 class="font-headline font-semibold text-xs text-stone-900 truncate">Imprimación MC-30</h2>
+<button class="text-teal-800 hover:text-teal-900 p-0.5 rounded text-xs font-semibold shrink-0" onclick="openBottomSheet()" type="button">
+                  Editar
+                </button>
+</div>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">Servicios</span>
+<span class="text-[10px] text-stone-400">·</span>
+<span class="text-[10px] font-mono text-stone-600">Por m²</span>
+</div>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-[10px] text-stone-500 font-label">Ref:</span>
+<span class="font-mono text-xs font-bold text-stone-900 tabular-nums">S/ 6.50</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-stone-100 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span class="text-stone-700 font-medium font-label">Disponible para cotizar</span>
+</div>
+<button class="w-8 h-4.5 bg-teal-800 rounded-full relative p-0.5 focus:outline-none" type="button">
+<span class="w-3.5 h-3.5 bg-white rounded-full block shadow-sm transform translate-x-3.5 transition-transform"></span>
+</button>
+</div>
+</article>
+<!-- Ítem 6 -->
+<article class="bg-white rounded-xl border border-stone-200 p-3 flex flex-col gap-2.5 hover:border-stone-300 transition-all">
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-lg object-cover border border-stone-200 shrink-0 bg-stone-100" data-alt="Close-up of rapid setting tack coat asphalt emulsion sprayed finely over existing concrete road slab before asphalt overlay." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDrjLv-67G17N-Nynnc5pvWlA42M6H6c3Hz7Vz38bY_EptPe5rb2XtQd6W5-LXXWEwbkmiH_aoqEBP6wjlFiju-mCRhn5t_uFE4UGAgP2e8FWDogYU5qD7kRb9OHXVTKSn5a5wIw9vusWs6PawCVwvWlh9No14kwWVAmKcesbD735QNZAits0wvHKXK8v-1DZ_M_tMzh_rDfLj5JScCuvBqhX6GZhk1bSJyu7eTFk6h-qb04uK3LONOOSxg92wHYqgV8AoPi_f9AWr0"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-1">
+<h2 class="font-headline font-semibold text-xs text-stone-900 truncate">Riego de liga</h2>
+<button class="text-teal-800 hover:text-teal-900 p-0.5 rounded text-xs font-semibold shrink-0" onclick="openBottomSheet()" type="button">
+                  Editar
+                </button>
+</div>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">Servicios</span>
+<span class="text-[10px] text-stone-400">·</span>
+<span class="text-[10px] font-mono text-stone-600">Por m²</span>
+</div>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-[10px] text-stone-500 font-label">Ref:</span>
+<span class="font-mono text-xs font-bold text-stone-900 tabular-nums">S/ 4.80</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-stone-100 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span class="text-stone-700 font-medium font-label">Disponible para cotizar</span>
+</div>
+<button class="w-8 h-4.5 bg-teal-800 rounded-full relative p-0.5 focus:outline-none" type="button">
+<span class="w-3.5 h-3.5 bg-white rounded-full block shadow-sm transform translate-x-3.5 transition-transform"></span>
+</button>
+</div>
+</article>
+<!-- Ítem 7 -->
+<article class="bg-white rounded-xl border border-stone-200 p-3 flex flex-col gap-2.5 hover:border-stone-300 transition-all">
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-lg object-cover border border-stone-200 shrink-0 bg-stone-100" data-alt="Heavy cold milling machine stripping deteriorated old asphalt pavement into dump truck on an urban street in Lima." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyCoLEmRnLGBWs_40ImiIB0EE-8e2bgRfRF_-AC9bdp7Draw_rX844Vn24ibzq0y5NGCFZhVlD56FEgpl3M8eD23HV0SKba_vUUAkHvOYedWmEVT4D2hSvKjt4nfC4IeFAl7CJcankE1My9-N-bvGbqQFPBxn2dfb5RAINA951D9Ii1BtSyqE58Gq4OBbvq3k1Xr9wYld2Q2kusnifWcsZ9Pwh2ZcNgRMScYZyXly1xHAOnqjmeQwVjGXNqDEuQQtQagaSs80tS1OG"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-1">
+<h2 class="font-headline font-semibold text-xs text-stone-900 truncate">Fresado de pavimento</h2>
+<button class="text-teal-800 hover:text-teal-900 p-0.5 rounded text-xs font-semibold shrink-0" onclick="openBottomSheet()" type="button">
+                  Editar
+                </button>
+</div>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">Servicios</span>
+<span class="text-[10px] text-stone-400">·</span>
+<span class="text-[10px] font-mono text-stone-600">Por m²</span>
+</div>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-[10px] text-stone-500 font-label">Ref:</span>
+<span class="font-mono text-xs font-bold text-stone-900 tabular-nums">S/ 12.00</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-stone-100 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span class="text-stone-700 font-medium font-label">Disponible para cotizar</span>
+</div>
+<button class="w-8 h-4.5 bg-teal-800 rounded-full relative p-0.5 focus:outline-none" type="button">
+<span class="w-3.5 h-3.5 bg-white rounded-full block shadow-sm transform translate-x-3.5 transition-transform"></span>
+</button>
+</div>
+</article>
+<!-- Ítem 8 -->
+<article class="bg-white rounded-xl border border-stone-200 p-3 flex flex-col gap-2.5 hover:border-stone-300 transition-all">
+<div class="flex items-start gap-3">
+<img class="w-14 h-14 rounded-lg object-cover border border-stone-200 shrink-0 bg-stone-100" data-alt="Heavy-duty tri-axle dump truck transporting hot asphalt mix covered with thermal canvas driving towards construction site." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_0RsP0c7JDFOOytAD5XeWQRlY_kCzE_qu03qK-gCCe1j_TkFpiOajGg4oaRZbP_-94KhNzyNGkgERsHxKfKWQdcLYlAywfrxusehyR3qcr2bd19zdeyHxgNtX-2DaACV2_djuYadd4aR5N9evhnfOToIDAmtofGKZN91wdNwyyh9FMMHjEg19llROsR1bKTCpD4KxHBjy4IUb6mbMiCVnNtVZJV1xgNL_H3daZree7lKKMO4ckw4Ta7WdKNhCsxvbBkTxrbIsD6Cc"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-1">
+<h2 class="font-headline font-semibold text-xs text-stone-900 truncate">Transporte de mezcla</h2>
+<button class="text-teal-800 hover:text-teal-900 p-0.5 rounded text-xs font-semibold shrink-0" onclick="openBottomSheet()" type="button">
+                  Editar
+                </button>
+</div>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">Transporte</span>
+<span class="text-[10px] text-stone-400">·</span>
+<span class="text-[10px] font-mono text-stone-600">Por viaje</span>
+</div>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-[10px] text-stone-500 font-label">Ref:</span>
+<span class="font-mono text-xs font-bold text-stone-900 tabular-nums">S/ 350.00</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-stone-100 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span class="text-stone-700 font-medium font-label">Disponible para cotizar</span>
+</div>
+<button class="w-8 h-4.5 bg-teal-800 rounded-full relative p-0.5 focus:outline-none" type="button">
+<span class="w-3.5 h-3.5 bg-white rounded-full block shadow-sm transform translate-x-3.5 transition-transform"></span>
+</button>
+</div>
+</article>
+</section>
+<!-- Tip de Asistente Dali -->
+<section class="p-3 bg-teal-50/80 rounded-xl border border-teal-200/50 flex items-start gap-2.5">
+<span class="material-symbols-outlined text-teal-800 text-lg shrink-0 mt-0.5">smart_toy</span>
+<div class="text-xs text-teal-900">
+<p class="font-semibold font-headline">¿Cómo responde Dali?</p>
+<p class="font-body text-[11px] text-teal-800 mt-0.5 leading-relaxed">
+            Cuando un cliente pregunta "¿Venden mezcla en frío?", Dali confirma el stock y solicita la ubicación de entrega para enviar la cotización a tu equipo.
+          </p>
+</div>
+</section>
+</main>
+<!-- Bottom Sheet / Drawer de Edición (Modal Deslizante) -->
+<div class="fixed inset-0 bg-stone-900/40 z-50 transition-opacity duration-200 opacity-100 backdrop-blur-[1px] flex justify-center items-end" id="bottom-sheet-overlay">
+<div class="w-full max-w-[390px] bg-white rounded-t-2xl max-h-[795px] flex flex-col shadow-2xl border-t border-stone-200 transform transition-transform duration-300 translate-y-0" id="bottom-sheet-content">
+<!-- Drag Handle Indicator -->
+<div class="pt-2 pb-1 flex justify-center">
+<span class="w-10 h-1 bg-stone-300 rounded-full"></span>
+</div>
+<!-- Sheet Header -->
+<div class="px-4 pb-3 border-b border-stone-100 flex items-center justify-between">
+<div>
+<h2 class="font-headline font-bold text-base text-stone-900">Editar ítem</h2>
+<p class="font-body text-[11px] text-stone-500">Configura los datos que Dali usará en WhatsApp</p>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-stone-100 active:scale-95 transition-all" onclick="closeBottomSheet()" type="button">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Sheet Body Form (Scrollable) -->
+<div class="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+<!-- Miniatura con acciones -->
+<div class="flex items-center gap-3 p-2.5 bg-stone-50 rounded-xl border border-stone-200">
+<img class="w-16 h-16 rounded-lg object-cover border border-stone-200 shrink-0 bg-white" data-alt="Detailed close up of freshly manufactured asphalt hot mix with glossy black bitumen coating ready for road placement in Lima Peru." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_ixJWWRLAonwn6mGr-jIWo_aM5PtKSnW9el2Arr7_bv-fubhmwii7ww_qlHgxWmqpX-YRSIEc6WrRQ_L7mMBX-mH5lQtivvVmvH5C7lAr6LxN8-WcxnlgvAwBmDACGZi6sFXFjKFf1Ctt8NVsCPfHVl7Jh_o_o21U9qDHdMM0b6DxEs8pFLvP1q93L7dvbY8NR8sRgf8EqQMossqTbhg5UBTduOfhafiwF-ru3HfrVFfY4vcD5gNDAf8Vt7ADZDzyd39NFxBXZDYF"/>
+<div class="flex flex-col gap-1.5">
+<span class="text-xs font-semibold text-stone-800 font-label">Foto referencial</span>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded-lg bg-white border border-stone-200 text-stone-700 hover:bg-stone-100 text-[11px] font-medium font-label" type="button">
+                  Cambiar foto
+                </button>
+<button class="px-2 py-1 text-red-700 hover:text-red-800 text-[11px] font-medium font-label" type="button">
+                  Eliminar
+                </button>
+</div>
+</div>
+</div>
+<!-- Nombre del producto -->
+<div class="space-y-1">
+<label class="block font-headline text-xs font-semibold text-stone-800">
+              Nombre del producto o servicio
+            </label>
+<input class="w-full h-11 px-3 text-xs bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-body focus:bg-white focus:border-teal-700 focus:ring-1 focus:ring-teal-700" type="text" value="Mezcla asfáltica en caliente"/>
+<span class="text-[10px] text-stone-500 font-body">Así lo mencionará Dali en las respuestas directas.</span>
+</div>
+<!-- Categoría y Unidad (2 columnas) -->
+<div class="grid grid-cols-2 gap-2.5">
+<div class="space-y-1">
+<label class="block font-headline text-xs font-semibold text-stone-800">
+                Categoría
+              </label>
+<select class="w-full h-11 px-2.5 text-xs bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-body focus:bg-white focus:border-teal-700 focus:ring-1 focus:ring-teal-700">
+<option selected="">Mezcla asfáltica</option>
+<option>Servicios</option>
+<option>Transporte</option>
+<option>Maquinaria</option>
+</select>
+</div>
+<div class="space-y-1">
+<label class="block font-headline text-xs font-semibold text-stone-800">
+                Unidad de medida
+              </label>
+<select class="w-full h-11 px-2.5 text-xs bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-body focus:bg-white focus:border-teal-700 focus:ring-1 focus:ring-teal-700">
+<option selected="">m³ (Metro cúbico)</option>
+<option>m² (Metro cuadrado)</option>
+<option>viaje</option>
+<option>tonelada (TN)</option>
+<option>galón (gal)</option>
+</select>
+</div>
+</div>
+<!-- Precio referencial en Soles -->
+<div class="space-y-1">
+<div class="flex items-center justify-between">
+<label class="font-headline text-xs font-semibold text-stone-800">
+                Precio unitario referencial (S/)
+              </label>
+<span class="text-[10px] font-mono text-teal-800 font-medium">Incluye IGV</span>
+</div>
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-stone-500">S/</span>
+<input class="w-full h-11 pl-8 pr-3 text-xs font-mono font-semibold bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:bg-white focus:border-teal-700 focus:ring-1 focus:ring-teal-700 tabular-nums" type="text" value="390.00"/>
+</div>
+<p class="text-[10px] text-stone-500 font-body">
+              Solo será visible para tus clientes si activas los precios globales en la cabecera del catálogo.
+            </p>
+</div>
+<!-- Switch Disponible para cotizar -->
+<div class="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between">
+<div class="space-y-0.5 pr-2">
+<span class="block font-headline text-xs font-semibold text-stone-900">Disponible para cotizar</span>
+<span class="block text-[11px] text-stone-500 leading-snug">Si lo desactivas, Dali avisa que está agotado o fuera de temporada.</span>
+</div>
+<button class="w-10 h-6 bg-teal-800 rounded-full relative p-0.5 shrink-0 focus:outline-none" type="button">
+<span class="w-5 h-5 bg-white rounded-full block shadow-sm transform translate-x-4 transition-transform"></span>
+</button>
+</div>
+<!-- Descripción del ítem para Dali -->
+<div class="space-y-1">
+<label class="block font-headline text-xs font-semibold text-stone-800">
+              Descripción técnica para Dali y el cliente
+            </label>
+<textarea class="w-full p-2.5 text-xs bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-body focus:bg-white focus:border-teal-700 focus:ring-1 focus:ring-teal-700 leading-relaxed" rows="3">Mezcla densa en caliente colocada a 140°C–160°C según norma MTC EG-2013. Cumple especificaciones de alta durabilidad para tráfico pesado y estacionamientos comerciales.</textarea>
+<span class="text-[10px] text-stone-500 font-body">Dali usa esta explicación si el cliente pregunta por fichas técnicas o certificaciones.</span>
+</div>
+</div>
+<!-- Sheet Sticky Footer Actions -->
+<div class="p-4 border-t border-stone-100 bg-white flex flex-col gap-2">
+<button class="w-full h-11 bg-teal-800 hover:bg-teal-900 text-white rounded-xl font-label font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-sm" onclick="closeBottomSheet()" type="button">
+            Guardar cambios
+          </button>
+<button class="w-full h-9 bg-transparent hover:bg-stone-50 text-stone-600 rounded-xl font-label font-medium text-xs flex items-center justify-center transition-colors" onclick="closeBottomSheet()" type="button">
+            Cancelar
+          </button>
+</div>
+</div>
+</div>
+<!-- BottomNavBar (Shared Component Anchor) -->
+<nav class="fixed bottom-0 left-0 w-full z-40 flex justify-around items-center px-2 py-1 max-w-[390px] mx-auto bg-white dark:bg-stone-900 border-t border-stone-200">
+<!-- Destino 1: Inicio -->
+<a class="flex flex-col items-center justify-center text-stone-500 dark:text-stone-400 font-normal py-1 active:scale-95 transition-transform duration-150 hover:text-teal-700" href="#inicio">
+<span class="material-symbols-outlined text-xl">home</span>
+<span class="font-label text-xs font-medium">Inicio</span>
+</a>
+<!-- Destino 2: Chats -->
+<a class="flex flex-col items-center justify-center text-stone-500 dark:text-stone-400 font-normal py-1 active:scale-95 transition-transform duration-150 hover:text-teal-700 relative" href="#chats">
+<span class="material-symbols-outlined text-xl">chat</span>
+<span class="font-label text-xs font-medium">Chats</span>
+<span class="absolute top-1 right-2.5 w-2 h-2 rounded-full bg-amber-600"></span>
+</a>
+<!-- Destino 3: Leads -->
+<a class="flex flex-col items-center justify-center text-stone-500 dark:text-stone-400 font-normal py-1 active:scale-95 transition-transform duration-150 hover:text-teal-700" href="#leads">
+<span class="material-symbols-outlined text-xl">group</span>
+<span class="font-label text-xs font-medium">Leads</span>
+</a>
+<!-- Destino 4: Asistente (Activo: Catálogo pertenece a la configuración del asistente/negocio) -->
+<a class="flex flex-col items-center justify-center text-teal-800 dark:text-teal-400 font-semibold py-1 active:scale-95 transition-transform duration-150" href="#asistente">
+<span class="material-symbols-outlined text-xl fill-icon">smart_toy</span>
+<span class="font-label text-xs font-medium">Asistente</span>
+</a>
+<!-- Destino 5: Más -->
+<a class="flex flex-col items-center justify-center text-stone-500 dark:text-stone-400 font-normal py-1 active:scale-95 transition-transform duration-150 hover:text-teal-700" href="#mas">
+<span class="material-symbols-outlined text-xl">more_horiz</span>
+<span class="font-label text-xs font-medium">Más</span>
+</a>
+</nav>
+</div>
+<!-- Micro-interaction JS for Bottom Sheet Toggle -->
+<script>
+    function openBottomSheet() {
+      const overlay = document.getElementById('bottom-sheet-overlay');
+      const content = document.getElementById('bottom-sheet-content');
+      overlay.classList.remove('hidden');
+      setTimeout(() => {
+        overlay.classList.remove('opacity-0', 'pointer-events-none');
+        overlay.classList.add('opacity-100');
+        content.classList.remove('translate-y-full');
+        content.classList.add('translate-y-0');
+      }, 10);
+    }
+
+    function closeBottomSheet() {
+      const overlay = document.getElementById('bottom-sheet-overlay');
+      const content = document.getElementById('bottom-sheet-content');
+      content.classList.remove('translate-y-0');
+      content.classList.add('translate-y-full');
+      overlay.classList.remove('opacity-100');
+      overlay.classList.add('opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+      }, 250);
+    }
+
+    // Close when tapping outside the sheet content
+    document.getElementById('bottom-sheet-overlay').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeBottomSheet();
+      }
+    });
+  </script>
+</body></html>

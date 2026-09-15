@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Código de verificación - Dali</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            dali: {
+              50: '#f0fdf9',
+              100: '#ccfbf0',
+              200: '#99f6e3',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+              950: '#042f2e',
+            }
+          },
+          boxShadow: {
+            'subtle': '0 1px 3px rgba(0,0,0,0.04), 0 10px 25px -5px rgba(0, 0, 0, 0.03)',
+            'card': '0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02)',
+          }
+        }
+      }
+    }
+  </script>
+<!-- Custom Styles: Micro-dots pattern and animations -->
+<style data-purpose="background-pattern">
+    .bg-micro-dots {
+      background-color: #fafaf9;
+      background-image: radial-gradient(#e7e5e4 0.75px, transparent 0.75px);
+      background-size: 16px 16px;
+    }
+  </style>
+<style data-purpose="cursor-animation">
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .animate-caret {
+      animation: blink 1.1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+</head>
+<body class="bg-micro-dots min-h-screen text-stone-800 font-sans antialiased flex flex-col justify-between selection:bg-teal-100 selection:text-teal-900">
+<!-- BEGIN: TopHeader -->
+<header class="w-full max-w-7xl mx-auto px-6 py-4 flex items-center justify-between text-xs text-stone-600 border-b border-stone-200/60 bg-stone-50/70 backdrop-blur-sm" data-purpose="global-status-bar">
+<!-- Left badge: WhatsApp Cloud API Official Status -->
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        WhatsApp Cloud API Oficial
+      </span>
+</div>
+<!-- Right support items -->
+<div class="flex items-center gap-4 font-medium text-stone-600">
+<a class="hover:text-stone-900 transition-colors flex items-center gap-1.5" href="#soporte">
+<svg class="w-3.5 h-3.5 text-stone-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+        Ayuda y soporte
+      </a>
+<span class="text-stone-300">|</span>
+<!-- Country Indicator Perú -->
+<div class="flex items-center gap-1.5 text-stone-700 font-semibold tracking-tight">
+<svg class="w-4 h-3 rounded-[2px] shadow-sm overflow-hidden" viewbox="0 0 640 480">
+<g fill-rule="evenodd">
+<path d="M0 0h213.3v480H0z" fill="#dc2626"></path>
+<path d="M213.3 0h213.4v480H213.3z" fill="#ffffff"></path>
+<path d="M426.7 0H640v480H426.7z" fill="#dc2626"></path>
+</g>
+</svg>
+<span>Perú (+51)</span>
+</div>
+</div>
+</header>
+<!-- END: TopHeader -->
+<!-- BEGIN: MainContent -->
+<main class="w-full max-w-[1280px] mx-auto px-4 py-8 flex-grow flex flex-col items-center justify-center">
+<!-- BEGIN: BrandLogoHeader -->
+<div class="text-center mb-6" data-purpose="brand-heading">
+<!-- Dali Monogram Logo -->
+<div class="inline-flex items-center gap-2.5 justify-center">
+<div class="w-10 h-10 rounded-xl bg-dali-800 flex items-center justify-center text-white font-bold text-xl shadow-md shadow-dali-800/15">
+          D
+        </div>
+<span class="text-2xl font-extrabold tracking-tight text-stone-900">
+          dali<span class="text-dali-700 font-bold">.pe</span>
+</span>
+</div>
+<p class="text-[11px] uppercase tracking-widest text-stone-400 font-semibold mt-1">
+        Asistente de WhatsApp para Negocios
+      </p>
+</div>
+<!-- END: BrandLogoHeader -->
+<!-- BEGIN: PrimaryVerificationCard -->
+<section class="w-full max-w-[480px] bg-white rounded-2xl border border-stone-200 shadow-card p-8" data-purpose="otp-verification-card">
+<!-- Top Action: Back link -->
+<div class="flex items-center justify-between mb-4">
+<button class="inline-flex items-center gap-1.5 text-sm font-medium text-stone-500 hover:text-stone-900 transition-colors" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M10 19l-7-7m0 0l7-7m-7 7h18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+          Cambiar número
+        </button>
+</div>
+<!-- Badge WhatsApp Oficial -->
+<div class="mb-3">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-800 border border-teal-200">
+<svg class="w-3.5 h-3.5 fill-current text-teal-600" viewbox="0 0 24 24">
+<path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.598 2.664-.699c.974.532 1.835.815 2.796.815 3.183 0 5.769-2.586 5.769-5.767.001-3.181-2.585-5.767-5.769-5.767zm0 10.428c-.887 0-1.758-.239-2.516-.69l-.18-.107-1.57.412.419-1.53-.117-.187c-.499-.794-.763-1.716-.762-2.66 0-2.654 2.159-4.813 4.813-4.813 2.653 0 4.813 2.159 4.813 4.813 0 2.654-2.159 4.813-4.813 4.813z"></path>
+</svg>
+          WhatsApp Oficial
+        </span>
+</div>
+<!-- Heading -->
+<h1 class="text-2xl font-bold text-stone-900 tracking-tight leading-snug">
+        Revisa tu WhatsApp
+      </h1>
+<p class="text-stone-600 text-sm mt-1 leading-relaxed">
+        Te mandamos un código de 6 dígitos al <span class="font-bold text-stone-900">+51 902 049 935</span>
+</p>
+<!-- OTP Form Container -->
+<form class="mt-6 space-y-6" onsubmit="event.preventDefault();">
+<!-- Label row -->
+<div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-stone-400">
+<span>Código de seguridad</span>
+<span>6 dígitos</span>
+</div>
+<!-- 6 OTP Input Boxes -->
+<div class="flex items-center justify-between gap-2.5" data-purpose="otp-inputs-grid">
+<!-- Box 1 (Filled: 4) -->
+<div class="w-14 h-16 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-center text-2xl font-mono font-bold text-stone-900 shadow-inner">
+            4
+          </div>
+<!-- Box 2 (Filled: 8) -->
+<div class="w-14 h-16 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-center text-2xl font-mono font-bold text-stone-900 shadow-inner">
+            8
+          </div>
+<!-- Box 3 (Filled: 1) -->
+<div class="w-14 h-16 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-center text-2xl font-mono font-bold text-stone-900 shadow-inner">
+            1
+          </div>
+<!-- Box 4 (Active Caret / Focus) -->
+<div class="w-14 h-16 rounded-xl border-2 border-teal-700 bg-white ring-4 ring-teal-50 flex items-center justify-center relative shadow-sm">
+<span class="w-[2px] h-7 bg-teal-800 animate-caret rounded-full"></span>
+</div>
+<!-- Box 5 (Empty Dot) -->
+<div class="w-14 h-16 rounded-xl border border-stone-200 bg-stone-50/50 flex items-center justify-center text-stone-300 text-xl">
+            •
+          </div>
+<!-- Box 6 (Empty Dot) -->
+<div class="w-14 h-16 rounded-xl border border-stone-200 bg-stone-50/50 flex items-center justify-center text-stone-300 text-xl">
+            •
+          </div>
+</div>
+<!-- Primary Action Button -->
+<button class="w-full bg-teal-800 hover:bg-teal-900 active:scale-[0.99] text-white font-semibold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-teal-900/10" type="submit">
+<span>Entrar</span>
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+</button>
+<!-- Resend options and timer -->
+<div class="flex items-center justify-between pt-1 text-xs">
+<div class="flex items-center gap-1.5 text-stone-500">
+<span>¿No llegó?</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 text-stone-600 rounded-md font-mono text-[11px] font-medium border border-stone-200">
+<svg class="w-3 h-3 text-stone-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+              Reenviar en 0:42
+            </span>
+</div>
+<a class="inline-flex items-center gap-1 text-teal-800 hover:text-teal-900 font-semibold hover:underline" href="#email-fallback">
+<svg class="w-3.5 h-3.5 text-teal-700" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+            Recibirlo por correo
+          </a>
+</div>
+<!-- Security Warning Box -->
+<div class="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3 flex items-start gap-2.5 text-xs text-amber-900" data-purpose="security-notice">
+<svg class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="leading-relaxed font-normal">
+            El código vence en <strong class="font-semibold">10 minutos</strong> y solo sirve una vez.
+          </span>
+</div>
+</form>
+</section>
+<!-- END: PrimaryVerificationCard -->
+<!-- BEGIN: VariantDivider -->
+<div class="w-full max-w-[480px] my-6 flex items-center justify-between" data-purpose="alternative-divider">
+<div class="h-px bg-stone-200 flex-grow"></div>
+<span class="px-3 text-[11px] font-bold tracking-widest text-stone-400 uppercase">O variante secundaria</span>
+<div class="h-px bg-stone-200 flex-grow"></div>
+</div>
+<!-- END: VariantDivider -->
+<!-- BEGIN: AlternativeEmailCard -->
+<section class="w-full max-w-[480px] bg-stone-50/90 border border-dashed border-stone-300 rounded-2xl p-6 shadow-sm relative transition-all hover:bg-stone-50" data-purpose="email-link-variant" id="email-fallback">
+<!-- Top Badges -->
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-1.5 text-xs font-semibold text-stone-600">
+<span class="w-2 h-2 rounded-full bg-teal-600"></span>
+<span class="uppercase tracking-wider text-[11px]">VARIANTE: ENLACE POR CORREO</span>
+</div>
+<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-200/70 text-stone-700">
+          Enlace mágico
+        </span>
+</div>
+<!-- Content Row -->
+<div class="flex items-start gap-4">
+<!-- Email Icon container -->
+<div class="w-12 h-12 rounded-xl bg-teal-50 border border-teal-100 flex-shrink-0 flex items-center justify-center text-teal-700">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75"></path>
+</svg>
+</div>
+<!-- Text copy -->
+<div class="flex-1">
+<h2 class="text-sm font-bold text-stone-900 leading-snug">
+            Revisa tu correo
+          </h2>
+<p class="text-xs text-stone-600 mt-1 leading-relaxed">
+            Abre el enlace que te mandamos a <strong class="text-stone-900 font-semibold">jose@constroad.com</strong>. Vence en 15 minutos.
+          </p>
+</div>
+</div>
+<!-- Action Footer within Card -->
+<div class="mt-4 pt-4 border-t border-stone-200/80 flex items-center justify-between text-xs">
+<span class="text-stone-500">¿No lo ves en tu bandeja?</span>
+<button class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-white border border-stone-300 text-stone-700 hover:bg-stone-100 hover:text-stone-900 font-medium transition-colors shadow-2xs" type="button">
+<svg class="w-3.5 h-3.5 text-stone-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+          Reenviar enlace
+        </button>
+</div>
+</section>
+<!-- END: AlternativeEmailCard -->
+</main>
+<!-- END: MainContent -->
+<!-- BEGIN: MainFooter -->
+<footer class="w-full border-t border-stone-200/80 bg-white/80 py-4 px-6 text-xs text-stone-500" data-purpose="footer-links-and-security">
+<div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+<!-- Left side: Identity & Peru location -->
+<div class="flex items-center gap-2">
+<span class="font-semibold text-stone-700">Dali Perú</span>
+<span class="text-stone-300">·</span>
+<span>Asistencia automatizada para WhatsApp Business</span>
+</div>
+<!-- Right side: Legal and Meta endorsement -->
+<div class="flex items-center gap-4">
+<a class="hover:text-stone-900 transition-colors" href="#privacidad">Privacidad</a>
+<a class="hover:text-stone-900 transition-colors" href="#terminos">Términos de servicio</a>
+<a class="hover:text-stone-900 transition-colors" href="#seguridad">Seguridad</a>
+<span class="text-stone-300">·</span>
+<span class="inline-flex items-center gap-1 text-teal-800 font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          Meta Partner Oficial
+        </span>
+</div>
+</div>
+</footer>
+<!-- END: MainFooter -->
+</body></html>

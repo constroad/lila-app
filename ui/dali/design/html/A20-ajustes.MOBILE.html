@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="es-PE">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Ajustes - Dali CONSTROAD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="bg-stone-100 text-stone-900 flex justify-center min-h-screen antialiased">
+  <!-- Contenedor móvil 390px -->
+  <div class="w-full max-w-[390px] bg-[#fbfbfb] min-h-screen flex flex-col relative pb-28 shadow-xl border-x border-stone-200/80">
+    
+    <!-- Barra superior de estado / contexto -->
+    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 px-4 py-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-lg bg-stone-900 flex items-center justify-center text-white font-bold text-xs tracking-wider shadow-sm">
+            CR
+          </div>
+          <div class="leading-tight">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-semibold text-stone-900">CONSTROAD</span>
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            </div>
+            <p class="text-[10px] text-stone-500">Cuenta &middot; Asistente Dali</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <button class="w-8 h-8 rounded-full flex items-center justify-center text-stone-500 hover:text-stone-800 hover:bg-stone-100 transition-colors" aria-label="Ayuda">
+            <span class="material-symbols-outlined text-[20px]">help</span>
+          </button>
+          <button class="w-8 h-8 rounded-full flex items-center justify-center text-stone-500 hover:text-stone-800 hover:bg-stone-100 transition-colors relative" aria-label="Notificaciones">
+            <span class="material-symbols-outlined text-[20px]">notifications</span>
+            <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white"></span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Contenido con padding 16px -->
+    <main class="px-4 pt-3 flex flex-col gap-4">
+
+      <!-- Título de sección -->
+      <div class="flex items-center justify-between pt-1">
+        <div>
+          <h1 class="text-2xl font-extrabold tracking-tight text-stone-900">Ajustes</h1>
+          <p class="text-xs text-stone-500 mt-0.5">Gestiona tu perfil, accesos y configuración de Dali</p>
+        </div>
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-brand-50 text-brand-700 border border-brand-100">
+          <span class="w-1.5 h-1.5 rounded-full bg-brand-600"></span>
+          Dueño
+        </span>
+      </div>
+
+      <!-- Tarjeta 1: Tu perfil -->
+      <section class="bg-white rounded-2xl p-4 border border-stone-200/90 shadow-sm space-y-4">
+        <div class="flex items-center justify-between pb-1 border-b border-stone-100">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-brand-700 text-[20px]">badge</span>
+            <h2 class="text-sm font-bold text-stone-900">Tu perfil</h2>
+          </div>
+          <span class="text-[11px] text-stone-400 font-medium">Datos personales</span>
+        </div>
+
+        <div class="flex items-center gap-3.5">
+          <!-- Avatar con iniciales JZ -->
+          <div class="relative">
+            <div class="w-14 h-14 rounded-2xl bg-stone-900 text-stone-50 flex items-center justify-center font-bold text-lg tracking-tight shadow-inner ring-4 ring-stone-100">
+              JZ
+            </div>
+            <button class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-brand-700 text-white flex items-center justify-center shadow-md hover:bg-brand-800 transition-colors" title="Cambiar foto">
+              <span class="material-symbols-outlined text-[13px]">photo_camera</span>
+            </button>
+          </div>
+
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-bold text-stone-900 truncate">José Zena</p>
+            <p class="text-xs text-stone-500 truncate">Administrador principal &middot; CONSTROAD</p>
+            <span class="inline-block text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md mt-1 border border-emerald-100">
+              Verificado por WhatsApp
+            </span>
+          </div>
+        </div>
+
+        <!-- Campos de formulario -->
+        <div class="space-y-3 pt-1">
+          <div>
+            <label class="block text-[11px] font-semibold text-stone-600 mb-1">Nombre completo</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3 top-2.5 text-stone-400 text-[18px]">person</span>
+              <input 
+                type="text" 
+                value="José Zena" 
+                class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-3 py-2 text-xs text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-brand-700/20 focus:border-brand-700 transition-all"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold text-stone-600 mb-1">Correo electrónico</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3 top-2.5 text-stone-400 text-[18px]">mail</span>
+              <input 
+                type="email" 
+                value="jose@constroad.com" 
+                class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-3 py-2 text-xs text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-brand-700/20 focus:border-brand-700 transition-all"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold text-stone-600 mb-1">WhatsApp de contacto</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3 top-2.5 text-stone-400 text-[18px]">phone</span>
+              <input 
+                type="tel" 
+                value="+51 902 049 935" 
+                class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-3 py-2 text-xs text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-brand-700/20 focus:border-brand-700 transition-all"
+              />
+            </div>
+            <p class="text-[10px] text-stone-400 mt-1 pl-1">A este número recibirás los códigos de acceso y alertas urgentes.</p>
+          </div>
+        </div>
+
+        <!-- Botón Guardar ancho completo -->
+        <button class="w-full py-2.5 px-4 rounded-xl bg-brand-700 hover:bg-brand-800 active:scale-[0.99] text-white font-semibold text-xs tracking-wide shadow-sm flex items-center justify-center gap-1.5 transition-all">
+          <span class="material-symbols-outlined text-[16px]">check</span>
+          Guardar cambios
+        </button>
+      </section>
+
+      <!-- Tarjeta 2: Acceso y sesiones -->
+      <section class="bg-white rounded-2xl p-4 border border-stone-200/90 shadow-sm space-y-3.5">
+        <div class="flex items-center justify-between pb-1 border-b border-stone-100">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-brand-700 text-[20px]">lock_open</span>
+            <h2 class="text-sm font-bold text-stone-900">Acceso</h2>
+          </div>
+          <span class="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">Sin clave</span>
+        </div>
+
+        <!-- Mensaje explicativo sin contraseña -->
+        <div class="bg-stone-50 rounded-xl p-3 border border-stone-200/80 flex items-start gap-2.5">
+          <span class="material-symbols-outlined text-stone-600 text-[18px] shrink-0 mt-0.5">key_off</span>
+          <p class="text-xs text-stone-600 leading-relaxed">
+            Entras con un <strong class="text-stone-800 font-semibold">código por WhatsApp</strong> o un <strong class="text-stone-800 font-semibold">enlace al correo</strong>. No hay contraseña.
+          </p>
+        </div>
+
+        <!-- Lista de sesiones abiertas -->
+        <div class="space-y-2 pt-1">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-stone-500">Sesiones abiertas</span>
+            <span class="text-[11px] text-stone-400 font-medium">2 activas</span>
+          </div>
+
+          <!-- Sesión actual -->
+          <div class="bg-brand-50/50 border border-brand-100 rounded-xl p-3 flex items-start justify-between gap-2">
+            <div class="flex items-start gap-2.5">
+              <div class="w-8 h-8 rounded-lg bg-white border border-brand-200 flex items-center justify-center text-brand-700 shrink-0 mt-0.5 shadow-2xs">
+                <span class="material-symbols-outlined text-[18px]">laptop_mac</span>
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-xs font-bold text-stone-900">Este dispositivo</span>
+                  <span class="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-brand-700 text-white tracking-wide uppercase">Actual</span>
+                </div>
+                <p class="text-[11px] text-stone-600 mt-0.5">Chrome en Mac &middot; Lima</p>
+                <div class="flex items-center gap-1 mt-1 text-[10px] text-emerald-600 font-medium">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Conectado ahora
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sesión secundaria -->
+          <div class="bg-white border border-stone-200 rounded-xl p-3 flex items-center justify-between gap-2 hover:border-stone-300 transition-colors">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600 shrink-0">
+                <span class="material-symbols-outlined text-[18px]">smartphone</span>
+              </div>
+              <div class="min-w-0">
+                <p class="text-xs font-semibold text-stone-900 truncate">iPhone de José</p>
+                <p class="text-[11px] text-stone-500">Safari &middot; hace 2 h</p>
+                <span class="text-[10px] text-stone-400">Lima, Perú</span>
+              </div>
+            </div>
+            <button class="px-2.5 py-1.5 rounded-lg border border-stone-200 hover:border-red-200 hover:bg-red-50 text-stone-600 hover:text-red-700 text-[11px] font-semibold transition-all shrink-0">
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <!-- Botón cerrar todas las demás sesiones -->
+        <button class="w-full py-2 px-3 rounded-xl border border-stone-200 hover:border-stone-300 bg-stone-50 hover:bg-stone-100 text-stone-700 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors">
+          <span class="material-symbols-outlined text-[16px] text-stone-500">logout</span>
+          Cerrar todas las demás sesiones
+        </button>
+      </section>
+
+      <!-- Tarjeta 3: Preferencias -->
+      <section class="bg-white rounded-2xl p-4 border border-stone-200/90 shadow-sm space-y-3.5">
+        <div class="flex items-center justify-between pb-1 border-b border-stone-100">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-brand-700 text-[20px]">tune</span>
+            <h2 class="text-sm font-bold text-stone-900">Preferencias</h2>
+          </div>
+          <span class="text-[11px] text-stone-400">Regional y vista</span>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Idioma -->
+          <div class="flex items-center justify-between py-1">
+            <div class="flex items-center gap-2.5">
+              <div class="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-600">
+                <span class="material-symbols-outlined text-[16px]">translate</span>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-stone-900">Idioma</p>
+                <p class="text-[11px] text-stone-500">Adaptado al mercado local</p>
+              </div>
+            </div>
+            <span class="inline-flex items-center gap-1 text-xs font-semibold text-brand-800 bg-brand-50 px-2.5 py-1 rounded-lg border border-brand-100">
+              <span>🇵🇪</span> Español &middot; Perú
+            </span>
+          </div>
+
+          <div class="h-px bg-stone-100"></div>
+
+          <!-- Zona horaria -->
+          <div class="flex items-center justify-between py-1">
+            <div class="flex items-center gap-2.5">
+              <div class="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-600">
+                <span class="material-symbols-outlined text-[16px]">schedule</span>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-stone-900">Zona horaria</p>
+                <p class="text-[11px] text-stone-500">Para reportes y descanso</p>
+              </div>
+            </div>
+            <span class="text-xs font-semibold text-stone-700 bg-stone-100 px-2.5 py-1 rounded-lg">
+              Lima, GMT-5
+            </span>
+          </div>
+
+          <div class="h-px bg-stone-100"></div>
+
+          <!-- Tema -->
+          <div class="space-y-2 pt-0.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-600">
+                  <span class="material-symbols-outlined text-[16px]">palette</span>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold text-stone-900">Tema de pantalla</p>
+                  <p class="text-[11px] text-stone-500">Apariencia de la interfaz</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Selector segmentado: Claro · Oscuro · Sistema -->
+            <div class="grid grid-cols-3 gap-1.5 p-1 bg-stone-100 rounded-xl">
+              <button class="py-1.5 px-2 rounded-lg bg-white shadow-2xs text-xs font-bold text-brand-800 border border-stone-200/60 flex items-center justify-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">light_mode</span>
+                Claro
+              </button>
+              <button class="py-1.5 px-2 rounded-lg text-xs font-medium text-stone-500 hover:text-stone-800 flex items-center justify-center gap-1 transition-colors">
+                <span class="material-symbols-outlined text-[14px]">dark_mode</span>
+                Oscuro
+              </button>
+              <button class="py-1.5 px-2 rounded-lg text-xs font-medium text-stone-500 hover:text-stone-800 flex items-center justify-center gap-1 transition-colors">
+                <span class="material-symbols-outlined text-[14px]">settings_brightness</span>
+                Sistema
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tarjeta 4: Empresa -->
+      <section class="bg-white rounded-2xl p-4 border border-stone-200/90 shadow-sm space-y-3">
+        <div class="flex items-center justify-between pb-1 border-b border-stone-100">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-brand-700 text-[20px]">domain</span>
+            <h2 class="text-sm font-bold text-stone-900">Empresa</h2>
+          </div>
+          <span class="text-[10px] font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-100">Plan Negocio</span>
+        </div>
+
+        <div class="p-3 bg-stone-50 rounded-xl border border-stone-200/80 flex items-start justify-between gap-2">
+          <div class="space-y-1">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-bold text-stone-900">CONSTROAD S.A.C.</span>
+            </div>
+            <p class="text-[11px] text-stone-500 font-mono">RUC 20601234567</p>
+            <p class="text-[11px] text-stone-600">Asfalto y Pavimentos &middot; Lurín, Lima</p>
+          </div>
+
+          <a href="#" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-stone-200 hover:border-brand-600 text-brand-700 hover:text-brand-800 text-xs font-semibold shadow-2xs transition-all shrink-0">
+            <span>Ir a Negocio</span>
+            <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+          </a>
+        </div>
+
+        <div class="flex items-center justify-between px-1 text-[11px] text-stone-500">
+          <span>Línea WhatsApp conectada:</span>
+          <span class="font-semibold text-stone-800 font-mono">+51 949 376 824</span>
+        </div>
+      </section>
+
+      <!-- Tarjeta 5: Datos -->
+      <section class="bg-white rounded-2xl p-4 border border-stone-200/90 shadow-sm space-y-3">
+        <div class="flex items-center justify-between pb-1 border-b border-stone-100">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-brand-700 text-[20px]">cloud_download</span>
+            <h2 class="text-sm font-bold text-stone-900">Datos y exportación</h2>
+          </div>
+          <span class="text-[11px] text-stone-400">Excel / Copia</span>
+        </div>
+
+        <p class="text-xs text-stone-600 leading-relaxed">
+          Descarga en cualquier momento una copia organizada de todas las atenciones automáticas y cotizaciones captadas en Lima.
+        </p>
+
+        <!-- Botón Descargar conversaciones y leads (.xlsx) -->
+        <button class="w-full py-2.5 px-4 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 active:scale-[0.99] text-stone-800 font-semibold text-xs flex items-center justify-center gap-2 shadow-2xs transition-all">
+          <span class="material-symbols-outlined text-[18px] text-emerald-600">table_view</span>
+          <span>Descargar mis conversaciones y leads (.xlsx)</span>
+        </button>
+
+        <!-- Nota de retención -->
+        <div class="flex items-start gap-2 bg-amber-50/70 border border-amber-200/60 rounded-xl p-2.5">
+          <span class="material-symbols-outlined text-amber-700 text-[16px] shrink-0 mt-0.5">info</span>
+          <p class="text-[11px] text-amber-900 leading-snug">
+            Las conversaciones se guardan <strong>90 días</strong>; los leads, <strong>siempre</strong>.
+          </p>
+        </div>
+      </section>
+
+      <!-- Tarjeta 6: Zona de peligro -->
+      <section class="bg-red-50/40 rounded-2xl p-4 border border-red-200/80 shadow-2xs space-y-3">
+        <div class="flex items-center gap-2 pb-1 border-b border-red-100">
+          <span class="material-symbols-outlined text-red-600 text-[20px]">warning</span>
+          <h2 class="text-sm font-bold text-red-900">Zona de peligro</h2>
+        </div>
+
+        <div class="space-y-1">
+          <p class="text-xs text-stone-600 leading-relaxed">
+            Se desconecta el número y se borran los datos en 30 días. Esta acción detendrá las cotizaciones automáticas de Dali en tu WhatsApp.
+          </p>
+        </div>
+
+        <!-- Botón rojo de texto -->
+        <button class="w-full py-2.5 px-3 rounded-xl border border-red-200 bg-white hover:bg-red-50 text-red-600 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors">
+          <span class="material-symbols-outlined text-[16px]">delete_forever</span>
+          Eliminar la cuenta de CONSTROAD en Dali
+        </button>
+      </section>
+
+      <!-- Botón de Cerrar Sesión General -->
+      <div class="pt-1 pb-4">
+        <button class="w-full py-3 px-4 rounded-xl bg-white border border-stone-200 hover:bg-stone-50 active:scale-[0.99] text-stone-700 font-semibold text-xs flex items-center justify-center gap-2 shadow-2xs transition-all">
+          <span class="material-symbols-outlined text-[18px] text-stone-500">power_settings_new</span>
+          Cerrar sesión
+        </button>
+        <p class="text-center text-[10px] text-stone-400 mt-2 font-mono">Dali v2.4 &middot; Lima, Perú</p>
+      </div>
+
+    </main>
+
+    <!-- Barra inferior fija de 5 pestañas (390px) -->
+    <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-50 bg-white border-t border-stone-200/90 py-1.5 px-3 shadow-lg backdrop-blur-sm">
+      <div class="grid grid-cols-5 items-center">
+        <!-- Pestaña 1: Inicio -->
+        <a href="#" class="flex flex-col items-center justify-center py-1 text-stone-500 hover:text-stone-800 transition-colors">
+          <span class="material-symbols-outlined text-[22px]">home</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Inicio</span>
+        </a>
+
+        <!-- Pestaña 2: Chats -->
+        <a href="#" class="flex flex-col items-center justify-center py-1 text-stone-500 hover:text-stone-800 transition-colors relative">
+          <span class="material-symbols-outlined text-[22px]">chat</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Chats</span>
+          <span class="absolute top-1 right-4 w-2 h-2 rounded-full bg-amber-500"></span>
+        </a>
+
+        <!-- Pestaña 3: Leads -->
+        <a href="#" class="flex flex-col items-center justify-center py-1 text-stone-500 hover:text-stone-800 transition-colors relative">
+          <span class="material-symbols-outlined text-[22px]">group</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Leads</span>
+          <span class="absolute top-1 right-4 w-2 h-2 rounded-full bg-brand-600"></span>
+        </a>
+
+        <!-- Pestaña 4: Asistente -->
+        <a href="#" class="flex flex-col items-center justify-center py-1 text-stone-500 hover:text-stone-800 transition-colors">
+          <span class="material-symbols-outlined text-[22px]">smart_toy</span>
+          <span class="text-[10px] font-medium tracking-tight mt-0.5">Asistente</span>
+        </a>
+
+        <!-- Pestaña 5: Más (ACTIVA EN VERDE) -->
+        <a href="#" class="flex flex-col items-center justify-center py-1 text-brand-700 font-bold transition-colors">
+          <div class="relative flex flex-col items-center">
+            <span class="material-symbols-outlined fill-icon text-[22px] text-brand-700">more_horiz</span>
+            <span class="text-[10px] font-bold text-brand-700 tracking-tight mt-0.5">Más</span>
+            <span class="w-1 h-1 rounded-full bg-brand-700 mt-0.5"></span>
+          </div>
+        </a>
+      </div>
+    </nav>
+
+  </div>
+</body>
+</html>

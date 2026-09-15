@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conversación - Luis Paredes (Dali CONSTROAD Tablet)</title>
+  <!-- Google Fonts & Tailwind CSS CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            teal: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              600: '#0D9488',
+              700: '#0F766E',
+              800: '#115E59',
+              900: '#134E4A',
+              950: '#042F2E',
+            },
+            amber: {
+              50: '#FFFBEB',
+              100: '#FEF3C7',
+              200: '#FDE68A',
+              500: '#F59E0B',
+              600: '#D97706',
+              800: '#92400E',
+              900: '#78350F',
+            },
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              150: '#EEEEEC',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            chat: ['"Inter"', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .material-symbols-outlined.fill-1 {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    /* WhatsApp subtle pattern background */
+    .whatsapp-bg {
+      background-color: #f7f6f2;
+      background-image: radial-gradient(#e5e2da 0.85px, transparent 0.85px), radial-gradient(#e5e2da 0.85px, #f7f6f2 0.85px);
+      background-size: 24px 24px;
+      background-position: 0 0, 12px 12px;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #D6D3D1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  </style>
+</head>
+<body class="h-full bg-stone-100 text-stone-900 font-sans antialiased overflow-hidden flex justify-center">
+
+  <!-- Main Tablet Container: Width 834px -->
+  <div class="w-[834px] h-full flex bg-white shadow-xl overflow-hidden relative border-x border-stone-200">
+
+    <!-- 1. LEFT NAVIGATION RAIL (72px) -->
+    <aside class="w-[72px] shrink-0 bg-white border-r border-stone-200 flex flex-col justify-between items-center py-3 z-30 select-none">
+      <!-- Top brand mark -->
+      <div class="flex flex-col items-center gap-3 w-full">
+        <div class="w-10 h-10 rounded-xl bg-teal-700 flex items-center justify-center text-white font-bold text-lg shadow-sm shadow-teal-900/10 tracking-tight">
+          D
+        </div>
+        <div class="w-8 h-px bg-stone-200"></div>
+
+        <!-- Rail Navigation items -->
+        <nav class="flex flex-col gap-1 w-full px-1.5 overflow-y-auto max-h-[calc(100vh-140px)] no-scrollbar">
+          <!-- Inicio -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">dashboard</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">Inicio</span>
+          </button>
+
+          <!-- Chats (ACTIVO) -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg bg-teal-50 text-teal-800 font-semibold border-l-2 border-teal-700 transition-colors group relative">
+            <span class="material-symbols-outlined fill-1 text-[20px] text-teal-700">chat</span>
+            <span class="text-[9.5px] font-bold mt-0.5 tracking-tight text-teal-800">Chats</span>
+            <!-- Unread / alert badge -->
+            <span class="absolute top-1 right-2 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white"></span>
+          </button>
+
+          <!-- Leads -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">group</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">Leads</span>
+          </button>
+
+          <!-- Asistente -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">smart_toy</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">Asistente</span>
+          </button>
+
+          <!-- Negocio -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">storefront</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">Negocio</span>
+          </button>
+
+          <!-- Servicios -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">construction</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">Servicios</span>
+          </button>
+
+          <!-- FAQ -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">quiz</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">FAQ</span>
+          </button>
+
+          <!-- Catálogo -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">menu_book</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">Catálogo</span>
+          </button>
+
+          <!-- WhatsApp -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">cell_tower</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">WhatsApp</span>
+          </button>
+
+          <!-- Equipo -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">badge</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">Equipo</span>
+          </button>
+
+          <!-- Plan -->
+          <button class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors group">
+            <span class="material-symbols-outlined text-[20px]">receipt_long</span>
+            <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">Plan</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Bottom items: Ajustes & Tenant Avatar -->
+      <div class="flex flex-col items-center gap-2 w-full px-1.5 pt-2 border-t border-stone-200">
+        <button class="w-full flex flex-col items-center justify-center py-1 px-0.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">settings</span>
+          <span class="text-[9.5px] font-medium mt-0.5 tracking-tight">Ajustes</span>
+        </button>
+        <div class="w-8 h-8 rounded-full bg-stone-900 text-stone-100 flex items-center justify-center text-xs font-bold ring-2 ring-stone-100 cursor-pointer" title="CONSTROAD Asfalto">
+          CR
+        </div>
+      </div>
+    </aside>
+
+    <!-- 2. MAIN WORKSPACE: Chat Section + Right Drawer -->
+    <div class="flex-1 flex overflow-hidden">
+
+      <!-- A. CHAT CONVERSATION VIEW (Flex-1) -->
+      <section class="flex-1 flex flex-col h-full bg-white relative border-r border-stone-200 overflow-hidden">
+        
+        <!-- Top Header (Cabecera) -->
+        <header class="h-16 px-4 bg-white border-b border-stone-200 flex items-center justify-between shrink-0 z-20">
+          <div class="flex items-center gap-3 min-w-0">
+            <!-- Flecha de volver -->
+            <button class="w-9 h-9 rounded-lg hover:bg-stone-100 text-stone-600 flex items-center justify-center transition-colors shrink-0" title="Volver a conversaciones">
+              <span class="material-symbols-outlined text-[22px]">arrow_back</span>
+            </button>
+
+            <!-- Avatar con iniciales LP -->
+            <div class="relative shrink-0">
+              <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-sm border border-amber-200">
+                LP
+              </div>
+              <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+            </div>
+
+            <!-- Datos del contacto -->
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <h1 class="font-bold text-stone-900 text-sm tracking-tight truncate leading-tight">Luis Paredes</h1>
+                <!-- Pill Ámbar: Pide atención -->
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  Pide atención
+                </span>
+              </div>
+              <p class="text-[11.5px] text-stone-500 truncate mt-0.5 font-normal">
+                Transportes Paredes · +51 902 049 935
+              </p>
+            </div>
+          </div>
+
+          <!-- Acciones de cabecera -->
+          <div class="flex items-center gap-1 shrink-0">
+            <button class="w-8 h-8 rounded-lg hover:bg-stone-100 text-stone-500 flex items-center justify-center transition-colors" title="Llamar">
+              <span class="material-symbols-outlined text-[20px]">call</span>
+            </button>
+            <button class="w-8 h-8 rounded-lg hover:bg-stone-100 text-stone-500 flex items-center justify-center transition-colors" title="Abrir en WhatsApp Web">
+              <span class="material-symbols-outlined text-[20px]">open_in_new</span>
+            </button>
+            <!-- Menú de tres puntos -->
+            <button class="w-8 h-8 rounded-lg hover:bg-stone-100 text-stone-600 flex items-center justify-center transition-colors" title="Más opciones">
+              <span class="material-symbols-outlined text-[20px]">more_vert</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- Banner Ámbar de Alerta Humana -->
+        <div class="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3 shrink-0 z-10 shadow-xs">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-7 h-7 rounded-full bg-amber-200/80 flex items-center justify-center text-amber-900 shrink-0">
+              <span class="material-symbols-outlined text-[17px]">pan_tool</span>
+            </div>
+            <p class="text-xs font-semibold text-amber-950 truncate">
+              Pidió hablar con una persona <span class="font-normal text-amber-800">hace 12 min</span>
+            </p>
+          </div>
+          <button class="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 active:scale-98 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 shrink-0 transition-all">
+            <span class="material-symbols-outlined text-[16px]">person_check</span>
+            Tomar la conversación
+          </button>
+        </div>
+
+        <!-- Chat Transcript Container (WhatsApp style) -->
+        <main class="flex-1 overflow-y-auto px-4 py-4 whatsapp-bg font-chat flex flex-col gap-3.5 text-stone-800 text-[13px]">
+
+          <!-- Separador "HOY" -->
+          <div class="flex items-center justify-center my-1">
+            <span class="bg-white/95 backdrop-blur-xs text-stone-500 font-sans font-semibold text-[11px] uppercase tracking-wider px-3 py-1 rounded-full shadow-xs border border-stone-200/80">
+              Hoy
+            </span>
+          </div>
+
+          <!-- Mensaje 1: Cliente 10:37 -->
+          <div class="flex flex-col items-start max-w-[85%]">
+            <div class="bg-white rounded-2xl rounded-tl-sm px-3.5 py-2 shadow-xs border border-stone-200/70 text-stone-900 leading-snug">
+              <p>Vi el anuncio en instagram sobre asfalto</p>
+              <div class="flex items-center justify-end gap-1 mt-1 text-[10.5px] text-stone-400">
+                <span>10:37</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensaje 2: Dali 10:37 -->
+          <div class="flex flex-col items-end self-end max-w-[88%]">
+            <div class="bg-teal-50 border border-teal-200/70 rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-xs text-stone-900 leading-snug">
+              <!-- Header Dali tag -->
+              <div class="flex items-center gap-1.5 pb-1 mb-1 border-b border-teal-100 text-teal-800 font-sans text-[11px] font-bold">
+                <span class="material-symbols-outlined text-[14px]">smart_toy</span>
+                <span>Dali · Asistente CONSTROAD</span>
+              </div>
+              <p>¡Hola! Soy Dali, la asistente de CONSTROAD 👋 ¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.</p>
+              <div class="flex items-center justify-end gap-1 mt-1 text-[10.5px] text-teal-800/60 font-sans">
+                <span>10:37</span>
+                <span class="material-symbols-outlined text-[14px] text-teal-700">done_all</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensaje 3: Cliente 10:38 -->
+          <div class="flex flex-col items-start max-w-[85%]">
+            <div class="bg-white rounded-2xl rounded-tl-sm px-3.5 py-2 shadow-xs border border-stone-200/70 text-stone-900 leading-snug">
+              <p>Para Lurín 150 m3 cuánto?</p>
+              <div class="flex items-center justify-end gap-1 mt-1 text-[10.5px] text-stone-400">
+                <span>10:38</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensaje 4: Dali 10:38 -->
+          <div class="flex flex-col items-end self-end max-w-[88%]">
+            <div class="bg-teal-50 border border-teal-200/70 rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-xs text-stone-900 leading-snug">
+              <div class="flex items-center gap-1.5 pb-1 mb-1 border-b border-teal-100 text-teal-800 font-sans text-[11px] font-bold">
+                <span class="material-symbols-outlined text-[14px]">smart_toy</span>
+                <span>Dali · Asistente CONSTROAD</span>
+              </div>
+              <p>El precio depende de la cantidad y la ubicación; con estos datos el asesor te cotiza. Con gusto te ayudo con venta de mezcla asfáltica. Perfecto: 150 m3, en Lurín. ¿Para qué es la mezcla: una vía, un estacionamiento, un patio, una zona industrial…?</p>
+              <div class="flex items-center justify-end gap-1 mt-1 text-[10.5px] text-teal-800/60 font-sans">
+                <span>10:38</span>
+                <span class="material-symbols-outlined text-[14px] text-teal-700">done_all</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensaje 5: Cliente 10:40 -->
+          <div class="flex flex-col items-start max-w-[85%]">
+            <div class="bg-white rounded-2xl rounded-tl-sm px-3.5 py-2 shadow-xs border border-stone-200/70 text-stone-900 leading-snug">
+              <p>Y si es asfaltado para 3000 m2?</p>
+              <div class="flex items-center justify-end gap-1 mt-1 text-[10.5px] text-stone-400">
+                <span>10:40</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensaje 6: Dali 10:40 -->
+          <div class="flex flex-col items-end self-end max-w-[88%]">
+            <div class="bg-teal-50 border border-teal-200/70 rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-xs text-stone-900 leading-snug">
+              <div class="flex items-center gap-1.5 pb-1 mb-1 border-b border-teal-100 text-teal-800 font-sans text-[11px] font-bold">
+                <span class="material-symbols-outlined text-[14px]">smart_toy</span>
+                <span>Dali · Asistente CONSTROAD</span>
+              </div>
+              <p>Perfecto, entonces asfaltado (colocación). Anotado: 3000 m2. ¿Qué espesor buscas? 1" para tráfico ligero, 2" para calles y estacionamientos, 3" para tráfico pesado.</p>
+              <div class="flex items-center justify-end gap-1 mt-1 text-[10.5px] text-teal-800/60 font-sans">
+                <span>10:40</span>
+                <span class="material-symbols-outlined text-[14px] text-teal-700">done_all</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensaje 7: Cliente 10:41 -->
+          <div class="flex flex-col items-start max-w-[85%]">
+            <div class="bg-white rounded-2xl rounded-tl-sm px-3.5 py-2 shadow-xs border border-stone-200/70 text-stone-900 leading-snug">
+              <p class="font-medium text-stone-900">quiero hablar con una persona</p>
+              <div class="flex items-center justify-end gap-1 mt-1 text-[10.5px] text-stone-400">
+                <span>10:41</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensaje 8: Dali 10:41 -->
+          <div class="flex flex-col items-end self-end max-w-[88%]">
+            <div class="bg-teal-50 border border-teal-200/70 rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-xs text-stone-900 leading-snug">
+              <div class="flex items-center gap-1.5 pb-1 mb-1 border-b border-teal-100 text-teal-800 font-sans text-[11px] font-bold">
+                <span class="material-symbols-outlined text-[14px]">smart_toy</span>
+                <span>Dali · Asistente CONSTROAD</span>
+              </div>
+              <p>Claro. Un asesor de CONSTROAD te escribe por aquí hoy mismo.</p>
+              <div class="flex items-center justify-end gap-1 mt-1 text-[10.5px] text-teal-800/60 font-sans">
+                <span>10:41</span>
+                <span class="material-symbols-outlined text-[14px] text-teal-700">done_all</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensaje de sistema centrado en gris -->
+          <div class="flex items-center justify-center my-2">
+            <div class="inline-flex items-center gap-1.5 bg-stone-200/90 text-stone-700 font-sans text-[11.5px] px-3.5 py-1.5 rounded-full shadow-2xs border border-stone-300">
+              <span class="material-symbols-outlined text-[15px] text-stone-500">pause_circle</span>
+              <span>Dali se puso en pausa · se avisó al grupo de ventas</span>
+            </div>
+          </div>
+
+        </main>
+
+        <!-- Chat Input Footer -->
+        <footer class="p-3 bg-white border-t border-stone-200 shrink-0 z-20">
+          <div class="flex items-center gap-2">
+            <!-- Adjuntos / shortcuts -->
+            <button class="w-9 h-9 rounded-full text-stone-500 hover:text-stone-800 hover:bg-stone-100 flex items-center justify-center transition-colors shrink-0" title="Plantillas de respuesta">
+              <span class="material-symbols-outlined text-[20px]">bolt</span>
+            </button>
+            <button class="w-9 h-9 rounded-full text-stone-500 hover:text-stone-800 hover:bg-stone-100 flex items-center justify-center transition-colors shrink-0" title="Adjuntar documento o foto">
+              <span class="material-symbols-outlined text-[20px]">attach_file</span>
+            </button>
+
+            <!-- Caja de texto input -->
+            <div class="flex-1 relative">
+              <input 
+                type="text" 
+                placeholder="Escribe como CONSTROAD…" 
+                class="w-full bg-stone-50 hover:bg-stone-100/70 focus:bg-white border border-stone-200 focus:border-teal-700 rounded-full px-4 py-2 text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 focus:ring-teal-700 transition-all font-chat"
+              />
+            </div>
+
+            <!-- Botón de enviar -->
+            <button class="w-9 h-9 rounded-full bg-teal-700 hover:bg-teal-800 active:scale-95 text-white flex items-center justify-center transition-all shadow-xs shrink-0" title="Enviar mensaje">
+              <span class="material-symbols-outlined text-[18px]">send</span>
+            </button>
+          </div>
+
+          <!-- Nota informativa inferior -->
+          <div class="flex items-center justify-center gap-1.5 mt-2 text-[11px] text-stone-500 font-sans">
+            <span class="material-symbols-outlined text-[13px] text-teal-700">info</span>
+            <span>Al escribir, Dali se calla 30 min en esta conversación</span>
+          </div>
+        </footer>
+
+      </section>
+
+      <!-- B. RIGHT DRAWER / PANEL: "Datos del lead" (420px) -->
+      <aside class="w-[360px] shrink-0 bg-stone-50/80 border-l border-stone-200 flex flex-col h-full overflow-hidden z-10">
+        
+        <!-- Drawer Header -->
+        <div class="h-16 px-4 bg-white border-b border-stone-200 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-100">
+              <span class="material-symbols-outlined text-[17px]">assignment</span>
+            </div>
+            <div>
+              <h2 class="text-xs font-bold text-stone-900 tracking-tight">Datos del lead</h2>
+              <p class="text-[10.5px] text-stone-500">Capturado por Dali en WhatsApp</p>
+            </div>
+          </div>
+          <!-- Lead status pill -->
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+            <span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+            Lead calificado
+          </span>
+        </div>
+
+        <!-- Drawer Body Content -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+
+          <!-- Card: Resumen de Campos Recolectados -->
+          <div class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-2xs space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-stone-100">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-stone-500">Ficha técnica</span>
+              <span class="text-[11px] font-semibold text-teal-700">3 de 3 datos clave</span>
+            </div>
+
+            <!-- Campo 1: Servicio -->
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2 text-stone-500">
+                <span class="material-symbols-outlined text-[16px]">construction</span>
+                <span class="text-xs">Servicio</span>
+              </div>
+              <span class="text-xs font-bold text-stone-900 text-right bg-stone-100 px-2 py-0.5 rounded-md">
+                Asfaltado (colocación)
+              </span>
+            </div>
+
+            <!-- Campo 2: Área -->
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2 text-stone-500">
+                <span class="material-symbols-outlined text-[16px]">square_foot</span>
+                <span class="text-xs">Área estimada</span>
+              </div>
+              <span class="text-xs font-bold text-teal-800 text-right bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100">
+                3,000 m²
+              </span>
+            </div>
+
+            <!-- Campo 3: Lugar -->
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2 text-stone-500">
+                <span class="material-symbols-outlined text-[16px]">location_on</span>
+                <span class="text-xs">Ubicación</span>
+              </div>
+              <span class="text-xs font-semibold text-stone-900 text-right">
+                Lurín, Lima
+              </span>
+            </div>
+
+            <!-- Subdato complementario detectado -->
+            <div class="pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-500">
+              <span>Espesor sugerido:</span>
+              <span class="font-medium text-stone-800">2" a 3" (tráfico pesado)</span>
+            </div>
+          </div>
+
+          <!-- Card: Contacto & Empresa -->
+          <div class="bg-white rounded-xl border border-stone-200 p-3.5 shadow-2xs space-y-2.5">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-stone-500 block">Contacto comercial</span>
+            
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-full bg-stone-100 text-stone-700 font-bold flex items-center justify-center text-xs">
+                LP
+              </div>
+              <div class="min-w-0">
+                <p class="text-xs font-bold text-stone-900 truncate">Luis Paredes</p>
+                <p class="text-[11px] text-stone-500 truncate">Transportes Paredes S.A.C.</p>
+              </div>
+            </div>
+
+            <div class="pt-1.5 flex items-center gap-2 text-stone-600 text-xs">
+              <span class="material-symbols-outlined text-[16px] text-teal-700">call</span>
+              <span class="font-mono text-[11.5px]">+51 902 049 935</span>
+            </div>
+          </div>
+
+          <!-- Botones de Acción Primaria y Secundaria -->
+          <div class="space-y-2 pt-1">
+            <button class="w-full py-2 px-3 bg-teal-700 hover:bg-teal-800 active:scale-98 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition-all">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              Ver lead completo
+            </button>
+
+            <div class="grid grid-cols-2 gap-2">
+              <button class="py-2 px-2.5 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-stone-700 flex items-center justify-center gap-1.5 transition-colors">
+                <span class="material-symbols-outlined text-[16px] text-teal-700">smart_toy</span>
+                Devolver a Dali
+              </button>
+              <button class="py-2 px-2.5 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-stone-700 flex items-center justify-center gap-1.5 transition-colors">
+                <span class="material-symbols-outlined text-[16px] text-stone-500">check_circle</span>
+                Marcar cerrada
+              </button>
+            </div>
+
+            <button class="w-full py-2 px-3 bg-white hover:bg-stone-50 border border-dashed border-stone-300 rounded-xl text-xs font-medium text-stone-700 flex items-center justify-center gap-1.5 transition-colors">
+              <span class="material-symbols-outlined text-[16px] text-stone-500">add_comment</span>
+              Agregar nota interna
+            </button>
+          </div>
+
+          <!-- Nota rápida guardada previa -->
+          <div class="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-[11.5px] text-amber-900 leading-relaxed">
+            <div class="flex items-center gap-1 font-semibold text-amber-950 mb-1">
+              <span class="material-symbols-outlined text-[14px]">sticky_note_2</span>
+              <span>Nota de recepción:</span>
+            </div>
+            "Cliente con apuro por asfaltar patio de maniobras en Lurín. Requiere visita técnica o cotización formal urgente."
+          </div>
+
+        </div>
+
+        <!-- Drawer Footer Status -->
+        <div class="p-3 bg-white border-t border-stone-200 text-[11px] text-stone-500 flex items-center justify-between shrink-0">
+          <span class="flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            WhatsApp conectado
+          </span>
+          <span class="font-mono text-[10.5px]">Línea CONSTROAD</span>
+        </div>
+
+      </aside>
+
+    </div>
+
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-100" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dali - Servicios CONSTROAD</title>
+<!-- Google Fonts: Outfit, DM Sans, JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&amp;family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&amp;family=Outfit:wght@400;500;600;700;800&amp;family=Public+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              teal: '#0F766E',
+              'teal-dark': '#115E59',
+              'teal-light': '#F0FDFA',
+              'teal-border': '#CCFBF1',
+              amber: '#D97706',
+              'amber-light': '#FEF3C7',
+              'amber-dark': '#92400E',
+              slate: '#334155',
+              surface: '#FFFFFF',
+              canvas: '#FAFAF9',
+              border: '#E7E5E4'
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "1rem",
+            "xl": "1.5rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Outfit", "Public Sans", "sans-serif"],
+            display: ["Outfit", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .font-headline {
+      font-family: 'Outfit', sans-serif;
+    }
+    .font-mono-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="h-full bg-stone-100 text-stone-900 antialiased flex justify-center selection:bg-teal-100 selection:text-teal-900">
+<!-- Mobile viewport container strictly calibrated to 390px (Per design system mobile viewport spec) -->
+<div class="w-full max-w-[390px] min-h-screen bg-[#FAFAF9] flex flex-col relative pb-28 border-x border-stone-200/80 shadow-2xl">
+<!-- 1. TopAppBar (Shared Component Implementation) -->
+<header class="bg-white sticky top-0 z-40 w-full px-4 h-14 flex items-center justify-between border-b border-stone-200">
+<div class="flex items-center gap-2.5">
+<button aria-label="Volver" class="w-9 h-9 -ml-1.5 flex items-center justify-center rounded-lg text-stone-600 hover:bg-stone-100 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[22px]" data-icon="arrow_back">arrow_back</span>
+</button>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-headline text-base font-bold tracking-tight text-stone-900 leading-none">CONSTROAD</span>
+<div class="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+<span class="text-[10px] font-medium text-emerald-800 tracking-tight">WhatsApp activo</span>
+</div>
+</div>
+<p class="text-[11px] text-stone-500 font-medium">Asfalto y Pavimentación • Lima</p>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button aria-label="Notificaciones" class="w-9 h-9 flex items-center justify-center rounded-lg text-stone-600 hover:bg-stone-100 active:scale-95 transition-all relative">
+<span class="material-symbols-outlined text-[22px]" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white"></span>
+</button>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 px-4 pt-4 space-y-4">
+<!-- Section Headline & Action Header -->
+<section class="space-y-3">
+<div>
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-semibold tracking-[0.08em] text-stone-500 uppercase font-headline">Configuración de Dali</span>
+<span class="inline-flex items-center gap-1 text-[11px] text-teal-800 font-medium">
+<span class="material-symbols-outlined text-[14px]" data-icon="sync">sync</span> 4 activos
+            </span>
+</div>
+<h1 class="font-headline text-2xl font-extrabold text-stone-900 tracking-tight mt-0.5">Servicios</h1>
+<p class="text-[13px] text-stone-600 leading-snug mt-1">
+            Lo que Dali reconoce y las preguntas que hace para juntar los datos antes de cotizar.
+          </p>
+</div>
+<!-- Primary Action & Secondary reset -->
+<div class="space-y-2 pt-1">
+<button class="w-full h-11 bg-[#0F766E] hover:bg-[#115E59] active:scale-[0.98] text-white font-medium text-[14px] rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all">
+<span class="material-symbols-outlined text-[20px]" data-icon="add">add</span>
+<span>Agregar servicio</span>
+</button>
+<button class="w-full py-1.5 text-center flex items-center justify-center gap-1.5 text-stone-500 hover:text-stone-700 active:scale-95 text-[12px] font-medium transition-colors">
+<span class="material-symbols-outlined text-[15px]" data-icon="restart_alt">restart_alt</span>
+<span>Restaurar el pack de Asfalto predeterminado</span>
+</button>
+</div>
+</section>
+<!-- 2. Tarjeta informativa destacada (Guion de inicio / desvío) -->
+<section class="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3.5 shadow-none relative overflow-hidden">
+<div class="flex items-start gap-2.5">
+<div class="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 text-amber-800 mt-0.5">
+<span class="material-symbols-outlined text-[18px]" data-icon="help_outline">help_outline</span>
+</div>
+<div class="space-y-1.5 flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-bold tracking-[0.08em] uppercase text-amber-900">CUANDO EL CLIENTE NO DICE QUÉ NECESITA</span>
+<button class="text-amber-800 font-semibold text-[11px] hover:underline flex items-center gap-0.5 active:scale-95">
+<span>Editar</span>
+<span class="material-symbols-outlined text-[13px]" data-icon="edit">edit</span>
+</button>
+</div>
+<p class="text-[13px] text-stone-800 leading-snug font-normal italic bg-white/70 p-2 rounded-lg border border-amber-200/50">
+              «¿Qué necesitas: solo la mezcla asfáltica, que la coloquemos, o transporte?»
+            </p>
+<p class="text-[11px] text-stone-600">
+              Dali lanza esta pregunta de arranque si el cliente solo dice <span class="font-medium text-stone-800">"Hola"</span> o <span class="font-medium text-stone-800">"Quiero info"</span>.
+            </p>
+</div>
+</div>
+</section>
+<!-- 3. Lista de tarjetas de servicios activos (4 servicios individuales) -->
+<section class="space-y-3">
+<div class="flex items-center justify-between px-0.5">
+<h2 class="text-xs font-bold tracking-[0.08em] text-stone-500 uppercase font-headline">Catálogo activo en WhatsApp</h2>
+<span class="text-xs text-stone-500 font-medium">Toca para configurar</span>
+</div>
+<!-- Tarjeta 1: Asfaltado (colocación) -->
+<article class="bg-white border border-stone-200 rounded-xl p-3.5 space-y-3 shadow-none hover:border-stone-300 transition-all">
+<div class="flex items-start justify-between gap-2">
+<div class="space-y-1 flex-1">
+<div class="flex items-center gap-2">
+<h3 class="font-headline font-bold text-[15px] text-stone-900 leading-tight">Asfaltado (colocación)</h3>
+</div>
+<div class="inline-flex items-center gap-1.5 bg-teal-50 border border-teal-200/70 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-700"></span>
+<span class="text-[11px] font-semibold text-teal-800">Junta datos para cotizar</span>
+</div>
+</div>
+<!-- Switch UI -->
+<label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0F766E]"></div>
+</label>
+</div>
+<!-- Chips de palabras clave reconocidas -->
+<div>
+<span class="text-[10px] uppercase tracking-wider font-semibold text-stone-500 block mb-1">Palabras clave que lo activan:</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">asfaltar</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">pavimentar</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">colocación</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">parchado</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">imprimación</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">fresado</span>
+</div>
+</div>
+<!-- Métricas de preguntas + Botón de acción -->
+<div class="pt-2 border-t border-stone-100 flex items-center justify-between">
+<div class="flex items-center gap-1.5 text-stone-600 text-[12px]">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="forum">forum</span>
+<span><strong class="font-mono-num font-semibold text-stone-900">10 preguntas</strong> en el guion</span>
+</div>
+<button class="h-8 px-2.5 rounded-lg border border-stone-300 bg-white hover:bg-stone-50 active:scale-95 text-stone-700 text-[12px] font-medium flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-[14px]" data-icon="tune">tune</span>
+<span>Editar preguntas</span>
+</button>
+</div>
+</article>
+<!-- Tarjeta 2: Venta de mezcla asfáltica -->
+<article class="bg-white border border-stone-200 rounded-xl p-3.5 space-y-3 shadow-none hover:border-stone-300 transition-all">
+<div class="flex items-start justify-between gap-2">
+<div class="space-y-1 flex-1">
+<h3 class="font-headline font-bold text-[15px] text-stone-900 leading-tight">Venta de mezcla asfáltica</h3>
+<div class="inline-flex items-center gap-1.5 bg-teal-50 border border-teal-200/70 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-700"></span>
+<span class="text-[11px] font-semibold text-teal-800">Junta datos para cotizar</span>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0F766E]"></div>
+</label>
+</div>
+<div>
+<span class="text-[10px] uppercase tracking-wider font-semibold text-stone-500 block mb-1">Palabras clave:</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">mezcla</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">cubos</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">m³</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">comprar</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">toneladas</span>
+</div>
+</div>
+<div class="pt-2 border-t border-stone-100 flex items-center justify-between">
+<div class="flex items-center gap-1.5 text-stone-600 text-[12px]">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="forum">forum</span>
+<span><strong class="font-mono-num font-semibold text-stone-900">7 preguntas</strong> en el guion</span>
+</div>
+<button class="h-8 px-2.5 rounded-lg border border-stone-300 bg-white hover:bg-stone-50 active:scale-95 text-stone-700 text-[12px] font-medium flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-[14px]" data-icon="tune">tune</span>
+<span>Editar preguntas</span>
+</button>
+</div>
+</article>
+<!-- Tarjeta 3: Transporte de mezcla -->
+<article class="bg-white border border-stone-200 rounded-xl p-3.5 space-y-3 shadow-none hover:border-stone-300 transition-all">
+<div class="flex items-start justify-between gap-2">
+<div class="space-y-1 flex-1">
+<h3 class="font-headline font-bold text-[15px] text-stone-900 leading-tight">Transporte de mezcla</h3>
+<div class="inline-flex items-center gap-1.5 bg-teal-50 border border-teal-200/70 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-700"></span>
+<span class="text-[11px] font-semibold text-teal-800">Junta datos para cotizar</span>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0F766E]"></div>
+</label>
+</div>
+<div>
+<span class="text-[10px] uppercase tracking-wider font-semibold text-stone-500 block mb-1">Palabras clave:</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">transporte</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">traslado</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">flete</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">volquete</span>
+</div>
+</div>
+<div class="pt-2 border-t border-stone-100 flex items-center justify-between">
+<div class="flex items-center gap-1.5 text-stone-600 text-[12px]">
+<span class="material-symbols-outlined text-[16px] text-teal-800" data-icon="forum">forum</span>
+<span><strong class="font-mono-num font-semibold text-stone-900">5 preguntas</strong> en el guion</span>
+</div>
+<button class="h-8 px-2.5 rounded-lg border border-stone-300 bg-white hover:bg-stone-50 active:scale-95 text-stone-700 text-[12px] font-medium flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-[14px]" data-icon="tune">tune</span>
+<span>Editar preguntas</span>
+</button>
+</div>
+</article>
+<!-- Tarjeta 4: Fabricación de mezcla especial (Modo: Deriva a un ingeniero) -->
+<article class="bg-white border border-amber-200 rounded-xl p-3.5 space-y-3 shadow-none hover:border-amber-300 transition-all bg-gradient-to-b from-white to-amber-50/20">
+<div class="flex items-start justify-between gap-2">
+<div class="space-y-1 flex-1">
+<div class="flex items-center gap-1.5">
+<h3 class="font-headline font-bold text-[15px] text-stone-900 leading-tight">Fabricación de mezcla especial</h3>
+</div>
+<div class="inline-flex items-center gap-1.5 bg-amber-100 text-amber-900 border border-amber-300/80 px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-[13px] text-amber-800" data-icon="person">person</span>
+<span class="text-[11px] font-semibold">Deriva a un ingeniero</span>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0F766E]"></div>
+</label>
+</div>
+<div>
+<span class="text-[10px] uppercase tracking-wider font-semibold text-stone-500 block mb-1">Palabras clave:</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">fabricar</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">diseño de mezcla</span>
+<span class="px-2 py-0.5 text-[11px] font-medium bg-stone-100 text-stone-700 rounded-md border border-stone-200/60">ensayo marshall</span>
+</div>
+</div>
+<div class="p-2.5 bg-stone-50 rounded-lg border border-stone-200/80 text-[12px] text-stone-600 flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-amber-700 shrink-0 mt-0.5" data-icon="notification_important">notification_important</span>
+<p class="leading-snug">
+<strong class="font-medium text-stone-800">Sin preguntas previas:</strong> Dali avisa por WhatsApp al ingeniero residente y le comparte el contacto al cliente de inmediato.
+            </p>
+</div>
+<div class="pt-2 border-t border-stone-100 flex items-center justify-between">
+<span class="text-[11px] text-amber-800 font-medium flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+              Atención humana directa
+            </span>
+<button class="h-8 px-2.5 rounded-lg border border-amber-300 bg-amber-50/50 hover:bg-amber-100/70 active:scale-95 text-amber-900 text-[12px] font-medium flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-[14px]" data-icon="settings_phone">settings_phone</span>
+<span>Configurar derivación</span>
+</button>
+</div>
+</article>
+</section>
+<!-- 4. Tarjeta 'Preguntas de cierre (para todos los servicios)' -->
+<section class="bg-white border border-stone-200 rounded-xl p-3.5 space-y-3 shadow-none">
+<div class="flex items-start gap-2.5">
+<div class="w-7 h-7 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[17px]" data-icon="check_circle">check_circle</span>
+</div>
+<div>
+<h3 class="font-headline font-bold text-[14px] text-stone-900 leading-tight">Preguntas de cierre (comunes a todos)</h3>
+<p class="text-[12px] text-stone-500 leading-snug mt-0.5">
+              Se realizan al finalizar cualquier cotización antes de enviar el resumen al asesor.
+            </p>
+</div>
+</div>
+<!-- Lista visual de las 2 preguntas de cierre -->
+<div class="space-y-2 pt-1">
+<div class="flex items-center gap-2.5 p-2 bg-stone-50 rounded-lg border border-stone-200/70">
+<span class="w-5 h-5 rounded-full bg-white border border-stone-300 text-stone-700 font-mono-num text-[11px] font-bold flex items-center justify-center shrink-0">1</span>
+<p class="text-[13px] text-stone-800 font-medium">«¿Para cuándo lo necesitas?»</p>
+</div>
+<div class="flex items-center gap-2.5 p-2 bg-stone-50 rounded-lg border border-stone-200/70">
+<span class="w-5 h-5 rounded-full bg-white border border-stone-300 text-stone-700 font-mono-num text-[11px] font-bold flex items-center justify-center shrink-0">2</span>
+<p class="text-[13px] text-stone-800 font-medium">«¿A nombre de quién preparamos la cotización?»</p>
+</div>
+</div>
+<div class="pt-2 flex justify-end">
+<button class="h-8 px-3 rounded-lg border border-stone-300 bg-stone-50 hover:bg-stone-100 active:scale-95 text-stone-700 text-[12px] font-medium flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-[14px]" data-icon="edit_note">edit_note</span>
+<span>Editar preguntas de cierre</span>
+</button>
+</div>
+</section>
+<!-- Tip de ayuda de Dali al pie -->
+<div class="py-2 px-3 bg-stone-100 rounded-lg text-center">
+<p class="text-[11px] text-stone-500">
+          ¿Dudas sobre cómo afinar el guion? <a class="text-teal-800 font-semibold underline underline-offset-2" href="#">Chatea con soporte Dali en Lima</a>
+</p>
+</div>
+</main>
+<!-- 5. BottomNavBar (Shared Component Implementation) -->
+<!-- Destination 4: "Asistente" is ACTIVE per Semantic Mapping protocol (Servicios is part of Assistant configuration) -->
+<nav aria-label="Navegación principal" class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-1 max-w-[390px] mx-auto bg-white border-t border-stone-200 dark:bg-stone-900 dark:border-stone-800 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+<!-- Inicio (home) -->
+<a class="flex flex-col items-center justify-center text-stone-500 hover:text-teal-700 active:scale-95 transition-all py-1 px-2" href="#inicio">
+<span class="material-symbols-outlined text-[22px]" data-icon="home">home</span>
+<span class="font-label text-[11px] font-normal tracking-tight mt-0.5">Inicio</span>
+</a>
+<!-- Chats (chat) -->
+<a class="flex flex-col items-center justify-center text-stone-500 hover:text-teal-700 active:scale-95 transition-all py-1 px-2 relative" href="#chats">
+<span class="material-symbols-outlined text-[22px]" data-icon="chat">chat</span>
+<span class="font-label text-[11px] font-normal tracking-tight mt-0.5">Chats</span>
+</a>
+<!-- Leads (group) -->
+<a class="flex flex-col items-center justify-center text-stone-500 hover:text-teal-700 active:scale-95 transition-all py-1 px-2" href="#leads">
+<span class="material-symbols-outlined text-[22px]" data-icon="group">group</span>
+<span class="font-label text-[11px] font-normal tracking-tight mt-0.5">Leads</span>
+</a>
+<!-- Asistente (smart_toy) -> ACTIVE STATE (style_active_navigation applied verbatim) -->
+<a aria-current="page" class="flex flex-col items-center justify-center text-teal-800 font-semibold py-1 px-2 active:scale-95 transition-transform duration-150" href="#asistente">
+<div class="relative">
+<span class="material-symbols-outlined text-[22px]" data-icon="smart_toy" data-weight="fill" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+<span class="absolute -top-1 -right-1.5 w-1.5 h-1.5 bg-teal-800 rounded-full"></span>
+</div>
+<span class="font-label text-[11px] font-semibold tracking-tight mt-0.5 text-teal-800">Asistente</span>
+</a>
+<!-- Más (more_horiz) -->
+<a class="flex flex-col items-center justify-center text-stone-500 hover:text-teal-700 active:scale-95 transition-all py-1 px-2" href="#mas">
+<span class="material-symbols-outlined text-[22px]" data-icon="more_horiz">more_horiz</span>
+<span class="font-label text-[11px] font-normal tracking-tight mt-0.5">Más</span>
+</a>
+</nav>
+</div>
+<script>
+    // Microinteractions: switch state feedback
+    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        const card = e.target.closest('article');
+        if (e.target.checked) {
+          card.classList.remove('opacity-60');
+        } else {
+          card.classList.add('opacity-60');
+        }
+      });
+    });
+  </script>
+</body></html>

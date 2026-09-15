@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-stone-50" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dali.pe — Crea tu cuenta (Paso 3 de 3)</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            teal: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              200: '#99f6e4',
+              300: '#5eead4',
+              400: '#2dd4bf',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0F766E', // Primario de marca
+              800: '#115e59',
+              900: '#134e4a',
+            },
+            amber: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309',
+            },
+            stone: {
+              50: '#FAFAF9',
+              100: '#F5F5F4',
+              200: '#E7E5E4',
+              300: '#D6D3D1',
+              400: '#A8A29E',
+              500: '#78716C',
+              600: '#57534E',
+              700: '#44403C',
+              800: '#292524',
+              900: '#1C1917',
+              950: '#0C0A09',
+            }
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "1rem",
+            "xl": "1.5rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Public Sans", "sans-serif"],
+            display: ["Public Sans", "sans-serif"],
+            body: ["DM Sans", "sans-serif"],
+            label: ["DM Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"],
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .material-symbols-fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+  </style>
+</head>
+<body class="min-h-full flex flex-col justify-between font-body text-stone-900 bg-stone-50 antialiased selection:bg-teal-100 selection:text-teal-900">
+<!-- Cabecera Minimalista (Source of Truth JSON TopNavBar adaptado sin menús profundos para flujo Onboarding) -->
+<header class="w-full bg-white border-b border-stone-200">
+<div class="max-w-5xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<a class="flex items-center gap-1.5 focus:outline-none" href="#">
+<span class="font-headline text-xl font-bold tracking-tight text-teal-800">Dali.pe</span>
+<span class="text-xs font-semibold uppercase tracking-wider text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded">Perú</span>
+</a>
+</div>
+<div class="flex items-center gap-4 text-xs font-label">
+<div class="hidden sm:flex items-center gap-1 text-stone-500 bg-stone-100/75 px-2.5 py-1 rounded-full border border-stone-200/60">
+<span class="material-symbols-outlined text-teal-700 text-sm" data-icon="lock">lock</span>
+<span>Conexión segura SSL</span>
+</div>
+<a class="text-stone-600 hover:text-teal-800 transition-colors duration-150 flex items-center gap-1" href="#soporte">
+<span class="material-symbols-outlined text-base" data-icon="help">help</span>
+<span>¿Necesitas ayuda?</span>
+</a>
+</div>
+</div>
+</header>
+<!-- Contenido Principal -->
+<main class="flex-1 max-w-4xl w-full mx-auto px-4 py-8 md:py-10">
+<!-- Stepper Horizontal (3 Pasos) -->
+<div class="max-w-xl mx-auto mb-8">
+<div class="flex items-center justify-between relative">
+<!-- Barra de progreso de fondo -->
+<div class="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-[2px] bg-stone-200 z-0"></div>
+<div class="absolute left-6 right-1/2 top-1/2 -translate-y-1/2 h-[2px] bg-teal-700 z-0 transition-all duration-300"></div>
+<!-- Paso 1: Completado -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-8 h-8 rounded-full bg-teal-700 text-white flex items-center justify-center font-mono text-xs font-semibold shadow-sm">
+<span class="material-symbols-outlined text-base" data-icon="check">check</span>
+</div>
+<span class="mt-2 text-xs font-medium text-stone-600">Tu negocio</span>
+</div>
+<!-- Paso 2: Completado -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-8 h-8 rounded-full bg-teal-700 text-white flex items-center justify-center font-mono text-xs font-semibold shadow-sm">
+<span class="material-symbols-outlined text-base" data-icon="check">check</span>
+</div>
+<span class="mt-2 text-xs font-medium text-stone-600">WhatsApp</span>
+</div>
+<!-- Paso 3: Activo -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-8 h-8 rounded-full bg-teal-700 text-white ring-4 ring-teal-50 flex items-center justify-center font-mono text-xs font-bold shadow-sm">
+<span>3</span>
+</div>
+<span class="mt-2 text-xs font-semibold text-teal-800">Conocimiento</span>
+</div>
+</div>
+</div>
+<!-- Tarjeta Principal del Formulario -->
+<div class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+<!-- Encabezado de la Tarjeta -->
+<div class="p-6 md:p-8 border-b border-stone-100 bg-stone-50/40">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-medium mb-3">
+<span class="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse"></span>
+          Paso final · Listo en 2 minutos
+        </div>
+<h1 class="font-headline text-2xl md:text-3xl font-bold tracking-tight text-stone-900">
+          ¿Qué sabe Dali de CONSTROAD?
+        </h1>
+<p class="mt-1.5 text-stone-600 text-sm md:text-base leading-relaxed">
+          Con esto atiende tu WhatsApp: qué ofreces, qué preguntas hacerle a tus clientes y cómo responder cotizaciones.
+        </p>
+</div>
+<!-- Selector de Modo: 2 Opciones lado a lado -->
+<div class="p-6 md:p-8 space-y-8">
+<div>
+<label class="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3 font-label">
+            Elige cómo cargar la información
+          </label>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Opción 1: Subir un Excel -->
+<div class="border border-stone-200 rounded-xl p-5 hover:border-stone-300 transition-all bg-stone-50/30 flex flex-col justify-between relative group">
+<div class="space-y-3">
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-lg bg-stone-100 flex items-center justify-center text-stone-700">
+<span class="material-symbols-outlined text-2xl text-teal-800" data-icon="table_view">table_view</span>
+</div>
+<span class="text-[11px] font-semibold tracking-wide bg-stone-200 text-stone-700 px-2 py-0.5 rounded-full uppercase">
+                    Recomendado si ya tienes lista
+                  </span>
+</div>
+<div>
+<h3 class="font-headline font-semibold text-stone-900 text-base">Subir un Excel</h3>
+<p class="text-xs text-stone-500 mt-1 leading-normal">
+                    Descarga nuestra plantilla oficial, complétala con tus servicios y súbela en 10 minutos.
+                  </p>
+</div>
+<a class="inline-flex items-center gap-1.5 text-xs font-medium text-teal-700 hover:text-teal-800 py-1" href="#descargar-plantilla">
+<span class="material-symbols-outlined text-sm" data-icon="download">download</span>
+                  Descargar plantilla .xlsx
+                </a>
+</div>
+<!-- Dropzone visual -->
+<div class="mt-4 border-2 border-dashed border-stone-200 hover:border-teal-400 rounded-lg p-4 text-center cursor-pointer transition-colors bg-white">
+<span class="material-symbols-outlined text-stone-400 text-2xl mx-auto block mb-1" data-icon="cloud_upload">cloud_upload</span>
+<p class="text-xs text-stone-600 font-medium">Suelta tu archivo .xlsx aquí</p>
+<p class="text-[11px] text-stone-400 mt-0.5">o haz clic para examinar tus archivos</p>
+</div>
+</div>
+<!-- Opción 2: Completarlo aquí (Seleccionada) -->
+<div class="border-2 border-teal-700 rounded-xl p-5 bg-teal-50/30 flex flex-col justify-between relative shadow-sm">
+<div class="absolute -top-3 right-4">
+<span class="bg-teal-700 text-white text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full shadow-xs">
+                  Más rápido · Recomendado
+                </span>
+</div>
+<div class="space-y-3">
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center text-teal-800">
+<span class="material-symbols-outlined text-2xl text-teal-800" data-icon="bolt">bolt</span>
+</div>
+<span class="w-5 h-5 rounded-full bg-teal-700 text-white flex items-center justify-center text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="check">check</span>
+</span>
+</div>
+<div>
+<h3 class="font-headline font-semibold text-stone-900 text-base">Completarlo aquí</h3>
+<p class="text-xs text-stone-600 mt-1 leading-normal">
+                    Empieza con el pack de tu rubro: <strong class="text-stone-800">Asfalto y Pavimentos</strong> ya trae los servicios típicos de Lima listos para atender.
+                  </p>
+</div>
+<div class="p-3 bg-white/80 rounded-lg border border-teal-200 text-xs text-stone-700 space-y-1">
+<div class="flex items-center gap-1.5 font-medium text-teal-900">
+<span class="material-symbols-outlined text-sm text-teal-700" data-icon="verified">verified</span>
+<span>Pack de Asfalto predefinido</span>
+</div>
+<p class="text-[11px] text-stone-500 pl-5">
+                    Incluye imprimación MC-30, carpeta asfáltica en caliente y bacheo.
+                  </p>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-teal-100 flex items-center justify-between text-xs">
+<span class="text-stone-600 text-[11px] flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-teal-600"></span>
+                  Seleccionado por defecto para CONSTROAD
+                </span>
+<span class="font-semibold text-teal-800 text-xs">Listo</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Resumen Checklist de Activación -->
+<div class="rounded-xl border border-stone-200 bg-stone-50/70 p-4 md:p-5">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-stone-200/70">
+<span class="text-xs font-semibold uppercase tracking-wider text-stone-600 font-label flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base text-stone-500" data-icon="list_alt">list_alt</span>
+              Lo que quedará listo en Dali
+            </span>
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-stone-500 bg-white px-2 py-0.5 rounded border border-stone-200 w-fit">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              Configurado automáticamente
+            </span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+<div class="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-stone-200/70">
+<span class="material-symbols-outlined text-emerald-700 text-lg flex-shrink-0 mt-0.5" data-icon="check_circle">check_circle</span>
+<div>
+<p class="font-semibold text-stone-800">Ficha del negocio</p>
+<p class="text-[11px] text-stone-500">Datos base, horario comercial y cobertura en Lima Metropolitana.</p>
+</div>
+</div>
+<div class="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-stone-200/70">
+<span class="material-symbols-outlined text-emerald-700 text-lg flex-shrink-0 mt-0.5" data-icon="check_circle">check_circle</span>
+<div>
+<p class="font-semibold text-stone-800">Servicios y preguntas</p>
+<p class="text-[11px] text-stone-500"><span class="font-mono">4</span> servicios y <span class="font-mono">22</span> preguntas técnicas para cotizar m² exactos.</p>
+</div>
+</div>
+<div class="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-stone-200/70">
+<span class="material-symbols-outlined text-emerald-700 text-lg flex-shrink-0 mt-0.5" data-icon="check_circle">check_circle</span>
+<div>
+<p class="font-semibold text-stone-800">Preguntas frecuentes</p>
+<p class="text-[11px] text-stone-500"><span class="font-mono">0</span> iniciales — podrás agregar respuestas con un clic desde el panel.</p>
+</div>
+</div>
+<div class="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-stone-200/70">
+<span class="material-symbols-outlined text-emerald-700 text-lg flex-shrink-0 mt-0.5" data-icon="check_circle">check_circle</span>
+<div>
+<p class="font-semibold text-stone-800">Catálogo de agregados</p>
+<p class="text-[11px] text-stone-500">Opcional y personalizable en cualquier momento desde tu panel web.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Acciones Finales -->
+<div class="pt-2 flex flex-col items-center gap-3">
+<button class="w-full sm:w-auto min-w-[280px] bg-teal-700 hover:bg-teal-800 text-white font-headline font-semibold px-8 py-3.5 rounded-xl text-base shadow-sm hover:shadow transition-all duration-150 flex items-center justify-center gap-2 group focus:ring-4 focus:ring-teal-100" type="button">
+<span>Terminar y probar a Dali</span>
+<span class="material-symbols-outlined text-xl transition-transform group-hover:translate-x-1" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<a class="text-xs text-stone-500 hover:text-stone-700 transition-colors py-1" href="#omitir">
+            Lo hago después (entrar al panel vacío)
+          </a>
+<!-- Garantías / Microcopy -->
+<div class="flex items-center justify-center gap-3 text-[11px] text-stone-400 mt-2 font-label">
+<span>14 días de prueba gratis</span>
+<span class="text-stone-300">•</span>
+<span>Sin tarjeta de crédito</span>
+<span class="text-stone-300">•</span>
+<span>Modificable 24/7 en tu panel</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Pie de página (Source of Truth JSON Footer) -->
+<footer class="bg-stone-50 border-t border-stone-200 mt-12 py-6">
+<div class="max-w-5xl mx-auto px-4 md:px-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-body text-stone-500">
+<div class="text-stone-700 font-medium">
+        © 2024 Dali.pe — Asistente de WhatsApp para negocios en Perú
+      </div>
+<div class="flex items-center gap-5">
+<a class="hover:text-stone-900 underline transition-colors duration-150" href="#soporte">Soporte en Perú (+51)</a>
+<a class="hover:text-stone-900 underline transition-colors duration-150" href="#terminos">Términos del servicio</a>
+<a class="hover:text-stone-900 underline transition-colors duration-150" href="#privacidad">Privacidad</a>
+</div>
+</div>
+</footer>
+</body></html>
