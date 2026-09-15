@@ -49,11 +49,16 @@ export const enviarAOperaciones = async (texto: string): Promise<boolean> => {
 };
 
 /**
- * Publica una propuesta en operaciones y le anota el id del mensaje: ese id es
- * lo que una respuesta citada trae, y es lo único que puede aprobarla.
+ * Publica una propuesta y le anota el id del mensaje: ese id es lo que una
+ * respuesta citada trae, y es lo único que puede aprobarla.
+ *
+ * DÓNDE: en el grupo que se escucha (INFRAMAQ admin), que es donde están los
+ * que deciden. José, 14/09 (19:30): «Lila aún no me ha preguntado en el grupo
+ * de Inframaq Admin… con la sugerencia del mensaje para yo decirle sí». Hasta
+ * entonces iba a error tracking (la prueba); sin alcance resuelto, sigue ahí.
  */
-export const publicarPropuesta = async (propuesta: Propuesta, textoPublicado: string): Promise<boolean> => {
-  const destino = destinoPermitido();
+export const publicarPropuesta = async (propuesta: Propuesta, textoPublicado: string, alcance?: AlcanceAgente): Promise<boolean> => {
+  const destino = alcance?.grupoEscuchado || destinoPermitido();
   if (!destino) return false;
   const msgId = await mandar(destino, textoPublicado);
   if (msgId) anotarMensaje(propuesta.id, msgId);
@@ -82,18 +87,20 @@ const grupoDeConsultas = (destino: string, alcance: AlcanceAgente): string | nul
 };
 
 /**
- * La única respuesta que sale con el agente APAGADO: decir que está apagado
- * («@lila estás encendida?»), en el grupo donde lo preguntaron. Solo a los
- * grupos donde se atienden consultas; el interruptor no lo frena porque es
- * justamente lo que se quiere saber.
+ * Un aviso corto en el grupo donde pasó algo (el estado del interruptor, el
+ * resultado de un voto): solo a los grupos donde se atienden consultas. Sale
+ * aunque el agente esté APAGADO —«@lila estás encendida?» es justamente lo que
+ * se quiere saber— porque no propone ni manda nada a nadie más.
  */
-export const responderEstado = async (destino: string, texto: string, alcance: AlcanceAgente): Promise<boolean> => {
+export const avisarEnGrupo = async (destino: string, texto: string, alcance: AlcanceAgente): Promise<boolean> => {
   if (!AGENTE_ACTIVO) return false;
   const jid = grupoDeConsultas(destino, alcance);
   if (!jid) return false;
   await mandar(jid, texto);
   return true;
 };
+/** @deprecated nombre anterior. */
+export const responderEstado = avisarEnGrupo;
 
 /**
  * «ESCRIBIENDO…» DESDE QUE SE ENTIENDE LA PREGUNTA, no desde que la respuesta

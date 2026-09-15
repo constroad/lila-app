@@ -12,7 +12,7 @@ import {
 import { normalizarTexto } from './checklist.js';
 import { hidratarMensajes, recordarMensaje } from './almacen.js';
 import { decidir, esVoto, hidratarPropuestas, type MotivoRechazo } from './sugerencias.js';
-import { enviarAOperaciones, enviarAprobado, responderEstado } from './emisor.js';
+import { avisarEnGrupo, enviarAOperaciones, enviarAprobado } from './emisor.js';
 import { cargarAprobadores, esAdmin, esAprobador } from './aprobadores.js';
 import { apagar, comandoInterruptor, encender, estadoInterruptor, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
 import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje } from './persistencia.js';
@@ -230,7 +230,7 @@ export const observarParaChecklist = async (
         // Un voto cita una propuesta; una elección es un número suelto tras una
         // pregunta del agente. El voto se prueba primero: si cita, es voto.
         if (esVoto(texto) && citaDe(raw.message)) {
-          await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien }, alcance);
+          await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance);
           continue;
         }
         // Las consultas también se atienden acá: es nuestro grupo (José, 13/09).
@@ -253,7 +253,7 @@ export const observarParaChecklist = async (
             if (citaAlBot(raw.message, propios)) return atenderContinuacion(texto, quien, remoteJid, alcance, true);
             const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
             if (!fue && /^\s*\d{1,2}\s*$/.test(texto) && esVoto(texto)) {
-              await atenderVoto({ voto: texto, citaMsgId: '', quien }, alcance);
+              await atenderVoto({ voto: texto, citaMsgId: '', quien, origen: remoteJid }, alcance);
             }
           })
           .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
@@ -274,6 +274,12 @@ export const observarParaChecklist = async (
         const comando = comandoInterruptor(texto);
         if (comando) {
           await atenderInterruptor(comando, quien, remoteJid, alcance);
+          continue;
+        }
+        // Las propuestas ahora se publican acá (José, 14/09): el voto —«1» o
+        // «3» citando la propuesta— también se atiende acá, y solo de un admin.
+        if (esVoto(texto) && citaDe(raw.message)) {
+          await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance);
           continue;
         }
         void import('../consultas/index.js')
@@ -330,11 +336,14 @@ export const observarParaChecklist = async (
  * Nunca lanza: cuelga del listener de Baileys.
  */
 const atenderVoto = async (
-  args: { voto: string; citaMsgId: string; quien: string },
+  args: { voto: string; citaMsgId: string; quien: string; origen?: string },
   alcance: AlcanceAgente
 ): Promise<void> => {
+  // Se contesta donde se votó: en INFRAMAQ admin o en operaciones.
+  const origen = args.origen || GROUP_ERRORS_TRACKING;
+  const avisar = (texto: string) => avisarEnGrupo(origen, texto, alcance);
   try {
-    const aprobador = await esAprobador(args.quien);
+    const aprobador = await esAprobador(args.quien, Date.now(), origen);
     const resultado = decidir({ ...args, esAprobador: aprobador });
     if (resultado.ok === false) {
       const explicacion: Record<MotivoRechazo, string> = {
@@ -344,20 +353,20 @@ const atenderVoto = async (
         'no-aprobador': 'de alguien que no está en el grupo de operaciones: se ignora',
         'no-es-voto': 'que no es un voto',
       };
-      logger.info(`[agente] «${args.voto}» de ${args.quien} en operaciones, ${explicacion[resultado.motivo]}`);
+      logger.info(`[agente] «${args.voto}» de ${args.quien} en ${origen === GROUP_ERRORS_TRACKING ? 'operaciones' : alcance.nombreGrupo || origen}, ${explicacion[resultado.motivo]}`);
       if (resultado.motivo === 'no-aprobador') {
-        await enviarAOperaciones('🔒 Solo quien está en este grupo puede aprobar o descartar.');
+        await avisar(origen === GROUP_ERRORS_TRACKING ? '🔒 Solo quien está en este grupo puede aprobar o descartar.' : '🔒 Solo un administrador de este grupo puede aprobar o descartar.');
       }
       return;
     }
     const propuesta = resultado.propuesta;
     if (propuesta.estado === 'descartada') {
       logger.info(`[agente] propuesta ${propuesta.id} (${propuesta.tipo}) descartada por ${args.quien}`);
-      await enviarAOperaciones(`🗑 Descartado. No se mandó a «${propuesta.nombreDestino}».`);
+      await avisar(`🗑 Descartado. No se mandó a «${propuesta.nombreDestino}».`);
       return;
     }
     const enviada = await enviarAprobado(propuesta, alcance);
-    await enviarAOperaciones(
+    await avisar(
       enviada
         ? `✅ Enviado a «${propuesta.nombreDestino}».`
         : `⛔ No se pudo mandar a «${propuesta.nombreDestino}»: revisá el log de lila.`
@@ -381,21 +390,21 @@ const atenderInterruptor = async (comando: 'off' | 'on' | 'estado', quien: strin
       // Responde aunque esté apagado, y en el grupo donde lo preguntaron: es la
       // única forma de saberlo desde el celular.
       const { apagado } = estadoInterruptor();
-      await responderEstado(grupo, apagado ? '⏸ Estoy apagada. Un administrador me prende con «@lila on».' : '▶️ Estoy encendida. Un administrador me apaga con «@lila off».', alcance);
+      await avisarEnGrupo(grupo, apagado ? '⏸ Estoy apagada. Un administrador me prende con «@lila on».' : '▶️ Estoy encendida. Un administrador me apaga con «@lila off».', alcance);
       return;
     }
-    if (!(await esAdmin(quien))) {
-      logger.info(`[agente] «!lila ${comando}» de ${quien}, que no administra el grupo: se ignora`);
-      await enviarAOperaciones('🔒 Solo un administrador de este grupo puede apagar o prender el agente.');
+    if (!(await esAdmin(quien, Date.now(), grupo))) {
+      logger.info(`[agente] «lila ${comando}» de ${quien}, que no administra el grupo: se ignora`);
+      await avisarEnGrupo(grupo, '🔒 Solo un administrador de este grupo puede apagar o prender el agente.', alcance);
       return;
     }
     const estado = comando === 'off' ? apagar(quien) : encender(quien);
     await guardarConfig('interruptor', estado);
     logger.warn(`[agente] interruptor: ${comando.toUpperCase()} por ${quien}`);
-    await enviarAOperaciones(
-      comando === 'off'
-        ? '⏸ Agente APAGADO. Sigue escuchando pero no propone ni manda nada. «@lila on» para prenderlo.'
-        : '▶️ Agente PRENDIDO.'
+    await avisarEnGrupo(
+      grupo,
+      comando === 'off' ? '⏸ Agente APAGADO. Sigue escuchando pero no propone ni manda nada. «@lila on» para prenderlo.' : '▶️ Agente PRENDIDO.',
+      alcance
     );
   } catch (error) {
     logger.warn(`[agente] no pude atender «!lila ${comando}»: ${error instanceof Error ? error.message : String(error)}`);

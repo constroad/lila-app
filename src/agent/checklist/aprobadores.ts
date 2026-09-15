@@ -17,15 +17,18 @@ import { COMPANY_PILOTO } from './alcance.js';
  */
 
 const CACHE_MS = 10 * 60_000;
-let cache: { admins: Set<string>; miembros: Set<string>; at: number } | null = null;
+type Roster = { admins: Set<string>; miembros: Set<string>; at: number };
+/** Un roster por grupo: el de operaciones y el que se escucha (INFRAMAQ admin). */
+const caches = new Map<string, Roster>();
 
 /** Solo para tests. */
-export const _resetAprobadores = (): void => void (cache = null);
+export const _resetAprobadores = (): void => caches.clear();
 
 /** `51949376824:12@s.whatsapp.net` y `51949376824@s.whatsapp.net` son la misma persona. */
 export const sinDispositivo = (jid: string): string => String(jid || '').replace(/:\d+@/, '@');
 
-const cargar = async (ahoraMs = Date.now()): Promise<{ admins: Set<string>; miembros: Set<string> }> => {
+const cargar = async (ahoraMs = Date.now(), grupo: string = GROUP_ERRORS_TRACKING): Promise<{ admins: Set<string>; miembros: Set<string> }> => {
+  const cache = caches.get(grupo);
   if (cache && ahoraMs - cache.at < CACHE_MS) return cache;
   try {
     const { getCompanyModel } = await import('../../database/models.js');
@@ -35,14 +38,15 @@ const cargar = async (ahoraMs = Date.now()): Promise<{ admins: Set<string>; miem
       | null;
     const sender = String(company?.whatsappConfig?.sender || '');
     const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
-    const { admins, miembros } = await WhatsAppDirectService.groupRoster(sender, GROUP_ERRORS_TRACKING);
-    cache = { admins: new Set(admins.map(sinDispositivo)), miembros: new Set(miembros.map(sinDispositivo)), at: ahoraMs };
+    const { admins, miembros } = await WhatsAppDirectService.groupRoster(sender, grupo);
+    const nuevo: Roster = { admins: new Set(admins.map(sinDispositivo)), miembros: new Set(miembros.map(sinDispositivo)), at: ahoraMs };
+    caches.set(grupo, nuevo);
     logger.info(
-      `[agente] grupo de operaciones: ${miembros.length} miembro(s) pueden aprobar; admins (pueden apagar): ${admins.join(', ') || '(ninguno)'}`
+      `[agente] grupo ${grupo === GROUP_ERRORS_TRACKING ? 'de operaciones' : grupo}: ${miembros.length} miembro(s); admins: ${admins.join(', ') || '(ninguno)'}`
     );
-    return cache;
+    return nuevo;
   } catch (error) {
-    logger.warn(`[agente] no pude leer el grupo de operaciones: ${error instanceof Error ? error.message : String(error)}`);
+    logger.warn(`[agente] no pude leer el grupo ${grupo}: ${error instanceof Error ? error.message : String(error)}`);
     return cache ?? { admins: new Set(), miembros: new Set() };
   }
 };
@@ -50,10 +54,16 @@ const cargar = async (ahoraMs = Date.now()): Promise<{ admins: Set<string>; miem
 /** Compatibilidad: lo que se loguea al arrancar. */
 export const cargarAprobadores = async (ahoraMs = Date.now()): Promise<Set<string>> => (await cargar(ahoraMs)).miembros;
 
-/** Cualquiera del grupo de operaciones aprueba o descarta. */
-export const esAprobador = async (jid: string, ahoraMs = Date.now()): Promise<boolean> =>
-  (await cargar(ahoraMs)).miembros.has(sinDispositivo(jid));
+/**
+ * Quién aprueba o descarta una propuesta, según DÓNDE se publicó: en el grupo
+ * de operaciones, cualquiera (es nuestro); en el grupo que se escucha (INFRAMAQ
+ * admin, donde están los clientes de la planta), solo sus ADMINISTRADORES.
+ */
+export const esAprobador = async (jid: string, ahoraMs = Date.now(), grupo: string = GROUP_ERRORS_TRACKING): Promise<boolean> => {
+  const roster = await cargar(ahoraMs, grupo);
+  return grupo === GROUP_ERRORS_TRACKING ? roster.miembros.has(sinDispositivo(jid)) : roster.admins.has(sinDispositivo(jid));
+};
 
-/** Solo un administrador apaga o prende. */
-export const esAdmin = async (jid: string, ahoraMs = Date.now()): Promise<boolean> =>
-  (await cargar(ahoraMs)).admins.has(sinDispositivo(jid));
+/** Solo un administrador apaga o prende (del grupo de operaciones o del que se escucha). */
+export const esAdmin = async (jid: string, ahoraMs = Date.now(), grupo: string = GROUP_ERRORS_TRACKING): Promise<boolean> =>
+  (await cargar(ahoraMs, grupo)).admins.has(sinDispositivo(jid));

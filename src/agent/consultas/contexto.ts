@@ -19,7 +19,14 @@ export interface UltimaConsulta {
   ms: number;
 }
 
-export const VIGENCIA_HILO_MS = 3 * 60_000;
+/**
+ * El hilo dura el DÍA de trabajo, no tres minutos: «@lila ¿y en Ate?» dos
+ * horas después de «clima en La Molina» sigue siendo la misma conversación.
+ * Antes eran 3 min porque el hilo también disparaba respuestas sin etiqueta;
+ * desde el 14/09 solo se contesta etiquetada o citada, y el hilo solo aporta
+ * CONTEXTO (José: «sí debería guardar el histórico, al menos del día»).
+ */
+export const VIGENCIA_HILO_MS = 12 * 60 * 60_000;
 const hilos = new Map<string, UltimaConsulta>();
 
 /** Solo para tests. */

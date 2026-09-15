@@ -1,4 +1,5 @@
 import { ALIAS_EMPRESA, fechaDe, hoyLima, normalizar, normalizarPlaca, sumarDias, type ClaveConsulta } from '../consultas/catalogo.js';
+import { REGLAS_INFORMES } from './informes.js';
 import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
 import { COMPANY_PILOTO } from '../checklist/alcance.js';
 
@@ -18,10 +19,10 @@ import { COMPANY_PILOTO } from '../checklist/alcance.js';
  * (`datos.ts`) y se responden con una ficha (`fichas.ts`).
  */
 
-export type HerramientaDeDatos = 'clientes' | 'proveedores' | 'pedidos' | 'kardex' | 'ingresos_agregados' | 'certificados_pendientes';
+export type HerramientaDeDatos = 'clientes' | 'proveedores' | 'pedidos' | 'kardex' | 'ingresos_agregados' | 'certificados_pendientes' | 'informes';
 export type IdHerramienta = ClaveConsulta | HerramientaDeDatos;
 
-export const HERRAMIENTAS_DE_DATOS: readonly HerramientaDeDatos[] = ['clientes', 'proveedores', 'pedidos', 'kardex', 'ingresos_agregados', 'certificados_pendientes'];
+export const HERRAMIENTAS_DE_DATOS: readonly HerramientaDeDatos[] = ['clientes', 'proveedores', 'pedidos', 'kardex', 'ingresos_agregados', 'certificados_pendientes', 'informes'];
 export const esHerramientaDeDatos = (id: string): id is HerramientaDeDatos =>
   (HERRAMIENTAS_DE_DATOS as readonly string[]).includes(id);
 
@@ -67,6 +68,13 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
   { id: 'kardex', descripcion: 'ingresos, salidas y movimientos de UN material en un rango de fechas', argumentos: ['nombre', 'desde', 'hasta', 'empresa'], historial: true },
   { id: 'ingresos_agregados', descripcion: 'cuántos agregados / insumos llegaron o se recibieron (camiones por proveedor) en un día o rango', argumentos: ['desde', 'hasta', 'empresa'], historial: true, reglas: [['llegaron'], ['llego'], ['llegado'], ['ingresaron'], ['ingreso', 'agregado'], ['ingresos', 'agregado'], ['ingreso', 'material'], ['ingresos', 'material'], ['entrada', 'material'], ['entradas', 'material'], ['recibimos'], ['recepcion'], ['insumo'], ['insumos'], ['cuanto', 'llego']] },
   { id: 'certificados_pendientes', descripcion: 'qué pedidos despachados no tienen certificado cargado / certificados pendientes (por cliente), en un rango', argumentos: ['desde', 'hasta', 'empresa'], historial: true, reglas: [['certificado'], ['certificados']] },
+  {
+    id: 'informes',
+    descripcion: 'mandar el PDF de un informe de servicio (producción de planta / IPP, control de pista, imprimación, área adicional, valorización, acta, panel fotográfico…) de una obra o cliente, de una fecha',
+    argumentos: ['nombre', 'fecha', 'desde', 'hasta', 'empresa'],
+    historial: true,
+    reglas: REGLAS_INFORMES,
+  },
 ];
 
 /** Las herramientas de datos que se reconocen por regla, sin modelo: las que no necesitan un nombre. */

@@ -1129,9 +1129,9 @@ var require_jws = __commonJS({
 var require_decode = __commonJS({
   "node_modules/jsonwebtoken/decode.js"(exports, module) {
     var jws = require_jws();
-    module.exports = function(jwt9, options2) {
+    module.exports = function(jwt10, options2) {
       options2 = options2 || {};
-      var decoded = jws.decode(jwt9, options2);
+      var decoded = jws.decode(jwt10, options2);
       if (!decoded) {
         return null;
       }
@@ -2284,7 +2284,7 @@ var require_range = __commonJS({
       parseRange(range) {
         const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
         const memoKey = memoOpts + ":" + range;
-        const cached2 = cache3.get(memoKey);
+        const cached2 = cache2.get(memoKey);
         if (cached2) {
           return cached2;
         }
@@ -2318,7 +2318,7 @@ var require_range = __commonJS({
           rangeMap.delete("");
         }
         const result = [...rangeMap.values()];
-        cache3.set(memoKey, result);
+        cache2.set(memoKey, result);
         return result;
       }
       intersects(range, options2) {
@@ -2357,7 +2357,7 @@ var require_range = __commonJS({
     };
     module.exports = Range;
     var LRU = require_lrucache();
-    var cache3 = new LRU();
+    var cache2 = new LRU();
     var parseOptions = require_parse_options();
     var Comparator = require_comparator();
     var debug = require_debug();
@@ -7154,8 +7154,8 @@ var init_whatsapp_direct_service = __esm({
       lidDeTelefono: async (id, telefono) => {
         const digitos = String(telefono || "").replace(/\D/g, "");
         if (!digitos) return null;
-        const cache3 = lidsPorTelefono.get(id) ?? /* @__PURE__ */ new Map();
-        if (cache3.has(digitos)) return cache3.get(digitos) ?? null;
+        const cache2 = lidsPorTelefono.get(id) ?? /* @__PURE__ */ new Map();
+        if (cache2.has(digitos)) return cache2.get(digitos) ?? null;
         const sock = getSession(id);
         if (!sock) return null;
         let lid = null;
@@ -7166,8 +7166,8 @@ var init_whatsapp_direct_service = __esm({
         } catch {
           lid = null;
         }
-        cache3.set(digitos, lid);
-        lidsPorTelefono.set(id, cache3);
+        cache2.set(digitos, lid);
+        lidsPorTelefono.set(id, cache2);
         return lid;
       },
       /**
@@ -8116,11 +8116,11 @@ var init_anthropic_provider = __esm({
             },
             { timeout: timeoutMs }
           );
-          const texto4 = respuesta.content.filter((b63) => b63.type === "text").map((b63) => b63.text).join("\n").trim();
+          const texto5 = respuesta.content.filter((b63) => b63.type === "text").map((b63) => b63.text).join("\n").trim();
           const llamadas = respuesta.content.filter((b63) => b63.type === "tool_use").map((b63) => ({ id: b63.id, nombre: b63.name, argumentos: b63.input ?? {} }));
           const uso = respuesta.usage;
           return {
-            texto: texto4 || void 0,
+            texto: texto5 || void 0,
             llamadas: llamadas.length ? llamadas : void 0,
             uso: { entrada: uso.input_tokens, salida: uso.output_tokens, cacheLeida: uso.cache_read_input_tokens ?? void 0, cacheEscrita: uso.cache_creation_input_tokens ?? void 0 },
             motivo: respuesta.stop_reason === "tool_use" ? "herramientas" : respuesta.stop_reason === "max_tokens" ? "tope" : "fin"
@@ -8150,9 +8150,9 @@ var init_openai_compat_provider = __esm({
       return mensajes2;
     };
     aTools = (lista) => lista.map((h65) => ({ type: "function", function: { name: h65.nombre, description: h65.descripcion, parameters: h65.parametros } }));
-    parsearArgumentos = (texto4) => {
+    parsearArgumentos = (texto5) => {
       try {
-        const v55 = JSON.parse(texto4 || "{}");
+        const v55 = JSON.parse(texto5 || "{}");
         return v55 && typeof v55 === "object" ? v55 : {};
       } catch {
         return {};
@@ -8180,9 +8180,9 @@ var init_openai_compat_provider = __esm({
           const data = await res.json();
           const eleccion = data.choices?.[0];
           const llamadas = (eleccion?.message?.tool_calls ?? []).map((c66) => ({ id: c66.id, nombre: c66.function.name, argumentos: parsearArgumentos(c66.function.arguments) }));
-          const texto4 = String(eleccion?.message?.content || "").trim();
+          const texto5 = String(eleccion?.message?.content || "").trim();
           return {
-            texto: texto4 || void 0,
+            texto: texto5 || void 0,
             llamadas: llamadas.length ? llamadas : void 0,
             uso: { entrada: data.usage?.prompt_tokens ?? 0, salida: data.usage?.completion_tokens ?? 0, cacheLeida: data.usage?.prompt_tokens_details?.cached_tokens },
             motivo: llamadas.length ? "herramientas" : eleccion?.finish_reason === "length" ? "tope" : "fin"
@@ -8421,7 +8421,7 @@ var init_modelo = __esm({
           const controlador = new AbortController();
           const timer3 = setTimeout(() => controlador.abort(), pedido.timeoutMs);
           try {
-            const texto4 = await entrada.sesion.prompt(pedido.usuario, {
+            const texto5 = await entrada.sesion.prompt(pedido.usuario, {
               grammar,
               maxTokens: pedido.maxTokens,
               temperature: pedido.temperatura ?? 0,
@@ -8429,7 +8429,7 @@ var init_modelo = __esm({
               stopOnAbortSignal: false
             });
             logger_default.info(`[agente] llm ${pedido.tarea}: ${((Date.now() - inicio) / 1e3).toFixed(1)} s`);
-            return texto4;
+            return texto5;
           } finally {
             clearTimeout(timer3);
           }
@@ -8506,8 +8506,8 @@ var init_qwen_provider = __esm({
       const lead = Object.fromEntries(Object.entries(salida.lead ?? {}).filter(([, v55]) => v55 !== "" && v55 !== void 0 && v55 !== null && v55 !== false));
       if (Object.keys(lead).length) llamadas.push({ id: "lead", nombre: "guardar_lead", argumentos: lead });
       if (salida.escalar === true) llamadas.push({ id: "escalar", nombre: "escalar_a_humano", argumentos: { motivo: String(salida.motivo_escalada || "el modelo decidi\xF3 escalar") } });
-      const texto4 = String(salida.respuesta || "").trim();
-      return { texto: texto4 || void 0, llamadas: llamadas.length ? llamadas : void 0, uso: { entrada: 0, salida: 0 }, motivo: "fin" };
+      const texto5 = String(salida.respuesta || "").trim();
+      return { texto: texto5 || void 0, llamadas: llamadas.length ? llamadas : void 0, uso: { entrada: 0, salida: 0 }, motivo: "fin" };
     };
     crearProveedorQwen = () => ({
       nombre: "qwen-local",
@@ -8839,8 +8839,8 @@ var init_guiado = __esm({
       for (let i50 = 0; i50 < 2; i50++) t44 = t44.replace(/^(a nombre de|mi nombre es|me llamo|seria en|es en|seria|soy|en|es|para|desde|hasta)\s+/i, "");
       return t44.slice(0, 120);
     };
-    separarNombreEmpresa = (texto4) => {
-      const limpio2 = limpiarTexto(texto4);
+    separarNombreEmpresa = (texto5) => {
+      const limpio2 = limpiarTexto(texto5);
       const m59 = limpio2.match(/^(.+?)\s+(?:de la empresa|de la constructora|de la|del|de)\s+(.+)$/i);
       if (m59 && m59[1].split(" ").length <= 4 && (EMPRESA_RE.test(m59[2]) || m59[2] === m59[2].toUpperCase() && /[A-Z]/.test(m59[2]))) return { nombre: m59[1].trim(), empresa: m59[2].trim() };
       return { nombre: limpio2 };
@@ -9442,6 +9442,7 @@ __export(models_exports, {
   getOrderModel: () => getOrderModel,
   getProviderModel: () => getProviderModel,
   getPublicLinkModel: () => getPublicLinkModel,
+  getServiceManagementModel: () => getServiceManagementModel,
   getServiceReportModel: () => getServiceReportModel,
   getSharedModels: () => getSharedModels,
   getUsageMetricModel: () => getUsageMetricModel
@@ -9502,6 +9503,12 @@ async function getServiceReportModel() {
   const conn = await getSharedConnection();
   serviceReportModel = conn.models.ServiceManagementReport || conn.model("ServiceManagementReport", looseSchema, "servicemanagementreports");
   return serviceReportModel;
+}
+async function getServiceManagementModel() {
+  if (serviceManagementModel) return serviceManagementModel;
+  const conn = await getSharedConnection();
+  serviceManagementModel = conn.models.ServiceManagementLoose || conn.model("ServiceManagementLoose", looseSchema, "servicemanagements");
+  return serviceManagementModel;
 }
 async function getControlTankModel() {
   if (controlTankModel) return controlTankModel;
@@ -9595,7 +9602,7 @@ async function getSharedModels() {
   ]);
   return { CronJobModel, CompanyModel, ConfigModel };
 }
-var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, publicLinkModel, serviceReportModel, controlTankModel, consumeModel, materialModel, clientModel, providerModel, kardexModel, inputModel, academyTutorialModel, gpsPositionModel;
+var cronJobModel, companyModel, configModel, usageMetricModel, looseSchema, orderModel, mediaModel, folderModel, dispatchModel, publicLinkModel, serviceReportModel, serviceManagementModel, controlTankModel, consumeModel, materialModel, clientModel, providerModel, kardexModel, inputModel, academyTutorialModel, gpsPositionModel;
 var init_models = __esm({
   "src/database/models.ts"() {
     init_sharedConnection();
@@ -9614,6 +9621,7 @@ var init_models = __esm({
     dispatchModel = null;
     publicLinkModel = null;
     serviceReportModel = null;
+    serviceManagementModel = null;
     controlTankModel = null;
     consumeModel = null;
     materialModel = null;
@@ -9861,22 +9869,22 @@ var init_runtime = __esm({
           turnos.push({ rol: "resultado", resultados });
           if (respuesta.motivo === "herramientas" || !respuesta.texto) continue;
         }
-        const texto4 = String(respuesta.texto || "").trim();
-        if (!texto4) break;
-        if (params.ultimaRespuestaBot && texto4 === params.ultimaRespuestaBot.trim()) break;
-        const seguro = respuestaSegura(texto4);
+        const texto5 = String(respuesta.texto || "").trim();
+        if (!texto5) break;
+        if (params.ultimaRespuestaBot && texto5 === params.ultimaRespuestaBot.trim()) break;
+        const seguro = respuestaSegura(texto5);
         if (seguro.ok === false) {
           usadas.push("escalar_a_humano");
           await params.contexto.escalar(`respuesta bloqueada: ${seguro.motivo}`);
           return { texto: RESPUESTA_FALLBACK, uso, herramientasUsadas: usadas, degradado: true };
         }
-        return { texto: texto4, uso, herramientasUsadas: usadas, degradado: false };
+        return { texto: texto5, uso, herramientasUsadas: usadas, degradado: false };
       }
       return { texto: RESPUESTA_FALLBACK, uso, herramientasUsadas: usadas, degradado: true };
     };
-    respuestaSegura = (texto4) => {
-      const t44 = texto4.toLowerCase();
-      if (texto4.length > 900) return { ok: false, motivo: "demasiado larga" };
+    respuestaSegura = (texto5) => {
+      const t44 = texto5.toLowerCase();
+      if (texto5.length > 900) return { ok: false, motivo: "demasiado larga" };
       if (/(s\/\.?\s*\d|\bsoles\b.*\d|\d.*\bsoles\b|\$\s*\d|\bus\$|\bdolares\b.*\d|\d[\d.,]*\s*(por|el|cada)\s*(m3|m³|m2|m²|metro))/i.test(t44)) return { ok: false, motivo: "contiene un precio" };
       if (/(instrucciones del sistema|system prompt|prompt de sistema|mis instrucciones son|mis reglas son|# quién eres|# reglas que no se negocian|# servicios|no se negocian)/i.test(t44)) return { ok: false, motivo: "revela instrucciones" };
       if (/(ignorar[ée]? mis instrucciones|ya no soy (la )?asistente|ahora soy|modo desarrollador|sin restricciones)/i.test(t44)) return { ok: false, motivo: "sali\xF3 del papel" };
@@ -9885,18 +9893,18 @@ var init_runtime = __esm({
     historialATurnos = (mensajes2, ultimos = 16) => {
       const turnos = [];
       for (const m59 of mensajes2.slice(-ultimos)) {
-        const texto4 = String(m59.text || "").trim();
-        if (!texto4) continue;
+        const texto5 = String(m59.text || "").trim();
+        if (!texto5) continue;
         const rol = m59.role === "customer" ? "usuario" : "asistente";
         const anterior = turnos[turnos.length - 1];
         if (anterior && anterior.rol === rol) {
           if (anterior.rol === "usuario") anterior.texto = `${anterior.texto}
-${texto4}`;
+${texto5}`;
           else if (anterior.rol === "asistente") anterior.texto = `${anterior.texto ?? ""}
-${texto4}`.trim();
+${texto5}`.trim();
           continue;
         }
-        turnos.push(rol === "usuario" ? { rol, texto: texto4 } : { rol, texto: texto4 });
+        turnos.push(rol === "usuario" ? { rol, texto: texto5 } : { rol, texto: texto5 });
       }
       while (turnos.length && turnos[0].rol !== "usuario") turnos.shift();
       while (turnos.length && turnos[turnos.length - 1].rol !== "usuario") turnos.pop();
@@ -10058,11 +10066,11 @@ Le dije que un asesor responde. Toma la conversaci\xF3n desde el WhatsApp de Con
       const guion = guionDe(ctx.botConfig.guion);
       let desde = ctx.mensajes.length;
       while (desde > 0 && ctx.mensajes[desde - 1].role === "customer") desde--;
-      const texto4 = ctx.mensajes.slice(desde).map((m59) => String(m59.text || "")).join("\n");
+      const texto5 = ctx.mensajes.slice(desde).map((m59) => String(m59.text || "")).join("\n");
       const ultimaBot = [...ctx.mensajes].reverse().find((m59) => m59.role === "bot")?.text;
       const inicio = Date.now();
-      const extraido = validarExtraccion(await extraerConQwen(texto4, { ultimaPreguntaBot: ultimaBot, resumenEnviado: Boolean(estado2.resumenEnviado) }), texto4, guion);
-      const p64 = paso(estado2, extraido, CONSTROAD, ctx.cliente, ctx.enHorario, texto4, guion);
+      const extraido = validarExtraccion(await extraerConQwen(texto5, { ultimaPreguntaBot: ultimaBot, resumenEnviado: Boolean(estado2.resumenEnviado) }), texto5, guion);
+      const p64 = paso(estado2, extraido, CONSTROAD, ctx.cliente, ctx.enHorario, texto5, guion);
       const lead = leadDe(guion, p64.estado);
       const guardar = paraGuardar(guion, p64.estado);
       if (p64.guardar) await notificarLead(lead, guardar, { ...ctx, nombreCliente: ctx.cliente?.nombre ?? ctx.conversacion.customerName }, deps);
@@ -10077,7 +10085,7 @@ Le dije que un asesor responde. Toma la conversaci\xF3n desde el WhatsApp de Con
           await deps.notificar(String(ctx.botConfig.ownerNotifyTarget), `\u{1F64B} *Cliente pide atenci\xF3n \u2014 ${CONSTROAD.nombre}*
 \u{1F464} ${quien ?? "sin nombre"} \xB7 ${telefonoLegible(ctx.customerPhone)}
 Motivo: ${p64.escalar}
-\xDAltimo mensaje: \xAB${texto4.slice(0, 160)}\xBB
+\xDAltimo mensaje: \xAB${texto5.slice(0, 160)}\xBB
 El bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
         }
       }
@@ -10089,8 +10097,8 @@ El bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
     };
     atenderMensajeDelDueno = async (message, companyId, botConfig, deps) => {
       if (!companyId) return;
-      const texto4 = message.text.trim();
-      const comando = texto4.toLowerCase().replace(/\s+/g, " ");
+      const texto5 = message.text.trim();
+      const comando = texto5.toLowerCase().replace(/\s+/g, " ");
       if (comando === "!bot off" || comando === "!bot on") {
         await deps.setBotEnabled(companyId, comando === "!bot on");
         await deps.notificar(message.remoteJid, comando === "!bot on" ? "\u{1F916} Bot de ventas encendido." : "\u{1F916} Bot de ventas apagado. Escribe !bot on para prenderlo.");
@@ -10100,7 +10108,7 @@ El bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
       if (!conversacion) return;
       const minutos = comando === "!pausa" ? 24 * 60 : botConfig?.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN;
       await pausarConversacion(conversacion.id, minutos, "owner");
-      if (comando !== "!pausa") await guardarMensajeDueno(companyId, conversacion.id, texto4);
+      if (comando !== "!pausa") await guardarMensajeDueno(companyId, conversacion.id, texto5);
       logger_default.info(`[dali] el due\xF1o tom\xF3 la conversaci\xF3n con ${message.remoteJid}: bot en pausa ${minutos} min`);
     };
   }
@@ -10261,9 +10269,9 @@ var init_agent_wiring = __esm({
     AGENT_SEND_TIMEOUT_MS = 3e4;
     rateLimiter = new JidRateLimiter(8, 6e4);
     sessionContextCache = /* @__PURE__ */ new Map();
-    notificarPor = (sock) => async (target, texto4) => {
+    notificarPor = (sock) => async (target, texto5) => {
       try {
-        await sendWithAgentTimeout(`agent\u2192${target}`, sock.sendMessage(target, { text: texto4 }));
+        await sendWithAgentTimeout(`agent\u2192${target}`, sock.sendMessage(target, { text: texto5 }));
       } catch (error) {
         logger_default.warn(`Agent: no pude avisar a ${target}: ${String(error)}`);
       }
@@ -10426,7 +10434,7 @@ var init_checklist = __esm({
       }
     ];
     CHECKLIST_PRODUCCION = [...CHECKLIST_PLANTA, ...CHECKLIST_CAMPO];
-    normalizarTexto = (texto4) => String(texto4 || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+    normalizarTexto = (texto5) => String(texto5 || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
     itemSatisfecho = (item, mensajes2) => {
       const dichos = mensajes2.map(normalizarTexto);
       return item.seSatisfaceCon.some((frase) => {
@@ -10470,12 +10478,15 @@ var init_almacen = __esm({
 
 // src/agent/checklist/sugerencias.ts
 import { randomUUID as randomUUID4 } from "crypto";
-var VIGENCIA_MS, MAX_PROPUESTAS, propuestas, hidratarPropuestas, expirar, proponer, anotarMensaje, yaPropuesta, pendientes, vencidasAhora, porMensaje, esVoto, decidir;
+var VIGENCIA_MS, MAX_PROPUESTAS, propuestas, _resetPropuestas, hidratarPropuestas, expirar, proponer, anotarMensaje, yaPropuesta, propuestasDe, pendientes, vencidasAhora, porMensaje, esVoto, decidir;
 var init_sugerencias = __esm({
   "src/agent/checklist/sugerencias.ts"() {
     VIGENCIA_MS = 6 * 60 * 60 * 1e3;
     MAX_PROPUESTAS = 500;
     propuestas = [];
+    _resetPropuestas = () => {
+      propuestas = [];
+    };
     hidratarPropuestas = (guardadas) => {
       propuestas = [...guardadas].sort((a49, b63) => a49.creadaMs - b63.creadaMs).slice(-MAX_PROPUESTAS);
     };
@@ -10509,14 +10520,15 @@ var init_sugerencias = __esm({
       expirar(ahoraMs);
       return propuestas.some((p64) => p64.tipo === tipo && p64.firma === firma && p64.estado !== "vencida");
     };
+    propuestasDe = (tipo) => propuestas.filter((p64) => p64.tipo === tipo).reverse();
     pendientes = (ahoraMs = Date.now()) => {
       expirar(ahoraMs);
       return propuestas.filter((p64) => p64.estado === "pendiente").reverse();
     };
     vencidasAhora = (ahoraMs = Date.now()) => expirar(ahoraMs);
     porMensaje = (msgId) => msgId ? propuestas.find((p64) => p64.msgId === msgId) : void 0;
-    esVoto = (texto4) => {
-      const t44 = String(texto4 || "").trim();
+    esVoto = (texto5) => {
+      const t44 = String(texto5 || "").trim();
       return t44 === "1" || t44 === "3";
     };
     decidir = (args, ahoraMs = Date.now()) => {
@@ -10685,8 +10697,8 @@ var init_interruptor = __esm({
     };
     agenteApagado = () => estado.apagado;
     estadoInterruptor = () => ({ ...estado });
-    comandoInterruptor = (texto4) => {
-      const t44 = String(texto4 || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[!@¡¿?.,]/g, " ").replace(/\s+/g, " ").trim();
+    comandoInterruptor = (texto5) => {
+      const t44 = String(texto5 || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[!@¡¿?.,]/g, " ").replace(/\s+/g, " ").trim();
       const m59 = t44.match(/^lila (.+)$/);
       if (!m59) return null;
       const orden = m59[1];
@@ -10707,7 +10719,7 @@ var init_interruptor = __esm({
 });
 
 // src/agent/checklist/emisor.ts
-var sender, mandar, enviarAOperaciones, publicarPropuesta, grupoDeConsultas, responderEstado, escribiendoEn, RENOVAR_ESCRIBIENDO_MS, TOPE_ESCRIBIENDO_MS, empezarAEscribir, dejarDeEscribir, responderEnGrupo, mandadas, enviarAprobado;
+var sender, mandar, enviarAOperaciones, publicarPropuesta, grupoDeConsultas, avisarEnGrupo, escribiendoEn, RENOVAR_ESCRIBIENDO_MS, TOPE_ESCRIBIENDO_MS, empezarAEscribir, dejarDeEscribir, responderEnGrupo, mandadas, enviarAprobado;
 var init_emisor = __esm({
   "src/agent/checklist/emisor.ts"() {
     init_logger();
@@ -10721,21 +10733,21 @@ var init_emisor = __esm({
       const company = await CompanyModel.findOne({ companyId: COMPANY_PILOTO }).lean();
       return String(company?.whatsappConfig?.sender || "");
     };
-    mandar = async (destino, texto4) => {
+    mandar = async (destino, texto5) => {
       const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
-      const resultado = await WhatsAppDirectService2.sendMessage(await sender(), destino, texto4, {
+      const resultado = await WhatsAppDirectService2.sendMessage(await sender(), destino, texto5, {
         companyId: COMPANY_PILOTO
       });
       return resultado?.key?.id || void 0;
     };
-    enviarAOperaciones = async (texto4) => {
+    enviarAOperaciones = async (texto5) => {
       const destino = destinoPermitido();
       if (!destino) return false;
-      await mandar(destino, texto4);
+      await mandar(destino, texto5);
       return true;
     };
-    publicarPropuesta = async (propuesta, textoPublicado) => {
-      const destino = destinoPermitido();
+    publicarPropuesta = async (propuesta, textoPublicado, alcance) => {
+      const destino = alcance?.grupoEscuchado || destinoPermitido();
       if (!destino) return false;
       const msgId = await mandar(destino, textoPublicado);
       if (msgId) anotarMensaje(propuesta.id, msgId);
@@ -10748,11 +10760,11 @@ var init_emisor = __esm({
       if (!jid || jid !== alcance.grupoEscuchado && jid !== grupoDestino()) return null;
       return jid;
     };
-    responderEstado = async (destino, texto4, alcance) => {
+    avisarEnGrupo = async (destino, texto5, alcance) => {
       if (!AGENTE_ACTIVO) return false;
       const jid = grupoDeConsultas(destino, alcance);
       if (!jid) return false;
-      await mandar(jid, texto4);
+      await mandar(jid, texto5);
       return true;
     };
     escribiendoEn = /* @__PURE__ */ new Map();
@@ -10862,37 +10874,42 @@ var init_emisor = __esm({
 });
 
 // src/agent/checklist/aprobadores.ts
-var CACHE_MS, cache, sinDispositivo, cargar, cargarAprobadores, esAprobador, esAdmin;
+var CACHE_MS, caches, sinDispositivo, cargar, cargarAprobadores, esAprobador, esAdmin;
 var init_aprobadores = __esm({
   "src/agent/checklist/aprobadores.ts"() {
     init_logger();
     init_whatsapp_constants();
     init_alcance();
     CACHE_MS = 10 * 6e4;
-    cache = null;
+    caches = /* @__PURE__ */ new Map();
     sinDispositivo = (jid) => String(jid || "").replace(/:\d+@/, "@");
-    cargar = async (ahoraMs = Date.now()) => {
-      if (cache && ahoraMs - cache.at < CACHE_MS) return cache;
+    cargar = async (ahoraMs = Date.now(), grupo = GROUP_ERRORS_TRACKING) => {
+      const cache2 = caches.get(grupo);
+      if (cache2 && ahoraMs - cache2.at < CACHE_MS) return cache2;
       try {
         const { getCompanyModel: getCompanyModel2 } = await Promise.resolve().then(() => (init_models(), models_exports));
         const CompanyModel = await getCompanyModel2();
         const company = await CompanyModel.findOne({ companyId: COMPANY_PILOTO }).lean();
         const sender2 = String(company?.whatsappConfig?.sender || "");
         const { WhatsAppDirectService: WhatsAppDirectService2 } = await Promise.resolve().then(() => (init_whatsapp_direct_service(), whatsapp_direct_service_exports));
-        const { admins, miembros } = await WhatsAppDirectService2.groupRoster(sender2, GROUP_ERRORS_TRACKING);
-        cache = { admins: new Set(admins.map(sinDispositivo)), miembros: new Set(miembros.map(sinDispositivo)), at: ahoraMs };
+        const { admins, miembros } = await WhatsAppDirectService2.groupRoster(sender2, grupo);
+        const nuevo = { admins: new Set(admins.map(sinDispositivo)), miembros: new Set(miembros.map(sinDispositivo)), at: ahoraMs };
+        caches.set(grupo, nuevo);
         logger_default.info(
-          `[agente] grupo de operaciones: ${miembros.length} miembro(s) pueden aprobar; admins (pueden apagar): ${admins.join(", ") || "(ninguno)"}`
+          `[agente] grupo ${grupo === GROUP_ERRORS_TRACKING ? "de operaciones" : grupo}: ${miembros.length} miembro(s); admins: ${admins.join(", ") || "(ninguno)"}`
         );
-        return cache;
+        return nuevo;
       } catch (error) {
-        logger_default.warn(`[agente] no pude leer el grupo de operaciones: ${error instanceof Error ? error.message : String(error)}`);
-        return cache ?? { admins: /* @__PURE__ */ new Set(), miembros: /* @__PURE__ */ new Set() };
+        logger_default.warn(`[agente] no pude leer el grupo ${grupo}: ${error instanceof Error ? error.message : String(error)}`);
+        return cache2 ?? { admins: /* @__PURE__ */ new Set(), miembros: /* @__PURE__ */ new Set() };
       }
     };
     cargarAprobadores = async (ahoraMs = Date.now()) => (await cargar(ahoraMs)).miembros;
-    esAprobador = async (jid, ahoraMs = Date.now()) => (await cargar(ahoraMs)).miembros.has(sinDispositivo(jid));
-    esAdmin = async (jid, ahoraMs = Date.now()) => (await cargar(ahoraMs)).admins.has(sinDispositivo(jid));
+    esAprobador = async (jid, ahoraMs = Date.now(), grupo = GROUP_ERRORS_TRACKING) => {
+      const roster = await cargar(ahoraMs, grupo);
+      return grupo === GROUP_ERRORS_TRACKING ? roster.miembros.has(sinDispositivo(jid)) : roster.admins.has(sinDispositivo(jid));
+    };
+    esAdmin = async (jid, ahoraMs = Date.now(), grupo = GROUP_ERRORS_TRACKING) => (await cargar(ahoraMs, grupo)).admins.has(sinDispositivo(jid));
   }
 });
 
@@ -11012,15 +11029,15 @@ var init_catalogo = __esm({
       }
     ];
     normalizar2 = (t44) => String(t44 || "").replace(/[\u2066-\u2069\u200e\u200f\u202a-\u202e]/g, "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
-    esConsulta = (texto4, numeroBot, mencionados = [], jidsBot = []) => {
-      const t44 = normalizar2(texto4);
+    esConsulta = (texto5, numeroBot, mencionados = [], jidsBot = []) => {
+      const t44 = normalizar2(texto5);
       if (/(^|\s)@lila\b/.test(t44)) return true;
       if (/^lila\b/.test(t44)) return true;
       if (numeroBot && t44.includes(`@${numeroBot}`)) return true;
       const propios = new Set([...jidsBot, numeroBot ? `${numeroBot}@s.whatsapp.net` : ""].filter(Boolean).map((j50) => j50.replace(/:\d+@/, "@")));
       return mencionados.some((m59) => propios.has(String(m59).replace(/:\d+@/, "@")));
     };
-    preguntaLimpia = (texto4, numeroBot) => normalizar2(texto4).replace(/@lila\b/g, "").replace(/^lila\b[,:]?/, "").replace(/@\d{6,}\b/g, "").replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, "g") : /$^/, "").replace(/\s+/g, " ").trim();
+    preguntaLimpia = (texto5, numeroBot) => normalizar2(texto5).replace(/@lila\b/g, "").replace(/^lila\b[,:]?/, "").replace(/@\d{6,}\b/g, "").replace(numeroBot ? new RegExp(`@${numeroBot}\\b`, "g") : /$^/, "").replace(/\s+/g, " ").trim();
     DIAS_SEMANA = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
     MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "setiembre", "octubre", "noviembre", "diciembre"];
     hoyLima = (ahoraMs = Date.now()) => new Date(ahoraMs - 5 * 36e5).toISOString().slice(0, 10);
@@ -11149,14 +11166,14 @@ var init_catalogo = __esm({
 });
 
 // src/agent/consultas/vista.ts
-var CACHE_MS2, cache2, slugsCache, slugsDeEmpresas, num, ms, construirVista;
+var CACHE_MS2, cache, slugsCache, slugsDeEmpresas, num, ms, construirVista;
 var init_vista = __esm({
   "src/agent/consultas/vista.ts"() {
     init_models();
     init_alcance();
     init_tiempo();
     CACHE_MS2 = 6e4;
-    cache2 = /* @__PURE__ */ new Map();
+    cache = /* @__PURE__ */ new Map();
     slugsCache = null;
     slugsDeEmpresas = async () => {
       if (slugsCache) return slugsCache;
@@ -11172,7 +11189,7 @@ var init_vista = __esm({
       return Number.isFinite(t44) ? t44 : void 0;
     };
     construirVista = async (fecha, ahoraMs = Date.now()) => {
-      const cacheada = cache2.get(fecha);
+      const cacheada = cache.get(fecha);
       if (cacheada && ahoraMs - cacheada.computedAt < CACHE_MS2) return cacheada;
       const OrderModel = await getOrderModel();
       const DispatchModel = await getDispatchModel();
@@ -11215,7 +11232,7 @@ var init_vista = __esm({
           };
         })
       };
-      cache2.set(fecha, vista);
+      cache.set(fecha, vista);
       return vista;
     };
   }
@@ -11627,11 +11644,11 @@ var init_pendientes = __esm({
     preguntar = (p64, ahoraMs = Date.now()) => {
       pendientes2.set(clave(p64.quien, p64.grupo), { ...p64, creadaMs: ahoraMs });
     };
-    nombraUnidad = (texto4) => {
-      const t44 = String(texto4 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    nombraUnidad = (texto5) => {
+      const t44 = String(texto5 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
       return /\b\d{1,2}\b/.test(t44) || /\b[a-z]{3}[\s-]?\d{3}\b/.test(t44) || /\b(ultim[oa]|primer[oa]?)\b/.test(t44);
     };
-    responderPendiente = (quien, grupo, texto4, ahoraMs = Date.now()) => {
+    responderPendiente = (quien, grupo, texto5, ahoraMs = Date.now()) => {
       const k61 = clave(quien, grupo);
       const p64 = pendientes2.get(k61);
       if (!p64) return null;
@@ -11640,28 +11657,28 @@ var init_pendientes = __esm({
         return null;
       }
       if (p64.tipo === "unidad") {
-        if (!nombraUnidad(texto4)) return null;
+        if (!nombraUnidad(texto5)) return null;
         pendientes2.delete(k61);
-        return { pregunta: p64, indice: -1, texto: String(texto4 || "").trim() };
+        return { pregunta: p64, indice: -1, texto: String(texto5 || "").trim() };
       }
       if (p64.tipo === "texto") {
-        const t44 = String(texto4 || "").trim();
+        const t44 = String(texto5 || "").trim();
         if (!t44 || t44.length > 60 || t44.startsWith("@") || t44.startsWith("!")) return null;
         pendientes2.delete(k61);
         return { pregunta: p64, indice: -1, texto: t44 };
       }
       if (p64.tipo === "confirmar") {
-        const t44 = String(texto4 || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        const t44 = String(texto5 || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
         const si = /^(si|sí|dale|ok|okey|claro|exacto|eso|ya|1)\b/.test(t44);
         const no4 = /^(no|nada|otra|3)\b/.test(t44);
         if (!si && !no4) return null;
         pendientes2.delete(k61);
         return si ? { pregunta: p64, indice: 0, texto: t44 } : null;
       }
-      const n44 = Number(String(texto4 || "").trim());
+      const n44 = Number(String(texto5 || "").trim());
       if (!Number.isInteger(n44) || n44 < 1 || n44 > p64.opciones.length) return null;
       pendientes2.delete(k61);
-      return { pregunta: p64, indice: n44 - 1, texto: String(texto4 || "").trim() };
+      return { pregunta: p64, indice: n44 - 1, texto: String(texto5 || "").trim() };
     };
     textoPregunta = (encabezado, opciones) => [encabezado, ...opciones.map((o37, i50) => `${i50 + 1}. ${o37}`), "", "Responde con el n\xFAmero."].join("\n");
   }
@@ -11671,7 +11688,7 @@ var init_pendientes = __esm({
 var VIGENCIA_HILO_MS, hilos, k, recordarConsulta, ultimaConsulta, pareceContinuacion, fusionar, pareceParaElAgente;
 var init_contexto = __esm({
   "src/agent/consultas/contexto.ts"() {
-    VIGENCIA_HILO_MS = 3 * 6e4;
+    VIGENCIA_HILO_MS = 12 * 60 * 6e4;
     hilos = /* @__PURE__ */ new Map();
     k = (quien, grupo) => `${grupo}|${quien}`;
     recordarConsulta = (c66, ms2 = Date.now()) => {
@@ -11686,8 +11703,8 @@ var init_contexto = __esm({
       }
       return u66;
     };
-    pareceContinuacion = (texto4) => {
-      const t44 = String(texto4 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¿?¡!.,]/g, " ").replace(/\s+/g, " ").trim();
+    pareceContinuacion = (texto5) => {
+      const t44 = String(texto5 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¿?¡!.,]/g, " ").replace(/\s+/g, " ").trim();
       if (!t44 || t44.split(" ").length > 6) return false;
       const traeDato = /\b\d{1,2}\b/.test(t44) || /\b[a-z]{3}[\s-]?\d{3}\b/.test(t44) || /\b(manana|hoy|ayer|anteayer|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|mes|enero|febrero|marzo|abril|mayo|junio|julio|agosto|se[pt]?tiembre|octubre|noviembre|diciembre|ultim[oa]|primer[oa]?)\b/.test(t44) || /\b(en|de|para|con) [a-z]/.test(t44);
       const empiezaComoSeguimiento = /^(y |e |que tal |en |de |para |la |el |las |los |con )/.test(t44) || /^\d/.test(t44);
@@ -11708,8 +11725,8 @@ var init_contexto = __esm({
       if (traeEmpresa) for (const e29 of empresas) ant = ant.split(n44(e29)).join(" ");
       return `${nn} ${ant}`.replace(/\s+/g, " ").trim();
     };
-    pareceParaElAgente = (texto4) => {
-      const t44 = String(texto4 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¡!.,]/g, " ").replace(/\s+/g, " ").trim();
+    pareceParaElAgente = (texto5) => {
+      const t44 = String(texto5 || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[¡!.,]/g, " ").replace(/\s+/g, " ").trim();
       if (!t44 || t44.split(" ").length > 25) return false;
       if (/\?/.test(t44)) return true;
       return /^(ok |ya |listo |y |e )?(hay|que|cual|cuales|cuanto|cuanta|cuantos|cuantas|como|donde|quien|quienes|a que hora|muestrame|muestra|dame|pasame|mandame|enviame|dime|necesito|quiero|puedes|podrias|me (muestras|pasas|mandas|das|dices))\b/.test(t44);
@@ -12307,11 +12324,11 @@ var init_clima = __esm({
     lugarDesconocido = (pregunta) => {
       const t44 = normalizar2(pregunta).replace(/[¿?¡!.,]/g, " ");
       if (distritosDe(pregunta).some((d67) => d67.name !== "la planta")) return null;
-      const RELLENO = /* @__PURE__ */ new Set(["hoy", "manana", "pasado", "semana", "mes", "planta", "lima", "obra", "campo", "pista", "zona", "dia", "tarde", "noche", "madrugada", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo", "clima", "lluvia", "riesgo", "distrito", "distritos", "produccion", "asfaltado", "asfaltar", "mezcla", "tiempo", "pronostico", "esta", "este", "proxima", "proximo", "temprano"]);
+      const RELLENO2 = /* @__PURE__ */ new Set(["hoy", "manana", "pasado", "semana", "mes", "planta", "lima", "obra", "campo", "pista", "zona", "dia", "tarde", "noche", "madrugada", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo", "clima", "lluvia", "riesgo", "distrito", "distritos", "produccion", "asfaltado", "asfaltar", "mezcla", "tiempo", "pronostico", "esta", "este", "proxima", "proximo", "temprano"]);
       const m59 = t44.match(/\b(?:en|para|de|por) (?:el |la |los |las )?([a-zñ]{4,}(?: [a-zñ]{3,})?)/g);
       if (!m59) return null;
       for (const frase of m59) {
-        const palabras = frase.replace(/^(?:en|para|de|por) (?:el |la |los |las )?/, "").split(" ").filter((p64) => !RELLENO.has(p64));
+        const palabras = frase.replace(/^(?:en|para|de|por) (?:el |la |los |las )?/, "").split(" ").filter((p64) => !RELLENO2.has(p64));
         if (palabras.length) return palabras.join(" ");
       }
       return null;
@@ -12733,9 +12750,9 @@ var init_imagen = __esm({
         acumulado += c66.ancho;
       }
       const celda = (c66, i50, valor, y66, clase) => {
-        const texto4 = escapeXml(recortar(String(valor ?? ""), c66.max ?? 40));
+        const texto5 = escapeXml(recortar(String(valor ?? ""), c66.max ?? 40));
         const x63 = c66.alinear === "fin" ? xs[i50] + c66.ancho - 12 : xs[i50];
-        return `<text x="${x63}" y="${y66}" class="${clase}"${c66.alinear === "fin" ? ' text-anchor="end"' : ""}>${texto4}</text>`;
+        return `<text x="${x63}" y="${y66}" class="${clase}"${c66.alinear === "fin" ? ' text-anchor="end"' : ""}>${texto5}</text>`;
       };
       const partes = [];
       let y65 = HEADER + 8;
@@ -13118,14 +13135,272 @@ var init_datos = __esm({
   }
 });
 
+// src/agent/llm/informes.ts
+import { access, readFile } from "node:fs/promises";
+import path12 from "node:path";
+var import_jsonwebtoken3, TIPOS_INFORME2, porCodigo, nombreTipo, tipoDeInforme, VERBOS, NOMBRES, REGLAS_INFORMES, RELLENO, textoDeBusqueda, texto4, fechaIso, resumenServicio, buscarInformes, fechaCorta, lineaInforme, nombreArchivo, rutaLocalDe, existe, TIMEOUT_GENERACION_MS, pdfDeInforme;
+var init_informes = __esm({
+  "src/agent/llm/informes.ts"() {
+    import_jsonwebtoken3 = __toESM(require_jsonwebtoken(), 1);
+    init_environment();
+    init_logger();
+    init_models();
+    init_alcance();
+    init_catalogo();
+    init_datos();
+    TIPOS_INFORME2 = [
+      { codigo: "IPP", nombre: "Informe de producci\xF3n de planta", alias: ["informe de produccion de planta", "informe de planta", "produccion de planta", "informe de produccion", "ipp"] },
+      { codigo: "CTL-PIS", nombre: "Control de pista", alias: ["control de pista", "informe de pista", "pista"] },
+      { codigo: "CTL-IMP", nombre: "Control de imprimaci\xF3n", alias: ["control de imprimacion", "informe de imprimacion", "imprimacion"] },
+      { codigo: "SOL-IMP", nombre: "Solicitud de imprimaci\xF3n", alias: ["solicitud de imprimacion"] },
+      { codigo: "IAA", nombre: "Informe de \xE1rea adicional", alias: ["informe de area adicional", "area adicional", "adicional", "iaa"] },
+      { codigo: "APR-ADI", nombre: "Aprobaci\xF3n de adicional", alias: ["aprobacion de adicional", "aprobacion adicional", "aprobacion del adicional"] },
+      { codigo: "VAL-SRV", nombre: "Valorizaci\xF3n", alias: ["valorizacion"] },
+      { codigo: "LIQ-SRV", nombre: "Liquidaci\xF3n de servicio", alias: ["liquidacion"] },
+      { codigo: "CONT-SRV", nombre: "Contrato de servicio", alias: ["contrato de servicio", "contrato"] },
+      { codigo: "PNL-FOT", nombre: "Panel fotogr\xE1fico", alias: ["panel fotografico", "panel de fotos", "panel"] },
+      { codigo: "ACT-CNF", nombre: "Acta de conformidad", alias: ["acta de conformidad", "conformidad", "acta"] },
+      { codigo: "INF-ACT", nombre: "Informe de actividades", alias: ["informe de actividades", "actividades"] },
+      { codigo: "DOS-OBR", nombre: "Dossier de obra", alias: ["dossier de obra", "dossier"] },
+      { codigo: "FRE-PAV", nombre: "Fresado de pavimento", alias: ["fresado de pavimento", "fresado"] },
+      { codigo: "TOP-CMP", nombre: "Protocolo topogr\xE1fico completo", alias: ["protocolo topografico completo", "topografico completo"] },
+      { codigo: "TOP-PROT", nombre: "Protocolo topogr\xE1fico", alias: ["protocolo topografico", "topografico", "topo"] },
+      { codigo: "CAL-PROT", nombre: "Protocolo de calidad", alias: ["protocolo de calidad", "calidad"] },
+      { codigo: "MET-RES", nombre: "Metrado resumen", alias: ["metrado resumen", "metrado"] },
+      { codigo: "CONS-TRA", nombre: "Constancia de trabajo", alias: ["constancia de trabajo", "constancia"] },
+      { codigo: "REC-EXC", nombre: "Informe de reclamo", alias: ["informe de reclamo", "reclamo"] },
+      { codigo: "LEV-OBS", nombre: "Levantamiento de observaciones", alias: ["levantamiento de observaciones", "levantamiento"] },
+      { codigo: "RCP-CAM", nombre: "Recepci\xF3n de campo", alias: ["recepcion de campo", "recepcion"] }
+    ];
+    porCodigo = new Map(TIPOS_INFORME2.map((t44) => [t44.codigo, t44]));
+    nombreTipo = (codigo) => porCodigo.get(codigo)?.nombre ?? codigo;
+    tipoDeInforme = (pregunta) => {
+      const t44 = ` ${normalizar2(pregunta)} `;
+      let mejor;
+      for (const tipo of TIPOS_INFORME2) {
+        for (const alias of tipo.alias) {
+          if (t44.includes(` ${alias} `) && (!mejor || alias.length > mejor.largo)) mejor = { tipo, largo: alias.length };
+        }
+      }
+      return mejor?.tipo;
+    };
+    VERBOS = ["dame", "damelo", "damela", "manda", "mandame", "mandalo", "mandala", "envia", "enviame", "envialo", "enviala", "pasa", "pasame", "pasalo", "pasala", "comparte", "compartelo", "compartela", "adjunta", "adjuntame", "descarga", "descargame"];
+    NOMBRES = ["informe", "informes", "ipp", "pista", "imprimacion", "valorizacion", "acta", "panel", "dossier", "liquidacion", "constancia", "metrado", "protocolo", "contrato", "pdf", "reporte", "solicitud", "aprobacion", "fresado", "levantamiento", "recepcion", "reclamo", "adicional"];
+    REGLAS_INFORMES = [...VERBOS.flatMap((v55) => NOMBRES.map((n44) => [v55, n44])), ["pdf"], ["ultimo", "informe"], ["ultimos", "informes"]];
+    RELLENO = /* @__PURE__ */ new Set([
+      ...VERBOS,
+      ...NOMBRES,
+      "el",
+      "la",
+      "los",
+      "las",
+      "un",
+      "una",
+      "de",
+      "del",
+      "en",
+      "por",
+      "para",
+      "con",
+      "que",
+      "me",
+      "lo",
+      "a",
+      "al",
+      "y",
+      "o",
+      "su",
+      "sus",
+      "este",
+      "esta",
+      "ese",
+      "esa",
+      "porfa",
+      "porfavor",
+      "favor",
+      "gracias",
+      "hola",
+      "lila",
+      "hoy",
+      "ayer",
+      "anteayer",
+      "manana",
+      "semana",
+      "mes",
+      "pasado",
+      "pasada",
+      "ultimo",
+      "ultima",
+      "ultimos",
+      "ultimas",
+      "reciente",
+      "nuevo",
+      "nueva",
+      "lunes",
+      "martes",
+      "miercoles",
+      "jueves",
+      "viernes",
+      "sabado",
+      "domingo",
+      "enero",
+      "febrero",
+      "marzo",
+      "abril",
+      "mayo",
+      "junio",
+      "julio",
+      "agosto",
+      "septiembre",
+      "setiembre",
+      "octubre",
+      "noviembre",
+      "diciembre",
+      "servicio",
+      "obra",
+      "pedido",
+      "cliente",
+      "proyecto",
+      "como",
+      "esta",
+      "estan",
+      "va",
+      "van",
+      "ya",
+      "tiene",
+      "tienen",
+      "hay",
+      "listo",
+      "generado",
+      "generar",
+      "genera",
+      "generame",
+      "produccion",
+      "planta",
+      "campo",
+      "control",
+      "quiero",
+      "necesito",
+      "muestrame",
+      "ver",
+      "mostrar",
+      "ultimo"
+    ]);
+    textoDeBusqueda = (pregunta, tipo) => {
+      let t44 = ` ${normalizar2(pregunta)} `;
+      for (const alias of tipo?.alias ?? []) t44 = t44.split(` ${alias} `).join(" ");
+      for (const e29 of ALIAS_EMPRESA) for (const a49 of e29.alias) t44 = t44.split(` ${a49} `).join(" ");
+      return t44.replace(/\b\d{1,2}\s*(de\s+\w+|\/\d{1,2})\b/g, " ").split(" ").filter((p64) => p64 && !RELLENO.has(p64) && !/^\d+$/.test(p64) && p64.length >= 3).join(" ").trim();
+    };
+    texto4 = (v55) => String(v55 ?? "").trim();
+    fechaIso = (v55) => {
+      const d67 = v55 instanceof Date ? v55 : new Date(String(v55 || ""));
+      return Number.isNaN(d67.getTime()) ? "" : d67.toISOString().slice(0, 10);
+    };
+    resumenServicio = (descripcion, palabras = 8) => {
+      const p64 = texto4(descripcion).replace(/\s+/g, " ").split(" ");
+      return p64.length <= palabras ? p64.join(" ") : `${p64.slice(0, palabras).join(" ")}\u2026`;
+    };
+    buscarInformes = async (filtro, limite = 6) => {
+      const [Informe, Servicio, Cliente, nombres] = await Promise.all([getServiceReportModel(), getServiceManagementModel(), getClientModel(), nombresDeEmpresas()]);
+      const empresas = filtro.companyId ? [filtro.companyId] : [...EMPRESAS_CON_PEDIDOS];
+      const query = { companyId: { $in: empresas } };
+      if (filtro.tipo) query.type = filtro.tipo;
+      if (filtro.desde || filtro.hasta) {
+        query.date = {
+          ...filtro.desde ? { $gte: /* @__PURE__ */ new Date(`${filtro.desde}T00:00:00.000Z`) } : {},
+          ...filtro.hasta ? { $lte: /* @__PURE__ */ new Date(`${filtro.hasta}T23:59:59.999Z`) } : {}
+        };
+      }
+      const docs = await Informe.find(query).select("companyId serviceManagementId type status date responsible generatedDocuments").sort({ date: -1, updatedAt: -1 }).limit(filtro.texto ? 200 : limite * 4).lean();
+      if (!docs.length) return [];
+      const idsServicio = [...new Set(docs.map((d67) => texto4(d67.serviceManagementId)).filter(Boolean))];
+      const servicios = await Servicio.find({ _id: { $in: idsServicio } }).select("clientId projectName description").lean();
+      const porServicio = new Map(servicios.map((s59) => [String(s59._id), s59]));
+      const idsCliente = [...new Set(servicios.map((s59) => texto4(s59.clientId)).filter(Boolean))];
+      const clientes = idsCliente.length ? await Cliente.find({ _id: { $in: idsCliente } }).select("name").lean() : [];
+      const nombreCliente = new Map(clientes.map((c66) => [String(c66._id), texto4(c66.name)]));
+      const patron = filtro.texto ? patronDeBusqueda(filtro.texto) : null;
+      const lista = [];
+      for (const d67 of docs) {
+        const s59 = porServicio.get(texto4(d67.serviceManagementId));
+        const descripcion = texto4(s59?.projectName) || texto4(s59?.description);
+        const cliente = s59 ? nombreCliente.get(texto4(s59.clientId)) : void 0;
+        const responsable = texto4(d67.responsible) || void 0;
+        if (patron && ![descripcion, cliente ?? "", responsable ?? ""].some((v55) => patron.test(v55))) continue;
+        const generado = d67.generatedDocuments;
+        lista.push({
+          id: String(d67._id),
+          companyId: texto4(d67.companyId),
+          empresa: nombres.get(texto4(d67.companyId)) || texto4(d67.companyId),
+          tipo: texto4(d67.type),
+          nombreTipo: nombreTipo(texto4(d67.type)),
+          fecha: fechaIso(d67.date) || fechaIso(d67.createdAt),
+          estado: texto4(d67.status),
+          servicio: resumenServicio(descripcion),
+          cliente: cliente || void 0,
+          responsable,
+          pdfUrl: texto4(generado?.pdfUrl) || void 0
+        });
+        if (lista.length >= limite) break;
+      }
+      return lista;
+    };
+    fechaCorta = (iso3) => iso3 ? `${iso3.slice(8, 10)}/${iso3.slice(5, 7)}` : "\u2014";
+    lineaInforme = (i50) => `*${i50.nombreTipo}* \xB7 ${fechaCorta(i50.fecha)} \xB7 ${i50.empresa}${i50.cliente ? ` \xB7 ${i50.cliente}` : ""}${i50.servicio ? `
+   ${i50.servicio}` : ""}${i50.pdfUrl ? "" : " \xB7 _(se genera al pedirlo)_"}`;
+    nombreArchivo = (i50) => `${i50.nombreTipo} - ${i50.cliente || i50.empresa} - ${i50.fecha || "sin fecha"}.pdf`.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ");
+    rutaLocalDe = (pdfUrl, companyId) => {
+      const m59 = pdfUrl.match(/\/files\/companies\/([^/]+)\/(.+)$/);
+      if (!m59 || m59[1] !== companyId) return null;
+      const relativa = decodeURIComponent(m59[2]).replace(/\.\./g, "");
+      return path12.join(config.storage.root, "companies", companyId, relativa);
+    };
+    existe = async (ruta) => access(ruta).then(() => true, () => false);
+    TIMEOUT_GENERACION_MS = 12e4;
+    pdfDeInforme = async (i50) => {
+      if (i50.pdfUrl) {
+        const ruta = rutaLocalDe(i50.pdfUrl, i50.companyId);
+        if (ruta && await existe(ruta)) return { buffer: await readFile(ruta), generado: false };
+      }
+      const secreto = config.security.jwtSecret;
+      const tokenImpresion = import_jsonwebtoken3.default.sign({ scope: "report-print", companyId: i50.companyId, reportId: i50.id }, secreto, { expiresIn: "15m" });
+      const printUrl = `${config.portal.baseUrl.replace(/\/+$/, "")}/print/service-report/${encodeURIComponent(i50.id)}?token=${encodeURIComponent(tokenImpresion)}`;
+      const tokenTenant = import_jsonwebtoken3.default.sign({ companyId: i50.companyId, userId: "lila-agente", role: "agent" }, secreto, { expiresIn: "5m" });
+      const inicio = Date.now();
+      try {
+        const res = await fetch(`http://127.0.0.1:${config.port}/api/documents/preview`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${tokenTenant}` },
+          body: JSON.stringify({ printUrl }),
+          signal: AbortSignal.timeout(TIMEOUT_GENERACION_MS)
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        const json = await res.json();
+        const previewUrl = texto4(json.data?.previewUrl);
+        if (!previewUrl.endsWith(".pdf")) throw new Error(`respuesta sin PDF: ${previewUrl || "(vac\xEDa)"}`);
+        const pdf = await fetch(`http://127.0.0.1:${config.port}${previewUrl}`, { signal: AbortSignal.timeout(3e4) });
+        if (!pdf.ok) throw new Error(`no pude leer el PDF generado: HTTP ${pdf.status}`);
+        const buffer2 = Buffer.from(await pdf.arrayBuffer());
+        logger_default.info(`[agente] informe ${i50.tipo} ${i50.id} generado (${Math.round(buffer2.length / 1024)} KB) en ${((Date.now() - inicio) / 1e3).toFixed(1)} s`);
+        return { buffer: buffer2, generado: true };
+      } catch (error) {
+        logger_default.warn(`[agente] no pude generar el PDF del informe ${i50.tipo} ${i50.id}: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
+    };
+  }
+});
+
 // src/agent/llm/herramientas.ts
 var HERRAMIENTAS_DE_DATOS, esHerramientaDeDatos, CAMPOS_ARGUMENTO, HERRAMIENTAS, herramientaDeDatosPorReglas, herramienta, FECHA_ISO, fechaValida, MESES2, ultimoDia, iso, rangoDe, textoConFecha, empresaPorAlias, aliasEnPregunta, normalizarArgumentos;
 var init_herramientas2 = __esm({
   "src/agent/llm/herramientas.ts"() {
     init_catalogo();
+    init_informes();
     init_weather_asphalt_forecast_service();
     init_alcance();
-    HERRAMIENTAS_DE_DATOS = ["clientes", "proveedores", "pedidos", "kardex", "ingresos_agregados", "certificados_pendientes"];
+    HERRAMIENTAS_DE_DATOS = ["clientes", "proveedores", "pedidos", "kardex", "ingresos_agregados", "certificados_pendientes", "informes"];
     esHerramientaDeDatos = (id) => HERRAMIENTAS_DE_DATOS.includes(id);
     CAMPOS_ARGUMENTO = ["fecha", "desde", "hasta", "unidad", "placa", "empresa", "distrito", "nombre"];
     HERRAMIENTAS = [
@@ -13155,7 +13430,14 @@ var init_herramientas2 = __esm({
       { id: "pedidos", descripcion: "historial de pedidos en un rango de fechas, de una empresa o de un cliente", argumentos: ["desde", "hasta", "empresa", "nombre"], historial: true },
       { id: "kardex", descripcion: "ingresos, salidas y movimientos de UN material en un rango de fechas", argumentos: ["nombre", "desde", "hasta", "empresa"], historial: true },
       { id: "ingresos_agregados", descripcion: "cu\xE1ntos agregados / insumos llegaron o se recibieron (camiones por proveedor) en un d\xEDa o rango", argumentos: ["desde", "hasta", "empresa"], historial: true, reglas: [["llegaron"], ["llego"], ["llegado"], ["ingresaron"], ["ingreso", "agregado"], ["ingresos", "agregado"], ["ingreso", "material"], ["ingresos", "material"], ["entrada", "material"], ["entradas", "material"], ["recibimos"], ["recepcion"], ["insumo"], ["insumos"], ["cuanto", "llego"]] },
-      { id: "certificados_pendientes", descripcion: "qu\xE9 pedidos despachados no tienen certificado cargado / certificados pendientes (por cliente), en un rango", argumentos: ["desde", "hasta", "empresa"], historial: true, reglas: [["certificado"], ["certificados"]] }
+      { id: "certificados_pendientes", descripcion: "qu\xE9 pedidos despachados no tienen certificado cargado / certificados pendientes (por cliente), en un rango", argumentos: ["desde", "hasta", "empresa"], historial: true, reglas: [["certificado"], ["certificados"]] },
+      {
+        id: "informes",
+        descripcion: "mandar el PDF de un informe de servicio (producci\xF3n de planta / IPP, control de pista, imprimaci\xF3n, \xE1rea adicional, valorizaci\xF3n, acta, panel fotogr\xE1fico\u2026) de una obra o cliente, de una fecha",
+        argumentos: ["nombre", "fecha", "desde", "hasta", "empresa"],
+        historial: true,
+        reglas: REGLAS_INFORMES
+      }
     ];
     herramientaDeDatosPorReglas = (pregunta) => {
       const t44 = normalizar2(pregunta);
@@ -13538,9 +13820,9 @@ var init_redaccion = __esm({
       "Contacto: Luis Paz \xB7 999888777",
       "Respuesta: *ANDES SAC* no tiene correo registrado. Su contacto es Luis Paz, tel\xE9fono 999888777."
     ].join("\n");
-    numerosDe = (texto4) => {
+    numerosDe = (texto5) => {
       const encontrados = [];
-      for (const m59 of String(texto4).matchAll(/\d[\d.,]*/g)) {
+      for (const m59 of String(texto5).matchAll(/\d[\d.,]*/g)) {
         const crudo = m59[0].replace(/[.,]$/, "");
         const ultimo = Math.max(crudo.lastIndexOf("."), crudo.lastIndexOf(","));
         const entero = ultimo < 0 ? crudo : crudo.slice(0, ultimo).replace(/[.,]/g, "");
@@ -13574,7 +13856,7 @@ ${pregunta}`.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
     TIMEOUT_REDACCION_MS = 25e3;
     MAX_FRASE = 320;
     redactar = async (pregunta, ficha) => {
-      const texto4 = await generar({
+      const texto5 = await generar({
         tarea: "redaccion",
         sistema: PROMPT_REDACCION,
         usuario: `Pregunta: ${pregunta}
@@ -13584,8 +13866,8 @@ Respuesta:`,
         maxTokens: 120,
         timeoutMs: TIMEOUT_REDACCION_MS
       });
-      if (!texto4) return null;
-      const frase = texto4.replace(/^respuesta:\s*/i, "").replace(/\s+/g, " ").trim();
+      if (!texto5) return null;
+      const frase = texto5.replace(/^respuesta:\s*/i, "").replace(/\s+/g, " ").trim();
       if (!frase || frase.length > MAX_FRASE) return null;
       if (/\bno (lo |la |los |las )?encontr/i.test(frase)) return null;
       return respetaLosDatos(frase, ficha, pregunta) ? frase : null;
@@ -13714,7 +13996,7 @@ __export(llm_exports, {
   rangoDe: () => rangoDe,
   responderConDatos: () => responderConDatos
 });
-var DIAS_POR_DEFECTO, PREGUNTA_NOMBRE, fichaPara, conFrase, responderConDatos, argumentosDeRango;
+var DIAS_POR_DEFECTO, PREGUNTA_NOMBRE, fichaPara, conFrase, responderConDatos, MAX_OPCIONES_INFORMES, responderInformes, enviarInforme, argumentosDeRango;
 var init_llm = __esm({
   "src/agent/llm/index.ts"() {
     init_logger();
@@ -13725,6 +14007,7 @@ var init_llm = __esm({
     init_herramientas2();
     init_fichas();
     init_imagen();
+    init_informes();
     init_redaccion();
     init_seleccion();
     init_modelo();
@@ -13736,7 +14019,8 @@ var init_llm = __esm({
       pedidos: "",
       kardex: "\xBFDe qu\xE9 material? Dime el nombre (arena, piedra, confitillo\u2026).",
       ingresos_agregados: "",
-      certificados_pendientes: ""
+      certificados_pendientes: "",
+      informes: ""
     };
     fichaPara = async (id, args, ahoraMs = Date.now()) => {
       const hoy = hoyLima(ahoraMs);
@@ -13793,13 +14077,14 @@ var init_llm = __esm({
     };
     conFrase = (id, resultados) => (id === "clientes" || id === "proveedores") && resultados === 1;
     responderConDatos = async (id, args, pregunta, quien, grupo) => {
+      if (id === "informes") return responderInformes(args, pregunta, quien, grupo);
       if (!args.nombre && PREGUNTA_NOMBRE[id]) {
         preguntar({
           quien,
           grupo,
           opciones: [],
           tipo: "texto",
-          continuar: (_i, texto4) => responderConDatos(id, { ...args, nombre: String(texto4 || "").trim() }, `${pregunta} ${texto4 ?? ""}`, quien, grupo)
+          continuar: (_i, texto5) => responderConDatos(id, { ...args, nombre: String(texto5 || "").trim() }, `${pregunta} ${texto5 ?? ""}`, quien, grupo)
         });
         return { texto: PREGUNTA_NOMBRE[id] };
       }
@@ -13820,6 +14105,37 @@ var init_llm = __esm({
 
 ${ficha}` : ficha };
     };
+    MAX_OPCIONES_INFORMES = 6;
+    responderInformes = async (args, pregunta, quien, grupo) => {
+      const tipo = tipoDeInforme(pregunta);
+      const texto5 = args.nombre ?? textoDeBusqueda(pregunta, tipo);
+      const filtro = { tipo: tipo?.codigo, texto: texto5 || void 0, desde: args.desde ?? args.fecha, hasta: args.hasta ?? args.fecha, companyId: args.companyId };
+      const lista = await buscarInformes(filtro, MAX_OPCIONES_INFORMES);
+      logger_default.info(`[agente] informes ${JSON.stringify(filtro)} \u2192 ${lista.length} resultado(s)`);
+      if (!lista.length) {
+        const que = tipo ? `de *${tipo.nombre}*` : "de servicio";
+        const donde = [texto5 ? `de \xAB${texto5}\xBB` : "", filtro.desde ? `del ${filtro.desde}${filtro.hasta && filtro.hasta !== filtro.desde ? ` al ${filtro.hasta}` : ""}` : ""].filter(Boolean).join(" ");
+        const tipos = TIPOS_INFORME2.slice(0, 8).map((t44) => t44.nombre.toLowerCase()).join(", ");
+        return { texto: `No encuentro informes ${que}${donde ? ` ${donde}` : ""}. Dime el tipo (${tipos}\u2026), la obra o el cliente, o la fecha.` };
+      }
+      if (lista.length === 1) return enviarInforme(lista[0]);
+      preguntar({
+        quien,
+        grupo,
+        opciones: lista.map((i50) => `${i50.nombreTipo} ${i50.fecha}`),
+        tipo: "opciones",
+        continuar: (indice) => enviarInforme(lista[indice] ?? lista[0])
+      });
+      return { texto: [`\u{1F4D1} Encontr\xE9 ${lista.length} informes${tipo ? ` de *${tipo.nombre}*` : ""}. \xBFCu\xE1l te mando?`, ...lista.map((i50, n44) => `${n44 + 1}. ${lineaInforme(i50)}`), "Responde con el n\xFAmero."].join("\n") };
+    };
+    enviarInforme = async (i50) => {
+      const pdf = await pdfDeInforme(i50);
+      if (!pdf) return { texto: `No pude armar el PDF de *${i50.nombreTipo}* (${i50.fecha}) de ${i50.cliente || i50.empresa}. Se puede generar desde Portal \u2192 Servicios \u2192 Informes.` };
+      const buffer2 = pdf.buffer;
+      const caption = `\u{1F4D1} *${i50.nombreTipo}* \xB7 ${i50.fecha} \xB7 ${i50.empresa}${i50.cliente ? ` \xB7 ${i50.cliente}` : ""}${i50.servicio ? `
+${i50.servicio}` : ""}${pdf.generado ? "\n_(generado ahora)_" : ""}`;
+      return { texto: "", archivos: [{ tipo: "document", url: "", nombre: nombreArchivo(i50), fechaMs: Date.now(), mime: "application/pdf", companyId: i50.companyId, buffer: buffer2, caption }] };
+    };
     argumentosDeRango = (pregunta, ahoraMs = Date.now()) => {
       const rango2 = rangoDe(pregunta, hoyLima(ahoraMs));
       if (!rango2 || rango2.desde === rango2.hasta) return null;
@@ -13836,7 +14152,7 @@ var init_mensajes = __esm({
     init_checklist();
     NEGACIONES_PALABRA = ["no", "nada", "nadie", "tampoco", "sin", "aun", "todavia", "ni"];
     NEGACIONES_PREFIJO = ["falta", "cancel", "postergam", "suspend", "se cayo"];
-    esPregunta = (texto4) => texto4.includes("?") || texto4.includes("\xBF");
+    esPregunta = (texto5) => texto5.includes("?") || texto5.includes("\xBF");
     enPalabras = (textoNormalizado) => textoNormalizado.replace(/[^a-z0-9ñ]+/g, " ").split(" ").filter(Boolean);
     niegaFragmento = (fragmento) => {
       const palabras = enPalabras(normalizarTexto(fragmento));
@@ -13845,18 +14161,18 @@ var init_mensajes = __esm({
       return NEGACIONES_PREFIJO.some((prefijo) => limpio2.includes(prefijo));
     };
     SEPARADOR_CLAUSULA = /[,;.]|\bpero\b|\baunque\b|\by (?=no |a[uú]n |todav[ií]a |ni |falta)/i;
-    enClausulas = (texto4) => String(texto4 || "").split(SEPARADOR_CLAUSULA).map((c66) => c66.trim()).filter(Boolean);
+    enClausulas = (texto5) => String(texto5 || "").split(SEPARADOR_CLAUSULA).map((c66) => c66.trim()).filter(Boolean);
     niega = (textoNormalizado) => {
       const [primera] = enClausulas(textoNormalizado);
       return primera !== void 0 && niegaFragmento(primera);
     };
-    clausulasUtiles = (texto4) => enClausulas(texto4).filter((c66) => !niegaFragmento(c66));
+    clausulasUtiles = (texto5) => enClausulas(texto5).filter((c66) => !niegaFragmento(c66));
     motivoDescarte = (mensaje) => {
       if (mensaje.esPropio) return "propio";
-      const texto4 = normalizarTexto(mensaje.texto);
-      if (!texto4) return "vacio";
+      const texto5 = normalizarTexto(mensaje.texto);
+      if (!texto5) return "vacio";
       if (esPregunta(mensaje.texto)) return "pregunta";
-      if (niega(texto4)) return "negacion";
+      if (niega(texto5)) return "negacion";
       return null;
     };
     filtrarMensajes = (mensajes2) => {
@@ -13951,12 +14267,12 @@ var init_aviso = __esm({
       for (const [id, p64] of a49) if (!b63.has(id)) frases.push(`se cae *${p64.empresa}* (${p64.hora})`);
       return frases.length ? `Cambio: ${frases.join("; ")}.` : "";
     };
-    conPiePropuesta = (texto4, nombreDestino) => [
+    conPiePropuesta = (texto5, nombreDestino) => [
       `\u{1F4E8} *Propuesta para \xAB${nombreDestino}\xBB*`,
       "Para enviarlo: mant\xE9n presionado este mensaje \u2192 *Responder* \u2192 *1*",
       "Para descartar: igual, con *3*",
       "",
-      texto4
+      texto5
     ].join("\n");
     firmaAviso = (fecha, momento, revision) => `${fecha}|${momento}|${revision.pendientes.map((i50) => i50.id).sort().join(",")}`;
   }
@@ -14091,8 +14407,8 @@ var init_menciones = __esm({
       return `${String(h65).padStart(2, "0")}:${min}`;
     };
     empresaDe = (t44) => ALIAS_EMPRESA.filter((e29) => e29.companyId !== COMPANY_PILOTO).find((e29) => e29.alias.some((a49) => new RegExp(`\\b${a49}\\b`).test(t44)))?.companyId;
-    clienteDe = (texto4) => {
-      const m59 = texto4.match(/cliente\s*:\s*([^\n]+)/i);
+    clienteDe = (texto5) => {
+      const m59 = texto5.match(/cliente\s*:\s*([^\n]+)/i);
       return m59 ? m59[1].trim().slice(0, 60) : void 0;
     };
     mencionesDe = (m59, enHilo = false) => {
@@ -14180,7 +14496,19 @@ var init_menciones = __esm({
 });
 
 // src/agent/checklist/detector.ts
-var nombresEmpresa, pedidosConArranque, ultimaVersionDelDia, correrDeteccion, proponerAvisoDelDia, proponerRevisionDelDia, revisionDelDia, nombreEmpresa2, pedidosEnRango, MENCION_REPETIR_MS, propuestasDeMencion, recortar3, proponerPorMenciones;
+var detector_exports = {};
+__export(detector_exports, {
+  _resetDetector: () => _resetDetector,
+  _resetMenciones: () => _resetMenciones,
+  correrDeteccion: () => correrDeteccion,
+  diaPeruano: () => diaPeruano,
+  instanteArranque: () => instanteArranque,
+  pedidosConArranque: () => pedidosConArranque,
+  pedidosEnRango: () => pedidosEnRango,
+  proponerAvisoManual: () => proponerAvisoManual,
+  revisionDelDia: () => revisionDelDia
+});
+var nombresEmpresa, _resetDetector, pedidosConArranque, ultimaVersionDelDia, correrDeteccion, proponerAvisoDelDia, proponerAvisoManual, proponerRevisionDelDia, revisionDelDia, nombreEmpresa2, pedidosEnRango, MENCION_REPETIR_MS, propuestasDeMencion, _resetMenciones, recortar3, proponerPorMenciones;
 var init_detector = __esm({
   "src/agent/checklist/detector.ts"() {
     init_logger();
@@ -14200,6 +14528,11 @@ var init_detector = __esm({
     init_almacen();
     init_menciones();
     nombresEmpresa = /* @__PURE__ */ new Map();
+    _resetDetector = () => {
+      _resetPropuestas();
+      nombresEmpresa.clear();
+      ultimaVersionDelDia.clear();
+    };
     pedidosConArranque = async (ahoraMs) => {
       const OrderModel = await getOrderModel();
       const desde = new Date(ahoraMs - 24 * 60 * 60 * 1e3);
@@ -14265,7 +14598,7 @@ var init_detector = __esm({
       if (yaPropuesta("aviso-planta", firma, ahoraMs)) return 0;
       const anterior = ultimaVersionDelDia.get(dia.fecha);
       const cambio = anterior ? describirCambio(anterior, dia.pedidos) : "";
-      const texto4 = construirAvisoProduccion(dia, { actualizacion: cambio || void 0 });
+      const texto5 = construirAvisoProduccion(dia, { actualizacion: cambio || void 0 });
       const propuesta = proponer(
         {
           tipo: "aviso-planta",
@@ -14273,14 +14606,35 @@ var init_detector = __esm({
           firma,
           destino: alcance.grupoPlanta,
           nombreDestino: alcance.nombreGrupoPlanta || "planta",
-          texto: texto4
+          texto: texto5
         },
         ahoraMs
       );
-      await publicarPropuesta(propuesta, conPiePropuesta(texto4, propuesta.nombreDestino));
+      await publicarPropuesta(propuesta, conPiePropuesta(texto5, propuesta.nombreDestino), alcance);
       ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
       logger_default.info(`[agente] propuesta ${propuesta.id}: ${cambio ? "actualizaci\xF3n" : "aviso"} de producci\xF3n ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB`);
       return 1;
+    };
+    proponerAvisoManual = async (fecha, alcance, ahoraMs = Date.now()) => {
+      if (!alcance.grupoPlanta) return "No tengo resuelto el grupo de planta: no puedo armar el aviso.";
+      const pedidos = await pedidosConArranque(ahoraMs);
+      const dia = agruparPorDia(pedidos).find((d67) => d67.fecha === fecha);
+      if (!dia) return `No hay pedidos con hora de inicio para el ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}: sin pedido no hay aviso que mandar.`;
+      const firmaBase = `${firmaDia(dia)}|aviso`;
+      const enviada = propuestasDe("aviso-planta").find((p64) => p64.firma === firmaBase && p64.estado === "aprobada");
+      if (enviada?.decididaMs) {
+        const hora3 = new Date(enviada.decididaMs).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", minute: "2-digit", hour12: false });
+        return `Ese aviso ya se mand\xF3 a \xAB${enviada.nombreDestino}\xBB hoy a las ${hora3}. Si cambi\xF3 algo, dime qu\xE9 y lo propongo de nuevo.`;
+      }
+      const texto5 = construirAvisoProduccion(dia);
+      const propuesta = proponer(
+        { tipo: "aviso-planta", fecha: dia.fecha, firma: `${firmaBase}|manual|${ahoraMs}`, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || "planta", texto: texto5 },
+        ahoraMs
+      );
+      await publicarPropuesta(propuesta, conPiePropuesta(texto5, propuesta.nombreDestino), alcance);
+      ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
+      logger_default.info(`[agente] propuesta ${propuesta.id}: aviso de producci\xF3n ${dia.fecha} a pedido \u2192 \xAB${propuesta.nombreDestino}\xBB`);
+      return "";
     };
     proponerRevisionDelDia = async (dia, alcance, ahoraMs) => {
       const momento = momentoVigente(dia, ahoraMs);
@@ -14299,8 +14653,8 @@ var init_detector = __esm({
         momento,
         grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado
       };
-      const texto4 = construirAvisoChecklist(revision, contexto);
-      if (!texto4) return 0;
+      const texto5 = construirAvisoChecklist(revision, contexto);
+      if (!texto5) return 0;
       const firma = firmaAviso(dia.fecha, momento, revision);
       if (yaPropuesta("checklist-admin", firma, ahoraMs)) return 0;
       if (yaPropuesta("checklist-admin", `${dia.fecha}|${momento}|`, ahoraMs)) return 0;
@@ -14311,7 +14665,7 @@ var init_detector = __esm({
           firma,
           destino: alcance.grupoEscuchado,
           nombreDestino: alcance.nombreGrupo || "admin",
-          texto: texto4
+          texto: texto5
         },
         ahoraMs
       );
@@ -14319,7 +14673,7 @@ var init_detector = __esm({
         { ...propuesta, firma: `${dia.fecha}|${momento}|`, texto: "", destino: "", nombreDestino: "" },
         ahoraMs
       ).estado = "descartada";
-      await publicarPropuesta(propuesta, conPiePropuesta(texto4, propuesta.nombreDestino));
+      await publicarPropuesta(propuesta, conPiePropuesta(texto5, propuesta.nombreDestino), alcance);
       logger_default.info(
         `[agente] propuesta ${propuesta.id}: checklist ${momento} de ${dia.fecha} \u2192 \xAB${propuesta.nombreDestino}\xBB (${revision.pendientes.length} pendientes, ${revision.semanticas.length} confirmaci\xF3n(es) entendidas por sem\xE1ntica, descartados: ${JSON.stringify(utiles.descartados)})`
       );
@@ -14365,6 +14719,7 @@ var init_detector = __esm({
     };
     MENCION_REPETIR_MS = 24 * 36e5;
     propuestasDeMencion = /* @__PURE__ */ new Map();
+    _resetMenciones = () => propuestasDeMencion.clear();
     recortar3 = (s59, max) => s59.length > max ? `${s59.slice(0, max - 1)}\u2026` : s59;
     proponerPorMenciones = async (alcance, ahoraMs) => {
       const hoy = diaPeruano(ahoraMs);
@@ -14392,12 +14747,12 @@ var init_detector = __esm({
       const contexto = `En \xAB${alcance.nombreGrupo || "el grupo"}\xBB dijeron: ${citas.join(" / ")}`;
       let nuevas = 0;
       if (sinPedido.length && alcance.grupoPlanta) {
-        const texto4 = textoAvisoPrevio(sinPedido);
+        const texto5 = textoAvisoPrevio(sinPedido);
         const propuesta2 = proponer(
-          { tipo: "aviso-mencion", fecha: sinPedido[0].desde, firma, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || "planta", texto: texto4 },
+          { tipo: "aviso-mencion", fecha: sinPedido[0].desde, firma, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || "planta", texto: texto5 },
           ahoraMs
         );
-        await publicarPropuesta(propuesta2, [contexto, "No hay pedido en Portal: sin \xE9l no sale el aviso formal ni el checklist.", "", conPiePropuesta(texto4, propuesta2.nombreDestino)].join("\n"));
+        await publicarPropuesta(propuesta2, [contexto, "No hay pedido en Portal: sin \xE9l no sale el aviso formal ni el checklist.", "", conPiePropuesta(texto5, propuesta2.nombreDestino)].join("\n"), alcance);
         logger_default.info(`[agente] propuesta ${propuesta2.id}: aviso previo por ${sinPedido.length} menci\xF3n(es) \u2192 \xAB${propuesta2.nombreDestino}\xBB`);
         nuevas += 1;
       }
@@ -14406,7 +14761,7 @@ var init_detector = __esm({
         { tipo: "recordatorio-pedido", fecha: todas[0].desde, firma, destino: alcance.grupoEscuchado, nombreDestino: alcance.nombreGrupo || "admin", texto: recordatorio },
         ahoraMs
       );
-      await publicarPropuesta(propuesta, [sinPedido.length ? "" : contexto, conPiePropuesta(recordatorio, propuesta.nombreDestino)].filter(Boolean).join("\n"));
+      await publicarPropuesta(propuesta, [sinPedido.length ? "" : contexto, conPiePropuesta(recordatorio, propuesta.nombreDestino)].filter(Boolean).join("\n"), alcance);
       logger_default.info(`[agente] propuesta ${propuesta.id}: recordatorio de pedido por ${todas.length} menci\xF3n(es)${sinHora.length ? ` (${sinHora.length} sin hora)` : ""} \u2192 \xAB${propuesta.nombreDestino}\xBB`);
       return nuevas + 1;
     };
@@ -14419,9 +14774,10 @@ __export(consultas_exports, {
   atenderConsulta: () => atenderConsulta,
   atenderContinuacion: () => atenderContinuacion,
   atenderEleccion: () => atenderEleccion,
-  esConsulta: () => esConsulta
+  esConsulta: () => esConsulta,
+  esOrdenDeAvisoAPlanta: () => esOrdenDeAvisoAPlanta
 });
-var UMBRAL_RUTEO, PALABRAS_PARA_MODELO, esDeUnDia, comoParametros, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, conImagen, armarRespuesta, empresasDelPiloto, informesDeLaVista, UMBRAL_SUGERENCIA, EJEMPLO, sinRuta, atenderConsulta, atenderContinuacion, atenderEleccion;
+var UMBRAL_RUTEO, PALABRAS_PARA_MODELO, esDeUnDia, comoParametros, respuestaEnlace, respuestaGuias, respuestaMedia, conPedidoElegido, conImagen, armarRespuesta, empresasDelPiloto, informesDeLaVista, UMBRAL_SUGERENCIA, EJEMPLO, sinRuta, esOrdenDeAvisoAPlanta, atenderConsulta, atenderContinuacion, atenderEleccion;
 var init_consultas = __esm({
   "src/agent/consultas/index.ts"() {
     init_logger();
@@ -14535,9 +14891,9 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       }
       if (clave2 === "tank_levels") {
         const lista = await tanques();
-        const texto4 = textoTanques(lista);
-        if (lista.length === 0) return { texto: texto4 };
-        return conImagen(texto4, `tanques-${fecha}.png`, () => pngTanques(lista, "Inframaq \xB7 planta"));
+        const texto5 = textoTanques(lista);
+        if (lista.length === 0) return { texto: texto5 };
+        return conImagen(texto5, `tanques-${fecha}.png`, () => pngTanques(lista, "Inframaq \xB7 planta"));
       }
       if (clave2 === "production_consume") return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
       if (clave2 === "aggregates_stock") {
@@ -14583,7 +14939,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
           grupo,
           opciones: [],
           tipo: "unidad",
-          continuar: (_i, texto4) => armarRespuesta(clave2, `${pregunta} ${texto4 ?? ""}`, quien, grupo)
+          continuar: (_i, texto5) => armarRespuesta(clave2, `${pregunta} ${texto5 ?? ""}`, quien, grupo)
         });
         return { texto: PREGUNTA_UNIDAD };
       }
@@ -14688,10 +15044,25 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       }
       return { clave: null, pregunta };
     };
-    atenderConsulta = async (texto4, quien, grupo, alcance, numeroBot, opciones = {}) => {
+    esOrdenDeAvisoAPlanta = (pregunta) => {
+      const t44 = normalizar2(pregunta);
+      if (!/\bplanta\b/.test(t44)) return false;
+      const verbo = /\b(manda|mandale|mandar|mandalo|envia|enviale|enviar|envialo|avisa|avisale|avisar|pon|publica|comparte|propon|proponme|prepara|arma|comunica|comunicale|pasa|pasale)\w*\b/.test(t44);
+      const que = /\b(aviso|mensaje|programacion|produccion|producciones|pedido|pedidos|recordatorio|avisar|comunicado)\b/.test(t44);
+      return verbo && que;
+    };
+    atenderConsulta = async (texto5, quien, grupo, alcance, numeroBot, opciones = {}) => {
       try {
         await empezarAEscribir(grupo, alcance);
-        let pregunta = preguntaLimpia(texto4, numeroBot);
+        let pregunta = preguntaLimpia(texto5, numeroBot);
+        if (!opciones.implicita && esOrdenDeAvisoAPlanta(pregunta)) {
+          const { proponerAvisoManual: proponerAvisoManual2 } = await Promise.resolve().then(() => (init_detector(), detector_exports));
+          const fecha = fechaDe(pregunta) ?? sumarDias(hoyLima(), /\bhoy\b/.test(normalizar2(pregunta)) ? 0 : 1);
+          const respuestaTexto = await proponerAvisoManual2(fecha, alcance);
+          logger_default.info(`[agente] orden de ${quien}: aviso a planta del ${fecha} \u2192 ${respuestaTexto ? "no se propuso" : "propuesto"}`);
+          if (respuestaTexto) await responderEnGrupo(grupo, { texto: respuestaTexto }, alcance);
+          return;
+        }
         const vetada = fueraDeCatalogo(pregunta);
         const porRegla = vetada ? null : rutearPorReglas(pregunta);
         const larga = pregunta.split(/\s+/).length > PALABRAS_PARA_MODELO && especificidadDeRegla(pregunta) < 2;
@@ -14721,27 +15092,27 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
         }
         respuesta = respuesta ?? await armarRespuesta(clave2, pregunta, quien, grupo, extra);
         if (clave2) recordarConsulta({ quien, grupo, clave: clave2, pregunta });
-        logger_default.info(`[agente] consulta de ${quien}: \xAB${preguntaLimpia(texto4, numeroBot)}\xBB \u2192 ${clave2 ?? (respuesta ? "datos" : "none")}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
+        logger_default.info(`[agente] consulta de ${quien}: \xAB${preguntaLimpia(texto5, numeroBot)}\xBB \u2192 ${clave2 ?? (respuesta ? "datos" : "none")}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ""}`);
         await responderEnGrupo(grupo, respuesta, alcance);
       } catch (error) {
-        logger_default.warn(`[agente] no pude atender la consulta \xAB${texto4}\xBB: ${error instanceof Error ? error.message : String(error)}`);
+        logger_default.warn(`[agente] no pude atender la consulta \xAB${texto5}\xBB: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         await dejarDeEscribir(grupo);
       }
     };
-    atenderContinuacion = async (texto4, quien, grupo, alcance, citaAlAgente = false) => {
+    atenderContinuacion = async (texto5, quien, grupo, alcance, citaAlAgente = false) => {
       if (!citaAlAgente) return false;
       const ultima = ultimaConsulta(quien, grupo);
-      const regla = rutearPorReglas(preguntaLimpia(texto4));
-      if (ultima && pareceContinuacion(texto4) || regla && regla !== "help") {
-        await atenderConsulta(`@lila ${texto4}`, quien, grupo, alcance);
+      const regla = rutearPorReglas(preguntaLimpia(texto5));
+      if (ultima && pareceContinuacion(texto5) || regla && regla !== "help") {
+        await atenderConsulta(`@lila ${texto5}`, quien, grupo, alcance);
         return true;
       }
-      await atenderConsulta(`@lila ${texto4}`, quien, grupo, alcance, void 0, { implicita: true });
+      await atenderConsulta(`@lila ${texto5}`, quien, grupo, alcance, void 0, { implicita: true });
       return true;
     };
-    atenderEleccion = async (texto4, quien, grupo, alcance) => {
-      const eleccion = responderPendiente(quien, grupo, texto4);
+    atenderEleccion = async (texto5, quien, grupo, alcance) => {
+      const eleccion = responderPendiente(quien, grupo, texto5);
       if (!eleccion) return false;
       try {
         await empezarAEscribir(grupo, alcance);
@@ -14851,36 +15222,36 @@ var init_observador = __esm({
         if (!alcance.grupoEscuchado) return;
         for (const raw of upsert.messages ?? []) {
           const remoteJid = String(raw?.key?.remoteJid || "");
-          const texto4 = extractInboundText(raw.message);
-          if (!texto4.trim()) continue;
+          const texto5 = extractInboundText(raw.message);
+          if (!texto5.trim()) continue;
           if (yaVisto(`${remoteJid}|${String(raw?.key?.id || "")}`)) continue;
           if (remoteJid === GROUP_ERRORS_TRACKING) {
             if (await esDelBot(raw, sessionPhone)) continue;
             if (findOutgoingMessage(sessionPhone, raw?.key?.id)) continue;
             const quien = String(raw?.key?.participant || "desconocido");
-            const comando = comandoInterruptor(texto4);
+            const comando = comandoInterruptor(texto5);
             if (comando) {
               await atenderInterruptor(comando, quien, remoteJid, alcance);
               continue;
             }
-            if (esVoto(texto4) && citaDe(raw.message)) {
-              await atenderVoto({ voto: texto4, citaMsgId: citaDe(raw.message), quien }, alcance);
+            if (esVoto(texto5) && citaDe(raw.message)) {
+              await atenderVoto({ voto: texto5, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance);
               continue;
             }
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2, atenderContinuacion: atenderContinuacion2 }) => {
               const bot = await senderPilotoCacheado();
-              if (esConsulta2(texto4, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
-                return atenderConsulta2(texto4, quien, remoteJid, alcance, bot);
+              if (esConsulta2(texto5, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
+                return atenderConsulta2(texto5, quien, remoteJid, alcance, bot);
               }
-              if (/lila/i.test(texto4)) {
-                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto4.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
+              if (/lila/i.test(texto5)) {
+                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto5.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
               const propios = await jidsPropios(bot);
               if (paraOtraPersona(raw.message, propios)) return;
-              if (citaAlBot(raw.message, propios)) return atenderContinuacion2(texto4, quien, remoteJid, alcance, true);
-              const fue = await atenderEleccion2(texto4, quien, remoteJid, alcance);
-              if (!fue && /^\s*\d{1,2}\s*$/.test(texto4) && esVoto(texto4)) {
-                await atenderVoto({ voto: texto4, citaMsgId: "", quien }, alcance);
+              if (citaAlBot(raw.message, propios)) return atenderContinuacion2(texto5, quien, remoteJid, alcance, true);
+              const fue = await atenderEleccion2(texto5, quien, remoteJid, alcance);
+              if (!fue && /^\s*\d{1,2}\s*$/.test(texto5) && esVoto(texto5)) {
+                await atenderVoto({ voto: texto5, citaMsgId: "", quien, origen: remoteJid }, alcance);
               }
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
             continue;
@@ -14889,28 +15260,32 @@ var init_observador = __esm({
           const delBot = await esDelBot(raw, sessionPhone);
           if (!delBot) {
             const quien = String(raw?.key?.participant || "alguien");
-            const comando = comandoInterruptor(texto4);
+            const comando = comandoInterruptor(texto5);
             if (comando) {
               await atenderInterruptor(comando, quien, remoteJid, alcance);
               continue;
             }
+            if (esVoto(texto5) && citaDe(raw.message)) {
+              await atenderVoto({ voto: texto5, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance);
+              continue;
+            }
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2, atenderContinuacion: atenderContinuacion2 }) => {
               const bot = await senderPilotoCacheado();
-              if (esConsulta2(texto4, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
-                return atenderConsulta2(texto4, quien, remoteJid, alcance, bot);
+              if (esConsulta2(texto5, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
+                return atenderConsulta2(texto5, quien, remoteJid, alcance, bot);
               }
-              if (/lila/i.test(texto4)) {
-                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto4.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
+              if (/lila/i.test(texto5)) {
+                logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto5.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
               const propios = await jidsPropios(bot);
               if (paraOtraPersona(raw.message, propios)) return;
-              if (citaAlBot(raw.message, propios)) return atenderContinuacion2(texto4, quien, remoteJid, alcance, true);
-              await atenderEleccion2(texto4, quien, remoteJid, alcance);
+              if (citaAlBot(raw.message, propios)) return atenderContinuacion2(texto5, quien, remoteJid, alcance, true);
+              await atenderEleccion2(texto5, quien, remoteJid, alcance);
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
           }
           const ahora = Date.now();
           const mensaje = {
-            texto: texto4,
+            texto: texto5,
             // En un grupo, quien escribió viene en `participant`; `remoteJid` es el
             // grupo. Se guarda para la seguridad por rol de F2 (spec §7.3).
             autor: String(raw?.key?.participant || ""),
@@ -14929,8 +15304,10 @@ var init_observador = __esm({
       }
     };
     atenderVoto = async (args, alcance) => {
+      const origen = args.origen || GROUP_ERRORS_TRACKING;
+      const avisar2 = (texto5) => avisarEnGrupo(origen, texto5, alcance);
       try {
-        const aprobador = await esAprobador(args.quien);
+        const aprobador = await esAprobador(args.quien, Date.now(), origen);
         const resultado = decidir({ ...args, esAprobador: aprobador });
         if (resultado.ok === false) {
           const explicacion = {
@@ -14940,20 +15317,20 @@ var init_observador = __esm({
             "no-aprobador": "de alguien que no est\xE1 en el grupo de operaciones: se ignora",
             "no-es-voto": "que no es un voto"
           };
-          logger_default.info(`[agente] \xAB${args.voto}\xBB de ${args.quien} en operaciones, ${explicacion[resultado.motivo]}`);
+          logger_default.info(`[agente] \xAB${args.voto}\xBB de ${args.quien} en ${origen === GROUP_ERRORS_TRACKING ? "operaciones" : alcance.nombreGrupo || origen}, ${explicacion[resultado.motivo]}`);
           if (resultado.motivo === "no-aprobador") {
-            await enviarAOperaciones("\u{1F512} Solo quien est\xE1 en este grupo puede aprobar o descartar.");
+            await avisar2(origen === GROUP_ERRORS_TRACKING ? "\u{1F512} Solo quien est\xE1 en este grupo puede aprobar o descartar." : "\u{1F512} Solo un administrador de este grupo puede aprobar o descartar.");
           }
           return;
         }
         const propuesta = resultado.propuesta;
         if (propuesta.estado === "descartada") {
           logger_default.info(`[agente] propuesta ${propuesta.id} (${propuesta.tipo}) descartada por ${args.quien}`);
-          await enviarAOperaciones(`\u{1F5D1} Descartado. No se mand\xF3 a \xAB${propuesta.nombreDestino}\xBB.`);
+          await avisar2(`\u{1F5D1} Descartado. No se mand\xF3 a \xAB${propuesta.nombreDestino}\xBB.`);
           return;
         }
         const enviada = await enviarAprobado(propuesta, alcance);
-        await enviarAOperaciones(
+        await avisar2(
           enviada ? `\u2705 Enviado a \xAB${propuesta.nombreDestino}\xBB.` : `\u26D4 No se pudo mandar a \xAB${propuesta.nombreDestino}\xBB: revis\xE1 el log de lila.`
         );
       } catch (error) {
@@ -14966,19 +15343,21 @@ var init_observador = __esm({
       try {
         if (comando === "estado") {
           const { apagado } = estadoInterruptor();
-          await responderEstado(grupo, apagado ? "\u23F8 Estoy apagada. Un administrador me prende con \xAB@lila on\xBB." : "\u25B6\uFE0F Estoy encendida. Un administrador me apaga con \xAB@lila off\xBB.", alcance);
+          await avisarEnGrupo(grupo, apagado ? "\u23F8 Estoy apagada. Un administrador me prende con \xAB@lila on\xBB." : "\u25B6\uFE0F Estoy encendida. Un administrador me apaga con \xAB@lila off\xBB.", alcance);
           return;
         }
-        if (!await esAdmin(quien)) {
-          logger_default.info(`[agente] \xAB!lila ${comando}\xBB de ${quien}, que no administra el grupo: se ignora`);
-          await enviarAOperaciones("\u{1F512} Solo un administrador de este grupo puede apagar o prender el agente.");
+        if (!await esAdmin(quien, Date.now(), grupo)) {
+          logger_default.info(`[agente] \xABlila ${comando}\xBB de ${quien}, que no administra el grupo: se ignora`);
+          await avisarEnGrupo(grupo, "\u{1F512} Solo un administrador de este grupo puede apagar o prender el agente.", alcance);
           return;
         }
         const estado2 = comando === "off" ? apagar(quien) : encender(quien);
         await guardarConfig("interruptor", estado2);
         logger_default.warn(`[agente] interruptor: ${comando.toUpperCase()} por ${quien}`);
-        await enviarAOperaciones(
-          comando === "off" ? "\u23F8 Agente APAGADO. Sigue escuchando pero no propone ni manda nada. \xAB@lila on\xBB para prenderlo." : "\u25B6\uFE0F Agente PRENDIDO."
+        await avisarEnGrupo(
+          grupo,
+          comando === "off" ? "\u23F8 Agente APAGADO. Sigue escuchando pero no propone ni manda nada. \xAB@lila on\xBB para prenderlo." : "\u25B6\uFE0F Agente PRENDIDO.",
+          alcance
         );
       } catch (error) {
         logger_default.warn(`[agente] no pude atender \xAB!lila ${comando}\xBB: ${error instanceof Error ? error.message : String(error)}`);
@@ -15070,7 +15449,7 @@ import {
   DisconnectReason,
   makeCacheableSignalKeyStore
 } from "@whiskeysockets/baileys";
-import path12 from "path";
+import path13 from "path";
 import fs7 from "fs-extra";
 import pino from "pino";
 function clearQR(sessionId) {
@@ -15683,7 +16062,7 @@ async function clearSession(sessionId) {
     clearQR(sessionId);
     readyClients.delete(sessionId);
     logger_default.info(`\u2705 Memory cleaned for ${sessionId}`);
-    const sessionDir = path12.join(config.whatsapp.sessionDir, sessionId);
+    const sessionDir = path13.join(config.whatsapp.sessionDir, sessionId);
     try {
       if (await fs7.pathExists(sessionDir)) {
         await fs7.remove(sessionDir);
@@ -15703,7 +16082,7 @@ async function clearSession(sessionId) {
     } catch (error) {
       logger_default.warn(`Failed to clear Mongo store for ${sessionId}:`, error);
     }
-    const backupDir = path12.join(config.whatsapp.sessionDir, "backups", sessionId);
+    const backupDir = path13.join(config.whatsapp.sessionDir, "backups", sessionId);
     try {
       if (await fs7.pathExists(backupDir)) {
         await fs7.remove(backupDir);
@@ -24749,8 +25128,8 @@ var require_FileKvStore = __commonJS({
     var promises_1 = __importDefault(__require("node:fs/promises"));
     var node_path_1 = __importDefault(__require("node:path"));
     var FileKvStore = class {
-      constructor(path43) {
-        this.directory = path43;
+      constructor(path44) {
+        this.directory = path44;
       }
       async get(key) {
         try {
@@ -25133,21 +25512,21 @@ var require_BaseHandler = __commonJS({
         return res.end();
       }
       generateUrl(req, id) {
-        const path43 = this.options.path === "/" ? "" : this.options.path;
+        const path44 = this.options.path === "/" ? "" : this.options.path;
         if (this.options.generateUrl) {
           const { proto: proto4, host: host2 } = this.extractHostAndProto(req);
           return this.options.generateUrl(req, {
             proto: proto4,
             host: host2,
-            path: path43,
+            path: path44,
             id
           });
         }
         if (this.options.relativeLocation) {
-          return `${path43}/${id}`;
+          return `${path44}/${id}`;
         }
         const { proto: proto3, host } = this.extractHostAndProto(req);
-        return `${proto3}://${host}${path43}/${id}`;
+        return `${proto3}://${host}${path44}/${id}`;
       }
       getFileIdFromRequest(req) {
         const match = reExtractFileID.exec(req.url);
@@ -25303,8 +25682,8 @@ var require_GetHandler = __commonJS({
           "application/ogg"
         ]);
       }
-      registerPath(path43, handler) {
-        this.paths.set(path43, handler);
+      registerPath(path44, handler) {
+        this.paths.set(path44, handler);
       }
       /**
        * Read data from the DataStore and send the stream.
@@ -26051,8 +26430,8 @@ var require_server = __commonJS({
           }
         });
       }
-      get(path43, handler) {
-        this.handlers.GET.registerPath(path43, handler);
+      get(path44, handler) {
+        this.handlers.GET.registerPath(path44, handler);
       }
       /**
        * Main server requestListener, invoked on every 'request' event.
@@ -26671,8 +27050,8 @@ var require_minimatch = __commonJS({
       return new Minimatch(pattern, options2).match(p64);
     };
     module.exports = minimatch;
-    var path43 = require_path();
-    minimatch.sep = path43.sep;
+    var path44 = require_path();
+    minimatch.sep = path44.sep;
     var GLOBSTAR = /* @__PURE__ */ Symbol("globstar **");
     minimatch.GLOBSTAR = GLOBSTAR;
     var expand = require_brace_expansion();
@@ -27278,8 +27657,8 @@ var require_minimatch = __commonJS({
         if (this.empty) return f64 === "";
         if (f64 === "/" && partial) return true;
         const options2 = this.options;
-        if (path43.sep !== "/") {
-          f64 = f64.split(path43.sep).join("/");
+        if (path44.sep !== "/") {
+          f64 = f64.split(path44.sep).join("/");
         }
         f64 = f64.split(slashSplit);
         this.debug(this.pattern, "split", f64);
@@ -27377,8 +27756,8 @@ var require_readdir_glob = __commonJS({
         });
       });
     }
-    async function* exploreWalkAsync(dir, path43, followSymlinks, useStat, shouldSkip, strict) {
-      let files = await readdir(path43 + dir, strict);
+    async function* exploreWalkAsync(dir, path44, followSymlinks, useStat, shouldSkip, strict) {
+      let files = await readdir(path44 + dir, strict);
       for (const file of files) {
         let name = file.name;
         if (name === void 0) {
@@ -27387,7 +27766,7 @@ var require_readdir_glob = __commonJS({
         }
         const filename = dir + "/" + name;
         const relative = filename.slice(1);
-        const absolute = path43 + "/" + relative;
+        const absolute = path44 + "/" + relative;
         let stats = null;
         if (useStat || followSymlinks) {
           stats = await stat(absolute, followSymlinks);
@@ -27401,15 +27780,15 @@ var require_readdir_glob = __commonJS({
         if (stats.isDirectory()) {
           if (!shouldSkip(relative)) {
             yield { relative, absolute, stats };
-            yield* exploreWalkAsync(filename, path43, followSymlinks, useStat, shouldSkip, false);
+            yield* exploreWalkAsync(filename, path44, followSymlinks, useStat, shouldSkip, false);
           }
         } else {
           yield { relative, absolute, stats };
         }
       }
     }
-    async function* explore(path43, followSymlinks, useStat, shouldSkip) {
-      yield* exploreWalkAsync("", path43, followSymlinks, useStat, shouldSkip, true);
+    async function* explore(path44, followSymlinks, useStat, shouldSkip) {
+      yield* exploreWalkAsync("", path44, followSymlinks, useStat, shouldSkip, true);
     }
     function readOptions(options2) {
       return {
@@ -29447,14 +29826,14 @@ var require_polyfills = __commonJS({
       fs40.fstatSync = statFixSync(fs40.fstatSync);
       fs40.lstatSync = statFixSync(fs40.lstatSync);
       if (fs40.chmod && !fs40.lchmod) {
-        fs40.lchmod = function(path43, mode, cb) {
+        fs40.lchmod = function(path44, mode, cb) {
           if (cb) process.nextTick(cb);
         };
         fs40.lchmodSync = function() {
         };
       }
       if (fs40.chown && !fs40.lchown) {
-        fs40.lchown = function(path43, uid, gid, cb) {
+        fs40.lchown = function(path44, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
         fs40.lchownSync = function() {
@@ -29521,9 +29900,9 @@ var require_polyfills = __commonJS({
         };
       })(fs40.readSync);
       function patchLchmod(fs41) {
-        fs41.lchmod = function(path43, mode, callback) {
+        fs41.lchmod = function(path44, mode, callback) {
           fs41.open(
-            path43,
+            path44,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -29539,8 +29918,8 @@ var require_polyfills = __commonJS({
             }
           );
         };
-        fs41.lchmodSync = function(path43, mode) {
-          var fd = fs41.openSync(path43, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs41.lchmodSync = function(path44, mode) {
+          var fd = fs41.openSync(path44, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -29561,8 +29940,8 @@ var require_polyfills = __commonJS({
       }
       function patchLutimes(fs41) {
         if (constants.hasOwnProperty("O_SYMLINK") && fs41.futimes) {
-          fs41.lutimes = function(path43, at3, mt6, cb) {
-            fs41.open(path43, constants.O_SYMLINK, function(er3, fd) {
+          fs41.lutimes = function(path44, at3, mt6, cb) {
+            fs41.open(path44, constants.O_SYMLINK, function(er3, fd) {
               if (er3) {
                 if (cb) cb(er3);
                 return;
@@ -29574,8 +29953,8 @@ var require_polyfills = __commonJS({
               });
             });
           };
-          fs41.lutimesSync = function(path43, at3, mt6) {
-            var fd = fs41.openSync(path43, constants.O_SYMLINK);
+          fs41.lutimesSync = function(path44, at3, mt6) {
+            var fd = fs41.openSync(path44, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -29693,11 +30072,11 @@ var require_legacy_streams = __commonJS({
         ReadStream,
         WriteStream
       };
-      function ReadStream(path43, options2) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path43, options2);
+      function ReadStream(path44, options2) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path44, options2);
         Stream2.call(this);
         var self2 = this;
-        this.path = path43;
+        this.path = path44;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -29742,10 +30121,10 @@ var require_legacy_streams = __commonJS({
           self2._read();
         });
       }
-      function WriteStream(path43, options2) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path43, options2);
+      function WriteStream(path44, options2) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path44, options2);
         Stream2.call(this);
-        this.path = path43;
+        this.path = path44;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -29887,15 +30266,15 @@ var require_graceful_fs = __commonJS({
       fs41.createReadStream = createReadStream;
       fs41.createWriteStream = createWriteStream2;
       var fs$readFile = fs41.readFile;
-      fs41.readFile = readFile;
-      function readFile(path43, options2, cb) {
+      fs41.readFile = readFile2;
+      function readFile2(path44, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        return go$readFile(path43, options2, cb);
-        function go$readFile(path44, options3, cb2, startTime) {
-          return fs$readFile(path44, options3, function(err) {
+        return go$readFile(path44, options2, cb);
+        function go$readFile(path45, options3, cb2, startTime) {
+          return fs$readFile(path45, options3, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path44, options3, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path45, options3, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -29905,14 +30284,14 @@ var require_graceful_fs = __commonJS({
       }
       var fs$writeFile = fs41.writeFile;
       fs41.writeFile = writeFile;
-      function writeFile(path43, data, options2, cb) {
+      function writeFile(path44, data, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        return go$writeFile(path43, data, options2, cb);
-        function go$writeFile(path44, data2, options3, cb2, startTime) {
-          return fs$writeFile(path44, data2, options3, function(err) {
+        return go$writeFile(path44, data, options2, cb);
+        function go$writeFile(path45, data2, options3, cb2, startTime) {
+          return fs$writeFile(path45, data2, options3, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path44, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path45, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -29923,14 +30302,14 @@ var require_graceful_fs = __commonJS({
       var fs$appendFile = fs41.appendFile;
       if (fs$appendFile)
         fs41.appendFile = appendFile;
-      function appendFile(path43, data, options2, cb) {
+      function appendFile(path44, data, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        return go$appendFile(path43, data, options2, cb);
-        function go$appendFile(path44, data2, options3, cb2, startTime) {
-          return fs$appendFile(path44, data2, options3, function(err) {
+        return go$appendFile(path44, data, options2, cb);
+        function go$appendFile(path45, data2, options3, cb2, startTime) {
+          return fs$appendFile(path45, data2, options3, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path44, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path45, data2, options3, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -29961,31 +30340,31 @@ var require_graceful_fs = __commonJS({
       var fs$readdir = fs41.readdir;
       fs41.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir(path43, options2, cb) {
+      function readdir(path44, options2, cb) {
         if (typeof options2 === "function")
           cb = options2, options2 = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path44, options3, cb2, startTime) {
-          return fs$readdir(path44, fs$readdirCallback(
-            path44,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path45, options3, cb2, startTime) {
+          return fs$readdir(path45, fs$readdirCallback(
+            path45,
             options3,
             cb2,
             startTime
           ));
-        } : function go$readdir2(path44, options3, cb2, startTime) {
-          return fs$readdir(path44, options3, fs$readdirCallback(
-            path44,
+        } : function go$readdir2(path45, options3, cb2, startTime) {
+          return fs$readdir(path45, options3, fs$readdirCallback(
+            path45,
             options3,
             cb2,
             startTime
           ));
         };
-        return go$readdir(path43, options2, cb);
-        function fs$readdirCallback(path44, options3, cb2, startTime) {
+        return go$readdir(path44, options2, cb);
+        function fs$readdirCallback(path45, options3, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path44, options3, cb2],
+                [path45, options3, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -30056,7 +30435,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path43, options2) {
+      function ReadStream(path44, options2) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -30076,7 +30455,7 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function WriteStream(path43, options2) {
+      function WriteStream(path44, options2) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -30094,22 +30473,22 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function createReadStream(path43, options2) {
-        return new fs41.ReadStream(path43, options2);
+      function createReadStream(path44, options2) {
+        return new fs41.ReadStream(path44, options2);
       }
-      function createWriteStream2(path43, options2) {
-        return new fs41.WriteStream(path43, options2);
+      function createWriteStream2(path44, options2) {
+        return new fs41.WriteStream(path44, options2);
       }
       var fs$open = fs41.open;
       fs41.open = open;
-      function open(path43, flags, mode, cb) {
+      function open(path44, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path43, flags, mode, cb);
-        function go$open(path44, flags2, mode2, cb2, startTime) {
-          return fs$open(path44, flags2, mode2, function(err, fd) {
+        return go$open(path44, flags, mode, cb);
+        function go$open(path45, flags2, mode2, cb2, startTime) {
+          return fs$open(path45, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path44, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path45, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -32214,22 +32593,22 @@ var require_lazystream = __commonJS({
 // node_modules/normalize-path/index.js
 var require_normalize_path = __commonJS({
   "node_modules/normalize-path/index.js"(exports, module) {
-    module.exports = function(path43, stripTrailing) {
-      if (typeof path43 !== "string") {
+    module.exports = function(path44, stripTrailing) {
+      if (typeof path44 !== "string") {
         throw new TypeError("expected path to be a string");
       }
-      if (path43 === "\\" || path43 === "/") return "/";
-      var len = path43.length;
-      if (len <= 1) return path43;
+      if (path44 === "\\" || path44 === "/") return "/";
+      var len = path44.length;
+      if (len <= 1) return path44;
       var prefix = "";
-      if (len > 4 && path43[3] === "\\") {
-        var ch = path43[2];
-        if ((ch === "?" || ch === ".") && path43.slice(0, 2) === "\\\\") {
-          path43 = path43.slice(2);
+      if (len > 4 && path44[3] === "\\") {
+        var ch = path44[2];
+        if ((ch === "?" || ch === ".") && path44.slice(0, 2) === "\\\\") {
+          path44 = path44.slice(2);
           prefix = "//";
         }
       }
-      var segs = path43.split(/[/\\]+/);
+      var segs = path44.split(/[/\\]+/);
       if (stripTrailing !== false && segs[segs.length - 1] === "") {
         segs.pop();
       }
@@ -39904,8 +40283,8 @@ var require_arrayMap = __commonJS({
 // node_modules/lodash/_cacheHas.js
 var require_cacheHas = __commonJS({
   "node_modules/lodash/_cacheHas.js"(exports, module) {
-    function cacheHas(cache3, key) {
-      return cache3.has(key);
+    function cacheHas(cache2, key) {
+      return cache2.has(key);
     }
     module.exports = cacheHas;
   }
@@ -41025,11 +41404,11 @@ var require_commonjs = __commonJS({
       return (f64) => f64.length === len && f64 !== "." && f64 !== "..";
     };
     var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-    var path43 = {
+    var path44 = {
       win32: { sep: "\\" },
       posix: { sep: "/" }
     };
-    exports.sep = defaultPlatform === "win32" ? path43.win32.sep : path43.posix.sep;
+    exports.sep = defaultPlatform === "win32" ? path44.win32.sep : path44.posix.sep;
     exports.minimatch.sep = exports.sep;
     exports.GLOBSTAR = /* @__PURE__ */ Symbol("globstar **");
     exports.minimatch.GLOBSTAR = exports.GLOBSTAR;
@@ -44422,13 +44801,13 @@ var require_commonjs4 = __commonJS({
       /**
        * Get the Path object referenced by the string path, resolved from this Path
        */
-      resolve(path43) {
+      resolve(path44) {
         var _a2;
-        if (!path43) {
+        if (!path44) {
           return this;
         }
-        const rootPath = this.getRootString(path43);
-        const dir = path43.substring(rootPath.length);
+        const rootPath = this.getRootString(path44);
+        const dir = path44.substring(rootPath.length);
         const dirParts = dir.split(this.splitSep);
         const result = rootPath ? __privateMethod(_a2 = this.getRoot(rootPath), _PathBase_instances, resolveParts_fn).call(_a2, dirParts) : __privateMethod(this, _PathBase_instances, resolveParts_fn).call(this, dirParts);
         return result;
@@ -45215,8 +45594,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path43) {
-        return node_path_1.win32.parse(path43).root;
+      getRootString(path44) {
+        return node_path_1.win32.parse(path44).root;
       }
       /**
        * @internal
@@ -45263,8 +45642,8 @@ var require_commonjs4 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path43) {
-        return path43.startsWith("/") ? "/" : "";
+      getRootString(path44) {
+        return path44.startsWith("/") ? "/" : "";
       }
       /**
        * @internal
@@ -45355,11 +45734,11 @@ var require_commonjs4 = __commonJS({
       /**
        * Get the depth of a provided path, string, or the cwd
        */
-      depth(path43 = this.cwd) {
-        if (typeof path43 === "string") {
-          path43 = this.cwd.resolve(path43);
+      depth(path44 = this.cwd) {
+        if (typeof path44 === "string") {
+          path44 = this.cwd.resolve(path44);
         }
-        return path43.depth();
+        return path44.depth();
       }
       /**
        * Return the cache of child entries.  Exposed so subclasses can create
@@ -45846,9 +46225,9 @@ var require_commonjs4 = __commonJS({
         process3();
         return results;
       }
-      chdir(path43 = this.cwd) {
+      chdir(path44 = this.cwd) {
         const oldCwd = this.cwd;
-        this.cwd = typeof path43 === "string" ? this.cwd.resolve(path43) : path43;
+        this.cwd = typeof path44 === "string" ? this.cwd.resolve(path44) : path44;
         this.cwd[setAsCwd](oldCwd);
       }
     };
@@ -46254,8 +46633,8 @@ var require_processor = __commonJS({
       }
       // match, absolute, ifdir
       entries() {
-        return [...this.store.entries()].map(([path43, n44]) => [
-          path43,
+        return [...this.store.entries()].map(([path44, n44]) => [
+          path44,
           !!(n44 & 2),
           !!(n44 & 1)
         ]);
@@ -46464,7 +46843,7 @@ var require_walker = __commonJS({
     var makeIgnore = (ignore, opts) => typeof ignore === "string" ? new ignore_js_1.Ignore([ignore], opts) : Array.isArray(ignore) ? new ignore_js_1.Ignore(ignore, opts) : ignore;
     var _onResume, _ignore, _sep, _GlobUtil_instances, ignored_fn, childrenIgnored_fn;
     var GlobUtil = class {
-      constructor(patterns, path43, opts) {
+      constructor(patterns, path44, opts) {
         __privateAdd(this, _GlobUtil_instances);
         __publicField(this, "path");
         __publicField(this, "patterns");
@@ -46479,7 +46858,7 @@ var require_walker = __commonJS({
         __publicField(this, "maxDepth");
         __publicField(this, "includeChildMatches");
         this.patterns = patterns;
-        this.path = path43;
+        this.path = path44;
         this.opts = opts;
         __privateSet(this, _sep, !opts.posix && opts.platform === "win32" ? "\\" : "/");
         this.includeChildMatches = opts.includeChildMatches !== false;
@@ -46713,16 +47092,16 @@ var require_walker = __commonJS({
     _ignore = new WeakMap();
     _sep = new WeakMap();
     _GlobUtil_instances = new WeakSet();
-    ignored_fn = function(path43) {
-      return this.seen.has(path43) || !!__privateGet(this, _ignore)?.ignored?.(path43);
+    ignored_fn = function(path44) {
+      return this.seen.has(path44) || !!__privateGet(this, _ignore)?.ignored?.(path44);
     };
-    childrenIgnored_fn = function(path43) {
-      return !!__privateGet(this, _ignore)?.childrenIgnored?.(path43);
+    childrenIgnored_fn = function(path44) {
+      return !!__privateGet(this, _ignore)?.childrenIgnored?.(path44);
     };
     exports.GlobUtil = GlobUtil;
     var GlobWalker = class extends GlobUtil {
-      constructor(patterns, path43, opts) {
-        super(patterns, path43, opts);
+      constructor(patterns, path44, opts) {
+        super(patterns, path44, opts);
         __publicField(this, "matches", /* @__PURE__ */ new Set());
       }
       matchEmit(e29) {
@@ -46760,8 +47139,8 @@ var require_walker = __commonJS({
     };
     exports.GlobWalker = GlobWalker;
     var GlobStream = class extends GlobUtil {
-      constructor(patterns, path43, opts) {
-        super(patterns, path43, opts);
+      constructor(patterns, path44, opts) {
+        super(patterns, path44, opts);
         __publicField(this, "results");
         this.results = new minipass_1.Minipass({
           signal: this.signal,
@@ -47118,7 +47497,7 @@ var require_commonjs5 = __commonJS({
 var require_file = __commonJS({
   "node_modules/archiver-utils/file.js"(exports, module) {
     var fs40 = require_graceful_fs();
-    var path43 = __require("path");
+    var path44 = __require("path");
     var flatten = require_flatten();
     var difference = require_difference();
     var union = require_union();
@@ -47143,7 +47522,7 @@ var require_file = __commonJS({
       return result;
     };
     file.exists = function() {
-      var filepath = path43.join.apply(path43, arguments);
+      var filepath = path44.join.apply(path44, arguments);
       return fs40.existsSync(filepath);
     };
     file.expand = function(...args) {
@@ -47157,7 +47536,7 @@ var require_file = __commonJS({
       });
       if (options2.filter) {
         matches = matches.filter(function(filepath) {
-          filepath = path43.join(options2.cwd || "", filepath);
+          filepath = path44.join(options2.cwd || "", filepath);
           try {
             if (typeof options2.filter === "function") {
               return options2.filter(filepath);
@@ -47174,7 +47553,7 @@ var require_file = __commonJS({
     file.expandMapping = function(patterns, destBase, options2) {
       options2 = Object.assign({
         rename: function(destBase2, destPath) {
-          return path43.join(destBase2 || "", destPath);
+          return path44.join(destBase2 || "", destPath);
         }
       }, options2);
       var files = [];
@@ -47182,14 +47561,14 @@ var require_file = __commonJS({
       file.expand(options2, patterns).forEach(function(src) {
         var destPath = src;
         if (options2.flatten) {
-          destPath = path43.basename(destPath);
+          destPath = path44.basename(destPath);
         }
         if (options2.ext) {
           destPath = destPath.replace(/(\.[^\/]*)?$/, options2.ext);
         }
         var dest = options2.rename(destBase, destPath, options2);
         if (options2.cwd) {
-          src = path43.join(options2.cwd, src);
+          src = path44.join(options2.cwd, src);
         }
         dest = dest.replace(pathSeparatorRe, "/");
         src = src.replace(pathSeparatorRe, "/");
@@ -47271,7 +47650,7 @@ var require_file = __commonJS({
 var require_archiver_utils = __commonJS({
   "node_modules/archiver-utils/index.js"(exports, module) {
     var fs40 = require_graceful_fs();
-    var path43 = __require("path");
+    var path44 = __require("path");
     var isStream = require_is_stream();
     var lazystream = require_lazystream();
     var normalizePath2 = require_normalize_path();
@@ -47359,11 +47738,11 @@ var require_archiver_utils = __commonJS({
           if (!file) {
             return callback(null, results);
           }
-          filepath = path43.join(dirpath, file);
+          filepath = path44.join(dirpath, file);
           fs40.stat(filepath, function(err2, stats) {
             results.push({
               path: filepath,
-              relative: path43.relative(base, filepath).replace(/\\/g, "/"),
+              relative: path44.relative(base, filepath).replace(/\\/g, "/"),
               stats
             });
             if (stats && stats.isDirectory()) {
@@ -52888,7 +53267,7 @@ var require_core = __commonJS({
     var fs40 = __require("fs");
     var glob = require_readdir_glob();
     var async = require_async();
-    var path43 = __require("path");
+    var path44 = __require("path");
     var util2 = require_archiver_utils();
     var inherits2 = __require("util").inherits;
     var ArchiverError = require_error();
@@ -53164,9 +53543,9 @@ var require_core = __commonJS({
         task.source = Buffer.concat([]);
       } else if (stats.isSymbolicLink() && this._moduleSupports("symlink")) {
         var linkPath = fs40.readlinkSync(task.filepath);
-        var dirName = path43.dirname(task.filepath);
+        var dirName = path44.dirname(task.filepath);
         task.data.type = "symlink";
-        task.data.linkname = path43.relative(dirName, path43.resolve(dirName, linkPath));
+        task.data.linkname = path44.relative(dirName, path44.resolve(dirName, linkPath));
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else {
@@ -68638,8 +69017,8 @@ var HIGH_CONFIDENCE_PROBE_PATTERNS = [
   /\.procmailrc/i,
   /config\.inc\.php/i
 ];
-function isHighConfidenceProbe(path43) {
-  return HIGH_CONFIDENCE_PROBE_PATTERNS.some((pattern) => pattern.test(path43));
+function isHighConfidenceProbe(path44) {
+  return HIGH_CONFIDENCE_PROBE_PATTERNS.some((pattern) => pattern.test(path44));
 }
 var activity = /* @__PURE__ */ new Map();
 function getBucket(ip) {
@@ -68666,11 +69045,11 @@ function isBanned(ip) {
   const bucket = activity.get(ip);
   return !!bucket && bucket.bannedUntil > Date.now();
 }
-function recordSuspiciousRequest(ip, path43, userAgent) {
+function recordSuspiciousRequest(ip, path44, userAgent) {
   const bucket = getBucket(ip);
-  const weight = isHighConfidenceProbe(path43) ? ALERT_THRESHOLD : 1;
+  const weight = isHighConfidenceProbe(path44) ? ALERT_THRESHOLD : 1;
   bucket.count += weight;
-  if (bucket.paths.length < 5) bucket.paths.push(path43);
+  if (bucket.paths.length < 5) bucket.paths.push(path44);
   if (userAgent && bucket.userAgents.size < 3) bucket.userAgents.add(userAgent);
   if (bucket.count >= BAN_THRESHOLD) {
     bucket.bannedUntil = Date.now() + BAN_DURATION_MS;
@@ -69210,7 +69589,7 @@ var getGroupList = getGroupListHandler;
 var syncGroups = syncGroupsHandler;
 
 // src/middleware/tenant.middleware.ts
-var import_jsonwebtoken3 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken4 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 init_logger();
 init_models();
@@ -69269,7 +69648,7 @@ async function requireTenant(req, res, next) {
       }
       let decoded;
       try {
-        decoded = import_jsonwebtoken3.default.verify(token, config.security.jwtSecret);
+        decoded = import_jsonwebtoken4.default.verify(token, config.security.jwtSecret);
       } catch (err) {
         const error = new Error("Invalid or expired token");
         error.statusCode = 401;
@@ -69399,7 +69778,7 @@ function optionalTenant(req, res, next) {
       return next();
     }
     try {
-      const decoded = import_jsonwebtoken3.default.verify(token, config.security.jwtSecret);
+      const decoded = import_jsonwebtoken4.default.verify(token, config.security.jwtSecret);
       if (decoded.companyId) {
         req.companyId = decoded.companyId;
         logger_default.info(`Optional tenant identified: ${decoded.companyId}`);
@@ -69589,7 +69968,7 @@ init_logger();
 import { Router as Router2 } from "express";
 import { promises as fs8 } from "fs";
 import os3 from "os";
-import path13 from "path";
+import path14 from "path";
 import { execFile as execFile2 } from "child_process";
 import { promisify as promisify2 } from "util";
 
@@ -69641,7 +70020,7 @@ function startMetricsHistory() {
 // src/api/routes/admin-health.routes.ts
 var execFileAsync2 = promisify2(execFile2);
 var router2 = Router2();
-var BACKUP_CONFIG_DIR = process.env.BACKUP_HEARTBEAT_DIR || path13.join(os3.homedir(), ".config", "constroad-backup");
+var BACKUP_CONFIG_DIR = process.env.BACKUP_HEARTBEAT_DIR || path14.join(os3.homedir(), ".config", "constroad-backup");
 var BACKUP_VOLUME = process.env.BACKUP_VOLUME || "/Volumes/CONSTROAD-BACKUP";
 function basicAuth(req, res, next) {
   const esperado = process.env.API_SECRET_KEY;
@@ -69660,7 +70039,7 @@ function basicAuth(req, res, next) {
 }
 async function edadHeartbeat(archivo) {
   try {
-    const raw = await fs8.readFile(path13.join(BACKUP_CONFIG_DIR, archivo), "utf8");
+    const raw = await fs8.readFile(path14.join(BACKUP_CONFIG_DIR, archivo), "utf8");
     const epoch = Number(raw.trim());
     if (!Number.isFinite(epoch) || epoch <= 0) return -1;
     return Math.floor(Date.now() / 1e3 - epoch);
@@ -71496,7 +71875,7 @@ init_environment();
 import puppeteer from "puppeteer";
 import Handlebars from "handlebars";
 import fs9 from "fs-extra";
-import path14 from "path";
+import path15 from "path";
 import os4 from "os";
 import { randomUUID as randomUUID5 } from "crypto";
 
@@ -71555,14 +71934,14 @@ function resolveChromeExecutable() {
   }
   candidates.push("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
   try {
-    const cacheRoot = path14.join(os4.homedir(), ".cache", "puppeteer", "chrome");
+    const cacheRoot = path15.join(os4.homedir(), ".cache", "puppeteer", "chrome");
     const builds = fs9.readdirSync(cacheRoot).map((name) => {
       const major = Number((name.match(/mac_arm-(\d+)\./) || [])[1] || 0);
       return { name, major };
     }).filter((b63) => b63.major >= 130).sort((a49, b63) => b63.major - a49.major);
     for (const b63 of builds) {
       candidates.push(
-        path14.join(
+        path15.join(
           cacheRoot,
           b63.name,
           "chrome-mac-arm64",
@@ -71713,7 +72092,7 @@ var PDFGenerator = class {
       const compiled = Handlebars.compile(template);
       const html = compiled(request.data);
       const filename = request.filename || `pdf-${randomUUID5()}.pdf`;
-      const filepath = path14.join(this.uploadsDir, filename);
+      const filepath = path15.join(this.uploadsDir, filename);
       return await renderLimiter.run(async () => {
         const page = await this.createPageWithRetry();
         try {
@@ -71743,8 +72122,8 @@ var PDFGenerator = class {
   async generateFromHtml(html, options2 = {}) {
     try {
       await this.ensureBrowser();
-      const filepath = options2.outputPath ? options2.outputPath : path14.join(this.uploadsDir, options2.filename || `pdf-${randomUUID5()}.pdf`);
-      await fs9.ensureDir(path14.dirname(filepath));
+      const filepath = options2.outputPath ? options2.outputPath : path15.join(this.uploadsDir, options2.filename || `pdf-${randomUUID5()}.pdf`);
+      await fs9.ensureDir(path15.dirname(filepath));
       const startedAt = Date.now();
       const htmlBytes = Buffer.byteLength(html);
       return await renderLimiter.run(async () => {
@@ -71820,8 +72199,8 @@ var PDFGenerator = class {
   }
   async createTemplate(id, name, htmlContent) {
     try {
-      const filepath = path14.join(this.templatesDir, `${id}.hbs`);
-      await fs9.ensureDir(path14.dirname(filepath));
+      const filepath = path15.join(this.templatesDir, `${id}.hbs`);
+      await fs9.ensureDir(path15.dirname(filepath));
       await fs9.writeFile(filepath, htmlContent, "utf-8");
       logger_default.info(`Created PDF template: ${id}`);
     } catch (error) {
@@ -71831,7 +72210,7 @@ var PDFGenerator = class {
   }
   async loadTemplate(templateId) {
     try {
-      const filepath = path14.join(this.templatesDir, `${templateId}.hbs`);
+      const filepath = path15.join(this.templatesDir, `${templateId}.hbs`);
       if (!await fs9.pathExists(filepath)) {
         throw new Error(`Template not found: ${templateId}`);
       }
@@ -71852,7 +72231,7 @@ var PDFGenerator = class {
   }
   async deleteTemplate(templateId) {
     try {
-      const filepath = path14.join(this.templatesDir, `${templateId}.hbs`);
+      const filepath = path15.join(this.templatesDir, `${templateId}.hbs`);
       if (await fs9.pathExists(filepath)) {
         await fs9.remove(filepath);
         logger_default.info(`Deleted template: ${templateId}`);
@@ -71947,7 +72326,7 @@ async function deleteTemplate(req, res, next) {
 
 // src/api/controllers/pdf-vale.controller.ts
 import fs11 from "fs-extra";
-import path16 from "path";
+import path17 from "path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { randomUUID as randomUUID6 } from "crypto";
 init_environment();
@@ -71955,7 +72334,7 @@ init_environment();
 // src/pdf/render.service.ts
 init_environment();
 import fs10 from "fs-extra";
-import path15 from "path";
+import path16 from "path";
 import crypto4 from "crypto";
 import { createCanvas } from "@napi-rs/canvas";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -71983,8 +72362,8 @@ async function renderPdfPageToPng(filePath, options2) {
   const stat = await fs10.stat(filePath);
   const scale = clampScale(options2.scale);
   const cacheKey = getCacheKey(filePath, stat, options2.page, scale);
-  const cacheDir = path15.resolve(resolveDriveCacheDir(), cacheKey);
-  const cacheFile = path15.join(cacheDir, `page-${options2.page}.png`);
+  const cacheDir = path16.resolve(resolveDriveCacheDir(), cacheKey);
+  const cacheFile = path16.join(cacheDir, `page-${options2.page}.png`);
   if (await fs10.pathExists(cacheFile)) {
     return { cacheFile, fromCache: true };
   }
@@ -72010,8 +72389,8 @@ async function renderPdfPageToPngWithGrid(filePath, options2) {
   const scale = clampScale(options2.scale);
   const gridSize = options2.gridSize && options2.gridSize > 0 ? options2.gridSize : 50;
   const cacheKey = getCacheKey(filePath, stat, options2.page, scale) + `-g${gridSize}`;
-  const cacheDir = path15.resolve(resolveDriveCacheDir(), cacheKey);
-  const cacheFile = path15.join(cacheDir, `page-${options2.page}-grid.png`);
+  const cacheDir = path16.resolve(resolveDriveCacheDir(), cacheKey);
+  const cacheFile = path16.join(cacheDir, `page-${options2.page}-grid.png`);
   if (await fs10.pathExists(cacheFile)) {
     return { cacheFile, fromCache: true };
   }
@@ -72171,7 +72550,7 @@ async function generateVale(req, res, next) {
         return next(error);
       }
     }
-    const templatePath = path16.join(config.pdf.templatesDir, template);
+    const templatePath = path17.join(config.pdf.templatesDir, template);
     if (!await fs11.pathExists(templatePath)) {
       const error = new Error("Template not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -72188,8 +72567,8 @@ async function generateVale(req, res, next) {
     }
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const signaturePath = path16.join(
-      path16.dirname(config.pdf.templatesDir),
+    const signaturePath = path17.join(
+      path17.dirname(config.pdf.templatesDir),
       "signatures",
       "signature-dispatch-note.png"
     );
@@ -72238,7 +72617,7 @@ async function generateVale(req, res, next) {
     const valeNumber = fields.nroVale || randomUUID6().slice(0, 8);
     const safeVale = String(valeNumber).replace(/[^a-zA-Z0-9_-]+/g, "-");
     const filename = `vale-despacho-${safeVale}.pdf`;
-    const outputPath = path16.join(config.pdf.tempDir, filename);
+    const outputPath = path17.join(config.pdf.tempDir, filename);
     const pdfBytes = await pdfDoc.save();
     await fs11.writeFile(outputPath, pdfBytes);
     await linearizePdfInPlace(outputPath, { mimeType: "application/pdf" });
@@ -72304,7 +72683,7 @@ async function previewValeTemplateGrid(req, res, next) {
     const page = parseInt(String(req.query.page || "1"), 10);
     const scale = parseFloat(String(req.query.scale || "1.5"));
     const gridSize = parseInt(String(req.query.grid || "50"), 10);
-    const templatePath = path16.join(config.pdf.templatesDir, template);
+    const templatePath = path17.join(config.pdf.templatesDir, template);
     if (!await fs11.pathExists(templatePath)) {
       const error = new Error("Template not found");
       error.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -72317,7 +72696,7 @@ async function previewValeTemplateGrid(req, res, next) {
     });
     res.setHeader("Cache-Control", "public, max-age=3600, immutable");
     res.setHeader("Content-Type", "image/png");
-    res.status(HTTP_STATUS.OK).sendFile(path16.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path17.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -72334,7 +72713,7 @@ import fs13 from "fs-extra";
 init_environment();
 init_models();
 import fs12 from "fs-extra";
-import path17 from "path";
+import path18 from "path";
 var escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 var formatDate2 = (value) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
@@ -72431,7 +72810,7 @@ async function generatePlantSettlementPdf(params) {
   });
   await fs12.ensureDir(config.pdf.tempDir);
   const fileName = `reporte-produccion-${Date.now()}.pdf`;
-  const filePath = path17.join(config.pdf.tempDir, fileName);
+  const filePath = path18.join(config.pdf.tempDir, fileName);
   await generator_service_default.generateFromHtml(html, {
     outputPath: filePath,
     format: "A4",
@@ -72533,11 +72912,11 @@ var pdf_routes_default = router5;
 import { Router as Router6 } from "express";
 import multer2 from "multer";
 import fs22 from "fs-extra";
-import path27 from "path";
+import path28 from "path";
 
 // src/api/controllers/drive.controller.ts
 import fs17 from "fs-extra";
-import path22 from "path";
+import path23 from "path";
 init_storage_path_service();
 
 // src/middleware/quota.middleware.ts
@@ -72640,7 +73019,7 @@ init_logger();
 
 // src/services/thumbnail.service.ts
 import fs14 from "fs-extra";
-import path18 from "path";
+import path19 from "path";
 import crypto5 from "crypto";
 import sharp from "sharp";
 import { spawn as spawn2 } from "child_process";
@@ -72723,7 +73102,7 @@ var THUMBNAIL_MAX_PX = Number(process.env.THUMBNAIL_MAX_PX) || 640;
 var PDF_THUMBNAIL_MAX_PX = 1200;
 function resolveKind(mimeType, fileName) {
   const mime = (mimeType || "").toLowerCase();
-  const ext = path18.extname(fileName).toLowerCase();
+  const ext = path19.extname(fileName).toLowerCase();
   if (mime.startsWith("image/") && !mime.includes("svg") || [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)) {
     return "image";
   }
@@ -72739,25 +73118,25 @@ function sanitizeName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "file";
 }
 async function removePreviousThumbnails(outputDir, safeBase) {
-  const thumbDir = path18.join(outputDir, thumbDirName);
+  const thumbDir = path19.join(outputDir, thumbDirName);
   await fs14.ensureDir(thumbDir);
   const entries = await fs14.readdir(thumbDir).catch(() => []);
   const prefix = `thumb_${safeBase}_`;
   await Promise.all(
-    entries.filter((entry) => entry.startsWith(prefix)).map((entry) => fs14.remove(path18.join(thumbDir, entry)).catch(() => {
+    entries.filter((entry) => entry.startsWith(prefix)).map((entry) => fs14.remove(path19.join(thumbDir, entry)).catch(() => {
     }))
   );
 }
 async function createThumbTargetPath(options2) {
   const stat = await fs14.stat(options2.filePath);
-  const parsed = path18.parse(options2.fileName);
+  const parsed = path19.parse(options2.fileName);
   const safeBase = sanitizeName(parsed.name || "file");
   const hash = crypto5.createHash("sha1").update(`${options2.filePath}:${stat.size}:${stat.mtimeMs}`).digest("hex").slice(0, 10);
   const thumbName = `thumb_${safeBase}_${hash}.jpg`;
-  const thumbDir = path18.join(options2.outputDir, thumbDirName);
+  const thumbDir = path19.join(options2.outputDir, thumbDirName);
   await fs14.ensureDir(thumbDir);
   await removePreviousThumbnails(options2.outputDir, safeBase);
-  const thumbPath = path18.join(thumbDir, thumbName);
+  const thumbPath = path19.join(thumbDir, thumbName);
   return { thumbName, thumbPath };
 }
 async function runFfmpeg(args) {
@@ -72820,8 +73199,8 @@ function materializeThumbnailInBackground(originalAbsolutePath) {
   void materializeLimiter.run(
     () => generateThumbnailForFile({
       filePath: originalAbsolutePath,
-      fileName: path18.basename(originalAbsolutePath),
-      outputDir: path18.dirname(originalAbsolutePath)
+      fileName: path19.basename(originalAbsolutePath),
+      outputDir: path19.dirname(originalAbsolutePath)
     })
   ).then((result) => {
     if (result.status === "ready") {
@@ -72887,17 +73266,17 @@ async function generateThumbnailForFile(options2) {
 // src/services/video-stream.service.ts
 init_logger();
 import fs15 from "fs-extra";
-import path19 from "path";
+import path20 from "path";
 import { spawn as spawn3 } from "child_process";
 var FASTSTART_EXTENSIONS = /* @__PURE__ */ new Set([".mp4", ".m4v", ".mov"]);
 var isVideoByMimeOrExt = (mimeType, fileName) => {
   const mime = (mimeType || "").toLowerCase();
-  const ext = path19.extname(fileName).toLowerCase();
+  const ext = path20.extname(fileName).toLowerCase();
   if (mime.startsWith("video/")) return true;
   return [".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi", ".mpeg", ".mpg", ".3gp"].includes(ext);
 };
 var supportsFaststart = (fileName) => {
-  const ext = path19.extname(fileName).toLowerCase();
+  const ext = path20.extname(fileName).toLowerCase();
   return FASTSTART_EXTENSIONS.has(ext);
 };
 var runFfmpegWithTimeout = async (args, timeoutMs) => {
@@ -72965,9 +73344,9 @@ async function optimizeVideoForProgressiveStreaming(options2) {
   const timeoutMs = Number.isFinite(options2.timeoutMs) ? options2.timeoutMs : 18e4;
   try {
     const sourceStat = await fs15.stat(options2.filePath);
-    const ext = path19.extname(options2.fileName).toLowerCase() || ".mp4";
-    const tempPath = path19.join(
-      path19.dirname(options2.filePath),
+    const ext = path20.extname(options2.fileName).toLowerCase() || ".mp4";
+    const tempPath = path20.join(
+      path20.dirname(options2.filePath),
       `.tmp_faststart_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`
     );
     await runFfmpegWithTimeout(
@@ -72983,11 +73362,11 @@ async function optimizeVideoForProgressiveStreaming(options2) {
     };
   } catch (error) {
     if (typeof options2.filePath === "string") {
-      const ext = path19.extname(options2.fileName).toLowerCase() || ".mp4";
+      const ext = path20.extname(options2.fileName).toLowerCase() || ".mp4";
       const tempPrefix = `.tmp_faststart_`;
-      const dir = path19.dirname(options2.filePath);
+      const dir = path20.dirname(options2.filePath);
       const entries = await fs15.readdir(dir).catch(() => []);
-      const cleanupTasks = entries.filter((entry) => entry.startsWith(tempPrefix) && entry.endsWith(ext)).map((entry) => fs15.remove(path19.join(dir, entry)).catch(() => {
+      const cleanupTasks = entries.filter((entry) => entry.startsWith(tempPrefix) && entry.endsWith(ext)).map((entry) => fs15.remove(path20.join(dir, entry)).catch(() => {
       }));
       await Promise.all(cleanupTasks);
     }
@@ -73008,24 +73387,24 @@ async function optimizeVideoForProgressiveStreaming(options2) {
 
 // src/services/storage-file-name.service.ts
 import crypto6 from "crypto";
-import path20 from "path";
+import path21 from "path";
 var MAX_SAFE_BASENAME_LENGTH = 80;
 function sanitizeStorageFileName(name) {
-  const parsed = path20.parse(name || "file");
+  const parsed = path21.parse(name || "file");
   const safeBase = parsed.name.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "").slice(0, MAX_SAFE_BASENAME_LENGTH) || "file";
   const safeExt = parsed.ext.replace(/[^a-zA-Z0-9.]/g, "").slice(0, 16).toLowerCase();
   return `${safeBase}${safeExt}`;
 }
 function buildUniqueStorageFileName(originalName, uniqueSeed) {
   const safeName = sanitizeStorageFileName(originalName);
-  const parsed = path20.parse(safeName);
+  const parsed = path21.parse(safeName);
   const hash = crypto6.createHash("sha1").update(`${uniqueSeed || crypto6.randomUUID()}:${originalName}:${Date.now()}`).digest("hex").slice(0, 10);
   return `${parsed.name}_${hash}${parsed.ext}`;
 }
 
 // src/services/media-ingest.service.ts
 init_logger();
-import path21 from "path";
+import path22 from "path";
 import { randomUUID as randomUUID7 } from "crypto";
 import sharp2 from "sharp";
 import fs16 from "fs-extra";
@@ -73036,7 +73415,7 @@ var isNormalizableImage = (fileName, mimeType) => {
   const mime = (mimeType || "").toLowerCase();
   if (mime.includes("svg") || mime.includes("gif")) return false;
   if (mime.startsWith("image/")) return true;
-  return IMAGE_EXTENSIONS.has(path21.extname(fileName).toLowerCase());
+  return IMAGE_EXTENSIONS.has(path22.extname(fileName).toLowerCase());
 };
 async function normalizeImageInPlace(params) {
   const maxPx = params.maxPx ?? MEDIA_INGEST_MAX_PX;
@@ -73056,8 +73435,8 @@ async function normalizeImageInPlace(params) {
     const hasAlpha = Boolean(metadata.hasAlpha);
     const pipeline2 = sharp2(params.filePath).rotate().resize(maxPx, maxPx, { fit: "inside", withoutEnlargement: true });
     const output = await (hasAlpha ? pipeline2.png({ compressionLevel: 9 }) : pipeline2.jpeg({ quality: NORMALIZED_JPEG_QUALITY, progressive: true, mozjpeg: true })).toBuffer();
-    const tmpPath = path21.join(
-      path21.dirname(params.filePath),
+    const tmpPath = path22.join(
+      path22.dirname(params.filePath),
       `.ingest-${randomUUID7()}.tmp`
     );
     await fs16.writeFile(tmpPath, output);
@@ -73086,7 +73465,7 @@ init_json_store();
 init_environment();
 var MAX_MIGRATION_COPY_ENTRIES = 500;
 var migrationJobStore = new json_store_default({
-  baseDir: path22.join(config.storage.root, "migration-jobs"),
+  baseDir: path23.join(config.storage.root, "migration-jobs"),
   autoBackup: false
 });
 var activeMigrationCopyJobs = /* @__PURE__ */ new Set();
@@ -73156,7 +73535,7 @@ async function listEntries(req, res, next) {
     const entries = (await fs17.readdir(resolved)).filter((name) => !name.startsWith("."));
     const results = await Promise.all(
       entries.map(async (name) => {
-        const entryStat = await fs17.stat(path22.join(resolved, name));
+        const entryStat = await fs17.stat(path23.join(resolved, name));
         const entry = toEntry(relativePath, name, entryStat, companyId);
         const result = { ...entry };
         if (entry.url) {
@@ -73207,7 +73586,7 @@ async function createFolder(req, res, next) {
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    const target = path22.join(resolved, name);
+    const target = path23.join(resolved, name);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
@@ -73268,7 +73647,7 @@ async function uploadFile(req, res, next) {
       return next(error);
     }
     const storageFileName = buildUniqueStorageFileName(file.originalname, file.path);
-    const target = path22.join(resolved, storageFileName);
+    const target = path23.join(resolved, storageFileName);
     if (!storagePathService.validateAccess(target, companyId)) {
       const error = new Error("Access denied: invalid target path");
       error.statusCode = HTTP_STATUS.FORBIDDEN;
@@ -73434,7 +73813,7 @@ async function moveEntry(req, res, next) {
       error.statusCode = HTTP_STATUS.NOT_FOUND;
       return next(error);
     }
-    await fs17.ensureDir(path22.dirname(toResolved));
+    await fs17.ensureDir(path23.dirname(toResolved));
     await fs17.move(fromResolved, toResolved, { overwrite: false });
     const publicUrl2 = `/files/companies/${companyId}/${to3}`;
     res.status(HTTP_STATUS.OK).json({
@@ -73516,7 +73895,7 @@ var copyCompanyFileEntry = async (params) => {
     throw error;
   }
   await storagePathService.ensureCompanyStructure(params.targetCompanyId);
-  await fs17.ensureDir(path22.dirname(targetResolved));
+  await fs17.ensureDir(path23.dirname(targetResolved));
   const targetExists = await fs17.pathExists(targetResolved);
   let createdTarget = false;
   if (targetExists) {
@@ -73837,8 +74216,8 @@ async function getInfo(req, res, next) {
       return next(error);
     }
     const stat = await fs17.stat(resolved);
-    const name = path22.basename(resolved);
-    const parent = path22.dirname(targetPath).replace(/\\/g, "/");
+    const name = path23.basename(resolved);
+    const parent = path23.dirname(targetPath).replace(/\\/g, "/");
     const base = parent === "." ? "" : parent;
     res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -73861,7 +74240,7 @@ async function getInfo(req, res, next) {
 
 // src/api/controllers/drive-pdf.controller.ts
 import fs18 from "fs-extra";
-import path23 from "path";
+import path24 from "path";
 init_storage_path_service();
 function getPdfPathFromRequest(req) {
   const companyId = req.companyId;
@@ -73879,7 +74258,7 @@ function getPdfPathFromRequest(req) {
   return { resolved, normalized: pathParam };
 }
 function ensurePdfExtension(filePath) {
-  return path23.extname(filePath).toLowerCase() === ".pdf";
+  return path24.extname(filePath).toLowerCase() === ".pdf";
 }
 async function resolveExistingPdfPath(resolved, normalized, companyId) {
   if (await fs18.pathExists(resolved)) {
@@ -73969,7 +74348,7 @@ async function getPdfPageImage(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path23.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path24.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -74015,7 +74394,7 @@ async function getPdfPagePreviewGrid(req, res, next) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("X-PDF-Path", normalized);
     res.setHeader("X-PDF-Page", String(page));
-    res.status(HTTP_STATUS.OK).sendFile(path23.resolve(cacheFile));
+    res.status(HTTP_STATUS.OK).sendFile(path24.resolve(cacheFile));
   } catch (error) {
     const err = error instanceof Error ? error : new Error("Invalid request");
     if (!err.statusCode) {
@@ -74156,18 +74535,18 @@ var import_server = __toESM(require_dist2(), 1);
 var import_file_store = __toESM(require_dist3(), 1);
 init_environment();
 import fs19 from "fs-extra";
-import path24 from "path";
+import path25 from "path";
 init_logger();
 init_storage_path_service();
 init_quota_validator_service();
 var MAX_ORDERS_BYTES = 100 * 1024 * 1024;
 var MAX_DRIVE_BYTES = 2 * 1024 * 1024 * 1024;
-var TUS_STORAGE_DIR = path24.join(config.storage.root, "temp", "tus-uploads");
+var TUS_STORAGE_DIR = path25.join(config.storage.root, "temp", "tus-uploads");
 try {
   fs19.ensureDirSync(TUS_STORAGE_DIR);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path24.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
+    const fallback = path25.join(process.cwd(), "data", "storage", "temp", "tus-uploads");
     fs19.ensureDirSync(fallback);
     logger_default.warn(`[tus] Failed to init storage dir at ${TUS_STORAGE_DIR}. Using fallback: ${fallback}`);
     TUS_STORAGE_DIR = fallback;
@@ -74175,7 +74554,7 @@ try {
     throw error;
   }
 }
-var TUS_META_DIR = path24.join(TUS_STORAGE_DIR, "metadata");
+var TUS_META_DIR = path25.join(TUS_STORAGE_DIR, "metadata");
 fs19.ensureDirSync(TUS_META_DIR);
 function isValidEntryName2(name) {
   if (!name) return false;
@@ -74221,7 +74600,7 @@ function getUploadId(upload4) {
   return String(upload4?.id || "");
 }
 async function storeUploadInfo(info) {
-  const infoPath = path24.join(TUS_META_DIR, `${info.id}.json`);
+  const infoPath = path25.join(TUS_META_DIR, `${info.id}.json`);
   await fs19.writeJson(infoPath, info, { spaces: 2 });
 }
 async function finalizeUpload(upload4, req) {
@@ -74252,11 +74631,11 @@ async function finalizeUpload(upload4, req) {
     throw new Error("Access denied: invalid path");
   }
   await fs19.ensureDir(resolved);
-  const target = path24.join(resolved, storageFileName);
+  const target = path25.join(resolved, storageFileName);
   if (!storagePathService.validateAccess(target, companyId)) {
     throw new Error("Access denied: invalid target path");
   }
-  const tempPath = path24.join(TUS_STORAGE_DIR, getUploadId(upload4));
+  const tempPath = path25.join(TUS_STORAGE_DIR, getUploadId(upload4));
   await fs19.move(tempPath, target, { overwrite: false });
   await incrementStorageUsage(companyId, uploadSize);
   const filePath = relativePath ? `${relativePath}/${storageFileName}` : storageFileName;
@@ -74416,7 +74795,7 @@ async function getTusUploadInfo(req, res, next) {
         error: { message: "Upload ID is required" }
       });
     }
-    const infoPath = path24.join(TUS_META_DIR, `${uploadId}.json`);
+    const infoPath = path25.join(TUS_META_DIR, `${uploadId}.json`);
     const exists = await fs19.pathExists(infoPath);
     if (!exists) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
@@ -74441,11 +74820,11 @@ async function getTusUploadInfo(req, res, next) {
 }
 
 // src/api/controllers/drive-folder-export.controller.ts
-var import_jsonwebtoken4 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken5 = __toESM(require_jsonwebtoken(), 1);
 var import_archiver2 = __toESM(require_archiver(), 1);
 init_models();
 init_environment();
-import path26 from "path";
+import path27 from "path";
 import fs21 from "fs-extra";
 
 // src/services/order-export.service.ts
@@ -74453,7 +74832,7 @@ var import_archiver = __toESM(require_archiver(), 1);
 init_models();
 init_storage_path_service();
 init_logger();
-import path25 from "path";
+import path26 from "path";
 import fs20 from "fs-extra";
 import { Types } from "mongoose";
 var EXPORT_TTL_HOURS = 24;
@@ -74463,7 +74842,7 @@ var isValidObjectId = (value) => Types.ObjectId.isValid(value);
 var sanitizeName2 = (name) => name.replace(/[\\/:"*?<>|]+/g, "_").trim();
 var buildZipPath = (companyId, orderId) => storagePathService.resolvePath(
   companyId,
-  path25.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`)
+  path26.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`)
 );
 var resolveMediaAbsolutePath = (mediaUrl, companyId) => {
   try {
@@ -74539,12 +74918,12 @@ async function requestOrderExport(orderId) {
         continue;
       }
       const folderPath = resolveFolderPath(media.folderId) || sanitizeName2(String(media.type ?? ""));
-      const baseName = sanitizeName2(String(media.name ?? path25.basename(absolutePath)));
+      const baseName = sanitizeName2(String(media.name ?? path26.basename(absolutePath)));
       let entryName = folderPath ? `${folderPath}/${baseName}` : baseName;
       let dedupe = 1;
       while (usedNames.has(entryName)) {
-        const ext = path25.extname(baseName);
-        const stem = path25.basename(baseName, ext);
+        const ext = path26.extname(baseName);
+        const stem = path26.basename(baseName, ext);
         const candidate = `${stem} (${dedupe})${ext}`;
         entryName = folderPath ? `${folderPath}/${candidate}` : candidate;
         dedupe += 1;
@@ -74563,7 +74942,7 @@ async function requestOrderExport(orderId) {
       return { ok: false, code: "empty" };
     }
     const zipPath = buildZipPath(companyId, orderId);
-    await fs20.ensureDir(path25.dirname(zipPath));
+    await fs20.ensureDir(path26.dirname(zipPath));
     await fs20.remove(zipPath);
     const output = fs20.createWriteStream(zipPath);
     const archive = (0, import_archiver.default)("zip", { zlib: { level: 6 } });
@@ -74585,7 +74964,7 @@ async function requestOrderExport(orderId) {
       id: jobId,
       status: "done",
       progress: 100,
-      filePath: path25.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`),
+      filePath: path26.join(EXPORTS_MODULE, EXPORTS_SUBDIR, `pedido-${orderId}.zip`),
       fileName: `${obra || "pedido"}-${orderId.slice(-6)}.zip`,
       sizeBytes: stat.size,
       finishedAt: nowIso(),
@@ -74689,7 +75068,7 @@ var SCOPE = "drive-export";
 var verifyToken = (raw) => {
   if (typeof raw !== "string" || !raw) return null;
   try {
-    const decoded = import_jsonwebtoken4.default.verify(raw, config.security.jwtSecret);
+    const decoded = import_jsonwebtoken5.default.verify(raw, config.security.jwtSecret);
     if (decoded.scope !== SCOPE) return null;
     if (!decoded.companyId || !decoded.resourceId || !decoded.folderId) return null;
     return decoded;
@@ -74763,7 +75142,7 @@ async function collectEntries({
       });
       continue;
     }
-    const fileName = String(media.name ?? path26.basename(absolutePath));
+    const fileName = String(media.name ?? path27.basename(absolutePath));
     let entryName = buildRelativeEntryName({
       folderPath: resolveFolderPath(mediaFolderId),
       rootPath,
@@ -74771,8 +75150,8 @@ async function collectEntries({
     });
     let suffix = 2;
     while (usedNames.has(entryName)) {
-      const parsed = path26.parse(entryName);
-      entryName = path26.join(parsed.dir, `${parsed.name} (${suffix})${parsed.ext}`);
+      const parsed = path27.parse(entryName);
+      entryName = path27.join(parsed.dir, `${parsed.name} (${suffix})${parsed.ext}`);
       suffix += 1;
     }
     usedNames.add(entryName);
@@ -74784,12 +75163,12 @@ async function collectEntries({
 // src/api/routes/drive.routes.ts
 var router6 = Router6();
 var MAX_DRIVE_BYTES2 = 2 * 1024 * 1024 * 1024;
-var tempDir = path27.join(config.storage.root, "temp", "uploads");
+var tempDir = path28.join(config.storage.root, "temp", "uploads");
 try {
   fs22.ensureDirSync(tempDir);
 } catch (error) {
   if (config.nodeEnv !== "production") {
-    const fallback = path27.join(process.cwd(), "data", "storage", "temp", "uploads");
+    const fallback = path28.join(process.cwd(), "data", "storage", "temp", "uploads");
     fs22.ensureDirSync(fallback);
     console.warn(
       `[drive] Failed to init temp dir at ${tempDir}. Using fallback: ${fallback}`
@@ -74842,7 +75221,7 @@ import { Router as Router7 } from "express";
 // src/api/controllers/documents.controller.ts
 init_logger();
 import fs29 from "fs-extra";
-import path30 from "path";
+import path31 from "path";
 
 // src/schemas/documents/control-imprimacion.schema.ts
 var emptyMeasurementValues = () => ({
@@ -86922,8 +87301,8 @@ var r38 = {};
 Xr(r38, { af_ZA: () => B58, ar: () => Y35, az: () => U39, base: () => Mi, cs_CZ: () => x61, da: () => le10, de: () => pr, de_AT: () => I40, de_CH: () => J42, dv: () => Q32, el: () => le9, en: () => ul, en_AU: () => be7, en_AU_ocker: () => P54, en_BORK: () => u60, en_CA: () => S41, en_GB: () => B46, en_GH: () => J39, en_HK: () => w42, en_IE: () => D49, en_IN: () => w43, en_NG: () => O41, en_US: () => A49, en_ZA: () => L39, eo: () => ro, es: () => ao3, es_MX: () => ia7, fa: () => wo, fi: () => A43, fr: () => Wi, fr_BE: () => I36, fr_CA: () => b32, fr_CH: () => _33, fr_LU: () => _34, fr_SN: () => _35, he: () => Z27, hr: () => C33, hu: () => U29, hy: () => j34, id_ID: () => F18, it: () => w21, ja: () => M24, ka_GE: () => H23, ko: () => G23, lv: () => $13, mk: () => S26, nb_NO: () => Z24, ne: () => j13, nl: () => an, nl_BE: () => j15, pl: () => ea3, pt_BR: () => W15, pt_PT: () => k18, ro: () => Mi2, ro_MD: () => j20, ru: () => ae4, sk: () => O8, sr_RS_latin: () => T7, sv: () => $5, th: () => E8, tr: () => V10, uk: () => S11, ur: () => yt, vi: () => U3, yo_NG: () => r3, zh_CN: () => Ke3, zh_TW: () => B5, zu_ZA: () => x5 });
 
 // src/services/random-data-generator.service.ts
-function setNestedValue(target, path43, value) {
-  const parts = path43.split(".");
+function setNestedValue(target, path44, value) {
+  const parts = path44.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -87766,7 +88145,7 @@ init_storage_path_service();
 // src/services/report-html-renderer.service.ts
 init_storage_path_service();
 import fs23 from "fs-extra";
-import path28 from "path";
+import path29 from "path";
 import sharp4 from "sharp";
 import axios3 from "axios";
 
@@ -87911,9 +88290,9 @@ function shouldHideDocumentLogo(data) {
 // src/services/report-html-renderer.service.ts
 var LIQUIDACION_IGV_RATE = 0.18;
 var resolverTituloCtlImp = (ligante) => {
-  const texto4 = String(ligante ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (texto4.includes("mc30")) return "IMPRIMACI\xD3N DE BASE GRANULAR";
-  if (texto4.includes("emulsion") || texto4.includes("riegodeliga")) return "RIEGO DE LIGA";
+  const texto5 = String(ligante ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (texto5.includes("mc30")) return "IMPRIMACI\xD3N DE BASE GRANULAR";
+  if (texto5.includes("emulsion") || texto5.includes("riegodeliga")) return "RIEGO DE LIGA";
   return "RIEGO DE IMPRIMACI\xD3N";
 };
 var ReportHtmlRenderer = class {
@@ -90061,10 +90440,10 @@ ${signaturesHtml}`;
   }
   async resolveFileBuffer(filePath) {
     try {
-      if (path28.isAbsolute(filePath)) {
+      if (path29.isAbsolute(filePath)) {
         if (await fs23.pathExists(filePath)) {
           const raw = await fs23.readFile(filePath);
-          return ImageCompressionService.processImage(raw, path28.basename(filePath));
+          return ImageCompressionService.processImage(raw, path29.basename(filePath));
         }
         return null;
       }
@@ -90074,7 +90453,7 @@ ${signaturesHtml}`;
       const resolved = this.resolveCompanyStoragePath(filePath);
       if (resolved && await fs23.pathExists(resolved)) {
         const raw = await fs23.readFile(resolved);
-        return ImageCompressionService.processImage(raw, path28.basename(resolved));
+        return ImageCompressionService.processImage(raw, path29.basename(resolved));
       }
     } catch (error) {
       logger_default.warn("Failed to read photo file for PDF", { error: String(error), filePath });
@@ -90117,7 +90496,7 @@ ${signaturesHtml}`;
       if (storagePath) {
         if (await fs23.pathExists(storagePath)) {
           const raw = await fs23.readFile(storagePath);
-          return ImageCompressionService.processImage(raw, path28.basename(storagePath));
+          return ImageCompressionService.processImage(raw, path29.basename(storagePath));
         }
       }
     } catch (error) {
@@ -90132,7 +90511,7 @@ ${signaturesHtml}`;
         timeout: 1e4
       });
       const buffer2 = Buffer.from(response.data);
-      return ImageCompressionService.processImage(buffer2, path28.basename(urlCandidate));
+      return ImageCompressionService.processImage(buffer2, path29.basename(urlCandidate));
     } catch (error) {
       logger_default.warn("Failed to download image for PDF compression", {
         error: String(error),
@@ -90328,7 +90707,7 @@ import axios4 from "axios";
 
 // src/services/thumbnail-request.service.ts
 import fs24 from "fs-extra";
-import path29 from "path";
+import path30 from "path";
 var THUMB_DIR_NAME = ".thumbs";
 var THUMBNAIL_NAME_PATTERN = /^thumb_(.+)_[a-f0-9]{10}\.jpg$/i;
 var IMAGE_EXTENSIONS2 = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
@@ -90339,7 +90718,7 @@ function normalizeRequestPath(requestPath) {
   if (!requestPath) return null;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path29.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
+    const normalized = path30.posix.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
     if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
       return null;
     }
@@ -90349,7 +90728,7 @@ function normalizeRequestPath(requestPath) {
   }
 }
 function toAbsolutePath(root, relativePath) {
-  return path29.join(root, ...relativePath.split("/"));
+  return path30.join(root, ...relativePath.split("/"));
 }
 async function findOriginalForThumbnail(root, relativeThumbPath) {
   const segments = relativeThumbPath.split("/");
@@ -90364,10 +90743,10 @@ async function findOriginalForThumbnail(root, relativeThumbPath) {
   const safeBase = match[1];
   const entries = await fs24.readdir(parentDir).catch(() => []);
   const candidates = await Promise.all(
-    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName3(path29.parse(entry).name || "file") === safeBase).map(async (entry) => {
-      const absolutePath = path29.join(parentDir, entry);
+    entries.filter((entry) => !entry.startsWith(".")).filter((entry) => sanitizeName3(path30.parse(entry).name || "file") === safeBase).map(async (entry) => {
+      const absolutePath = path30.join(parentDir, entry);
       const stat = await fs24.stat(absolutePath).catch(() => null);
-      const ext = path29.extname(entry).toLowerCase();
+      const ext = path30.extname(entry).toLowerCase();
       if (!stat?.isFile() || !IMAGE_EXTENSIONS2.has(ext)) {
         return null;
       }
@@ -90391,7 +90770,7 @@ async function findSiblingThumbForBase(root, relativeThumbPath) {
   const sibling = entries.find(
     (entry) => entry.startsWith(prefix) && THUMBNAIL_NAME_PATTERN.test(entry)
   );
-  return sibling ? path29.join(thumbDir, sibling) : null;
+  return sibling ? path30.join(thumbDir, sibling) : null;
 }
 async function resolveThumbnailRequestTarget(root, requestPath) {
   const relativePath = normalizeRequestPath(requestPath);
@@ -94360,7 +94739,7 @@ function requireWhichTypedArray() {
     }
     return -1;
   };
-  var cache3 = { __proto__: null };
+  var cache2 = { __proto__: null };
   if (hasToStringTag && gOPD && getPrototypeOf) {
     forEach(typedArrays, function(typedArray) {
       var arr = new g62[typedArray]();
@@ -94371,7 +94750,7 @@ function requireWhichTypedArray() {
           var superProto = getPrototypeOf(proto3);
           descriptor = gOPD(superProto, Symbol.toStringTag);
         }
-        cache3["$" + typedArray] = callBind2(descriptor.get);
+        cache2["$" + typedArray] = callBind2(descriptor.get);
       }
     });
   } else {
@@ -94379,13 +94758,13 @@ function requireWhichTypedArray() {
       var arr = new g62[typedArray]();
       var fn = arr.slice || arr.set;
       if (fn) {
-        cache3["$" + typedArray] = callBind2(fn);
+        cache2["$" + typedArray] = callBind2(fn);
       }
     });
   }
   var tryTypedArrays = function tryAllTypedArrays(value) {
     var found = false;
-    forEach(cache3, function(getter, typedArray) {
+    forEach(cache2, function(getter, typedArray) {
       if (!found) {
         try {
           if ("$" + getter(value) === typedArray) {
@@ -94399,7 +94778,7 @@ function requireWhichTypedArray() {
   };
   var trySlices = function tryAllSlices(value) {
     var found = false;
-    forEach(cache3, function(getter, name) {
+    forEach(cache2, function(getter, name) {
       if (!found) {
         try {
           getter(value);
@@ -105233,8 +105612,8 @@ var File = class {
     return this.fontWrapper;
   }
 };
-function commonjsRequire(path43) {
-  throw new Error('Could not dynamically require "' + path43 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
+function commonjsRequire(path44) {
+  throw new Error('Could not dynamically require "' + path44 + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
 }
 var jszip_min = { exports: {} };
 (function(module, exports) {
@@ -108759,14 +109138,14 @@ function resolveProto4(req) {
 var PUBLIC_BASE_URL = (process.env.LILA_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
 function buildAbsoluteUrl4(req, relativeUrl) {
   if (!relativeUrl) return relativeUrl;
-  const path43 = relativeUrl.startsWith("/") ? relativeUrl : `/${relativeUrl}`;
+  const path44 = relativeUrl.startsWith("/") ? relativeUrl : `/${relativeUrl}`;
   if (PUBLIC_BASE_URL) {
-    return `${PUBLIC_BASE_URL}${path43}`;
+    return `${PUBLIC_BASE_URL}${path44}`;
   }
   const host = req.get("x-forwarded-host") || req.get("host");
   if (!host) return relativeUrl;
   const proto3 = resolveProto4(req);
-  return `${proto3}://${host}${path43}`;
+  return `${proto3}://${host}${path44}`;
 }
 function isPlainObject2(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -108812,11 +109191,11 @@ function hasMeaningfulContractRows(value) {
 }
 function mergeContractAutofillData(currentData, serviceData) {
   const next = mergeDeep({}, currentData);
-  CONTRACT_AUTOFILL_PATHS.forEach((path43) => {
-    const currentValue = getNestedValue(next, path43);
-    const serviceValue = getNestedValue(serviceData, path43);
+  CONTRACT_AUTOFILL_PATHS.forEach((path44) => {
+    const currentValue = getNestedValue(next, path44);
+    const serviceValue = getNestedValue(serviceData, path44);
     if (isEmptyContractValue(currentValue) && !isEmptyContractValue(serviceValue)) {
-      setNestedValue2(next, path43, serviceValue);
+      setNestedValue2(next, path44, serviceValue);
     }
   });
   CONTRACT_TABLE_KEYS.forEach((key) => {
@@ -108962,8 +109341,8 @@ function roundValue(value, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round(num4 * factor) / factor;
 }
-function setNestedValue2(target, path43, value) {
-  const parts = path43.split(".");
+function setNestedValue2(target, path44, value) {
+  const parts = path44.split(".");
   let current = target;
   for (let i50 = 0; i50 < parts.length - 1; i50 += 1) {
     const key = parts[i50];
@@ -108974,8 +109353,8 @@ function setNestedValue2(target, path43, value) {
   }
   current[parts[parts.length - 1]] = value;
 }
-function getNestedValue(target, path43) {
-  const parts = path43.split(".");
+function getNestedValue(target, path44) {
+  const parts = path44.split(".");
   let current = target;
   for (const key of parts) {
     if (!current || typeof current !== "object") return void 0;
@@ -109342,7 +109721,7 @@ async function generateDocument(req, res, next) {
     const reportsDir = storagePathService.getModulePath(
       companyId,
       "service",
-      path30.join("reports", report.serviceManagementId || "generic")
+      path31.join("reports", report.serviceManagementId || "generic")
     );
     await fs29.ensureDir(reportsDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
@@ -109358,7 +109737,7 @@ async function generateDocument(req, res, next) {
     let docxSizeBytes;
     if (generatePdf) {
       const pdfFilename = `${baseFilename}.pdf`;
-      const pdfPath = path30.join(reportsDir, pdfFilename);
+      const pdfPath = path31.join(reportsDir, pdfFilename);
       const pdfStarted = Date.now();
       const baseUrl = buildAbsoluteUrl4(req, "");
       const { html, source } = await resolveReportHtml({
@@ -109379,7 +109758,7 @@ async function generateDocument(req, res, next) {
       });
       const letterhead = getDocumentLetterhead(data);
       if (letterhead) {
-        const letterheadPath = path30.join(reportsDir, `${baseFilename}-letterhead.pdf`);
+        const letterheadPath = path31.join(reportsDir, `${baseFilename}-letterhead.pdf`);
         await PDFMergerService.applyLetterheadBackground(
           pdfPath,
           letterhead,
@@ -109395,7 +109774,7 @@ async function generateDocument(req, res, next) {
       annexPages = 0;
       totalPages = mainPages;
       if (annexes.length > 0) {
-        const mergedPath = path30.join(reportsDir, `${baseFilename}-merged.pdf`);
+        const mergedPath = path31.join(reportsDir, `${baseFilename}-merged.pdf`);
         const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
           pdfPath,
           annexes,
@@ -109408,7 +109787,7 @@ async function generateDocument(req, res, next) {
         totalPages = mergeResult.totalPages;
       }
       if (folioConfig?.enabled) {
-        const folioPath = path30.join(reportsDir, `${baseFilename}-folio.pdf`);
+        const folioPath = path31.join(reportsDir, `${baseFilename}-folio.pdf`);
         const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
         await FolioGeneratorService.addFolios(
           currentPdfPath,
@@ -109422,7 +109801,7 @@ async function generateDocument(req, res, next) {
         await fs29.copyFile(currentPdfPath, pdfPath);
         await fs29.remove(currentPdfPath);
       }
-      pdfUrl = `/files/companies/${companyId}/${path30.posix.join(
+      pdfUrl = `/files/companies/${companyId}/${path31.posix.join(
         "service",
         "reports",
         report.serviceManagementId || "generic",
@@ -109436,11 +109815,11 @@ async function generateDocument(req, res, next) {
       }
       if (generateDocx) {
         const docxFilename = `${baseFilename}.docx`;
-        const docxPath = path30.join(reportsDir, docxFilename);
+        const docxPath = path31.join(reportsDir, docxFilename);
         const docxStarted = Date.now();
         await convertPdfToDocx(pdfPath, docxPath);
         docxDuration = Date.now() - docxStarted;
-        docxUrl = `/files/companies/${companyId}/${path30.posix.join(
+        docxUrl = `/files/companies/${companyId}/${path31.posix.join(
           "service",
           "reports",
           report.serviceManagementId || "generic",
@@ -109511,7 +109890,7 @@ async function previewFromPrintUrlOnly(req, res, startedAt) {
   await fs29.ensureDir(config.pdf.tempDir);
   const previewId = `print-url-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const previewFilename = `${previewId}.pdf`;
-  const previewPath = path30.join(config.pdf.tempDir, previewFilename);
+  const previewPath = path31.join(config.pdf.tempDir, previewFilename);
   if (process.env.PRINT_URL_DEBUG_HTML === "true") {
     await fs29.writeFile(previewPath.replace(/\.pdf$/, ".html"), html).catch(() => void 0);
   }
@@ -109521,7 +109900,7 @@ async function previewFromPrintUrlOnly(req, res, startedAt) {
     margin: { top: "0", right: "0", bottom: "0", left: "0" }
   });
   const totalPages = await PDFMergerService.getPageCount(previewPath);
-  const previewUrl = path30.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+  const previewUrl = path31.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
   const stat = await fs29.stat(previewPath);
   logger_default.info("documents.preview.print_url_only.completed", {
     companyId,
@@ -109573,7 +109952,7 @@ async function previewDocument(req, res, next) {
     });
     const previewId = `${report.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path30.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path31.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: effectiveSchema.pageSize || "A4",
@@ -109584,7 +109963,7 @@ async function previewDocument(req, res, next) {
     });
     const letterhead = getDocumentLetterhead(data);
     if (letterhead) {
-      const letterheadPath = path30.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
+      const letterheadPath = path31.join(config.pdf.tempDir, `${previewId}-letterhead.pdf`);
       await PDFMergerService.applyLetterheadBackground(
         previewPath,
         letterhead,
@@ -109599,7 +109978,7 @@ async function previewDocument(req, res, next) {
     let annexPages = 0;
     let totalPages = mainPages;
     if (annexes.length > 0) {
-      const mergedPath = path30.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
+      const mergedPath = path31.join(config.pdf.tempDir, `${previewId}-merged.pdf`);
       const mergeResult = await PDFMergerService.mergePDFWithAnnexes(
         previewPath,
         annexes,
@@ -109612,7 +109991,7 @@ async function previewDocument(req, res, next) {
       totalPages = mergeResult.totalPages;
     }
     if (folioConfig?.enabled) {
-      const folioPath = path30.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
+      const folioPath = path31.join(config.pdf.tempDir, `${previewId}-folio.pdf`);
       const limitPages = folioConfig.includeAnnexes ? void 0 : mainPages;
       await FolioGeneratorService.addFolios(
         currentPdfPath,
@@ -109626,7 +110005,7 @@ async function previewDocument(req, res, next) {
       await fs29.copyFile(currentPdfPath, previewPath);
       await fs29.remove(currentPdfPath);
     }
-    const previewUrl = path30.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const previewUrl = path31.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     const stat = await fs29.stat(previewPath);
     logger_default.info("documents.preview.completed", {
       reportId: report?._id,
@@ -109706,7 +110085,7 @@ async function downloadDocument(req, res, next) {
 // src/api/controllers/quote-documents.controller.ts
 init_logger();
 import fs30 from "fs-extra";
-import path31 from "path";
+import path32 from "path";
 init_environment();
 init_storage_path_service();
 
@@ -110927,7 +111306,7 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
     await fs30.ensureDir(config.pdf.tempDir);
     const previewId = `${previewPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path31.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path32.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -110951,7 +111330,7 @@ async function previewQuoteDocument(req, res, next, previewPrefix) {
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
     const stat = await fs30.stat(previewPath);
-    const previewUrl = path31.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const previewUrl = path32.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("quote_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -110981,16 +111360,16 @@ async function generateQuoteDocument(req, res, next, options2) {
       payload.quoteNumber || payload.schemaData?.header?.quoteNumber || payload.schemaData?.quoteNumber || "sin-numero"
     );
     const safeQuoteNumber = sanitizePathSegment(quoteNumberRaw);
-    const relativeDir = path31.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
+    const relativeDir = path32.posix.join("cotizaciones", options2.relativeRoot, `nro-${safeQuoteNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       "cotizaciones",
-      path31.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
+      path32.posix.join(options2.relativeRoot, `nro-${safeQuoteNumber}`)
     );
     await fs30.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${options2.filenamePrefix}-${safeQuoteNumber}-${timestamp}.pdf`;
-    const outputPath = path31.join(outputDir, filename);
+    const outputPath = path32.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -111061,7 +111440,7 @@ async function generateServiceQuoteDocument(req, res, next) {
 // src/api/controllers/purchase-order-documents.controller.ts
 init_logger();
 import fs31 from "fs-extra";
-import path32 from "path";
+import path33 from "path";
 init_environment();
 init_storage_path_service();
 function resolveProto6(req) {
@@ -111739,7 +112118,7 @@ async function previewPurchaseOrder(req, res, next) {
     await fs31.ensureDir(config.pdf.tempDir);
     const previewId = `ord-com-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const previewFilename = `${previewId}.pdf`;
-    const previewPath = path32.join(config.pdf.tempDir, previewFilename);
+    const previewPath = path33.join(config.pdf.tempDir, previewFilename);
     await generator_service_default.generateFromHtml(html, {
       outputPath: previewPath,
       format: "A4",
@@ -111761,7 +112140,7 @@ async function previewPurchaseOrder(req, res, next) {
     );
     const totalPages = await PDFMergerService.getPageCount(previewPath);
     const stat = await fs31.stat(previewPath);
-    const previewUrl = path32.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+    const previewUrl = path33.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
     logger_default.info("purchase_order_documents.preview.completed", {
       companyId: req.companyId,
       durationMs: Date.now() - startedAt,
@@ -111798,7 +112177,7 @@ async function generatePurchaseOrder(req, res, next) {
     ).toLowerCase() === "service";
     const moduleDir2 = isServiceOrder ? "ordenes-servicio" : "ordenes-compra";
     const filenamePrefix = isServiceOrder ? "orden-servicio" : "orden-compra";
-    const relativeDir = path32.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
+    const relativeDir = path33.posix.join(moduleDir2, `nro-${safeOrderNumber}`);
     const outputDir = storagePathService.getModulePath(
       companyId,
       moduleDir2,
@@ -111807,7 +112186,7 @@ async function generatePurchaseOrder(req, res, next) {
     await fs31.ensureDir(outputDir);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const filename = `${filenamePrefix}-${safeOrderNumber}-${timestamp}.pdf`;
-    const outputPath = path32.join(outputDir, filename);
+    const outputPath = path33.join(outputDir, filename);
     await generator_service_default.generateFromHtml(html, {
       outputPath,
       format: "A4",
@@ -111869,7 +112248,7 @@ init_logger();
 // src/services/dispatch-note-document.service.ts
 init_logger();
 import fs32 from "fs-extra";
-import path33 from "path";
+import path34 from "path";
 import QRCode from "qrcode";
 init_environment();
 init_storage_path_service();
@@ -112300,7 +112679,7 @@ async function previewDispatchNoteDocument(params) {
   await fs32.ensureDir(config.pdf.tempDir);
   const previewId = `dispatch-note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const previewFilename = `${previewId}.pdf`;
-  const previewPath = path33.join(config.pdf.tempDir, previewFilename);
+  const previewPath = path34.join(config.pdf.tempDir, previewFilename);
   await generator_service_default.generateFromHtml(html, {
     outputPath: previewPath,
     format: "A4",
@@ -112313,7 +112692,7 @@ async function previewDispatchNoteDocument(params) {
     }
   });
   const stat = await fs32.stat(previewPath);
-  const previewUrl = path33.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
+  const previewUrl = path34.posix.join(config.pdf.tempPublicBaseUrl, previewFilename);
   logger_default.info("dispatch_note_documents.preview.completed", {
     companyId,
     durationMs: Date.now() - startedAt,
@@ -112334,7 +112713,7 @@ async function generateDispatchNoteDocumentFile(params) {
     prePayload.orderNumber || prePayload.schemaData?.dispatch?.valeNumber || "sin-numero"
   );
   const safeDispatchNumber = sanitizePathSegment3(dispatchNumberRaw);
-  const relativeDir = path33.posix.join("vales", `nro-${safeDispatchNumber}`);
+  const relativeDir = path34.posix.join("vales", `nro-${safeDispatchNumber}`);
   const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
   const fileName = `vale-despacho-${safeDispatchNumber}-${timestamp}.pdf`;
   const { companyId, html } = await buildRenderContext3({
@@ -112345,7 +112724,7 @@ async function generateDispatchNoteDocumentFile(params) {
   await storagePathService.ensureCompanyStructure(companyId);
   const outputDir = storagePathService.getModulePath(companyId, "dispatches", relativeDir);
   await fs32.ensureDir(outputDir);
-  const outputPath = path33.join(outputDir, fileName);
+  const outputPath = path34.join(outputDir, fileName);
   await generator_service_default.generateFromHtml(html, {
     outputPath,
     format: "A4",
@@ -112359,7 +112738,7 @@ async function generateDispatchNoteDocumentFile(params) {
   });
   const stat = await fs32.stat(outputPath);
   const pdfUrl = `/files/companies/${companyId}/dispatches/${relativeDir}/${fileName}`;
-  const filePath = path33.posix.join("dispatches", relativeDir, fileName);
+  const filePath = path34.posix.join("dispatches", relativeDir, fileName);
   logger_default.info("dispatch_note_documents.generate.completed", {
     companyId,
     dispatchNumber: safeDispatchNumber,
@@ -112443,7 +112822,7 @@ async function generateDispatchNoteDocument(req, res, next) {
 // src/api/controllers/work-certificate-documents.controller.ts
 init_logger();
 import fs33 from "fs-extra";
-import path34 from "path";
+import path35 from "path";
 init_environment();
 var buildAbsoluteUrl7 = (req, relativeUrl) => {
   const host = req.get("host");
@@ -112475,7 +112854,7 @@ var renderToTempFile = async (payload, html, prefix) => {
   await fs33.ensureDir(config.pdf.tempDir);
   const fileId = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const fileName = `${fileId}.pdf`;
-  const filePath = path34.join(config.pdf.tempDir, fileName);
+  const filePath = path35.join(config.pdf.tempDir, fileName);
   await generator_service_default.generateFromHtml(html, {
     outputPath: filePath,
     format: "A4",
@@ -112491,7 +112870,7 @@ async function previewWorkCertificateDocument(req, res, next) {
   try {
     const { payload, html } = await buildRenderContext4(req);
     const rendered = await renderToTempFile(payload, html, "cons-tra");
-    const previewUrl = path34.posix.join(config.pdf.tempPublicBaseUrl, rendered.fileName);
+    const previewUrl = path35.posix.join(config.pdf.tempPublicBaseUrl, rendered.fileName);
     logger_default.info("work_certificate_documents.preview.completed", {
       durationMs: Date.now() - startedAt,
       totalPages: rendered.totalPages,
@@ -112543,7 +112922,7 @@ import { Router as Router8 } from "express";
 init_logger();
 
 // src/services/dispatch-vale.service.ts
-var import_jsonwebtoken7 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken8 = __toESM(require_jsonwebtoken(), 1);
 init_logger();
 init_environment();
 init_models();
@@ -112551,12 +112930,12 @@ import axios8 from "axios";
 init_whatsapp_direct_service();
 
 // src/utils/driver-link.ts
-var import_jsonwebtoken5 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken6 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 var SCOPE2 = "driver-location";
 var DEFAULT_TTL = "12h";
 function signDriverToken(dispatchId, companyId, expiresIn = DEFAULT_TTL) {
-  return import_jsonwebtoken5.default.sign({ dispatchId, companyId, scope: SCOPE2 }, config.security.jwtSecret, {
+  return import_jsonwebtoken6.default.sign({ dispatchId, companyId, scope: SCOPE2 }, config.security.jwtSecret, {
     expiresIn
   });
 }
@@ -112587,15 +112966,15 @@ function computeLocationShareDelayMs(etaDurationSeconds) {
 init_json_store();
 init_logger();
 init_environment();
-import path36 from "path";
+import path37 from "path";
 import { randomUUID as randomUUID9 } from "crypto";
 import axios7 from "axios";
 
 // src/utils/portal-callback.ts
-var import_jsonwebtoken6 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken7 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 var buildPortalCallbackHeaders = (companyId, userId = "lila-callback") => ({
-  Authorization: `Bearer ${import_jsonwebtoken6.default.sign(
+  Authorization: `Bearer ${import_jsonwebtoken7.default.sign(
     { companyId, userId, role: "admin" },
     config.security.jwtSecret,
     { expiresIn: "15m" }
@@ -112608,7 +112987,7 @@ var buildPortalCallbackHeaders = (companyId, userId = "lila-callback") => ({
 init_json_store();
 init_logger();
 init_environment();
-import path35 from "path";
+import path36 from "path";
 import { randomUUID as randomUUID8 } from "crypto";
 import axios6 from "axios";
 var STORE_KEY2 = "queue";
@@ -112621,7 +113000,7 @@ var store2 = null;
 function getStore2() {
   if (!store2) {
     store2 = new json_store_default({
-      baseDir: path35.join(config.whatsapp.sessionDir, "../dispatch-autoclose"),
+      baseDir: path36.join(config.whatsapp.sessionDir, "../dispatch-autoclose"),
       autoBackup: true
     });
   }
@@ -112778,7 +113157,7 @@ var store3 = null;
 function getStore3() {
   if (!store3) {
     store3 = new json_store_default({
-      baseDir: path36.join(config.whatsapp.sessionDir, "../driver-reminders"),
+      baseDir: path37.join(config.whatsapp.sessionDir, "../driver-reminders"),
       autoBackup: true
     });
   }
@@ -113214,7 +113593,7 @@ async function withTimeout(promise, timeoutMs, label) {
   }
 }
 function buildPortalCallbackToken(companyId) {
-  return import_jsonwebtoken7.default.sign(
+  return import_jsonwebtoken8.default.sign(
     {
       companyId,
       userId: "lila-dispatch-vale",
@@ -114734,16 +115113,16 @@ var dispatch_routes_default = router8;
 import { Router as Router9 } from "express";
 import multer3 from "multer";
 import fs35 from "fs-extra";
-import path38 from "path";
+import path39 from "path";
 
 // src/api/controllers/public.controller.ts
-var import_jsonwebtoken8 = __toESM(require_jsonwebtoken(), 1);
+var import_jsonwebtoken9 = __toESM(require_jsonwebtoken(), 1);
 init_environment();
 init_models();
 import axios11 from "axios";
 import { randomUUID as randomUUID10 } from "crypto";
 import fs34 from "fs-extra";
-import path37 from "path";
+import path38 from "path";
 
 // src/models/public-reception-idempotency.model.ts
 init_sharedConnection();
@@ -114826,7 +115205,7 @@ var parseNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
-var buildPortalCallbackToken2 = (companyId) => import_jsonwebtoken8.default.sign(
+var buildPortalCallbackToken2 = (companyId) => import_jsonwebtoken9.default.sign(
   {
     companyId,
     userId: "lila-public-reception",
@@ -114840,7 +115219,7 @@ var buildPortalHeaders = (companyId) => ({
   "Content-Type": "application/json",
   "x-company-id": companyId
 });
-var buildPortalUrl = (path43) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path43}`;
+var buildPortalUrl = (path44) => `${String(config.portal.baseUrl).replace(/\/+$/, "")}${path44}`;
 var buildRequestPublicBaseUrl = (req) => {
   const forwardedProto = trimValue(req.headers["x-forwarded-proto"]).split(",")[0];
   const forwardedHost = trimValue(req.headers["x-forwarded-host"]).split(",")[0];
@@ -115097,7 +115476,7 @@ var storeFileInLilaDrive = async (companyId, lilaPublicBaseUrl, resourceId, file
   const targetDir = storagePathService.resolvePath(companyId, relativeDir);
   await storagePathService.ensureDir(targetDir, companyId);
   const storageFileName = buildUniqueStorageFileName(file.originalName, file.path);
-  const targetPath = path37.join(targetDir, storageFileName);
+  const targetPath = path38.join(targetDir, storageFileName);
   if (!storagePathService.validateAccess(targetPath, companyId)) {
     throw new Error("Ruta de almacenamiento invalida");
   }
@@ -115679,7 +116058,7 @@ async function submitPublicFinancialMovement(req, res) {
 // src/api/routes/public.routes.ts
 init_environment();
 var router9 = Router9();
-var receptionUploadsDir = path38.join(config.storage.root, "temp", "public-receptions");
+var receptionUploadsDir = path39.join(config.storage.root, "temp", "public-receptions");
 fs35.ensureDirSync(receptionUploadsDir);
 var sanitizeFileName = (value) => value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "upload";
 var upload3 = multer3({
@@ -116007,7 +116386,7 @@ init_logger();
 // src/services/service-migration.helpers.ts
 init_storage_path_service();
 import fs36 from "fs-extra";
-import path39 from "node:path";
+import path40 from "node:path";
 import {
   Schema as Schema14,
   Types as Types3
@@ -116321,7 +116700,7 @@ var copyPhysicalFiles = async (files, sourceCompanyId, targetCompanyId) => {
       if (!sourceStats.isFile()) {
         throw new Error(`Origen no es un archivo regular: ${sourceRelative}`);
       }
-      const targetDirectory = path39.dirname(targetAbsolute);
+      const targetDirectory = path40.dirname(targetAbsolute);
       if (!targetDirectory || targetDirectory === ".") {
         throw new Error(`Directorio destino inv\xE1lido: ${targetRelative}`);
       }
@@ -117359,7 +117738,7 @@ import { Router as Router14 } from "express";
 // src/services/academy-transcode.service.ts
 init_logger();
 import fs37 from "fs-extra";
-import path40 from "path";
+import path41 from "path";
 init_models();
 init_storage_path_service();
 var ACADEMY_COMPANY_ID = "academy";
@@ -117495,10 +117874,10 @@ async function transcodeAcademyTutorial(tutorialId) {
     await markError(tutorialId, "source-file-missing");
     return;
   }
-  const dirRel = path40.dirname(sourceRel);
-  const hdRel = path40.posix.join(dirRel, "hd.mp4");
-  const sdRel = path40.posix.join(dirRel, "sd.mp4");
-  const posterRel = path40.posix.join(dirRel, "poster.jpg");
+  const dirRel = path41.dirname(sourceRel);
+  const hdRel = path41.posix.join(dirRel, "hd.mp4");
+  const sdRel = path41.posix.join(dirRel, "sd.mp4");
+  const posterRel = path41.posix.join(dirRel, "poster.jpg");
   const hdAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, hdRel);
   const sdAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, sdRel);
   const posterAbs = storagePathService.resolvePath(ACADEMY_COMPANY_ID, posterRel);
@@ -118086,9 +118465,9 @@ var vision_routes_default = router16;
 init_telegram_alert_service();
 init_logger();
 import fs38 from "fs/promises";
-import path41 from "path";
+import path42 from "path";
 import os5 from "os";
-var HEARTBEAT_DIR = process.env.BACKUP_HEARTBEAT_DIR || path41.join(os5.homedir(), ".config", "constroad-backup");
+var HEARTBEAT_DIR = process.env.BACKUP_HEARTBEAT_DIR || path42.join(os5.homedir(), ".config", "constroad-backup");
 var VIGILADOS = [
   { nombre: "medios", archivo: "last-media-backup", maxHoras: 25 },
   { nombre: "base de datos", archivo: "last-db-backup", maxHoras: 2 },
@@ -118110,7 +118489,7 @@ var CHECK_INTERVAL_MS = Number(process.env.BACKUP_WATCHDOG_INTERVAL_MS) || 60 * 
 var timer2 = null;
 async function horasDesdeUltimoBackup(archivo) {
   try {
-    const raw = await fs38.readFile(path41.join(HEARTBEAT_DIR, archivo), "utf8");
+    const raw = await fs38.readFile(path42.join(HEARTBEAT_DIR, archivo), "utf8");
     const epoch = Number(raw.trim());
     if (!Number.isFinite(epoch) || epoch <= 0) return null;
     return (Date.now() - epoch * 1e3) / 36e5;
@@ -120089,7 +120468,7 @@ init_detector();
 init_observador();
 import cron2 from "node-cron";
 import fs39 from "fs-extra";
-import path42 from "path";
+import path43 from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 var app = express();
 app.set("trust proxy", config.security.trustProxy);
@@ -120147,7 +120526,7 @@ var shouldDisableStaticCaching = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path42.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
+    const normalized = path43.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`).toLowerCase();
     return normalized.includes("/vale/");
   } catch {
     return false;
@@ -120156,7 +120535,7 @@ var shouldDisableStaticCaching = (requestPath) => {
 var isAcademyTutorialPath = (requestPath) => {
   if (!requestPath) return false;
   try {
-    const normalized = path42.posix.normalize(decodeURIComponent(requestPath).toLowerCase()).replace(/^\/+/, "/");
+    const normalized = path43.posix.normalize(decodeURIComponent(requestPath).toLowerCase()).replace(/^\/+/, "/");
     return normalized.includes("/academy/tutorials/");
   } catch {
     return false;
@@ -120178,7 +120557,7 @@ var isSafeThumbRequestPath = (requestPath) => {
   if (!requestPath) return false;
   try {
     const decoded = decodeURIComponent(requestPath);
-    const normalized = path42.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
+    const normalized = path43.posix.normalize(decoded.startsWith("/") ? decoded : `/${decoded}`);
     return normalized.includes("/.thumbs/");
   } catch {
     return false;
@@ -120386,7 +120765,7 @@ async function startServer() {
         const now = Date.now();
         const maxAgeMs = pdfTempMaxAgeHours * 60 * 60 * 1e3;
         const removals = entries.map(async (entry) => {
-          const fullPath = path42.join(config.pdf.tempDir, entry);
+          const fullPath = path43.join(config.pdf.tempDir, entry);
           const stat = await fs39.stat(fullPath);
           if (!stat.isFile()) return;
           if (now - stat.mtimeMs > maxAgeMs) {

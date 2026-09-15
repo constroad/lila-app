@@ -81,3 +81,15 @@ describe('«¿y cajamarquilla?»', () => {
     expect(fusionar('y cajamarquilla?', 'como estara el clima en la molina para manana', ['La Molina', 'cajamarquilla'])).toBe('y cajamarquilla? como estara el clima en para manana');
   });
 });
+
+describe('esOrdenDeAvisoAPlanta — «manda el aviso a planta» es una orden, no una consulta', () => {
+  it('verbo de mandar + planta + algo que mandar', async () => {
+    const { esOrdenDeAvisoAPlanta } = await import('./index');
+    for (const si of ['manda el aviso a planta', 'envía el mensaje al grupo de planta con los pedidos de mañana', 'avísale a planta de la producción de mañana', 'pon en planta la programación de mañana', 'manda a planta el recordatorio de hoy']) {
+      expect(esOrdenDeAvisoAPlanta(si)).toBe(true);
+    }
+    for (const no of ['qué unidad está en planta', 'clima para planta mañana', 'cuánto falta para terminar la producción en planta', 'manda las fotos de la unidad 4', 'hay producción en planta mañana?']) {
+      expect(esOrdenDeAvisoAPlanta(no)).toBe(false);
+    }
+  });
+});

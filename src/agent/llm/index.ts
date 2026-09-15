@@ -20,6 +20,7 @@ import {
   tablaPedidos,
 } from './fichas.js';
 import { pngTabla, type TablaSpec } from '../consultas/imagen.js';
+import { buscarInformes, lineaInforme, nombreArchivo, pdfDeInforme, textoDeBusqueda, tipoDeInforme, TIPOS_INFORME, type InformeEncontrado } from './informes.js';
 import type { Archivo } from '../consultas/archivos.js';
 import type { Argumentos, HerramientaDeDatos } from './herramientas.js';
 import { redactar } from './redaccion.js';
@@ -44,6 +45,7 @@ const PREGUNTA_NOMBRE: Record<HerramientaDeDatos, string> = {
   kardex: '¿De qué material? Dime el nombre (arena, piedra, confitillo…).',
   ingresos_agregados: '',
   certificados_pendientes: '',
+  informes: '',
 };
 
 export interface FichaArmada {
@@ -131,6 +133,7 @@ export const responderConDatos = async (
   quien: string,
   grupo: string
 ): Promise<{ texto: string; archivos?: Archivo[] }> => {
+  if (id === 'informes') return responderInformes(args, pregunta, quien, grupo);
   if (!args.nombre && PREGUNTA_NOMBRE[id]) {
     preguntar({
       quien,
@@ -157,6 +160,45 @@ export const responderConDatos = async (
   const frase = conFrase(id, resultados) ? await redactar(pregunta, ficha) : null;
   logger.info(`[agente] ${id} ${JSON.stringify(args)} → ficha de ${ficha.split('\n').length} línea(s)${frase ? ' con frase' : ''} en ${((Date.now() - inicio) / 1000).toFixed(1)} s`);
   return { texto: frase ? `${frase}\n\n${ficha}` : ficha };
+};
+
+/**
+ * «Dame el informe de control de pista de los pinos»: se busca por tipo, obra o
+ * cliente y fecha; con uno solo se manda el PDF; con varios se pregunta cuál
+ * (número), como con las unidades. El PDF que no está generado se genera al
+ * momento (`informes.ts`), y se avisa que tarda.
+ */
+const MAX_OPCIONES_INFORMES = 6;
+
+const responderInformes = async (args: Argumentos, pregunta: string, quien: string, grupo: string): Promise<{ texto: string; archivos?: Archivo[] }> => {
+  const tipo = tipoDeInforme(pregunta);
+  const texto = args.nombre ?? textoDeBusqueda(pregunta, tipo);
+  const filtro = { tipo: tipo?.codigo, texto: texto || undefined, desde: args.desde ?? args.fecha, hasta: args.hasta ?? args.fecha, companyId: args.companyId };
+  const lista = await buscarInformes(filtro, MAX_OPCIONES_INFORMES);
+  logger.info(`[agente] informes ${JSON.stringify(filtro)} → ${lista.length} resultado(s)`);
+  if (!lista.length) {
+    const que = tipo ? `de *${tipo.nombre}*` : 'de servicio';
+    const donde = [texto ? `de «${texto}»` : '', filtro.desde ? `del ${filtro.desde}${filtro.hasta && filtro.hasta !== filtro.desde ? ` al ${filtro.hasta}` : ''}` : ''].filter(Boolean).join(' ');
+    const tipos = TIPOS_INFORME.slice(0, 8).map((t) => t.nombre.toLowerCase()).join(', ');
+    return { texto: `No encuentro informes ${que}${donde ? ` ${donde}` : ''}. Dime el tipo (${tipos}…), la obra o el cliente, o la fecha.` };
+  }
+  if (lista.length === 1) return enviarInforme(lista[0]);
+  preguntar({
+    quien,
+    grupo,
+    opciones: lista.map((i) => `${i.nombreTipo} ${i.fecha}`),
+    tipo: 'opciones',
+    continuar: (indice) => enviarInforme(lista[indice] ?? lista[0]),
+  });
+  return { texto: [`📑 Encontré ${lista.length} informes${tipo ? ` de *${tipo.nombre}*` : ''}. ¿Cuál te mando?`, ...lista.map((i, n) => `${n + 1}. ${lineaInforme(i)}`), 'Responde con el número.'].join('\n') };
+};
+
+const enviarInforme = async (i: InformeEncontrado): Promise<{ texto: string; archivos?: Archivo[] }> => {
+  const pdf = await pdfDeInforme(i);
+  if (!pdf) return { texto: `No pude armar el PDF de *${i.nombreTipo}* (${i.fecha}) de ${i.cliente || i.empresa}. Se puede generar desde Portal → Servicios → Informes.` };
+  const buffer = pdf.buffer;
+  const caption = `📑 *${i.nombreTipo}* · ${i.fecha} · ${i.empresa}${i.cliente ? ` · ${i.cliente}` : ''}${i.servicio ? `\n${i.servicio}` : ''}${pdf.generado ? '\n_(generado ahora)_' : ''}`;
+  return { texto: '', archivos: [{ tipo: 'document', url: '', nombre: nombreArchivo(i), fechaMs: Date.now(), mime: 'application/pdf', companyId: i.companyId, buffer, caption }] };
 };
 
 /**

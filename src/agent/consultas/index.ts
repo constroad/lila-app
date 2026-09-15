@@ -10,7 +10,7 @@ import { ALIAS_EMPRESA } from './catalogo.js';
 import { SIN_AGREGADOS, consumosDelDia, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
 import { NOMBRES_DE_DISTRITOS, diasHasta, distritosDe, lugarDesconocido, pronosticoHorario, pronosticoSemanal, riesgoPorDistrito, textoClima, textoClimaSemanal, textoFueraDeAlcance, textoLugarDesconocido, textoRiesgoDistritos } from './clima.js';
 import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
-import { hoyLima, sumarDias } from './catalogo.js';
+import { fechaDe, hoyLima, normalizar, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
 import { argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, herramientaDeDatosPorReglas, normalizarArgumentos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
@@ -370,6 +370,19 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRe
   return { clave: null, pregunta };
 };
 
+/**
+ * «Manda/envía/avisa/pon el aviso (mensaje, programación, producción, pedidos)
+ * a planta» — un verbo de mandar, «planta» y algo que mandar. «¿Qué unidad está
+ * en planta?» o «clima para planta» no lo son.
+ */
+export const esOrdenDeAvisoAPlanta = (pregunta: string): boolean => {
+  const t = normalizar(pregunta);
+  if (!/\bplanta\b/.test(t)) return false;
+  const verbo = /\b(manda|mandale|mandar|mandalo|envia|enviale|enviar|envialo|avisa|avisale|avisar|pon|publica|comparte|propon|proponme|prepara|arma|comunica|comunicale|pasa|pasale)\w*\b/.test(t);
+  const que = /\b(aviso|mensaje|programacion|produccion|producciones|pedido|pedidos|recordatorio|avisar|comunicado)\b/.test(t);
+  return verbo && que;
+};
+
 export const atenderConsulta = async (
   texto: string,
   quien: string,
@@ -383,6 +396,17 @@ export const atenderConsulta = async (
     // segundos, y la persona tiene que ver que algo pasa (José, 14/09).
     await empezarAEscribir(grupo, alcance);
     let pregunta = preguntaLimpia(texto, numeroBot);
+    // «Manda el aviso a planta con la programación de mañana»: una ORDEN, no
+    // una consulta. Se propone en este grupo y se manda con la aprobación de
+    // siempre (José, 14/09: «si no me lo sugieres, yo debería poder pedirlo»).
+    if (!opciones.implicita && esOrdenDeAvisoAPlanta(pregunta)) {
+      const { proponerAvisoManual } = await import('../checklist/detector.js');
+      const fecha = fechaDe(pregunta) ?? sumarDias(hoyLima(), /\bhoy\b/.test(normalizar(pregunta)) ? 0 : 1);
+      const respuestaTexto = await proponerAvisoManual(fecha, alcance);
+      logger.info(`[agente] orden de ${quien}: aviso a planta del ${fecha} → ${respuestaTexto ? 'no se propuso' : 'propuesto'}`);
+      if (respuestaTexto) await responderEnGrupo(grupo, { texto: respuestaTexto }, alcance);
+      return;
+    }
     // La lista negra gana sobre todo: ni reglas, ni modelo, ni embeddings ven un precio.
     const vetada = fueraDeCatalogo(pregunta);
     const porRegla = vetada ? null : rutearPorReglas(pregunta);

@@ -109,6 +109,18 @@ export async function getServiceReportModel(): Promise<Model<Record<string, unkn
   return serviceReportModel;
 }
 
+let serviceManagementModel: Model<Record<string, unknown>> | null = null;
+
+/** Servicios (gestión de servicio) del Portal (loose, solo lectura): a qué obra/cliente pertenece un informe. */
+export async function getServiceManagementModel(): Promise<Model<Record<string, unknown>>> {
+  if (serviceManagementModel) return serviceManagementModel;
+  const conn = await getSharedConnection();
+  serviceManagementModel =
+    (conn.models.ServiceManagementLoose as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('ServiceManagementLoose', looseSchema, 'servicemanagements');
+  return serviceManagementModel;
+}
+
 let controlTankModel: Model<Record<string, unknown>> | null = null;
 let consumeModel: Model<Record<string, unknown>> | null = null;
 let materialModel: Model<Record<string, unknown>> | null = null;

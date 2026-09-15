@@ -18,6 +18,7 @@ import {
   _resetPropuestas,
   pendientes,
   proponer,
+  propuestasDe,
   vencidasAhora,
   yaPropuesta,
   type Propuesta,
@@ -165,10 +166,43 @@ const proponerAvisoDelDia = async (
     },
     ahoraMs
   );
-  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino));
+  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
   ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
   logger.info(`[agente] propuesta ${propuesta.id}: ${cambio ? 'actualización' : 'aviso'} de producción ${dia.fecha} → «${propuesta.nombreDestino}»`);
   return 1;
+};
+
+/**
+ * «@lila manda el aviso a planta con la programación de mañana»: la propuesta
+ * a pedido, en el grupo donde lo pidieron, aunque el detector ya la haya
+ * propuesto (o aunque esté apagado por interruptor: pedirla es prenderla para
+ * esto). José, 14/09 (19:30): «si en caso no me lo sugieres, yo debería poder
+ * decirle que envíe el mensaje al grupo de planta».
+ */
+export const proponerAvisoManual = async (
+  fecha: string,
+  alcance: Awaited<ReturnType<typeof alcanceVigente>>,
+  ahoraMs = Date.now()
+): Promise<string> => {
+  if (!alcance.grupoPlanta) return 'No tengo resuelto el grupo de planta: no puedo armar el aviso.';
+  const pedidos = await pedidosConArranque(ahoraMs);
+  const dia = agruparPorDia(pedidos).find((d) => d.fecha === fecha);
+  if (!dia) return `No hay pedidos con hora de inicio para el ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}: sin pedido no hay aviso que mandar.`;
+  const firmaBase = `${firmaDia(dia)}|aviso`;
+  const enviada = propuestasDe('aviso-planta').find((p) => p.firma === firmaBase && p.estado === 'aprobada');
+  if (enviada?.decididaMs) {
+    const hora = new Date(enviada.decididaMs).toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false });
+    return `Ese aviso ya se mandó a «${enviada.nombreDestino}» hoy a las ${hora}. Si cambió algo, dime qué y lo propongo de nuevo.`;
+  }
+  const texto = construirAvisoProduccion(dia);
+  const propuesta = proponer(
+    { tipo: 'aviso-planta', fecha: dia.fecha, firma: `${firmaBase}|manual|${ahoraMs}`, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || 'planta', texto },
+    ahoraMs
+  );
+  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
+  ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
+  logger.info(`[agente] propuesta ${propuesta.id}: aviso de producción ${dia.fecha} a pedido → «${propuesta.nombreDestino}»`);
+  return '';
 };
 
 const proponerRevisionDelDia = async (
@@ -222,7 +256,7 @@ const proponerRevisionDelDia = async (
     ahoraMs
   ).estado = 'descartada';
 
-  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino));
+  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
   logger.info(
     `[agente] propuesta ${propuesta.id}: checklist ${momento} de ${dia.fecha} → «${propuesta.nombreDestino}» ` +
       `(${revision.pendientes.length} pendientes, ${revision.semanticas.length} confirmación(es) entendidas por semántica, ` +
@@ -344,7 +378,7 @@ const proponerPorMenciones = async (
       { tipo: 'aviso-mencion', fecha: sinPedido[0].desde, firma, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || 'planta', texto },
       ahoraMs
     );
-    await publicarPropuesta(propuesta, [contexto, 'No hay pedido en Portal: sin él no sale el aviso formal ni el checklist.', '', conPiePropuesta(texto, propuesta.nombreDestino)].join('\n'));
+    await publicarPropuesta(propuesta, [contexto, 'No hay pedido en Portal: sin él no sale el aviso formal ni el checklist.', '', conPiePropuesta(texto, propuesta.nombreDestino)].join('\n'), alcance);
     logger.info(`[agente] propuesta ${propuesta.id}: aviso previo por ${sinPedido.length} mención(es) → «${propuesta.nombreDestino}»`);
     nuevas += 1;
   }
@@ -353,7 +387,7 @@ const proponerPorMenciones = async (
     { tipo: 'recordatorio-pedido', fecha: todas[0].desde, firma, destino: alcance.grupoEscuchado, nombreDestino: alcance.nombreGrupo || 'admin', texto: recordatorio },
     ahoraMs
   );
-  await publicarPropuesta(propuesta, [sinPedido.length ? '' : contexto, conPiePropuesta(recordatorio, propuesta.nombreDestino)].filter(Boolean).join('\n'));
+  await publicarPropuesta(propuesta, [sinPedido.length ? '' : contexto, conPiePropuesta(recordatorio, propuesta.nombreDestino)].filter(Boolean).join('\n'), alcance);
   logger.info(`[agente] propuesta ${propuesta.id}: recordatorio de pedido por ${todas.length} mención(es)${sinHora.length ? ` (${sinHora.length} sin hora)` : ''} → «${propuesta.nombreDestino}»`);
   return nuevas + 1;
 };

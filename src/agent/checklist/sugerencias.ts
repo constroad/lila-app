@@ -104,6 +104,9 @@ export const yaPropuesta = (tipo: TipoPropuesta, firma: string, ahoraMs = Date.n
   return propuestas.some((p) => p.tipo === tipo && p.firma === firma && p.estado !== 'vencida');
 };
 
+/** Todas las de un tipo (cualquier estado), de la más nueva a la más vieja. */
+export const propuestasDe = (tipo: TipoPropuesta): Propuesta[] => propuestas.filter((p) => p.tipo === tipo).reverse();
+
 /** Las pendientes, de la más nueva a la más vieja. */
 export const pendientes = (ahoraMs = Date.now()): Propuesta[] => {
   expirar(ahoraMs);
