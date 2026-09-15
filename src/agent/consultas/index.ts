@@ -430,6 +430,9 @@ export const esOrdenDeAvisoAPlanta = (pregunta: string): boolean => {
   return verbo && que;
 };
 
+/** Lo que se contesta si la consulta revienta por dentro (base, red): honesto y sin stack. */
+export const MENSAJE_DE_FALLO = '⚠️ No pude responder ahora: algo falló al buscar los datos. Vuelve a preguntarme en un momento.';
+
 export const atenderConsulta = async (
   texto: string,
   quien: string,
@@ -507,6 +510,11 @@ export const atenderConsulta = async (
     await responderEnGrupo(grupo, conNotaSiVacia(respuesta), alcance);
   } catch (error) {
     logger.warn(`[agente] no pude atender la consulta «${texto}»: ${error instanceof Error ? error.message : String(error)}`);
+    // Se dice, no se calla. El 15/09 a las 12:26 una consulta etiquetada murió
+    // en Mongo y el grupo vio a Lila «escribiendo…» y después nada: quien
+    // pregunta no distingue «falló» de «me ignoró». «No pude» es la respuesta
+    // honesta, sin el detalle técnico (eso va al log).
+    await responderEnGrupo(grupo, { texto: MENSAJE_DE_FALLO }, alcance).catch((e) => logger.warn(`[agente] tampoco pude avisar del fallo: ${e instanceof Error ? e.message : String(e)}`));
   } finally {
     await dejarDeEscribir(grupo);
   }

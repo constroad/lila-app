@@ -150,7 +150,20 @@ export const buscarInformes = async (
     };
   }
   // Se traen más de los que se muestran para poder filtrar por obra/cliente.
-  const docs = (await Informe.find(query).select('companyId serviceManagementId type status date responsible generatedDocuments').sort({ date: -1, updatedAt: -1 }).limit(filtro.texto ? 200 : limite * 4).lean()) as Doc[];
+  //
+  // `allowDiskUse`: la colección es del Portal y no tiene índice por
+  // `{companyId, date}`, así que ordenar es un SORT en memoria de los informes
+  // enteros (con `schemaData` y fotos adentro) de todas las empresas del
+  // filtro. El 15/09 a las 12:26 pasó de los 32 MB que Mongo permite y la
+  // consulta «cuántos carros se descargaron en el control de pista» murió sin
+  // respuesta. El arreglo de fondo es el índice `{companyId: 1, date: -1}` en
+  // el modelo del Portal; hasta que exista, esto deja de tirar el query.
+  const docs = (await Informe.find(query)
+    .select('companyId serviceManagementId type status date responsible generatedDocuments')
+    .sort({ date: -1, updatedAt: -1 })
+    .limit(filtro.texto ? 200 : limite * 4)
+    .allowDiskUse(true)
+    .lean()) as Doc[];
   if (!docs.length) return [];
   const idsServicio = [...new Set(docs.map((d) => texto(d.serviceManagementId)).filter(Boolean))];
   const servicios = (await Servicio.find({ _id: { $in: idsServicio } }).select('clientId projectName description').lean()) as Doc[];
