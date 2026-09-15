@@ -11272,7 +11272,8 @@ var init_ayuda = __esm({
         ejemplos: [
           "el enlace del pedido de hoy de Globofast",
           "las gu\xEDas generadas para la producci\xF3n de hoy",
-          "el informe de imprimaci\xF3n / \xE1rea adicional",
+          "dame el informe de planta \xB7 p\xE1same el control de pista de los pinos \xB7 manda la valorizaci\xF3n de comas (en PDF)",
+          "ya est\xE1 el informe de imprimaci\xF3n / \xE1rea adicional de hoy",
           "qu\xE9 pedidos no tienen certificado cargado (por cliente)",
           "c\xF3mo va el checklist"
         ]
@@ -11302,9 +11303,9 @@ var init_ayuda = __esm({
         ejemplos: [],
         notas: [
           "\u{1F4C5} *Fechas*: hoy, ayer, ma\xF1ana, el martes, el martes pasado, 15/09, esta semana, la semana pasada, en agosto.",
-          "\u{1F4AC} *Sigue el hilo* sin volver a etiquetarme: \xAB\xBFy la 3?\xBB, \xAB\xBFy ma\xF1ana?\xBB, \xAB\xBFy en Ate?\xBB. Si hay m\xE1s de una producci\xF3n, te pregunto cu\xE1l: responde con el n\xFAmero.",
-          "\u2699\uFE0F *Propuestas* (aviso a planta, checklist, recordatorios): llegan a error tracking; mant\xE9n presionado el mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar.",
-          "\u{1F50C} `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores.",
+          "\u{1F3F7} *Respondo solo si me etiquetas* (@lila o mi n\xFAmero) o si respondes a un mensaje m\xEDo: \xAB\xBFy la 3?\xBB, \xAB\xBFy en Ate?\xBB. Si hay m\xE1s de una opci\xF3n, te pregunto cu\xE1l: responde con el n\xFAmero.",
+          "\u{1F4E8} *Propuestas* (aviso a planta, checklist de planta, recordatorios): las publico aqu\xED; un administrador mantiene presionado el mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar. \xAB@lila manda el aviso a planta con la programaci\xF3n de ma\xF1ana\xBB me la pide a m\xED.",
+          "\u{1F50C} \xAB@lila off\xBB me apaga (sigo escuchando, no mando nada); \xAB@lila on\xBB me prende; \xAB@lila est\xE1s encendida?\xBB te lo dice. Solo administradores.",
           "No respondo precios, pagos, deudas ni datos personales de conductores."
         ]
       }

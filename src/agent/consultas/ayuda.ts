@@ -51,7 +51,8 @@ export const TEMAS: TemaAyuda[] = [
     ejemplos: [
       'el enlace del pedido de hoy de Globofast',
       'las guías generadas para la producción de hoy',
-      'el informe de imprimación / área adicional',
+      'dame el informe de planta · pásame el control de pista de los pinos · manda la valorización de comas (en PDF)',
+      'ya está el informe de imprimación / área adicional de hoy',
       'qué pedidos no tienen certificado cargado (por cliente)',
       'cómo va el checklist',
     ],
@@ -81,9 +82,9 @@ export const TEMAS: TemaAyuda[] = [
     ejemplos: [],
     notas: [
       '📅 *Fechas*: hoy, ayer, mañana, el martes, el martes pasado, 15/09, esta semana, la semana pasada, en agosto.',
-      '💬 *Sigue el hilo* sin volver a etiquetarme: «¿y la 3?», «¿y mañana?», «¿y en Ate?». Si hay más de una producción, te pregunto cuál: responde con el número.',
-      '⚙️ *Propuestas* (aviso a planta, checklist, recordatorios): llegan a error tracking; mantén presionado el mensaje → *Responder* → *1* para enviarlo, *3* para descartar.',
-      '🔌 `!lila off` apaga el agente (sigue escuchando, no manda nada); `!lila on` lo prende. Solo administradores.',
+      '🏷 *Respondo solo si me etiquetas* (@lila o mi número) o si respondes a un mensaje mío: «¿y la 3?», «¿y en Ate?». Si hay más de una opción, te pregunto cuál: responde con el número.',
+      '📨 *Propuestas* (aviso a planta, checklist de planta, recordatorios): las publico aquí; un administrador mantiene presionado el mensaje → *Responder* → *1* para enviarlo, *3* para descartar. «@lila manda el aviso a planta con la programación de mañana» me la pide a mí.',
+      '🔌 «@lila off» me apaga (sigo escuchando, no mando nada); «@lila on» me prende; «@lila estás encendida?» te lo dice. Solo administradores.',
       'No respondo precios, pagos, deudas ni datos personales de conductores.',
     ],
   },
