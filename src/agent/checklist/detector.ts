@@ -413,7 +413,7 @@ const proponerPorMenciones = async (
       { tipo: 'aviso-mencion', fecha: sinPedido[0].desde, firma, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || 'planta', texto },
       ahoraMs
     );
-    await publicarPropuesta(propuesta, `${recordatorio}\n\n📨 ¿Aviso a «${propuesta.nombreDestino}» de lo posible? Mantén presionado este mensaje → *Responder* → *1* para avisar, *3* para no.`, alcance);
+    await publicarPropuesta(propuesta, `${recordatorio}\n\n📨 ¿Aviso a «${propuesta.nombreDestino}» de lo posible? Responde a este mensaje (deslízalo) con *1* para avisar, o *3* para no.`, alcance);
     presupuesto.restantes -= 1;
     logger.info(`[agente] propuesta ${propuesta.id}: recordatorio + aviso previo por ${todas.length} mención(es) → «${propuesta.nombreDestino}»`);
     return 1;

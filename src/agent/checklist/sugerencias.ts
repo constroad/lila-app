@@ -10,7 +10,7 @@ import { randomUUID } from 'crypto';
  * CÓMO SE APRUEBA — POR CITA, NO POR UN «1» SUELTO. José, 13/09/2026: «estamos
  * en un grupo. ¿Qué pasa si el contador escribe inmediatamente después de este
  * mensaje?». Tenía razón: un «1» en un grupo no es de nadie. Ahora se aprueba
- * RESPONDIENDO al mensaje de la propuesta (mantener presionado → Responder → 1):
+ * RESPONDIENDO al mensaje de la propuesta (deslizar → responder con 1):
  * la respuesta trae el id del mensaje citado, y ese id es de UNA propuesta. Un
  * «1» sin cita no aprueba nada, y un «1» citando otra cosa tampoco.
  *

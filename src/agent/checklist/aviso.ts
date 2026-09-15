@@ -143,13 +143,25 @@ export const construirAvisoProduccion = (
   if (opciones.actualizacion) lineas.push(opciones.actualizacion);
   lineas.push('');
   for (const p of dia.pedidos) {
+    const reunion = horaMenos(p.hora, MINUTOS_REUNION_ANTES);
     lineas.push(
-      `• ${p.hora} — *${p.empresa}*${p.cliente ? ` (${p.cliente})` : ''} · ${p.cubos} m³`
+      `• ${p.hora} — *${p.empresa}*${p.cliente ? ` (${p.cliente})` : ''} · ${p.cubos} m³${reunion ? ` · reunión ${reunion}` : ''}`
     );
   }
   if (dia.pedidos.length > 1) lineas.push('', `Total del día: *${dia.totalCubos} m³*`);
-  lineas.push('', 'Por favor confirmar que planta está enterada y coordinada.');
+  lineas.push('', `Reunión de coordinación ${MINUTOS_REUNION_ANTES} min antes de cada arranque. Por favor confirmar que planta está enterada y coordinada.`);
   return lineas.join('\n');
+};
+
+/** La reunión de coordinación en planta es media hora antes del arranque (José, 14/09/2026). */
+export const MINUTOS_REUNION_ANTES = 30;
+
+/** «04:30» − 30 min → «04:00»; una hora que no se entiende devuelve vacío. */
+export const horaMenos = (hora: string, minutos: number): string => {
+  const m = String(hora || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return '';
+  const total = (((Number(m[1]) * 60 + Number(m[2]) - minutos) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 };
 
 /**
@@ -181,7 +193,7 @@ export const describirCambio = (
  * lo que se va a mandar; nada se reescribe entre el «1» y el envío.
  */
 export const conPiePropuesta = (texto: string, nombreDestino: string): string =>
-  [texto, '', `📨 Para «${nombreDestino}»: mantén presionado este mensaje → *Responder* → *1* para enviarlo, *3* para descartar.`].join('\n');
+  [texto, '', `📨 Para «${nombreDestino}»: responde a este mensaje (deslízalo) con *1* para enviarlo, o *3* para descartar.`].join('\n');
 
 /**
  * LA FIRMA DEL AVISO, para no repetirlo.

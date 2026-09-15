@@ -211,8 +211,10 @@ describe('el aviso al grupo de operaciones', () => {
     const aviso = construirAvisoProduccion(dia);
 
     expect(aviso).toContain('📢 *Producción programada — domingo 13/09*');
-    expect(aviso).toContain('• 04:00 — *Globofast* · 91 m³');
-    expect(aviso).toContain('• 07:00 — *Constroad* · 45 m³');
+    // La reunión de coordinación es media hora antes del arranque (José, 14/09).
+    expect(aviso).toContain('• 04:00 — *Globofast* · 91 m³ · reunión 03:30');
+    expect(aviso).toContain('• 07:00 — *Constroad* · 45 m³ · reunión 06:30');
+    expect(aviso).toContain('Reunión de coordinación 30 min antes de cada arranque.');
     expect(aviso).toContain('Total del día: *136 m³*');
     expect(aviso).not.toContain('@g.us');
   });
@@ -242,7 +244,9 @@ describe('el aviso al grupo de operaciones', () => {
 
     // El texto primero, y UNA línea de cómo aprobarlo al final (14/09: la cabecera de cuatro líneas tapaba el mensaje).
     expect(propuesta.startsWith(texto)).toBe(true);
-    expect(propuesta.endsWith('📨 Para «Inframaq Planta»: mantén presionado este mensaje → *Responder* → *1* para enviarlo, *3* para descartar.')).toBe(true);
+    // En WhatsApp se DESLIZA para responder, no se mantiene presionado (José, 14/09).
+    expect(propuesta.endsWith('📨 Para «Inframaq Planta»: responde a este mensaje (deslízalo) con *1* para enviarlo, o *3* para descartar.')).toBe(true);
+    expect(propuesta).not.toContain('presionado');
   });
 
   it('no filtra identificadores del sistema', () => {

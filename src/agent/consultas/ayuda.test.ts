@@ -14,7 +14,7 @@ describe('ayuda', () => {
     expect(textoTema(1)).toContain('• cuántos agregados llegaron hoy (por proveedor)');
     expect(textoTema(1)).toContain('Otro tema: responde su número.');
     expect(textoTema(5)).toContain('@lila off');
-    expect(textoTema(5)).toContain('Responder');
+    expect(textoTema(5)).toContain('lo desliza');
     expect(textoTema(5)).toContain('No respondo precios');
     expect(textoTema(9)).toBe(menuAyuda());
   });

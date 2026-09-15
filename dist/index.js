@@ -11304,7 +11304,7 @@ var init_ayuda = __esm({
         notas: [
           "\u{1F4C5} *Fechas*: hoy, ayer, ma\xF1ana, el martes, el martes pasado, 15/09, esta semana, la semana pasada, en agosto.",
           "\u{1F3F7} *Respondo solo si me etiquetas* (@lila o mi n\xFAmero) o si respondes a un mensaje m\xEDo: \xAB\xBFy la 3?\xBB, \xAB\xBFy en Ate?\xBB. Si hay m\xE1s de una opci\xF3n, te pregunto cu\xE1l: responde con el n\xFAmero.",
-          "\u{1F4E8} *Propuestas* (aviso a planta, checklist de planta, recordatorios): las publico aqu\xED; un administrador mantiene presionado el mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar. \xAB@lila manda el aviso a planta con la programaci\xF3n de ma\xF1ana\xBB me la pide a m\xED.",
+          "\u{1F4E8} *Propuestas* (aviso a planta, checklist de planta, recordatorios): las publico aqu\xED; un administrador responde al mensaje (lo desliza) con *1* para enviarlo o *3* para descartar. \xAB@lila manda el aviso a planta con la programaci\xF3n de ma\xF1ana\xBB me la pide a m\xED.",
           "\u{1F50C} \xAB@lila off\xBB me apaga (sigo escuchando, no mando nada); \xAB@lila on\xBB me prende; \xAB@lila est\xE1s encendida?\xBB te lo dice. Solo administradores.",
           "No respondo precios, pagos, deudas ni datos personales de conductores."
         ]
@@ -14202,7 +14202,7 @@ var init_mensajes = __esm({
 });
 
 // src/agent/checklist/aviso.ts
-var duracion, ENCABEZADO, construirAvisoChecklist, ENCABEZADO_DOMINIO, construirAvisoProduccion, describirCambio, conPiePropuesta, firmaAviso;
+var duracion, ENCABEZADO, construirAvisoChecklist, ENCABEZADO_DOMINIO, construirAvisoProduccion, MINUTOS_REUNION_ANTES, horaMenos, describirCambio, conPiePropuesta, firmaAviso;
 var init_aviso = __esm({
   "src/agent/checklist/aviso.ts"() {
     init_tiempo();
@@ -14259,13 +14259,21 @@ var init_aviso = __esm({
       if (opciones.actualizacion) lineas.push(opciones.actualizacion);
       lineas.push("");
       for (const p64 of dia.pedidos) {
+        const reunion = horaMenos(p64.hora, MINUTOS_REUNION_ANTES);
         lineas.push(
-          `\u2022 ${p64.hora} \u2014 *${p64.empresa}*${p64.cliente ? ` (${p64.cliente})` : ""} \xB7 ${p64.cubos} m\xB3`
+          `\u2022 ${p64.hora} \u2014 *${p64.empresa}*${p64.cliente ? ` (${p64.cliente})` : ""} \xB7 ${p64.cubos} m\xB3${reunion ? ` \xB7 reuni\xF3n ${reunion}` : ""}`
         );
       }
       if (dia.pedidos.length > 1) lineas.push("", `Total del d\xEDa: *${dia.totalCubos} m\xB3*`);
-      lineas.push("", "Por favor confirmar que planta est\xE1 enterada y coordinada.");
+      lineas.push("", `Reuni\xF3n de coordinaci\xF3n ${MINUTOS_REUNION_ANTES} min antes de cada arranque. Por favor confirmar que planta est\xE1 enterada y coordinada.`);
       return lineas.join("\n");
+    };
+    MINUTOS_REUNION_ANTES = 30;
+    horaMenos = (hora3, minutos) => {
+      const m59 = String(hora3 || "").match(/^(\d{1,2}):(\d{2})$/);
+      if (!m59) return "";
+      const total = ((Number(m59[1]) * 60 + Number(m59[2]) - minutos) % 1440 + 1440) % 1440;
+      return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
     };
     describirCambio = (antes, ahora) => {
       const porId = (lista) => new Map(lista.map((p64) => [p64.id ?? `${p64.empresa}|${p64.hora}`, p64]));
@@ -14281,7 +14289,7 @@ var init_aviso = __esm({
       for (const [id, p64] of a49) if (!b63.has(id)) frases.push(`se cae *${p64.empresa}* (${p64.hora})`);
       return frases.length ? `Cambio: ${frases.join("; ")}.` : "";
     };
-    conPiePropuesta = (texto5, nombreDestino) => [texto5, "", `\u{1F4E8} Para \xAB${nombreDestino}\xBB: mant\xE9n presionado este mensaje \u2192 *Responder* \u2192 *1* para enviarlo, *3* para descartar.`].join("\n");
+    conPiePropuesta = (texto5, nombreDestino) => [texto5, "", `\u{1F4E8} Para \xAB${nombreDestino}\xBB: responde a este mensaje (desl\xEDzalo) con *1* para enviarlo, o *3* para descartar.`].join("\n");
     firmaAviso = (fecha, momento, revision) => `${fecha}|${momento}|${revision.pendientes.map((i50) => i50.id).sort().join(",")}`;
   }
 });
@@ -14778,7 +14786,7 @@ var init_detector = __esm({
         );
         await publicarPropuesta(propuesta2, `${recordatorio}
 
-\u{1F4E8} \xBFAviso a \xAB${propuesta2.nombreDestino}\xBB de lo posible? Mant\xE9n presionado este mensaje \u2192 *Responder* \u2192 *1* para avisar, *3* para no.`, alcance);
+\u{1F4E8} \xBFAviso a \xAB${propuesta2.nombreDestino}\xBB de lo posible? Responde a este mensaje (desl\xEDzalo) con *1* para avisar, o *3* para no.`, alcance);
         presupuesto.restantes -= 1;
         logger_default.info(`[agente] propuesta ${propuesta2.id}: recordatorio + aviso previo por ${todas.length} menci\xF3n(es) \u2192 \xAB${propuesta2.nombreDestino}\xBB`);
         return 1;
