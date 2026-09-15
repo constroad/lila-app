@@ -186,6 +186,13 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
   limit 8 msg/min por jid; typing humano cap 4 s; quota vía
   `incrementWhatsAppUsage`. Spec: `specs/WHATSAPP-AGENT-VERTICALS.spec.md`
   (runbook piloto §9).
+- **Agente de operaciones «Lila» (sept. 2026):** `src/agent/checklist/*` (observa
+  INFRAMAQ admin, checklist de producción, propuestas con aprobación por cita),
+  `src/agent/consultas/*` (preguntas `@lila`, catálogo cerrado) y `src/agent/llm/*`
+  (Qwen2.5-1.5B local por `node-llama-cpp`, herramientas de datos, fichas). Su as-is
+  vive en `../Portal/specs/AGENT-OPERATIONS.spec.md` §13; la **auditoría del
+  entendimiento** (cinco ruteadores, tres extractores; diseño objetivo «el modelo
+  señala, el código resuelve» + corpus de evaluación, pendiente) está en §13.5.
 - Una sesion por empresa, credenciales en `data/sessions/{companyPhone}` (volumen montado).
 - **Auth de rutas de sesion (`/api/sessions/*` state-changing):** middleware `requireTenantOrApiKey` (junio 2026) acepta JWT de tenant (Portal), API key `lk_fe_...` o, por compatibilidad, la API key global `x-api-key`. Antes exigian solo `x-api-key === API_SECRET_KEY`, lo que rompia el boton "Desconectar" de Portal (que firma JWT). Plan de deprecar el secreto global en `specs/SCALABILITY-MULTI-SESSION.spec.md` §4.4/§4.5.
 - **Multi-sesion (junio 2026):** `startSession` tiene guard anti-duplicado (mapa `startingPromises` + chequeo `isSessionReady`) que reutiliza la inicializacion en curso / el socket vivo sin bloquear la reconexion automatica; el cuerpo real se movio a `initSession`. Los `setInterval` de persistencia del store se trackean en `storeTimers` y se cancelan con `clearStoreTimer` (en `startSession`, `createPairingSession`, `disconnectSession`, `endSession`, `clearSession`) para no fugar timers en reconexiones.
