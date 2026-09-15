@@ -68,10 +68,15 @@ async function saveQueue(items: DispatchAutoCloseItem[]): Promise<void> {
   await getStore().set(STORE_KEY, items);
 }
 
-/** Delay del cierre = ETA de la unidad (segundos) tal cual. Sin ETA → fallback. */
+/**
+ * Delay del cierre = ETA de la unidad (segundos) tal cual. Sin ETA (null,
+ * undefined, NaN, negativo) → fallback. **0 es 0**: el barrido lo manda para una
+ * unidad cuya llegada esperada ya pasó, y tratarlo como «sin ETA» la dejaba
+ * 90 min más «en ruta» (15/09, 15:48).
+ */
 function computeAutoCloseDelayMs(etaSeconds: number | null | undefined): number {
-  const eta = Number(etaSeconds);
-  const raw = Number.isFinite(eta) && eta > 0 ? eta * 1000 : NO_ETA_FALLBACK_MS;
+  const eta = etaSeconds === null || etaSeconds === undefined ? NaN : Number(etaSeconds);
+  const raw = Number.isFinite(eta) && eta >= 0 ? eta * 1000 : NO_ETA_FALLBACK_MS;
   return Math.min(MAX_DELAY_MS, Math.max(0, Math.round(raw)));
 }
 

@@ -78,6 +78,16 @@ const axiosError = (status: number) => {
 };
 
 describe('scheduleDispatchAutoClose', () => {
+  it('ETA 0 es «ya debería haber llegado»: dispara en el próximo tick, no en 90 min', async () => {
+    // El barrido manda 0 para una unidad cuya llegada esperada ya pasó. Antes
+    // 0 caía en «sin ETA» → 90 min más de «en ruta» (15/09, 15:48).
+    const antes = Date.now();
+    await scheduleDispatchAutoClose({ companyId: 'c1', dispatchId: 'd0', etaSeconds: 0 });
+    const item = queue().find((q) => q.dispatchId === 'd0');
+    expect(item).toBeDefined();
+    expect(new Date(item!.availableAt).getTime()).toBeLessThanOrEqual(antes + 1000);
+  });
+
   it('programa el cierre al ETA y deduplica por despacho', async () => {
     const first = await scheduleDispatchAutoClose({ companyId: 'c1', dispatchId: 'd1', etaSeconds: 1800 });
     const dup = await scheduleDispatchAutoClose({ companyId: 'c1', dispatchId: 'd1', etaSeconds: 1800 });
