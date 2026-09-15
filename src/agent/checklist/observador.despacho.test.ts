@@ -9,13 +9,11 @@ import { jest } from '@jest/globals';
  */
 const atenderConsulta = jest.fn(async () => undefined);
 const atenderEleccion = jest.fn(async (texto: string) => /^\s*[123]\s*$/.test(texto));
-const atenderContinuacion = jest.fn(async () => true);
 jest.unstable_mockModule('../consultas/index.js', () => ({
   __esModule: true,
   esConsulta: (texto: string, bot: string, mencionados: string[]) => /@lila\b/i.test(texto) || texto.includes(`@${bot}`) || mencionados.includes('244534046892225@lid'),
   atenderConsulta,
   atenderEleccion,
-  atenderContinuacion,
 }));
 jest.unstable_mockModule('../../database/models.js', () => ({
   __esModule: true,
@@ -51,7 +49,6 @@ beforeAll(async () => {
 beforeEach(() => {
   atenderConsulta.mockClear();
   atenderEleccion.mockClear();
-  atenderContinuacion.mockClear();
 });
 
 const mensaje = (texto: string, contextInfo: Record<string, unknown> = {}) =>
@@ -67,7 +64,17 @@ describe('atenderComoConsulta', () => {
   it('«3» citando la pregunta del agente también es la respuesta', async () => {
     await observador.atenderComoConsulta(mensaje('3', { stanzaId: 'q1', participant: '244534046892225@lid' }), '3', QUIEN, ADMIN, alcance, { votosSueltos: false });
     expect(atenderEleccion).toHaveBeenCalledWith('3', QUIEN, ADMIN, alcance);
-    expect(atenderContinuacion).not.toHaveBeenCalled();
+    expect(atenderConsulta).not.toHaveBeenCalled();
+  });
+
+  /** 15/09, 10:30: Globofast citó el checklist para decirle a alguien «enlaza al grupo de certificados» y Lila contestó con la tabla de certificados. */
+  it('citar un mensaje del agente sin etiquetarlo NO es una consulta', async () => {
+    atenderEleccion.mockImplementation(async () => false);
+    await observador.atenderComoConsulta(mensaje('Enlaza al grupo de certificados', { stanzaId: 'c1', participant: '244534046892225@lid' }), 'Enlaza al grupo de certificados', QUIEN, ADMIN, alcance, { votosSueltos: false });
+    expect(atenderConsulta).not.toHaveBeenCalled();
+    await observador.atenderComoConsulta(mensaje('¿y la 3?', { stanzaId: 'c1', participant: '244534046892225@lid' }), '¿y la 3?', QUIEN, ADMIN, alcance, { votosSueltos: false });
+    expect(atenderConsulta).not.toHaveBeenCalled();
+    atenderEleccion.mockImplementation(async (texto: string) => /^\s*[123]\s*$/.test(texto));
   });
 
   it('una consulta larga etiquetada sigue siendo consulta aunque haya pregunta pendiente', async () => {

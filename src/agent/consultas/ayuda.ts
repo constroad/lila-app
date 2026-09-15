@@ -82,7 +82,7 @@ export const TEMAS: TemaAyuda[] = [
     ejemplos: [],
     notas: [
       '📅 *Fechas*: hoy, ayer, mañana, el martes, el martes pasado, 15/09, esta semana, la semana pasada, en agosto.',
-      '🏷 *Respondo solo si me etiquetas* (@lila o mi número) o si respondes a un mensaje mío: «¿y la 3?», «¿y en Ate?». Si hay más de una opción, te pregunto cuál: responde con el número.',
+      '🏷 *Respondo solo si me etiquetas* (@lila o mi número). Para seguir un tema, etiquétame de nuevo: «@lila ¿y la 3?», «@lila ¿y en Ate?». Si hay más de una opción, te pregunto cuál: responde con el número.',
       '📨 *Propuestas* (aviso a planta, checklist de planta, recordatorios): las publico aquí; un administrador responde al mensaje (lo desliza) con *1* para enviarlo o *3* para descartar. «@lila manda el aviso a planta con la programación de mañana» me la pide a mí.',
       '🔌 «@lila off» me apaga (sigo escuchando, no mando nada); «@lila on» me prende; «@lila estás encendida?» te lo dice. Solo administradores.',
       'No respondo precios, pagos, deudas ni datos personales de conductores.',

@@ -371,7 +371,7 @@ interface Ruta {
  *
  * Lo general de la experiencia está acá, no en cada consulta.
  */
-const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRespaldo: ClaveConsulta | null = null, implicita = false): Promise<Ruta> => {
+const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRespaldo: ClaveConsulta | null = null): Promise<Ruta> => {
   const ultima = ultimaConsulta(quien, grupo);
   if (ultima && pareceContinuacion(pregunta)) {
     // La misma pregunta con el dato nuevo, y sin el dato viejo del mismo tipo.
@@ -379,18 +379,6 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRe
     // Un hilo de datos (clientes, kardex…) lo sigue el modelo, que es quien lo abrió.
     if (!esHerramientaDeDatos(ultima.clave)) return { clave: ultima.clave as ClaveConsulta, pregunta: fusionada };
     pregunta = fusionada;
-  }
-  // Un mensaje IMPLÍCITO (sin @lila) no pasa por el modelo ni pide confirmación:
-  // solo las reglas y los embeddings con certeza. El modelo, ante «como ven esos
-  // son ejemplos…», eligió `help` y Lila contestó con el menú (14/09, 18:11).
-  if (implicita) {
-    if (reglaDeRespaldo) return { clave: reglaDeRespaldo, pregunta };
-    const embed = await cargarModelo();
-    if (embed) {
-      const [mejor] = await clasificar(CATALOGO, [pregunta], embed);
-      if (mejor && mejor.similitud >= UMBRAL_RUTEO && mejor.itemId !== 'help') return { clave: mejor.itemId as ClaveConsulta, pregunta };
-    }
-    return { clave: null, pregunta };
   }
   // La pregunta anterior del hilo solo ayuda con una pregunta CORTA («¿y en
   // Ate?»); a una larga la confunde: «y el clima en la molina…» tras «stock de
@@ -447,8 +435,7 @@ export const atenderConsulta = async (
   quien: string,
   grupo: string,
   alcance: AlcanceAgente,
-  numeroBot?: string,
-  opciones: { implicita?: boolean } = {}
+  numeroBot?: string
 ): Promise<void> => {
   try {
     // «Escribiendo…» desde ya: rutear, armar una imagen o leer un video toma
@@ -458,7 +445,7 @@ export const atenderConsulta = async (
     // «Manda el aviso a planta con la programación de mañana»: una ORDEN, no
     // una consulta. Se propone en este grupo y se manda con la aprobación de
     // siempre (José, 14/09: «si no me lo sugieres, yo debería poder pedirlo»).
-    if (!opciones.implicita && esOrdenDeAvisoAPlanta(pregunta)) {
+    if (esOrdenDeAvisoAPlanta(pregunta)) {
       const { proponerAvisoManual } = await import('../checklist/detector.js');
       const fecha = fechaDe(pregunta) ?? sumarDias(hoyLima(), /\bhoy\b/.test(normalizar(pregunta)) ? 0 : 1);
       const respuestaTexto = await proponerAvisoManual(fecha, alcance);
@@ -471,7 +458,7 @@ export const atenderConsulta = async (
     const sinDato = temaSinDato(pregunta);
     if (sinDato) {
       logger.info(`[agente] consulta de ${quien} sobre un dato que no se registra: «${pregunta}»`);
-      if (!opciones.implicita) await responderEnGrupo(grupo, { texto: sinDato }, alcance);
+      await responderEnGrupo(grupo, { texto: sinDato }, alcance);
       return;
     }
     // La lista negra gana sobre todo: ni reglas, ni modelo, ni embeddings ven un precio.
@@ -505,15 +492,7 @@ export const atenderConsulta = async (
       recordarConsulta({ quien, grupo, clave: 'pedidos', pregunta });
       clave = null;
     }
-    if (!clave && !vetada && !respuesta) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, larga ? porRegla : null, opciones.implicita));
-    // Una consulta IMPLÍCITA (sin @lila, dentro del hilo) se contesta solo si
-    // se entendió con certeza; lo demás pasa en silencio, porque puede no ser
-    // para el agente. Y nunca con el menú de ayuda: el 14/09 a las 18:11 dos
-    // mensajes de José a otras personas terminaron en «Lila — pregúntame…».
-    if (opciones.implicita && (!clave || clave === 'help') && !respuesta) {
-      logger.info(`[agente] consulta implícita de ${quien} sin ruta cierta, se deja pasar: «${pregunta}»`);
-      return;
-    }
+    if (!clave && !vetada && !respuesta) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, larga ? porRegla : null));
     // Etiquetada pero hablando DE ella, no CON ella («…la vayamos entrenando a
     // @lila», «eso no puede responder @lila 😅», 14/09 18:27): no es pregunta
     // ni pedido, ninguna regla la entendió y el modelo cayó en `help`. Silencio;
@@ -531,32 +510,6 @@ export const atenderConsulta = async (
   } finally {
     await dejarDeEscribir(grupo);
   }
-};
-
-/**
- * Un mensaje SIN @lila que RESPONDE (cita) a un mensaje del agente: se atiende
- * como si lo etiquetara —«¿y la 3?» citando su tabla funciona—, en silencio si
- * no se entiende. Sin cita no hay continuación: el 14/09 (18:11 y 18:27) los
- * mensajes de José a otras personas, un minuto después de preguntarle algo,
- * caían como «pregunta dentro del hilo» y Lila contestaba con el menú. José:
- * «mejor la gente debe responder cuando se le taguea @lila o el número».
- */
-export const atenderContinuacion = async (
-  texto: string,
-  quien: string,
-  grupo: string,
-  alcance: AlcanceAgente,
-  citaAlAgente = false
-): Promise<boolean> => {
-  if (!citaAlAgente) return false;
-  const ultima = ultimaConsulta(quien, grupo);
-  const regla = rutearPorReglas(preguntaLimpia(texto));
-  if ((ultima && pareceContinuacion(texto)) || (regla && regla !== 'help')) {
-    await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance);
-    return true;
-  }
-  await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance, undefined, { implicita: true });
-  return true;
 };
 
 /** Un número suelto de alguien con una pregunta pendiente: es su respuesta. */

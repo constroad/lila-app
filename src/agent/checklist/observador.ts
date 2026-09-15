@@ -131,12 +131,6 @@ const mencionadosDe = (message: ContenidoEntrante | null | undefined): string[] 
  * cayeron como «pregunta dentro del hilo» y Lila contestó con el menú. Un
  * mensaje dirigido a otro nunca es una continuación.
  */
-/** ¿Este mensaje CITA (responde a) un mensaje del agente? Entonces es para el agente aunque no lo etiquete. */
-export const citaAlBot = (message: ContenidoEntrante | null | undefined, jidsBot: string[]): boolean => {
-  const citado = String(message?.extendedTextMessage?.contextInfo?.participant || '').replace(/:\d+@/, '@');
-  return Boolean(citado) && jidsBot.includes(citado);
-};
-
 export const paraOtraPersona = (message: ContenidoEntrante | null | undefined, jidsBot: string[]): boolean => {
   const esBot = (jid: string) => jidsBot.includes(String(jid || '').replace(/:\d+@/, '@'));
   const citado = String(message?.extendedTextMessage?.contextInfo?.participant || '');
@@ -307,10 +301,11 @@ const RESPUESTA_CORTA_PALABRAS = 3;
  *    si el mensaje es corto: «@lila qué pedidos hay hoy» con una pregunta
  *    pendiente sigue siendo una consulta.
  * 2. Una consulta etiquetada (`@lila …`, el número, la mención).
- * 3. Sin etiqueta, solo lo que le RESPONDEN: una cita a un mensaje suyo («¿y la
- *    3?» respondiendo a su tabla) o la respuesta a una pregunta suya (larga).
- *    Nunca si le habla a otra persona (José, 14/09: «mejor la gente debe
- *    responder cuando se le taguea»).
+ * 3. Sin etiqueta, SOLO la respuesta (larga) a una pregunta suya. Citar un
+ *    mensaje del agente NO es hablarle: el 15/09 a las 10:30 Globofast citó el
+ *    checklist para decirle a alguien «enlaza al grupo de certificados» y Lila
+ *    contestó con la tabla de certificados. José, 14/09 y 15/09: «la gente debe
+ *    responder cuando se le taguea @lila o el número».
  * 4. En operaciones, un número suelto puede ser un voto sin cita.
  */
 export const atenderComoConsulta = async (
@@ -322,7 +317,7 @@ export const atenderComoConsulta = async (
   opciones: { votosSueltos: boolean }
 ): Promise<void> => {
   try {
-    const { esConsulta, atenderConsulta, atenderEleccion, atenderContinuacion } = await import('../consultas/index.js');
+    const { esConsulta, atenderConsulta, atenderEleccion } = await import('../consultas/index.js');
     const bot = await senderPilotoCacheado();
     const propios = await jidsPropios(bot);
     const mensaje = raw.message as ContenidoEntrante | null | undefined;
@@ -336,10 +331,6 @@ export const atenderComoConsulta = async (
     if (/lila/i.test(texto)) {
       // Para diagnosticar la próxima vez sin adivinar: qué llegó y contra qué se comparó.
       logger.info(`[agente] mensaje con «lila» no reconocido como consulta: ${JSON.stringify({ texto: texto.slice(0, 80), mencionados: mencionadosDe(mensaje), bot, jidsBot: propios })}`);
-    }
-    if (citaAlBot(mensaje, propios)) {
-      await atenderContinuacion(texto, quien, remoteJid, alcance, true);
-      return;
     }
     const fue = await atenderEleccion(texto, quien, remoteJid, alcance);
     if (!fue && opciones.votosSueltos && /^\s*\d{1,2}\s*$/.test(texto) && esVoto(texto)) {
