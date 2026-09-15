@@ -72,7 +72,7 @@ async function saveQueue(items: DriverReminderItem[]): Promise<void> {
 }
 
 /** ETA (segundos) del despacho vía Portal (interna, x-company-id). Null si falla. */
-async function fetchDispatchTracking(
+export async function fetchDispatchTracking(
   companyId: string,
   dispatchId: string
 ): Promise<{ durationSeconds: number | null; stage: string | null } | null> {

@@ -52,6 +52,7 @@ import { startSocketLeaseLoop, releaseSocketLease, setOnLeaseAcquiredLate } from
 import { startTelegramQueueFlusher } from './services/telegram-alert.service.js';
 import { startDriverReminderFlusher } from './services/driver-arrival-reminder.service.js';
 import { startDispatchAutoCloseFlusher } from './services/dispatch-autoclose.service.js';
+import { startDispatchAutoCloseSweeper } from './services/dispatch-autoclose-sweeper.service.js';
 import cron from 'node-cron';
 import { correrDeteccion } from './agent/checklist/detector.js';
 import { hidratarAgente } from './agent/checklist/observador.js';
@@ -559,6 +560,8 @@ async function startServer() {
     // Cierre de fondo de la llegada al ETA si nadie la confirma (one-shot,
     // se autodestruye) — así la unidad no queda "en ruta" para siempre.
     const stopDispatchAutoCloseFlusher = startDispatchAutoCloseFlusher();
+    // Vuelve a pedir el cierre de las unidades cuyo job se perdió (deploy, caída).
+    const stopDispatchAutoCloseSweeper = startDispatchAutoCloseSweeper();
 
     // Phase 1: Extend HTTP server timeouts for large uploads (no breaking changes)
     const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
@@ -580,6 +583,7 @@ async function startServer() {
       stopTelegramQueueFlusher();
       stopDriverReminderFlusher();
       stopDispatchAutoCloseFlusher();
+      stopDispatchAutoCloseSweeper();
 
       // Cerrar servidor HTTP
       server.close(async () => {

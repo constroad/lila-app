@@ -974,7 +974,20 @@ Qué le toca a lila-app (y qué NO):
   existiendo como respaldo.
 - **Recordatorio "¿ya llegaste?"**: `driver-arrival-reminder.service.ts` —
   cola persistida en JsonStore (patrón telegram-queue, sobrevive reinicios) +
-  flusher cada 60 s (arrancado/detenido en `index.ts`). Delay = **ETA + 10%**
+  flusher cada 60 s (arrancado/detenido en `index.ts`).
+  **«Sobrevive reinicios» dejó de ser cierto con Torre y se arregló el
+  15/09/2026:** todos los JsonStore cuelgan de `config.whatsapp.sessionDir`
+  (`./data/…`), que con `WorkingDirectory=~/deploys/lila/current` caía DENTRO
+  de cada release — cada deploy arrancaba con las colas vacías (8 deploys ese
+  día; a las 15:39 tres unidades de Consorcio Lomas seguían «en ruta» desde la
+  mañana). Ahora `WHATSAPP_SESSION_DIR=/Users/jose/deploys/lila/shared/data/sessions`
+  y `LOG_DIR=/Users/jose/deploys/lila/shared/logs` en el `.env` compartido:
+  colas y logs viven en `shared/` (los logs también se perdían al podar
+  releases, y es lo que impidió reconstruir el día). Y como un one-shot se
+  puede perder igual (caída, disco), `dispatch-autoclose-sweeper.service.ts`
+  barre cada 10 min (y a los 30 s del arranque) los despachos `despachado` sin
+  `arrival` con salida entre 20 min y 12 h atrás y les vuelve a programar el
+  cierre con el ETA que les QUEDA (salida + ETA − ahora; ya cumplido → 0). Delay = **ETA + 10%**
   (clamp 15 min–6 h; sin ETA → 90 min). El ETA se consulta a Portal
   `GET /api/dispatch-tracking?dispatchId=` con header `x-company-id` (Portal lo
   abrió a `withCompanyOrInternal`, mismo gate `internalPublicAccess` del IPP
