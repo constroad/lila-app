@@ -10,6 +10,7 @@ import { ESTADOS_LEAD, agregarNotaALead, cambiarEstadoDeLead, detalleDeLead, lis
 import { guardarAsistente, leerAsistente, minutosHastaManana, pausarAsistente, type CambiosAsistente } from '../../agent/dali/asistente.js';
 import { clearAgentSessionCache } from '../../agent/runtime/agent-wiring.js';
 import { GuionInvalido, guardarServicios, leerServicios, restaurarPack, type GuionEditable } from '../../agent/dali/servicios.js';
+import { simularTurno } from '../../agent/dali/probar.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -128,6 +129,23 @@ router.post('/servicios/restaurar-pack', async (req: Request, res: Response) => 
   const servicios = await restaurarPack(req.dali!.companyId, req.dali!.name);
   clearAgentSessionCache();
   res.json(servicios);
+});
+
+/** A15: un turno del simulador. Nada se guarda ni se avisa; el estado va y viene con el navegador. */
+const limiteSimulador = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Muchos mensajes seguidos en el simulador, espera un minuto' } });
+router.post('/probar', limiteSimulador, async (req: Request, res: Response) => {
+  const texto = String(req.body?.texto ?? '').trim();
+  if (!texto) {
+    res.status(400).json({ error: 'Escribe un mensaje' });
+    return;
+  }
+  res.json(
+    await simularTurno(
+      req.dali!.companyId,
+      { estado: req.body?.estado ?? null, texto, ultimaPreguntaBot: req.body?.ultimaPreguntaBot ? String(req.body.ultimaPreguntaBot) : undefined, clienteConocido: Boolean(req.body?.clienteConocido) },
+      { nombre: req.dali!.name }
+    )
+  );
 });
 
 router.get('/conversaciones', async (req: Request, res: Response) => {

@@ -257,7 +257,8 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   Conversaciones (en escritorio, lista + chat + datos del lead en tres
   columnas), A3 Conversación, A4 Leads (tablero por estado y lista; en
   escritorio, el lead elegido como panel a la derecha), A5 Lead, **A6
-  Asistente**, **A8 Servicios, A9 guion, A10 pregunta** (abajo). Las demás
+  Asistente**, **A8 Servicios, A9 guion, A10 pregunta**, **A15 Probar a
+  Dali** (abajo). Las demás
   responden «esta pantalla se está construyendo»; «Más» del móvil lista lo
   que no cabe en la barra.
 - **A6 Asistente** (`ui/dali/src/screens/asistente/*`, comparada con
@@ -332,6 +333,20 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   - Tests: `guion.test.ts` (raíz, patrón, servicio editado y apagado, opción
     por palabras, `guionDe` con lo editable), `servicios.test.ts` (ida y
     vuelta pack↔panel, servicio nuevo, slug, campos intactos).
+- **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
+  `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
+  estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
+  (`extraerConQwen` + `paso`, `dali/probar.ts`) con el guion y el perfil
+  vigentes, sin conversación en la base, sin lead y sin avisos; el estado del
+  guion va y viene con el navegador (el servidor no guarda nada; rate limit
+  30/min). «Cliente conocido» simula que quien escribe ya es cliente (su
+  nombre y la empresa). «Lo que Dali entendió» sale del estado real: servicio
+  detectado (por el pack o por las palabras editadas), cada dato del guion
+  como anotado / pendiente (el paso activo, con sus opciones) / paso
+  posterior, las señales por reglas (precio, persona, fuera de tema,
+  confirma), si escalaría, y el motor y el tiempo del turno. **Sin certezas
+  inventadas**: el diseño dibuja «98% certeza» e «intención 0.94»; no existen
+  en el motor y no se muestran. Tests: `probar.test.ts` (campos y señales).
 - **Backend** `src/agent/dali/*` + `src/api/routes/dali.routes.ts`:
   - **Sesión de prueba (decisión de José, 15/09: «no esperes un envío real de
     código, eso déjalo para el final»)**: el flujo de pantallas es el
@@ -375,7 +390,9 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   fino (§3 `bot_members.role`) se aplica cuando llegue Equipo (A16).
 
 **Sin verificar todavía:** tema oscuro (tokens definidos, ninguna pantalla
-revisada en oscuro); en A8–A10, un guion editado contra un mensaje real del
+revisada en oscuro); A15 con Qwen en producción bajo carga (en local un turno
+tarda ~5 s; el modelo es el mismo proceso que atiende al piloto, y un turno
+del simulador compite con él); en A8–A10, un guion editado contra un mensaje real del
 piloto (se probó guardando y restaurando desde la pantalla contra la base,
 más los tests del motor); el arrastre para reordenar que dibuja Stitch se
 reemplazó por flechas (decisión: sin librería de drag, y accesible); `escribirAlCliente` de punta a punta (envía por
@@ -388,7 +405,7 @@ navegador de la herramienta no mapea bien los clics con 1440 emulado); la
 barra superior en escritorio para Chats/Leads (A2 desktop la dibuja) queda
 para cuando se revisen esas pantallas.
 
-**Pendiente de F3:** P1, P4–P6, A7, A11–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A7, A11–A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

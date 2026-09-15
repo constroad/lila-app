@@ -178,3 +178,36 @@ export interface Servicios {
   delPack: boolean;
   activos: number;
 }
+
+/** A15 «Probar a Dali» (`src/agent/dali/probar.ts`). */
+export interface CampoSimulado {
+  campo: string;
+  etiqueta: string;
+  valor?: string;
+  estado: 'listo' | 'activo' | 'pendiente';
+  opciones?: string[];
+  pregunta?: string;
+}
+
+export interface Simulacion {
+  texto: string;
+  estado: Record<string, unknown>;
+  extraido: Record<string, unknown>;
+  lead: {
+    nombre?: string;
+    empresa?: string;
+    servicio?: string;
+    detalle?: string;
+    cantidad?: string;
+    distrito?: string;
+    fecha?: string;
+    listo?: boolean;
+    campos: Array<[string, string]>;
+  };
+  servicio?: { id: string; nombre: string; porPalabras: boolean };
+  campos: CampoSimulado[];
+  senales: { preguntaPrecio: boolean; quiereCotizacion: boolean; quierePersona: boolean; fueraDeTema: boolean; confirma: boolean; saludoSolo: boolean };
+  escalar?: string;
+  motor: 'qwen-local' | 'reglas';
+  duracionMs: number;
+}

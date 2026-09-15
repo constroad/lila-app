@@ -17,6 +17,7 @@ const AsistenteScreen = lazy(() => import('@/screens/asistente/AsistenteScreen')
 const GuionProvider = lazy(() => import('@/screens/servicios/GuionProvider').then((m) => ({ default: m.GuionProvider })));
 const ServiciosScreen = lazy(() => import('@/screens/servicios/ServiciosScreen').then((m) => ({ default: m.ServiciosScreen })));
 const GuionScreen = lazy(() => import('@/screens/servicios/GuionScreen').then((m) => ({ default: m.GuionScreen })));
+const ProbarScreen = lazy(() => import('@/screens/probar/ProbarScreen').then((m) => ({ default: m.ProbarScreen })));
 
 /** En móvil y tablet la conversación y el lead son pantallas enteras; en escritorio viven dentro de la lista. */
 const ChatMovil = () => (
@@ -133,7 +134,15 @@ export default function App() {
                 <Route path=":id" element={<GuionScreen />} />
                 <Route path=":id/preguntas/:n" element={<GuionScreen />} />
               </Route>
-              {['/negocio', '/faq', '/catalogo', '/whatsapp', '/probar', '/equipo', '/plan', '/ajustes', '/importar', '/notificaciones', '/reportes', '/mas'].map((ruta) => (
+              <Route
+                path="/probar"
+                element={
+                  <Suspense fallback={null}>
+                    <ProbarScreen />
+                  </Suspense>
+                }
+              />
+              {['/negocio', '/faq', '/catalogo', '/whatsapp', '/equipo', '/plan', '/ajustes', '/importar', '/notificaciones', '/reportes', '/mas'].map((ruta) => (
                 <Route key={ruta} path={`${ruta}/*`} element={<PendienteScreen titulo={ruta.slice(1)} />} />
               ))}
               <Route path="/" element={<Navigate to="/inicio" replace />} />
