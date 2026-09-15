@@ -257,8 +257,9 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   Conversaciones (en escritorio, lista + chat + datos del lead en tres
   columnas), A3 Conversación, A4 Leads (tablero por estado y lista; en
   escritorio, el lead elegido como panel a la derecha), A5 Lead, **A6
-  Asistente** (abajo). Las demás responden «esta pantalla se está
-  construyendo»; «Más» del móvil lista lo que no cabe en la barra.
+  Asistente**, **A8 Servicios, A9 guion, A10 pregunta** (abajo). Las demás
+  responden «esta pantalla se está construyendo»; «Más» del móvil lista lo
+  que no cabe en la barra.
 - **A6 Asistente** (`ui/dali/src/screens/asistente/*`, comparada con
   `A6-asistente.{MOBILE,TABLET,DESKTOP}.png`): estado y pausa (30 min, 2 h,
   hasta mañana) al toque; identidad (nombre, saludo, tono, emojis), reglas
@@ -293,6 +294,44 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   - Tests: `asistente.test.ts` (perfil, avisos, destino, horario, negocio,
     pausa), `guiado.test.ts` (saludo propio, fuera de horario, sin emojis),
     `inbound-router.test.ts` (pausa).
+- **A8 Servicios · A9 guion de un servicio · A10 editor de pregunta**
+  (`ui/dali/src/screens/servicios/*`, comparadas con `A8-servicios`,
+  `A9-guion` y `A10-pregunta` en los tres tamaños). Las tres editan el MISMO
+  guion en memoria (`GuionProvider`) y se guarda de una vez: A8 lista los
+  servicios (interruptor, modo, palabras, cuántas preguntas), la pregunta de
+  cuando el cliente no dice qué necesita, «Agregar servicio» y «Restaurar el
+  pack de Asfalto»; desde tablet, el servicio elegido (`?editar=<id>`) se
+  edita en el panel derecho (nombre, palabras, modo, resumen de preguntas).
+  A9 (`/servicios/:id`) es el guion: palabras que lo reconocen, secuencia de
+  preguntas (orden con flechas, editar, duplicar, nueva) y la vista previa de
+  las tres primeras preguntas (sin inventar respuestas). A10
+  (`/servicios/:id/preguntas/:n`, `nueva`) es la pregunta: texto, nombre del
+  dato, tipo, opciones con sus palabras y sugerencia, condición (solo sobre
+  una pregunta anterior de opciones o sí/no), pista y explicación; panel al
+  lado en escritorio, cajón en tablet, hoja desde abajo en móvil.
+  - **Palabras, no regex (decisión de diseño)**: el guion del pack usa regex
+    expertos (`alias`, `cambio`, `senal`); el panel muestra y edita listas de
+    palabras. `regexDePalabras` (`ventas/guion.asfalto.ts`) arma el patrón:
+    cada palabra por su **raíz** desde el inicio de palabra («asfaltar» →
+    «asfalt» vale para asfaltado y asfaltamos; `raizDe` quita terminaciones si
+    queda una raíz de 4+ letras), entera si es corta («m3», «mc»), las frases
+    tal cual, sin tildes; para CAMBIAR un servicio ya fijado no valen unidades
+    ni cifras («40 cubos» no vuelve venta un asfaltado). Lo que no se tocó
+    vuelve al motor con los regex del pack (`dali/servicios.ts` `aGuion`
+    compara las palabras con `palabrasDeOpcion`/`palabrasDeServicio`); lo
+    editado queda solo con `palabras` (y conserva `senal`). Un servicio nuevo
+    (`nuevo-…`) recibe su id del nombre; los `campo` de las preguntas son
+    identificadores y se conservan tal cual (`tipoBase`). Un servicio apagado
+    (`activo: false`) no se reconoce; una conversación que ya lo tenía sigue.
+    `preguntaServicio` reemplaza la pregunta de desambiguación del guion.
+  - API: `GET servicios` → `{guion editable, delPack, activos}`, `PUT
+    servicios` (el guion entero; 400 si no tiene forma), `POST
+    servicios/restaurar-pack` (borra `bot_configs.guion`). Los `PUT
+    servicios/:id` y `…/preguntas` por separado de §4 no se hicieron: el
+    editor guarda todo junto.
+  - Tests: `guion.test.ts` (raíz, patrón, servicio editado y apagado, opción
+    por palabras, `guionDe` con lo editable), `servicios.test.ts` (ida y
+    vuelta pack↔panel, servicio nuevo, slug, campos intactos).
 - **Backend** `src/agent/dali/*` + `src/api/routes/dali.routes.ts`:
   - **Sesión de prueba (decisión de José, 15/09: «no esperes un envío real de
     código, eso déjalo para el final»)**: el flujo de pantallas es el
@@ -336,7 +375,10 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   fino (§3 `bot_members.role`) se aplica cuando llegue Equipo (A16).
 
 **Sin verificar todavía:** tema oscuro (tokens definidos, ninguna pantalla
-revisada en oscuro); `escribirAlCliente` de punta a punta (envía por
+revisada en oscuro); en A8–A10, un guion editado contra un mensaje real del
+piloto (se probó guardando y restaurando desde la pantalla contra la base,
+más los tests del motor); el arrastre para reordenar que dibuja Stitch se
+reemplazó por flechas (decisión: sin librería de drag, y accesible); `escribirAlCliente` de punta a punta (envía por
 WhatsApp: no se probó para no mandarle mensajes a nadie); PWA/instalable (F3
 «done» lo pide); en A6, el efecto real de una pausa y de un perfil distinto
 sobre una conversación de WhatsApp (se probó con tests y guardando/reanudando
@@ -346,7 +388,7 @@ navegador de la herramienta no mapea bien los clics con 1440 emulado); la
 barra superior en escritorio para Chats/Leads (A2 desktop la dibuja) queda
 para cuando se revisen esas pantallas.
 
-**Pendiente de F3:** P1, P4–P6, A7–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A7, A11–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

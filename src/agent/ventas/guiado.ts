@@ -1,5 +1,5 @@
 import type { NegocioAsfalto } from './prompt.asfalto.js';
-import { GUION_ASFALTO, type Guion, type PreguntaGuion, type ServicioGuion } from './guion.asfalto.js';
+import { GUION_ASFALTO, PREGUNTA_SERVICIO_POR_DEFECTO, aliasDeOpcion, regexDeServicio, type Guion, type PreguntaGuion, type ServicioGuion } from './guion.asfalto.js';
 
 /**
  * EL FLUJO GUIADO: la conversación la lleva el CÓDIGO y el modelo solo LEE.
@@ -24,7 +24,7 @@ import { GUION_ASFALTO, type Guion, type PreguntaGuion, type ServicioGuion } fro
  * (`runtime.ts`); este modo queda como el de siempre-funciona.
  */
 
-export type ServicioId = ServicioGuion['id'] | 'otro';
+export type ServicioId = string;
 
 export interface Extraccion {
   servicio?: ServicioId;
@@ -91,6 +91,7 @@ export const normalizar = (t: string): string =>
 const regexes = new Map<string, RegExp | null>();
 /** Un regex del guion (que puede venir de Mongo): inválido = no matchea nunca. */
 const re = (patron: string): RegExp | null => {
+  if (!patron) return null;
   if (!regexes.has(patron)) {
     try {
       regexes.set(patron, new RegExp(patron));
@@ -180,7 +181,8 @@ export const validarExtraccion = (x: Extraccion, mensaje: string, guion: Guion =
 export const servicioEnTexto = (t: string, guion: Guion = GUION_ASFALTO, modo: 'alias' | 'cambio' = 'alias'): ServicioGuion['id'] | undefined => {
   let mejor: { id: ServicioGuion['id']; en: number } | undefined;
   for (const s of guion.servicios) {
-    const m = re(modo === 'cambio' ? s.cambio ?? s.alias : s.alias)?.exec(t);
+    if (s.activo === false) continue;
+    const m = re(regexDeServicio(s, modo))?.exec(t);
     if (!m) continue;
     if (s.derivar) return s.id;
     if (!mejor || m.index < mejor.en) mejor = { id: s.id, en: m.index };
@@ -291,7 +293,7 @@ export const interpretarRespuesta = (p: PreguntaGuion, mensaje: string): string 
   const t = normalizar(mensaje);
   if (!t || /^(no se|no lo se|ni idea|no estoy segur|no sabria|no tengo idea)\b/.test(t)) return undefined;
   if (p.tipo === 'sino' || p.tipo === 'opcion') {
-    for (const o of p.opciones ?? []) if (matchea(o.alias, t)) return o.valor;
+    for (const o of p.opciones ?? []) if (matchea(aliasDeOpcion(o), t)) return o.valor;
     const i = ORDINALES.findIndex((o) => o.test(t));
     return i >= 0 ? p.opciones?.[i]?.valor : undefined;
   }
@@ -647,7 +649,7 @@ const pasoGuiado = (
 
   // 6) Lo que sigue.
   if (!e.servicio || e.servicio === 'otro') {
-    const intro = x.saludoSolo || primeraVez ? '¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.' : '¿Qué necesitas: solo la mezcla asfáltica, que la coloquemos (asfaltado), o transporte?';
+    const intro = x.saludoSolo || primeraVez ? '¿En qué te ayudo? Vendemos mezcla asfáltica, hacemos asfaltado y transporte.' : (guion.preguntaServicio?.trim() || PREGUNTA_SERVICIO_POR_DEFECTO);
     const previo = x.saludoSolo ? e.previo : `${e.previo ?? ''} ${mensaje.trim()}`.trim().slice(-300);
     return { texto: `${saludo}${prefacio}${intro}`.trim(), estado: { ...e, ultimoCampo: undefined, previo }, guardar: Boolean(x.detalle || x.cantidad || x.distrito) };
   }

@@ -91,7 +91,8 @@ const telefonoLegible = (t: string): string => `+${t.replace(/(\d{2})(\d{3})(\d{
 type LeadParaAviso = DatosLead & { campos?: Array<[string, string]> };
 
 const textoLead = (lead: LeadParaAviso, telefono: string, negocio: NegocioAsfalto, nombreCliente?: string): string => {
-  const servicio = { venta: 'Venta de mezcla', colocacion: 'Colocación / asfaltado', transporte: 'Transporte', fabricacion: 'Fabricación (derivar a ingeniero)', otro: 'Otro' }[lead.servicio ?? 'otro'];
+  const NOMBRES: Record<string, string> = { venta: 'Venta de mezcla', colocacion: 'Colocación / asfaltado', transporte: 'Transporte', fabricacion: 'Fabricación (derivar a ingeniero)', otro: 'Otro' };
+  const servicio = NOMBRES[lead.servicio ?? 'otro'] ?? lead.servicio;
   return [
     `🧲 *${lead.listo ? 'Lead listo para cotizar' : 'Nuevo lead'} — ${negocio.nombre}*`,
     `👤 ${lead.nombre || nombreCliente || 'sin nombre'}${lead.empresa ? ` · ${lead.empresa}` : ''} · ${telefonoLegible(telefono)}`,

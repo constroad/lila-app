@@ -10,7 +10,8 @@ import type { EspecificacionHerramienta, LlamadaHerramienta, ResultadoHerramient
 export interface DatosLead {
   nombre?: string;
   empresa?: string;
-  servicio?: 'venta' | 'colocacion' | 'transporte' | 'fabricacion' | 'otro';
+  /** Un id del guion (`venta`, `colocacion`, … o uno propio de la empresa) u «otro». */
+  servicio?: string;
   detalle?: string;
   cantidad?: string;
   distrito?: string;

@@ -137,3 +137,44 @@ export interface Asistente {
   ownerNotifyTarget: string;
   empresa: { nombre: string; rubro: string; ciudad: string; numero: string };
 }
+
+/** A8/A9/A10 «Servicios» y el guion (`src/agent/dali/servicios.ts`). */
+export type TipoPregunta = 'texto' | 'numero' | 'sino' | 'opcion';
+
+export interface OpcionEditable {
+  valor: string;
+  palabras: string[];
+  sugerencia?: string;
+}
+
+export interface PreguntaEditable {
+  campo: string;
+  etiqueta: string;
+  pregunta: string;
+  tipo: TipoPregunta;
+  opciones: OpcionEditable[];
+  cuando?: { campo: string; es: string | string[] };
+  pista?: string;
+  explicacion?: string;
+}
+
+export interface ServicioEditable {
+  id: string;
+  nombre: string;
+  palabras: string[];
+  activo: boolean;
+  modo: 'preguntas' | 'derivar';
+  preguntas: PreguntaEditable[];
+}
+
+export interface GuionEditable {
+  preguntaServicio: string;
+  servicios: ServicioEditable[];
+  cierre: PreguntaEditable[];
+}
+
+export interface Servicios {
+  guion: GuionEditable;
+  delPack: boolean;
+  activos: number;
+}

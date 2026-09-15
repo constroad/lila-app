@@ -9,6 +9,7 @@ import { cerrarConversacion, detalleDeConversacion, devolverConversacion, escrib
 import { ESTADOS_LEAD, agregarNotaALead, cambiarEstadoDeLead, detalleDeLead, listarLeads, type EstadoLead } from '../../agent/dali/leads.js';
 import { guardarAsistente, leerAsistente, minutosHastaManana, pausarAsistente, type CambiosAsistente } from '../../agent/dali/asistente.js';
 import { clearAgentSessionCache } from '../../agent/runtime/agent-wiring.js';
+import { GuionInvalido, guardarServicios, leerServicios, restaurarPack, type GuionEditable } from '../../agent/dali/servicios.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -101,6 +102,32 @@ router.post('/asistente/pausa', async (req: Request, res: Response) => {
   const asistente = await pausarAsistente(req.dali!.companyId, minutos, req.dali!.name);
   clearAgentSessionCache();
   res.json(asistente);
+});
+
+/** A8/A9/A10: el guion entero como lo edita el panel (spec §4 `servicios`; se guarda de una vez, no por servicio). */
+router.get('/servicios', async (req: Request, res: Response) => {
+  res.json(await leerServicios(req.dali!.companyId));
+});
+
+router.put('/servicios', async (req: Request, res: Response) => {
+  try {
+    const servicios = await guardarServicios(req.dali!.companyId, (req.body ?? {}) as GuionEditable, req.dali!.name);
+    clearAgentSessionCache();
+    res.json(servicios);
+  } catch (error) {
+    if (error instanceof GuionInvalido) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    logger.error(`[dali] no se pudo guardar el guion de ${req.dali!.companyId}: ${String(error)}`);
+    res.status(500).json({ error: 'No se pudo guardar el guion' });
+  }
+});
+
+router.post('/servicios/restaurar-pack', async (req: Request, res: Response) => {
+  const servicios = await restaurarPack(req.dali!.companyId, req.dali!.name);
+  clearAgentSessionCache();
+  res.json(servicios);
 });
 
 router.get('/conversaciones', async (req: Request, res: Response) => {

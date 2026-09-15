@@ -30,8 +30,14 @@ export type TipoPregunta = 'texto' | 'numero' | 'sino' | 'opcion';
 
 export interface OpcionGuion {
   valor: string;
-  /** Regex (sin tildes, minúsculas) que la eligen cuando esta pregunta fue la última. */
-  alias: string[];
+  /**
+   * Regex (sin tildes, minúsculas) que la eligen cuando esta pregunta fue la
+   * última. Los trae el pack; cuando la empresa edita la opción en el panel
+   * (A10) quedan solo `palabras` y el patrón se arma con `regexDePalabras`.
+   */
+  alias?: string[];
+  /** Palabras simples con las que se elige («afirmado», «riego de liga»): lo que se edita en el panel. */
+  palabras?: string[];
   /** Regex inequívocos que la eligen en cualquier mensaje. */
   senal?: string[];
   /** Lo que se le dice al elegirla: una recomendación, por ejemplo. */
@@ -54,16 +60,25 @@ export interface PreguntaGuion {
 }
 
 export interface ServicioGuion {
-  id: 'venta' | 'colocacion' | 'transporte' | 'fabricacion';
+  /** Los del pack: venta, colocacion, transporte, fabricacion; uno nuevo lleva un slug (`a-z0-9-`). */
+  id: string;
   nombre: string;
-  /** Con qué palabras se reconoce en el mensaje (regex, sin tildes) cuando todavía no hay servicio. */
-  alias: string;
+  /**
+   * Con qué palabras se reconoce en el mensaje (regex, sin tildes) cuando
+   * todavía no hay servicio. Lo trae el pack; un servicio editado en el panel
+   * (A8/A9) no lo tiene y se reconoce por `palabras`.
+   */
+  alias?: string;
   /**
    * Con qué palabras CAMBIA un servicio ya fijado: solo las que lo nombran
    * («y si es asfaltado», «solo la mezcla»), nunca una unidad ni un lugar. Sin
-   * esto, se usa `alias`.
+   * esto, se usa `alias`; con `palabras`, las mismas menos las unidades.
    */
   cambio?: string;
+  /** Palabras simples con las que se reconoce: lo que muestra y edita el panel. */
+  palabras?: string[];
+  /** Apagado desde el panel: no se reconoce (una conversación que ya lo tenía sigue). */
+  activo?: boolean;
   /** Se deriva de inmediato a una persona. */
   derivar?: string;
   preguntas: PreguntaGuion[];
@@ -73,10 +88,83 @@ export interface Guion {
   servicios: ServicioGuion[];
   /** Preguntas comunes al final de cualquier servicio (fecha, nombre). */
   cierre: PreguntaGuion[];
+  /** Lo que pregunta Dali cuando el cliente no dice qué necesita (A8); ausente = la del pack. */
+  preguntaServicio?: string;
 }
+
+export const PREGUNTA_SERVICIO_POR_DEFECTO = '¿Qué necesitas: solo la mezcla asfáltica, que la coloquemos (asfaltado), o transporte?';
+
+const sinTildes = (t: string): string =>
+  String(t || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+const escapar = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Una unidad o una cifra nombra una cantidad, no un servicio: no cambia el que ya está fijado. */
+const ES_UNIDAD = /^(m2|m²|m3|m³|cubos?|toneladas?|tn|kg|kilos?|metros?( cuadrados| cubicos)?|pulgadas?|")$/;
+/** Terminaciones que se quitan para reconocer la familia («asfaltar» → «asfalt» vale para asfaltado y asfaltamos), de la más larga a la más corta. */
+const TERMINACIONES = ['aciones', 'acion', 'cion', 'ados', 'adas', 'ado', 'ada', 'ar', 'er', 'ir', 'os', 'as', 'es', 'e', 'o', 'a', 's'];
+/** Lo que queda tras quitar la terminación tiene que ser una raíz reconocible; más corta, la palabra entera. */
+const RAIZ_MINIMA = 4;
+
+/** La raíz de una palabra sola («colocacion» → «coloc»); una frase se deja tal cual. */
+export const raizDe = (palabra: string): string => {
+  const p = sinTildes(palabra);
+  if (!p || p.includes(' ')) return p;
+  for (const t of TERMINACIONES) if (p.endsWith(t) && p.length - t.length >= RAIZ_MINIMA) return p.slice(0, -t.length);
+  return p;
+};
+
+/**
+ * El patrón de una lista de palabras simples: cada una por su raíz desde el
+ * inicio de palabra (y entera si es corta), sin tildes, con las frases tal
+ * cual. Para `cambio` (cambiar un servicio ya fijado) no valen unidades ni
+ * cifras.
+ */
+export const regexDePalabras = (palabras: string[], modo: 'alias' | 'cambio' = 'alias'): string => {
+  const utiles = [...new Set(palabras.map(sinTildes).filter(Boolean))].filter((p) => modo === 'alias' || !(ES_UNIDAD.test(p) || /\d/.test(p)));
+  if (!utiles.length) return '';
+  const cuerpos = [...new Set(utiles.map(raizDe))].map((p) => {
+    const cuerpo = escapar(p).replace(/ /g, '\\s+');
+    return p.length >= RAIZ_MINIMA ? cuerpo : `${cuerpo}(?!\\w)`;
+  });
+  return `(?<!\\w)(?:${cuerpos.join('|')})`;
+};
+export const regexDePalabra = (palabra: string): string => regexDePalabras([palabra]);
+
+/** El patrón que reconoce (o cambia a) un servicio: el regex del pack si lo tiene; si no, sus palabras. */
+export const regexDeServicio = (s: ServicioGuion, modo: 'alias' | 'cambio' = 'alias'): string =>
+  s.alias ? (modo === 'cambio' ? (s.cambio ?? s.alias) : s.alias) : regexDePalabras(s.palabras ?? [], modo);
+
+export const palabrasDeServicio = (s: ServicioGuion): string[] => s.palabras ?? [];
+
+/** Los patrones con los que se elige una opción: los del pack, o los de sus palabras. */
+export const aliasDeOpcion = (o: OpcionGuion): string[] => o.alias ?? (o.palabras ?? []).map(regexDePalabra);
+
+const ORDINAL = /^(la |el )?(primer|segund|tercer|cuart|quint)[ao]?$/;
+/** Un regex del pack leído como palabra: sin `\b`, con el primer término de cada grupo, sin cuantificadores. */
+const legible = (patron: string): string =>
+  patron
+    .replace(/\\b/g, '')
+    .replace(/\\s[*+]/g, ' ')
+    .replace(/\(([^()|]*)(\|[^()]*)?\)\??/g, '$1')
+    .replace(/\\/g, '')
+    .replace(/[?^$]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** Las palabras de una opción para mostrar y editar: las suyas, o las que se leen de sus regex (sin los ordinales, que el motor ya entiende). */
+export const palabrasDeOpcion = (o: OpcionGuion): string[] => o.palabras ?? [...new Set((o.alias ?? []).map(legible).filter((p) => p && !ORDINAL.test(p)))];
 
 const NO = ['^no\\b', '\\bno (hace falta|necesito|quiero|gracias|por ahora|va)', '\\bsin\\b', '\\bnada\\b', '\\bningun', '\\btampoco\\b', '\\bnegativo\\b'];
 const SI = ['^si\\b', '\\bsi\\b', '\\bclaro\\b', '\\bdale\\b', 'por favor', '\\bquiero\\b', '\\bnecesito\\b', '\\bhagan\\b', '\\bok\\b', 'de una', '^ya\\b', 'por supuesto', '\\bcorrecto\\b', '\\bafirmativo\\b'];
+/** Las dos opciones de una pregunta sí/no nueva (A10): lo negativo primero, como en todo el pack. */
+export const opcionesSiNo = (): OpcionGuion[] => [
+  { valor: 'no', alias: [...NO] },
+  { valor: 'sí', alias: [...SI] },
+];
 
 const ESPESOR: PreguntaGuion = {
   campo: 'espesor',
@@ -112,6 +200,7 @@ export const GUION_ASFALTO: Guion = {
       id: 'fabricacion',
       nombre: 'fabricación de mezcla especial',
       alias: '\\b(fabric(ar|acion|an|a)|diseno de mezcla|mezcla especial|formula)\\b',
+      palabras: ['fabricar', 'fabricación', 'diseño de mezcla', 'mezcla especial', 'fórmula'],
       derivar: 'fabricación de mezcla especial: la ve un ingeniero',
       preguntas: [],
     },
@@ -119,6 +208,7 @@ export const GUION_ASFALTO: Guion = {
       id: 'colocacion',
       nombre: 'asfaltado (colocación)',
       alias: '\\b(asfalt(ar|ado|ada|en|amos|e|as)|pavimentar|pavimentacion|coloc(ar|acion|an|ado)|coloqu(en|e)|parch(e|ar|es|ado|eo)|imprimar|imprimacion|fresa(r|do)|recapeo|las dos cosas|ambas cosas)\\b',
+      palabras: ['asfaltar', 'asfaltado', 'pavimentar', 'pavimentación', 'colocación', 'colocar', 'parchado', 'parchar', 'imprimación', 'imprimar', 'fresado', 'recapeo'],
       cambio: '\\b(asfalt(ar|ado|ada|en)|pavimentar|pavimentacion|coloc(ar|acion|an|ado)|coloqu(en|e)|parch(ar|eo)|recapeo|las dos cosas|ambas cosas)\\b',
       preguntas: [
         { campo: 'area', etiqueta: 'Área', pregunta: '¿Cuántos m² necesitas asfaltar, aproximadamente?', tipo: 'numero', pista: 'Un aproximado en m² me sirve.' },
@@ -223,6 +313,7 @@ export const GUION_ASFALTO: Guion = {
       nombre: 'transporte de mezcla',
       // «Transportes Paredes» es una empresa, no un pedido: sin el plural.
       alias: '\\b(transport(e|ar|an|en)|traslad(o|ar|en)|flete|acarreo)\\b',
+      palabras: ['transporte', 'transportar', 'traslado', 'trasladar', 'flete', 'acarreo'],
       preguntas: [
         { campo: 'puntoCarga', etiqueta: 'Carga', pregunta: '¿De dónde recogemos la mezcla?', tipo: 'texto', pista: 'Dime la planta o la dirección donde se recoge.' },
         { campo: 'puntoDescarga', etiqueta: 'Descarga', pregunta: '¿A dónde la llevamos?', tipo: 'texto', pista: 'Dime el distrito o la dirección de la obra.' },
@@ -236,6 +327,7 @@ export const GUION_ASFALTO: Guion = {
       nombre: 'venta de mezcla asfáltica',
       alias: '\\b(mezcla|cubos?|m3|m³|metros cubicos|compr(ar|a|o)|venta|vend(er|en|an)|material|toneladas?)\\b|\\d\\s*(m3|m³|cubos?)\\b',
       cambio: '\\b(compr(ar|a|o)|venta|vend(er|en|an)|solo (la |el )?(mezcla|material|asfalto)|yo (lo|la) coloco|nosotros (lo|la) colocamos|(la )?colocacion la (hacemos|hago|vemos) nosotros|colocamos nosotros)\\b',
+      palabras: ['mezcla', 'cubos', 'm3', 'm³', 'metros cúbicos', 'comprar', 'venta', 'vender', 'material', 'toneladas'],
       preguntas: [
         {
           campo: 'tipoProyecto',
@@ -302,23 +394,33 @@ export const GUION_ASFALTO: Guion = {
   ],
 };
 
+const listaDeTextos = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
+
 const preguntaValida = (p: unknown): p is PreguntaGuion => {
   const q = p as PreguntaGuion | null;
   if (!q || typeof q.campo !== 'string' || typeof q.etiqueta !== 'string' || typeof q.pregunta !== 'string') return false;
   if (!['texto', 'numero', 'sino', 'opcion'].includes(q.tipo)) return false;
   if (q.tipo === 'sino' || q.tipo === 'opcion') {
     if (!Array.isArray(q.opciones) || !q.opciones.length) return false;
-    if (!q.opciones.every((o) => o && typeof o.valor === 'string' && Array.isArray(o.alias))) return false;
+    if (!q.opciones.every((o) => o && typeof o.valor === 'string' && (listaDeTextos(o.alias) || listaDeTextos(o.palabras)))) return false;
   }
   return true;
+};
+
+export const ID_SERVICIO = /^[a-z0-9-]{1,40}$/;
+
+const servicioValido = (s: unknown): s is ServicioGuion => {
+  const x = s as ServicioGuion | null;
+  if (!x || typeof x.id !== 'string' || !ID_SERVICIO.test(x.id) || typeof x.nombre !== 'string') return false;
+  if (!(typeof x.alias === 'string' || listaDeTextos(x.palabras))) return false;
+  if (x.activo !== undefined && typeof x.activo !== 'boolean') return false;
+  return Array.isArray(x.preguntas) && x.preguntas.every(preguntaValida);
 };
 
 /** El guion guardado en `bot_configs.guion`, si tiene la forma; si no, el default. */
 export const guionDe = (v: unknown): Guion => {
   const g = v as Guion | null | undefined;
   if (!g || !Array.isArray(g.servicios) || !Array.isArray(g.cierre)) return GUION_ASFALTO;
-  const ok =
-    g.servicios.every((s) => s && ['venta', 'colocacion', 'transporte', 'fabricacion'].includes(s.id) && typeof s.nombre === 'string' && typeof s.alias === 'string' && Array.isArray(s.preguntas) && s.preguntas.every(preguntaValida)) &&
-    g.cierre.every(preguntaValida);
+  const ok = g.servicios.every(servicioValido) && g.cierre.every(preguntaValida) && (g.preguntaServicio === undefined || typeof g.preguntaServicio === 'string');
   return ok ? g : GUION_ASFALTO;
 };

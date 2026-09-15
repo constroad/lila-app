@@ -14,6 +14,9 @@ const ChatScreen = lazy(() => import('@/screens/chats/ChatScreen').then((m) => (
 const LeadsScreen = lazy(() => import('@/screens/leads/LeadsScreen').then((m) => ({ default: m.LeadsScreen })));
 const LeadScreen = lazy(() => import('@/screens/leads/LeadScreen').then((m) => ({ default: m.LeadScreen })));
 const AsistenteScreen = lazy(() => import('@/screens/asistente/AsistenteScreen').then((m) => ({ default: m.AsistenteScreen })));
+const GuionProvider = lazy(() => import('@/screens/servicios/GuionProvider').then((m) => ({ default: m.GuionProvider })));
+const ServiciosScreen = lazy(() => import('@/screens/servicios/ServiciosScreen').then((m) => ({ default: m.ServiciosScreen })));
+const GuionScreen = lazy(() => import('@/screens/servicios/GuionScreen').then((m) => ({ default: m.GuionScreen })));
 
 /** En móvil y tablet la conversación y el lead son pantallas enteras; en escritorio viven dentro de la lista. */
 const ChatMovil = () => (
@@ -118,11 +121,21 @@ export default function App() {
                   </Suspense>
                 }
               />
-              {['/negocio', '/servicios', '/faq', '/catalogo', '/whatsapp', '/probar', '/equipo', '/plan', '/ajustes', '/importar', '/notificaciones', '/reportes', '/mas'].map(
-                (ruta) => (
-                  <Route key={ruta} path={`${ruta}/*`} element={<PendienteScreen titulo={ruta.slice(1)} />} />
-                )
-              )}
+              <Route
+                path="/servicios"
+                element={
+                  <Suspense fallback={null}>
+                    <GuionProvider />
+                  </Suspense>
+                }
+              >
+                <Route index element={<ServiciosScreen />} />
+                <Route path=":id" element={<GuionScreen />} />
+                <Route path=":id/preguntas/:n" element={<GuionScreen />} />
+              </Route>
+              {['/negocio', '/faq', '/catalogo', '/whatsapp', '/probar', '/equipo', '/plan', '/ajustes', '/importar', '/notificaciones', '/reportes', '/mas'].map((ruta) => (
+                <Route key={ruta} path={`${ruta}/*`} element={<PendienteScreen titulo={ruta.slice(1)} />} />
+              ))}
               <Route path="/" element={<Navigate to="/inicio" replace />} />
               <Route path="*" element={<Navigate to="/inicio" replace />} />
             </Route>
