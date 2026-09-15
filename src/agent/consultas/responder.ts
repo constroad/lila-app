@@ -335,8 +335,11 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       const porSalir = todas.filter((u) => u.state !== 'despachado');
       const total = vista.orders.reduce((s, o) => s + o.cantidadCubos, 0);
       const colocados = llegadas.reduce((s, u) => s + u.quantity, 0);
+      const faltan = enRuta.length + porSalir.length;
       const partes = [
         `🛣 *Campo, ${dia}*: llegaron *${llegadas.length} unidad(es)* (${colocados} de ${total} m³); en ruta ${enRuta.length}; por salir de planta ${porSalir.length}.`,
+        // La pregunta más frecuente es «cuántos faltan»: se dice, no se deduce.
+        faltan > 0 ? `Faltan por colocar *${faltan} unidad(es)* (${Math.max(total - colocados, 0)} m³).` : 'Ya llegaron todas.',
       ];
       const est = estimarFin(llegadas.map((u) => u.arrivalAt as number), enRuta.length + porSalir.length, ctx.ahoraMs ?? Date.now());
       partes.push(est ? `Al ritmo de llegadas (una cada ~${est.ritmoMin} min) la última llegaría *~${hora(est.finMs)}*.` : 'Todavía no hay ritmo de llegadas para estimar.');

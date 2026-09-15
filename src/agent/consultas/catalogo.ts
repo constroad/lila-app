@@ -149,7 +149,11 @@ export const CATALOGO: EntradaCatalogo[] = [
   {
     id: 'site_finish',
     seSatisfaceCon: ['cuanto falta para terminar el control de pista', 'cuanto falta para terminar la colocacion', 'a que hora terminan en campo', 'falta mucho para acabar en obra'],
-    reglas: [['falta', 'terminar', 'pista'], ['falta', 'terminar', 'colocacion'], ['falta', 'terminar', 'colocación'], ['falta', 'terminar', 'campo'], ['termina', 'campo'], ['falta', 'acabar', 'obra'], ['termine', 'obra'], ['termine', 'campo'], ['acabamos', 'obra'], ['terminamos', 'campo'], ['termina', 'obra'], ['termina', 'colocacion']],
+    // «Cuántos carros ya se descargaron en campo en el control de pista»
+    // (15/09 12:26) no caía en ninguna regla, iba al modelo y el modelo elegía
+    // el PDF del control de pista por el nombre. Cuántos llegaron / se
+    // colocaron / faltan por colocar es esto: llegadas contra el total.
+    reglas: [['falta', 'terminar', 'pista'], ['falta', 'terminar', 'colocacion'], ['falta', 'terminar', 'colocación'], ['falta', 'terminar', 'campo'], ['termina', 'campo'], ['falta', 'acabar', 'obra'], ['termine', 'obra'], ['termine', 'campo'], ['acabamos', 'obra'], ['terminamos', 'campo'], ['termina', 'obra'], ['termina', 'colocacion'], ['falta', 'colocar'], ['cuant', 'colocar'], ['colocaron'], ['colocados'], ['colocadas'], ['descarg', 'campo'], ['descarg', 'obra'], ['descarg', 'pista'], ['cuant', 'llegaron'], ['llegaron', 'obra'], ['llegaron', 'campo'], ['llegaron', 'pista']],
   },
   {
     id: 'reports_status',

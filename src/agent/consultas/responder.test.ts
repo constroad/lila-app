@@ -206,6 +206,8 @@ describe('cuánto falta', () => {
     const informes = [{ type: 'CTL-PIS', label: 'Control de pista', status: 'draft' as const, cantidad: 1 }];
     const r = responder('site_finish', { vista, params: hoy, informes, ahoraMs: lima('07:30') });
     expect(r).toContain('llegaron *1 unidad(es)* (25 de 91 m³); en ruta 2; por salir de planta 1');
+    // «Cuántos faltan por colocar» se contesta de frente, no se deduce restando.
+    expect(r).toContain('Faltan por colocar *3 unidad(es)* (66 m³)');
     expect(r).toContain('Informe: ✏️ Control de pista (borrador)');
     // Con una sola llegada no hay ritmo, y no se inventa.
     expect(r).toContain('Todavía no hay ritmo de llegadas');

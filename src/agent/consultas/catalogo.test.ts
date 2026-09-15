@@ -77,6 +77,13 @@ describe('ruteo por reglas', () => {
     ['cuánto falta para terminar el control de pista', 'site_finish'],
     ['a qué hora acabamos hoy en planta', 'plant_finish'],
     ['falta mucho para que termine la obra?', 'site_finish'],
+    // 15/09 12:26: fue al modelo y eligió «informes» (el PDF) por decir «control de pista».
+    ['cuantos carros ya se descargaron en campo en el control dr pista?', 'site_finish'],
+    ['cuántos carros faltan por colocar en obra', 'site_finish'],
+    ['cuántos carros faltan por colocar en pista', 'site_finish'],
+    ['cuántos llegaron a obra', 'site_finish'],
+    ['cuántas unidades ya se colocaron', 'site_finish'],
+    ['cuánto falta por colocar', 'site_finish'],
     ['cómo vamos con la producción', 'day_progress'],
     ['cuántos galones tenemos en los tanques', 'tank_levels'],
     ['muéstrame el resumen de líquidos', 'tank_levels'],
