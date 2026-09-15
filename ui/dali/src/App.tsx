@@ -16,7 +16,7 @@ const LeadScreen = lazy(() => import('@/screens/leads/LeadScreen').then((m) => (
 
 /** En móvil y tablet la conversación y el lead son pantallas enteras; en escritorio viven dentro de la lista. */
 const ChatMovil = () => (
-  <div className="xl:hidden">
+  <div className="lg:hidden">
     <ChatScreen />
   </div>
 );

@@ -4,10 +4,10 @@ import { Icon } from '@/components/Icon';
 import { BrandMark } from '@/components/BrandMark';
 import { useSesion } from '@/lib/session';
 import { api } from '@/lib/api';
-import { iniciales } from '@/lib/format';
+import { iniciales, telefonoLegible } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Inicio } from '@/lib/types';
-import { NAV_MOBILE, NAV_RAIL, NAV_SECTIONS } from './nav';
+import { NAV_MAS, NAV_MOBILE, NAV_RAIL, NAV_SECTIONS } from './nav';
 
 /**
  * EL CASCARÓN, uno por tamaño, como en los diseños de Stitch (A1 en los tres):
@@ -28,6 +28,7 @@ export function AppShell() {
       <SidebarEscritorio empresa={inicio?.empresa.nombre} rubro={inicio?.empresa.rubro} contadores={contadores} />
       <RailTablet contadores={contadores} />
       <div className="min-w-0 flex-1 md:pl-[72px] xl:pl-0">
+        <BarraTablet empresa={inicio?.empresa.nombre} numero={inicio?.asistente.numero} enLinea={inicio?.asistente.encendido} />
         <main className="mx-auto min-h-dvh w-full max-w-[390px] bg-stone-50 pb-24 shadow-xl md:max-w-none md:bg-stone-100 md:pb-0 md:shadow-none">
           <Outlet />
         </main>
@@ -114,6 +115,52 @@ function SidebarEscritorio({ empresa, rubro, contadores }: { empresa?: string; r
         </button>
       </div>
     </aside>
+  );
+}
+
+/** La barra de arriba en tablet (diseños A2/A4 tablet): migas, la línea oficial, «Ver en WhatsApp» y la persona. Inicio trae la suya. */
+function BarraTablet({ empresa, numero, enLinea }: { empresa?: string; numero?: string; enLinea?: boolean }) {
+  const { yo } = useSesion();
+  const { pathname } = useLocation();
+  const item = [...NAV_SECTIONS.flatMap((s) => s.items.map((i) => ({ ...i, seccion: s.title }))), ...NAV_MAS.map((i) => ({ ...i, seccion: 'Más' }))].find((i) =>
+    pathname.startsWith(i.to)
+  );
+  if (!item || item.to === '/inicio') return null;
+  return (
+    <header className="hidden h-16 items-center justify-between gap-4 border-b border-stone-200 bg-white px-6 md:flex xl:hidden">
+      <p className="flex min-w-0 items-center gap-2 whitespace-nowrap font-body text-[15px] text-stone-500">
+        <span className="hidden truncate font-semibold text-stone-900 lg:inline">{empresa ?? '…'}</span>
+        <span className="hidden text-stone-300 lg:inline">/</span>
+        <span className="hidden lg:inline">{item.seccion}</span>
+        <span className="hidden text-stone-300 lg:inline">/</span>
+        <span className="truncate font-semibold text-teal-800">{item.label}</span>
+      </p>
+      <div className="flex shrink-0 items-center gap-3">
+        {numero && (
+          <span className="hidden h-10 items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 font-mono text-sm text-teal-900 lg:inline-flex">
+            <span className={cn('size-2 rounded-full', enLinea ? 'bg-emerald-500' : 'bg-stone-400')} /> {telefonoLegible(numero)}
+            <span className="font-body text-xs text-teal-700">· {enLinea ? 'En línea' : 'En pausa'}</span>
+          </span>
+        )}
+        <a
+          href={numero ? `https://wa.me/${numero}` : '#'}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 font-body text-sm font-semibold text-teal-800"
+        >
+          <Icon name="visibility" className="text-lg" /> Ver en WhatsApp
+        </a>
+        <div className="flex items-center gap-2 border-l border-stone-200 pl-3">
+          <div className="flex size-9 items-center justify-center rounded-full bg-stone-200 font-headline text-xs font-bold text-stone-700">
+            {iniciales(yo?.usuario.nombre ?? '?')}
+          </div>
+          <div className="hidden leading-tight lg:block">
+            <p className="font-headline text-sm font-bold text-stone-900">{yo?.usuario.nombre}</p>
+            <p className="font-body text-xs text-stone-500">{ROL[yo?.usuario.rol ?? ''] ?? yo?.usuario.rol}</p>
+          </div>
+        </div>
+      </div>
+    </header>
   );
 }
 

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { cuando, iniciales, telefonoLegible } from '@/lib/format';
+import { cuando, iniciales, oracion, telefonoLegible } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { NOMBRE_ESTADO_LEAD, StatusPill } from '@/components/StatusPill';
 import type { EstadoLead, LeadDetalle } from '@/lib/types';
@@ -204,7 +204,7 @@ export function LeadScreen({ embebido = false }: { embebido?: boolean }) {
             {lead.cerradoEn && <span className="font-normal text-emerald-700"> · {lead.cerradoEn}</span>}
           </p>
           <dl className="mt-2 divide-y divide-stone-100 font-body text-[15px]">
-            <Fila k="Servicio" v={<span className="first-letter:uppercase">{lead.servicio}</span>} />
+            <Fila k="Servicio" v={oracion(lead.servicio)} />
             {lead.cantidad && (
               <Fila
                 k={lead.cantidad.includes('m³') ? 'Cantidad' : 'Área'}

@@ -64,7 +64,7 @@ export function InicioScreen() {
             <h2 className="font-label text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Métricas de hoy</h2>
             <span className="font-mono text-[11px] text-stone-500">Actualizado ahora</span>
           </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
             <TarjetaMetrica
               titulo="Conversaciones"
               valor={String(m.conversacionesHoy)}

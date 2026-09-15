@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { cuando, iniciales } from '@/lib/format';
+import { cuando, iniciales, oracion } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { NOMBRE_ESTADO_LEAD, StatusPill, TONO_LEAD } from '@/components/StatusPill';
 import type { EstadoLead, Inicio, LeadResumen } from '@/lib/types';
@@ -118,14 +118,14 @@ export function LeadsScreen() {
             </label>
             <div className="-mx-4 mt-3 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] xl:mx-0 xl:flex-wrap xl:px-0">
               <span className="hidden font-label text-sm font-semibold uppercase tracking-wider text-stone-500 xl:inline">Servicio:</span>
-              {[['todos', 'Todos', todos.length] as const, ...servicios.map((s) => [s, s.replace(/\s*\(.*?\)/, ''), todos.filter((l) => l.servicio === s).length] as const)].map(
+              {[['todos', 'Todos', todos.length] as const, ...servicios.map((s) => [s, oracion(s.replace(/\s*\(.*?\)/, '')), todos.filter((l) => l.servicio === s).length] as const)].map(
                 ([id, label, n]) => (
                   <button
                     key={id}
                     type="button"
                     onClick={() => setServicio(id)}
                     className={cn(
-                      'inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 font-body text-[15px] transition-colors first-letter:uppercase xl:h-10 xl:rounded-lg',
+                      'inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 font-body text-[15px] transition-colors xl:h-10 xl:rounded-lg',
                       servicio === id ? 'border-teal-800 bg-teal-800 font-semibold text-white' : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 xl:bg-stone-100'
                     )}
                   >

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { horaDe, iniciales, telefonoLegible } from '@/lib/format';
+import { horaDe, iniciales, oracion, telefonoLegible } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { StatusPill } from '@/components/StatusPill';
 import type { ConversacionDetalle, Inicio, MensajeConversacion } from '@/lib/types';
@@ -99,13 +99,22 @@ export function ChatScreen({ embebido = false }: { embebido?: boolean }) {
               <div className="flex min-w-0 items-center gap-2 [&>span]:shrink-0 [&>span]:whitespace-nowrap">
                 <h1 className="min-w-[4.5rem] truncate font-headline text-[17px] font-bold text-stone-900">{nombre}</h1>
                 {pide ? (
-                  <StatusPill tono="amber">Pide atención</StatusPill>
+                  <StatusPill tono="amber">
+                    <span className="sm:hidden">Atención</span>
+                    <span className="hidden sm:inline">Pide atención</span>
+                  </StatusPill>
                 ) : c.estado === 'human' ? (
-                  <StatusPill tono="stone">Persona a cargo</StatusPill>
+                  <StatusPill tono="stone">
+                    <span className="sm:hidden">Persona</span>
+                    <span className="hidden sm:inline">Persona a cargo</span>
+                  </StatusPill>
                 ) : c.estado === 'closed' ? (
                   <StatusPill tono="stone">Cerrada</StatusPill>
                 ) : (
-                  <StatusPill tono="teal">Dali atendiendo</StatusPill>
+                  <StatusPill tono="teal">
+                    <span className="sm:hidden">Dali</span>
+                    <span className="hidden sm:inline">Dali atendiendo</span>
+                  </StatusPill>
                 )}
               </div>
               <p className="truncate font-body text-sm text-stone-500">
@@ -183,7 +192,7 @@ export function ChatScreen({ embebido = false }: { embebido?: boolean }) {
           )}
 
           <div
-            className={cn('flex-1 space-y-3 px-4 py-4', embebido && 'min-h-0 overflow-y-auto')}
+            className={cn('flex-1 space-y-3 px-4 py-4', embebido ? 'min-h-0 overflow-y-auto' : 'pb-36')}
             style={{ backgroundImage: 'radial-gradient(circle, rgb(214 211 209 / 0.6) 1px, transparent 1px)', backgroundSize: '18px 18px' }}
           >
             <p className="mx-auto w-fit rounded-full bg-stone-200/80 px-4 py-1 font-label text-xs font-semibold uppercase tracking-[0.12em] text-stone-600">Hoy · Lima, Perú</p>
@@ -279,7 +288,7 @@ export function ChatScreen({ embebido = false }: { embebido?: boolean }) {
                 </div>
                 <dl className="mt-4 divide-y divide-stone-100 font-body text-[15px]">
                   <Dato k="A nombre de" v={`${lead.nombre}${lead.empresa ? ` · ${lead.empresa}` : ''}`} />
-                  <Dato k="Servicio" v={<span className="rounded-md bg-teal-50 px-2 py-0.5 font-semibold first-letter:uppercase text-teal-800">{lead.servicio}</span>} />
+                  <Dato k="Servicio" v={<span className="rounded-md bg-teal-50 px-2 py-0.5 font-semibold text-teal-800">{oracion(lead.servicio)}</span>} />
                   {lead.cantidad && <Dato k="Cantidad" v={<span className="font-mono font-semibold">{lead.cantidad}</span>} />}
                   {lead.distrito && (
                     <Dato

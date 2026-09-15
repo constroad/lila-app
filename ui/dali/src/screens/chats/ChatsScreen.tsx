@@ -19,12 +19,13 @@ import { ChatScreen } from './ChatScreen';
  */
 type Filtro = 'todas' | 'atencion' | 'bot' | 'human' | 'closed';
 
-const FILTROS: Array<{ id: Filtro; label: string; punto?: string }> = [
-  { id: 'todas', label: 'Todas' },
-  { id: 'atencion', label: 'Piden atención', punto: 'bg-amber-500' },
-  { id: 'bot', label: 'Dali atendiendo', punto: 'bg-teal-600' },
-  { id: 'human', label: 'Persona a cargo', punto: 'bg-stone-500' },
-  { id: 'closed', label: 'Cerradas', punto: 'bg-stone-400' },
+/** En tablet (diseño A2 tablet) los filtros van cortos: «Dali», «Persona»; en móvil y escritorio, enteros. */
+const FILTROS: Array<{ id: Filtro; label: string; corto: string; punto?: string }> = [
+  { id: 'todas', label: 'Todas', corto: 'Todas' },
+  { id: 'atencion', label: 'Piden atención', corto: 'Piden atención', punto: 'bg-amber-500' },
+  { id: 'bot', label: 'Dali atendiendo', corto: 'Dali', punto: 'bg-teal-600' },
+  { id: 'human', label: 'Persona a cargo', corto: 'Persona', punto: 'bg-stone-500' },
+  { id: 'closed', label: 'Cerradas', corto: 'Cerradas', punto: 'bg-stone-400' },
 ];
 
 const estadoDe = (c: ConversacionResumen): { texto: string; tono: 'amber' | 'teal' | 'stone' | 'emerald'; icon?: 'front_hand' | 'person' | 'check_circle' } => {
@@ -53,8 +54,8 @@ export function ChatsScreen() {
   const ahoraMs = Date.now();
 
   return (
-    <div className={cn('xl:flex xl:h-dvh xl:overflow-hidden', id && 'max-md:hidden')}>
-      <div className="flex min-h-dvh flex-col xl:h-full xl:w-[440px] xl:shrink-0 xl:border-r xl:border-stone-200 xl:bg-white">
+    <div className={cn('lg:flex lg:h-dvh lg:overflow-hidden', id && 'max-lg:hidden')}>
+      <div className="flex min-h-dvh flex-col lg:h-full lg:w-[380px] lg:shrink-0 lg:border-r lg:border-stone-200 lg:bg-white xl:w-[440px]">
         <header className="flex items-center justify-between border-b border-stone-200 bg-white px-4 py-3 md:hidden">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-full bg-stone-900 font-headline text-sm font-bold text-white">
@@ -74,14 +75,14 @@ export function ChatsScreen() {
           </div>
         </header>
 
-        <div className="px-4 pt-4 md:px-6 xl:px-5">
+        <div className="px-4 pt-4 md:px-6 lg:px-5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h1 className="flex items-center gap-3 font-headline text-[28px] font-bold tracking-tight text-stone-900 md:text-3xl">
                 Conversaciones
-                <span className="hidden rounded-full bg-stone-100 px-2.5 py-0.5 font-mono text-sm font-semibold text-stone-600 xl:inline">{total}</span>
+                <span className="hidden rounded-full bg-stone-100 px-2.5 py-0.5 font-mono text-sm font-semibold text-stone-600 md:inline">{total}</span>
               </h1>
-              <p className="mt-0.5 font-body text-sm text-stone-500 xl:hidden">Chats en vivo sincronizados con WhatsApp</p>
+              <p className="mt-0.5 font-body text-sm text-stone-500 md:hidden">Chats en vivo sincronizados con WhatsApp</p>
             </div>
             {atencion > 0 && (
               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-amber-300/80 bg-amber-50 px-3 py-2 font-body text-sm font-semibold leading-tight text-amber-800">
@@ -118,8 +119,9 @@ export function ChatsScreen() {
                         : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
                   )}
                 >
-                  {f.punto && !activo && <span className={cn('size-2 rounded-full', f.punto)} />}
-                  {f.label}
+                  {f.punto && !activo && <span className={cn('size-2 rounded-full md:hidden xl:inline-block', f.punto)} />}
+                  <span className="md:hidden xl:inline">{f.label}</span>
+                  <span className="hidden md:inline xl:hidden">{f.corto}</span>
                   {n > 0 && (
                     <span
                       className={cn(
@@ -136,7 +138,7 @@ export function ChatsScreen() {
           </div>
         </div>
 
-        <div className="mt-4 flex-1 space-y-3 px-4 pb-6 md:px-6 xl:space-y-0 xl:divide-y xl:divide-stone-100 xl:overflow-y-auto xl:px-0">
+        <div className="mt-4 flex-1 space-y-3 px-4 pb-6 md:px-6 lg:space-y-0 lg:divide-y lg:divide-stone-100 lg:overflow-y-auto lg:px-0">
           {isPending ? (
             [0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl bg-white shadow-sm" />)
           ) : lista.length === 0 ? (
@@ -150,7 +152,7 @@ export function ChatsScreen() {
           )}
         </div>
       </div>
-      <div className="hidden min-w-0 flex-1 xl:block">
+      <div className="hidden min-w-0 flex-1 lg:block">
         {id ? (
           <ChatScreen embebido />
         ) : (
@@ -173,13 +175,13 @@ function TarjetaConversacion({ c, activa, ahoraMs }: { c: ConversacionResumen; a
     <Link
       to={`/chats/${c.id}`}
       className={cn(
-        'relative block rounded-xl border bg-white p-4 shadow-sm transition-colors xl:rounded-none xl:border-0 xl:border-l-4 xl:shadow-none',
-        pide ? 'border-amber-300 bg-amber-50/40 xl:border-l-amber-500' : 'border-stone-200 xl:border-l-transparent',
-        activa && 'xl:bg-stone-50',
+        'relative block rounded-xl border bg-white p-4 shadow-sm transition-colors lg:rounded-none lg:border-0 lg:border-l-4 lg:shadow-none',
+        pide ? 'border-amber-300 bg-amber-50/40 lg:border-l-amber-500' : 'border-stone-200 lg:border-l-transparent',
+        activa && 'lg:bg-teal-50/40',
         !pide && 'hover:bg-stone-50'
       )}
     >
-      {pide && <span className="absolute inset-y-4 left-0 w-1 rounded-r-full bg-amber-500 xl:hidden" />}
+      {pide && <span className="absolute inset-y-4 left-0 w-1 rounded-r-full bg-amber-500 lg:hidden" />}
       <div className="flex gap-3">
         <div className="relative shrink-0">
           <div

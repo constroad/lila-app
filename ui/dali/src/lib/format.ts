@@ -52,3 +52,6 @@ export const iniciales = (nombre: string): string =>
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('') || '?';
+
+/** «venta de mezcla asfáltica» → «Venta de mezcla asfáltica» (los nombres del guion vienen en minúscula). */
+export const oracion = (texto: string): string => (texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : texto);
