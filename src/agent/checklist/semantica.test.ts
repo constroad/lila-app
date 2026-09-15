@@ -99,6 +99,6 @@ describe('evaluarRevisionSemantica', () => {
     const r = await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, [], { embed: embedFalso, soloCriticos: true });
 
     expect(r.pendientes.every((i) => i.critico)).toBe(true);
-    expect(r.pendientes.map((i) => i.id)).toEqual(['agregados', 'petroleo-planta', 'operadores', 'clima']);
+    expect(r.pendientes.map((i) => i.id)).toEqual(['agregados', 'pen', 'petroleo-planta', 'operadores', 'clima']);
   });
 });

@@ -155,6 +155,17 @@ export async function getMaterialModel(): Promise<Model<Record<string, unknown>>
   return materialModel;
 }
 
+let asphaltDesignModel: Model<Record<string, unknown>> | null = null;
+/** Diseños de mezcla (loose, solo lectura): `values[{materialId, percentage}]`, lo que el pedido referencia en `tipoMAC`. */
+export async function getAsphaltDesignModel(): Promise<Model<Record<string, unknown>>> {
+  if (asphaltDesignModel) return asphaltDesignModel;
+  const conn = await getSharedConnection();
+  asphaltDesignModel =
+    (conn.models.AsphaltDesign as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('AsphaltDesign', looseSchema, 'asphaltdesigns');
+  return asphaltDesignModel;
+}
+
 /** Medias del Portal (loose, solo lectura): archivos de un pedido. */
 export async function getMediaModel(): Promise<Model<Record<string, unknown>>> {
   if (mediaModel) {

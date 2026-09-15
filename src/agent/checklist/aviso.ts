@@ -1,5 +1,6 @@
-import type { ChecklistDomain, Revision } from './checklist.js';
+import type { ChecklistDomain, ChecklistItem, Revision } from './checklist.js';
 import { fechaLegible } from './tiempo.js';
+import type { StockEnRevision } from './stock.js';
 
 /**
  * El texto del aviso que va al grupo de operaciones.
@@ -62,7 +63,7 @@ const ENCABEZADO: Record<ContextoRevision['momento'], string> = {
  * correcta**.
  */
 export const construirAvisoChecklist = (
-  revision: Revision,
+  revision: Revision & { stock?: StockEnRevision },
   contexto: ContextoRevision,
   /** Solo esa parte, con su propio encabezado: la lee otra gente (José, 14/09: mezclar planta y campo pierde el foco). */
   dominio?: ChecklistDomain
@@ -85,12 +86,18 @@ export const construirAvisoChecklist = (
     const pendientes = pendientesDe(dominio);
     const resueltos = revision.resueltos.filter((r) => r.domain === dominio);
     const encabezado = ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio]);
+    // Lo que Portal sabe del stock va con la parte de PLANTA: qué cubre, qué falta y las cifras (José, 15/09).
+    const stock = dominio === 'planta' ? revision.stock : undefined;
+    const faltantes = new Set((stock?.faltantes ?? []).map((i) => i.id));
+    const porPortal = new Set((stock?.cubiertos ?? []).map((i) => i.id));
+    const titulo = (i: ChecklistItem) => (faltantes.has(i.id) ? `${i.titulo} ⚠️` : porPortal.has(i.id) ? `${i.titulo} (Portal)` : i.titulo);
     // Cómo se confirma, con ejemplos de lo que falta (Globofast, 14/09, 20:58: «¿cómo se confirma?»).
     const ejemplos = pendientes.slice(0, 2).map((i) => `«${i.titulo} ok»`).join(', ');
     return [
       `${encabezado} — ${fechaLegible(contexto.fecha)} · ${quienes}${contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''} · ${cuando}`,
-      `Por confirmar: ${pendientes.map((i) => i.titulo).join(' · ')}`,
-      ...(resueltos.length ? [`✔ ${resueltos.map((r) => r.titulo).join(', ')}`] : []),
+      ...(stock?.lineas ?? []),
+      `Por confirmar: ${pendientes.map(titulo).join(' · ')}`,
+      ...(resueltos.length ? [`✔ ${resueltos.map(titulo).join(', ')}`] : []),
       `Confirmen aquí mismo, ítem por ítem: ${ejemplos}.`,
     ].join('\n');
   }

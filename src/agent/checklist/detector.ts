@@ -28,6 +28,7 @@ import {
   type Propuesta,
 } from './sugerencias.js';
 import { agruparPorDia, firmaDia, momentoVigente, type DiaDePlanta, type PedidoDelDia } from './dia.js';
+import { analizarStockDelDia, conStockDePortal } from './stock.js';
 import { diaPeruano, instanteArranque } from './tiempo.js';
 import { agenteApagado } from './interruptor.js';
 import { VENTANA_MS } from './almacen.js';
@@ -245,12 +246,21 @@ const proponerRevisionDelDia = async (
   // anterior a que se cargara el primer pedido hablaba de otro día.
   const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
   const utiles = filtrarMensajes(delGrupo);
-  const revision = conConfirmacionesEnBloque(
-    await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
-      soloCriticos: momento === 'ultima-llamada',
-      negadas: utiles.negadas,
+  // Lo que Portal sabe del stock (agregados, PEN, gasohol, petróleo) cubre o
+  // marca sus ítems antes de preguntarle a nadie (José, 15/09).
+  const revision = conStockDePortal(
+    conConfirmacionesEnBloque(
+      await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, {
+        soloCriticos: momento === 'ultima-llamada',
+        negadas: utiles.negadas,
+      }),
+      dominiosConfirmadosEnBloque(delGrupo, dia.fecha)
+    ),
+    await analizarStockDelDia(dia.fecha).catch((error) => {
+      logger.warn(`[agente] no pude analizar el stock del ${dia.fecha}: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
     }),
-    dominiosConfirmadosEnBloque(delGrupo, dia.fecha)
+    ahoraMs
   );
 
   const contexto = {
@@ -333,7 +343,11 @@ export const revisionDelDia = async (fecha: string, ahoraMs = Date.now()) => {
   if (!dia) return null;
   const delGrupo = mensajesDesde(alcance.grupoEscuchado, dia.creadoMs);
   const utiles = filtrarMensajes(delGrupo);
-  return conConfirmacionesEnBloque(await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, { negadas: utiles.negadas }), dominiosConfirmadosEnBloque(delGrupo, fecha));
+  return conStockDePortal(
+    conConfirmacionesEnBloque(await evaluarRevisionSemantica(CHECKLIST_PRODUCCION, utiles.textos, { negadas: utiles.negadas }), dominiosConfirmadosEnBloque(delGrupo, fecha)),
+    await analizarStockDelDia(fecha).catch(() => null),
+    ahoraMs
+  );
 };
 
 /**

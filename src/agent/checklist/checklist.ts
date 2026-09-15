@@ -89,6 +89,17 @@ export const CHECKLIST_PLANTA: ChecklistItem[] = [
     seSatisfaceCon: ['agregados suficientes', 'hay agregados', 'agregados listos', 'tenemos agregados', 'agregado suficiente'],
   },
   {
+    // El insumo principal, que faltaba en la lista (15/09): Portal lo calcula desde los tanques.
+    id: 'pen',
+    critico: true,
+    titulo: 'PEN',
+    pregunta: '¿Hay cemento asfáltico (PEN) suficiente?',
+    domain: 'planta',
+    phase: 'antes',
+    venceMinutosAntes: VENCE_TARDE_ANTERIOR,
+    seSatisfaceCon: ['hay pen', 'pen suficiente', 'pen listo', 'tenemos pen', 'cemento asfaltico suficiente', 'hay cemento asfaltico', 'alcanza el pen'],
+  },
+  {
     id: 'petroleo-planta',
     critico: true,
     titulo: 'petróleo de planta',

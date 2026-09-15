@@ -26,6 +26,8 @@ export interface Tanque {
   reorden: number;
   /** Color configurado en Portal para el tanque, si lo hay. */
   color?: string;
+  /** Cuándo se tocó el tanque por última vez en Portal (medición o ajuste). */
+  medidoMs?: number;
 }
 
 const CONTENIDO: Record<string, Tanque['contenido']> = { pen: 'pen', gasohol: 'gasohol', petroleum: 'petroleo', petroleo: 'petroleo', thermal_oil: 'otro', other: 'otro' };
@@ -39,7 +41,7 @@ const CONTENIDO: Record<string, Tanque['contenido']> = { pen: 'pen', gasohol: 'g
 export const tanques = async (): Promise<Tanque[]> => {
   const Tank = await getControlTankModel();
   const docs = (await Tank.find({ companyId: COMPANY_PILOTO, includeInFluidsReport: { $ne: false } })
-    .select('name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter volume reorderPoint bgColor')
+    .select('name contentType volumeInStock valveDeadVolumeGallons gallonsPerProductionM3 levelCentimeter volume reorderPoint bgColor updatedAt')
     .lean()) as Doc[];
   return docs.map((d) => {
     const disponibles = Math.max(num(d.volumeInStock) - num(d.valveDeadVolumeGallons), 0);
@@ -54,6 +56,7 @@ export const tanques = async (): Promise<Tanque[]> => {
       stock: num(d.volumeInStock),
       reorden: num(d.reorderPoint),
       color: String(d.bgColor || '').trim() || undefined,
+      medidoMs: d.updatedAt ? new Date(d.updatedAt as string).getTime() : 0,
     };
   });
 };

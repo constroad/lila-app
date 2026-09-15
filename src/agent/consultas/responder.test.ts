@@ -122,8 +122,8 @@ describe('responder', () => {
   it('checklist: confirmado y sin confirmar en palabras de obra', () => {
     const revision = { resueltos: CHECKLIST_PRODUCCION.slice(0, 2), pendientes: CHECKLIST_PRODUCCION.slice(2, 4) };
     const r = responder('checklist_status', { vista, ahoraMs: lima('12:00'), params: hoy, revision });
-    expect(r).toContain('✅ Confirmado: agregados, petróleo de planta.');
-    expect(r).toContain('❔ Sin confirmar: gasohol, aviso a operadores.');
+    expect(r).toContain('✅ Confirmado: agregados, PEN.');
+    expect(r).toContain('❔ Sin confirmar: petróleo de planta, gasohol.');
   });
 
   /**

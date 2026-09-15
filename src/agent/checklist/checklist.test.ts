@@ -180,9 +180,9 @@ describe('el aviso al grupo de operaciones', () => {
     // Tres líneas: cabecera con el día y el arranque, los pendientes por su nombre, lo confirmado.
     expect(planta.split('\n')).toEqual([
       '📋 *Planta, por confirmar* — domingo 13/09 · 04:00 Globofast 91 m³ · 07:00 Constroad 45 m³ · total 136 m³ · arranca en 4 h',
-      'Por confirmar: agregados · petróleo de planta · aviso a operadores · mantenimiento o riesgos · clima',
+      'Por confirmar: agregados · PEN · petróleo de planta · aviso a operadores · mantenimiento o riesgos · clima',
       '✔ gasohol',
-      'Confirmen aquí mismo, ítem por ítem: «agregados ok», «petróleo de planta ok».',
+      'Confirmen aquí mismo, ítem por ítem: «agregados ok», «PEN ok».',
     ]);
     const campo = construirAvisoChecklist(r, contexto, 'obra')!;
     expect(campo).toContain('📋 *Campo, por confirmar* — domingo 13/09');
