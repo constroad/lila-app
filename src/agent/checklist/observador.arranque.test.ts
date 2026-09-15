@@ -1,4 +1,4 @@
-import { esperarAlcance } from './observador';
+import { esperarAlcance, paraOtraPersona } from './observador';
 
 /**
  * EL HUECO DEL ARRANQUE. Las sesiones conectan de a una y la de inframaq —la
@@ -30,5 +30,27 @@ describe('esperarAlcance', () => {
     const alcance = await esperarAlcance(async () => (++llamadas, vacio), { intentos: 4, dormir: async () => undefined });
     expect(alcance.grupoEscuchado).toBe('');
     expect(llamadas).toBe(5);
+  });
+});
+
+/**
+ * UN MENSAJE PARA OTRA PERSONA NO ES UNA CONTINUACIÓN. 14/09, 18:11: José le
+ * contestó «¿a qué te refieres?» a Globofast (citándolo) y le habló a @nikole
+ * un minuto después de preguntarle algo a Lila; los dos cayeron como «pregunta
+ * dentro del hilo» y Lila contestó con el menú.
+ */
+describe('paraOtraPersona', () => {
+  const bot = ['51949376824@s.whatsapp.net', '244534046892225@lid'];
+  const con = (contextInfo: Record<string, unknown>) => ({ extendedTextMessage: { text: 'x', contextInfo } }) as never;
+  it('cita a otro → es para otro; cita al agente → no', () => {
+    expect(paraOtraPersona(con({ stanzaId: '1', participant: '173066143440987@lid' }), bot)).toBe(true);
+    expect(paraOtraPersona(con({ stanzaId: '1', participant: '244534046892225@lid' }), bot)).toBe(false);
+    expect(paraOtraPersona(con({ stanzaId: '1', participant: '51949376824:12@s.whatsapp.net' }), bot)).toBe(false);
+  });
+  it('menciona a otros → es para otro; menciona al agente entre otros → no', () => {
+    expect(paraOtraPersona(con({ mentionedJid: ['188570740486215@lid'] }), bot)).toBe(true);
+    expect(paraOtraPersona(con({ mentionedJid: ['188570740486215@lid', '244534046892225@lid'] }), bot)).toBe(false);
+    expect(paraOtraPersona(con({}), bot)).toBe(false);
+    expect(paraOtraPersona(undefined, bot)).toBe(false);
   });
 });

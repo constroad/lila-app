@@ -31,11 +31,29 @@ export const hidratarInterruptor = (guardado: EstadoInterruptor | null | undefin
 export const agenteApagado = (): boolean => estado.apagado;
 export const estadoInterruptor = (): EstadoInterruptor => ({ ...estado });
 
-/** `!lila off` | `!lila on` — exactos, sin importar mayúsculas ni espacios de más. */
-export const comandoInterruptor = (texto: string): 'off' | 'on' | null => {
-  const t = String(texto || '').trim().toLowerCase().replace(/\s+/g, ' ');
-  if (t === '!lila off') return 'off';
-  if (t === '!lila on') return 'on';
+/**
+ * `!lila off` | `!lila on` — y las formas en que la gente lo escribe de verdad:
+ * «@lila off», «lila off», «!@lila off», «@lila apágate», «@lila enciéndete».
+ * El 14/09 a las 18:14 José escribió «@lila off» y «!@lila off» y ninguno lo
+ * apagó: «off» fue al modelo y contestó cualquier cosa. También «@lila estás
+ * encendida?» → `estado`, para que no vaya al modelo y termine en el menú.
+ * Tiene que ser el mensaje entero (con o sin signos al final), nunca parte de
+ * una frase.
+ */
+export const comandoInterruptor = (texto: string): 'off' | 'on' | 'estado' | null => {
+  const t = String(texto || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[!@¡¿?.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const m = t.match(/^lila (.+)$/);
+  if (!m) return null;
+  const orden = m[1];
+  if (/^(off|apagar|apagate|apaga|apagado|silencio|callate|stop)$/.test(orden)) return 'off';
+  if (/^(on|prender|prendete|encender|enciendete|enciende|activar|activate|prendido|encendido)$/.test(orden)) return 'on';
+  if (/^(estado|estas (encendid|prendid|apagad|activ)[ao]|estas on|estas off|sigues (encendid|prendid|apagad)[ao]|te apagaron)$/.test(orden)) return 'estado';
   return null;
 };
 

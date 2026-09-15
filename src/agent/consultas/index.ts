@@ -312,7 +312,7 @@ interface Ruta {
  *
  * Lo general de la experiencia está acá, no en cada consulta.
  */
-const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRespaldo: ClaveConsulta | null = null): Promise<Ruta> => {
+const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRespaldo: ClaveConsulta | null = null, implicita = false): Promise<Ruta> => {
   const ultima = ultimaConsulta(quien, grupo);
   if (ultima && pareceContinuacion(pregunta)) {
     // La misma pregunta con el dato nuevo, y sin el dato viejo del mismo tipo.
@@ -320,6 +320,18 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRe
     // Un hilo de datos (clientes, kardex…) lo sigue el modelo, que es quien lo abrió.
     if (!esHerramientaDeDatos(ultima.clave)) return { clave: ultima.clave as ClaveConsulta, pregunta: fusionada };
     pregunta = fusionada;
+  }
+  // Un mensaje IMPLÍCITO (sin @lila) no pasa por el modelo ni pide confirmación:
+  // solo las reglas y los embeddings con certeza. El modelo, ante «como ven esos
+  // son ejemplos…», eligió `help` y Lila contestó con el menú (14/09, 18:11).
+  if (implicita) {
+    if (reglaDeRespaldo) return { clave: reglaDeRespaldo, pregunta };
+    const embed = await cargarModelo();
+    if (embed) {
+      const [mejor] = await clasificar(CATALOGO, [pregunta], embed);
+      if (mejor && mejor.similitud >= UMBRAL_RUTEO && mejor.itemId !== 'help') return { clave: mejor.itemId as ClaveConsulta, pregunta };
+    }
+    return { clave: null, pregunta };
   }
   // La pregunta anterior del hilo solo ayuda con una pregunta CORTA («¿y en
   // Ate?»); a una larga la confunde: «y el clima en la molina…» tras «stock de
@@ -402,11 +414,13 @@ export const atenderConsulta = async (
       recordarConsulta({ quien, grupo, clave: 'pedidos', pregunta });
       clave = null;
     }
-    if (!clave && !vetada && !respuesta) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, larga ? porRegla : null));
-    // Una consulta IMPLÍCITA (sin @lila, dentro del hilo) que no se entiende se
-    // deja pasar en silencio: puede que no fuera para el agente.
-    if (opciones.implicita && !clave && !respuesta) {
-      logger.info(`[agente] consulta implícita de ${quien} sin ruta, se deja pasar: «${pregunta}»`);
+    if (!clave && !vetada && !respuesta) ({ clave, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, larga ? porRegla : null, opciones.implicita));
+    // Una consulta IMPLÍCITA (sin @lila, dentro del hilo) se contesta solo si
+    // se entendió con certeza; lo demás pasa en silencio, porque puede no ser
+    // para el agente. Y nunca con el menú de ayuda: el 14/09 a las 18:11 dos
+    // mensajes de José a otras personas terminaron en «Lila — pregúntame…».
+    if (opciones.implicita && (!clave || clave === 'help') && !respuesta) {
+      logger.info(`[agente] consulta implícita de ${quien} sin ruta cierta, se deja pasar: «${pregunta}»`);
       return;
     }
     respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo, extra));
@@ -438,7 +452,8 @@ export const atenderContinuacion = async (
   // programación esta semana?»). La pregunta va por todo el camino —modelo
   // incluido— pero en silencio si no se entiende: dentro del hilo es casi
   // seguro para el agente, y «casi» no alcanza para contestar «no lo tengo».
-  if (pareceContinuacion(texto) || rutearPorReglas(preguntaLimpia(texto))) {
+  const regla = rutearPorReglas(preguntaLimpia(texto));
+  if (pareceContinuacion(texto) || (regla && regla !== 'help')) {
     await atenderConsulta(`@lila ${texto}`, quien, grupo, alcance);
     return true;
   }

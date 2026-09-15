@@ -82,6 +82,20 @@ const grupoDeConsultas = (destino: string, alcance: AlcanceAgente): string | nul
 };
 
 /**
+ * La única respuesta que sale con el agente APAGADO: decir que está apagado
+ * («@lila estás encendida?»), en el grupo donde lo preguntaron. Solo a los
+ * grupos donde se atienden consultas; el interruptor no lo frena porque es
+ * justamente lo que se quiere saber.
+ */
+export const responderEstado = async (destino: string, texto: string, alcance: AlcanceAgente): Promise<boolean> => {
+  if (!AGENTE_ACTIVO) return false;
+  const jid = grupoDeConsultas(destino, alcance);
+  if (!jid) return false;
+  await mandar(jid, texto);
+  return true;
+};
+
+/**
  * «ESCRIBIENDO…» DESDE QUE SE ENTIENDE LA PREGUNTA, no desde que la respuesta
  * está lista. José, 14/09/2026: «para la generación de imágenes o de cosas
  * pesadas no me muestra inmediatamente escribiendo, lo cual al usuario lo hace

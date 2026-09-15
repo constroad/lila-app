@@ -20,8 +20,14 @@ describe('el comando', () => {
     expect(comandoInterruptor('  !LILA   ON ')).toBe('on');
   });
 
-  it('no reconoce nada parecido', () => {
-    for (const otro of ['lila off', '!lila apagate', '!lila off ya', '!lilaoff', '', 'off']) {
+  it('y las formas en que la gente lo escribe (14/09: «@lila off» y «!@lila off» no apagaban nada)', () => {
+    for (const off of ['@lila off', '!@lila off', 'lila off', '@lila apágate', '@lila apagar', '@Lila OFF.']) expect(comandoInterruptor(off)).toBe('off');
+    for (const on of ['@lila on', 'lila on', '@lila enciéndete', '@lila prender']) expect(comandoInterruptor(on)).toBe('on');
+    for (const estado of ['@lila estás encendida?', '@lila estas encendido?', 'lila estado', '@lila estás apagada?']) expect(comandoInterruptor(estado)).toBe('estado');
+  });
+
+  it('no reconoce nada parecido: tiene que ser el mensaje entero', () => {
+    for (const otro of ['!lila off ya', '!lilaoff', '', 'off', 'apaga la lila', '@lila off el pedido de hoy', 'hola lila']) {
       expect(comandoInterruptor(otro)).toBeNull();
     }
   });

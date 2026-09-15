@@ -12,9 +12,9 @@ import {
 import { normalizarTexto } from './checklist.js';
 import { hidratarMensajes, recordarMensaje } from './almacen.js';
 import { decidir, esVoto, hidratarPropuestas, type MotivoRechazo } from './sugerencias.js';
-import { enviarAOperaciones, enviarAprobado } from './emisor.js';
+import { enviarAOperaciones, enviarAprobado, responderEstado } from './emisor.js';
 import { cargarAprobadores, esAdmin, esAprobador } from './aprobadores.js';
-import { apagar, comandoInterruptor, encender, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
+import { apagar, comandoInterruptor, encender, estadoInterruptor, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
 import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje } from './persistencia.js';
 import { VENTANA_MS } from './almacen.js';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
@@ -81,7 +81,7 @@ export const esperarAlcance = async (
 
 type ContenidoEntrante = BaileysMessageContent & {
   extendedTextMessage?: {
-    contextInfo?: { stanzaId?: string | null; mentionedJid?: string[] | null } | null;
+    contextInfo?: { stanzaId?: string | null; participant?: string | null; mentionedJid?: string[] | null } | null;
   } | null;
 };
 
@@ -121,6 +121,22 @@ const senderPilotoCacheado = async (): Promise<string> => {
 /** A quiénes menciona este mensaje (los JIDs detrás de los «@Nombre»). */
 const mencionadosDe = (message: ContenidoEntrante | null | undefined): string[] =>
   (message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []).map(String);
+
+/**
+ * ¿ESTE MENSAJE ES PARA OTRA PERSONA? Cita a alguien que no es el agente, o
+ * menciona a alguien que no es el agente. El 14/09 a las 18:11, José le
+ * contestó «¿a qué te refieres?» a Globofast (citándolo) y le habló a
+ * @nikole y @Polluela un minuto después de preguntarle algo a Lila: los dos
+ * cayeron como «pregunta dentro del hilo» y Lila contestó con el menú. Un
+ * mensaje dirigido a otro nunca es una continuación.
+ */
+export const paraOtraPersona = (message: ContenidoEntrante | null | undefined, jidsBot: string[]): boolean => {
+  const esBot = (jid: string) => jidsBot.includes(String(jid || '').replace(/:\d+@/, '@'));
+  const citado = String(message?.extendedTextMessage?.contextInfo?.participant || '');
+  if (citado && !esBot(citado)) return true;
+  const mencionados = mencionadosDe(message);
+  return mencionados.length > 0 && !mencionados.some(esBot);
+};
 
 /**
  * EL MISMO MENSAJE NO SE PROCESA DOS VECES. El 13/09 cada pregunta se atendió
@@ -202,7 +218,7 @@ export const observarParaChecklist = async (
         const quien = String(raw?.key?.participant || 'desconocido');
         const comando = comandoInterruptor(texto);
         if (comando) {
-          await atenderInterruptor(comando, quien);
+          await atenderInterruptor(comando, quien, remoteJid, alcance);
           continue;
         }
         // Un voto cita una propuesta; una elección es un número suelto tras una
@@ -224,7 +240,9 @@ export const observarParaChecklist = async (
             }
             // Cualquier mensaje puede ser la respuesta a algo que el agente
             // preguntó («la unidad 4», «2», «sí»), o la continuación de lo que
-            // esa persona preguntó hace un momento («¿y la 3?»).
+            // esa persona preguntó hace un momento («¿y la 3?»). Nunca si le
+            // habla a otra persona.
+            if (paraOtraPersona(raw.message, await jidsPropios(bot))) return;
             const fue = (await atenderEleccion(texto, quien, remoteJid, alcance)) || (await atenderContinuacion(texto, quien, remoteJid, alcance));
             if (!fue && /^\s*\d{1,2}\s*$/.test(texto) && esVoto(texto)) {
               await atenderVoto({ voto: texto, citaMsgId: '', quien }, alcance);
@@ -243,6 +261,13 @@ export const observarParaChecklist = async (
       const delBot = await esDelBot(raw, sessionPhone);
       if (!delBot) {
         const quien = String(raw?.key?.participant || 'alguien');
+        // El interruptor también desde este grupo: el 14/09 «@lila off» acá fue
+        // al modelo como consulta y recién «!lila off» en error tracking lo apagó.
+        const comando = comandoInterruptor(texto);
+        if (comando) {
+          await atenderInterruptor(comando, quien, remoteJid, alcance);
+          continue;
+        }
         void import('../consultas/index.js')
           .then(async ({ esConsulta, atenderConsulta, atenderEleccion, atenderContinuacion }) => {
             const bot = await senderPilotoCacheado();
@@ -255,6 +280,8 @@ export const observarParaChecklist = async (
             }
             // «La unidad 4», «2», «sí»: la respuesta a algo que el agente preguntó;
             // «¿y la 3?»: la continuación de lo que esa persona preguntó recién.
+            // Nunca si le habla a otra persona (cita o menciona a alguien más).
+            if (paraOtraPersona(raw.message, await jidsPropios(bot))) return;
             (await atenderEleccion(texto, quien, remoteJid, alcance)) || (await atenderContinuacion(texto, quien, remoteJid, alcance));
           })
           .catch((error) => logger.warn(`[agente] consulta no atendida: ${String(error)}`));
@@ -339,8 +366,15 @@ const atenderVoto = async (
  * `!lila off` / `!lila on`, de un administrador del grupo de operaciones. Se
  * persiste: un deploy no prende lo que alguien apagó.
  */
-const atenderInterruptor = async (comando: 'off' | 'on', quien: string): Promise<void> => {
+const atenderInterruptor = async (comando: 'off' | 'on' | 'estado', quien: string, grupo: string, alcance: AlcanceAgente): Promise<void> => {
   try {
+    if (comando === 'estado') {
+      // Responde aunque esté apagado, y en el grupo donde lo preguntaron: es la
+      // única forma de saberlo desde el celular.
+      const { apagado } = estadoInterruptor();
+      await responderEstado(grupo, apagado ? '⏸ Estoy apagada. Un administrador me prende con «@lila on».' : '▶️ Estoy encendida. Un administrador me apaga con «@lila off».', alcance);
+      return;
+    }
     if (!(await esAdmin(quien))) {
       logger.info(`[agente] «!lila ${comando}» de ${quien}, que no administra el grupo: se ignora`);
       await enviarAOperaciones('🔒 Solo un administrador de este grupo puede apagar o prender el agente.');
@@ -351,7 +385,7 @@ const atenderInterruptor = async (comando: 'off' | 'on', quien: string): Promise
     logger.warn(`[agente] interruptor: ${comando.toUpperCase()} por ${quien}`);
     await enviarAOperaciones(
       comando === 'off'
-        ? '⏸ Agente APAGADO. Sigue escuchando pero no propone ni manda nada. `!lila on` para prenderlo.'
+        ? '⏸ Agente APAGADO. Sigue escuchando pero no propone ni manda nada. «@lila on» para prenderlo.'
         : '▶️ Agente PRENDIDO.'
     );
   } catch (error) {

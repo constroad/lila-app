@@ -8828,7 +8828,7 @@ var init_guiado = __esm({
       return regexes.get(patron) ?? null;
     };
     matchea = (patrones, t44) => Boolean(patrones?.some((p64) => re(p64)?.test(t44)));
-    NOMBRES_PROHIBIDOS = ["maria", "constroad", "asistente", "cliente", "asesor"];
+    NOMBRES_PROHIBIDOS = ["dali", "maria", "constroad", "asistente", "cliente", "asesor"];
     NO_ES_LUGAR = /* @__PURE__ */ new Set(["almacen", "patio", "obra", "casa", "local", "empresa", "pista", "calle", "planta", "terreno", "estacionamiento", "condominio", "fabrica", "taller", "cochera", "garaje", "via", "avenida", "jiron", "urbanizacion", "zona", "lugar", "sitio", "proyecto", "losa", "parque", "colegio", "mercado"]);
     FECHA_RE = /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|se[pt]?tiembre|octubre|noviembre|diciembre|lunes|martes|miercoles|jueves|viernes|sabado|domingo|hoy|manana|semana|quincena|mes|dias?|urgente|lo antes posible|cuanto antes|ya mismo|fin de ano)\b|\b\d{1,2}\s*(de\s+[a-z]|\/\d|-\d)/;
     PREGUNTA_QUE_ES_RE = /^(que es|que significa|que seria|cual es la diferencia|que diferencia|para que sirve|para que es|en que consiste)\b/;
@@ -9764,7 +9764,7 @@ var init_prompt_asfalto = __esm({
   "src/agent/ventas/prompt.asfalto.ts"() {
     CONSTROAD = {
       nombre: "CONSTROAD",
-      asistente: "Mar\xEDa",
+      asistente: "Dali",
       horario: "lunes a viernes de 8:00 a 18:00 y s\xE1bados de 8:00 a 13:00",
       zona: "Lima y alrededores (planta en Cajamarquilla, Lurigancho)"
     };
@@ -9933,8 +9933,8 @@ var init_ventas = __esm({
         const modelo = String(process.env.LLM_MODEL || "").trim();
         if (!proveedor && baseUrl && apiKey && modelo) proveedor = crearProveedorOpenAiCompat({ baseUrl, apiKey, modelo });
         if (!proveedor && modeloDescargado()) proveedor = crearProveedorQwen();
-        if (!proveedor) logger_default.warn("[maria] sin clave de LLM ni modelo local: el agente de ventas no contesta");
-        else logger_default.info(`[maria] proveedor de LLM: ${proveedor.nombre}`);
+        if (!proveedor) logger_default.warn("[dali] sin clave de LLM ni modelo local: el agente de ventas no contesta");
+        else logger_default.info(`[dali] proveedor de LLM: ${proveedor.nombre}`);
       }
       return proveedor;
     };
@@ -10036,7 +10036,7 @@ Le dije que un asesor responde. Toma la conversaci\xF3n desde el WhatsApp de Con
           }
         }
         logger_default.info(
-          `[maria] ${customerPhone}${cliente ? ` (${cliente.nombre})` : ""}: ${resultado.herramientasUsadas.length ? `herramientas ${resultado.herramientasUsadas.join(",")} \xB7 ` : ""}${resultado.uso.entrada}/${resultado.uso.salida} tokens${resultado.uso.cacheLeida ? ` (cache ${resultado.uso.cacheLeida})` : ""}${resultado.degradado ? " \xB7 DEGRADADO" : ""}`
+          `[dali] ${customerPhone}${cliente ? ` (${cliente.nombre})` : ""}: ${resultado.herramientasUsadas.length ? `herramientas ${resultado.herramientasUsadas.join(",")} \xB7 ` : ""}${resultado.uso.entrada}/${resultado.uso.salida} tokens${resultado.uso.cacheLeida ? ` (cache ${resultado.uso.cacheLeida})` : ""}${resultado.degradado ? " \xB7 DEGRADADO" : ""}`
         );
         return resultado.texto;
       });
@@ -10083,7 +10083,7 @@ El bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
       }
       const respondido = Object.entries(p64.estado.respuestas ?? {}).map(([k61, v55]) => `${k61}=${v55}`).join(" ");
       logger_default.info(
-        `[maria] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ""}: guiado \xB7 extra\xEDdo ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v55]) => v55 && v55 !== "")))} \xB7 ${p64.estado.servicio ?? "sin servicio"}${respondido ? ` \xB7 ${respondido}` : ""} \xB7 pregunta ${p64.estado.ultimoCampo ?? (p64.estado.resumenEnviado ? "resumen" : p64.estado.cerrado ? "cerrado" : "servicio")} \xB7 ${((Date.now() - inicio) / 1e3).toFixed(1)} s${p64.escalar ? ` \xB7 ESCALA (${p64.escalar})` : ""}`
+        `[dali] ${ctx.customerPhone}${ctx.cliente ? ` (${ctx.cliente.nombre})` : ""}: guiado \xB7 extra\xEDdo ${JSON.stringify(Object.fromEntries(Object.entries(extraido).filter(([, v55]) => v55 && v55 !== "")))} \xB7 ${p64.estado.servicio ?? "sin servicio"}${respondido ? ` \xB7 ${respondido}` : ""} \xB7 pregunta ${p64.estado.ultimoCampo ?? (p64.estado.resumenEnviado ? "resumen" : p64.estado.cerrado ? "cerrado" : "servicio")} \xB7 ${((Date.now() - inicio) / 1e3).toFixed(1)} s${p64.escalar ? ` \xB7 ESCALA (${p64.escalar})` : ""}`
       );
       return p64.texto;
     };
@@ -10101,7 +10101,7 @@ El bot se calla 30 min: responde desde el WhatsApp de Constroad.`);
       const minutos = comando === "!pausa" ? 24 * 60 : botConfig?.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN;
       await pausarConversacion(conversacion.id, minutos, "owner");
       if (comando !== "!pausa") await guardarMensajeDueno(companyId, conversacion.id, texto4);
-      logger_default.info(`[maria] el due\xF1o tom\xF3 la conversaci\xF3n con ${message.remoteJid}: bot en pausa ${minutos} min`);
+      logger_default.info(`[dali] el due\xF1o tom\xF3 la conversaci\xF3n con ${message.remoteJid}: bot en pausa ${minutos} min`);
     };
   }
 });
@@ -10236,7 +10236,7 @@ async function handleAgentMessagesUpsert(sessionPhone, sock, upsert) {
       if (outcome === "replied") {
         logger_default.info(`Agent: respondido a ${remoteJid} (sesi\xF3n ${sessionPhone})`);
       } else if (outcome !== "bot-disabled" && outcome !== "from-me" && outcome !== "group") {
-        logger_default.info(`[maria] mensaje de ${remoteJid} \u2192 ${outcome}`);
+        logger_default.info(`[dali] mensaje de ${remoteJid} \u2192 ${outcome}`);
       }
     } catch (error) {
       logger_default.error(`Agent: error procesando mensaje de ${remoteJid}: ${String(error)}`);
@@ -10676,7 +10676,7 @@ var init_persistencia = __esm({
 });
 
 // src/agent/checklist/interruptor.ts
-var estado, hidratarInterruptor, agenteApagado, comandoInterruptor, apagar, encender;
+var estado, hidratarInterruptor, agenteApagado, estadoInterruptor, comandoInterruptor, apagar, encender;
 var init_interruptor = __esm({
   "src/agent/checklist/interruptor.ts"() {
     estado = { apagado: false };
@@ -10684,10 +10684,15 @@ var init_interruptor = __esm({
       if (guardado && typeof guardado.apagado === "boolean") estado = { ...guardado };
     };
     agenteApagado = () => estado.apagado;
+    estadoInterruptor = () => ({ ...estado });
     comandoInterruptor = (texto4) => {
-      const t44 = String(texto4 || "").trim().toLowerCase().replace(/\s+/g, " ");
-      if (t44 === "!lila off") return "off";
-      if (t44 === "!lila on") return "on";
+      const t44 = String(texto4 || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[!@¡¿?.,]/g, " ").replace(/\s+/g, " ").trim();
+      const m59 = t44.match(/^lila (.+)$/);
+      if (!m59) return null;
+      const orden = m59[1];
+      if (/^(off|apagar|apagate|apaga|apagado|silencio|callate|stop)$/.test(orden)) return "off";
+      if (/^(on|prender|prendete|encender|enciendete|enciende|activar|activate|prendido|encendido)$/.test(orden)) return "on";
+      if (/^(estado|estas (encendid|prendid|apagad|activ)[ao]|estas on|estas off|sigues (encendid|prendid|apagad)[ao]|te apagaron)$/.test(orden)) return "estado";
       return null;
     };
     apagar = (por, ms2 = Date.now()) => {
@@ -10702,7 +10707,7 @@ var init_interruptor = __esm({
 });
 
 // src/agent/checklist/emisor.ts
-var sender, mandar, enviarAOperaciones, publicarPropuesta, grupoDeConsultas, escribiendoEn, RENOVAR_ESCRIBIENDO_MS, TOPE_ESCRIBIENDO_MS, empezarAEscribir, dejarDeEscribir, responderEnGrupo, mandadas, enviarAprobado;
+var sender, mandar, enviarAOperaciones, publicarPropuesta, grupoDeConsultas, responderEstado, escribiendoEn, RENOVAR_ESCRIBIENDO_MS, TOPE_ESCRIBIENDO_MS, empezarAEscribir, dejarDeEscribir, responderEnGrupo, mandadas, enviarAprobado;
 var init_emisor = __esm({
   "src/agent/checklist/emisor.ts"() {
     init_logger();
@@ -10742,6 +10747,13 @@ var init_emisor = __esm({
       const jid = String(destino || "").trim();
       if (!jid || jid !== alcance.grupoEscuchado && jid !== grupoDestino()) return null;
       return jid;
+    };
+    responderEstado = async (destino, texto4, alcance) => {
+      if (!AGENTE_ACTIVO) return false;
+      const jid = grupoDeConsultas(destino, alcance);
+      if (!jid) return false;
+      await mandar(jid, texto4);
+      return true;
     };
     escribiendoEn = /* @__PURE__ */ new Map();
     RENOVAR_ESCRIBIENDO_MS = 7e3;
@@ -14627,12 +14639,21 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
       dispatch_summary: "el resumen de despachos",
       help: "la ayuda"
     };
-    sinRuta = async (pregunta, quien, grupo, reglaDeRespaldo = null) => {
+    sinRuta = async (pregunta, quien, grupo, reglaDeRespaldo = null, implicita = false) => {
       const ultima = ultimaConsulta(quien, grupo);
       if (ultima && pareceContinuacion(pregunta)) {
         const fusionada = fusionar(pregunta, ultima.pregunta, NOMBRES_DE_DISTRITOS, ALIAS_EMPRESA.flatMap((e29) => e29.alias));
         if (!esHerramientaDeDatos(ultima.clave)) return { clave: ultima.clave, pregunta: fusionada };
         pregunta = fusionada;
+      }
+      if (implicita) {
+        if (reglaDeRespaldo) return { clave: reglaDeRespaldo, pregunta };
+        const embed2 = await cargarModelo();
+        if (embed2) {
+          const [mejor] = await clasificar(CATALOGO, [pregunta], embed2);
+          if (mejor && mejor.similitud >= UMBRAL_RUTEO && mejor.itemId !== "help") return { clave: mejor.itemId, pregunta };
+        }
+        return { clave: null, pregunta };
       }
       const eleccion = await elegirHerramienta(pregunta, pregunta.split(/\s+/).length <= 8 ? ultima?.pregunta : void 0);
       if (eleccion) {
@@ -14686,9 +14707,9 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
           recordarConsulta({ quien, grupo, clave: "pedidos", pregunta });
           clave2 = null;
         }
-        if (!clave2 && !vetada && !respuesta) ({ clave: clave2, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, larga ? porRegla : null));
-        if (opciones.implicita && !clave2 && !respuesta) {
-          logger_default.info(`[agente] consulta impl\xEDcita de ${quien} sin ruta, se deja pasar: \xAB${pregunta}\xBB`);
+        if (!clave2 && !vetada && !respuesta) ({ clave: clave2, pregunta, respuesta, extra } = await sinRuta(pregunta, quien, grupo, larga ? porRegla : null, opciones.implicita));
+        if (opciones.implicita && (!clave2 || clave2 === "help") && !respuesta) {
+          logger_default.info(`[agente] consulta impl\xEDcita de ${quien} sin ruta cierta, se deja pasar: \xAB${pregunta}\xBB`);
           return;
         }
         respuesta = respuesta ?? await armarRespuesta(clave2, pregunta, quien, grupo, extra);
@@ -14704,7 +14725,8 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
     atenderContinuacion = async (texto4, quien, grupo, alcance) => {
       const ultima = ultimaConsulta(quien, grupo);
       if (!ultima) return false;
-      if (pareceContinuacion(texto4) || rutearPorReglas(preguntaLimpia(texto4))) {
+      const regla = rutearPorReglas(preguntaLimpia(texto4));
+      if (pareceContinuacion(texto4) || regla && regla !== "help") {
         await atenderConsulta(`@lila ${texto4}`, quien, grupo, alcance);
         return true;
       }
@@ -14731,7 +14753,7 @@ ${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, 
 });
 
 // src/agent/checklist/observador.ts
-var ALCANCE_TTL_MS, alcanceCache, _resetAlcanceCache, alcanceVigente, esperarAlcance, esDelBot, senderCache, senderPilotoCacheado, mencionadosDe, vistos, yaVisto, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, jidsPropios, senderPiloto, jidPorNombre;
+var ALCANCE_TTL_MS, alcanceCache, _resetAlcanceCache, alcanceVigente, esperarAlcance, esDelBot, senderCache, senderPilotoCacheado, mencionadosDe, paraOtraPersona, vistos, yaVisto, citaDe, aMilisegundos, observarParaChecklist, atenderVoto, atenderInterruptor, hidratarAgente, jidsPropios, senderPiloto, jidPorNombre;
 var init_observador = __esm({
   "src/agent/checklist/observador.ts"() {
     init_logger();
@@ -14786,6 +14808,13 @@ var init_observador = __esm({
       return valor;
     };
     mencionadosDe = (message) => (message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []).map(String);
+    paraOtraPersona = (message, jidsBot) => {
+      const esBot = (jid) => jidsBot.includes(String(jid || "").replace(/:\d+@/, "@"));
+      const citado = String(message?.extendedTextMessage?.contextInfo?.participant || "");
+      if (citado && !esBot(citado)) return true;
+      const mencionados = mencionadosDe(message);
+      return mencionados.length > 0 && !mencionados.some(esBot);
+    };
     vistos = /* @__PURE__ */ new Set();
     yaVisto = (id) => {
       if (!id) return false;
@@ -14821,7 +14850,7 @@ var init_observador = __esm({
             const quien = String(raw?.key?.participant || "desconocido");
             const comando = comandoInterruptor(texto4);
             if (comando) {
-              await atenderInterruptor(comando, quien);
+              await atenderInterruptor(comando, quien, remoteJid, alcance);
               continue;
             }
             if (esVoto(texto4) && citaDe(raw.message)) {
@@ -14836,6 +14865,7 @@ var init_observador = __esm({
               if (/lila/i.test(texto4)) {
                 logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto4.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
+              if (paraOtraPersona(raw.message, await jidsPropios(bot))) return;
               const fue = await atenderEleccion2(texto4, quien, remoteJid, alcance) || await atenderContinuacion2(texto4, quien, remoteJid, alcance);
               if (!fue && /^\s*\d{1,2}\s*$/.test(texto4) && esVoto(texto4)) {
                 await atenderVoto({ voto: texto4, citaMsgId: "", quien }, alcance);
@@ -14847,6 +14877,11 @@ var init_observador = __esm({
           const delBot = await esDelBot(raw, sessionPhone);
           if (!delBot) {
             const quien = String(raw?.key?.participant || "alguien");
+            const comando = comandoInterruptor(texto4);
+            if (comando) {
+              await atenderInterruptor(comando, quien, remoteJid, alcance);
+              continue;
+            }
             void Promise.resolve().then(() => (init_consultas(), consultas_exports)).then(async ({ esConsulta: esConsulta2, atenderConsulta: atenderConsulta2, atenderEleccion: atenderEleccion2, atenderContinuacion: atenderContinuacion2 }) => {
               const bot = await senderPilotoCacheado();
               if (esConsulta2(texto4, bot, mencionadosDe(raw.message), await jidsPropios(bot))) {
@@ -14855,6 +14890,7 @@ var init_observador = __esm({
               if (/lila/i.test(texto4)) {
                 logger_default.info(`[agente] mensaje con \xABlila\xBB no reconocido como consulta: ${JSON.stringify({ texto: texto4.slice(0, 80), mencionados: mencionadosDe(raw.message), bot, jidsBot: await jidsPropios(bot) })}`);
               }
+              if (paraOtraPersona(raw.message, await jidsPropios(bot))) return;
               await atenderEleccion2(texto4, quien, remoteJid, alcance) || await atenderContinuacion2(texto4, quien, remoteJid, alcance);
             }).catch((error) => logger_default.warn(`[agente] consulta no atendida: ${String(error)}`));
           }
@@ -14912,8 +14948,13 @@ var init_observador = __esm({
         );
       }
     };
-    atenderInterruptor = async (comando, quien) => {
+    atenderInterruptor = async (comando, quien, grupo, alcance) => {
       try {
+        if (comando === "estado") {
+          const { apagado } = estadoInterruptor();
+          await responderEstado(grupo, apagado ? "\u23F8 Estoy apagada. Un administrador me prende con \xAB@lila on\xBB." : "\u25B6\uFE0F Estoy encendida. Un administrador me apaga con \xAB@lila off\xBB.", alcance);
+          return;
+        }
         if (!await esAdmin(quien)) {
           logger_default.info(`[agente] \xAB!lila ${comando}\xBB de ${quien}, que no administra el grupo: se ignora`);
           await enviarAOperaciones("\u{1F512} Solo un administrador de este grupo puede apagar o prender el agente.");
@@ -14923,7 +14964,7 @@ var init_observador = __esm({
         await guardarConfig("interruptor", estado2);
         logger_default.warn(`[agente] interruptor: ${comando.toUpperCase()} por ${quien}`);
         await enviarAOperaciones(
-          comando === "off" ? "\u23F8 Agente APAGADO. Sigue escuchando pero no propone ni manda nada. `!lila on` para prenderlo." : "\u25B6\uFE0F Agente PRENDIDO."
+          comando === "off" ? "\u23F8 Agente APAGADO. Sigue escuchando pero no propone ni manda nada. \xAB@lila on\xBB para prenderlo." : "\u25B6\uFE0F Agente PRENDIDO."
         );
       } catch (error) {
         logger_default.warn(`[agente] no pude atender \xAB!lila ${comando}\xBB: ${error instanceof Error ? error.message : String(error)}`);
