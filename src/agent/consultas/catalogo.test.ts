@@ -1,4 +1,4 @@
-import { especificidadDeRegla, esConsulta, extraerParametros, fechaDe, normalizarPlaca, preguntaLimpia, rutearPorReglas, sumarDias } from './catalogo';
+import { especificidadDeRegla, esConsulta, extraerParametros, fechaDe, hablaEnPasado, normalizarPlaca, preguntaLimpia, rutearPorReglas, sumarDias } from './catalogo';
 
 /**
  * EL CATÁLOGO ES CERRADO Y EL RUTEO SE PUEDE LEER. Cada pregunta real de José
@@ -168,7 +168,7 @@ describe('parámetros', () => {
 
   /**
    * FECHAS CON NOMBRE. «el martes» es el PRÓXIMO martes; «15 de septiembre» y
-   * «15/09» de este año salvo que ya hayan pasado; «pasado mañana» son dos días.
+   * «15/09» sin año son la vez más cercana a hoy; «pasado mañana» son dos días.
    * Todo relativo a un «ahora» fijo: domingo 13/09/2026 a las 13:00 Lima.
    */
   it('entiende días de la semana, fechas y «pasado mañana»', () => {
@@ -178,9 +178,30 @@ describe('parámetros', () => {
     expect(fechaDe('clima pasado mañana', ahora)).toBe('2026-09-15');
     expect(fechaDe('clima el 20 de septiembre', ahora)).toBe('2026-09-20');
     expect(fechaDe('clima el 20/09', ahora)).toBe('2026-09-20');
-    expect(fechaDe('clima el 5 de enero', ahora)).toBe('2027-01-05'); // ya pasó este año
+    expect(fechaDe('clima el 5 de enero', ahora)).toBe('2027-01-05'); // el que viene está más cerca que el que pasó
     expect(fechaDe('clima hoy', ahora)).toBeUndefined();
     expect(sumarDias('2026-09-30', 1)).toBe('2026-10-01');
+  });
+
+  /**
+   * EL AÑO DE UN DÍA SIN AÑO. El 15/09 Nene preguntó «qué empresa tuvo
+   * producción el 03 y 04 de setiembre» y el 04/09, por ya haber pasado, saltó
+   * a 2027: «no hay pedidos el sábado 04/09», con tres pedidos en Portal. Un
+   * día que acaba de pasar es el de este año; hacia atrás (historial o pregunta
+   * en pasado) nunca es el del año que viene.
+   */
+  it('un día ya pasado es el de este año, no el del año que viene', () => {
+    const ahora = new Date('2026-09-15T10:58:00Z').getTime(); // martes 15/09, 05:58 Lima
+    expect(fechaDe('qué empresa tuvo producción el 04 de setiembre', ahora)).toBe('2026-09-04');
+    expect(fechaDe('qué pedidos hay el 04 de setiembre', ahora)).toBe('2026-09-04'); // sin verbo en pasado, igual: es el más cercano
+    expect(fechaDe('qué se despachó el 4/9', ahora)).toBe('2026-09-04');
+    expect(fechaDe('cuántos m3 se despacharon el 20 de diciembre', ahora)).toBe('2025-12-20'); // en pasado y a tres meses: el del año pasado
+    expect(fechaDe('los pedidos del 20 de diciembre', ahora, { historial: true })).toBe('2025-12-20');
+    expect(fechaDe('los pedidos del 20 de setiembre', ahora, { historial: true })).toBe('2026-09-20'); // programado, dentro de dos meses
+    expect(fechaDe('qué hay programado el 20 de diciembre', ahora)).toBe('2026-12-20');
+    expect(fechaDe('el pedido del 3 de enero', new Date('2026-12-28T14:00:00Z').getTime())).toBe('2027-01-03'); // en diciembre, enero es el que viene
+    expect(hablaEnPasado('qué empresa tuvo producción el 03 y 04')).toBe(true);
+    expect(hablaEnPasado('el despacho de mañana')).toBe(false);
   });
 
   /**

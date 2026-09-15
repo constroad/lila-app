@@ -221,12 +221,51 @@ export const sumarDias = (fecha: string, dias: number): string => {
   return new Date(Date.UTC(y, m - 1, d + dias)).toISOString().slice(0, 10);
 };
 
+/** Días entre dos `YYYY-MM-DD` (positivo si `b` es después de `a`). */
+const diasEntre = (a: string, b: string): number => {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
+};
+
+/** «se despachó», «tuvo producción», «hubo»: una pregunta que mira hacia atrás. */
+const EN_PASADO =
+  /\b(tuvo|tuvimos|tuvieron|hubo|fue|fueron|hizo|hicimos|hicieron|produjo|produjimos|produjeron|se despacho|despachamos|despacharon|salio|salieron|llego|llegaron|pasaron|atendio|atendimos|atendieron|entregamos|entregaron|recibio|recibimos|recibieron|cargaron|vendimos|vendieron)\b/;
+export const hablaEnPasado = (pregunta: string): boolean => EN_PASADO.test(normalizar(pregunta));
+
+/** Cuánto puede adelantarse una fecha de historial antes de tomarse por la del año pasado. */
+const DIAS_DE_PROGRAMACION = 60;
+
+/**
+ * EL AÑO de un «4 de setiembre» sin año. Mirando hacia atrás (historial, o una
+ * pregunta en pasado) es la vez más reciente: la de este año, salvo que esté a
+ * más de dos meses por delante, que entonces es la del año pasado. Si no, la
+ * vez MÁS CERCANA a hoy: el 15/09, «el 4 de setiembre» es el que acaba de
+ * pasar, no el del año que viene; en diciembre, «el 3 de enero» es el que viene.
+ *
+ * Antes cualquier día ya pasado saltaba al año siguiente: el 15/09 a las 05:58
+ * Nene preguntó «qué empresa tuvo producción el 03 y 04 de setiembre», se leyó
+ * el 04/09 de 2027 y Lila contestó «no hay pedidos», con tres en Portal.
+ */
+export const fechaConAnio = (mes: number, dia: number, hoy: string, haciaAtras: boolean): string => {
+  const anio = Number(hoy.slice(0, 4));
+  const en = (a: number) => `${a}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  if (haciaAtras) return diasEntre(hoy, en(anio)) > DIAS_DE_PROGRAMACION ? en(anio - 1) : en(anio);
+  const distancia = (a: number) => Math.abs(diasEntre(hoy, en(a)));
+  return en([anio - 1, anio + 1].reduce((mejor, a) => (distancia(a) < distancia(mejor) ? a : mejor), anio));
+};
+
+export interface OpcionesFecha {
+  /** Historial: la fecha mira hacia atrás (la vez más reciente, nunca la del año que viene). */
+  historial?: boolean;
+}
+
 /**
  * La fecha que nombra la pregunta, si alguna. «el martes» es el PRÓXIMO martes
  * (si hoy es martes, el de la semana que viene: nadie dice «el martes» por
- * hoy). «15 de septiembre» y «15/09» son de este año, salvo que ya hayan pasado.
+ * hoy). «15 de septiembre» y «15/09» sin año: ver `fechaConAnio`.
  */
-export const fechaDe = (pregunta: string, ahoraMs = Date.now()): string | undefined => {
+export const fechaDe = (pregunta: string, ahoraMs = Date.now(), opciones: OpcionesFecha = {}): string | undefined => {
   const t = normalizar(pregunta);
   const hoy = hoyLima(ahoraMs);
   // «ayer» no existía y se tomaba por hoy (14/09: «resumen de despachos de
@@ -238,11 +277,7 @@ export const fechaDe = (pregunta: string, ahoraMs = Date.now()): string | undefi
   if (dm) {
     const dia = Number(dm[1]);
     const mes = /^\d+$/.test(dm[2]) ? Number(dm[2]) : MESES.indexOf(dm[2]) + 1 - (MESES.indexOf(dm[2]) >= 9 ? 1 : 0);
-    const anio = Number(hoy.slice(0, 4));
-    if (dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12) {
-      const candidata = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-      return candidata < hoy ? `${anio + 1}${candidata.slice(4)}` : candidata;
-    }
+    if (dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12) return fechaConAnio(mes, dia, hoy, Boolean(opciones.historial) || EN_PASADO.test(t));
   }
   const dia = DIAS_SEMANA.findIndex((d) => new RegExp(`\\b(el |este |proximo |próximo )?${d}\\b`).test(t));
   if (dia >= 0) {

@@ -111,6 +111,19 @@ describe('rangoDe', () => {
     ['qué hay pasado mañana', { desde: '2026-09-16', hasta: '2026-09-16' }],
     ['los pedidos del 20 de septiembre', { desde: '2026-09-20', hasta: '2026-09-20' }],
     ['qué se despacha el jueves', { desde: '2026-09-17', hasta: '2026-09-17' }],
+    // Un día que ya pasó es el de ESTE año (15/09, 05:58: «el 04 de setiembre» saltó a 2027 → «no hay pedidos»).
+    ['qué empresa tuvo producción el 04 de setiembre', { desde: '2026-09-04', hasta: '2026-09-04' }],
+    ['los pedidos del 4/9', { desde: '2026-09-04', hasta: '2026-09-04' }],
+    ['los pedidos del 20 de diciembre', { desde: '2025-12-20', hasta: '2025-12-20' }], // historial: a tres meses es el del año pasado
+    // DOS DÍAS SON UN RANGO, no el segundo día solo.
+    [', que empresa tuvo produccion el 03 y 04 de setiembre??', { desde: '2026-09-03', hasta: '2026-09-04' }],
+    ['qué se despachó del 3 al 5 de setiembre', { desde: '2026-09-03', hasta: '2026-09-05' }],
+    ['pedidos entre el 28 de agosto y el 4 de setiembre', { desde: '2026-08-28', hasta: '2026-09-04' }],
+    ['los pedidos del 03/09 y 04/09', { desde: '2026-09-03', hasta: '2026-09-04' }],
+    ['los pedidos del 03/09/26 al 05/09', { desde: '2026-09-03', hasta: '2026-09-05' }],
+    ['kardex de pen del 1 al 15 en globofast', { desde: '2026-09-01', hasta: '2026-09-15' }], // sin mes: este mes
+    ['del 5 al 3 de setiembre', { desde: '2026-09-03', hasta: '2026-09-05' }], // al revés
+    ['el pedido del 3 de setiembre a globofast', { desde: '2026-09-03', hasta: '2026-09-03' }], // «a globofast» no es «al 4»
     ['los pedidos', undefined],
   ])('«%s»', (pregunta, esperado) => {
     expect(rangoDe(pregunta, hoy)).toEqual(esperado);
@@ -118,6 +131,15 @@ describe('rangoDe', () => {
 
   it('el mes pasado cruzando el año', () => {
     expect(rangoDe('los pedidos del mes pasado', '2027-01-05')).toEqual({ desde: '2026-12-01', hasta: '2026-12-31' });
+    expect(rangoDe('los pedidos del 28 de diciembre al 3 de enero', '2027-01-05')).toEqual({ desde: '2026-12-28', hasta: '2027-01-03' });
+  });
+
+  /** El modelo trajo «2027-09-04» (inventado y fuera de rango): la pregunta manda, con los dos días. */
+  it('los dos días de la pregunta mandan sobre la fecha inventada del modelo', () => {
+    const ahora = new Date('2026-09-15T10:58:00Z').getTime();
+    const crudos = [{ campo: 'desde', valor: '2027-09-04' }, { campo: 'hasta', valor: '2027-09-04' }];
+    expect(normalizarArgumentos('pedidos', crudos, ', que empresa tuvo produccion el 03 y 04 de setiembre??', ahora)).toEqual({ desde: '2026-09-03', hasta: '2026-09-04' });
+    expect(normalizarArgumentos('orders_day', [], 'qué empresa tuvo producción el 04 de setiembre', ahora)).toEqual({ fecha: '2026-09-04' });
   });
 });
 

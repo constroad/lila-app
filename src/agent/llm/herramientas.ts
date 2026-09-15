@@ -1,4 +1,4 @@
-import { ALIAS_EMPRESA, fechaDe, hoyLima, normalizar, normalizarPlaca, sumarDias, type ClaveConsulta } from '../consultas/catalogo.js';
+import { ALIAS_EMPRESA, fechaConAnio, fechaDe, hoyLima, normalizar, normalizarPlaca, sumarDias, type ClaveConsulta } from '../consultas/catalogo.js';
 import { REGLAS_INFORMES } from './informes.js';
 import { LOCATIONS } from '../../services/weather-asphalt-forecast.service.js';
 import { COMPANY_PILOTO } from '../checklist/alcance.js';
@@ -129,6 +129,40 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 const ultimoDia = (y: number, m: number): number => new Date(Date.UTC(y, m, 0)).getUTCDate();
 const iso = (y: number, m: number, d: number): string => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
+const MES = 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|se[pt]?tiembre|octubre|noviembre|diciembre';
+const numeroDeMes = (nombre: string): number => (/^se[pt]?tiembre$/.test(nombre) ? 9 : MESES.indexOf(nombre) + 1);
+/** Entre dos días: «y», «al», «a», «hasta», «hasta el», «y el», «-». */
+const ENTRE = '\\s*(?:y|al|a|hasta|-|–)\\s*(?:el\\s+)?';
+const DIAS_CON_MES = new RegExp(`\\b(\\d{1,2})(?:\\s*(?:de\\s+)?(${MES}))?${ENTRE}(\\d{1,2})\\s*(?:de\\s+)?(${MES})\\b`);
+const DIAS_CON_BARRA = new RegExp(`\\b(\\d{1,2})\\/(\\d{1,2})(?:\\/\\d{2,4})?${ENTRE}(\\d{1,2})\\/(\\d{1,2})\\b`);
+const DIAS_DEL_MES = /\bdel\s+(\d{1,2})\s+(?:al|a|hasta el|hasta)\s+(\d{1,2})\b(?![/:])/;
+
+/**
+ * Un rango de DÍAS escrito en la pregunta, mirando hacia atrás (como todo lo
+ * que tiene rango): «el 03 y 04 de setiembre», «del 3 al 5 de setiembre»,
+ * «del 28 de agosto al 4 de setiembre», «03/09 y 04/09», «del 1 al 15» (de
+ * este mes). Un día fuera de calendario no es rango.
+ */
+const rangoDeDias = (t: string, hoy: string): { desde: string; hasta: string } | undefined => {
+  const mesActual = Number(hoy.slice(5, 7));
+  const armar = (d1: number, m1: number, d2: number, m2: number) => {
+    if (![d1, d2].every((d) => d >= 1 && d <= 31) || ![m1, m2].every((m) => m >= 1 && m <= 12)) return undefined;
+    const desde = fechaConAnio(m1, d1, hoy, true);
+    const anio = Number(desde.slice(0, 4));
+    const hasta = iso(anio, m2, d2);
+    if (hasta >= desde) return { desde, hasta };
+    // «del 5 al 3» está al revés; «del 28 de diciembre al 3 de enero» cruza el año.
+    return m1 === m2 ? { desde: hasta, hasta: desde } : { desde, hasta: iso(anio + 1, m2, d2) };
+  };
+  const conMes = t.match(DIAS_CON_MES);
+  if (conMes) return armar(Number(conMes[1]), numeroDeMes(conMes[2] ?? conMes[4]), Number(conMes[3]), numeroDeMes(conMes[4]));
+  const conBarra = t.match(DIAS_CON_BARRA);
+  if (conBarra) return armar(Number(conBarra[1]), Number(conBarra[2]), Number(conBarra[3]), Number(conBarra[4]));
+  const delMes = t.match(DIAS_DEL_MES);
+  if (delMes) return armar(Number(delMes[1]), mesActual, Number(delMes[2]), mesActual);
+  return undefined;
+};
+
 /**
  * El RANGO que nombra la pregunta, resuelto por código: «este mes», «el mes
  * pasado», «esta semana», «la semana pasada», «en agosto», «hoy/ayer». Los
@@ -162,7 +196,14 @@ export const rangoDe = (pregunta: string, hoy: string): { desde: string; hasta: 
   // recibió la tabla de los 15 pedidos del mes por su pedido de mañana (14/09,
   // 18:23). «mañana», «pasado mañana», «el martes», «15 de septiembre», «15/09».
   if (/\bmanana\b/.test(t) && !/\bpasado manana\b/.test(t)) return { desde: sumarDias(hoy, 1), hasta: sumarDias(hoy, 1) };
-  const dia = fechaDe(pregunta, Date.UTC(y, m - 1, d, 17));
+  // DOS DÍAS SON UN RANGO: «el 03 y 04 de setiembre», «del 3 al 5 de
+  // setiembre», «entre el 28 de agosto y el 4 de setiembre», «03/09 y 04/09»,
+  // «del 1 al 15» (de este mes). Se leía solo el segundo día (15/09, 05:58:
+  // «qué empresa tuvo producción el 03 y 04 de setiembre» → el 04, y de 2027).
+  const dias = rangoDeDias(t, hoy);
+  if (dias) return dias;
+  // Todo lo que tiene rango es historial: «el 4 de setiembre» es el que ya pasó.
+  const dia = fechaDe(pregunta, Date.UTC(y, m - 1, d, 17), { historial: true });
   if (dia) return { desde: dia, hasta: dia };
   const mes = MESES.findIndex((nombre) => new RegExp(`\\b(en|de|del) (mes de )?${nombre === 'septiembre' ? 'se[pt]?tiembre' : nombre}\\b`).test(t));
   if (mes >= 0) {
@@ -285,7 +326,7 @@ export const normalizarArgumentos = (
   // Las fechas que el código sabe leer mandan (salvo en el historial, donde
   // «el martes» mira hacia atrás y el modelo ya lo entendió así).
   if (acepta('fecha')) {
-    const propia = fechaDe(pregunta, ahoraMs);
+    const propia = fechaDe(pregunta, ahoraMs, { historial: h?.historial });
     if (propia) args.fecha = propia;
     else if (/\bhoy\b/.test(t)) args.fecha = hoy;
     else if (/\bmanana\b/.test(t) && !/\bpasado manana\b/.test(t)) args.fecha = sumarDias(hoy, 1);
