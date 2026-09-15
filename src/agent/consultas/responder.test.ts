@@ -1,4 +1,4 @@
-import { AYUDA, acotarArchivos, elegirPedido, estimarFin, responder, unidadPor } from './responder';
+import { AYUDA, NOTA_ENTRENAMIENTO, acotarArchivos, conNotaSiVacia, elegirPedido, esRespuestaVacia, estimarFin, responder, unidadPor } from './responder';
 import type { VistaDelDia } from './vista';
 import { CHECKLIST_PRODUCCION } from '../checklist/checklist';
 
@@ -35,42 +35,69 @@ const hoy = { day: 'today' as const };
 
 describe('responder', () => {
   it('fuera del catálogo: una respuesta fija que dice qué SÍ puede', () => {
-    expect(responder(null, { vista, params: hoy })).toContain('Eso no lo tengo');
+    expect(responder(null, { vista, ahoraMs: lima('12:00'), params: hoy })).toContain('Eso no lo tengo');
   });
 
   it('planta: qué carga y cuál fue la última en salir', () => {
-    const r = responder('plant_current_unit', { vista, params: hoy });
+    const r = responder('plant_current_unit', { vista, ahoraMs: lima('12:00'), params: hoy });
     expect(r).toContain('Cargando: *unidad 4* (XYZ 123)');
     expect(r).toContain('Última en salir: *unidad 3* a las 06:26');
     expect(r).toContain('Van 3 despachadas');
   });
 
   it('campo: última en llegar y las que van en ruta', () => {
-    const r = responder('site_current_unit', { vista, params: hoy });
+    const r = responder('site_current_unit', { vista, ahoraMs: lima('12:00'), params: hoy });
     expect(r).toContain('Última en llegar a campo: *unidad 3* a las 07:10');
     expect(r).toContain('En ruta: *1*, *2*');
   });
 
   it('avance: despachado contra pedido', () => {
-    expect(responder('day_progress', { vista, params: hoy })).toContain('*75 de 91 m³* despachados, faltan 16');
+    expect(responder('day_progress', { vista, ahoraMs: lima('12:00'), params: hoy })).toContain('*75 de 91 m³* despachados, faltan 16');
   });
 
   it('salida de una unidad, en hora de Lima', () => {
-    expect(responder('unit_departure', { vista, params: { ...hoy, unitNumber: 1 } })).toContain('salió a las *05:32*');
-    expect(responder('unit_departure', { vista, params: { ...hoy, unitNumber: 4 } })).toContain('está cargando');
-    expect(responder('unit_departure', { vista, params: { ...hoy, unitNumber: 9 } })).toContain('No encuentro la unidad 9');
-    expect(responder('unit_departure', { vista, params: hoy })).toContain('¿De cuál unidad?');
+    expect(responder('unit_departure', { vista, ahoraMs: lima('12:00'), params: { ...hoy, unitNumber: 1 } })).toContain('salió a las *05:32*');
+    expect(responder('unit_departure', { vista, ahoraMs: lima('12:00'), params: { ...hoy, unitNumber: 4 } })).toContain('está cargando');
+    expect(responder('unit_departure', { vista, ahoraMs: lima('12:00'), params: { ...hoy, unitNumber: 9 } })).toContain('No encuentro la unidad 9');
+    expect(responder('unit_departure', { vista, ahoraMs: lima('12:00'), params: hoy })).toContain('¿De cuál unidad?');
   });
 
   it('conductor: nombre y placa, y NADA más', () => {
-    const r = responder('unit_driver', { vista, params: { ...hoy, unitNumber: 2 } });
-    expect(r).toContain('*LUCIO QUISPE DIAZ*');
+    const r = responder('unit_driver', { vista, ahoraMs: lima('12:00'), params: { ...hoy, unitNumber: 2 } });
+    expect(r).toContain('la maneja *LUCIO QUISPE DIAZ*');
     expect(r).toContain('BBE 942');
     expect(r).not.toMatch(/\d{9}/); // ningún teléfono
   });
 
+  /** «Quién manejó la 5 el 3 de setiembre»: de un día que ya pasó se habla en pasado, y nada «todavía no salió». */
+  it('un día ya pasado se cuenta en pasado', () => {
+    const dosDiasDespues = new Date('2026-09-15T15:00:00.000-05:00').getTime();
+    expect(responder('unit_driver', { vista, ahoraMs: dosDiasDespues, params: { ...hoy, unitNumber: 2 } })).toContain('la manejó el domingo 13/09 *LUCIO QUISPE DIAZ*');
+    expect(responder('unit_departure', { vista, ahoraMs: dosDiasDespues, params: { ...hoy, unitNumber: 1 } })).toContain('salió a las *05:32* con 25 m³ el domingo 13/09');
+    expect(responder('unit_departure', { vista, ahoraMs: dosDiasDespues, params: { ...hoy, unitNumber: 4 } })).toContain('no tiene salida registrada el domingo 13/09');
+    expect(responder('unit_eta', { vista, ahoraMs: dosDiasDespues, params: { ...hoy, unitNumber: 3 } })).toContain('llegó a campo el domingo 13/09 a las 07:10');
+  });
+
+  /**
+   * UNA RESPUESTA VACÍA LLEVA LA NOTA DE ENTRENAMIENTO (José, 15/09: «si no
+   * tienes el dato deberías ser más sincero»). Las que sí traen dato, no.
+   */
+  it('las respuestas vacías dicen que Lila está en entrenamiento', () => {
+    expect(esRespuestaVacia('No encuentro pedidos el jueves 03/09 en Portal.')).toBe(true);
+    expect(esRespuestaVacia('No tengo pedidos cargados para lunes 14/09.')).toBe(true);
+    expect(esRespuestaVacia('No hay consumo registrado para jueves 03/09.')).toBe(true);
+    expect(esRespuestaVacia('📋 *3 pedido(s)* del 03/09 al 04/09')).toBe(false);
+    expect(esRespuestaVacia('La *unidad 4* todavía no salió.')).toBe(false);
+    const vacia = conNotaSiVacia({ texto: 'No encuentro informes de servicio del 2026-09-03.' });
+    expect(vacia.texto).toContain('No encuentro informes');
+    expect(vacia.texto).toContain(NOTA_ENTRENAMIENTO);
+    expect(conNotaSiVacia(vacia).texto).toBe(vacia.texto); // no se repite
+    expect(conNotaSiVacia({ texto: '📋 *3 pedido(s)*' }).texto).not.toContain(NOTA_ENTRENAMIENTO);
+    expect(conNotaSiVacia({ texto: '', archivos: [] }).texto).toBe('');
+  });
+
   it('pedidos del día', () => {
-    const r = responder('orders_day', { vista, params: hoy });
+    const r = responder('orders_day', { vista, ahoraMs: lima('12:00'), params: hoy });
     expect(r).toContain('📋 *Pedidos de domingo 13/09*');
     expect(r).toContain('• 04:00 · 75/91 m³ · *FERNANDO COBEÑAS*\n   PROYECTOS VARIOS');
   });
@@ -82,7 +109,7 @@ describe('responder', () => {
 
   it('checklist: confirmado y sin confirmar en palabras de obra', () => {
     const revision = { resueltos: CHECKLIST_PRODUCCION.slice(0, 2), pendientes: CHECKLIST_PRODUCCION.slice(2, 4) };
-    const r = responder('checklist_status', { vista, params: hoy, revision });
+    const r = responder('checklist_status', { vista, ahoraMs: lima('12:00'), params: hoy, revision });
     expect(r).toContain('✅ Confirmado: agregados, petróleo de planta.');
     expect(r).toContain('❔ Sin confirmar: gasohol, aviso a operadores.');
   });
@@ -94,19 +121,34 @@ describe('responder', () => {
   it('«la última» es la de salida más tardía; «la primera», la más temprana', () => {
     expect(unidadPor(vista, { ...hoy, ordinal: 'ultima' })?.unitNumber).toBe(3); // 06:26; la 4 está cargando, sin salida
     expect(unidadPor(vista, { ...hoy, ordinal: 'primera' })?.unitNumber).toBe(1);
-    expect(responder('unit_departure', { vista, params: { ...hoy, ordinal: 'ultima' } })).toContain('*unidad 3* (ALC 812) salió a las *06:26*');
+    expect(responder('unit_departure', { vista, ahoraMs: lima('12:00'), params: { ...hoy, ordinal: 'ultima' } })).toContain('*unidad 3* (ALC 812) salió a las *06:26*');
   });
 
   it('sin unidad, pregunta cuál (y acepta número, placa o «la última»)', () => {
-    expect(responder('unit_departure', { vista, params: hoy })).toBe('¿De cuál unidad? Dime el número, la placa o «la última».');
+    expect(responder('unit_departure', { vista, ahoraMs: lima('12:00'), params: hoy })).toBe('¿De cuál unidad? Dime el número, la placa o «la última».');
   });
 
   it('media: la unidad se encuentra por placa o por número', () => {
     expect(unidadPor(vista, { ...hoy, plate: 'BBE942' })?.unitNumber).toBe(2);
     expect(unidadPor(vista, { ...hoy, unitNumber: 3 })?.plate).toBe('ALC 812');
     expect(unidadPor(vista, { ...hoy, plate: 'ZZZ999' })).toBeUndefined();
-    expect(responder('unit_media', { vista, params: { ...hoy, plate: 'AZJ910' } })).toContain('*Unidad 1* (AZJ 910)');
-    expect(responder('unit_media', { vista, params: hoy })).toContain('¿De cuál unidad?');
+    expect(responder('unit_media', { vista, ahoraMs: lima('12:00'), params: { ...hoy, plate: 'AZJ910' } })).toContain('*Unidad 1* (AZJ 910)');
+    expect(responder('unit_media', { vista, ahoraMs: lima('12:00'), params: hoy })).toContain('¿De cuál unidad?');
+  });
+
+  /** El 03/09 Constroad y Globofast tenían cada una su unidad 5: la empresa nombrada acota. */
+  it('la empresa nombrada acota la unidad cuando dos empresas producen el mismo día', () => {
+    const dosEmpresas: VistaDelDia = {
+      ...vista,
+      orders: [
+        vista.orders[0],
+        { ...vista.orders[0], orderId: 'o2', companyId: 'constroad', companySlug: 'constroad', cliente: 'LOROÑA Y RIVAS', units: [{ dispatchId: 'd9', unitNumber: 2, plate: 'C2A 772', driverName: 'RAFAEL MIRANDA', state: 'despachado', quantity: 25, departedAt: lima('08:00'), picturesCount: 0 }] },
+      ],
+    };
+    expect(unidadPor(dosEmpresas, { ...hoy, unitNumber: 2 })?.plate).toBe('BBE 942'); // sin empresa: la primera
+    expect(unidadPor(dosEmpresas, { ...hoy, unitNumber: 2, companyId: 'constroad' })?.plate).toBe('C2A 772');
+    expect(unidadPor(dosEmpresas, { ...hoy, ordinal: 'ultima', companyId: 'globofas-s8k' })?.unitNumber).toBe(3);
+    expect(unidadPor(dosEmpresas, { ...hoy, unitNumber: 4, companyId: 'constroad' })).toBeUndefined();
   });
 
   /** El presupuesto por respuesta: fotos, videos y documentos por separado. */
@@ -176,7 +218,7 @@ describe('informes', () => {
   ];
 
   it('los nombrados van primero aunque no existan; el resto solo si existe', () => {
-    const r = responder('reports_status', { vista, params: { ...hoy, pregunta: 'tenemos hecho el informe de imprimacion, area adicional?' } as never, informes });
+    const r = responder('reports_status', { vista, ahoraMs: lima('12:00'), params: { ...hoy, pregunta: 'tenemos hecho el informe de imprimacion, area adicional?' } as never, informes });
     const lineas = r.split('\n').slice(1);
     expect(lineas[0]).toBe('• ❌ Control de imprimación (no hay)');
     expect(lineas[1]).toBe('• ❌ Área adicional (no hay)');
@@ -186,14 +228,14 @@ describe('informes', () => {
 
   it('sin ninguno generado, lo dice', () => {
     const vacios = informes.map((i) => ({ ...i, status: null, cantidad: 0 }));
-    expect(responder('reports_status', { vista, params: hoy, informes: vacios })).toContain('todavía no hay ninguno generado');
+    expect(responder('reports_status', { vista, ahoraMs: lima('12:00'), params: hoy, informes: vacios })).toContain('todavía no hay ninguno generado');
   });
 });
 
 describe('ayuda', () => {
   it('lista lo que puede, cómo aprobar, y el interruptor', () => {
     // Con pedidos hoy, los ejemplos del momento son de despachos; sin pedidos, de programación.
-    expect(responder('help', { vista, params: hoy })).toContain('«resumen de despachos de hoy»');
+    expect(responder('help', { vista, ahoraMs: lima('12:00'), params: hoy })).toContain('«resumen de despachos de hoy»');
     expect(responder('help', { vista: { ...vista, orders: [] }, params: hoy })).toBe(AYUDA);
     expect(AYUDA).toContain('«qué pedidos hay esta semana»');
     expect(AYUDA).toContain('6. Cómo funciona');

@@ -78,9 +78,10 @@ export const fichaPedidos = (h: Historial, filtro: { empresa?: string; cliente?:
   const de = [filtro.cliente ? `de ${filtro.cliente}` : '', filtro.empresa ? `en ${etiquetaEmpresa(filtro.empresa)}` : ''].filter(Boolean).join(' ');
   if (h.pedidos.length === 0) {
     // El agente ve Portal, no el chat: si en el grupo dijeron que habrá
-    // producción y acá no aparece, es que el pedido no está cargado.
+    // producción y acá no aparece, es que el pedido no está cargado. Y es «no
+    // encuentro», no «no hay»: lo que buscó sale de cómo leyó la pregunta.
     const porVenir = Boolean(hoy) && h.hasta >= hoy;
-    return `No hay pedidos ${de ? `${de} ` : ''}${rango(h.desde, h.hasta)} en Portal.${porVenir ? ' Si hay producción programada, todavía no está cargada.' : ''}`;
+    return `No encuentro pedidos ${de ? `${de} ` : ''}${rango(h.desde, h.hasta)} en Portal.${porVenir ? ' Si hay producción programada, todavía no está cargada.' : ''}`;
   }
   // Lo programado se cuenta en m³ pedidos; lo que ya pasó, en despachados sobre pedidos.
   const porVenir = (p: { fecha: string }) => Boolean(hoy) && p.fecha > hoy;

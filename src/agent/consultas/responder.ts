@@ -1,4 +1,4 @@
-import { normalizarPlaca, type ClaveConsulta, type Parametros } from './catalogo.js';
+import { hoyLima, normalizarPlaca, type ClaveConsulta, type Parametros } from './catalogo.js';
 import type { VistaDelDia, UnidadDelDia, PedidoDelDiaVista } from './vista.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { menuAyuda } from './ayuda.js';
@@ -14,6 +14,21 @@ export interface Respuesta {
 }
 
 export const LIMITES = { imagenes: 5, videos: 2, documentos: 6 };
+
+/**
+ * UNA RESPUESTA VACÍA SE DICE CON HONESTIDAD. «No hay pedidos el sábado 04/09»
+ * (15/09, 05:58) afirmaba como hecho lo que era una fecha mal leída. Lila ve
+ * Portal a través de su lectura de la pregunta: si no encuentra, puede que no
+ * haya, o que haya entendido mal — y está en entrenamiento, y lo dice (José,
+ * 15/09: «si no tienes el dato deberías ser más sincero e indicar que en fase
+ * de entrenamiento se va a corregir»). Va al final de toda respuesta que
+ * empieza diciendo que no hay, no encuentra o no tiene.
+ */
+export const NOTA_ENTRENAMIENTO = '_Estoy en entrenamiento: si el dato sí existe, entendí mal la pregunta y se corrige. Prueba escribiéndola de otra forma (la fecha en números: 03/09)._';
+const EMPIEZA_VACIA = /^(no hay|no encuentro|no encontr|no tengo|no me consta|no veo|eso no lo tengo|sin (pedidos|datos|registros|informes|fotos|consumo))\b/i;
+export const esRespuestaVacia = (texto: string): boolean => EMPIEZA_VACIA.test((texto ?? '').trim().split('\n')[0] ?? '');
+export const conNotaSiVacia = (r: Respuesta): Respuesta =>
+  r.texto && esRespuestaVacia(r.texto) && !r.texto.includes(NOTA_ENTRENAMIENTO) ? { ...r, texto: `${r.texto}\n\n${NOTA_ENTRENAMIENTO}` } : r;
 
 /** Lo que no entra en una línea de celular (~36 caracteres) se recorta con «…». */
 const recortarTexto = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
@@ -46,7 +61,10 @@ export const etiquetaPedido = (o: PedidoDelDiaVista): string =>
 
 /** La unidad por placa, por número, o por orden («la última que salió», «la primera»). */
 export const unidadPor = (vista: VistaDelDia, params: Parametros) => {
-  const todas = vista.orders.flatMap((o) => o.units.map((u) => ({ ...u, pedido: o })));
+  // «La unidad 5 de globofast»: los números se repiten entre empresas el mismo
+  // día (03/09: la 5 de Constroad y la 5 de Globofast), la empresa nombrada acota.
+  const pedidos = params.companyId ? vista.orders.filter((o) => o.companyId === params.companyId) : vista.orders;
+  const todas = pedidos.flatMap((o) => o.units.map((u) => ({ ...u, pedido: o })));
   if (params.plate) return todas.find((u) => normalizarPlaca(u.plate) === params.plate);
   if (params.unitNumber) return todas.find((u) => u.unitNumber === params.unitNumber);
   if (params.ordinal) {
@@ -135,6 +153,8 @@ export const AYUDA = menuAyuda();
 export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): string => {
   const { vista, params } = ctx;
   const dia = fechaLegible(vista.fecha);
+  /** Un día que ya pasó se cuenta en pasado, y «todavía no salió» no tiene sentido. */
+  const pasado = vista.fecha < hoyLima(ctx.ahoraMs);
 
   if (!clave) return 'Eso no lo tengo. Puedo ayudarte con lo de planta y campo, unidades, pedidos, tanques, agregados, informes y clima — escribe «lila ayuda» para ver la lista.';
   // La ayuda no depende de que haya pedidos (14/09: un día sin producción,
@@ -190,7 +210,8 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
       const u = unidadPor(vista, params);
       if (!u) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
-      if (u.state === 'despachado' && u.departedAt) return `🚚 La *unidad ${u.unitNumber}* (${u.plate || 'sin placa'}) salió a las *${hora(u.departedAt)}* con ${u.quantity} m³.`;
+      if (u.state === 'despachado' && u.departedAt) return `🚚 La *unidad ${u.unitNumber}* (${u.plate || 'sin placa'}) salió a las *${hora(u.departedAt)}* con ${u.quantity} m³${pasado ? ` el ${dia}` : ''}.`;
+      if (pasado) return `La *unidad ${u.unitNumber}* no tiene salida registrada el ${dia}.`;
       if (u.state === 'progreso') return `La *unidad ${u.unitNumber}* está cargando; todavía no salió.`;
       return `La *unidad ${u.unitNumber}* todavía no salió.`;
     }
@@ -200,15 +221,17 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       const u = unidadPor(vista, params);
       if (!u) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
       // Nombre y placa, nada más: teléfono y licencia no existen en la vista (spec §6.2).
-      return `👤 La *unidad ${u.unitNumber}* la maneja *${u.driverName || 'sin conductor asignado'}*, placa ${u.plate || 'sin placa'}.`;
+      // De un día ya pasado se habla en pasado («quién manejó la 5 el 3 de setiembre»).
+      return `👤 La *unidad ${u.unitNumber}* la ${pasado ? `manejó el ${dia}` : 'maneja'} *${u.driverName || 'sin conductor asignado'}*, placa ${u.plate || 'sin placa'}.`;
     }
 
     case 'unit_eta': {
       if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
       const u = unidadPor(vista, params);
       if (!u) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
-      if (u.arrivalAt) return `La *unidad ${u.unitNumber}* ya llegó a campo a las ${hora(u.arrivalAt)}.`;
-      if (u.departedAt) return `La *unidad ${u.unitNumber}* salió a las ${hora(u.departedAt)}. Todavía no calculo tiempos de llegada por acá.`;
+      if (u.arrivalAt) return `La *unidad ${u.unitNumber}* ${pasado ? `llegó a campo el ${dia} a las` : 'ya llegó a campo a las'} ${hora(u.arrivalAt)}.`;
+      if (u.departedAt) return `La *unidad ${u.unitNumber}* salió a las ${hora(u.departedAt)}${pasado ? ` el ${dia}, sin llegada registrada` : '. Todavía no calculo tiempos de llegada por acá'}.`;
+      if (pasado) return `La *unidad ${u.unitNumber}* no tiene salida registrada el ${dia}.`;
       return `La *unidad ${u.unitNumber}* todavía no salió.`;
     }
 

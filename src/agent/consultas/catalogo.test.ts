@@ -149,8 +149,25 @@ describe('parámetros', () => {
     ['cuántos m3 van', undefined],
     // 25 m3 no es una unidad, y 05:32 tampoco.
     ['ya salieron 25 m3', undefined],
+    // Los números de una fecha tampoco (15/09: «la última unidad que salió el 4 de setiembre» daba la unidad 4).
+    ['fotos de la última unidad que salió el 4 de setiembre', undefined],
+    ['quién manejó la unidad 5 el 3 de setiembre', 5],
+    ['qué empresa tuvo producción el 03 y 04 de setiembre', undefined],
+    ['la salida de la 7 el 4/9', 7],
+    ['consumos del 03/09/26', undefined],
   ])('«%s» → unidad %s', (pregunta, unidad) => {
     expect(extraerParametros(pregunta).unitNumber).toBe(unidad);
+  });
+
+  it('con la fecha tapada, «la última» sigue siendo la última', () => {
+    expect(extraerParametros('fotos de la última unidad que salió el 4 de setiembre')).toMatchObject({ ordinal: 'ultima', unitNumber: undefined });
+  });
+
+  /** «Qué informes de campo se hicieron» caía en «campo» → unidad en campo (15/09). */
+  it('los informes de campo son informes, no la unidad en campo', () => {
+    expect(rutearPorReglas('qué informes de campo se hicieron el 4 de setiembre')).toBe('reports_status');
+    expect(rutearPorReglas('ya se generaron los informes de obra')).toBe('reports_status');
+    expect(rutearPorReglas('qué unidad está en campo')).toBe('site_current_unit');
   });
 
   it('la placa se reconoce con y sin espacio o guion, y no se confunde con una unidad', () => {

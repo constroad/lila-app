@@ -40,12 +40,16 @@ const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', '
  * grupo de obra piensa en «2026-09-13». Sin `Intl` a propósito: el día de la
  * semana de una fecha de calendario no depende de la zona, y así no hay nada que
  * pueda variar entre la máquina de desarrollo y la mini.
+ *
+ * El AÑO solo cuando no es el de hoy: «sábado 04/09» escondía que se había
+ * leído el 04/09 de 2027 (15/09); «sábado 04/09/2027» lo habría delatado.
  */
-export const fechaLegible = (fecha: string): string => {
+export const fechaLegible = (fecha: string, ahoraMs = Date.now()): string => {
   const [y, m, d] = String(fecha || '').split('-').map(Number);
   if (!y || !m || !d) return fecha;
   const dia = DIAS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   const dd = String(d).padStart(2, '0');
   const mm = String(m).padStart(2, '0');
-  return `${dia} ${dd}/${mm}`;
+  const anio = y === Number(diaPeruano(ahoraMs).slice(0, 4)) ? '' : `/${y}`;
+  return `${dia} ${dd}/${mm}${anio}`;
 };

@@ -153,7 +153,8 @@ export const CATALOGO: EntradaCatalogo[] = [
   {
     id: 'reports_status',
     seSatisfaceCon: ['ya se generaron los informes', 'tenemos hecho el informe de imprimacion', 'esta el informe de area adicional', 'falta algun informe', 'ya esta el ipp', 'hicieron el control de pista'],
-    reglas: [['informe'], ['certificado'], ['ipp'], ['imprimacion'], ['imprimación'], ['area adicional'], ['área adicional'], ['acta']],
+    // «Qué informes de campo se hicieron» caía en «campo» → unidad en campo (15/09): dos palabras ganan a una.
+    reglas: [['informe'], ['certificado'], ['ipp'], ['imprimacion'], ['imprimación'], ['area adicional'], ['área adicional'], ['acta'], ['informe', 'campo'], ['informe', 'obra'], ['informe', 'hicieron'], ['informe', 'hecho'], ['informe', 'genera'], ['informe', 'falta']],
   },
 ];
 
@@ -305,16 +306,21 @@ export const normalizarPlaca = (placa: string): string =>
  * «la 5», «unidad 5», «carro 5», «volquete #5», «el 12». Un número de dos
  * cifras como máximo: una placa o un vale tienen más y no son unidades.
  */
+/** «el 4 de setiembre», «el 3 y 4 de setiembre», «4/9», «04/09/26»: los números de una fecha no son una unidad. */
+const FECHAS_ESCRITAS = /\b\d{1,2}(?:\s*(?:y|al|a|hasta|-)\s*(?:el\s+)?\d{1,2})?\s*(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g;
+
 export const extraerParametros = (pregunta: string, ahoraMs = Date.now()): Parametros => {
   const t = normalizar(pregunta);
   const day: Parametros['day'] = /\bmanana\b/.test(t) ? 'tomorrow' : 'today';
 
   // Placa peruana: tres letras y tres números («AZJ 910», «AML838», «BBE-942»),
   // con o sin la palabra «placa» adelante. Se extrae ANTES que la unidad para
-  // que «910» no se lea como unidad.
-  const placa = t.match(/\b([a-z]{3})[\s-]?(\d{3})\b/);
+  // que «910» no se lea como unidad. Y las fechas se tapan antes que todo:
+  // «fotos de la última unidad que salió el 4 de setiembre» daba la unidad 4.
+  const sinFechas = t.replace(FECHAS_ESCRITAS, ' ');
+  const placa = sinFechas.match(/\b([a-z]{3})[\s-]?(\d{3})\b/);
   const plate = placa ? normalizarPlaca(`${placa[1]}${placa[2]}`) : undefined;
-  const sinPlaca = placa ? t.replace(placa[0], ' ') : t;
+  const sinPlaca = placa ? sinFechas.replace(placa[0], ' ') : sinFechas;
 
   const m =
     sinPlaca.match(/\b(?:la|el|unidad|carro|camion|volquete|numero|n)\s*#?\s*(\d{1,2})\b/) ??

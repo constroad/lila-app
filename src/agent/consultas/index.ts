@@ -1,7 +1,7 @@
 import logger from '../../utils/logger.js';
 import { CATALOGO, esConsulta, especificidadDeRegla, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, temaSinDato, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { construirVista, type VistaDelDia } from './vista.js';
-import { PREGUNTA_UNIDAD, acotarArchivos, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
+import { PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
 import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
 import { TEMAS, menuAyuda, temaPorPalabra, textoTema } from './ayuda.js';
@@ -466,7 +466,7 @@ export const atenderConsulta = async (
     respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo, extra));
     if (clave) recordarConsulta({ quien, grupo, clave, pregunta });
     logger.info(`[agente] consulta de ${quien}: «${preguntaLimpia(texto, numeroBot)}» → ${clave ?? (respuesta ? 'datos' : 'none')}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
-    await responderEnGrupo(grupo, respuesta, alcance);
+    await responderEnGrupo(grupo, conNotaSiVacia(respuesta), alcance);
   } catch (error) {
     logger.warn(`[agente] no pude atender la consulta «${texto}»: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
@@ -513,7 +513,7 @@ export const atenderEleccion = async (
     await empezarAEscribir(grupo, alcance);
     const respuesta = (await eleccion.pregunta.continuar(eleccion.indice, eleccion.texto)) as Respuesta;
     logger.info(`[agente] ${quien} contestó «${eleccion.texto}» a la pregunta pendiente`);
-    await responderEnGrupo(grupo, respuesta, alcance);
+    await responderEnGrupo(grupo, conNotaSiVacia(respuesta), alcance);
   } catch (error) {
     logger.warn(`[agente] no pude continuar la consulta de ${quien}: ${error instanceof Error ? error.message : String(error)}`);
   } finally {

@@ -42,8 +42,8 @@ describe('fichas', () => {
     expect(f).toContain('te muestro los primeros 2');
     // Ninguna línea se parte en un celular.
     for (const linea of f.split('\n').filter((l) => l.startsWith('• '))) expect(linea.length).toBeLessThanOrEqual(64);
-    expect(fichaPedidos({ desde: '2026-09-13', hasta: '2026-09-13', pedidos: [], totalM3Pedidos: 0, totalM3Despachados: 0, truncado: false }, {}, '2026-09-14')).toBe('No hay pedidos el domingo 13/09 en Portal.');
-    expect(fichaPedidos({ desde: '2026-09-14', hasta: '2026-09-20', pedidos: [], totalM3Pedidos: 0, totalM3Despachados: 0, truncado: false }, {}, '2026-09-14')).toBe('No hay pedidos del 14/09 al 20/09 en Portal. Si hay producción programada, todavía no está cargada.');
+    expect(fichaPedidos({ desde: '2026-09-13', hasta: '2026-09-13', pedidos: [], totalM3Pedidos: 0, totalM3Despachados: 0, truncado: false }, {}, '2026-09-14')).toBe('No encuentro pedidos el domingo 13/09 en Portal.');
+    expect(fichaPedidos({ desde: '2026-09-14', hasta: '2026-09-20', pedidos: [], totalM3Pedidos: 0, totalM3Despachados: 0, truncado: false }, {}, '2026-09-14')).toBe('No encuentro pedidos del 14/09 al 20/09 en Portal. Si hay producción programada, todavía no está cargada.');
   });
 
   it('kardex: totales, stock actual y cada movimiento con su saldo', () => {
