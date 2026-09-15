@@ -211,3 +211,17 @@ export interface Simulacion {
   motor: 'qwen-local' | 'reglas';
   duracionMs: number;
 }
+
+/** A7 «Negocio» (`src/agent/dali/negocio.ts`). */
+export interface FichaNegocio {
+  nombreComercial: string;
+  descripcion: string;
+  ruc: string;
+  web: string;
+  direccion: string;
+  zona: string;
+  comoLlegar: string;
+  contacto: { whatsapp: string; telefono: string; correo: string; redSocial: string };
+  ofrece: string[];
+  noOfrece: string[];
+}

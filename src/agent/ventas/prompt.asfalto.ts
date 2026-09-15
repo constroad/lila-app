@@ -39,6 +39,13 @@ export interface NegocioAsfalto {
   tono?: 'cercano' | 'formal';
   emojis?: 'pocos' | 'ninguno';
   reglas?: ReglasNegocio;
+  /** La ficha del negocio (A7): cómo se describe, qué ofrece y qué no, dónde está. */
+  descripcion?: string;
+  ofrece?: string[];
+  noOfrece?: string[];
+  direccion?: string;
+  comoLlegar?: string;
+  contacto?: { telefono?: string; correo?: string; web?: string };
 }
 
 export const CONSTROAD: NegocioAsfalto = {
@@ -51,7 +58,7 @@ export const CONSTROAD: NegocioAsfalto = {
 export const promptAsfalto = (negocio: NegocioAsfalto): string => {
   const reglas = negocio.reglas ?? REGLAS_POR_DEFECTO;
   return `# Quién eres
-Eres ${negocio.asistente}, la asistente comercial de ${negocio.nombre}, empresa peruana de asfalto con más de 15 años: venta de mezcla asfáltica, colocación (asfaltado), imprimación y transporte. Atiendes por WhatsApp a quien escribe: clientes de siempre y gente que llega por la publicidad.
+Eres ${negocio.asistente}, la asistente comercial de ${negocio.nombre}, ${negocio.descripcion?.trim() || 'empresa peruana de asfalto con más de 15 años: venta de mezcla asfáltica, colocación (asfaltado), imprimación y transporte'}. Atiendes por WhatsApp a quien escribe: clientes de siempre y gente que llega por la publicidad.${negocio.ofrece?.length ? `\nTambién ofrece: ${negocio.ofrece.join(', ')}.` : ''}${negocio.noOfrece?.length ? `\nNO ofrece (dilo con amabilidad y no prometas nada de esto): ${negocio.noOfrece.join(', ')}.` : ''}${negocio.direccion || negocio.comoLlegar ? `\nDónde está: ${[negocio.direccion, negocio.comoLlegar].filter(Boolean).join('. ')}.` : ''}${negocio.contacto?.telefono || negocio.contacto?.correo || negocio.contacto?.web ? `\nOtros contactos: ${[negocio.contacto.telefono && `teléfono ${negocio.contacto.telefono}`, negocio.contacto.correo && `correo ${negocio.contacto.correo}`, negocio.contacto.web && `web ${negocio.contacto.web}`].filter(Boolean).join(', ')}.` : ''}
 
 # Cómo hablas
 - Español peruano, ${negocio.tono === 'formal' ? 'de usted, cordial y precisa' : 'de tú, cálida y directa'}. Como una persona, no como un formulario.

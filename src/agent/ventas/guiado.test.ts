@@ -297,6 +297,16 @@ describe('flujo guiado — la conversación del piloto (14/09), ahora con el gui
     expect(sinEmojis('Solo puedo ayudarte con lo de asfalto 🙂 ¿En qué te ayudo?')).toBe('Solo puedo ayudarte con lo de asfalto ¿En qué te ayudo?');
   });
 
+  it('si preguntan dónde están y la ficha tiene cómo llegar, lo dice una vez y sigue con el guion', () => {
+    const conFicha = { ...CONSTROAD, comoLlegar: 'Planta en Cajamarquilla, km 11.5 de la Autopista Ramiro Prialé.' };
+    let p = paso({ servicio: 'colocacion', saludado: true, respuestas: { area: '600 m2' }, ultimoCampo: 'distrito' }, validarExtraccion({}, 'dónde queda la planta?'), conFicha, null, true, 'dónde queda la planta?');
+    expect(p.texto).toContain('Planta en Cajamarquilla, km 11.5');
+    expect(p.texto).toContain(pregunta('distrito'));
+    p = paso(p.estado, validarExtraccion({}, 'y cómo llego?'), conFicha, null, true, 'y cómo llego?');
+    expect(p.texto).not.toContain('Cajamarquilla'); // ya se dijo: no se repite
+    expect(paso({ servicio: 'colocacion', saludado: true, respuestas: {}, ultimoCampo: 'area' }, validarExtraccion({}, 'dónde están?'), CONSTROAD, null, true, 'dónde están?').texto).not.toContain('Planta'); // sin ficha, nada que decir
+  });
+
   it('todo en tuteo peruano', () => {
     const textos = [habla({}, 'hola').texto, habla({ servicio: 'venta', saludado: true }, 'cuánto cuesta?').texto, ...GUION_ASFALTO.servicios.flatMap((s) => s.preguntas.map((p) => `${p.pregunta} ${p.pista ?? ''} ${p.explicacion ?? ''}`))];
     for (const t of textos) expect(t).not.toMatch(/\b(decime|podés|querés|necesitás|tenés|vos)\b/);

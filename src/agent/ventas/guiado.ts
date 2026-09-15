@@ -104,6 +104,8 @@ const re = (patron: string): RegExp | null => {
 const matchea = (patrones: string[] | undefined, t: string): boolean => Boolean(patrones?.some((p) => re(p)?.test(t)));
 
 const NOMBRES_PROHIBIDOS = ['dali', 'maria', 'constroad', 'asistente', 'cliente', 'asesor'];
+/** «¿Dónde están?», «¿cómo llego?», «la dirección»: se contesta con la ficha del negocio. */
+const PREGUNTA_UBICACION = /\b(donde (estan|queda|quedan|es|se ubican|se encuentran|los encuentro)|direccion|ubicacion|como (llego|llegar|se llega)|la planta donde)\b/;
 /** Palabras que el modelo confunde con un lugar: «el patio de mi almacén» no es un distrito. */
 const NO_ES_LUGAR = new Set(['almacen', 'patio', 'obra', 'casa', 'local', 'empresa', 'pista', 'calle', 'planta', 'terreno', 'estacionamiento', 'condominio', 'fabrica', 'taller', 'cochera', 'garaje', 'via', 'avenida', 'jiron', 'urbanizacion', 'zona', 'lugar', 'sitio', 'proyecto', 'losa', 'parque', 'colegio', 'mercado']);
 /** Una fecha dice un mes, un día, «mañana», «urgente», «15 de…» o «15/10»; un número suelto no es fecha («asfaltado para 3000m2»). */
@@ -238,6 +240,8 @@ export interface EstadoGuiado {
   saludado?: boolean;
   precioExplicado?: boolean;
   cotizacionExplicada?: boolean;
+  /** Ya se le dijo dónde está la planta (ficha del negocio, A7). */
+  ubicacionExplicada?: boolean;
   /** Lo que agregó después del cierre. */
   notas?: string[];
   /** Copia legible de lo principal (y lo que guardaban los estados de antes del guion). */
@@ -615,9 +619,12 @@ const pasoGuiado = (
     return { texto: `${preguntada.explicacion ?? preguntada.pregunta} ${preguntada.explicacion ? preguntada.pregunta : ''}`.trim(), estado: e, guardar: false };
   }
 
-  // 4) Precio / cotización: se explica una vez y se sigue.
+  // 4) Precio / cotización / dónde están: se explica una vez y se sigue.
   let prefacio = '';
-  if (x.preguntaPrecio) {
+  if (PREGUNTA_UBICACION.test(t) && negocio.comoLlegar && !e.ubicacionExplicada) {
+    prefacio = `${negocio.comoLlegar.trim()} `;
+    e.ubicacionExplicada = true;
+  } else if (x.preguntaPrecio) {
     prefacio = e.precioExplicado ? 'El precio te lo confirma el asesor con la cotización. ' : 'El precio depende de la cantidad y la ubicación; con estos datos el asesor te cotiza. ';
     e.precioExplicado = true;
   } else if (x.quiereCotizacion && !e.cotizacionExplicada) {

@@ -20,6 +20,8 @@ export interface AgentBotConfig {
   guion?: unknown;
   /** Cómo se presenta la asistente (`dali/asistente.ts` `PerfilAsistente`); ausente = el perfil del piloto. */
   profile?: unknown;
+  /** La ficha del negocio (`dali/negocio.ts`): descripción, qué ofrece y qué no, dónde está. */
+  business?: unknown;
   /** Con el que se presenta el guion; ausente = CONSTROAD. */
   companyName?: string;
   /** Pausa del dueño desde el panel: hasta entonces no se contesta a nadie. */

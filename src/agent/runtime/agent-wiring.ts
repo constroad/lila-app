@@ -91,6 +91,7 @@ async function resolveSessionContext(
             notifyOn: avisos.casos,
             guion: stored.guion,
             profile: stored.perfil,
+            business: stored.negocio,
             companyName: (company as { name?: unknown } | null)?.name ? String((company as { name?: unknown }).name) : undefined,
             pausedUntil: stored.pausedUntil ? new Date(stored.pausedUntil) : undefined,
           }

@@ -257,8 +257,8 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   Conversaciones (en escritorio, lista + chat + datos del lead en tres
   columnas), A3 Conversación, A4 Leads (tablero por estado y lista; en
   escritorio, el lead elegido como panel a la derecha), A5 Lead, **A6
-  Asistente**, **A8 Servicios, A9 guion, A10 pregunta**, **A15 Probar a
-  Dali** (abajo). Las demás
+  Asistente**, **A7 Negocio**, **A8 Servicios, A9 guion, A10 pregunta**,
+  **A15 Probar a Dali** (abajo). Las demás
   responden «esta pantalla se está construyendo»; «Más» del móvil lista lo
   que no cabe en la barra.
 - **A6 Asistente** (`ui/dali/src/screens/asistente/*`, comparada con
@@ -333,6 +333,24 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   - Tests: `guion.test.ts` (raíz, patrón, servicio editado y apagado, opción
     por palabras, `guionDe` con lo editable), `servicios.test.ts` (ida y
     vuelta pack↔panel, servicio nuevo, slug, campos intactos).
+- **A7 Negocio — la ficha** (`ui/dali/src/screens/negocio/NegocioScreen.tsx`,
+  comparada con `A7-negocio` móvil y tablet; el de escritorio salió
+  superpuesto de Stitch y se siguió la composición de los otros dos): datos
+  del negocio (nombre comercial, rubro solo lectura, descripción de 240,
+  RUC de 11 dígitos, web), dónde está (dirección, zona —la MISMA de A6,
+  `perfil.zona`—, enlace al mapa, cómo llegar), contacto oficial (el WhatsApp
+  de Dali solo lectura, teléfono, correo, red social), lo que ofrece (los
+  servicios activos del guion, que se editan en Servicios, más una lista
+  libre de otros productos) y lo que NO ofrece. `GET/PUT /negocio`
+  (`dali/negocio.ts`, `bot_configs.negocio`; lo vacío sale de la empresa de
+  Portal: nombre, RUC, dirección, teléfono, correo). El motor lo usa: la
+  descripción, lo que ofrece y lo que no, dónde está y los contactos entran
+  al prompt del modelo grande; en el guion guiado, «¿dónde están? / ¿cómo
+  llego?» se contesta con «cómo llegar» una vez y se sigue
+  (`PREGUNTA_UBICACION` en `guiado.ts`). Sin el mapa dibujado (no hay API de
+  mapas; el enlace abre Google Maps) ni la verificación SUNAT del diseño.
+  Tests: `negocio.test.ts` (ficha desde Portal, recortes, mezcla, RUC),
+  `guiado.test.ts` (dónde están).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -405,7 +423,7 @@ navegador de la herramienta no mapea bien los clics con 1440 emulado); la
 barra superior en escritorio para Chats/Leads (A2 desktop la dibuja) queda
 para cuando se revisen esas pantallas.
 
-**Pendiente de F3:** P1, P4–P6, A7, A11–A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A11–A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

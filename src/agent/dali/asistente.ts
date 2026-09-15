@@ -157,11 +157,26 @@ export const horarioLegible = (h: HorarioAtencion): string => {
   return partes.length ? partes.join(' y ') : 'sin horario definido';
 };
 
-/** El negocio que ve el guion, a partir del perfil guardado (o el del piloto). */
-export const negocioDe = (config: { perfil?: unknown; greeting?: string; tone?: string } | null | undefined, nombreEmpresa?: string): NegocioAsfalto => {
+/** La ficha (A7) tal como la guarda `negocio.ts`; acá solo se lee lo que el guion necesita. */
+interface FichaGuardada {
+  nombreComercial?: string;
+  descripcion?: string;
+  web?: string;
+  direccion?: string;
+  comoLlegar?: string;
+  contacto?: { telefono?: string; correo?: string };
+  ofrece?: string[];
+  noOfrece?: string[];
+}
+
+/** El negocio que ve el guion, a partir del perfil y la ficha guardados (o el del piloto). */
+export const negocioDe = (config: { perfil?: unknown; negocio?: unknown; greeting?: string; tone?: string } | null | undefined, nombreEmpresa?: string): NegocioAsfalto => {
   const perfil = perfilDe(config?.perfil, { greeting: config?.greeting, tone: config?.tone });
+  const ficha = (config?.negocio ?? {}) as FichaGuardada;
+  const lista = (v: unknown): string[] | undefined => (Array.isArray(v) && v.length ? v.map(String) : undefined);
+  const contacto = { telefono: texto(ficha.contacto?.telefono) || undefined, correo: texto(ficha.contacto?.correo) || undefined, web: texto(ficha.web) || undefined };
   return {
-    nombre: nombreEmpresa || CONSTROAD.nombre,
+    nombre: texto(ficha.nombreComercial) || nombreEmpresa || CONSTROAD.nombre,
     asistente: perfil.asistente,
     horario: horarioLegible(perfil.horario),
     zona: perfil.zona,
@@ -170,6 +185,12 @@ export const negocioDe = (config: { perfil?: unknown; greeting?: string; tone?: 
     tono: perfil.tono,
     emojis: perfil.emojis,
     reglas: perfil.reglas,
+    descripcion: texto(ficha.descripcion) || undefined,
+    ofrece: lista(ficha.ofrece),
+    noOfrece: lista(ficha.noOfrece),
+    direccion: texto(ficha.direccion) || undefined,
+    comoLlegar: texto(ficha.comoLlegar) || undefined,
+    ...(contacto.telefono || contacto.correo || contacto.web ? { contacto } : {}),
   };
 };
 

@@ -11,6 +11,7 @@ import { guardarAsistente, leerAsistente, minutosHastaManana, pausarAsistente, t
 import { clearAgentSessionCache } from '../../agent/runtime/agent-wiring.js';
 import { GuionInvalido, guardarServicios, leerServicios, restaurarPack, type GuionEditable } from '../../agent/dali/servicios.js';
 import { simularTurno } from '../../agent/dali/probar.js';
+import { guardarNegocio, leerNegocio, type CambiosFicha } from '../../agent/dali/negocio.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -129,6 +130,17 @@ router.post('/servicios/restaurar-pack', async (req: Request, res: Response) => 
   const servicios = await restaurarPack(req.dali!.companyId, req.dali!.name);
   clearAgentSessionCache();
   res.json(servicios);
+});
+
+/** A7: la ficha del negocio. */
+router.get('/negocio', async (req: Request, res: Response) => {
+  res.json(await leerNegocio(req.dali!.companyId));
+});
+
+router.put('/negocio', async (req: Request, res: Response) => {
+  const ficha = await guardarNegocio(req.dali!.companyId, (req.body ?? {}) as CambiosFicha, req.dali!.name);
+  clearAgentSessionCache();
+  res.json(ficha);
 });
 
 /** A15: un turno del simulador. Nada se guarda ni se avisa; el estado va y viene con el navegador. */

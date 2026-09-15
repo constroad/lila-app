@@ -27,6 +27,8 @@ export interface IBotConfig {
   perfil?: unknown;
   /** A quién y de qué se avisa (`AvisosAsistente`). */
   avisos?: unknown;
+  /** La ficha del negocio (`agent/dali/negocio.ts` `NegocioGuardado`). */
+  negocio?: unknown;
   /** Pausa del dueño desde el panel: hasta esta hora Dali no contesta a nadie. */
   pausedUntil?: Date;
   createdAt?: Date;
@@ -55,6 +57,7 @@ export const BotConfigSchema = new Schema<IBotConfig>(
     guion: { type: Schema.Types.Mixed },
     perfil: { type: Schema.Types.Mixed },
     avisos: { type: Schema.Types.Mixed },
+    negocio: { type: Schema.Types.Mixed },
     pausedUntil: { type: Date },
   },
   { collection: 'bot_configs', timestamps: true }
