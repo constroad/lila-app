@@ -80,6 +80,8 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
 /** Las herramientas de datos que se reconocen por regla, sin modelo: las que no necesitan un nombre. */
 /** Una llegada de cemento asfáltico, emulsión o combustible es de LÍQUIDOS, no de agregados. */
 const HABLA_DE_LIQUIDOS = /\b(cemento|pen|emulsion|mc-?30|petroleo|diesel|gasohol|gasolina|tancada|cisterna|liquido|liquidos|galones)\b/;
+/** «Pásame el enlace del pedido con informes» pide el ENLACE (catálogo), no un PDF. */
+const HABLA_DE_ENLACE = /\b(enlace|link|url)\b/;
 
 export const herramientaDeDatosPorReglas = (pregunta: string): HerramientaDeDatos | null => {
   const t = normalizar(pregunta);
@@ -87,6 +89,7 @@ export const herramientaDeDatosPorReglas = (pregunta: string): HerramientaDeDato
   for (const h of HERRAMIENTAS) {
     if (!esHerramientaDeDatos(h.id) || !h.reglas) continue;
     if (h.id === 'ingresos_agregados' && HABLA_DE_LIQUIDOS.test(t)) continue;
+    if (h.id === 'informes' && HABLA_DE_ENLACE.test(t)) continue;
     for (const grupo of h.reglas) {
       const palabras = grupo.map(normalizar);
       if (!palabras.every((p) => new RegExp(`\\b${p}`).test(t))) continue;

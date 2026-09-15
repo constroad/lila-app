@@ -49,7 +49,7 @@ export const TEMAS: TemaAyuda[] = [
     titulo: 'Documentos y certificados',
     palabras: ['documento', 'documentos', 'certificado', 'certificados', 'guia', 'guias', 'guía', 'guías', 'enlace', 'informe', 'informes', 'checklist'],
     ejemplos: [
-      'el enlace del pedido de hoy de Globofast',
+      'el enlace del pedido de hoy de Globofast (si no existe, lo genero: producción siempre; colocación e informes, si me lo pides)',
       'las guías generadas para la producción de hoy',
       'dame el informe de planta · pásame el control de pista de los pinos · manda la valorización de comas (en PDF)',
       'ya está el informe de imprimación / área adicional de hoy',

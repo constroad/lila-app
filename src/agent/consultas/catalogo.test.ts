@@ -163,6 +163,13 @@ describe('parámetros', () => {
     expect(extraerParametros('fotos de la última unidad que salió el 4 de setiembre')).toMatchObject({ ordinal: 'ultima', unitNumber: undefined });
   });
 
+  /** Pedir el enlace es `order_link` aunque nombre producción, mañana o informes (las pestañas). */
+  it('el enlace del pedido gana a las palabras de las pestañas y del día', () => {
+    expect(rutearPorReglas('genera el enlace del pedido de constroad de mañana solo producción')).toBe('order_link');
+    expect(rutearPorReglas('pásame el link del pedido de cobeñas con colocación e informes')).toBe('order_link');
+    expect(rutearPorReglas('el enlace del pedido de hoy con informes')).toBe('order_link');
+  });
+
   /** «Qué informes de campo se hicieron» caía en «campo» → unidad en campo (15/09). */
   it('los informes de campo son informes, no la unidad en campo', () => {
     expect(rutearPorReglas('qué informes de campo se hicieron el 4 de setiembre')).toBe('reports_status');

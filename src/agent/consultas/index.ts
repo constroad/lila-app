@@ -1,8 +1,8 @@
 import logger from '../../utils/logger.js';
 import { CATALOGO, esConsulta, especificidadDeRegla, extraerParametros, fueraDeCatalogo, preguntaLimpia, rutearPorReglas, temaSinDato, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { construirVista, type VistaDelDia } from './vista.js';
-import { PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, elegirPedido, etiquetaPedido, identificaUnidad, responder, unidadPor, type Respuesta } from './responder.js';
-import { enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo } from './archivos.js';
+import { OPCIONES_PESTANAS, PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, elegirPedido, etiquetaPedido, identificaUnidad, pestanasEnLaPregunta, responder, textoEnlace, unidadPor, type Respuesta } from './responder.js';
+import { crearEnlaceDelPedido, enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo, type PestanasEnlace } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta } from './pendientes.js';
 import { TEMAS, menuAyuda, temaPorPalabra, textoTema } from './ayuda.js';
 import { fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto.js';
@@ -16,7 +16,7 @@ import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklis
 import { argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, herramientaDeDatosPorReglas, normalizarArgumentos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
-import type { AlcanceAgente } from '../checklist/alcance.js';
+import { COMPANY_PILOTO, type AlcanceAgente } from '../checklist/alcance.js';
 
 export { esConsulta };
 
@@ -47,24 +47,35 @@ const comoParametros = (a: Argumentos): Partial<Parametros> => ({
   ...(a.companyId ? { companyId: a.companyId } : {}),
 });
 
-/** Con un pedido elegido: el enlace del cliente, si existe. */
-const respuestaEnlace = async (vista: VistaDelDia, indice: number): Promise<Respuesta> => {
-  const o = vista.orders[indice];
-  const enlace = await enlaceDelPedido(o.companyId, o.orderId, o.companySlug);
-  if (!enlace) {
-    return {
-      texto: `El pedido de *${o.cliente || o.companySlug}* (${fechaLegible(vista.fecha)}) no tiene enlace generado. Se genera en Portal → Pedidos → «Enlace para el cliente».`,
+/**
+ * Con un pedido elegido: el enlace del cliente. Si existe, se pasa; si no, se
+ * GENERA — preguntando qué pestañas lleva, salvo que la pregunta ya lo diga
+ * (José, 15/09: «que pregunte si genera el link con colocación e informes,
+ * porque el de producción sí debería salir»). Es la única escritura del agente
+ * a pedido de una persona, y queda en el log con quién la pidió.
+ */
+const respuestaEnlace =
+  (quien: string, grupo: string, pregunta: string) =>
+  async (vista: VistaDelDia, indice: number): Promise<Respuesta> => {
+    const o = vista.orders[indice];
+    const existente = await enlaceDelPedido(o.companyId, o.orderId, o.companySlug);
+    if (existente) return { texto: textoEnlace(o, vista.fecha, existente, false) };
+    const generar = async (pestanas: PestanasEnlace): Promise<Respuesta> => {
+      const enlace = await crearEnlaceDelPedido(o.companyId, o.orderId, o.companySlug, pestanas, quien);
+      logger.info(`[agente] enlace del cliente generado por ${quien} para el pedido ${o.orderId} (${o.companySlug}, ${vista.fecha}): ${enlace.tabs.join(',')}`);
+      return { texto: textoEnlace(o, vista.fecha, enlace, true) };
     };
-  }
-  const tabs = enlace.tabs.map((t) => ({ summary: 'resumen', production: 'producción', placement: 'colocación', reports: 'informes' })[t] ?? t);
-  return {
-    texto: [
-      `🔗 *Enlace del cliente — ${o.cliente || o.companySlug}* · ${fechaLegible(vista.fecha)}`,
-      `Muestra: ${tabs.join(', ') || 'sin pestañas'}`,
-      enlace.url,
-    ].join('\n'),
+    const dichas = pestanasEnLaPregunta(pregunta);
+    if (dichas) return generar(dichas);
+    preguntar({
+      quien,
+      grupo,
+      opciones: OPCIONES_PESTANAS.map((op) => op.etiqueta),
+      tipo: 'opciones',
+      continuar: (i) => generar((OPCIONES_PESTANAS[i] ?? OPCIONES_PESTANAS[0]).pestanas),
+    });
+    return { texto: textoPregunta(`El pedido de *${o.cliente || o.companySlug}* (${fechaLegible(vista.fecha)}) no tiene enlace. ¿Lo genero? Producción va siempre; elige qué más ve el cliente:`, OPCIONES_PESTANAS.map((op) => op.etiqueta)) };
   };
-};
 
 /** Con un pedido elegido: sus guías y vales. */
 const respuestaGuias = async (vista: VistaDelDia, indice: number): Promise<Respuesta> => {
@@ -172,8 +183,13 @@ const armarRespuesta = async (
   }
   if (clave === 'production_consume') return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
   if (clave === 'aggregates_stock') {
-    const porEmpresa = materialesPorEmpresa(await materiales(await empresasDelPiloto()));
-    if (porEmpresa.length === 0) return { texto: SIN_AGREGADOS };
+    // «El stock de agregados de globofast» es el de Globofast, no el de todas
+    // (15/09, 06:43: salieron Globofast y Constroad). Inframaq es la planta, no
+    // tiene agregados propios: nombrarla es preguntar por todas.
+    const todas = await empresasDelPiloto();
+    const empresas = params.companyId && params.companyId !== COMPANY_PILOTO ? todas.filter((e) => e.companyId === params.companyId) : todas;
+    const porEmpresa = materialesPorEmpresa(await materiales(empresas));
+    if (porEmpresa.length === 0) return { texto: params.companyId ? `No encuentro stock de agregados de ${empresas[0]?.nombre ?? params.companyId}.` : SIN_AGREGADOS };
     const archivos: Archivo[] = [];
     for (const { empresa, materiales: ms } of porEmpresa) {
       const r = await conImagen(textoMaterialesDe(empresa, ms), `agregados-${empresa}-${fecha}.png`, () => pngAgregados(ms, empresa));
@@ -211,7 +227,7 @@ const armarRespuesta = async (
     return r.archivos ? r : { texto: responder(clave, { vista, params }) };
   }
 
-  if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace);
+  if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace(quien, grupo, pregunta));
   if (clave === 'guias_day') return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
   // Las consultas de una unidad sin unidad: se PREGUNTA, y la respuesta de la
   // persona («la 4», «AML838», «la última») completa esta misma consulta.

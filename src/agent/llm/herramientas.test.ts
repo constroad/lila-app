@@ -152,6 +152,9 @@ describe('herramientas de datos por regla (sin modelo)', () => {
     ['cuántos pedidos no tienen certificados cargados', 'certificados_pendientes'],
     ['certificados pendientes de constroad', 'certificados_pendientes'],
     ['cuántos m3 van', null],
+    // «Pásame el enlace… con informes» pide el ENLACE (catálogo), no un PDF.
+    ['pásame el link del pedido de cobeñas con colocación e informes', null],
+    ['dame el enlace del pedido de hoy con informes', null],
     ['el teléfono del cliente cobeñas', null], // necesita un nombre: lo saca el modelo
   ])('«%s» → %s', (pregunta, esperado) => {
     expect(herramientaDeDatosPorReglas(pregunta)).toBe(esperado);

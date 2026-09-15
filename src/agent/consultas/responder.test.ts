@@ -1,4 +1,4 @@
-import { AYUDA, NOTA_ENTRENAMIENTO, acotarArchivos, conNotaSiVacia, elegirPedido, esRespuestaVacia, estimarFin, responder, unidadPor } from './responder';
+import { AYUDA, NOTA_ENTRENAMIENTO, OPCIONES_PESTANAS, acotarArchivos, conNotaSiVacia, elegirPedido, esRespuestaVacia, estimarFin, pestanasEnLaPregunta, responder, textoEnlace, unidadPor } from './responder';
 import type { VistaDelDia } from './vista';
 import { CHECKLIST_PRODUCCION } from '../checklist/checklist';
 
@@ -94,6 +94,18 @@ describe('responder', () => {
     expect(conNotaSiVacia(vacia).texto).toBe(vacia.texto); // no se repite
     expect(conNotaSiVacia({ texto: '📋 *3 pedido(s)*' }).texto).not.toContain(NOTA_ENTRENAMIENTO);
     expect(conNotaSiVacia({ texto: '', archivos: [] }).texto).toBe('');
+  });
+
+  /** El enlace del cliente se GENERA a pedido (15/09): producción siempre; colocación e informes, si lo dicen o lo eligen. */
+  it('enlace del cliente: las pestañas que la pregunta nombra, y el texto del enlace', () => {
+    expect(pestanasEnLaPregunta('el enlace del pedido de hoy')).toBeNull(); // no dice: se pregunta
+    expect(pestanasEnLaPregunta('genera el link del pedido con colocación e informes')).toEqual({ placement: true, reports: true });
+    expect(pestanasEnLaPregunta('el enlace del pedido con informes')).toEqual({ placement: false, reports: true });
+    expect(pestanasEnLaPregunta('el enlace del pedido solo producción')).toEqual({ placement: false, reports: false });
+    expect(OPCIONES_PESTANAS.map((o) => o.etiqueta)).toEqual(['Solo producción', 'Producción + colocación', 'Producción + colocación + informes']);
+    const nuevo = textoEnlace(vista.orders[0], '2026-09-13', { url: 'https://x/y?token=t', tabs: ['summary', 'production', 'placement'] }, true);
+    expect(nuevo).toBe('🔗 *Enlace del cliente — FERNANDO COBEÑAS* · domingo 13/09\nMuestra: resumen, producción, colocación\nGenerado recién, sin vencimiento. Es público: cualquiera con el enlace lo ve.\nhttps://x/y?token=t');
+    expect(textoEnlace(vista.orders[0], '2026-09-13', { url: 'https://x/y?token=t', tabs: [] }, false)).toContain('Muestra: sin pestañas');
   });
 
   it('pedidos del día', () => {

@@ -67,11 +67,15 @@ export const guiasDelPedido = async (companyId: string, orderId: string): Promis
     .filter((a): a is Archivo => Boolean(a));
 };
 
-/**
- * El enlace del cliente para un pedido, SI YA EXISTE. Crearlo es una escritura
- * en Portal (`POST /api/public-link`, con sesión de admin): por ahora el agente
- * no crea enlaces, los encuentra.
- */
+const urlDelEnlace = (companySlug: string, token: string): string =>
+  `https://www.constroad.com/public/${companySlug}/client-report/order?token=${token}`;
+
+const tabsDe = (doc: Doc): string[] =>
+  Object.entries(((doc.permissions as Doc | undefined)?.tabs as Record<string, boolean>) || {})
+    .filter(([, v]) => v)
+    .map(([k]) => k);
+
+/** El enlace del cliente para un pedido, SI YA EXISTE y no venció. */
 export const enlaceDelPedido = async (
   companyId: string,
   orderId: string,
@@ -91,13 +95,51 @@ export const enlaceDelPedido = async (
   if (!doc?.token) return null;
   const expira = doc.expiresAt ? new Date(doc.expiresAt as string).getTime() : 0;
   if (expira && expira < Date.now()) return null;
-  const tabs = Object.entries(((doc.permissions as Doc | undefined)?.tabs as Record<string, boolean>) || {})
-    .filter(([, v]) => v)
-    .map(([k]) => k);
-  return {
-    url: `https://www.constroad.com/public/${companySlug}/client-report/order?token=${String(doc.token)}`,
-    tabs,
-  };
+  return { url: urlDelEnlace(companySlug, String(doc.token)), tabs: tabsDe(doc) };
+};
+
+/** Las pestañas que el cliente ve: resumen y producción van siempre; colocación e informes se eligen. */
+export interface PestanasEnlace {
+  placement: boolean;
+  reports: boolean;
+}
+
+/**
+ * CREA el enlace del cliente de un pedido: la primera escritura del agente a
+ * pedido de una persona (José, 15/09: «en un rato preguntarán por el enlace
+ * del pedido para enviárselo al cliente»). Es el MISMO documento que crea
+ * Portal en `POST /api/public-link` (`publiclinks`, base compartida): token de
+ * 32 bytes generado acá, sin vencimiento (como el modal de Portal por defecto),
+ * `permissions.tabs` con resumen y producción siempre. La API de Portal exige
+ * sesión de administrador de Portal, que el agente no tiene; escribir el mismo
+ * documento es la vía, y `enlaceDelPedido` ya leía esta forma.
+ *
+ * Es un enlace PÚBLICO: cualquiera que lo tenga ve el pedido. Se anota quién
+ * lo pidió (`createdBy`) y que salió de WhatsApp (`title`).
+ */
+export const crearEnlaceDelPedido = async (
+  companyId: string,
+  orderId: string,
+  companySlug: string,
+  pestanas: PestanasEnlace,
+  pedidoPor: string
+): Promise<{ url: string; tabs: string[] }> => {
+  const { randomBytes } = await import('node:crypto');
+  const PublicLink = await getPublicLinkModel();
+  const token = randomBytes(32).toString('hex');
+  const permissions = { view: true, tabs: { summary: true, production: true, placement: pestanas.placement, reports: pestanas.reports } };
+  const doc = await PublicLink.create({
+    token,
+    companyId,
+    scope: 'client-report',
+    resourceType: 'order',
+    resourceId: orderId,
+    permissions,
+    expirationPolicy: 'indefinite',
+    title: `Enlace del cliente generado desde WhatsApp (Lila)`,
+    createdBy: `lila:${pedidoPor}`,
+  });
+  return { url: urlDelEnlace(companySlug, token), tabs: tabsDe(doc.toObject() as Doc) };
 };
 
 /** Los informes que la gente pregunta, con su nombre. El orden es el de la lista. */

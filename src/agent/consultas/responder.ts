@@ -1,9 +1,9 @@
-import { hoyLima, normalizarPlaca, type ClaveConsulta, type Parametros } from './catalogo.js';
+import { hoyLima, normalizar, normalizarPlaca, type ClaveConsulta, type Parametros } from './catalogo.js';
 import type { VistaDelDia, UnidadDelDia, PedidoDelDiaVista } from './vista.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { menuAyuda } from './ayuda.js';
 import type { Revision } from '../checklist/checklist.js';
-import type { Archivo, EstadoInforme } from './archivos.js';
+import type { Archivo, EstadoInforme, PestanasEnlace } from './archivos.js';
 
 /** Una respuesta puede ser texto, texto + archivos, o una pregunta con opciones. */
 export interface Respuesta {
@@ -14,6 +14,36 @@ export interface Respuesta {
 }
 
 export const LIMITES = { imagenes: 5, videos: 2, documentos: 6 };
+
+/** Las pestañas del enlace del cliente, como las nombra la gente. */
+const NOMBRE_PESTANA: Record<string, string> = { summary: 'resumen', production: 'producción', placement: 'colocación', reports: 'informes' };
+
+export const textoEnlace = (o: PedidoDelDiaVista, fecha: string, enlace: { url: string; tabs: string[] }, nuevo: boolean): string =>
+  [
+    `🔗 *Enlace del cliente — ${o.cliente || o.companySlug}* · ${fechaLegible(fecha)}`,
+    `Muestra: ${enlace.tabs.map((t) => NOMBRE_PESTANA[t] ?? t).join(', ') || 'sin pestañas'}`,
+    nuevo ? 'Generado recién, sin vencimiento. Es público: cualquiera con el enlace lo ve.' : '',
+    enlace.url,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+/** Las pestañas que la pregunta nombra: «con colocación e informes», «solo producción». `null` si no dice. */
+export const pestanasEnLaPregunta = (pregunta: string): PestanasEnlace | null => {
+  const t = normalizar(pregunta);
+  const placement = /\bcolocacion\b/.test(t);
+  const reports = /\binforme(s)?\b/.test(t);
+  if (placement || reports) return { placement, reports };
+  if (/\bsolo (produccion|planta|resumen)\b/.test(t)) return { placement: false, reports: false };
+  return null;
+};
+
+/** Las tres combinaciones que se ofrecen al generar: producción va siempre (José, 15/09). */
+export const OPCIONES_PESTANAS: ReadonlyArray<{ etiqueta: string; pestanas: PestanasEnlace }> = [
+  { etiqueta: 'Solo producción', pestanas: { placement: false, reports: false } },
+  { etiqueta: 'Producción + colocación', pestanas: { placement: true, reports: false } },
+  { etiqueta: 'Producción + colocación + informes', pestanas: { placement: true, reports: true } },
+];
 
 /**
  * UNA RESPUESTA VACÍA SE DICE CON HONESTIDAD. «No hay pedidos el sábado 04/09»

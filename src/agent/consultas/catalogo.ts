@@ -55,7 +55,8 @@ export const CATALOGO: EntradaCatalogo[] = [
   {
     id: 'order_link',
     seSatisfaceCon: ['generame el enlace del pedido de hoy de globofast', 'pasame el link del reporte del cliente', 'enlace del pedido de manana', 'link para el cliente'],
-    reglas: [['enlace'], ['link'], ['reporte', 'cliente']],
+    // «Genera el enlace del pedido de mañana solo producción» caía en «producción» + «mañana» (pedidos del día): dos palabras contra dos, y el orden del catálogo decide.
+    reglas: [['enlace'], ['link'], ['reporte', 'cliente'], ['enlace', 'pedido'], ['link', 'pedido'], ['genera', 'enlace'], ['genera', 'link']],
   },
   {
     id: 'guias_day',
