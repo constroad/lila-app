@@ -22,6 +22,8 @@ export interface AgentBotConfig {
   profile?: unknown;
   /** La ficha del negocio (`dali/negocio.ts`): descripción, qué ofrece y qué no, dónde está. */
   business?: unknown;
+  /** Las preguntas frecuentes (`dali/faq.ts`): Dali las contesta tal cual. */
+  faq?: unknown;
   /** Con el que se presenta el guion; ausente = CONSTROAD. */
   companyName?: string;
   /** Pausa del dueño desde el panel: hasta entonces no se contesta a nadie. */

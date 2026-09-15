@@ -92,6 +92,7 @@ async function resolveSessionContext(
             guion: stored.guion,
             profile: stored.perfil,
             business: stored.negocio,
+            faq: stored.faq,
             companyName: (company as { name?: unknown } | null)?.name ? String((company as { name?: unknown }).name) : undefined,
             pausedUntil: stored.pausedUntil ? new Date(stored.pausedUntil) : undefined,
           }

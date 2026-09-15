@@ -225,3 +225,28 @@ export interface FichaNegocio {
   ofrece: string[];
   noOfrece: string[];
 }
+
+/** A11 «Preguntas frecuentes» (`src/agent/dali/faq.ts`). */
+export interface Faq {
+  id: string;
+  pregunta: string;
+  respuesta: string;
+  variantes: string[];
+  categoria: string;
+  activa: boolean;
+  usos: number;
+}
+
+export interface PruebaFaq {
+  coincidencia: number;
+  responde: boolean;
+  motor: string;
+  faq?: { id: string; pregunta: string };
+  respuesta?: string;
+}
+
+export interface FaqSugerida {
+  pregunta: string;
+  veces: number;
+  ultimaVezMs: number;
+}

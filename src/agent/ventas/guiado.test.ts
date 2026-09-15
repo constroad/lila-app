@@ -307,6 +307,17 @@ describe('flujo guiado — la conversación del piloto (14/09), ahora con el gui
     expect(paso({ servicio: 'colocacion', saludado: true, respuestas: {}, ultimoCampo: 'area' }, validarExtraccion({}, 'dónde están?'), CONSTROAD, null, true, 'dónde están?').texto).not.toContain('Planta'); // sin ficha, nada que decir
   });
 
+  it('una pregunta frecuente se contesta con su respuesta y se sigue con el guion, sin contar como «no entendí» ni fuera de tema', () => {
+    const estado: EstadoGuiado = { servicio: 'colocacion', saludado: true, respuestas: { area: '600 m2' }, ultimoCampo: 'distrito' };
+    let p = paso(estado, { ...validarExtraccion({ fueraDeTema: true }, 'trabajan los sábados?'), respuestaFaq: 'Sí, atendemos de lunes a sábado desde las 7:00.' }, CONSTROAD, null, true, 'trabajan los sábados?');
+    expect(p.texto).toBe(`Sí, atendemos de lunes a sábado desde las 7:00. ${pregunta('distrito')}`);
+    expect(p.estado.sinEntender ?? 0).toBe(0);
+    // Sin servicio todavía, la respuesta va delante de la pregunta de arranque.
+    p = paso({ saludado: true }, { ...validarExtraccion({}, 'trabajan los sábados?'), respuestaFaq: 'Sí, de lunes a sábado.' }, CONSTROAD, null, true, 'trabajan los sábados?');
+    expect(p.texto).toContain('Sí, de lunes a sábado.');
+    expect(p.texto).toContain('¿Qué necesitas');
+  });
+
   it('todo en tuteo peruano', () => {
     const textos = [habla({}, 'hola').texto, habla({ servicio: 'venta', saludado: true }, 'cuánto cuesta?').texto, ...GUION_ASFALTO.servicios.flatMap((s) => s.preguntas.map((p) => `${p.pregunta} ${p.pista ?? ''} ${p.explicacion ?? ''}`))];
     for (const t of textos) expect(t).not.toMatch(/\b(decime|podés|querés|necesitás|tenés|vos)\b/);

@@ -6,6 +6,7 @@ import { extraerConQwen } from '../ventas/extraccion.js';
 import { leadDe, paso, preguntasVigentes, validarExtraccion, type EstadoGuiado, type Extraccion } from '../ventas/guiado.js';
 import { guionDe, type Guion } from '../ventas/guion.asfalto.js';
 import { enHorarioSegun, negocioDe, perfilDe } from './asistente.js';
+import { respuestaFaqPara } from './faq.js';
 
 /**
  * EL SIMULADOR (A15 «Probar a Dali»): el mismo motor guiado que atiende por
@@ -32,6 +33,8 @@ export interface CampoSimulado {
 }
 
 export interface Senales {
+  /** Coincidió con una pregunta frecuente: Dali contesta con ella. */
+  faq?: string;
   preguntaPrecio: boolean;
   quiereCotizacion: boolean;
   quierePersona: boolean;
@@ -75,6 +78,7 @@ export const camposDe = (guion: Guion, estado: EstadoGuiado): CampoSimulado[] =>
 };
 
 export const senalesDe = (x: Extraccion): Senales => ({
+  ...(x.respuestaFaq ? { faq: x.respuestaFaq } : {}),
   preguntaPrecio: Boolean(x.preguntaPrecio),
   quiereCotizacion: Boolean(x.quiereCotizacion),
   quierePersona: Boolean(x.quierePersona),
@@ -102,8 +106,11 @@ export const simularTurno = async (companyId: string, entrada: EntradaSimulacion
   const cliente = entrada.clienteConocido ? { nombre: usuario.nombre || 'Cliente', empresa: nombreEmpresa } : null;
 
   const motor: Simulacion['motor'] = modeloDescargado() ? 'qwen-local' : 'reglas';
-  const crudo = motor === 'qwen-local' ? await extraerConQwen(texto, { ultimaPreguntaBot: entrada.ultimaPreguntaBot, resumenEnviado: Boolean(estado.resumenEnviado) }).catch(() => ({})) : {};
-  const extraido = validarExtraccion(crudo, texto, guion);
+  const [crudo, respuestaFaq] = await Promise.all([
+    motor === 'qwen-local' ? extraerConQwen(texto, { ultimaPreguntaBot: entrada.ultimaPreguntaBot, resumenEnviado: Boolean(estado.resumenEnviado) }).catch(() => ({})) : Promise.resolve({}),
+    respuestaFaqPara(companyId, (config as { faq?: unknown } | null)?.faq, texto).catch(() => undefined),
+  ]);
+  const extraido = { ...validarExtraccion(crudo, texto, guion), ...(respuestaFaq ? { respuestaFaq } : {}) };
   const p = paso(estado, extraido, negocio, cliente, enHorario, texto, guion);
   const servicio = p.estado.servicio && p.estado.servicio !== 'otro' ? guion.servicios.find((s) => s.id === p.estado.servicio) : undefined;
   const duracionMs = Date.now() - inicio;

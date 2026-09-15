@@ -12,6 +12,7 @@ import { clearAgentSessionCache } from '../../agent/runtime/agent-wiring.js';
 import { GuionInvalido, guardarServicios, leerServicios, restaurarPack, type GuionEditable } from '../../agent/dali/servicios.js';
 import { simularTurno } from '../../agent/dali/probar.js';
 import { guardarNegocio, leerNegocio, type CambiosFicha } from '../../agent/dali/negocio.js';
+import { guardarFaq, listarFaq, probarFaq, sugeridasFaq } from '../../agent/dali/faq.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -141,6 +142,30 @@ router.put('/negocio', async (req: Request, res: Response) => {
   const ficha = await guardarNegocio(req.dali!.companyId, (req.body ?? {}) as CambiosFicha, req.dali!.name);
   clearAgentSessionCache();
   res.json(ficha);
+});
+
+/** A11: las preguntas frecuentes (la lista entera se guarda de una vez), probar una y las sugeridas. */
+router.get('/faq', async (req: Request, res: Response) => {
+  res.json({ faqs: await listarFaq(req.dali!.companyId) });
+});
+
+router.put('/faq', async (req: Request, res: Response) => {
+  const faqs = await guardarFaq(req.dali!.companyId, req.body?.faqs, req.dali!.name);
+  clearAgentSessionCache();
+  res.json({ faqs });
+});
+
+router.post('/faq/probar', async (req: Request, res: Response) => {
+  const pregunta = String(req.body?.pregunta ?? '').trim();
+  if (!pregunta) {
+    res.status(400).json({ error: 'Escribe una pregunta' });
+    return;
+  }
+  res.json(await probarFaq(req.dali!.companyId, pregunta));
+});
+
+router.get('/faq/sugeridas', async (req: Request, res: Response) => {
+  res.json({ sugeridas: await sugeridasFaq(req.dali!.companyId) });
 });
 
 /** A15: un turno del simulador. Nada se guarda ni se avisa; el estado va y viene con el navegador. */

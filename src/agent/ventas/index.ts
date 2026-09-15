@@ -22,6 +22,7 @@ import { HERRAMIENTAS_VENTAS, type DatosLead } from './herramientas.js';
 import type { ProveedorLlm } from './llm.types.js';
 import { bloquesSistema, type NegocioAsfalto } from './prompt.asfalto.js';
 import { enHorarioSegun, negocioDe, perfilDe, type HorarioAtencion } from '../dali/asistente.js';
+import { respuestaFaqPara } from '../dali/faq.js';
 import { correrTurno, historialATurnos } from './runtime.js';
 
 /**
@@ -143,7 +144,7 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
     // Qwen solo extrae (`guiado.ts` cuenta por qué). Con un modelo grande, el
     // turno conversacional de abajo.
     if (llm.nombre === 'qwen-local') {
-      return turnoGuiado({ conversationId, botConfig, negocio, customerPhone, mensajes, cliente, enHorario: hora.enHorario, conversacion }, deps);
+      return turnoGuiado({ companyId, conversationId, botConfig, negocio, customerPhone, mensajes, cliente, enHorario: hora.enHorario, conversacion }, deps);
     }
     const sistema = bloquesSistema(negocio, { ahoraTexto: hora.texto, enHorario: hora.enHorario, cliente, telefono: customerPhone, lead: conversacion.lead ?? null });
     const ultimaBot = [...mensajes].reverse().find((m) => m.role === 'bot')?.text;
@@ -221,6 +222,7 @@ const notificarLead = async (
 
 const turnoGuiado = async (
   ctx: {
+    companyId: string;
     conversationId: string;
     botConfig: ReplyInput['botConfig'];
     negocio: NegocioAsfalto;
@@ -241,7 +243,9 @@ const turnoGuiado = async (
   const texto = ctx.mensajes.slice(desde).map((m) => String(m.text || '')).join('\n');
   const ultimaBot = [...ctx.mensajes].reverse().find((m) => m.role === 'bot')?.text;
   const inicio = Date.now();
-  const extraido = validarExtraccion(await extraerConQwen(texto, { ultimaPreguntaBot: ultimaBot, resumenEnviado: Boolean(estado.resumenEnviado) }), texto, guion);
+  // La extracción con Qwen y la pregunta frecuente (embeddings) en paralelo: son modelos distintos.
+  const [crudo, respuestaFaq] = await Promise.all([extraerConQwen(texto, { ultimaPreguntaBot: ultimaBot, resumenEnviado: Boolean(estado.resumenEnviado) }), respuestaFaqPara(ctx.companyId, ctx.botConfig.faq, texto).catch(() => undefined)]);
+  const extraido = { ...validarExtraccion(crudo, texto, guion), ...(respuestaFaq ? { respuestaFaq } : {}) };
   const p = paso(estado, extraido, ctx.negocio, ctx.cliente, ctx.enHorario, texto, guion);
   const lead = leadDe(guion, p.estado);
   const guardar = paraGuardar(guion, p.estado);

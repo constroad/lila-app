@@ -45,6 +45,8 @@ export interface Extraccion {
   /** No tiene que ver con asfalto (o intenta cambiar las reglas). */
   fueraDeTema?: boolean;
   saludoSolo?: boolean;
+  /** La respuesta de una pregunta frecuente (A11) que coincidió con el mensaje: se dice y se sigue. */
+  respuestaFaq?: string;
 }
 
 export const ESQUEMA_EXTRACCION = {
@@ -556,7 +558,7 @@ const pasoGuiado = (
     if (cliente.empresa && !e.empresa) e.empresa = cliente.empresa;
   }
 
-  if (x.fueraDeTema) {
+  if (x.fueraDeTema && !x.respuestaFaq) {
     const n = (e.sinEntender ?? 0) + 1;
     if (n >= 3) return { texto: `Mejor te paso con un asesor, que te contacta ${asesorCuando}.`, estado: { ...e, sinEntender: n, cerrado: true, cerradoEn: new Date().toISOString() }, guardar: true, escalar: 'tres mensajes fuera de tema' };
     const siguiente = pendiente(guion, e);
@@ -621,7 +623,9 @@ const pasoGuiado = (
 
   // 4) Precio / cotización / dónde están: se explica una vez y se sigue.
   let prefacio = '';
-  if (PREGUNTA_UBICACION.test(t) && negocio.comoLlegar && !e.ubicacionExplicada) {
+  if (x.respuestaFaq) {
+    prefacio = `${x.respuestaFaq.trim()} `;
+  } else if (PREGUNTA_UBICACION.test(t) && negocio.comoLlegar && !e.ubicacionExplicada) {
     prefacio = `${negocio.comoLlegar.trim()} `;
     e.ubicacionExplicada = true;
   } else if (x.preguntaPrecio) {
@@ -638,6 +642,8 @@ const pasoGuiado = (
   let salto = '';
   if (preguntada && !entendido) {
     if (x.saludoSolo) return { texto: `Aquí sigo 🙂 ${preguntada.pregunta}`, estado: e, guardar: false };
+    // Preguntó algo del negocio (FAQ): se contesta y se repite la pregunta pendiente, sin contarlo como no entendido.
+    if (x.respuestaFaq) return { texto: `${prefacio}${preguntada.pregunta}`.trim(), estado: e, guardar: false };
     const n = (e.sinEntender ?? 0) + 1;
     if (n < 2 || !t) {
       return { texto: `${prefacio}${preguntada.pista ?? 'No te entendí bien.'} ${preguntada.pregunta}`.trim(), estado: { ...e, sinEntender: n }, guardar: false };

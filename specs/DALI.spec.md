@@ -258,7 +258,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   columnas), A3 Conversación, A4 Leads (tablero por estado y lista; en
   escritorio, el lead elegido como panel a la derecha), A5 Lead, **A6
   Asistente**, **A7 Negocio**, **A8 Servicios, A9 guion, A10 pregunta**,
-  **A15 Probar a Dali** (abajo). Las demás
+  **A11 Preguntas frecuentes**, **A15 Probar a Dali** (abajo). Las demás
   responden «esta pantalla se está construyendo»; «Más» del móvil lista lo
   que no cabe en la barra.
 - **A6 Asistente** (`ui/dali/src/screens/asistente/*`, comparada con
@@ -351,6 +351,26 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   mapas; el enlace abre Google Maps) ni la verificación SUNAT del diseño.
   Tests: `negocio.test.ts` (ficha desde Portal, recortes, mezcla, RUC),
   `guiado.test.ts` (dónde están).
+- **A11 Preguntas frecuentes** (`ui/dali/src/screens/faq/*`, comparada con
+  `A11-faq` en los tres tamaños): lo que Dali responde tal cual. Lista de
+  tarjetas (pregunta, respuesta, variantes «también se pregunta así»,
+  categoría, interruptor, «usada N veces»), edición en el lugar, búsqueda y
+  pestañas por categoría, «Sugeridas por Dali» (preguntas de clientes de los
+  últimos 30 días que Dali contestó con «solo puedo ayudarte con lo de
+  asfalto», agrupadas: `sugeridasDe`), y el probador (`POST faq/probar` →
+  con cuál coincide, cuánto y qué contestaría). La lista se guarda entera
+  (`PUT faq`) en `bot_configs.faq` (`dali/faq.ts`). **Cómo reconoce**: por
+  embeddings con el mismo `multilingual-e5-small` local del agente de
+  operaciones (`checklist/semantica.ts` `cargarModelo`), coseno entre el
+  mensaje y cada pregunta o variante, umbral `UMBRAL_FAQ = 0.87` (medido:
+  «sábados atienden?» 0.93 contra «¿Trabajan los sábados?», «abren los
+  domingos?» 0.85, «cuánto cuesta el m2» 0.78); sin modelo, por palabras en
+  común (Jaccard ≥ 0.6). **En el motor**: `turnoGuiado` y el simulador
+  corren la extracción de Qwen y la FAQ en paralelo; si coincide,
+  `Extraccion.respuestaFaq` y `paso` la dice delante de la pregunta pendiente
+  sin contarla como «no entendí» ni fuera de tema; se incrementa `usos`.
+  Tests: `faq.test.ts` (limpieza, literal, coseno con modelo de juguete,
+  sin modelo), `guiado.test.ts` (FAQ dentro del guion).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -423,7 +443,7 @@ navegador de la herramienta no mapea bien los clics con 1440 emulado); la
 barra superior en escritorio para Chats/Leads (A2 desktop la dibuja) queda
 para cuando se revisen esas pantallas.
 
-**Pendiente de F3:** P1, P4–P6, A11–A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A12–A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 
