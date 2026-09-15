@@ -23,6 +23,7 @@ import {
   proponer,
   propuestasDe,
   vencidasAhora,
+  yaEnviada,
   yaPropuesta,
   type Propuesta,
 } from './sugerencias.js';
@@ -120,8 +121,11 @@ export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => 
   // Lo que venció sin respuesta se dice UNA vez y en una línea (si no, una
   // propuesta ignorada se confunde con una aprobada), y se persiste vencido
   // para que un reinicio no lo vuelva a vencer.
-  const vencidas = vencidasAhora(ahoraMs).filter((p) => p.destino);
-  for (const vencida of vencidas) void guardarPropuesta(vencida);
+  const todasVencidas = vencidasAhora(ahoraMs).filter((p) => p.destino);
+  // Si otra del mismo tipo, día y destino ya se aprobó, esta venció porque
+  // sobraba: se guarda y no se dice nada.
+  const vencidas = todasVencidas.filter((p) => !propuestasDe(p.tipo).some((o) => o.id !== p.id && o.estado === 'aprobada' && o.fecha === p.fecha && o.destino === p.destino));
+  for (const vencida of todasVencidas) void guardarPropuesta(vencida);
   if (vencidas.length) {
     const NOMBRE: Record<string, string> = { 'aviso-planta': 'aviso a planta', 'checklist-planta': 'checklist de planta', 'checklist-admin': 'checklist', 'aviso-mencion': 'aviso previo a planta', 'recordatorio-pedido': 'recordatorio de pedido' };
     const lista = vencidas.map((p) => `${NOMBRE[p.tipo] ?? p.tipo} (${p.nombreDestino})`).join(', ');
@@ -168,7 +172,11 @@ const proponerAvisoDelDia = async (
 ): Promise<number> => {
   if (!alcance.grupoPlanta || presupuesto.restantes <= 0) return 0;
   const firma = `${firmaDia(dia)}|aviso`;
-  if (yaPropuesta('aviso-planta', firma, ahoraMs)) return 0;
+  // Ya se mandó (a pedido o aprobada): no hay nada que proponer. Y lo que
+  // venció sin respuesta no se vuelve a proponer solo: para eso está «@lila
+  // manda el aviso a planta».
+  if (yaEnviada('aviso-planta', firma)) return 0;
+  if (yaPropuesta('aviso-planta', firma, ahoraMs, { incluirVencidas: true })) return 0;
 
   const anterior = ultimaVersionDelDia.get(dia.fecha);
   const cambio = anterior ? describirCambio(anterior, dia.pedidos) : '';
@@ -208,7 +216,7 @@ export const proponerAvisoManual = async (
   const dia = agruparPorDia(pedidos).find((d) => d.fecha === fecha);
   if (!dia) return `No hay pedidos con hora de inicio para el ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}: sin pedido no hay aviso que mandar.`;
   const firmaBase = `${firmaDia(dia)}|aviso`;
-  const enviada = propuestasDe('aviso-planta').find((p) => p.firma === firmaBase && p.estado === 'aprobada');
+  const enviada = yaEnviada('aviso-planta', firmaBase);
   if (enviada?.decididaMs) {
     const hora = new Date(enviada.decididaMs).toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false });
     return `Ese aviso ya se mandó a «${enviada.nombreDestino}» hoy a las ${hora}. Si cambió algo, dime qué y lo propongo de nuevo.`;

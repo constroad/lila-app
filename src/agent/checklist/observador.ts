@@ -11,7 +11,7 @@ import {
 } from './alcance.js';
 import { normalizarTexto } from './checklist.js';
 import { hidratarMensajes, recordarMensaje } from './almacen.js';
-import { decidir, esVoto, hidratarPropuestas, type MotivoRechazo } from './sugerencias.js';
+import { cerrarSuperadas, decidir, esVoto, hidratarPropuestas, type MotivoRechazo } from './sugerencias.js';
 import { avisarEnGrupo, enviarAOperaciones, enviarAprobado } from './emisor.js';
 import { cargarAprobadores, esAdmin, esAprobador } from './aprobadores.js';
 import { apagar, comandoInterruptor, encender, estadoInterruptor, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
@@ -369,6 +369,7 @@ const atenderVoto = async (
       return;
     }
     const enviada = await enviarAprobado(propuesta, alcance);
+    for (const superada of cerrarSuperadas(propuesta)) void guardarPropuesta(superada);
     await avisar(
       enviada
         ? `✅ Enviado a «${propuesta.nombreDestino}».`

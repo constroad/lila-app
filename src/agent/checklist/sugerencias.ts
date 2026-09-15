@@ -106,9 +106,37 @@ export const anotarMensaje = (id: string, msgId: string): Propuesta | undefined 
  * ¿Ya se propuso esto? Una VENCIDA no cuenta: si nadie la contestó en 6 h y el
  * hecho sigue faltando, se vuelve a proponer — lo que se evita es el eco.
  */
-export const yaPropuesta = (tipo: TipoPropuesta, firma: string, ahoraMs = Date.now()): boolean => {
+export const yaPropuesta = (tipo: TipoPropuesta, firma: string, ahoraMs = Date.now(), opciones: { incluirVencidas?: boolean } = {}): boolean => {
   expirar(ahoraMs);
-  return propuestas.some((p) => p.tipo === tipo && p.firma === firma && p.estado !== 'vencida');
+  return propuestas.some((p) => p.tipo === tipo && p.firma === firma && (opciones.incluirVencidas || p.estado !== 'vencida'));
+};
+
+/**
+ * ¿Este hecho ya se MANDÓ? Una propuesta aprobada del mismo tipo y día cuya
+ * firma empiece igual (la manual lleva sufijo `|manual|…`). El 14/09 a las
+ * 23:00 y el 15/09 a las 05:00 el detector volvió a proponer el aviso a planta
+ * del 15/09 que José había aprobado a las 20:42: la aprobada era la manual, con
+ * otra firma, y la automática había vencido.
+ */
+export const yaEnviada = (tipo: TipoPropuesta, firmaBase: string): Propuesta | undefined =>
+  propuestas.find((p) => p.tipo === tipo && p.estado === 'aprobada' && p.firma.startsWith(firmaBase));
+
+/**
+ * Al aprobarse una, las demás pendientes del mismo tipo, día y destino quedan
+ * superadas: se cierran en silencio (no «vencen» con aviso). Devuelve las
+ * cerradas para persistirlas.
+ */
+export const cerrarSuperadas = (aprobada: Propuesta, ahoraMs = Date.now()): Propuesta[] => {
+  const cerradas: Propuesta[] = [];
+  for (const p of propuestas) {
+    if (p.id === aprobada.id || p.estado !== 'pendiente') continue;
+    if (p.tipo !== aprobada.tipo || p.fecha !== aprobada.fecha || p.destino !== aprobada.destino) continue;
+    p.estado = 'descartada';
+    p.decididaPor = 'superada';
+    p.decididaMs = ahoraMs;
+    cerradas.push(p);
+  }
+  return cerradas;
 };
 
 /** Todas las de un tipo (cualquier estado), de la más nueva a la más vieja. */

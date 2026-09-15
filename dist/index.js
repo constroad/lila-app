@@ -10478,7 +10478,7 @@ var init_almacen = __esm({
 
 // src/agent/checklist/sugerencias.ts
 import { randomUUID as randomUUID4 } from "crypto";
-var VIGENCIA_MS, MAX_PROPUESTAS, propuestas, _resetPropuestas, hidratarPropuestas, expirar, proponer, anotarMensaje, yaPropuesta, propuestasDe, pendientes, vencidasAhora, porMensaje, esVoto, decidir;
+var VIGENCIA_MS, MAX_PROPUESTAS, propuestas, _resetPropuestas, hidratarPropuestas, expirar, proponer, anotarMensaje, yaPropuesta, yaEnviada, cerrarSuperadas, propuestasDe, pendientes, vencidasAhora, porMensaje, esVoto, decidir;
 var init_sugerencias = __esm({
   "src/agent/checklist/sugerencias.ts"() {
     VIGENCIA_MS = 6 * 60 * 60 * 1e3;
@@ -10517,9 +10517,22 @@ var init_sugerencias = __esm({
       if (p64) p64.msgId = msgId;
       return p64;
     };
-    yaPropuesta = (tipo, firma, ahoraMs = Date.now()) => {
+    yaPropuesta = (tipo, firma, ahoraMs = Date.now(), opciones = {}) => {
       expirar(ahoraMs);
-      return propuestas.some((p64) => p64.tipo === tipo && p64.firma === firma && p64.estado !== "vencida");
+      return propuestas.some((p64) => p64.tipo === tipo && p64.firma === firma && (opciones.incluirVencidas || p64.estado !== "vencida"));
+    };
+    yaEnviada = (tipo, firmaBase) => propuestas.find((p64) => p64.tipo === tipo && p64.estado === "aprobada" && p64.firma.startsWith(firmaBase));
+    cerrarSuperadas = (aprobada, ahoraMs = Date.now()) => {
+      const cerradas = [];
+      for (const p64 of propuestas) {
+        if (p64.id === aprobada.id || p64.estado !== "pendiente") continue;
+        if (p64.tipo !== aprobada.tipo || p64.fecha !== aprobada.fecha || p64.destino !== aprobada.destino) continue;
+        p64.estado = "descartada";
+        p64.decididaPor = "superada";
+        p64.decididaMs = ahoraMs;
+        cerradas.push(p64);
+      }
+      return cerradas;
     };
     propuestasDe = (tipo) => propuestas.filter((p64) => p64.tipo === tipo).reverse();
     pendientes = (ahoraMs = Date.now()) => {
@@ -14627,8 +14640,9 @@ var init_detector = __esm({
       }
       const alcance = await alcanceVigente(ahoraMs);
       if (!alcance.grupoEscuchado) return 0;
-      const vencidas = vencidasAhora(ahoraMs).filter((p64) => p64.destino);
-      for (const vencida of vencidas) void guardarPropuesta(vencida);
+      const todasVencidas = vencidasAhora(ahoraMs).filter((p64) => p64.destino);
+      const vencidas = todasVencidas.filter((p64) => !propuestasDe(p64.tipo).some((o37) => o37.id !== p64.id && o37.estado === "aprobada" && o37.fecha === p64.fecha && o37.destino === p64.destino));
+      for (const vencida of todasVencidas) void guardarPropuesta(vencida);
       if (vencidas.length) {
         const NOMBRE = { "aviso-planta": "aviso a planta", "checklist-planta": "checklist de planta", "checklist-admin": "checklist", "aviso-mencion": "aviso previo a planta", "recordatorio-pedido": "recordatorio de pedido" };
         const lista = vencidas.map((p64) => `${NOMBRE[p64.tipo] ?? p64.tipo} (${p64.nombreDestino})`).join(", ");
@@ -14653,7 +14667,8 @@ var init_detector = __esm({
     proponerAvisoDelDia = async (dia, alcance, ahoraMs, presupuesto = SIN_LIMITE) => {
       if (!alcance.grupoPlanta || presupuesto.restantes <= 0) return 0;
       const firma = `${firmaDia(dia)}|aviso`;
-      if (yaPropuesta("aviso-planta", firma, ahoraMs)) return 0;
+      if (yaEnviada("aviso-planta", firma)) return 0;
+      if (yaPropuesta("aviso-planta", firma, ahoraMs, { incluirVencidas: true })) return 0;
       const anterior = ultimaVersionDelDia.get(dia.fecha);
       const cambio = anterior ? describirCambio(anterior, dia.pedidos) : "";
       const texto5 = construirAvisoProduccion(dia, { actualizacion: cambio || void 0 });
@@ -14680,7 +14695,7 @@ var init_detector = __esm({
       const dia = agruparPorDia(pedidos).find((d67) => d67.fecha === fecha);
       if (!dia) return `No hay pedidos con hora de inicio para el ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}: sin pedido no hay aviso que mandar.`;
       const firmaBase = `${firmaDia(dia)}|aviso`;
-      const enviada = propuestasDe("aviso-planta").find((p64) => p64.firma === firmaBase && p64.estado === "aprobada");
+      const enviada = yaEnviada("aviso-planta", firmaBase);
       if (enviada?.decididaMs) {
         const hora3 = new Date(enviada.decididaMs).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "2-digit", minute: "2-digit", hour12: false });
         return `Ese aviso ya se mand\xF3 a \xAB${enviada.nombreDestino}\xBB hoy a las ${hora3}. Si cambi\xF3 algo, dime qu\xE9 y lo propongo de nuevo.`;
@@ -15445,6 +15460,7 @@ var init_observador = __esm({
           return;
         }
         const enviada = await enviarAprobado(propuesta, alcance);
+        for (const superada of cerrarSuperadas(propuesta)) void guardarPropuesta(superada);
         await avisar2(
           enviada ? `\u2705 Enviado a \xAB${propuesta.nombreDestino}\xBB.` : `\u26D4 No se pudo mandar a \xAB${propuesta.nombreDestino}\xBB: revis\xE1 el log de lila.`
         );

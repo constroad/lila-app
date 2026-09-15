@@ -1,7 +1,7 @@
 import {
-  VIGENCIA_MS,
   _resetPropuestas,
   anotarMensaje,
+  cerrarSuperadas,
   decidir,
   esVoto,
   hidratarPropuestas,
@@ -9,6 +9,8 @@ import {
   porMensaje,
   proponer,
   vencidasAhora,
+  VIGENCIA_MS,
+  yaEnviada,
   yaPropuesta,
 } from './sugerencias';
 
@@ -145,5 +147,28 @@ describe('vigencia, repetición y memoria', () => {
     expect(vencidas.map((p) => p.id)).toEqual(['vieja']);
     expect(vencidas[0].estado).toBe('vencida');
     expect(vencidasAhora(VIGENCIA_MS + 2).map((p) => p.id)).toEqual([]);
+  });
+});
+
+describe('lo ya mandado no se vuelve a proponer (14/09 23:00 y 15/09 05:00: el aviso a planta salió tres veces)', () => {
+  it('yaEnviada encuentra la aprobada aunque sea la manual; cerrarSuperadas cierra las demás pendientes del mismo día y destino', () => {
+    _resetPropuestas();
+    const firmaBase = '2026-09-15|abc:04:30:275|aviso';
+    const automatica = proponer({ ...base, fecha: '2026-09-15', firma: firmaBase }, 0);
+    const manual = proponer({ ...base, fecha: '2026-09-15', firma: `${firmaBase}|manual|123` }, 1_000);
+    expect(yaEnviada('aviso-planta', firmaBase)).toBeUndefined();
+    manual.estado = 'aprobada';
+    expect(yaEnviada('aviso-planta', firmaBase)?.id).toBe(manual.id);
+    const cerradas = cerrarSuperadas(manual, 2_000);
+    expect(cerradas.map((p) => p.id)).toEqual([automatica.id]);
+    expect(automatica.estado).toBe('descartada');
+    expect(vencidasAhora(VIGENCIA_MS + 10)).toEqual([]); // ya no vence: no hay aviso que dar
+  });
+
+  it('una vencida no se vuelve a proponer sola', () => {
+    _resetPropuestas();
+    proponer(base, 0);
+    expect(yaPropuesta('aviso-planta', base.firma, VIGENCIA_MS + 1)).toBe(false);
+    expect(yaPropuesta('aviso-planta', base.firma, VIGENCIA_MS + 1, { incluirVencidas: true })).toBe(true);
   });
 });
