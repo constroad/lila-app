@@ -33,6 +33,30 @@ const vista: VistaDelDia = {
 };
 const hoy = { day: 'today' as const };
 
+describe('cubicaje de una unidad', () => {
+  it('con cubicación en el Portal: m³, forma, quién cubicó, y lo que salió hoy', () => {
+    const r = responder('unit_capacity', {
+      vista,
+      params: { ...hoy, unitNumber: 1 },
+      cubicacion: { plate: 'AZJ910', m3: 25, shape: 'Concavo', cubicator: 'JUAN PEREZ' },
+    });
+    expect(r).toContain('*Unidad 1* (AZJ 910) cubica *25 m³*');
+    expect(r).toContain('cóncava');
+    expect(r).toContain('JUAN PEREZ');
+    expect(r).toContain('salió con *25 m³*');
+  });
+
+  it('sin cubicación registrada lo dice, y dice dónde se carga', () => {
+    const r = responder('unit_capacity', { vista, params: { ...hoy, plate: 'BBE942' }, cubicacion: null });
+    expect(r).toContain('no tiene cubicación registrada');
+    expect(r).toContain('Transportes');
+  });
+
+  it('sin unidad pregunta cuál, como las demás consultas de unidad', () => {
+    expect(responder('unit_capacity', { vista, params: hoy })).toContain('¿De cuál unidad?');
+  });
+});
+
 describe('responder', () => {
   it('fuera del catálogo: una respuesta fija que dice qué SÍ puede', () => {
     expect(responder(null, { vista, ahoraMs: lima('12:00'), params: hoy })).toContain('Eso no lo tengo');

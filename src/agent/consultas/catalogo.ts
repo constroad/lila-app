@@ -22,6 +22,7 @@ export type ClaveConsulta =
   | 'unit_departure'
   | 'unit_eta'
   | 'unit_driver'
+  | 'unit_capacity'
   | 'orders_day'
   | 'checklist_status'
   | 'reports_status'
@@ -73,6 +74,15 @@ export const CATALOGO: EntradaCatalogo[] = [
     id: 'unit_eta',
     seSatisfaceCon: ['cuanto falta para que llegue la 5', 'a que hora llega el carro 3', 'cuando llega la 2', 'eta de la unidad 4'],
     reglas: [['lleg'], ['eta']],
+    pideUnidad: true,
+  },
+  {
+    id: 'unit_capacity',
+    seSatisfaceCon: ['cuanto cubica ese volquete', 'cual es el cubicaje de la unidad 9', 'cuantos m3 le entran a la placa abc 123', 'capacidad del carro 3'],
+    // 15/09 16:50: Globofast vio hueco atrás en el video y preguntó «¿sabes
+    // cuánto cubica ese volquete?»; Lila volvió a pedir la unidad y mandó fotos.
+    // El cubicaje vive en el Portal (Transportes → Cubicar): m³, forma y quién cubicó.
+    reglas: [['cubica'], ['cubicaje'], ['cubicacion'], ['cubicación'], ['capacidad'], ['entran'], ['caben'], ['cabe']],
     pideUnidad: true,
   },
   {
@@ -304,6 +314,9 @@ export const ALIAS_EMPRESA: Array<{ companyId: string; alias: string[] }> = [
   { companyId: 'inframaq-iax', alias: ['inframaq', 'infra'] },
 ];
 
+/** Palabras de tres letras que preceden a un número sin ser una placa. */
+const PALABRAS_NO_PLACA = new Set(['los', 'las', 'van', 'hay', 'son', 'con', 'del', 'por', 'que', 'una', 'uno', 'mas', 'hoy', 'sus', 'esa', 'ese', 'eso', 'sin', 'los', 'dos', 'sea', 'era', 'fue', 'aun', 'aún', 'ver', 'dar', 'sale', 'sus']);
+
 export const normalizarPlaca = (placa: string): string =>
   String(placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -318,12 +331,18 @@ export const extraerParametros = (pregunta: string, ahoraMs = Date.now()): Param
   const t = normalizar(pregunta);
   const day: Parametros['day'] = /\bmanana\b/.test(t) ? 'tomorrow' : 'today';
 
-  // Placa peruana: tres letras y tres números («AZJ 910», «AML838», «BBE-942»),
-  // con o sin la palabra «placa» adelante. Se extrae ANTES que la unidad para
+  // Placa peruana: tres caracteres y tres números («AZJ 910», «AML838»,
+  // «BBE-942»), con o sin la palabra «placa» adelante. El primer bloque puede
+  // llevar un dígito en el medio (A1Y-825, C2A-772, T2T-809, F2B-725: el formato
+  // nuevo); con «tres letras» a secas, «del A1Y 825 dame el vídeo» terminaba en
+  // «¿De cuál unidad?» (15/09, 16:48). Empieza por letra para que «250 m3»,
+  // «12/09» o un vale de seis dígitos no se lean como placa. Se extrae ANTES que la unidad para
   // que «910» no se lea como unidad. Y las fechas se tapan antes que todo:
   // «fotos de la última unidad que salió el 4 de setiembre» daba la unidad 4.
   const sinFechas = t.replace(FECHAS_ESCRITAS, ' ');
-  const placa = sinFechas.match(/\b([a-z]{3})[\s-]?(\d{3})\b/);
+  // Una palabra de tres letras seguida de un número («van 250», «los 275 de
+  // hoy») no es una placa: se descartan las palabras comunes.
+  const placa = [...sinFechas.matchAll(/\b([a-z][a-z0-9]{2})[\s-]?(\d{3})\b/g)].find((m) => !PALABRAS_NO_PLACA.has(m[1]!));
   const plate = placa ? normalizarPlaca(`${placa[1]}${placa[2]}`) : undefined;
   const sinPlaca = placa ? sinFechas.replace(placa[0], ' ') : sinFechas;
 

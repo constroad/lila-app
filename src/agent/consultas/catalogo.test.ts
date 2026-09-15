@@ -67,6 +67,11 @@ describe('ruteo por reglas', () => {
     ['cuánto falta para que llegue la 5', 'unit_eta'],
     ['quién maneja la 5', 'unit_driver'],
     ['qué placa tiene la 3', 'unit_driver'],
+    // 15/09 16:50: «sabes cuánto cubica ese volquete?» → pedía fotos otra vez.
+    ['sabes cuánto cubica ese volquete?', 'unit_capacity'],
+    ['cuál es el cubicaje del volquete 9', 'unit_capacity'],
+    ['cuántos m3 le entran a la A1Y 825', 'unit_capacity'],
+    ['capacidad de la unidad 3', 'unit_capacity'],
     ['qué pedidos hay mañana', 'orders_day'],
     ['hay producción mañana?', 'orders_day'],
     ['cómo va el checklist', 'checklist_status'],
@@ -188,6 +193,13 @@ describe('parámetros', () => {
     expect(extraerParametros('fotos de la placa AZJ 910')).toMatchObject({ plate: 'AZJ910', unitNumber: undefined });
     expect(extraerParametros('video de la aml838')).toMatchObject({ plate: 'AML838' });
     expect(extraerParametros('la BBE-942 ya salió?')).toMatchObject({ plate: 'BBE942' });
+    // 15/09 16:48: «del A1Y 825 dame el vídeo» → «¿De cuál unidad?». Las placas
+    // nuevas llevan un dígito en el bloque de letras (A1Y-825, C2A-772, T2T-809).
+    expect(extraerParametros('del A1Y 825 dame el vídeo de cómo salió hoy de planta')).toMatchObject({ plate: 'A1Y825', unitNumber: undefined });
+    expect(extraerParametros('cuánto cubica el T2T-809')).toMatchObject({ plate: 'T2T809' });
+    // Y no cualquier cosa con tres dígitos: «m3 250» no es placa.
+    expect(extraerParametros('van 250 m3 hoy').plate).toBeUndefined();
+    expect(extraerParametros('los 275 de hoy ya salieron?').plate).toBeUndefined();
     expect(normalizarPlaca(' bbe 942 ')).toBe('BBE942');
   });
 

@@ -4,6 +4,7 @@ import { fechaLegible } from '../checklist/tiempo.js';
 import { menuAyuda } from './ayuda.js';
 import type { Revision } from '../checklist/checklist.js';
 import type { Archivo, EstadoInforme, PestanasEnlace } from './archivos.js';
+import type { Cubicacion } from './cubicacion.js';
 
 /** Una respuesta puede ser texto, texto + archivos, o una pregunta con opciones. */
 export interface Respuesta {
@@ -137,6 +138,14 @@ const unidad = (vista: VistaDelDia, n?: number) => (n ? unidades(vista).find((u)
  */
 export const PREGUNTA_UNIDAD = '¿De cuál unidad? Dime el número, la placa o «la última».';
 
+/** Como lo escribe el Portal en `transport.shape` («Cuadrado», «Concavo»). */
+const formaDeTolva = (shape: string): string => {
+  const s = shape.toLowerCase();
+  if (s.startsWith('conc')) return 'cóncava';
+  if (s.startsWith('cuad')) return 'cuadrada';
+  return s;
+};
+
 const describeUnidad = (params: Parametros): string =>
   params.plate ? `la placa ${params.plate}` : params.unitNumber ? `la unidad ${params.unitNumber}` : params.ordinal === 'ultima' ? 'la última unidad' : 'la primera unidad';
 
@@ -150,6 +159,8 @@ export interface ContextoRespuesta {
   revision?: Revision | null;
   /** Informes del día, para `reports_status` y `site_finish`. */
   informes?: EstadoInforme[] | null;
+  /** La ficha de cubicación del volquete, para `unit_capacity` (`null` = no tiene). */
+  cubicacion?: Cubicacion | null;
   /** «Ahora», para estimaciones. */
   ahoraMs?: number;
 }
@@ -263,6 +274,20 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       if (u.departedAt) return `La *unidad ${u.unitNumber}* salió a las ${hora(u.departedAt)}${pasado ? ` el ${dia}, sin llegada registrada` : '. Todavía no calculo tiempos de llegada por acá'}.`;
       if (pasado) return `La *unidad ${u.unitNumber}* no tiene salida registrada el ${dia}.`;
       return `La *unidad ${u.unitNumber}* todavía no salió.`;
+    }
+
+    case 'unit_capacity': {
+      if (!identificaUnidad(params)) return PREGUNTA_UNIDAD;
+      const u = unidadPor(vista, params);
+      if (!u) return `No encuentro ${describeUnidad(params)} en los pedidos de ${dia}.`;
+      const c = ctx.cubicacion;
+      const salio = u.state === 'despachado' ? ` Hoy salió con *${u.quantity} m³* despachados.` : '';
+      if (!c || !c.m3) {
+        return `🚛 La *unidad ${u.unitNumber}* (${u.plate || 'sin placa'}) no tiene cubicación registrada en el Portal: se carga en Transportes → Cubicar (medidas de la tolva → m³).${salio}`;
+      }
+      const forma = c.shape ? ` (tolva ${formaDeTolva(c.shape)})` : '';
+      const quien = c.cubicator ? `, cubicó ${c.cubicator}` : '';
+      return `🚛 La *Unidad ${u.unitNumber}* (${u.plate || c.plate}) cubica *${c.m3} m³*${forma}${quien}.${salio}`;
     }
 
     case 'unit_media': {

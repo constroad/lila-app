@@ -47,6 +47,7 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
   { id: 'plant_current_unit', descripcion: 'qué unidad se está cargando en planta ahora', argumentos: [] },
   { id: 'site_current_unit', descripcion: 'qué unidad está en campo / en obra ahora', argumentos: [] },
   { id: 'unit_driver', descripcion: 'quién maneja / conductor de una unidad', argumentos: ['unidad', 'placa', 'fecha'] },
+  { id: 'unit_capacity', descripcion: 'cuánto cubica / cubicaje / capacidad en m³ de una unidad o placa', argumentos: ['unidad', 'placa', 'fecha'] },
   { id: 'unit_departure', descripcion: 'a qué hora salió una unidad', argumentos: ['unidad', 'placa', 'fecha'] },
   { id: 'unit_eta', descripcion: 'cuánto falta para que llegue una unidad', argumentos: ['unidad', 'placa'] },
   { id: 'unit_media', descripcion: 'fotos y videos de una unidad', argumentos: ['unidad', 'placa', 'fecha'] },

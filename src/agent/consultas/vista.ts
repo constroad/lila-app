@@ -19,6 +19,8 @@ export interface UnidadDelDia {
   dispatchId: string;
   unitNumber: number;
   plate: string;
+  /** El volquete del Portal (`transports`), para su cubicación. */
+  transportId?: string;
   driverName: string;
   state: 'pendiente' | 'progreso' | 'despachado';
   quantity: number;
@@ -98,7 +100,7 @@ export const construirVista = async (fecha: string, ahoraMs = Date.now()): Promi
 
   const dispatches = ids.length
     ? ((await DispatchModel.find({ orderId: { $in: ids }, state: { $ne: 'eliminado' } })
-        .select('orderId unitNumber plate driverName state quantity departedAt arrival pictures')
+        .select('orderId unitNumber plate driverName state quantity departedAt arrival pictures transportId')
         .lean()) as Array<Record<string, unknown>>)
     : [];
 
@@ -112,6 +114,7 @@ export const construirVista = async (fecha: string, ahoraMs = Date.now()): Promi
           dispatchId: String(d._id),
           unitNumber: num(d.unitNumber),
           plate: String(d.plate || '').trim(),
+          transportId: d.transportId ? String(d.transportId) : undefined,
           driverName: String(d.driverName || '').trim(),
           state: (['pendiente', 'progreso', 'despachado'].includes(String(d.state)) ? d.state : 'pendiente') as UnidadDelDia['state'],
           quantity: num(d.quantity),

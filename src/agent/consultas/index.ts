@@ -13,6 +13,7 @@ import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { fechaDe, hoyLima, normalizar, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
+import { buscarCubicacion, type Cubicacion } from './cubicacion.js';
 import { MAX_OPCIONES_INFORMES, argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, herramientaDeDatosPorReglas, normalizarArgumentos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
@@ -274,7 +275,7 @@ const armarRespuesta = async (
   if (clave === 'unit_media' && pideFotosDeInforme(pregunta)) return respuestaFotosDeInforme(vista, params, pregunta, quien, grupo);
   // Las consultas de una unidad sin unidad: se PREGUNTA, y la respuesta de la
   // persona («la 4», «AML838», «la última») completa esta misma consulta.
-  const deUnidad = clave === 'unit_media' || clave === 'unit_departure' || clave === 'unit_driver' || clave === 'unit_eta';
+  const deUnidad = clave === 'unit_media' || clave === 'unit_departure' || clave === 'unit_driver' || clave === 'unit_eta' || clave === 'unit_capacity';
   if (deUnidad && !identificaUnidad(params)) {
     preguntar({
       quien,
@@ -294,7 +295,20 @@ const armarRespuesta = async (
     clave === 'reports_status' || clave === 'site_finish'
       ? await informesDeLaVista(vista, params, fecha)
       : null;
-  return { texto: responder(clave, { vista, params: { ...params, pregunta } as Parametros, revision, informes }) };
+  // El cubicaje no está en la vista del día: es la ficha del volquete en el Portal.
+  const cubicacion = clave === 'unit_capacity' ? await cubicacionDe(vista, params) : undefined;
+  return { texto: responder(clave, { vista, params: { ...params, pregunta } as Parametros, revision, informes, cubicacion }) };
+};
+
+/**
+ * La cubicación del volquete de la unidad: por `transportId` del despacho y,
+ * si no, por placa dentro de la empresa del pedido (nunca de otra).
+ */
+const cubicacionDe = async (vista: VistaDelDia, params: Parametros): Promise<Cubicacion | null> => {
+  const u = unidadPor(vista, params);
+  if (!u) return null;
+  const pedido = vista.orders.find((o) => o.units.includes(u));
+  return buscarCubicacion({ companyId: pedido?.companyId ?? '', transportId: u.transportId, plate: u.plate });
 };
 
 /** Las empresas del piloto con su nombre, para etiquetar el stock. */
@@ -338,6 +352,7 @@ const EJEMPLO: Partial<Record<ClaveConsulta, string>> = {
   unit_departure: 'a qué hora salió una unidad',
   unit_eta: 'cuánto falta para que llegue una unidad',
   unit_driver: 'quién maneja una unidad',
+  unit_capacity: 'cuánto cubica una unidad',
   orders_day: 'qué pedidos hay',
   checklist_status: 'cómo va el checklist',
   reports_status: 'qué informes están hechos',

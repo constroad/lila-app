@@ -293,3 +293,18 @@ export async function getSharedModels(): Promise<{
 
   return { CronJobModel, CompanyModel, ConfigModel };
 }
+
+let transportModel: Model<Record<string, unknown>> | null = null;
+
+/** Volquetes del Portal (loose, solo lectura): placa y su cubicación (m³, forma, quién cubicó). */
+export async function getTransportModel(): Promise<Model<Record<string, unknown>>> {
+  if (transportModel) {
+    return transportModel;
+  }
+
+  const conn = await getSharedConnection();
+  transportModel =
+    (conn.models.Transport as Model<Record<string, unknown>>) ||
+    conn.model<Record<string, unknown>>('Transport', looseSchema, 'transports');
+  return transportModel;
+}
