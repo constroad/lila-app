@@ -1,8 +1,29 @@
 import esbuild from 'esbuild';
 import path from 'path';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * LA UI DE DALI (`ui/dali`, Vite) se compila en el mismo build y lila la
+ * sirve como estáticos (spec DALI §2.1). `--include=dev` porque el deploy corre
+ * con NODE_ENV=production y `npm ci` omitiría vite y typescript. Si la UI no
+ * compila, lila igual se despliega (la API de WhatsApp no depende de ella) y
+ * `/dali` responde que no está compilada: el aviso queda en el log del deploy.
+ */
+const buildUiDali = () => {
+  const cwd = path.join(__dirname, 'ui', 'dali');
+  try {
+    execSync('npm ci --include=dev --no-audit --no-fund', { cwd, stdio: 'inherit', env: { ...process.env, NODE_ENV: 'development' } });
+    execSync('npm run build', { cwd, stdio: 'inherit', env: { ...process.env, NODE_ENV: 'production' } });
+    console.log('✅ UI de Dali compilada (ui/dali/dist)');
+  } catch (error) {
+    console.error('⚠️  La UI de Dali NO se compiló; lila sigue sin ella:', error instanceof Error ? error.message : error);
+  }
+};
+
+buildUiDali();
 
 esbuild
   .build({

@@ -9,6 +9,35 @@
         "dev"
       ],
       "port": 3000
+    },
+    {
+      "name": "torre-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/jose/projects/torre",
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "4100"
+      ],
+      "port": 4100
+    },
+    {
+      "name": "dali-ui",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/jose/projects/lila-app/ui/dali",
+        "run",
+        "dev",
+        "--",
+        "--host",
+        "127.0.0.1"
+      ],
+      "port": 5180,
+      "url": "http://127.0.0.1:5180"
     }
   ]
 }

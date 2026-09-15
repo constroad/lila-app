@@ -33,6 +33,8 @@ import exportsRoutes from './api/routes/exports.routes.js';
 import academyRoutes from './api/routes/academy.routes.js';
 import gpsRoutes from './api/routes/gps.routes.js';
 import visionRoutes from './api/routes/vision.routes.js';
+import daliRoutes from './api/routes/dali.routes.js';
+import { montarUiDali } from './api/dali-ui.js';
 import { startAcademyTranscodeWatchdog } from './services/academy-transcode.service.js';
 import { startBackupWatchdog } from './services/backup-watchdog.service.js';
 import { startMetricsHistory } from './services/metrics-history.service.js';
@@ -279,6 +281,9 @@ app.use('/api/academy', academyRoutes);
 // factura del mes; acá es un proceso que ya está prendido.
 app.use('/api/gps', gpsRoutes);
 app.use('/api/vision', visionRoutes);
+// El panel de Dali: su API y su UI estática (spec DALI §2.1).
+app.use('/api/dali', daliRoutes);
+montarUiDali(app);
 
 const companiesRoot = `${config.storage.root}/companies`;
 const companiesStaticHeaders = (res: express.Response) => {
