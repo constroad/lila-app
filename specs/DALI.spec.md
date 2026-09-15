@@ -1,0 +1,250 @@
+# DALI — Asistente de WhatsApp para negocios (producto por verticales)
+
+> **Estado:** spec de producto y arquitectura, 14/09/2026. El motor de ventas
+> (vertical asfalto, CONSTROAD) ya corre en producción como piloto
+> (`WHATSAPP-AGENT-VERTICALS.spec.md` F2/F3, modo guiado con Qwen local). Este
+> documento define el PRODUCTO alrededor de ese motor: UI propia, login,
+> conocimiento por Excel, packs por vertical y administración.
+> **Diseños:** Stitch, proyecto `10416531549338173240` («Dali — Asistente de
+> WhatsApp para negocios»), design system `assets/15899208091892470814`. Las
+> pantallas y sus IDs están en §7.
+> **Decisiones tomadas con José (14/09):** Dali tiene UI propia (no vive en
+> Portal); el backend es lila-app y nada se duplica; el login es constroad-auth
+> con el patrón de Torre; Portal queda para la operación de asfalto y Constroad
+> es un tenant más de Dali; la asistente se llama Dali (antes «María»).
+
+## 0) Qué es
+
+Un negocio conecta su número de WhatsApp, le cuenta a Dali qué ofrece (ficha,
+servicios y preguntas, preguntas frecuentes, catálogo; por Excel o en el panel)
+y Dali atiende a sus clientes por WhatsApp: junta los datos de un pedido, responde
+lo frecuente, escala a una persona cuando hace falta y avisa al dueño. El dueño
+configura, mira y toma el control desde el panel Dali (celular, tablet o
+escritorio).
+
+**Un vertical = un modo de motor + un pack de datos.** Asfalto es el primero
+(modo *lead*). Restaurante (*pedido*), lubricentro (*cita*) y grifo (*info*)
+llegan como packs nuevos y, cuando el modo no existe, como código nuevo una vez.
+
+## 1) Principios
+
+1. **Un solo backend.** lila-app es el único proceso que habla con WhatsApp,
+   con el modelo y con la base. La UI de Dali es un cliente delgado de su API.
+2. **El conocimiento es estructurado**, no un prompt. Con Qwen 1,5 B local
+   (sin tarjeta no hay modelo grande) el modelo extrae y el código conversa
+   (`WHATSAPP-AGENT-VERTICALS.spec.md` §5, modo guiado). La ficha, el guion, la
+   FAQ y el catálogo son DATOS que el motor usa; con un modelo grande, los
+   mismos datos se vuelven prompt.
+3. **Multi-tenant por `companyId`** en cada colección, query y caché
+   (`../PERFORMANCE-SCALABILITY.SPEC.md`); el tenant sale del token o del
+   número de sesión, nunca del mensaje ni del cliente HTTP.
+4. **El dueño manda.** Escribe desde su WhatsApp y Dali se calla; `!bot off`;
+   switch en el panel; pausa por conversación. Nunca se vende sin handoff.
+5. **Reuse-first.** Sesiones Baileys con lease, quota-validator, storage,
+   `requireTenant`, JWT, constroad-auth, torre para deploy. Nada nuevo de eso.
+
+## 2) Arquitectura
+
+```
+[Cliente final] ─WhatsApp─▶ Baileys (lila-app) ─▶ agente Dali (src/agent/ventas)
+                                                      │ lee/escribe
+[Dueño] ─▶ dali.<dominio> (UI estática servida por lila) ─▶ /api/dali/* ─▶ Mongo constroad_db
+                │ login                                                   (companies, bot_configs,
+                └─▶ lila ─▶ constroad-auth (código WhatsApp / enlace correo)   bot_conversations, bot_leads…)
+[Operador Dali (José)] ─▶ dali.<dominio>/admin ─▶ /api/dali/admin/*
+[Portal] ─▶ solo asfalto; el card «Asistente con IA» enlaza a Dali (aiEnabled se retira)
+```
+
+- **UI:** `ui/dali/` en el repo de lila (Vite + React + shadcn, mobile-first).
+  Se compila en el build de lila y lila la sirve como estáticos. Cero proceso
+  nuevo en la Mac mini de 8 GB; un solo deploy (torre); mismo origen que la API
+  (sin CORS). Si algún día necesita vida propia, es mover la carpeta.
+
+### 2.1 Deploy y dominio (revisado contra torre y el túnel, 14/09)
+
+Cómo se expone hoy una app en esta máquina (`torre/specs/ARCHITECTURE-torre.as-is.md`
+§3, `torre.apps.json`): un servicio launchd por app, y **cloudflared** (túnel
+`b197fa60…`, config en `/usr/local/etc/cloudflared/config.yml`, corre como
+root) rutea por hostname a `127.0.0.1:<puerto>`: `lila.constroad.com` → 3001,
+`torre.constroad.com` → 4000, `constroad.com` → 3002 (Portal), `auth…` → 4002,
+`lilastore…` → 3003, `lilachat…` → 3004, y el wildcard `*.constroad.com` →
+Portal. **Las reglas específicas van antes del wildcard** (cloudflared gana con
+la primera coincidencia; el síntoma de equivocarse es que la app nueva responde
+200 sirviendo Portal).
+
+Dali no es una app nueva para torre: es lila con un segundo hostname.
+
+1. **Build.** `ui/dali` tiene su propio `package.json` (Vite). `build.js` de
+   lila corre `npm --prefix ui/dali ci && npm --prefix ui/dali run build` y deja
+   `ui/dali/dist`. torre no cambia (`build: npm-ci-build` ya ejecuta `npm run
+   build`). Costo: ~+1 min de build y ~150 MB de `node_modules` de la UI por
+   release; aceptable, y si molesta se compila en GitHub Actions y se commitea
+   el `dist`.
+2. **Servir.** Express en lila: si `Host` es el hostname de Dali (constante
+   `DALI_HOSTS` en código, sin env nueva), sirve `ui/dali/dist` con fallback a
+   `index.html` (SPA) y deja pasar `/api/*`; en cualquier otro host, la UI
+   también está en `/dali/` para probar sin DNS.
+3. **Túnel (lo hace José, pide sudo):** una línea en
+   `/usr/local/etc/cloudflared/config.yml` ANTES del wildcard —
+   `- hostname: dali.constroad.com` / `service: http://127.0.0.1:3001` — y
+   reiniciar cloudflared. DNS: el CNAME wildcard de `constroad.com` al túnel ya
+   cubre `dali.constroad.com`; si no, un CNAME `dali` → `<túnel>.cfargotunnel.com`.
+4. **torre.** `torre.apps.json` admite un solo `hostname` por app
+   (`lila.constroad.com`); el de Dali se documenta en el `$comment` de lila y
+   el health sigue siendo el de lila. Cambio opcional en torre: `hostnames[]`
+   para que el diagnóstico también pruebe `dali.constroad.com`.
+
+**Dominio.** Para el piloto y F1–F3: **`dali.constroad.com`** (cero compra,
+cero riesgo, misma noche). Para la marca (F4): un dominio propio comprado por
+José en Cloudflare (candidatos: `dali.pe`, `holadali.com`, `getdali.com`; el
+`.pe` se compra en NIC.pe o en un registrador peruano y se apunta a Cloudflare
+DNS) — se agrega como zona en Cloudflare, una regla más en el túnel y el
+hostname en `DALI_HOSTS`. Nada de lo anterior cambia; los dos hostnames pueden
+convivir (el viejo redirige al nuevo). **La decisión del nombre es de José.**
+- **API:** `/api/dali/*` en lila con `requireTenant` (JWT con `companyId`,
+  `userId`, `email`, `role`, que ya existe) y `/api/dali/admin/*` con rol
+  `operator`. Portal no interviene.
+- **Login (patrón Torre):** el panel pide número o correo → lila (`POST
+  /api/dali/auth/codigo`) llama a constroad-auth `POST /v1/codigo` con SU
+  llave (`CONSTROAD_AUTH_KEY`, `CONSTROAD_AUTH_URL`; la llave se emite en
+  Torre → Identidad para la app `dali`, con los `enlaces` de retorno) → el
+  código llega por WhatsApp (sale por lila) o el enlace por correo → `POST
+  /api/dali/auth/verificar` → constroad-auth devuelve `{identidad,
+  companyId, app}` → lila emite su JWT (`LILA_APP_JWT_SECRET`, 14 días, cookie
+  `HttpOnly`). La lista de quién entra a qué empresa vive en constroad-auth
+  (`miembros`: companyId + app + destino + rol de la lista); el ROL dentro de
+  Dali (dueño / ventas / solo lectura) vive en lila (`bot_members`).
+  «La ausencia de respuesta no revoca» (INTEGRATION.spec §2): si
+  constroad-auth no contesta, la sesión vigente sigue.
+- **Alta de empresa:** desde el panel admin (José) o auto-registro público
+  (`POST /api/dali/registro`): crea `companies` (con `vertical`), `bot_configs`
+  con el pack del rubro, el miembro dueño en constroad-auth y en `bot_members`,
+  y manda el código de acceso. La sesión de WhatsApp se vincula después con
+  el QR/pairing de lila (`/api/sessions`, que ya existe).
+
+## 3) Modelo de datos (Mongo compartido `constroad_db`)
+
+| Colección | Estado | Qué guarda |
+| --- | --- | --- |
+| `companies` | existe (Portal + lila) | tenant: `companyId`, nombre, `vertical`, plan, `whatsappConfig.sender`. Dali agrega `dali: { plan, trialEndsAt, status }`. |
+| `bot_configs` | existe (1 por empresa) | `enabled`, `vertical`, `testNumbers`, `ownerNotifyTarget`, `handoffPauseMinutes`, `guion` (hoy). **Crece con:** `perfil` (asistente, presentación, tono, emojis, horario, fueraDeHorario, zona, reglas: daPrecios, prometeFechas, escala), `negocio` (descripción, dirección, contacto, ofrece[], noOfrece[]), `faq[]` ({pregunta, respuesta, variantes[], activa}), `catalogo[]` ({nombre, categoria, unidad, precio?, disponible, descripcion, foto?}), `avisos` (canal, qué avisar, silencio), `packVersion`. Caché 60 s en lila (ya existe por sesión). |
+| `bot_conversations` | existe | conversación por cliente: estado bot/human/closed, pausas, `lead` (estado del guion), tokens. |
+| `bot_conversation_messages` | existe (TTL 90 d) | transcripción. |
+| `bot_leads` | **nueva** | el lead como objeto de trabajo del dueño: `companyId`, `conversationId`, `servicio`, `campos` (etiqueta→valor), `resumen`, `confirmado`, `estado` (nuevo/contactado/cotizado/ganado/perdido), `cotizacion` {monto, enviadaEl, validaHasta, pdf}, `notas[]`, `historial[]`, `motivoPerdido`. Se crea cuando el motor guarda un lead con servicio y (lugar o cantidad); se actualiza mientras la conversación siga; después es del dueño. |
+| `bot_members` | **nueva** | `companyId`, `identidad` (teléfono/correo), `nombre`, `rol` (owner/sales/viewer), `recibeAvisos`, `ultimoIngreso`. Espejo mínimo de constroad-auth `miembros` con el rol de la app. |
+| `vertical_packs` | **nueva** (global) | por `vertical`: `version`, `modo` (lead/pedido/cita/info), `guion`, `faq[]`, `catalogo[]`, `textos` (saludo, precio, cierre, escalada, desambiguación), `plantillaExcel` (definición de pestañas). El default de asfalto es `ventas/guion.asfalto.ts` volcado como v1. |
+| `usage_metrics` | existe | conversaciones del mes por empresa (quota). |
+| `bot_imports` | **nueva** | historial de importaciones: archivo, resumen, avisos, quién, cuándo, modo (reemplazar/agregar). |
+
+Regla: toda colección nueva lleva índice `{companyId, …}` y se filtra por
+`req.companyId`.
+
+## 4) API `/api/dali/*` (lila-app, Express)
+
+Auth: `requireTenant` (JWT) salvo `auth/*` y `registro`. Rol en `req.auth.role`.
+
+| Grupo | Endpoints | Notas |
+| --- | --- | --- |
+| auth | `POST auth/codigo` {destino} · `POST auth/verificar` {destino, codigo} · `GET auth/enlace?t=` · `POST auth/salir` · `GET auth/yo` | patrón Torre; cookie HttpOnly; `yo` devuelve usuario, empresa, rol, permisos. |
+| registro | `POST registro` {negocio, rubro, zona, dueño, whatsappPersonal, asistente} | crea empresa + config con pack + miembro + manda código. Rate limit por IP. |
+| inicio | `GET inicio` | estado del asistente y sesión, stats de hoy, «piden atención», últimos leads, uso del plan. |
+| asistente | `GET/PUT asistente` (perfil, reglas, avisos, testNumbers) · `POST asistente/pausa` {minutos} · `PUT asistente/estado` {enabled} | escribe `bot_configs`. |
+| negocio | `GET/PUT negocio` | ficha. |
+| servicios | `GET servicios` · `POST servicios` · `PUT servicios/:id` · `DELETE` · `PUT servicios/:id/preguntas` (lista completa, ordenada) · `POST servicios/restaurar-pack` | escribe `bot_configs.guion` (validado con `guionDe`). |
+| faq | `GET/POST/PUT/DELETE faq` · `POST faq/probar` {pregunta} → {respuesta, coincidencia} · `GET faq/sugeridas` | embeddings e5 (`agent/checklist` ya los tiene). |
+| catalogo | `GET/POST/PUT/DELETE catalogo` · `PUT catalogo/politica` {daPrecios} | |
+| importar | `GET importar/plantilla.xlsx` · `POST importar/analizar` (multipart) → resumen + avisos · `POST importar/confirmar` {token, modo} · `GET importar/historial` | `xlsx` en lila (ya está en deps de exports). |
+| whatsapp | `GET whatsapp` (estado, calidad, historial) · `POST whatsapp/vincular` (QR/pairing, reusa `/api/sessions`) · `POST whatsapp/desconectar` · `POST whatsapp/prueba` {numero} | |
+| conversaciones | `GET conversaciones?estado&q&cursor` · `GET conversaciones/:id` (mensajes + lead) · `POST conversaciones/:id/tomar` · `POST …/devolver` · `POST …/cerrar` · `POST …/mensaje` {texto} (sale por el número del negocio, pausa a Dali) · `POST …/nota` | |
+| leads | `GET leads?estado&servicio&q` · `GET leads/:id` · `PATCH leads/:id` {estado, cotizacion, motivoPerdido} · `POST leads/:id/notas` · `GET leads/exportar.xlsx` | |
+| probar | `POST probar` {sesionId?, mensaje, como: nuevo|conocido} → {respuesta, entendido, siguiente, senales} | corre `paso()` con un estado en memoria (TTL 30 min), sin persistir ni avisar. |
+| equipo | `GET equipo` · `POST equipo/invitar` · `PATCH equipo/:id` · `DELETE equipo/:id` | invita en constroad-auth + `bot_members`. |
+| plan | `GET plan` (plan, uso, semanas, pagos) | pagos registrados por el operador (sin pasarela: transferencia/Yape). |
+| notificaciones | `GET/PUT notificaciones` | `bot_configs.avisos`. |
+| reportes | `GET reportes?rango` | agregados por semana; «no supo responder» sale de las conversaciones con `fueraDeTema`/sin ruta. |
+| ajustes | `GET/PUT ajustes` · `GET ajustes/sesiones` · `DELETE ajustes/sesiones/:id` · `GET ajustes/exportar.xlsx` · `POST ajustes/eliminar-cuenta` | |
+| admin | `GET admin/empresas` · `POST admin/empresas` · `GET admin/empresas/:id` · `POST admin/empresas/:id/impersonar` · `PATCH admin/empresas/:id` (pausar, suspender, plan, pago) · `GET/PUT admin/verticales/:v` · `POST admin/verticales/:v/aplicar` · `GET admin/salud` | rol `operator` (José). `salud` reusa `estadoLlm()`, sesiones, memoria del proceso. |
+
+Toda ruta nueva se monta con guard y se verifica con `curl` sin credenciales
+→ 401 (`lila-security` §1).
+
+## 5) Motor por vertical
+
+| Modo | Vertical | Qué hace | Estado |
+| --- | --- | --- | --- |
+| **lead** | asfalto, servicios genéricos | guion de preguntas por servicio → resumen → confirmación → lead al dueño | **hecho** (`ventas/guiado.ts`, `guion.asfalto.ts`) |
+| **info** | grifo | FAQ por embeddings + horario + «precios del día» (catálogo con `daPrecios`) + escalada | FAQ y catálogo son parte de F1 de este spec; el modo es lead sin guion |
+| **pedido** | restaurante | catálogo con precios → pedido ítem por ítem → confirmación → `bot_orders` | F4 (el F2 original de WHATSAPP-AGENT-VERTICALS) |
+| **cita** | lubricentro, barbería | servicios con duración + horarios → reserva → recordatorio | F5 |
+
+Lo común a todos: ficha del negocio (saludo con el nombre, horario, zona),
+FAQ por similitud (umbral 0,88, como el checklist de Lila), escalada a persona,
+avisos, pausa del dueño, números de prueba, quotas.
+
+## 6) Fases
+
+| Fase | Entrega | Done |
+| --- | --- | --- |
+| **F1 · Conocimiento** | `bot_configs` con perfil/negocio/faq/catálogo/avisos; `bot_leads`; `vertical_packs` con asfalto v1; importador Excel (plantilla, analizar, confirmar); Dali usa ficha (saludo, horario, zona) y FAQ por embeddings; `/api/dali/*` de negocio, servicios, faq, catálogo, importar, leads, conversaciones, probar | tests de importación (plantilla real) y de FAQ; curl 401 sin token; una FAQ respondida en el piloto |
+| **F2 · Acceso** | llave `dali` emitida en Torre → Identidad; `auth/*`, `registro`, `bot_members`, roles; cookie 14 d | login real desde el celular de José por código de WhatsApp; invitación a un segundo miembro |
+| **F3 · UI** | `ui/dali` (Vite + React + shadcn) con las 31 pantallas de §7 en los 3 tamaños; build integrado en lila; servido en `/dali`; PWA instalable | recorrido completo en móvil real: registro → conectar → importar → probar → conversación → lead; Lighthouse móvil ≥ 90 accesibilidad |
+| **F4 · Marca y admin** | dominio propio, landing, panel admin (empresas, verticales, salud), Portal enlaza a Dali y retira `aiEnabled` | José da de alta un restaurante de prueba sin tocar código |
+| **F5 · Verticales** | modo *pedido* (restaurante) y *cita* (lubricentro) con sus packs | pedido y cita de prueba de punta a punta |
+
+## 7) Pantallas (Stitch) — inventario, rutas, API y datos
+
+Las 31 pantallas existen en móvil (390), tablet (834) y escritorio (1280); la
+misma información en los tres, reordenada. Shell: móvil = barra inferior de 5
+pestañas (Inicio, Chats, Leads, Asistente, Más); tablet = rail de 72 px;
+escritorio = sidebar de 256 px con secciones Operación / Configurar / Cuenta.
+Admin: pestañas/sidebar Empresas, Verticales, Salud, Cuentas.
+
+Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
+(generado desde el proyecto; incluye captura y HTML descargables).
+
+| # | Pantalla | Ruta | API | Datos |
+| --- | --- | --- | --- | --- |
+| P1 | Landing | `/` | — | estática |
+| P2 | Entrar | `/entrar` | `auth/codigo` | — |
+| P3 | Código de verificación | `/entrar/codigo` | `auth/verificar`, `auth/enlace` | — |
+| P4 | Registro (1/3 tu negocio) | `/registro` | `registro` | companies, bot_configs, bot_members |
+| P5 | Conectar WhatsApp (2/3) | `/registro/whatsapp` | `whatsapp/vincular` | sesión Baileys |
+| P6 | Cargar conocimiento (3/3) | `/registro/conocimiento` | `importar/*`, `servicios/restaurar-pack` | bot_configs, vertical_packs |
+| A1 | Inicio | `/inicio` | `inicio` | agregados |
+| A2 | Conversaciones | `/chats` | `conversaciones` | bot_conversations |
+| A3 | Conversación | `/chats/:id` | `conversaciones/:id`, tomar/devolver/cerrar/mensaje/nota | + messages, lead |
+| A4 | Leads | `/leads` | `leads` | bot_leads |
+| A5 | Lead | `/leads/:id` | `leads/:id`, PATCH, notas | bot_leads |
+| A6 | Asistente | `/asistente` | `asistente`, pausa, estado | bot_configs.perfil, avisos, testNumbers |
+| A7 | Negocio | `/negocio` | `negocio` | bot_configs.negocio |
+| A8 | Servicios | `/servicios` | `servicios` | bot_configs.guion |
+| A9 | Guion de un servicio | `/servicios/:id` | `servicios/:id/preguntas` | guion.servicios[].preguntas |
+| A10 | Editor de pregunta | `/servicios/:id/preguntas/:n` | (mismo PUT) | PreguntaGuion |
+| A11 | Preguntas frecuentes | `/faq` | `faq`, probar, sugeridas | bot_configs.faq |
+| A12 | Catálogo | `/catalogo` | `catalogo`, politica | bot_configs.catalogo |
+| A13 | Importar | `/importar` | `importar/*` | bot_imports |
+| A14 | WhatsApp | `/whatsapp` | `whatsapp/*` | sesión |
+| A15 | Probar a Dali | `/probar` | `probar` | memoria |
+| A16 | Equipo | `/equipo` | `equipo/*` | bot_members, constroad-auth |
+| A17 | Plan y uso | `/plan` | `plan` | companies.dali, usage_metrics |
+| A18 | Notificaciones | `/notificaciones` | `notificaciones` | bot_configs.avisos |
+| A19 | Reportes | `/reportes` | `reportes` | agregados |
+| A20 | Ajustes | `/ajustes` | `ajustes/*` | bot_members, sesiones |
+| S1 | Admin · Empresas | `/admin/empresas` | `admin/empresas` | companies, bot_configs |
+| S2 | Admin · Empresa | `/admin/empresas/:id` | `admin/empresas/:id` | todo lo anterior |
+| S3 | Admin · Verticales | `/admin/verticales` | `admin/verticales/:v` | vertical_packs |
+| S4 | Admin · Salud | `/admin/salud` | `admin/salud` | proceso, sesiones, modelo |
+| E1 | Estados (vacíos, error, carga, banners, diálogos, toasts, offline) | — | — | componentes compartidos |
+
+## 8) Riesgos y decisiones abiertas
+
+- **Dominio y marca:** piloto en `dali.constroad.com` (§2.1); el dominio
+  propio lo elige y compra José en F4.
+- **Memoria de la Mac mini:** la UI es estática (no suma proceso); el
+  importador de Excel y los reportes corren en el mismo proceso de lila con
+  límites (archivo ≤ 2 MB, agregados por semana precalculados).
+- **constroad-auth manda el código por WhatsApp vía lila:** si el número de
+  Dali del negocio es el mismo que recibe leads, el código sale por el número
+  de plataforma (el de constroad-auth), no por el del negocio. Confirmar en F2.
+- **Portal:** `whatsappConfig.aiEnabled` se retira cuando Dali esté en F4;
+  hasta entonces sigue deshabilitado como hoy.
