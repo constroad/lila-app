@@ -84,6 +84,20 @@ describe('atenderComoConsulta', () => {
   });
 
   /** 15/09, 10:30: Globofast citó el checklist para decirle a alguien «enlaza al grupo de certificados» y Lila contestó con la tabla de certificados. */
+  it('citar (deslizar) una respuesta que Lila le dio a ESA persona sí es una consulta; citar la de otro, no', async () => {
+    const { recordarRespuestaA, _resetContexto } = await import('../consultas/contexto.js');
+    _resetContexto();
+    atenderEleccion.mockImplementation(async () => false);
+    recordarRespuestaA(QUIEN, ADMIN, 'resp-jose');
+    await observador.atenderComoConsulta(mensaje('cuándo fue cubicado?', { stanzaId: 'resp-jose', participant: '244534046892225@lid' }), 'cuándo fue cubicado?', QUIEN, ADMIN, alcance, { votosSueltos: false });
+    expect(atenderConsulta).toHaveBeenCalledTimes(1);
+    atenderConsulta.mockClear();
+    await observador.atenderComoConsulta(mensaje('cuándo fue cubicado?', { stanzaId: 'resp-jose', participant: '244534046892225@lid' }), 'cuándo fue cubicado?', 'otro@lid', ADMIN, alcance, { votosSueltos: false });
+    expect(atenderConsulta).not.toHaveBeenCalled();
+    atenderEleccion.mockImplementation(async (texto: string) => /^\s*[123]\s*$/.test(texto));
+    _resetContexto();
+  });
+
   it('citar un mensaje del agente sin etiquetarlo NO es una consulta', async () => {
     atenderEleccion.mockImplementation(async () => false);
     await observador.atenderComoConsulta(mensaje('Enlaza al grupo de certificados', { stanzaId: 'c1', participant: '244534046892225@lid' }), 'Enlaza al grupo de certificados', QUIEN, ADMIN, alcance, { votosSueltos: false });

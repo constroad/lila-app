@@ -20,7 +20,8 @@
  */
 import { especificidadDeRegla, extraerParametros, fueraDeCatalogo, rutearPorReglas, temaSinDato, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { pareceParaElAgente } from './contexto.js';
-import { argumentosDeRango, herramientaDeDatosPorReglas, normalizarArgumentos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
+import { argumentosDeRango, normalizarArgumentos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
+import { herramientaDeDatosConEspecificidad } from '../llm/herramientas.js';
 import { esOrdenDeAvisoAPlanta } from './orden-planta.js';
 
 /** Desde cuántas palabras una pregunta va primero al modelo y no a las reglas. */
@@ -67,8 +68,13 @@ export const decidirRuta = (pregunta: string, opciones: OpcionesDecision = {}): 
   const clave: ClaveConsulta | null = larga ? null : porRegla;
 
   // Las herramientas de datos que se reconocen por palabra y no necesitan un
-  // nombre («cuántos agregados llegaron hoy») se contestan sin modelo.
-  const porDatos = larga ? null : herramientaDeDatosPorReglas(pregunta);
+  // nombre («cuántos agregados llegaron hoy») se contestan sin modelo…
+  // …salvo que el catálogo haya casado una regla MÁS específica: «qué unidades
+  // llegaron sin fotos» tiene «llegaron» (agregados, una palabra) y «sin»+«fotos»
+  // (evidencia, dos). Gana la que más dice, como entre entradas del catálogo.
+  // Lo encontró el examen (15/09): `rutearPorReglas` daba bien y el camino real no.
+  const datos = larga ? null : herramientaDeDatosConEspecificidad(pregunta);
+  const porDatos = datos && !(clave && especificidadDeRegla(pregunta) > datos.palabras) ? datos.id : null;
   if (porDatos) return { tipo: 'datos', herramienta: porDatos, argumentos: normalizarArgumentos(porDatos, [], pregunta, ahoraMs) };
 
   // «Qué pedidos hay esta semana»: la regla dice «pedidos de hoy», pero el

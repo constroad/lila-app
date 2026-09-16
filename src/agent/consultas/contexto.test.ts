@@ -1,5 +1,5 @@
 import {
-  unidadHeredada, alCambiarHilos, exportarHilos, hidratarHilos, VIGENCIA_HILO_MS, _resetContexto, fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto';
+  unidadHeredada, alCambiarHilos, exportarHilos, hidratarHilos, recordarRespuestaA, citaRespuestaPropia, VIGENCIA_HILO_MS, _resetContexto, fusionar, pareceContinuacion, pareceParaElAgente, recordarConsulta, ultimaConsulta } from './contexto';
 
 /**
  * EL HILO. José, 13/09/2026: «no quiero que la mejores solo para este caso
@@ -132,5 +132,30 @@ describe('el hilo sobrevive al deploy', () => {
     expect(hidratarHilos(exportados, 1_000_000 + VIGENCIA_HILO_MS + 1)).toBe(0);
     expect(hidratarHilos([{ quien: '', grupo: 'g', clave: 'x', pregunta: 'p', ms: 1 } as never, null as never], 2)).toBe(0);
     alCambiarHilos(null);
+  });
+});
+
+describe('citar una respuesta de Lila a esa persona es seguir hablando con ella', () => {
+  it('solo las respuestas A ESA persona, en ese grupo, dentro del hilo; un checklist citado no cuenta', () => {
+    _resetContexto();
+    recordarConsulta({ quien: 'jose', grupo: 'g', clave: 'unit_capacity', pregunta: 'cuánto cubica el volquete 9' }, 1_000);
+    recordarRespuestaA('jose', 'g', 'resp-1', 1_100);
+    expect(citaRespuestaPropia('jose', 'g', 'resp-1', 2_000)).toBe(true);
+    expect(citaRespuestaPropia('wilson', 'g', 'resp-1', 2_000)).toBe(false); // otro integrante
+    expect(citaRespuestaPropia('jose', 'otro', 'resp-1', 2_000)).toBe(false);
+    expect(citaRespuestaPropia('jose', 'g', 'checklist-99', 2_000)).toBe(false);
+    expect(citaRespuestaPropia('jose', 'g', '', 2_000)).toBe(false);
+    // Cambiar de consulta conserva las respuestas del hilo; vencido el hilo, no.
+    recordarConsulta({ quien: 'jose', grupo: 'g', clave: 'unit_driver', pregunta: 'quién la maneja' }, 3_000);
+    expect(citaRespuestaPropia('jose', 'g', 'resp-1', 4_000)).toBe(true);
+    expect(citaRespuestaPropia('jose', 'g', 'resp-1', 3_000 + VIGENCIA_HILO_MS + 1)).toBe(false);
+    // Se recuerdan las últimas cinco, y sobreviven al deploy con el hilo.
+    for (let i = 2; i <= 8; i += 1) recordarRespuestaA('jose', 'g', `resp-${i}`, 5_000);
+    expect(citaRespuestaPropia('jose', 'g', 'resp-2', 5_000)).toBe(false);
+    expect(citaRespuestaPropia('jose', 'g', 'resp-8', 5_000)).toBe(true);
+    const exportados = exportarHilos(5_000);
+    _resetContexto();
+    hidratarHilos(exportados, 5_000);
+    expect(citaRespuestaPropia('jose', 'g', 'resp-8', 5_000)).toBe(true);
   });
 });

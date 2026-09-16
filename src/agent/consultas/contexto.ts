@@ -17,6 +17,8 @@ export interface UltimaConsulta {
   clave: string;
   pregunta: string;
   ms: number;
+  /** Ids de los mensajes con que Lila le contestó A ESTA PERSONA en este hilo (los últimos). */
+  respuestas?: string[];
 }
 
 /**
@@ -51,7 +53,8 @@ export const exportarHilos = (ms = Date.now()): UltimaConsulta[] => [...hilos.va
 export const hidratarHilos = (lista: UltimaConsulta[] | null | undefined, ms = Date.now()): number => {
   let n = 0;
   for (const u of lista ?? []) {
-    if (!u?.quien || !u.grupo || !u.pregunta || typeof u.ms !== 'number' || ms - u.ms > VIGENCIA_HILO_MS) continue;
+    if (!u?.quien || !u.grupo || typeof u.ms !== 'number' || ms - u.ms > VIGENCIA_HILO_MS) continue;
+    if (!u.pregunta && !(u.respuestas ?? []).length) continue;
     hilos.set(k(u.quien, u.grupo), u);
     n += 1;
   }
@@ -59,8 +62,40 @@ export const hidratarHilos = (lista: UltimaConsulta[] | null | undefined, ms = D
 };
 
 export const recordarConsulta = (c: Omit<UltimaConsulta, 'ms'>, ms = Date.now()): void => {
-  hilos.set(k(c.quien, c.grupo), { ...c, ms });
+  // Las respuestas del hilo se conservan al cambiar de consulta: seguir
+  // citando la respuesta anterior sigue siendo el mismo hilo.
+  const previo = hilos.get(k(c.quien, c.grupo));
+  hilos.set(k(c.quien, c.grupo), { ...c, ms, respuestas: previo?.respuestas ?? [] });
   persistir?.(exportarHilos(ms));
+};
+
+const MAX_RESPUESTAS_RECORDADAS = 5;
+
+/**
+ * RESPONDER (deslizar) A UNA RESPUESTA QUE LILA TE DIO es seguir hablando
+ * con ella, sin etiqueta. Es lo que hace WhatsApp con cualquier persona y lo
+ * que hace Meta AI en un grupo: @ o cita. Y es seguro en un grupo, a
+ * diferencia de «los siguientes 2 minutos sin etiqueta»: la cita es
+ * explícita, es a UN mensaje concreto, y solo vale si ese mensaje fue una
+ * respuesta a la MISMA persona. Citar un checklist, una propuesta o un aviso
+ * (mensajes para todos) no es hablarle — eso sigue siendo un voto o nada
+ * (15/09, 10:30: «enlaza al grupo de certificados» citando el checklist).
+ */
+export const recordarRespuestaA = (quien: string, grupo: string, msgId: string, ms = Date.now()): void => {
+  if (!msgId) return;
+  const key = k(quien, grupo);
+  const previo = hilos.get(key);
+  const respuestas = [...(previo?.respuestas ?? []), msgId].slice(-MAX_RESPUESTAS_RECORDADAS);
+  hilos.set(key, previo ? { ...previo, respuestas } : { quien, grupo, clave: '', pregunta: '', ms, respuestas });
+  persistir?.(exportarHilos(ms));
+};
+
+/** ¿Este mensaje cita una respuesta que Lila le dio a esta persona (en la vigencia del hilo)? */
+export const citaRespuestaPropia = (quien: string, grupo: string, citaMsgId: string, ms = Date.now()): boolean => {
+  if (!citaMsgId) return false;
+  const u = hilos.get(k(quien, grupo));
+  if (!u || ms - u.ms > VIGENCIA_HILO_MS) return false;
+  return (u.respuestas ?? []).includes(citaMsgId);
 };
 
 /**

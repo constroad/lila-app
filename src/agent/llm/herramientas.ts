@@ -48,6 +48,7 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
   { id: 'site_current_unit', descripcion: 'qué unidad está en campo / en obra ahora', argumentos: [] },
   { id: 'unit_driver', descripcion: 'quién maneja / conductor de una unidad', argumentos: ['unidad', 'placa', 'fecha'] },
   { id: 'unit_capacity', descripcion: 'cuánto cubica / cubicaje / capacidad en m³ de una unidad o placa', argumentos: ['unidad', 'placa', 'fecha'] },
+  { id: 'unit_evidence', descripcion: 'qué unidades llegaron a campo sin fotos (evidencia: llegada, temperatura, tolva vacía) en el control de pista, o cuántas fotos tiene una unidad', argumentos: ['unidad', 'placa', 'fecha', 'empresa'] },
   { id: 'unit_departure', descripcion: 'a qué hora salió una unidad', argumentos: ['unidad', 'placa', 'fecha'] },
   { id: 'unit_eta', descripcion: 'cuánto falta para que llegue una unidad', argumentos: ['unidad', 'placa'] },
   { id: 'unit_media', descripcion: 'fotos y videos de una unidad', argumentos: ['unidad', 'placa', 'fecha'] },
@@ -84,7 +85,10 @@ const HABLA_DE_LIQUIDOS = /\b(cemento|pen|emulsion|mc-?30|petroleo|diesel|gasoho
 /** «Pásame el enlace del pedido con informes» pide el ENLACE (catálogo), no un PDF. */
 const HABLA_DE_ENLACE = /\b(enlace|link|url)\b/;
 
-export const herramientaDeDatosPorReglas = (pregunta: string): HerramientaDeDatos | null => {
+export const herramientaDeDatosPorReglas = (pregunta: string): HerramientaDeDatos | null => herramientaDeDatosConEspecificidad(pregunta)?.id ?? null;
+
+/** La misma decisión, con cuántas palabras exigió la regla que ganó: para compararla con la del catálogo. */
+export const herramientaDeDatosConEspecificidad = (pregunta: string): { id: HerramientaDeDatos; palabras: number } | null => {
   const t = normalizar(pregunta);
   let mejor: { id: HerramientaDeDatos; palabras: number } | null = null;
   for (const h of HERRAMIENTAS) {
@@ -101,7 +105,7 @@ export const herramientaDeDatosPorReglas = (pregunta: string): HerramientaDeDato
       if (!mejor || palabras.length > mejor.palabras) mejor = { id: h.id, palabras: palabras.length };
     }
   }
-  return mejor?.id ?? null;
+  return mejor;
 };
 
 export const herramienta = (id: string): Herramienta | undefined => HERRAMIENTAS.find((h) => h.id === id);

@@ -23,6 +23,7 @@ export type ClaveConsulta =
   | 'unit_eta'
   | 'unit_driver'
   | 'unit_capacity'
+  | 'unit_evidence'
   | 'orders_day'
   | 'checklist_status'
   | 'reports_status'
@@ -78,6 +79,15 @@ export const CATALOGO: EntradaCatalogo[] = [
     // secas «cuánto cemento asfáltico llegó hoy» pedía «¿de cuál unidad?».
     reglas: [['llega'], ['llegue'], ['llegara'], ['llegará'], ['llegaria'], ['llegaría'], ['llegando'], ['eta']],
     pideUnidad: true,
+  },
+  {
+    id: 'unit_evidence',
+    seSatisfaceCon: ['que unidades llegaron sin fotos en el control de pista', 'cuantas fotos tiene la 9 en campo', 'que unidad no tiene foto de la tolva vacia', 'que unidades salieron sin foto de temperatura', 'falta evidencia de alguna unidad'],
+    // José, 15/09: las tres fotos obligatorias del ingeniero de campo (llegada,
+    // temperatura, tolva vacía) son la única prueba ante el cliente; hay que
+    // poder preguntar qué unidad no las tiene. Reglas de dos palabras: le ganan
+    // a «foto» de unit_media (que manda las fotos, no las cuenta).
+    reglas: [['sin', 'foto'], ['sin', 'fotos'], ['evidencia'], ['cuantas', 'fotos'], ['cuántas', 'fotos'], ['falta', 'foto'], ['faltan', 'fotos'], ['tolva', 'vacia'], ['tolva', 'vacía'], ['foto', 'temperatura'], ['fotos', 'temperatura'], ['tiene', 'foto'], ['tienen', 'foto'], ['tiene', 'fotos'], ['tienen', 'fotos'], ['registr', 'foto'], ['subio', 'foto'], ['subieron', 'foto']],
   },
   {
     id: 'unit_capacity',
@@ -166,7 +176,7 @@ export const CATALOGO: EntradaCatalogo[] = [
     // (15/09 12:26) no caía en ninguna regla, iba al modelo y el modelo elegía
     // el PDF del control de pista por el nombre. Cuántos llegaron / se
     // colocaron / faltan por colocar es esto: llegadas contra el total.
-    reglas: [['falta', 'terminar', 'pista'], ['falta', 'terminar', 'colocacion'], ['falta', 'terminar', 'colocación'], ['falta', 'terminar', 'campo'], ['termina', 'campo'], ['falta', 'acabar', 'obra'], ['termine', 'obra'], ['termine', 'campo'], ['acabamos', 'obra'], ['terminamos', 'campo'], ['termina', 'obra'], ['termina', 'colocacion'], ['falta', 'colocar'], ['cuant', 'colocar'], ['colocaron'], ['colocados'], ['colocadas'], ['descarg', 'campo'], ['descarg', 'obra'], ['descarg', 'pista'], ['cuant', 'llegaron'], ['llegaron', 'obra'], ['llegaron', 'campo'], ['llegaron', 'pista']],
+    reglas: [['falta', 'terminar', 'pista'], ['falta', 'terminar', 'colocacion'], ['falta', 'terminar', 'colocación'], ['falta', 'terminar', 'campo'], ['termina', 'campo'], ['falta', 'acabar', 'obra'], ['termine', 'obra'], ['termine', 'campo'], ['acabamos', 'obra'], ['terminamos', 'campo'], ['termina', 'obra'], ['termina', 'colocacion'], ['falta', 'colocar'], ['cuant', 'colocar'], ['colocaron'], ['colocados'], ['colocadas'], ['descarg', 'campo'], ['descarg', 'obra'], ['descarg', 'pista'], ['llegaron', 'obra'], ['llegaron', 'campo'], ['llegaron', 'pista'], ['carros', 'llegaron'], ['unidades', 'llegaron'], ['volquetes', 'llegaron']],
   },
   {
     id: 'reports_status',

@@ -84,6 +84,14 @@ describe('ruteo por reglas', () => {
     ['cuál es el cubicaje del volquete 9', 'unit_capacity'],
     ['cuántos m3 le entran a la A1Y 825', 'unit_capacity'],
     ['capacidad de la unidad 3', 'unit_capacity'],
+    // José, 15/09: las tres fotos obligatorias de campo (llegada, temperatura, tolva vacía).
+    ['qué unidades llegaron sin fotos en el control de pista', 'unit_evidence'],
+    ['qué unidad no tiene foto de la tolva vacía', 'unit_evidence'],
+    ['qué unidades salieron sin foto de temperatura', 'unit_evidence'],
+    ['cuántas fotos tiene la 9 en campo', 'unit_evidence'],
+    ['falta evidencia de alguna unidad?', 'unit_evidence'],
+    // …y pedir las fotos sigue siendo mandarlas.
+    ['muéstrame las fotos de la unidad 9', 'unit_media'],
     ['qué pedidos hay mañana', 'orders_day'],
     ['hay producción mañana?', 'orders_day'],
     ['cómo va el checklist', 'checklist_status'],

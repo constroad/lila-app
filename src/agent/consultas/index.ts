@@ -1,7 +1,7 @@
 import logger from '../../utils/logger.js';
 import { CATALOGO, esConsulta, extraerParametros, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
 import { construirVista, type VistaDelDia } from './vista.js';
-import { OPCIONES_PESTANAS, PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, elegirPedido, etiquetaPedido, identificaUnidad, pestanasEnLaPregunta, responder, textoEnlace, unidadPor, type Respuesta } from './responder.js';
+import { OPCIONES_PESTANAS, PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, describeUnidad, elegirPedido, etiquetaPedido, identificaUnidad, pestanasEnLaPregunta, responder, textoEnlace, unidadPor, type Respuesta } from './responder.js';
 import { crearEnlaceDelPedido, enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo, type PestanasEnlace } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta, textoRespuestaInvalida } from './pendientes.js';
 import { TEMAS, menuAyuda, temaPorPalabra, textoTema } from './ayuda.js';
@@ -18,7 +18,8 @@ import { MAX_OPCIONES_INFORMES, argumentosDeRango, elegirHerramienta, esHerramie
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import { buscarInformes, tipoDeInforme, type InformeEncontrado } from '../llm/informes.js';
-import { archivosDeFotos, cargarFotosDelInforme, fotosDeUnidad, todasLasFotos } from './fotos-informe.js';
+import { archivosDeFotos, cargarFotosDelInforme, esVideo, fotosDeUnidad, todasLasFotos } from './fotos-informe.js';
+import { evidenciaPorUnidad, textoEvidencia, unidadesDe, type EvidenciaUnidad } from './evidencia.js';
 import { COMPANY_PILOTO, type AlcanceAgente } from '../checklist/alcance.js';
 import { esOrdenDeAvisoAPlanta } from './orden-planta.js';
 import { decidirRuta, esDeUnDia, seDejaPasar } from './decision.js';
@@ -307,9 +308,34 @@ const armarRespuesta = async (
     clave === 'reports_status' || clave === 'site_finish'
       ? await informesDeLaVista(vista, params, fecha)
       : null;
+  // La evidencia de campo: las fotos por unidad del control de pista del día.
+  if (clave === 'unit_evidence') return respuestaEvidencia(vista, params);
   // El cubicaje no está en la vista del día: es la ficha del volquete en el Portal.
   const cubicacion = clave === 'unit_capacity' ? await cubicacionDe(vista, params) : undefined;
   return { texto: responder(clave, { vista, params: { ...params, pregunta } as Parametros, revision, informes, cubicacion }) };
+};
+
+/**
+ * Las fotos del control de pista del día contra el mínimo de tres por unidad.
+ * Con unidad nombrada, la de esa; sin unidad, todas las despachadas. Varias
+ * empresas el mismo día: el control de pista de cada una, sus unidades.
+ */
+const respuestaEvidencia = async (vista: VistaDelDia, params: Parametros): Promise<Respuesta> => {
+  const dia = fechaLegible(vista.fecha);
+  const empresas = [...new Set(vista.orders.filter((o) => !params.companyId || o.companyId === params.companyId).map((o) => o.companyId))];
+  const lista: EvidenciaUnidad[] = [];
+  for (const companyId of empresas) {
+    const informes = await buscarInformes({ tipo: 'CTL-PIS', desde: vista.fecha, hasta: vista.fecha, companyId }, MAX_OPCIONES_INFORMES);
+    const fotos = (await Promise.all(informes.map((i) => cargarFotosDelInforme(i.id)))).flatMap((f) => f ?? []);
+    lista.push(...evidenciaPorUnidad(unidadesDe(vista, companyId), fotos, esVideo));
+  }
+  if (identificaUnidad(params)) {
+    const u = unidadPor(vista, params);
+    const e = u ? lista.find((x) => x.unitNumber === u.unitNumber && x.plate === u.plate) : undefined;
+    if (!e) return { texto: `No encuentro ${describeUnidad(params)} entre las despachadas de ${dia}.` };
+    return { texto: textoEvidencia(lista, dia, e) };
+  }
+  return { texto: textoEvidencia(lista, dia) };
 };
 
 /**
@@ -364,6 +390,7 @@ const EJEMPLO: Partial<Record<ClaveConsulta, string>> = {
   unit_eta: 'cuánto falta para que llegue una unidad',
   unit_driver: 'quién maneja una unidad',
   unit_capacity: 'cuánto cubica una unidad',
+  unit_evidence: 'qué unidades llegaron sin fotos en campo',
   orders_day: 'qué pedidos hay',
   checklist_status: 'cómo va el checklist',
   reports_status: 'qué informes están hechos',
@@ -500,14 +527,14 @@ export const atenderConsulta = async (
     respuesta = respuesta ?? (await armarRespuesta(clave, pregunta, quien, grupo, extra));
     if (clave) recordarConsulta({ quien, grupo, clave, pregunta });
     logger.info(`[agente] consulta de ${quien}: «${preguntaLimpia(texto, numeroBot)}» → ${clave ?? (respuesta ? 'datos' : 'none')}${respuesta.archivos?.length ? ` (+${respuesta.archivos.length} archivo(s))` : ''}`);
-    await responderEnGrupo(grupo, conNotaSiVacia(respuesta), alcance);
+    await responderEnGrupo(grupo, conNotaSiVacia(respuesta), alcance, quien);
   } catch (error) {
     logger.warn(`[agente] no pude atender la consulta «${texto}»: ${error instanceof Error ? error.message : String(error)}`);
     // Se dice, no se calla. El 15/09 a las 12:26 una consulta etiquetada murió
     // en Mongo y el grupo vio a Lila «escribiendo…» y después nada: quien
     // pregunta no distingue «falló» de «me ignoró». «No pude» es la respuesta
     // honesta, sin el detalle técnico (eso va al log).
-    await responderEnGrupo(grupo, { texto: MENSAJE_DE_FALLO }, alcance).catch((e) => logger.warn(`[agente] tampoco pude avisar del fallo: ${e instanceof Error ? e.message : String(e)}`));
+    await responderEnGrupo(grupo, { texto: MENSAJE_DE_FALLO }, alcance, quien).catch((e) => logger.warn(`[agente] tampoco pude avisar del fallo: ${e instanceof Error ? e.message : String(e)}`));
   } finally {
     await dejarDeEscribir(grupo);
   }
@@ -524,14 +551,14 @@ export const atenderEleccion = async (
   if (!eleccion) return false;
   if (eleccion.invalida) {
     logger.info(`[agente] ${quien} contestó «${eleccion.texto}» a una pregunta de ${eleccion.pregunta.opciones.length} opciones: se le pide un número válido`);
-    await responderEnGrupo(grupo, { texto: textoRespuestaInvalida(eleccion.pregunta) }, alcance);
+    await responderEnGrupo(grupo, { texto: textoRespuestaInvalida(eleccion.pregunta) }, alcance, quien);
     return true;
   }
   try {
     await empezarAEscribir(grupo, alcance);
     const respuesta = (await eleccion.pregunta.continuar(eleccion.indice, eleccion.texto)) as Respuesta;
     logger.info(`[agente] ${quien} contestó «${eleccion.texto}» a la pregunta pendiente`);
-    await responderEnGrupo(grupo, conNotaSiVacia(respuesta), alcance);
+    await responderEnGrupo(grupo, conNotaSiVacia(respuesta), alcance, quien);
   } catch (error) {
     logger.warn(`[agente] no pude continuar la consulta de ${quien}: ${error instanceof Error ? error.message : String(error)}`);
   } finally {

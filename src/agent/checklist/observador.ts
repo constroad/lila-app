@@ -16,7 +16,7 @@ import { avisarEnGrupo, enviarAOperaciones, enviarAprobado } from './emisor.js';
 import { cargarAprobadores, esAdmin, esAprobador } from './aprobadores.js';
 import { apagar, comandoInterruptor, encender, estadoInterruptor, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
 import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje, guardarPropuesta } from './persistencia.js';
-import { alCambiarHilos, hidratarHilos, type UltimaConsulta } from '../consultas/contexto.js';
+import { alCambiarHilos, citaRespuestaPropia, hidratarHilos, type UltimaConsulta } from '../consultas/contexto.js';
 import { VENTANA_MS } from './almacen.js';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
 import { findOutgoingMessage } from '../../whatsapp/baileys/outgoing-messages.js';
@@ -347,7 +347,10 @@ export const atenderComoConsulta = async (
     if (paraOtraPersona(mensaje, propios)) return;
     const limpio = preguntaLimpia(texto, bot);
     if (limpio.split(/\s+/).filter(Boolean).length <= RESPUESTA_CORTA_PALABRAS && (await atenderEleccion(limpio, quien, remoteJid, alcance))) return;
-    if (esConsulta(texto, bot, mencionadosDe(mensaje), propios)) {
+    // Etiquetada, o RESPONDIENDO (deslizar) a una respuesta que Lila le dio a
+    // esta misma persona: las dos formas de hablarle en un grupo. Citar un
+    // checklist o una propuesta no cuenta (eso es un voto, arriba, o nada).
+    if (esConsulta(texto, bot, mencionadosDe(mensaje), propios) || citaRespuestaPropia(quien, remoteJid, citaDe(mensaje))) {
       await atenderConsulta(texto, quien, remoteJid, alcance, bot);
       return;
     }

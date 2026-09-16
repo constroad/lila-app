@@ -146,7 +146,7 @@ const formaDeTolva = (shape: string): string => {
   return s;
 };
 
-const describeUnidad = (params: Parametros): string =>
+export const describeUnidad = (params: Parametros): string =>
   params.plate ? `la placa ${params.plate}` : params.unitNumber ? `la unidad ${params.unitNumber}` : params.ordinal === 'ultima' ? 'la última unidad' : 'la primera unidad';
 
 const sinPedidos = (vista: VistaDelDia): string | null =>

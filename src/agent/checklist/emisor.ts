@@ -174,7 +174,9 @@ export const _escribiendoEn = (): string[] => [...escribiendoEn.keys()];
 export const responderEnGrupo = async (
   destino: string,
   respuesta: { texto?: string; archivos?: ArchivoAEnviar[] },
-  alcance: AlcanceAgente
+  alcance: AlcanceAgente,
+  /** A quién se le contesta: se recuerda el id del mensaje para que pueda seguir citándolo sin etiqueta. */
+  paraQuien?: string
 ): Promise<boolean> => {
   if (!AGENTE_ACTIVO || agenteApagado()) return false;
   const jid = grupoDeConsultas(destino, alcance);
@@ -192,7 +194,13 @@ export const responderEnGrupo = async (
     await empezarAEscribir(jid, alcance);
     await new Promise((r) => setTimeout(r, Math.min(600 + (respuesta.texto?.length ?? 0) * 8, 2_500)));
   }
-  if (respuesta.texto?.trim()) await mandar(jid, respuesta.texto);
+  if (respuesta.texto?.trim()) {
+    const msgId = await mandar(jid, respuesta.texto);
+    if (msgId && paraQuien) {
+      const { recordarRespuestaA } = await import('../consultas/contexto.js');
+      recordarRespuestaA(paraQuien, jid, msgId);
+    }
+  }
   if (respuesta.archivos?.length) {
     const { resolveFileBuffer } = await import('../../services/whatsapp-media.utils.js');
     for (const a of respuesta.archivos) {

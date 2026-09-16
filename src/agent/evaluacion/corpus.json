@@ -391,5 +391,57 @@
     "esperadoConModelo": {
       "herramienta": "pedidos"
     }
+  },
+  {
+    "id": "evidencia-sin-fotos",
+    "pregunta": "@lila qué unidades llegaron sin fotos en el control de pista",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_evidence"
+    }
+  },
+  {
+    "id": "evidencia-tolva",
+    "pregunta": "@lila qué unidad no tiene foto de la tolva vacía",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_evidence"
+    }
+  },
+  {
+    "id": "evidencia-unidad-9",
+    "pregunta": "@lila cuántas fotos tiene la 9 en campo",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_evidence",
+      "params": {
+        "unitNumber": 9
+      }
+    }
+  },
+  {
+    "id": "fotos-unidad-9",
+    "pregunta": "@lila muéstrame las fotos de la unidad 9",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_media",
+      "params": {
+        "unitNumber": 9
+      }
+    }
+  },
+  {
+    "id": "cuantos-carros-llegaron",
+    "pregunta": "@lila cuántos carros llegaron a obra",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "site_finish"
+    },
+    "nota": "«llegaron» solo (agregados) pierde contra «carros»+«llegaron»; «cuántos agregados llegaron» sigue siendo agregados"
   }
 ]
