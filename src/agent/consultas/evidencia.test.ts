@@ -68,7 +68,7 @@ describe('las marcas que escribe el ingeniero (medido 15/09 sobre un mes de Glob
     expect(e[0].marcadas).toEqual({ ingreso: 0, temperatura: 1, vacio: 0 });
     const t = textoEvidencia(e, 'hoy', undefined, 'temperatura');
     expect(t).toContain('Con «temperatura» escrito por el ingeniero: unidad 7 ✓');
-    expect(t).toContain('Las otras 1 (9) tienen 4–4 fotos cada una sin decir cuál es cuál: *no puedo saber si la de temperatura está o no*');
+    expect(t).toContain('Las otras 1 (9) tienen 4–4 fotos cada una sin decir cuál es cuál: *quizá la foto de temperatura está, pero no se registró como tal*. Conviene revisarlas.');
     expect(t).not.toMatch(/sin la marca/i);
     expect(textoEvidencia(e, 'hoy', e[0])).toContain('Marcadas por el ingeniero: ingreso / descarga – · temperatura ✓ · salida vacía –');
   });

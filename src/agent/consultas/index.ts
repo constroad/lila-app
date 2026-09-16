@@ -1,6 +1,6 @@
 import logger from '../../utils/logger.js';
 import { CATALOGO, esConsulta, extraerParametros, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
-import { construirVista, type VistaDelDia } from './vista.js';
+import { construirVista, type PedidoDelDiaVista, type VistaDelDia } from './vista.js';
 import { OPCIONES_PESTANAS, PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, describeUnidad, elegirPedido, etiquetaPedido, identificaUnidad, pestanasEnLaPregunta, responder, textoEnlace, unidadPor, type Respuesta } from './responder.js';
 import { crearEnlaceDelPedido, enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo, type PestanasEnlace } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta, textoRespuestaInvalida } from './pendientes.js';
@@ -130,7 +130,9 @@ const respuestaFotosDeInforme = async (vista: VistaDelDia, params: Parametros, p
     const { enviar, omitidos } = acotarArchivos(archivos);
     const fotosN = archivos.filter((a) => a.tipo === 'image').length;
     const videosN = archivos.filter((a) => a.tipo === 'video').length;
-    return { texto: `${encabezado}\n${de}: ${fotosN} foto(s) y ${videosN} video(s)${omitidos ? `; te mando ${enviar.length}, el resto está en Portal` : ''}.`, archivos: enviar };
+    const pedido = u?.pedido ?? vista.orders.find((o) => o.companyId === i.companyId);
+    const enlace = omitidos && pedido ? await enlaceParaVer(pedido, quien) : null;
+    return { texto: `${encabezado}\n${de}: ${fotosN} foto(s) y ${videosN} video(s)${omitidos ? `; te mando ${enviar.length}.` : '.'}${omitidos ? lineaEnlace(enlace, `Las ${archivos.length} en el informe`) : ''}`, archivos: enviar };
   };
   if (lista.length === 1) return mandar(lista[0]);
   const opciones = lista.map((i) => `${i.nombreTipo} · ${i.empresa}${i.cliente ? ` · ${i.cliente}` : ''}`);
@@ -138,8 +140,31 @@ const respuestaFotosDeInforme = async (vista: VistaDelDia, params: Parametros, p
   return { texto: textoPregunta(`Hay ${lista.length} informes ${fechaLegible(vista.fecha)}. ¿De cuál te mando las fotos?`, opciones) };
 };
 
+/**
+ * EL ENLACE PARA VER LO QUE NO CABE EN WHATSAPP. Cada vez que Lila dice «el
+ * resto está en Portal» o «no puedo saber si la foto está», tiene que dar
+ * DÓNDE mirarlo (José, 15/09 20:45: «no indicas el link, pésima
+ * experiencia»). Es el enlace público del pedido con colocación e informes:
+ * el que ya existe, o uno nuevo — generarlo es lo que la persona pediría a
+ * continuación, y preguntárselo es otra vuelta.
+ */
+const enlaceParaVer = async (o: PedidoDelDiaVista, quien: string): Promise<string | null> => {
+  try {
+    const existente = await enlaceDelPedido(o.companyId, o.orderId, o.companySlug);
+    if (existente) return existente.url;
+    const nuevo = await crearEnlaceDelPedido(o.companyId, o.orderId, o.companySlug, { placement: true, reports: true }, quien);
+    logger.info(`[agente] enlace del cliente generado por ${quien} para ver fotos/informes del pedido ${o.orderId} (${o.companySlug})`);
+    return nuevo.url;
+  } catch (error) {
+    logger.warn(`[agente] no pude obtener el enlace del pedido ${o.orderId}: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+};
+
+const lineaEnlace = (url: string | null, que = 'Verlo todo'): string => (url ? `\n🔗 ${que}: ${url}` : '');
+
 /** Fotos y videos de la unidad pedida. */
-const respuestaMedia = async (vista: VistaDelDia, params: Parametros, encabezado: string): Promise<Respuesta> => {
+const respuestaMedia = async (vista: VistaDelDia, params: Parametros, encabezado: string, quien: string): Promise<Respuesta> => {
   const u = unidadPor(vista, params);
   if (!u) return { texto: encabezado };
   const archivos = await mediaDelDespacho(u.pedido.companyId, u.pedido.orderId, u.dispatchId);
@@ -147,8 +172,9 @@ const respuestaMedia = async (vista: VistaDelDia, params: Parametros, encabezado
   const { enviar, omitidos } = acotarArchivos(archivos);
   const fotos = archivos.filter((a) => a.tipo === 'image').length;
   const videos = archivos.filter((a) => a.tipo === 'video').length;
+  const enlace = omitidos ? await enlaceParaVer(u.pedido, quien) : null;
   return {
-    texto: `${encabezado}\n${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}, el resto está en Portal` : ''}.`,
+    texto: `${encabezado}\n${fotos} foto(s) y ${videos} video(s)${omitidos ? `; te mando ${enviar.length}.` : '.'}${omitidos ? lineaEnlace(enlace, `Las ${archivos.length} en el pedido`) : ''}`,
     archivos: enviar,
   };
 };
@@ -309,7 +335,7 @@ const armarRespuesta = async (
   }
   if (clave === 'unit_media') {
     const encabezado = responder(clave, { vista, params });
-    return unidadPor(vista, params) ? respuestaMedia(vista, params, encabezado) : { texto: encabezado };
+    return unidadPor(vista, params) ? respuestaMedia(vista, params, encabezado, quien) : { texto: encabezado };
   }
   const revision = clave === 'checklist_status' ? await revisionDelDia(fecha) : null;
   const informes =
@@ -317,7 +343,7 @@ const armarRespuesta = async (
       ? await informesDeLaVista(vista, params, fecha)
       : null;
   // La evidencia de campo: las fotos por unidad del control de pista del día.
-  if (clave === 'unit_evidence') return respuestaEvidencia(vista, params, pregunta);
+  if (clave === 'unit_evidence') return respuestaEvidencia(vista, params, pregunta, quien);
   // El cubicaje no está en la vista del día: es la ficha del volquete en el Portal.
   const cubicacion = clave === 'unit_capacity' ? await cubicacionDe(vista, params) : undefined;
   return { texto: responder(clave, { vista, params: { ...params, pregunta } as Parametros, revision, informes, cubicacion }) };
@@ -328,7 +354,7 @@ const armarRespuesta = async (
  * Con unidad nombrada, la de esa; sin unidad, todas las despachadas. Varias
  * empresas el mismo día: el control de pista de cada una, sus unidades.
  */
-const respuestaEvidencia = async (vista: VistaDelDia, params: Parametros, pregunta: string): Promise<Respuesta> => {
+const respuestaEvidencia = async (vista: VistaDelDia, params: Parametros, pregunta: string, quien: string): Promise<Respuesta> => {
   const dia = fechaLegible(vista.fecha);
   const empresas = [...new Set(vista.orders.filter((o) => !params.companyId || o.companyId === params.companyId).map((o) => o.companyId))];
   const lista: EvidenciaUnidad[] = [];
@@ -337,13 +363,20 @@ const respuestaEvidencia = async (vista: VistaDelDia, params: Parametros, pregun
     const fotos = (await Promise.all(informes.map((i) => cargarFotosDelInforme(i.id)))).flatMap((f) => f ?? []);
     lista.push(...evidenciaPorUnidad(unidadesDe(vista, companyId), fotos, esVideo));
   }
+  // Siempre con el enlace del pedido: es donde se revisa lo que Lila no puede
+  // afirmar («quizá la foto está pero no se marcó como temperatura»).
+  const pedidos = vista.orders.filter((o) => !params.companyId || o.companyId === params.companyId);
+  const enlaces = (await Promise.all(pedidos.map(async (o) => ({ o, url: await enlaceParaVer(o, quien) }))))
+    .filter((e) => e.url)
+    .map((e) => (pedidos.length > 1 ? `\n🔗 ${e.o.cliente || e.o.companySlug}: ${e.url}` : `\n🔗 Revisar las fotos en el enlace del pedido: ${e.url}`))
+    .join('');
   if (identificaUnidad(params)) {
     const u = unidadPor(vista, params);
     const e = u ? lista.find((x) => x.unitNumber === u.unitNumber && x.plate === u.plate) : undefined;
     if (!e) return { texto: `No encuentro ${describeUnidad(params)} entre las despachadas de ${dia}.` };
-    return { texto: textoEvidencia(lista, dia, e) };
+    return { texto: textoEvidencia(lista, dia, e) + enlaces };
   }
-  return { texto: textoEvidencia(lista, dia, undefined, focoDe(pregunta)) };
+  return { texto: textoEvidencia(lista, dia, undefined, focoDe(pregunta)) + enlaces };
 };
 
 /**

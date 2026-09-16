@@ -118,7 +118,7 @@ export const textoEvidencia = (lista: EvidenciaUnidad[], dia: string, unidad?: E
     );
     if (sin.length) {
       const rango = `${Math.min(...sin.map((u) => u.fotos))}–${Math.max(...sin.map((u) => u.fotos))}`;
-      partes.push(`Las otras ${sin.length} (${sin.map((u) => u.unitNumber).join(', ')}) tienen ${rango} fotos cada una sin decir cuál es cuál: *no puedo saber si la de ${nombre} está o no*. Para verlas: «fotos de campo de la unidad N».`);
+      partes.push(`Las otras ${sin.length} (${sin.map((u) => u.unitNumber).join(', ')}) tienen ${rango} fotos cada una sin decir cuál es cuál: *quizá la foto de ${nombre} está, pero no se registró como tal*. Conviene revisarlas.`);
     }
     partes.push(`_El ingeniero escribe la marca a veces; para saberlo siempre, el Portal tendría que pedir la foto de ${nombre} como disparo fijo._`);
     return partes.join('\n');
