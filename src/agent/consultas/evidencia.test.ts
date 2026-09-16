@@ -1,10 +1,10 @@
-import { evidenciaPorUnidad, textoEvidencia } from './evidencia';
+import { evidenciaPorUnidad, focoDe, marcasDe, textoEvidencia } from './evidencia';
 import type { UnidadDelDia } from './vista';
 import type { FotoInforme } from './fotos-informe';
 
 const esVideo = (url: string) => /\.mp4$/.test(url);
 const u = (n: number, plate: string, extra: Partial<UnidadDelDia> = {}): UnidadDelDia => ({ dispatchId: `d${n}`, unitNumber: n, plate, driverName: '', state: 'despachado', quantity: 25, picturesCount: 0, departedAt: 1, ...extra });
-const f = (seccion: string, n: number, video = false): FotoInforme[] => Array.from({ length: n }, (_, i) => ({ url: `/x/${seccion}-${i}.${video ? 'mp4' : 'jpg'}`, descripcion: '', hora: '', seccion }));
+const f = (seccion: string, n: number, video = false, descripcion = ''): FotoInforme[] => Array.from({ length: n }, (_, i) => ({ url: `/x/${seccion}-${descripcion.replace(/\W/g, '')}-${i}.${video ? 'mp4' : 'jpg'}`, descripcion, hora: '', seccion }));
 
 describe('evidencia de campo por unidad', () => {
   const units = [u(1, 'AZJ 910', { arrivalAt: 2 }), u(2, 'C2A 772', { arrivalAt: 2 }), u(3, 'ALC 812', { arrivalAt: 2 }), u(4, 'BBE 942'), u(5, 'XYZ 123', { state: 'progreso', departedAt: undefined })];
@@ -27,7 +27,7 @@ describe('evidencia de campo por unidad', () => {
     expect(t).toContain('• Unidad 3 (ALC 812): ninguna foto');
     expect(t).not.toContain('Unidad 1 (AZJ 910)');
     expect(t).toContain('En ruta, todavía sin fotos: unidad 4');
-    expect(t).toContain('no puedo decir cuál falta');
+    expect(t).toContain('«–» es sin marcar, no sin foto');
   });
 
   it('de una unidad: cuántas tiene y si cubre el mínimo', () => {
@@ -39,5 +39,37 @@ describe('evidencia de campo por unidad', () => {
 
   it('sin despachos lo dice', () => {
     expect(textoEvidencia([], 'hoy')).toBe('No hay unidades despachadas hoy.');
+  });
+});
+
+describe('las marcas que escribe el ingeniero (medido 15/09 sobre un mes de Globofast)', () => {
+  it('temperatura, salida vacía e ingreso, con tilde, sin tilde y con errores', () => {
+    expect(marcasDe('Unidad 7 F2B 725 temperatura')).toEqual(['temperatura']);
+    expect(marcasDe('temperatura del 8tvo volquete')).toEqual(['temperatura']);
+    expect(marcasDe('Unidad 2 volquete saliendo')).toEqual(['vacio']);
+    expect(marcasDe('vacioo')).toEqual(['vacio']);
+    expect(marcasDe('Unidad 3 volquete vacío')).toEqual(['vacio']);
+    expect(marcasDe('ingreso a descarga')).toEqual(['ingreso']);
+    expect(marcasDe('Unidad 9 A1Y825')).toEqual([]);
+    expect(marcasDe('control con escantillon')).toEqual([]);
+  });
+
+  it('el foco de la pregunta', () => {
+    expect(focoDe('qué unidad no tiene foto de temperatura')).toBe('temperatura');
+    expect(focoDe('qué unidades salieron sin foto de la tolva vacía')).toBe('vacio');
+    expect(focoDe('cuáles no tienen foto de ingreso a descarga')).toBe('ingreso');
+    expect(focoDe('qué unidades llegaron sin fotos')).toBeNull();
+  });
+
+  it('con foco: quién tiene la marca, quién no, y que sin marca no es sin foto', () => {
+    const units = [u(7, 'F2B 725', { arrivalAt: 2 }), u(9, 'A1Y825', { arrivalAt: 2 })];
+    const fotos = [...f('unitPhotos_d7', 2, false, 'Unidad 7 F2B 725'), ...f('unitPhotos_d7', 1, false, 'Unidad 7 F2B 725 temperatura'), ...f('unitPhotos_d9', 4, false, 'Unidad 9 A1Y825')];
+    const e = evidenciaPorUnidad(units, fotos, esVideo);
+    expect(e[0].marcadas).toEqual({ ingreso: 0, temperatura: 1, vacio: 0 });
+    const t = textoEvidencia(e, 'hoy', undefined, 'temperatura');
+    expect(t).toContain('marcada por el ingeniero en 1 de 2 unidad(es) que llegaron (unidad 7)');
+    expect(t).toContain('Sin la marca «temperatura» en ninguna de sus fotos: unidad 9 (4 foto(s))');
+    expect(t).toContain('Sin marca no es sin foto');
+    expect(textoEvidencia(e, 'hoy', e[0])).toContain('Marcadas por el ingeniero: ingreso / descarga – · temperatura ✓ · salida vacía –');
   });
 });

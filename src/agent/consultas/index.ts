@@ -19,7 +19,7 @@ import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import { buscarInformes, tipoDeInforme, type InformeEncontrado } from '../llm/informes.js';
 import { archivosDeFotos, cargarFotosDelInforme, esVideo, fotosDeUnidad, todasLasFotos } from './fotos-informe.js';
-import { evidenciaPorUnidad, textoEvidencia, unidadesDe, type EvidenciaUnidad } from './evidencia.js';
+import { evidenciaPorUnidad, focoDe, textoEvidencia, unidadesDe, type EvidenciaUnidad } from './evidencia.js';
 import { COMPANY_PILOTO, type AlcanceAgente } from '../checklist/alcance.js';
 import { esOrdenDeAvisoAPlanta } from './orden-planta.js';
 import { decidirRuta, esDeUnDia, seDejaPasar } from './decision.js';
@@ -309,7 +309,7 @@ const armarRespuesta = async (
       ? await informesDeLaVista(vista, params, fecha)
       : null;
   // La evidencia de campo: las fotos por unidad del control de pista del día.
-  if (clave === 'unit_evidence') return respuestaEvidencia(vista, params);
+  if (clave === 'unit_evidence') return respuestaEvidencia(vista, params, pregunta);
   // El cubicaje no está en la vista del día: es la ficha del volquete en el Portal.
   const cubicacion = clave === 'unit_capacity' ? await cubicacionDe(vista, params) : undefined;
   return { texto: responder(clave, { vista, params: { ...params, pregunta } as Parametros, revision, informes, cubicacion }) };
@@ -320,7 +320,7 @@ const armarRespuesta = async (
  * Con unidad nombrada, la de esa; sin unidad, todas las despachadas. Varias
  * empresas el mismo día: el control de pista de cada una, sus unidades.
  */
-const respuestaEvidencia = async (vista: VistaDelDia, params: Parametros): Promise<Respuesta> => {
+const respuestaEvidencia = async (vista: VistaDelDia, params: Parametros, pregunta: string): Promise<Respuesta> => {
   const dia = fechaLegible(vista.fecha);
   const empresas = [...new Set(vista.orders.filter((o) => !params.companyId || o.companyId === params.companyId).map((o) => o.companyId))];
   const lista: EvidenciaUnidad[] = [];
@@ -335,7 +335,7 @@ const respuestaEvidencia = async (vista: VistaDelDia, params: Parametros): Promi
     if (!e) return { texto: `No encuentro ${describeUnidad(params)} entre las despachadas de ${dia}.` };
     return { texto: textoEvidencia(lista, dia, e) };
   }
-  return { texto: textoEvidencia(lista, dia) };
+  return { texto: textoEvidencia(lista, dia, undefined, focoDe(pregunta)) };
 };
 
 /**
