@@ -159,7 +159,7 @@ Auth: `requireTenant` (JWT) salvo `auth/*` y `registro`. Rol en `req.auth.role`.
 | leads | `GET leads?estado&servicio&q` · `GET leads/:id` · `PATCH leads/:id` {estado, cotizacion, motivoPerdido} · `POST leads/:id/notas` · `GET leads/exportar.xlsx` | |
 | probar | `POST probar` {sesionId?, mensaje, como: nuevo|conocido} → {respuesta, entendido, siguiente, senales} | corre `paso()` con un estado en memoria (TTL 30 min), sin persistir ni avisar. |
 | equipo | `GET equipo` · `POST equipo` (invitar = dar acceso) · `PATCH equipo/:id` {rol, recibeAvisos} · `DELETE equipo/:id` | `bot_members`; en F2 también constroad-auth. |
-| plan | `GET plan` (plan, uso, semanas, pagos) | pagos registrados por el operador (sin pasarela: transferencia/Yape). |
+| plan | `GET plan` (plan, uso, semanas, pagos) | hoy solo el piloto, sin costo ni pagos; los planes de pago y sus comprobantes, en F4. |
 | notificaciones | `GET/PUT notificaciones` | `bot_configs.avisos`. |
 | reportes | `GET reportes?rango` | agregados por semana; «no supo responder» sale de las conversaciones con `fueraDeTema`/sin ruta. |
 | ajustes | `GET/PUT ajustes` · `GET ajustes/sesiones` · `DELETE ajustes/sesiones/:id` · `GET ajustes/exportar.xlsx` · `POST ajustes/eliminar-cuenta` | |
@@ -492,6 +492,27 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   rol y avisos, quitar). Tests: `equipo.test.ts` (legible, invitación, último
   dueño, JIDs de avisos, cupo), `permisos.test.ts` (qué rol cambia qué),
   `asistente.test.ts` (`destinosDeAviso`).
+- **A17 Plan y uso** (`ui/dali/src/screens/plan/*`, comparada con `A17-plan`
+  en los tres tamaños): lo que la empresa usa este ciclo (`GET plan`,
+  `dali/plan.ts`). **Lo real**: el ciclo es el mes calendario en Lima (cierre,
+  días restantes, «se renueva el 1»); los mensajes de WhatsApp que salieron
+  por la línea este mes (`usage_metrics.whatsapp.total` del período: es el
+  mismo conteo de la cuota de `companies.limits.whatsappMessages`, e incluye
+  a Lila y a los avisos, no solo a Dali) contra el límite (−1 = sin tope, que
+  es el caso del piloto); las respuestas de Dali del mes
+  (`bot_conversation_messages` con `role: 'bot'`); el número conectado (1 de
+  1); los miembros (N de 5); y las **conversaciones nuevas por semana** de las
+  últimas ocho semanas, lunes a domingo en Lima (`$dateTrunc` sobre
+  `bot_conversations.createdAt`), con promedio y variación contra la semana
+  anterior. **Contra el diseño, deliberado**: el diseño dibuja «Plan Negocio
+  S/ 149», «Plan Crecimiento S/ 299», comprobantes, historial de pagos,
+  «Cambiar de plan» y «Descargar resumen contable»; nada de eso existe: el
+  único plan es el **Piloto, sin costo**, la pantalla lo dice, las tarjetas de
+  planes son «Piloto (tu plan actual)» y «Planes de pago: en camino», y el
+  historial de pagos es un vacío honesto. La «Protección contra pérdida de
+  ventas» del diseño describía un tope que Dali no aplica (nada corta el
+  servicio al llegar a la cuota): se reemplazó por «sin sorpresas durante el
+  piloto». Tests: `plan.test.ts` (ciclo en Lima, ocho semanas, variación).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -531,7 +552,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
     el cliente) y el trabajo del dueño.
   - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
     identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
-    lead). Suite completa en verde (1047 + 333, tras A16).
+    lead). Suite completa en verde (1051 + 333, tras A17).
 - **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
   → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
   sin sesión → 401.
@@ -577,7 +598,7 @@ probó por el selector de archivos), y una plantilla editada por alguien en
 Excel de verdad (se probó la ida y vuelta sin tocar y los casos de
 normalización por test).
 
-**Pendiente de F3:** P1, P4–P6, A17–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A18–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

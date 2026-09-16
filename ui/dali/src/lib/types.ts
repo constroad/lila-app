@@ -364,3 +364,35 @@ export interface Equipo {
   pendientes: number;
   cupo: { usados: number; limite: number };
 }
+
+/** A17 «Plan y uso» (`src/agent/dali/plan.ts`). */
+export interface Ciclo {
+  desde: string;
+  hasta: string;
+  renuevaEl: string;
+  diasRestantes: number;
+  periodo: string;
+}
+
+export interface Semana {
+  etiqueta: string;
+  desde: string;
+  conversaciones: number;
+  actual: boolean;
+}
+
+export interface PlanYUso {
+  plan: { nombre: string; estado: 'activo'; sinCosto: true; ciclo: Ciclo };
+  uso: {
+    mensajesMes: number;
+    mensajesLimite: number;
+    respuestasDali: number;
+    numeros: { usados: number; limite: number; principal: string };
+    miembros: { usados: number; limite: number; nombres: string[] };
+  };
+  semanas: Semana[];
+  promedioSemanal: number;
+  variacionPct: number | null;
+  facturacion: { razonSocial: string; ruc: string };
+  pagos: never[];
+}

@@ -32,6 +32,7 @@ import {
 } from '../../agent/dali/whatsapp.js';
 import { EquipoInvalido, cambiarMiembro, invitarMiembro, listarEquipo, quitarMiembro } from '../../agent/dali/equipo.js';
 import { motivoSinPermiso } from '../../agent/dali/permisos.js';
+import { leerPlan } from '../../agent/dali/plan.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -329,6 +330,11 @@ router.delete('/equipo/:id', async (req: Request, res: Response) => {
   } catch (error) {
     responderErrorDeEquipo(res, error, 'quitar al miembro', req.dali!.companyId);
   }
+});
+
+/** A17: plan y uso (solo lectura; el piloto no tiene pagos). */
+router.get('/plan', async (req: Request, res: Response) => {
+  res.json(await leerPlan(req.dali!.companyId));
 });
 
 /**
