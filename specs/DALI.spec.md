@@ -162,7 +162,7 @@ Auth: `requireTenant` (JWT) salvo `auth/*` y `registro`. Rol en `req.auth.role`.
 | plan | `GET plan` (plan, uso, semanas, pagos) | hoy solo el piloto, sin costo ni pagos; los planes de pago y sus comprobantes, en F4. |
 | notificaciones | `GET/PUT notificaciones` (canal, grupo de la línea, número, casos, descanso) · `POST notificaciones/prueba` | `bot_configs.avisos` + `ownerNotifyTarget`. |
 | reportes | `GET reportes?periodo=semana\|semana-pasada\|30-dias` | calculado al pedirlo sobre `bot_conversations`, `bot_leads` y los mensajes (90 días); «no supo responder» = las sugeridas de FAQ. |
-| ajustes | `GET/PUT ajustes` · `GET ajustes/sesiones` · `DELETE ajustes/sesiones/:id` · `GET ajustes/exportar.xlsx` · `POST ajustes/eliminar-cuenta` | |
+| ajustes | `PATCH ajustes/perfil` {nombre} (reemite la sesión) · `GET ajustes/exportar.xlsx` | sin sesiones remotas (la sesión es una cookie de 14 días, sin registro) ni baja desde el panel (se pide por escrito). |
 | admin | `GET admin/empresas` · `POST admin/empresas` · `GET admin/empresas/:id` · `POST admin/empresas/:id/impersonar` · `PATCH admin/empresas/:id` (pausar, suspender, plan, pago) · `GET/PUT admin/verticales/:v` · `POST admin/verticales/:v/aplicar` · `GET admin/salud` | rol `operator` (José). `salud` reusa `estadoLlm()`, sesiones, memoria del proceso. |
 
 Toda ruta nueva se monta con guard y se verifica con `curl` sin credenciales
@@ -557,6 +557,26 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   «sin período anterior para comparar». Tests: `reportes.test.ts` (rangos,
   resumen, embudo, por día, por servicio, variación, toma humana),
   `inicio.test.ts` (tope del tiempo de respuesta).
+- **A20 Ajustes** (`ui/dali/src/screens/ajustes/*`, comparada con
+  `A20-ajustes` en los tres tamaños): tu perfil (el nombre, editable:
+  `PATCH ajustes/perfil` cambia `bot_members.name` y reemite la cookie con el
+  nombre nuevo; la identidad con la que se entra se muestra y no se cambia
+  desde acá), cómo se entra (sin contraseña; «este dispositivo» y que la
+  sesión dura 14 días), preferencias (idioma, zona horaria y tema como
+  valores fijos y dichos: el oscuro «llega cuando esté revisado»), la empresa
+  (de la ficha de A7 e Inicio, con enlace a Negocio), **la exportación a
+  Excel** (`GET ajustes/exportar.xlsx`, `dali/ajustes.ts` con `exceljs`: hoja
+  «Conversaciones» —hasta 5 000, las más nuevas— y hoja «Leads», un lead por
+  conversación con servicio, con el trabajo del dueño de `bot_leads` si
+  existe y «nuevo» si no; fechas en hora de Lima), y cerrar sesión. **Contra
+  el diseño, deliberado**: sin foto, sin cargo, sin correo editable (la
+  identidad es una sola), sin «sesiones abiertas» ni «cerrar las demás» (no
+  hay registro de sesiones: es un JWT en cookie), sin selector de tema, sin
+  «Términos y privacidad» ni «Registro de auditoría», y la «zona de peligro»
+  no borra nada: dice que la baja se pide por escrito. Probado contra la base
+  (cambiar el nombre y revertirlo; la exportación real de Constroad bajó
+  con 1 conversación y su lead). Tests: `ajustes.test.ts` (nombre, filas en
+  Lima, el libro con sus dos hojas).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -596,7 +616,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
     el cliente) y el trabajo del dueño.
   - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
     identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
-    lead). Suite completa en verde (1064 + 333, tras A19).
+    lead). Suite completa en verde (1079 + 333, tras A20).
 - **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
   → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
   sin sesión → 401.
@@ -644,7 +664,7 @@ probó por el selector de archivos), y una plantilla editada por alguien en
 Excel de verdad (se probó la ida y vuelta sin tocar y los casos de
 normalización por test).
 
-**Pendiente de F3:** P1, P4–P6, A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

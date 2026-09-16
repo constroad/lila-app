@@ -107,7 +107,7 @@ export function ReportesScreen() {
               titulo="Confirmados"
               valor={r.resumen.confirmados}
               chip={r.resumen.leads ? { texto: `${Math.round((r.resumen.confirmados / r.resumen.leads) * 100)}%`, tono: 'teal' } : undefined}
-              pie={r.resumen.leads ? `de los ${r.resumen.leads} leads` : 'con todos los datos'}
+              pie={r.resumen.leads ? (r.resumen.leads === 1 ? 'del único lead' : `de los ${r.resumen.leads} leads`) : 'con todos los datos'}
             />
             <Kpi
               icon="support_agent"

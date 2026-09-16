@@ -35,6 +35,7 @@ import { EquipoInvalido, cambiarMiembro, invitarMiembro, listarEquipo, quitarMie
 import { motivoSinPermiso } from '../../agent/dali/permisos.js';
 import { leerPlan } from '../../agent/dali/plan.js';
 import { PERIODOS, leerReporte, type Periodo } from '../../agent/dali/reportes.js';
+import { PerfilInvalido, cambiarNombre, exportarDatos } from '../../agent/dali/ajustes.js';
 import { EVENTOS_DE_AVISO, NotificacionesInvalidas, guardarNotificaciones, leerNotificaciones, textoDePruebaDeAviso, type GrupoDelStore } from '../../agent/dali/notificaciones.js';
 
 /**
@@ -333,6 +334,33 @@ router.delete('/equipo/:id', async (req: Request, res: Response) => {
   } catch (error) {
     responderErrorDeEquipo(res, error, 'quitar al miembro', req.dali!.companyId);
   }
+});
+
+/** A20: ajustes — el propio nombre (la sesión se reemite con el nombre nuevo) y la exportación a Excel. */
+router.patch('/ajustes/perfil', async (req: Request, res: Response) => {
+  try {
+    const miembro = await cambiarNombre(req.dali!.companyId, req.dali!.userId, String(req.body?.nombre ?? ''));
+    if (!miembro) {
+      res.status(404).json({ error: 'Tu usuario ya no está en el equipo' });
+      return;
+    }
+    res.setHeader('Set-Cookie', cabeceraCookie(firmarSesion(miembro), esSegura(req)));
+    res.json({ usuario: { nombre: miembro.name, rol: miembro.role, identidad: miembro.identity }, empresa: { companyId: miembro.companyId } });
+  } catch (error) {
+    if (error instanceof PerfilInvalido) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    logger.error(`[dali] no se pudo cambiar el nombre de ${req.dali!.userId}: ${String(error)}`);
+    res.status(500).json({ error: 'No se pudo guardar tu nombre' });
+  }
+});
+
+router.get('/ajustes/exportar.xlsx', async (req: Request, res: Response) => {
+  const buffer = await exportarDatos(req.dali!.companyId);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="dali-${req.dali!.companyId}-conversaciones-y-leads.xlsx"`);
+  res.send(buffer);
 });
 
 /** A19: reportes por período (esta semana, la pasada, 30 días). */
