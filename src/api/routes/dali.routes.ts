@@ -36,6 +36,7 @@ import { motivoSinPermiso } from '../../agent/dali/permisos.js';
 import { leerPlan } from '../../agent/dali/plan.js';
 import { PERIODOS, leerReporte, type Periodo } from '../../agent/dali/reportes.js';
 import { PerfilInvalido, cambiarNombre, exportarDatos } from '../../agent/dali/ajustes.js';
+import { NumeroOcupado, RUBROS, RegistroInvalido, asignarNumero, confirmarRegistro, iniciarRegistro, type ResultadoRegistro } from '../../agent/dali/registro.js';
 import { EVENTOS_DE_AVISO, NotificacionesInvalidas, guardarNotificaciones, leerNotificaciones, textoDePruebaDeAviso, type GrupoDelStore } from '../../agent/dali/notificaciones.js';
 
 /**
@@ -73,6 +74,41 @@ router.post('/auth/verificar', limiteAuth, async (req: Request, res: Response) =
 router.post('/auth/salir', (_req: Request, res: Response) => {
   res.setHeader('Set-Cookie', cabeceraCookieBorrada());
   res.json({ ok: true });
+});
+
+/** P4: registro público. La empresa se crea recién con el código correcto (`registro.ts`). */
+router.get('/registro/rubros', (_req: Request, res: Response) => {
+  res.json({ rubros: RUBROS });
+});
+
+router.post('/registro', limiteAuth, (req: Request, res: Response) => {
+  try {
+    res.json(iniciarRegistro(req.body ?? {}));
+  } catch (error) {
+    if (error instanceof RegistroInvalido) {
+      res.status(error.message.startsWith('Espera') ? 429 : 400).json({ error: error.message });
+      return;
+    }
+    logger.error(`[dali] no se pudo iniciar un registro: ${String(error)}`);
+    res.status(500).json({ error: 'No se pudo iniciar el registro' });
+  }
+});
+
+router.post('/registro/confirmar', limiteAuth, async (req: Request, res: Response) => {
+  try {
+    const r = await confirmarRegistro(String(req.body?.token ?? ''), String(req.body?.codigo ?? ''));
+    if (r.ok) {
+      res.setHeader('Set-Cookie', cabeceraCookie(firmarSesion(r.miembro), esSegura(req)));
+      res.status(201).json({ usuario: { nombre: r.miembro.name, rol: r.miembro.role, identidad: r.miembro.identity }, empresa: { companyId: r.miembro.companyId } });
+      return;
+    }
+    const { motivo } = r as Extract<ResultadoRegistro, { ok: false }>;
+    const mensajes = { 'sin-registro': 'Vuelve a empezar el registro', vencido: 'El código venció: vuelve a empezar', incorrecto: 'Código incorrecto', bloqueado: 'Demasiados intentos: vuelve a empezar' };
+    res.status(motivo === 'incorrecto' ? 400 : 410).json({ error: mensajes[motivo], motivo });
+  } catch (error) {
+    logger.error(`[dali] no se pudo confirmar un registro: ${String(error)}`);
+    res.status(500).json({ error: 'No se pudo crear la empresa' });
+  }
 });
 
 router.use(requireDaliSession);
@@ -333,6 +369,22 @@ router.delete('/equipo/:id', async (req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (error) {
     responderErrorDeEquipo(res, error, 'quitar al miembro', req.dali!.companyId);
+  }
+});
+
+/** P5: el número del negocio pasa a ser la línea de la empresa (después se vincula con A14). */
+router.put('/registro/numero', async (req: Request, res: Response) => {
+  try {
+    const numero = await asignarNumero(req.dali!.companyId, String(req.body?.numero ?? ''));
+    clearAgentSessionCache();
+    res.json({ numero });
+  } catch (error) {
+    if (error instanceof RegistroInvalido || error instanceof NumeroOcupado) {
+      res.status(error instanceof NumeroOcupado ? 409 : 400).json({ error: error.message });
+      return;
+    }
+    logger.error(`[dali] no se pudo asignar el número de ${req.dali!.companyId}: ${String(error)}`);
+    res.status(500).json({ error: 'No se pudo guardar el número' });
   }
 });
 

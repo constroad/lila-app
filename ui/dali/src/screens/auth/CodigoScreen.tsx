@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSesion } from '@/lib/session';
+import type { Yo } from '@/lib/types';
 import { telefonoLegible } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { BrandMark } from '@/components/BrandMark';
@@ -20,8 +22,11 @@ export function CodigoScreen() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { recargar } = useSesion();
+  const queryClient = useQueryClient();
   const destino = params.get('destino') ?? '';
   const metodo = params.get('metodo') === 'correo' ? 'correo' : 'whatsapp';
+  // P4: el código del registro se confirma con el token del borrador y al entrar sigue el paso 2.
+  const tokenRegistro = params.get('token') ?? '';
   const [digitos, setDigitos] = useState<string[]>(Array(LARGO).fill(''));
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -74,6 +79,13 @@ export function CodigoScreen() {
     }
     setEnviando(true);
     try {
+      if (tokenRegistro) {
+        // La sesión y la ruta cambian en el mismo render: si no, «solo sin sesión» manda al inicio antes de llegar al paso 2.
+        const yo = await api.post<Yo>('/registro/confirmar', { token: tokenRegistro, codigo });
+        queryClient.setQueryData(['yo'], yo);
+        navigate('/registro/whatsapp', { replace: true });
+        return;
+      }
       await api.post('/auth/verificar', { destino, codigo });
       await recargar();
       navigate('/inicio', { replace: true });
@@ -113,8 +125,8 @@ export function CodigoScreen() {
           <span className="size-1.5 rounded-full bg-emerald-500" /> Asistente oficial para WhatsApp
         </p>
         <form onSubmit={entrar} noValidate className="mt-5 rounded-xl bg-white px-5 pb-6 pt-5 shadow-sm ring-1 ring-stone-200/90 sm:px-7">
-          <Link to="/entrar" className="inline-flex min-h-11 items-center gap-2 font-body text-sm text-stone-600 hover:text-stone-900">
-            <Icon name="arrow_back" className="text-xl" /> {porWhatsApp ? 'Cambiar número' : 'Cambiar correo'}
+          <Link to={tokenRegistro ? '/registro' : '/entrar'} className="inline-flex min-h-11 items-center gap-2 font-body text-sm text-stone-600 hover:text-stone-900">
+            <Icon name="arrow_back" className="text-xl" /> {tokenRegistro ? 'Volver al registro' : porWhatsApp ? 'Cambiar número' : 'Cambiar correo'}
           </Link>
           <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-teal-100/80 bg-teal-50 px-3 py-1 font-label text-sm font-semibold text-teal-800">
             <Icon name={porWhatsApp ? 'chat' : 'mail'} className="text-base" /> {porWhatsApp ? 'WhatsApp Oficial' : 'Correo'}
@@ -168,7 +180,7 @@ export function CodigoScreen() {
             {enviando ? 'Verificando…' : 'Entrar'} <Icon name="arrow_forward" className="text-xl" />
           </button>
 
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-2 font-body text-sm text-stone-500">
+          <div className={cn('mt-5 flex flex-wrap items-center justify-center gap-2 font-body text-sm text-stone-500', tokenRegistro && 'hidden')}>
             <span>¿No llegó?</span>
             {segundos > 0 ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1 font-mono text-[13px] text-stone-500">
@@ -184,9 +196,13 @@ export function CodigoScreen() {
               </button>
             )}
           </div>
-          <Link to={`/entrar`} className="mt-3 flex min-h-10 items-center justify-center gap-1.5 font-body text-sm font-semibold text-teal-800 hover:underline">
-            <Icon name={porWhatsApp ? 'mail' : 'chat'} className="text-lg" /> {porWhatsApp ? 'Recibirlo por correo' : 'Recibirlo por WhatsApp'}
-          </Link>
+          {tokenRegistro ? (
+            <p className="mt-3 text-center font-body text-sm text-stone-500">¿No llegó? Vuelve al registro y pide el código de nuevo.</p>
+          ) : (
+            <Link to={`/entrar`} className="mt-3 flex min-h-10 items-center justify-center gap-1.5 font-body text-sm font-semibold text-teal-800 hover:underline">
+              <Icon name={porWhatsApp ? 'mail' : 'chat'} className="text-lg" /> {porWhatsApp ? 'Recibirlo por correo' : 'Recibirlo por WhatsApp'}
+            </Link>
+          )}
 
           <p className="mt-5 flex items-start gap-2 rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2.5 font-body text-[13px] leading-snug text-amber-800">
             <Icon name="lock" className="mt-0.5 text-lg text-amber-600" /> El código vence en 10 minutos y solo sirve una vez.

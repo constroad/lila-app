@@ -9,7 +9,7 @@ import type { RolDali } from './miembros.js';
  * Leer (`GET`) puede cualquiera con sesión. La ruta llega sin el prefijo
  * `/api/dali`.
  */
-const CONFIGURACION = /^\/(asistente|servicios|negocio|faq|catalogo|importar|whatsapp|equipo)(\/|$)/;
+const CONFIGURACION = /^\/(asistente|servicios|negocio|faq|catalogo|importar|whatsapp|equipo|registro)(\/|$)/;
 const OPERACION = /^\/(conversaciones|leads)(\/|$)/;
 const LIBRES = ['/probar', '/faq/probar'];
 

@@ -236,7 +236,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
 | S4 | Admin · Salud | `/admin/salud` | `admin/salud` | proceso, sesiones, modelo |
 | E1 | Estados (vacíos, error, carga, banners, diálogos, toasts, offline) | — | — | componentes compartidos |
 
-## 7-bis) Estado de implementación (as-is al 15/09/2026)
+## 7-bis) Estado de implementación (as-is al 16/09/2026)
 
 **Hecho y desplegado** (`31fc3aa`…`ccf7750`, lila `6075ff0`+):
 
@@ -591,6 +591,46 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   confirma), si escalaría, y el motor y el tiempo del turno. **Sin certezas
   inventadas**: el diseño dibuja «98% certeza» e «intención 0.94»; no existen
   en el motor y no se muestran. Tests: `probar.test.ts` (campos y señales).
+- **P4–P6 Registro** (`ui/dali/src/screens/registro/*`, comparadas con
+  `P4-registro`, `P5-conectar-whatsapp` y `P6-conocimiento` en los tres
+  tamaños; `src/agent/dali/registro.ts`): el alta de una empresa nueva desde
+  cero, sin nadie de Constroad en el medio. **P4** pide negocio, rubro (hoy
+  solo Asfalto tiene pack: los otros cuatro se ven y no se eligen,
+  «Próximamente»), zona, nombre, WhatsApp personal y el nombre de la asistente;
+  `POST registro` (público, 10/min por IP) deja un **borrador en memoria**
+  (15 min) y manda el código de seis cifras al WhatsApp —que, igual que en
+  P2/P3, hasta F2 **queda en el log de lila**: `[dali] código de registro para
+  <wa> (<negocio>, <nombre>): 123456`—; reenviar antes de 30 s contesta 429.
+  **La empresa se crea recién con el código correcto** (`POST
+  registro/confirmar`, P3 en modo registro: 10 min, cinco intentos, un solo
+  uso): `companies` (companyId derivado del nombre, sin tildes ni «S.A.C.»,
+  con sufijo -2/-3 si ya existe), `bot_configs` con `vertical: 'asphalt'`,
+  el perfil (asistente y zona) y los avisos al dueño, y ella como `owner` en
+  `bot_members`; la respuesta ya trae la cookie de sesión y la UI sigue al
+  paso 2 sin pasar por Inicio. **P5**: el número del negocio pasa a ser la
+  línea de la empresa (`PUT registro/numero`, dueño; **409 si otra empresa ya
+  lo usa** como sender) y se vincula con el mismo panel de A14 (QR o código;
+  `GET whatsapp` cada 5 s); «Continuar» se habilita cuando la línea queda
+  conectada (en móvil dentro del aviso «Estado de confirmación», desde tablet
+  al lado del «Conectado»). **P6** reutiliza A13 (plantilla, `importar/analizar`
+  y `confirmar` en modo agregar) y muestra el pack de Asfalto como ya elegido
+  («Seleccionado por defecto · Listo», con los servicios reales del guion) en
+  vez del botón «Usar el pack» del diseño, que no tendría nada que hacer porque
+  el pack ya viene puesto al crear la empresa; «Lo que quedará listo» cuenta
+  de verdad servicios activos, preguntas, FAQ y catálogo. El cascarón
+  (`piezas.tsx`): en móvil el contenido va directo sobre la página, desde
+  tablet en la tarjeta blanca (P6 más ancha, a dos columnas); «¿Ya tienes
+  cuenta? Entrar» en el paso 1 y «Conexión segura» con sesión. **Contra el
+  diseño, deliberado**: sin «¿Ayuda?» (no hay número de soporte definido),
+  sin «14 días de prueba» (el piloto no tiene plazo: «Piloto sin costo · Sin
+  tarjeta»), sin «Términos / Privacidad» (no existen las páginas), y el paso a
+  paso lleva «PASO n» en escritorio como en P4 (P5/P6 lo dibujan sin él).
+  Probado en el harness de punta a punta con una empresa de prueba («Prueba
+  Dali», borrada después con `borrar-prueba-dali.mts`: companies, bot_configs
+  y bot_members): P4 → código del log → empresa creada y sesión → P5 con el
+  409 del número de Constroad y la asignación de otro → P6 con los conteos.
+  Tests: `registro.test.ts` (datos, companyId, borrador y código, creación,
+  número ocupado), `permisos.test.ts` (registro es configuración: dueño).
 - **Backend** `src/agent/dali/*` + `src/api/routes/dali.routes.ts`:
   - **Sesión de prueba (decisión de José, 15/09: «no esperes un envío real de
     código, eso déjalo para el final»)**: el flujo de pantallas es el
@@ -616,7 +656,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
     el cliente) y el trabajo del dueño.
   - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
     identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
-    lead). Suite completa en verde (1079 + 333, tras A20).
+    lead). Suite completa en verde (1104 + 333, tras P4–P6).
 - **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
   → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
   sin sesión → 401.
@@ -662,9 +702,14 @@ para cuando se revisen esas pantallas; en A13, un `.xls` viejo (solo se lee
 `.xlsx`; el error lo dice) y el arrastrar-y-soltar con la mano (la subida se
 probó por el selector de archivos), y una plantilla editada por alguien en
 Excel de verdad (se probó la ida y vuelta sin tocar y los casos de
-normalización por test).
+normalización por test); en P4–P6, el código de registro llegando de verdad
+al WhatsApp (F2), el QR de un número nuevo hasta «conectado» (el harness no
+tiene el lease de sockets: la pantalla muestra que no pudo preparar el código
+y «Continuar» queda deshabilitado) y un registro entero contra producción (se
+verificó que `/dali/registro` carga y que `POST /api/dali/registro` vacío
+devuelve 400 sin crear nada).
 
-**Pendiente de F3:** P1, P4–P6, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

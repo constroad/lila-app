@@ -6,6 +6,9 @@ import { SesionProvider, useSesion } from '@/lib/session';
 import { AppShell } from '@/layout/AppShell';
 import { EntrarScreen } from '@/screens/auth/EntrarScreen';
 import { CodigoScreen } from '@/screens/auth/CodigoScreen';
+import { RegistroScreen } from '@/screens/registro/RegistroScreen';
+const RegistroWhatsAppScreen = lazy(() => import('@/screens/registro/RegistroWhatsAppScreen').then((m) => ({ default: m.RegistroWhatsAppScreen })));
+const RegistroConocimientoScreen = lazy(() => import('@/screens/registro/RegistroConocimientoScreen').then((m) => ({ default: m.RegistroConocimientoScreen })));
 import { InicioScreen } from '@/screens/inicio/InicioScreen';
 import { PendienteScreen } from '@/screens/PendienteScreen';
 
@@ -81,7 +84,42 @@ export default function App() {
                 </SoloSinSesion>
               }
             />
-            <Route path="/registro/*" element={<PendienteScreen titulo="Registro" />} />
+            <Route
+              path="/registro"
+              element={
+                <SoloSinSesion>
+                  <RegistroScreen />
+                </SoloSinSesion>
+              }
+            />
+            <Route
+              path="/registro/codigo"
+              element={
+                <SoloSinSesion>
+                  <CodigoScreen />
+                </SoloSinSesion>
+              }
+            />
+            <Route
+              path="/registro/whatsapp"
+              element={
+                <ConSesion>
+                  <Suspense fallback={null}>
+                    <RegistroWhatsAppScreen />
+                  </Suspense>
+                </ConSesion>
+              }
+            />
+            <Route
+              path="/registro/conocimiento"
+              element={
+                <ConSesion>
+                  <Suspense fallback={null}>
+                    <RegistroConocimientoScreen />
+                  </Suspense>
+                </ConSesion>
+              }
+            />
             <Route
               element={
                 <ConSesion>
