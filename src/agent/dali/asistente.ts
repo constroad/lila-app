@@ -42,11 +42,20 @@ export interface PerfilAsistente {
   reglas: ReglasAsistente;
 }
 
+export interface DescansoAvisos {
+  activo: boolean;
+  /** HH:MM en hora de Lima; la franja puede cruzar la medianoche («22:00»–«07:00»). */
+  desde: string;
+  hasta: string;
+}
+
 export interface AvisosAsistente {
   /** Al grupo de ventas conectado (`ownerNotifyTarget`) o al número del dueño. */
   canal: 'grupo' | 'dueno';
   numeroDueno: string;
   casos: { leadNuevo: boolean; pideUrgente: boolean; fallo: boolean };
+  /** Horario de descanso (A18): en esa franja no sale ningún aviso; los leads igual quedan en el panel. */
+  descanso: DescansoAvisos;
 }
 
 export interface Asistente {
@@ -75,7 +84,7 @@ export const PERFIL_POR_DEFECTO: PerfilAsistente = {
   reglas: REGLAS_POR_DEFECTO,
 };
 
-export const AVISOS_POR_DEFECTO: AvisosAsistente = { canal: 'grupo', numeroDueno: '', casos: { leadNuevo: true, pideUrgente: true, fallo: true } };
+export const AVISOS_POR_DEFECTO: AvisosAsistente = { canal: 'grupo', numeroDueno: '', casos: { leadNuevo: true, pideUrgente: true, fallo: true }, descanso: { activo: false, desde: '22:00', hasta: '07:00' } };
 
 /** Cuánto se calla Dali cuando una persona interviene (A6 «Silencio al intervenir»). */
 export const SILENCIOS_MIN = [15, 30, 60, 120] as const;
@@ -124,15 +133,33 @@ export const perfilDe = (guardado: unknown, heredado: { greeting?: string; tone?
   };
 };
 
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 export const avisosDe = (guardado: unknown): AvisosAsistente => {
   const a = (guardado ?? {}) as Partial<AvisosAsistente>;
   const c = (a.casos ?? {}) as Partial<AvisosAsistente['casos']>;
+  const d = (a.descanso ?? {}) as Partial<DescansoAvisos>;
   const base = AVISOS_POR_DEFECTO.casos;
   return {
     canal: a.canal === 'dueno' ? 'dueno' : 'grupo',
     numeroDueno: texto(a.numeroDueno, 20).replace(/\D/g, ''),
     casos: { leadNuevo: bool(c.leadNuevo, base.leadNuevo), pideUrgente: bool(c.pideUrgente, base.pideUrgente), fallo: bool(c.fallo, base.fallo) },
+    descanso: {
+      activo: bool(d.activo, AVISOS_POR_DEFECTO.descanso.activo),
+      desde: HORA.test(String(d.desde ?? '')) ? String(d.desde) : AVISOS_POR_DEFECTO.descanso.desde,
+      hasta: HORA.test(String(d.hasta ?? '')) ? String(d.hasta) : AVISOS_POR_DEFECTO.descanso.hasta,
+    },
   };
+};
+
+/** ¿Estamos en el horario de descanso (hora de Lima)? La franja puede cruzar la medianoche. */
+export const enDescanso = (descanso: DescansoAvisos | undefined, ahoraMs: number): boolean => {
+  if (!descanso?.activo) return false;
+  const lima = new Date(ahoraMs - 5 * 3_600_000);
+  const ahora = lima.getUTCHours() * 60 + lima.getUTCMinutes();
+  const desde = minutosDe(descanso.desde);
+  const hasta = minutosDe(descanso.hasta);
+  return desde <= hasta ? ahora >= desde && ahora < hasta : ahora >= desde || ahora < hasta;
 };
 
 const minutosDe = (hhmm: string): number => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
@@ -200,11 +227,17 @@ export const negocioDe = (config: { perfil?: unknown; negocio?: unknown; catalog
  * A quién le llegan los avisos y cuáles: el grupo conectado (`ownerNotifyTarget`)
  * o el número del dueño, según lo elegido en A6; sin elección, el grupo.
  */
-export const destinoDeAvisos = (config: { avisos?: unknown; ownerNotifyTarget?: string } | null | undefined): { target?: string; casos: AvisosAsistente['casos'] } => {
+export const destinoDeAvisos = (
+  config: { avisos?: unknown; ownerNotifyTarget?: string } | null | undefined
+): { target?: string; casos: AvisosAsistente['casos']; quietHours?: { desde: string; hasta: string } } => {
   const avisos = avisosDe(config?.avisos);
   const grupo = texto(config?.ownerNotifyTarget) || undefined;
   const dueno = avisos.numeroDueno ? `${avisos.numeroDueno}@s.whatsapp.net` : undefined;
-  return { target: avisos.canal === 'dueno' ? (dueno ?? grupo) : grupo, casos: avisos.casos };
+  return {
+    target: avisos.canal === 'dueno' ? (dueno ?? grupo) : grupo,
+    casos: avisos.casos,
+    ...(avisos.descanso.activo ? { quietHours: { desde: avisos.descanso.desde, hasta: avisos.descanso.hasta } } : {}),
+  };
 };
 
 /**
@@ -213,10 +246,12 @@ export const destinoDeAvisos = (config: { avisos?: unknown; ownerNotifyTarget?: 
  * nada si ese caso está apagado.
  */
 export const destinosDeAviso = (
-  config: { ownerNotifyTarget?: string; notifyOn?: Partial<AvisosAsistente['casos']>; alertTargets?: string[] },
-  caso: keyof AvisosAsistente['casos']
+  config: { ownerNotifyTarget?: string; notifyOn?: Partial<AvisosAsistente['casos']>; alertTargets?: string[]; quietHours?: { desde: string; hasta: string } },
+  caso: keyof AvisosAsistente['casos'],
+  ahoraMs = Date.now()
 ): string[] => {
   if (!(config.notifyOn?.[caso] ?? true)) return [];
+  if (config.quietHours && enDescanso({ activo: true, ...config.quietHours }, ahoraMs)) return [];
   return [...new Set([config.ownerNotifyTarget, ...(config.alertTargets ?? [])].map((t) => texto(t)).filter(Boolean))];
 };
 
@@ -278,7 +313,7 @@ export const cambiosParaGuardar = (actual: Record<string, unknown>, cambios: Cam
   }
   if (cambios.avisos) {
     const previo = avisosDe(actual.avisos);
-    set.avisos = avisosDe({ ...previo, ...cambios.avisos, casos: { ...previo.casos, ...(cambios.avisos.casos ?? {}) } });
+    set.avisos = avisosDe({ ...previo, ...cambios.avisos, casos: { ...previo.casos, ...(cambios.avisos.casos ?? {}) }, descanso: { ...previo.descanso, ...(cambios.avisos.descanso ?? {}) } });
   }
   if (typeof cambios.handoffPauseMinutes === 'number' && (SILENCIOS_MIN as readonly number[]).includes(cambios.handoffPauseMinutes)) set.handoffPauseMinutes = cambios.handoffPauseMinutes;
   if (Array.isArray(cambios.testNumbers)) set.testNumbers = numerosDePrueba(cambios.testNumbers);

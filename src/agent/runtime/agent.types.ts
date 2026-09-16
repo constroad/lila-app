@@ -18,6 +18,8 @@ export interface AgentBotConfig {
   notifyOn?: { leadNuevo: boolean; pideUrgente: boolean; fallo: boolean };
   /** JIDs de los miembros del equipo con los avisos activos (A16); reciben lo mismo que `ownerNotifyTarget`. */
   alertTargets?: string[];
+  /** Horario de descanso (A18, hora de Lima, puede cruzar la medianoche): en esa franja no sale ningún aviso. */
+  quietHours?: { desde: string; hasta: string };
   /** El guion de preguntas del vertical (`ventas/guion.asfalto.ts`); ausente = el default en código. */
   guion?: unknown;
   /** Cómo se presenta la asistente (`dali/asistente.ts` `PerfilAsistente`); ausente = el perfil del piloto. */

@@ -92,6 +92,7 @@ async function resolveSessionContext(
             ownerNotifyTarget: avisos.target,
             notifyOn: avisos.casos,
             alertTargets,
+            quietHours: avisos.quietHours,
             guion: stored.guion,
             profile: stored.perfil,
             business: stored.negocio,

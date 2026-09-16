@@ -160,7 +160,7 @@ Auth: `requireTenant` (JWT) salvo `auth/*` y `registro`. Rol en `req.auth.role`.
 | probar | `POST probar` {sesionId?, mensaje, como: nuevo|conocido} → {respuesta, entendido, siguiente, senales} | corre `paso()` con un estado en memoria (TTL 30 min), sin persistir ni avisar. |
 | equipo | `GET equipo` · `POST equipo` (invitar = dar acceso) · `PATCH equipo/:id` {rol, recibeAvisos} · `DELETE equipo/:id` | `bot_members`; en F2 también constroad-auth. |
 | plan | `GET plan` (plan, uso, semanas, pagos) | hoy solo el piloto, sin costo ni pagos; los planes de pago y sus comprobantes, en F4. |
-| notificaciones | `GET/PUT notificaciones` | `bot_configs.avisos`. |
+| notificaciones | `GET/PUT notificaciones` (canal, grupo de la línea, número, casos, descanso) · `POST notificaciones/prueba` | `bot_configs.avisos` + `ownerNotifyTarget`. |
 | reportes | `GET reportes?rango` | agregados por semana; «no supo responder» sale de las conversaciones con `fueraDeTema`/sin ruta. |
 | ajustes | `GET/PUT ajustes` · `GET ajustes/sesiones` · `DELETE ajustes/sesiones/:id` · `GET ajustes/exportar.xlsx` · `POST ajustes/eliminar-cuenta` | |
 | admin | `GET admin/empresas` · `POST admin/empresas` · `GET admin/empresas/:id` · `POST admin/empresas/:id/impersonar` · `PATCH admin/empresas/:id` (pausar, suspender, plan, pago) · `GET/PUT admin/verticales/:v` · `POST admin/verticales/:v/aplicar` · `GET admin/salud` | rol `operator` (José). `salud` reusa `estadoLlm()`, sesiones, memoria del proceso. |
@@ -513,6 +513,27 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   ventas» del diseño describía un tope que Dali no aplica (nada corta el
   servicio al llegar a la cuota): se reemplazó por «sin sorpresas durante el
   piloto». Tests: `plan.test.ts` (ciclo en Lima, ocho semanas, variación).
+- **A18 Notificaciones** (`ui/dali/src/screens/notificaciones/*`, comparada
+  con `A18-notificaciones` en los tres tamaños): por dónde avisa Dali, qué
+  avisa y cuándo calla. Es la MISMA configuración de A6 «Avisos»
+  (`bot_configs.avisos` + `ownerNotifyTarget`, `dali/notificaciones.ts`),
+  con lo que A6 no tenía: el grupo se elige entre los **grupos reales de la
+  línea** (`WhatsAppDirectService.listGroups` del store de la sesión; si la
+  línea no está conectada en el proceso, se muestra el grupo actual y no se
+  puede cambiar) y el **horario de descanso** (`avisos.descanso`, hora de
+  Lima, cruza la medianoche): `enDescanso` en `asistente.ts`,
+  `AgentBotConfig.quietHours` y `destinosDeAviso` devuelve vacío en la
+  franja — no sale ningún aviso, los leads igual quedan en el panel. Los
+  eventos son los tres reales (lead con datos —incluye «listo para cotizar»
+  y lo que el cliente agrega después—, cliente que pide a alguien, Dali no
+  pudo contestar), con un ejemplo con datos inventados en el formato exacto
+  del aviso; «WhatsApp desconectado» y «Resumen semanal» se muestran como
+  **todavía no** (nada los emite). El correo no es un canal (nada manda
+  correos). `POST notificaciones/prueba` manda un mensaje de prueba al canal
+  elegido por la línea (rate limit 5/10 min). Probado contra la base
+  (guardar el descanso y revertirlo). Tests: `notificaciones.test.ts`
+  (armado, validación, eventos, prueba), `asistente.test.ts` (descanso,
+  `destinosDeAviso` en la franja).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -552,7 +573,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
     el cliente) y el trabajo del dueño.
   - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
     identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
-    lead). Suite completa en verde (1051 + 333, tras A17).
+    lead). Suite completa en verde (1058 + 333, tras A18).
 - **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
   → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
   sin sesión → 401.
@@ -584,7 +605,9 @@ y un envío real necesita el sí de José; el historial nace vacío (se registra
 desde este deploy); en A16, un aviso real a un miembro del equipo (el fan-out
 se probó con tests; nadie más que José tiene celular en el equipo hoy) y un
 ingreso con rol ventas o solo lectura (no hay otro miembro: el gate de roles se
-probó por test); `escribirAlCliente` de punta a punta (envía por
+probó por test); en A18, el mensaje de prueba al grupo (es un envío real por
+la línea del piloto) y un aviso real en el horario de descanso (se probó por
+test); `escribirAlCliente` de punta a punta (envía por
 WhatsApp: no se probó para no mandarle mensajes a nadie); PWA/instalable (F3
 «done» lo pide); en A6, el efecto real de una pausa y de un perfil distinto
 sobre una conversación de WhatsApp (se probó con tests y guardando/reanudando
@@ -598,7 +621,7 @@ probó por el selector de archivos), y una plantilla editada por alguien en
 Excel de verdad (se probó la ida y vuelta sin tocar y los casos de
 normalización por test).
 
-**Pendiente de F3:** P1, P4–P6, A18–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A19–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

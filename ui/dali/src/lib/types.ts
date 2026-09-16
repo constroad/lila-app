@@ -120,10 +120,17 @@ export interface PerfilAsistente {
   reglas: ReglasAsistente;
 }
 
+export interface DescansoAvisos {
+  activo: boolean;
+  desde: string;
+  hasta: string;
+}
+
 export interface AvisosAsistente {
   canal: 'grupo' | 'dueno';
   numeroDueno: string;
   casos: { leadNuevo: boolean; pideUrgente: boolean; fallo: boolean };
+  descanso: DescansoAvisos;
 }
 
 export interface Asistente {
@@ -395,4 +402,32 @@ export interface PlanYUso {
   variacionPct: number | null;
   facturacion: { razonSocial: string; ruc: string };
   pagos: never[];
+}
+
+/** A18 «Notificaciones» (`src/agent/dali/notificaciones.ts`). */
+export interface GrupoDeLinea {
+  jid: string;
+  nombre: string;
+  miembros: number;
+}
+
+export interface EventoDeAviso {
+  id: 'leadNuevo' | 'pideUrgente' | 'fallo' | 'desconexion' | 'resumen';
+  titulo: string;
+  etiqueta: string;
+  detalle: string;
+  ejemplo: string;
+  disponible: boolean;
+}
+
+export interface Notificaciones {
+  linea: string;
+  canal: 'grupo' | 'dueno';
+  grupo?: GrupoDeLinea;
+  grupos: GrupoDeLinea[];
+  gruposDisponibles: boolean;
+  numeroDueno: string;
+  casos: { leadNuevo: boolean; pideUrgente: boolean; fallo: boolean };
+  descanso: DescansoAvisos;
+  eventos: EventoDeAviso[];
 }

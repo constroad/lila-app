@@ -1,4 +1,4 @@
-import { destinosDeAviso, avisosDe, destinoDeAvisos, enHorarioSegun, horarioLegible, minutosHastaManana, negocioDe, pausada, perfilDe, PERFIL_POR_DEFECTO } from './asistente';
+import { destinosDeAviso, enDescanso, avisosDe, destinoDeAvisos, enHorarioSegun, horarioLegible, minutosHastaManana, negocioDe, pausada, perfilDe, PERFIL_POR_DEFECTO } from './asistente';
 
 /**
  * LO QUE SE CONFIGURA EN «ASISTENTE» (A6) llega al guion tal cual: el nombre,
@@ -46,7 +46,7 @@ describe('perfilDe', () => {
 
 describe('avisosDe', () => {
   it('por defecto avisa al grupo de ventas de todo', () => {
-    expect(avisosDe(undefined)).toEqual({ canal: 'grupo', numeroDueno: '', casos: { leadNuevo: true, pideUrgente: true, fallo: true } });
+    expect(avisosDe(undefined)).toEqual({ canal: 'grupo', numeroDueno: '', casos: { leadNuevo: true, pideUrgente: true, fallo: true }, descanso: { activo: false, desde: '22:00', hasta: '07:00' } });
   });
 
   it('deja solo dígitos en el número del dueño', () => {
@@ -54,6 +54,7 @@ describe('avisosDe', () => {
       canal: 'dueno',
       numeroDueno: '51903124919',
       casos: { leadNuevo: false, pideUrgente: true, fallo: true },
+      descanso: { activo: false, desde: '22:00', hasta: '07:00' },
     });
   });
 
@@ -65,6 +66,25 @@ describe('avisosDe', () => {
     });
     expect(destinoDeAvisos({ ownerNotifyTarget: '120363@g.us', avisos: { canal: 'dueno' } }).target).toBe('120363@g.us');
     expect(destinoDeAvisos(null).target).toBeUndefined();
+  });
+
+  it('descanso (A18): se guarda con forma (HH:MM) y se entiende una franja que cruza la medianoche, en hora de Lima', () => {
+    expect(avisosDe({ descanso: { activo: true, desde: '22:00', hasta: '07:00' } }).descanso).toEqual({ activo: true, desde: '22:00', hasta: '07:00' });
+    expect(avisosDe({ descanso: { activo: true, desde: 'x', hasta: '7' } }).descanso).toEqual({ activo: true, desde: '22:00', hasta: '07:00' });
+    expect(avisosDe({}).descanso).toEqual({ activo: false, desde: '22:00', hasta: '07:00' });
+    const franja = { activo: true, desde: '22:00', hasta: '07:00' };
+    expect(enDescanso(franja, Date.parse('2026-09-16T04:30:00Z'))).toBe(true); // 23:30 Lima
+    expect(enDescanso(franja, Date.parse('2026-09-16T11:30:00Z'))).toBe(true); // 06:30 Lima
+    expect(enDescanso(franja, Date.parse('2026-09-16T12:00:00Z'))).toBe(false); // 07:00 Lima: se reanuda
+    expect(enDescanso(franja, Date.parse('2026-09-16T20:00:00Z'))).toBe(false); // 15:00 Lima
+    expect(enDescanso({ ...franja, activo: false }, Date.parse('2026-09-16T04:30:00Z'))).toBe(false);
+    expect(enDescanso({ activo: true, desde: '13:00', hasta: '14:00' }, Date.parse('2026-09-16T18:30:00Z'))).toBe(true); // 13:30 Lima, franja del mismo día
+  });
+
+  it('destinosDeAviso (A18): en el horario de descanso no se avisa a nadie', () => {
+    const config = { ownerNotifyTarget: '120363@g.us', quietHours: { desde: '22:00', hasta: '07:00' } };
+    expect(destinosDeAviso(config, 'leadNuevo', Date.parse('2026-09-16T04:30:00Z'))).toEqual([]);
+    expect(destinosDeAviso(config, 'leadNuevo', Date.parse('2026-09-16T20:00:00Z'))).toEqual(['120363@g.us']);
   });
 
   it('destinosDeAviso (A16): el canal elegido más cada miembro con avisos activos, sin repetir, y nada si el caso está apagado', () => {

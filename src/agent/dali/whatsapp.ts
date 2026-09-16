@@ -184,7 +184,7 @@ const HISTORIAL_MAX = 20;
 
 const inicioDelDia = (ahoraMs: number): Date => new Date(`${diaPeruano(ahoraMs)}T00:00:00.000-05:00`);
 
-const empresaDe = async (companyId: string): Promise<{ nombre: string; numero: string }> => {
+export const empresaDe = async (companyId: string): Promise<{ nombre: string; numero: string }> => {
   const Company = await getCompanyModel();
   const doc = (await Company.findOne({ companyId }).select('name whatsappConfig.sender').lean()) as { name?: unknown; whatsappConfig?: { sender?: unknown } } | null;
   return { nombre: String(doc?.name ?? companyId), numero: soloDigitos(String(doc?.whatsappConfig?.sender ?? '')) };

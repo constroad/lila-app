@@ -303,7 +303,7 @@ const DIAS: Array<{ clave: keyof PerfilAsistente['horario']; label: string; cerr
 /** Cada media hora entre las 05:00 y las 23:30, en 24 h como lo escribe el guion (el `type=time` del navegador sale en 12 h y no entra en 390). */
 const HORAS = Array.from({ length: 38 }, (_, i) => `${String(5 + Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
 
-function SelectorHora({ valor, onChange, label }: { valor: string; onChange: (v: string) => void; label: string }) {
+export function SelectorHora({ valor, onChange, label }: { valor: string; onChange: (v: string) => void; label: string }) {
   const opciones = HORAS.includes(valor) ? HORAS : [valor, ...HORAS];
   return (
     <span className="relative inline-flex h-11 items-center rounded-lg border border-stone-200 bg-stone-50 md:bg-white">

@@ -28,11 +28,13 @@ import {
   reconectarLinea,
   vinculacionPorCodigo,
   vinculacionPorQr,
+  empresaDe,
   type OperacionesDeLinea,
 } from '../../agent/dali/whatsapp.js';
 import { EquipoInvalido, cambiarMiembro, invitarMiembro, listarEquipo, quitarMiembro } from '../../agent/dali/equipo.js';
 import { motivoSinPermiso } from '../../agent/dali/permisos.js';
 import { leerPlan } from '../../agent/dali/plan.js';
+import { EVENTOS_DE_AVISO, NotificacionesInvalidas, guardarNotificaciones, leerNotificaciones, textoDePruebaDeAviso, type GrupoDelStore } from '../../agent/dali/notificaciones.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -335,6 +337,62 @@ router.delete('/equipo/:id', async (req: Request, res: Response) => {
 /** A17: plan y uso (solo lectura; el piloto no tiene pagos). */
 router.get('/plan', async (req: Request, res: Response) => {
   res.json(await leerPlan(req.dali!.companyId));
+});
+
+/** A18: notificaciones. Los grupos salen del store de la sesión de la línea (vacío si no está conectada en este proceso). */
+const gruposDeLaLinea = async (numero: string): Promise<GrupoDelStore[]> => {
+  if (!numero) return [];
+  try {
+    const { WhatsAppDirectService } = await import('../../services/whatsapp-direct.service.js');
+    if (!WhatsAppDirectService.isSessionActive(numero)) return [];
+    return WhatsAppDirectService.listGroups(numero) as GrupoDelStore[];
+  } catch {
+    return [];
+  }
+};
+
+router.get('/notificaciones', async (req: Request, res: Response) => {
+  const { numero } = await empresaDe(req.dali!.companyId);
+  res.json({ ...(await leerNotificaciones(req.dali!.companyId, await gruposDeLaLinea(numero), numero)), eventos: EVENTOS_DE_AVISO });
+});
+
+router.put('/notificaciones', async (req: Request, res: Response) => {
+  try {
+    const { numero } = await empresaDe(req.dali!.companyId);
+    const guardado = await guardarNotificaciones(req.dali!.companyId, req.body ?? {}, await gruposDeLaLinea(numero), numero);
+    clearAgentSessionCache();
+    res.json({ ...guardado, eventos: EVENTOS_DE_AVISO });
+  } catch (error) {
+    if (error instanceof NotificacionesInvalidas) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    logger.error(`[dali] no se pudieron guardar las notificaciones de ${req.dali!.companyId}: ${String(error)}`);
+    res.status(500).json({ error: 'No se pudieron guardar las notificaciones' });
+  }
+});
+
+const limitePruebaDeAviso = rateLimit({ windowMs: 10 * 60_000, max: 5, standardHeaders: true, legacyHeaders: false, message: { error: 'Ya mandaste varias pruebas seguidas: espera unos minutos' } });
+router.post('/notificaciones/prueba', limitePruebaDeAviso, async (req: Request, res: Response) => {
+  try {
+    const { nombre, numero } = await empresaDe(req.dali!.companyId);
+    const n = await leerNotificaciones(req.dali!.companyId, await gruposDeLaLinea(numero), numero);
+    const destino = n.canal === 'dueno' && n.numeroDueno ? `${n.numeroDueno}@s.whatsapp.net` : n.grupo?.jid;
+    if (!numero || !destino) {
+      res.status(409).json({ error: 'Todavía no hay a dónde avisar: elige el grupo o un número y guarda' });
+      return;
+    }
+    const linea = await lineaReal();
+    if (!linea.lista(numero)) {
+      res.status(409).json({ error: 'La línea no está conectada: no se puede mandar la prueba' });
+      return;
+    }
+    await linea.enviar(numero, destino, textoDePruebaDeAviso(nombre, req.dali!.name), req.dali!.companyId);
+    res.json({ ok: true, destino });
+  } catch (error) {
+    logger.error(`[dali] no se pudo mandar la prueba de avisos de ${req.dali!.companyId}: ${String(error)}`);
+    res.status(500).json({ error: 'No se pudo mandar la prueba' });
+  }
 });
 
 /**
