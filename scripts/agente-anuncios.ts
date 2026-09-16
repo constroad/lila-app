@@ -13,6 +13,11 @@ const casos: Array<[string, number]> = [
   ['@lila hay producción mañana?', martes],
   ['ok gracias', martes],
   ['Buenos días, confirmamos producción viernes 18 04:30 am 225 m3 consorcio lomas', martes],
+  ['Puede haber produccion mañana o Viernes. Son 300m3 de 2 pulgadas', martes],
+  ['Aun no me confirman', martes],
+  ['se tiene que ver despues de produccion', martes],
+  ['Buen dia,mañana tienen producción,@CONSTROAD,GLOBO FAST??', martes],
+  ['Rafael lo acaba de ver. Parece que hay material rosando.', martes],
 ];
 for (const [texto, ms] of casos) {
   const t0 = Date.now();

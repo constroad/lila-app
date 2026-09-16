@@ -1,4 +1,4 @@
-import { esPregunta, horaDe, interpretarJsonDeAnuncio, resolverFechaAnunciada } from './anuncios';
+import { esPregunta, esTentativo, horaDe, interpretarJsonDeAnuncio, resolverFechaAnunciada } from './anuncios';
 
 const lima = (fecha: string, hora: string) => new Date(`${fecha}T${hora}:00.000-05:00`).getTime();
 const lunes = lima('2026-09-14', '10:23');
@@ -76,6 +76,18 @@ describe('una pregunta no anuncia nada, y un anuncio sin hora ni m³ no programa
     expect(esPregunta('📣 Jueves 17 tengo produccion de 137m3')).toBe(false);
     const a = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'globofast', cliente: '', fecha: 'mañana', hora: '', m3: '' }], desde_fecha: '' }), texto, lima('2026-09-16', '06:50'));
     expect(a).toEqual({ accion: 'ninguna', producciones: [] });
+  });
+  it('lo tentativo («puede haber», «aún no confirman», «mañana o viernes») es posible, no anuncio', () => {
+    expect(esTentativo('Puede haber produccion mañana o Viernes. Son 300m3 de 2 pulgadas')).toBe(true);
+    expect(esTentativo('Aun no me confirman')).toBe(true);
+    expect(esTentativo('producción jueves o viernes 300 m3')).toBe(true);
+    expect(esTentativo('📣 Jueves 17 tengo produccion de 137m3')).toBe(false);
+    const a = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: '', cliente: '', fecha: 'mañana', hora: '', m3: '300' }], desde_fecha: '' }), 'Puede haber produccion mañana o Viernes. Son 300m3 de 2 pulgadas', lima('2026-09-16', '07:12'), { companyId: 'globofas-s8k', empresa: 'Globofast Solkali' });
+    expect(a).toEqual({ accion: 'posible', producciones: [] });
+  });
+  it('sin empresa (ni en el texto ni por el autor) no se programa: es incompleto', () => {
+    const a = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: '', cliente: '', fecha: 'jueves 17', hora: '04:30', m3: '300' }], desde_fecha: '' }), 'Jueves 17 producción 04:30 300 m3', lima('2026-09-16', '07:12'));
+    expect(a).toMatchObject({ accion: 'ninguna', vago: true });
   });
   it('«mañana producción de globofast» sin hora ni m³: vago, se pregunta el dato', () => {
     const a = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'globofast', cliente: '', fecha: 'mañana', hora: '', m3: '' }], desde_fecha: '' }), 'mañana producción de globofast', lima('2026-09-16', '06:50'));

@@ -20,7 +20,7 @@ import { fechasEn } from '../checklist/menciones.js';
 import { generar } from './modelo.js';
 import logger from '../../utils/logger.js';
 
-export type AccionAnuncio = 'programar' | 'mover' | 'cancelar' | 'ninguna';
+export type AccionAnuncio = 'programar' | 'mover' | 'cancelar' | 'posible' | 'ninguna';
 
 export interface ProduccionAnunciada {
   companyId?: string;
@@ -46,7 +46,7 @@ const EMPRESAS = ['globofast', 'constroad'] as const;
 export const ESQUEMA_ANUNCIO = {
   type: 'object',
   properties: {
-    accion: { enum: ['programar', 'mover', 'cancelar', 'ninguna'] },
+    accion: { enum: ['programar', 'mover', 'cancelar', 'posible', 'ninguna'] },
     producciones: {
       type: 'array',
       items: {
@@ -72,7 +72,7 @@ export const promptAnuncio = (hoy: string): string => {
   const ej = (t: string, r: object) => `M: ${t} → ${JSON.stringify(r)}`;
   return [
     `Eres Lila, asistente de una planta de asfalto en Lima. Hoy es ${DIAS[dow]} ${hoy}.`,
-    'Lees un mensaje del grupo de coordinación y dices si ANUNCIA producciones (programar), MUEVE una de día (mover), CANCELA una (cancelar) o nada de eso (ninguna). Respondes solo JSON.',
+    'Lees un mensaje del grupo de coordinación y dices si ANUNCIA una producción confirmada (programar), MUEVE una de día (mover), CANCELA una (cancelar), habla de una producción POSIBLE todavía sin confirmar (posible), o nada de eso (ninguna). Respondes solo JSON.',
     '',
     'Reglas:',
     '- fecha y desde_fecha: COPIA el texto de la fecha tal como está escrito ("jueves 17", "MARTES 15-09", "mañana", "viernes"). No calcules ni conviertas.',
@@ -85,6 +85,8 @@ export const promptAnuncio = (hoy: string): string => {
     '- Preguntas ("¿mañana tienen producción?", "hay producción?", "@CONSTROAD, GLOBOFAST??"), dudas, charla, lo que ya pasó, y lo que dice Lila: ninguna.',
     '- "ya no el jueves, pasa al viernes" / "se mueve" / "se reprograma" / "en vez de" = mover, con desde_fecha el día viejo y fecha el nuevo.',
     '- "se cancela" / "se suspende" / "no va" / "no hay producción" = cancelar, con la fecha cancelada.',
+    '- "puede haber", "posible", "tal vez", "aún no confirman", "por confirmar", "mañana o viernes" (dos días alternativos) = posible: NO es un anuncio todavía.',
+    '- Comentarios sobre una producción ("se tiene que ver después de producción", "la máquina", "nivelar") = ninguna.',
     '',
     'Ejemplos:',
     ej('📣 Jueves 17 tengo produccion de 137m3, 2 pulgadas', { accion: 'programar', producciones: [{ empresa: '', cliente: '', fecha: 'Jueves 17', hora: '', m3: '137' }], desde_fecha: '' }),
@@ -92,6 +94,8 @@ export const promptAnuncio = (hoy: string): string => {
     ej('mañana producción de globofast 200 m3 a las 5', { accion: 'programar', producciones: [{ empresa: 'globofast', cliente: '', fecha: 'mañana', hora: '05:00', m3: '200' }], desde_fecha: '' }),
     ej('la producción de globofast del jueves ya no va, pasa al viernes', { accion: 'mover', producciones: [{ empresa: 'globofast', cliente: '', fecha: 'viernes', hora: '', m3: '' }], desde_fecha: 'jueves' }),
     ej('se suspende la producción del jueves por lluvia', { accion: 'cancelar', producciones: [{ empresa: '', cliente: '', fecha: 'jueves', hora: '', m3: '' }], desde_fecha: '' }),
+    ej('Puede haber produccion mañana o Viernes. Son 300m3 de 2 pulgadas. Aun no me confirman', { accion: 'posible', producciones: [{ empresa: '', cliente: '', fecha: 'mañana', hora: '', m3: '300' }], desde_fecha: '' }),
+    ej('se tiene que ver despues de produccion', { accion: 'ninguna', producciones: [], desde_fecha: '' }),
     ej('ayer terminamos a las 3 con 250 m3', { accion: 'ninguna', producciones: [], desde_fecha: '' }),
     ej('@lila hay producción mañana?', { accion: 'ninguna', producciones: [], desde_fecha: '' }),
     ej('ok gracias', { accion: 'ninguna', producciones: [], desde_fecha: '' }),
@@ -150,8 +154,21 @@ export const esPregunta = (texto: string): boolean => {
   return /[?¿]/.test(texto) || /\b(alguien sabe|saben si|se sabe si|me confirman si)\b/.test(t);
 };
 
+/**
+ * Tentativo = no es anuncio, diga lo que diga el modelo. 16/09 07:12,
+ * Polluela: «Puede haber produccion mañana o Viernes. Son 300m3» tras «aún no
+ * me confirman» → el modelo dijo programar y Lila programó el jueves con
+ * «empresa por confirmar». Lo posible se espera; cuando lo confirmen, se anuncia.
+ */
+export const esTentativo = (texto: string): boolean => {
+  const t = normalizar(texto);
+  return /\b(puede haber|podria haber|posible|posiblemente|probable|probablemente|tal vez|quiza|quizas|capaz|aun no|todavia no|sin confirmar|por confirmar|no (me |nos )?confirman|falta confirmar|de repente)\b/.test(t)
+    || /\b(manana|hoy|lunes|martes|miercoles|jueves|viernes|sabado|domingo|\d{1,2}(?:[-/]\d{1,2})?)\s+o\s+(el\s+)?(manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|\d{1,2}(?:[-/]\d{1,2})?)\b/.test(t);
+};
+
 export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs: number, empresaDelAutor?: { companyId: string; empresa: string }): Anuncio | null => {
   if (esPregunta(texto)) return { accion: 'ninguna', producciones: [] };
+  if (esTentativo(texto)) return { accion: 'posible', producciones: [] };
   let crudo: { accion?: unknown; producciones?: unknown; desde_fecha?: unknown };
   try {
     crudo = JSON.parse(json);
@@ -159,6 +176,7 @@ export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs:
     return null;
   }
   const accion = String(crudo.accion || 'ninguna') as AccionAnuncio;
+  if (accion === 'posible') return { accion: 'posible', producciones: [] };
   if (!['programar', 'mover', 'cancelar'].includes(accion)) return { accion: 'ninguna', producciones: [] };
   const t = normalizar(texto);
   const lista = Array.isArray(crudo.producciones) ? (crudo.producciones as Array<Record<string, unknown>>) : [];
@@ -186,10 +204,16 @@ export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs:
   // salió como cancelar del 14/09): ninguna.
   const vigentes = producciones.filter((p) => !p.fecha || p.fecha >= hoy);
   if (!vigentes.length) return { accion: 'ninguna', producciones: [] };
-  // Programar exige sustancia: una hora o unos m³. «Mañana hay producción» a
-  // secas no arma un aviso a planta («hora por confirmar · m³ por confirmar»
-  // no le sirve a nadie): se contesta pidiendo el dato, sin programar.
-  if (accion === 'programar' && !vigentes.some((p) => p.hora || p.cubos)) return { accion: 'ninguna', producciones: [], vago: true };
+  // Programar exige un anuncio ENTERO: fecha, empresa (del texto o del autor)
+  // y una hora o unos m³. Lo que no llega a eso no es un anuncio para Lila:
+  // silencio, no una pregunta (16/09 07:58: «se tiene que ver después de
+  // producción» recibió «¿a qué hora arranca y cuántos m³?»). Un anuncio de
+  // verdad trae todo eso; el que no, lo completa la persona sin que se lo pidan.
+  if (accion === 'programar') {
+    const enteras = vigentes.filter((p) => p.fecha && p.companyId && (p.hora || p.cubos));
+    if (!enteras.length) return { accion: 'ninguna', producciones: [], vago: true };
+    return { accion, producciones: enteras };
+  }
   let desdeFecha = accion === 'mover' ? resolverFechaAnunciada(String(crudo.desde_fecha ?? ''), mensajeMs) : undefined;
   // «El jueves cambia: 160 m3 en vez de 137» vino como mover del jueves al
   // jueves: es una actualización, o sea programar.
