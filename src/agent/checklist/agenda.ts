@@ -168,6 +168,10 @@ export const aplicar = (agenda: AvisoProgramado[], hecho: Hecho, ahoraMs: number
   }
 
   const { fecha, produccion } = hecho;
+  // Lo que ya arrancó (o ya pasó) no se coordina: se produce. 16/09 06:40: el
+  // primer arranque programó «sale ahora» la producción de las 04:30 de ese
+  // mismo día y lo confirmó en admin, para un aviso que nunca iba a salir.
+  if (yaArranco(fecha, produccion.hora, ahoraMs)) return { agenda: lista, efectos };
   // Se mueve desde otro día: la producción de ese día se cancela (con su efecto).
   if (hecho.desdeFecha && hecho.desdeFecha !== fecha) {
     const desde = vivas(hecho.desdeFecha)[0];

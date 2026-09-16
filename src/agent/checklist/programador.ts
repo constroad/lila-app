@@ -106,7 +106,7 @@ export const textoConfirmacion = (efectos: Efecto[], nombrePlanta: string, ahora
   const pendientesPortal = new Set<string>();
   for (const e of efectos) {
     if (e.tipo === 'sin-cambio') continue;
-    if (e.tipo === 'programado') lineas.push(`✅ Programé el aviso a «${nombrePlanta}» ${cuandoSale(e.aviso, ahoraMs)}:`, lineaProduccion(e.produccion, e.aviso.fecha));
+    if (e.tipo === 'programado') lineas.push(`✅ Programé el aviso a «${nombrePlanta}» (${cuandoSale(e.aviso, ahoraMs)}):`, lineaProduccion(e.produccion, e.aviso.fecha));
     if (e.tipo === 'sumado') lineas.push(`✅ Sumé al aviso de ${fechaLegible(e.aviso.fecha)} (${cuandoSale(e.aviso, ahoraMs)}):`, lineaProduccion(e.produccion, e.aviso.fecha));
     if (e.tipo === 'actualizado') lineas.push(`🔁 Actualicé el aviso de ${fechaLegible(e.aviso.fecha)} (${cuandoSale(e.aviso, ahoraMs)}):`, lineaProduccion(e.produccion, e.aviso.fecha));
     if (e.tipo === 'movido') lineas.push(`🔁 Moví la producción de ${e.produccion.empresa} del ${fechaLegible(e.desde.fecha)} al ${fechaLegible(e.hasta.fecha)} (aviso ${cuandoSale(e.hasta, ahoraMs)})${e.desde.estado === 'cancelada' && e.desde.msgIdPlanta ? '; a planta le aviso que el ' + fechaLegible(e.desde.fecha) + ' ya no va' : ''}.`);

@@ -55,6 +55,16 @@ describe('aplicar: programar, sumar, actualizar', () => {
   });
 });
 
+describe('aplicar: lo que ya arrancó no se programa', () => {
+  it('16/09 06:40: la producción de las 04:30 de hoy no genera aviso ni efecto', () => {
+    const r = aplicar([], { accion: 'programar', fecha: '2026-09-16', produccion: globo({ fuente: 'portal', pedidoId: 'o1' }) }, lima('2026-09-16', '06:40'));
+    expect(r.efectos).toEqual([]);
+    expect(r.agenda).toEqual([]);
+    // Pero la de mañana sí, aunque sea de madrugada.
+    expect(aplicar([], { accion: 'programar', fecha: '2026-09-17', produccion: globo() }, lima('2026-09-16', '06:40')).efectos.map((e) => e.tipo)).toEqual(['programado']);
+  });
+});
+
 describe('aplicar: mover y cancelar', () => {
   const ahora = lima('2026-09-15', '10:00');
   it('«ya no jueves, viernes»: se mueve (el jueves queda cancelado, el viernes programado, UN efecto de movido)', () => {
