@@ -20,7 +20,7 @@ import {
   tablaPedidos,
 } from './fichas.js';
 import { pngTabla, type TablaSpec } from '../consultas/imagen.js';
-import { buscarInformes, lineaInforme, nombreArchivo, pdfDeInforme, textoDeBusqueda, tipoDeInforme, tiposDeInforme, TIPOS_INFORME, type InformeEncontrado } from './informes.js';
+import { buscarInformes, lineaInforme, nombreArchivo, pdfDeInforme, textoDeBusqueda, tipoDeInforme, tiposDeInforme, TIPOS_INFORME, type InformeEncontrado, type TipoInforme } from './informes.js';
 import type { Archivo } from '../consultas/archivos.js';
 import type { Argumentos, HerramientaDeDatos } from './herramientas.js';
 import { redactar } from './redaccion.js';
@@ -205,12 +205,13 @@ const responderInformes = async (args: Argumentos, pregunta: string, quien: stri
       else faltan.push(tp.nombre.toLowerCase());
     }
     logger.info(`[agente] informes ${tipos.map((t) => t.codigo).join('+')} ${desde}..${hasta} → ${elegidos.length} de ${tipos.length}`);
-    if (!elegidos.length) return { texto: `No encuentro informes de ${tipos.map((t) => t.nombre.toLowerCase()).join(', ')} entre el ${desde} y el ${hasta}.` };
+    const noHay = await Promise.all(tipos.filter((tp) => faltan.includes(tp.nombre.toLowerCase())).map((tp) => textoNoHay(tp, desde!, hasta!, args.companyId)));
+    if (!elegidos.length) return { texto: noHay.join('\n') };
     await avisarGeneracion(elegidos, grupo);
     const respuestas = await Promise.all(elegidos.map((i) => enviarInforme(i)));
     const archivos = respuestas.flatMap((r) => r.archivos ?? []);
     const fallidos = respuestas.filter((r) => !r.archivos?.length).map((r) => r.texto);
-    return { texto: [...fallidos, faltan.length ? `No encuentro ${faltan.join(', ')} en esas fechas.` : ''].filter(Boolean).join('\n'), archivos };
+    return { texto: [...fallidos, ...noHay].filter(Boolean).join('\n'), archivos };
   }
   const filtro = { tipo: tipo?.codigo, texto: texto || undefined, desde, hasta, companyId: args.companyId };
   let lista = await buscarInformes(filtro, MAX_OPCIONES_INFORMES);
@@ -218,10 +219,12 @@ const responderInformes = async (args: Argumentos, pregunta: string, quien: stri
   if (sinFecha && tipo && lista.length > 1) lista = [lista.find((c) => c.estado === 'completed') ?? lista[0]];
   logger.info(`[agente] informes ${JSON.stringify(filtro)} → ${lista.length} resultado(s)`);
   if (!lista.length) {
-    const que = tipo ? `de *${tipo.nombre}*` : 'de servicio';
-    const donde = [texto ? `de «${texto}»` : '', filtro.desde ? `del ${filtro.desde}${filtro.hasta && filtro.hasta !== filtro.desde ? ` al ${filtro.hasta}` : ''}` : ''].filter(Boolean).join(' ');
-    const tipos = TIPOS_INFORME.slice(0, 8).map((t) => t.nombre.toLowerCase()).join(', ');
-    return { texto: `No encuentro informes ${que}${donde ? ` ${donde}` : ''}. Dime el tipo (${tipos}…), la obra o el cliente, o la fecha.` };
+    // Con tipo: qué NO hay y cuál es el último que sí (16/09, José: «¿y si
+    // pregunto por informes y no hay creados?»). Sin tipo: cómo pedirlo.
+    if (tipo) return { texto: await textoNoHay(tipo, desde ?? '', hasta ?? '', args.companyId, texto || undefined) };
+    const donde = [texto ? `de «${texto}»` : '', desde ? `del ${desde}${hasta && hasta !== desde ? ` al ${hasta}` : ''}` : ''].filter(Boolean).join(' ');
+    const nombres = TIPOS_INFORME.slice(0, 8).map((t) => t.nombre.toLowerCase()).join(', ');
+    return { texto: `No encuentro informes de servicio${donde ? ` ${donde}` : ''}. Dime el tipo (${nombres}…), la obra o el cliente, o la fecha.` };
   }
   if (lista.length === 1) {
     await avisarGeneracion([lista[0]], grupo);
@@ -239,6 +242,23 @@ const responderInformes = async (args: Argumentos, pregunta: string, quien: stri
     },
   });
   return { texto: [`📑 Encontré ${lista.length} informes${tipo ? ` de *${tipo.nombre}*` : ''}. ¿Cuál te mando?`, ...lista.map((i, n) => `${n + 1}. ${lineaInforme(i)}`), 'Responde con el número.'].join('\n') };
+};
+
+/**
+ * «No hay» que sirva: qué no existe, cuál es el último que sí existe (y en qué
+ * estado), y dónde se crea. Un «no encuentro» seco manda a adivinar si la
+ * fecha estaba mal, si el informe no se hizo, o si Lila no lo vio.
+ */
+const textoNoHay = async (tipo: TipoInforme, desde: string, hasta: string, companyId?: string, textoObra?: string): Promise<string> => {
+  const cuando = desde ? (hasta && hasta !== desde ? `entre el ${desde} y el ${hasta}` : `del ${desde}`) : '';
+  const obra = textoObra ? ` de «${textoObra}»` : '';
+  const ultimos = await buscarInformes({ tipo: tipo.codigo, texto: textoObra, companyId }, 2).catch(() => []);
+  const ultimo = ultimos[0];
+  const lineas = [`No hay *${tipo.nombre.toLowerCase()}*${obra}${cuando ? ` ${cuando}` : ''}.`];
+  if (ultimo) lineas.push(`El último es del ${ultimo.fecha} (${ultimo.estado === 'completed' ? 'completado' : 'borrador'}, ${ultimo.cliente || ultimo.empresa}).`);
+  else lineas.push(`No hay ninguno registrado${obra}.`);
+  lineas.push('Se crea en Portal → Servicios → Informes; en cuanto exista, lo mando.');
+  return lineas.join('\n');
 };
 
 /**
