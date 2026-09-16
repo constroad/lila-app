@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config/environment.js';
@@ -153,6 +153,8 @@ export interface InformeEncontrado {
   cliente?: string;
   responsable?: string;
   pdfUrl?: string;
+  /** Última modificación del informe (ISO): es la VERSIÓN del PDF cacheado. */
+  version?: string;
 }
 
 type Doc = Record<string, unknown>;
@@ -246,6 +248,7 @@ export const buscarInformes = async (
       nombreTipo: nombreTipo(texto(d.type)),
       fecha: fechaIso(d.date) || fechaIso(d.createdAt),
       estado: texto(d.status),
+      version: d.updatedAt instanceof Date ? d.updatedAt.toISOString() : texto(d.updatedAt) || undefined,
       servicio: resumenServicio(descripcion),
       cliente: cliente || undefined,
       responsable,
@@ -302,12 +305,59 @@ const deAUno = <T>(tarea: () => Promise<T>): Promise<T> => {
 /** Solo para tests. */
 export const _deAUnoParaTests = deAUno;
 
+/**
+ * LA CACHÉ POR VERSIÓN. José, 16/09: «si el informe ya está generado, ¿para
+ * qué generarlo otra vez? Pero después agregan fotos y queda desfasado».
+ * La clave del archivo es el informe + su última modificación (`updatedAt`):
+ *   companies/<empresa>/cache/informes/<reportId>-<updatedAtMs>.pdf
+ * Si el informe no cambió, el PDF está y sale en milisegundos; si le agregaron
+ * una foto, `updatedAt` cambia, la clave cambia, se genera una vez y se borra
+ * la versión vieja. No hay invalidación que olvidar: la versión ES la clave.
+ * Seguro: el directorio es de la empresa dueña y el nombre sale de un ObjectId
+ * y un número, nunca de texto de un usuario. Escalable: una lectura de disco
+ * por consulta y a lo sumo un PDF por informe en disco.
+ */
+export const rutaEnCache = (i: InformeEncontrado): string | null => {
+  if (!/^[a-f\d]{24}$/i.test(i.id) || !i.version) return null;
+  const ms = Date.parse(i.version);
+  if (!Number.isFinite(ms)) return null;
+  return path.join(config.storage.root, 'companies', i.companyId, 'cache', 'informes', `${i.id}-${ms}.pdf`);
+};
+
+const guardarEnCache = async (i: InformeEncontrado, buffer: Buffer): Promise<void> => {
+  const ruta = rutaEnCache(i);
+  if (!ruta) return;
+  try {
+    await mkdir(path.dirname(ruta), { recursive: true });
+    await writeFile(`${ruta}.tmp`, buffer);
+    await rename(`${ruta}.tmp`, ruta);
+    // Las versiones viejas del MISMO informe se van: a lo sumo un PDF por informe.
+    for (const f of await readdir(path.dirname(ruta))) {
+      const otra = path.join(path.dirname(ruta), f);
+      if (f.startsWith(`${i.id}-`) && f.endsWith('.pdf') && otra !== ruta) await unlink(otra).catch(() => undefined);
+    }
+  } catch (error) {
+    logger.warn(`[agente] no pude guardar el PDF del informe ${i.id} en caché: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
 export const pdfDeInforme = async (i: InformeEncontrado): Promise<{ buffer: Buffer; generado: boolean } | null> => {
   if (i.pdfUrl) {
     const ruta = rutaLocalDe(i.pdfUrl, i.companyId);
     if (ruta && (await existe(ruta))) return { buffer: await readFile(ruta), generado: false };
   }
-  return deAUno(() => generarPdf(i));
+  const cache = rutaEnCache(i);
+  if (cache && (await existe(cache))) {
+    logger.info(`[agente] informe ${i.tipo} ${i.id} de caché (versión ${i.version})`);
+    return { buffer: await readFile(cache), generado: false };
+  }
+  const resultado = await deAUno(async () => {
+    // Otro pedido pudo generarlo mientras este esperaba su turno.
+    if (cache && (await existe(cache))) return { buffer: await readFile(cache), generado: false };
+    return generarPdf(i);
+  });
+  if (resultado?.generado) await guardarEnCache(i, resultado.buffer);
+  return resultado;
 };
 
 const generarPdf = async (i: InformeEncontrado): Promise<{ buffer: Buffer; generado: boolean } | null> => {

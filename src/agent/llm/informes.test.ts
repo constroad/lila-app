@@ -1,5 +1,5 @@
 import { herramientaDeDatosPorReglas } from './herramientas';
-import { lineaInforme, nombreArchivo, resumenServicio, sinDuplicados, textoDeBusqueda, tipoDeInforme, tiposDeInforme } from './informes';
+import { lineaInforme, nombreArchivo, resumenServicio, rutaEnCache, sinDuplicados, textoDeBusqueda, tipoDeInforme, tiposDeInforme } from './informes';
 
 /**
  * LOS INFORMES EN PDF (José, 14/09): «dame el informe de planta», «dame el
@@ -96,5 +96,20 @@ describe('los PDF se generan de a uno', () => {
     // Un fallo no traba la cola.
     await expect(_deAUnoParaTests(async () => { throw new Error('x'); })).rejects.toThrow('x');
     expect(await _deAUnoParaTests(async () => 'sigue')).toBe('sigue');
+  });
+});
+
+describe('la caché de PDF por versión', () => {
+  const base = { companyId: 'globofas-s8k', empresa: 'G', tipo: 'IPP', nombreTipo: 'IPP', fecha: '2026-09-15', estado: 'completed', servicio: 's' };
+  it('la clave es el informe + su última modificación, dentro del directorio de la empresa', () => {
+    const r = rutaEnCache({ ...base, id: '6aa91b4eb16fa93f5f47f3e7', version: '2026-09-16T14:00:00.000Z' });
+    expect(r).toMatch(/companies\/globofas-s8k\/cache\/informes\/6aa91b4eb16fa93f5f47f3e7-1789567200000\.pdf$/);
+    // Cambió el informe (una foto más): otra clave.
+    expect(rutaEnCache({ ...base, id: '6aa91b4eb16fa93f5f47f3e7', version: '2026-09-16T15:00:00.000Z' })).not.toBe(r);
+  });
+  it('sin versión, o con un id que no es ObjectId, no hay caché (nunca una ruta con texto de un usuario)', () => {
+    expect(rutaEnCache({ ...base, id: '6aa91b4eb16fa93f5f47f3e7' })).toBeNull();
+    expect(rutaEnCache({ ...base, id: '../../etc/passwd', version: '2026-09-16T14:00:00.000Z' })).toBeNull();
+    expect(rutaEnCache({ ...base, id: '6aa91b4eb16fa93f5f47f3e7', version: 'ayer' })).toBeNull();
   });
 });
