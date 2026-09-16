@@ -84,6 +84,10 @@ Dali no es una app nueva para torre: es lila con un segundo hostname.
    `DALI_HOSTS` en código, sin env nueva), sirve `ui/dali/dist` con fallback a
    `index.html` (SPA) y deja pasar `/api/*`; en cualquier otro host, la UI
    también está en `/dali/` para probar sin DNS.
+   > Defecto que hubo (16/09): `montarUiDali` estaba montado DESPUÉS del
+   > `app.get('/')` genérico de lila, así que en el host de Dali la raíz
+   > contestaba `{status: ok}` y nunca redirigía a `/dali/`. Ahora va antes,
+   > con test (`src/api/dali-ui.test.ts`).
 3. **Túnel (lo hace José, pide sudo):** una línea en
    `/usr/local/etc/cloudflared/config.yml` ANTES del wildcard —
    `- hostname: dali.constroad.com` / `service: http://127.0.0.1:3001` — y

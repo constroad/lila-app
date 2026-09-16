@@ -251,6 +251,11 @@ app.get('/health', (req, res) => {
   });
 });
 
+// El panel de Dali: su UI estática (spec DALI §2.1). Va ANTES de la raíz
+// genérica: en `dali.constroad.com` la raíz redirige a `/dali/`, y un `app.get('/')`
+// registrado antes se la comería (pasó: el host de Dali contestaba `{status: ok}`).
+montarUiDali(app);
+
 // Raíz: probes de uptime / navegador abierto en la URL base pegan a `/` y
 // generaban `Route not found: /` (404 ruidoso). Devolvemos 200 liviano (sin
 // exponer nada): es un health-check implícito, no una ruta de la API.
@@ -284,9 +289,8 @@ app.use('/api/academy', academyRoutes);
 // factura del mes; acá es un proceso que ya está prendido.
 app.use('/api/gps', gpsRoutes);
 app.use('/api/vision', visionRoutes);
-// El panel de Dali: su API y su UI estática (spec DALI §2.1).
+// El panel de Dali: su API (la UI se montó arriba, antes de la raíz genérica).
 app.use('/api/dali', daliRoutes);
-montarUiDali(app);
 
 const companiesRoot = `${config.storage.root}/companies`;
 const companiesStaticHeaders = (res: express.Response) => {
