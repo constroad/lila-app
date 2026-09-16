@@ -37,11 +37,19 @@ export const preguntar = <T>(p: Omit<PreguntaPendiente<T>, 'creadaMs'>, ahoraMs 
   pendientes.set(clave(p.quien, p.grupo), { ...p, creadaMs: ahoraMs } as PreguntaPendiente);
 };
 
-/** ¿Este texto nombra una unidad? Un número, una placa, o «la última / primera». */
+/**
+ * ¿Este texto ES una unidad, y nada más? «9», «la 9», «unidad 9», «del volquete
+ * 9», «A1Y 825», «la última». En un grupo, la respuesta sin etiqueta a «¿de
+ * cuál unidad?» solo puede ser eso: antes bastaba con que hubiera un número
+ * en cualquier parte, y «mañana salimos a las 5» de la misma persona, dentro
+ * de los 10 minutos, se habría leído como «la unidad 5» (José, 15/09). Lo que
+ * no es solo la unidad es otra conversación y la pregunta sigue en pie.
+ */
 export const nombraUnidad = (texto: string): boolean => {
-  const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.,;:!?]+$/g, '').trim();
+  const prefijo = '(?:(?:es|seria|sera)\\s+)?(?:la|el|del|de la|unidad|carro|camion|volquete|placa|numero|n|#)?\\s*(?:unidad|carro|camion|volquete|placa|numero|n|#)?\\s*';
   // Placa con dígito en el bloque de letras (A1Y-825), como en `extraerParametros`.
-  return /\b\d{1,2}\b/.test(t) || /\b[a-z][a-z0-9]{2}[\s-]?\d{3}\b/.test(t) || /\b(ultim[oa]|primer[oa]?)\b/.test(t);
+  return new RegExp(`^${prefijo}(?:\\d{1,2}|[a-z][a-z0-9]{2}[\\s-]?\\d{3}|ultim[oa]|primer[oa]?)$`).test(t);
 };
 
 /**
@@ -78,12 +86,17 @@ export const responderPendiente = (
   if (p.tipo === 'texto') {
     const t = String(texto || '').trim();
     // Un mensaje largo es otra conversación, no la respuesta a «¿qué nombre?».
-    if (!t || t.length > 60 || t.startsWith('@') || t.startsWith('!')) return null;
+    // Un nombre son hasta cuatro palabras («Consorcio Santa Rosa», «Municipalidad
+    // de Comas»); «juan mándame el vale por favor» no es un nombre.
+    if (!t || t.length > 60 || t.split(/\s+/).length > 4 || t.startsWith('@') || t.startsWith('!')) return null;
     pendientes.delete(k);
     return { pregunta: p, indice: -1, texto: t };
   }
   if (p.tipo === 'confirmar') {
     const t = String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    // El texto ENTERO es la confirmación («sí», «dale», «sí, dale»), no una
+    // frase que empieza con «sí»: «sí mañana vamos a planta» es otra conversación.
+    if (t.split(/\s+/).length > 2) return null;
     const si = /^(si|sí|dale|ok|okey|claro|exacto|eso|ya|1)\b/.test(t);
     const no = /^(no|nada|otra|3)\b/.test(t);
     if (!si && !no) return null;

@@ -49,6 +49,13 @@ describe('preguntas pendientes', () => {
   });
 
   /** «¿Te referís a X?» — un «sí» confirma; un «no» la cierra sin hacer nada. */
+  it('«sí mañana vamos a planta» no es un sí: la confirmación es el texto entero', () => {
+    _resetPendientes();
+    preguntar({ quien: 'q', grupo: 'g', opciones: [], tipo: 'confirmar', continuar: async () => 'ok' }, 0);
+    expect(responderPendiente('q', 'g', 'sí mañana vamos a planta', 1)).toBeNull();
+    expect(responderPendiente('q', 'g', 'sí, dale', 1)).not.toBeNull();
+  });
+
   it('una pregunta de confirmación se contesta con sí (o se descarta con no)', async () => {
     const continuar = jest.fn(async () => 'hecho');
     preguntar({ quien: 'jose', grupo: 'g', opciones: [], tipo: 'confirmar', continuar }, 0);
@@ -61,11 +68,22 @@ describe('preguntas pendientes', () => {
     expect(responderPendiente('jose', 'g', 'sí', 2_000)).toBeNull(); // el «no» la cerró
   });
 
-  it('nombraUnidad: número, placa u ordinal', () => {
+  it('nombraUnidad: SOLO una unidad, no una frase con un número adentro', () => {
     expect(nombraUnidad('la unidad 4')).toBe(true);
     expect(nombraUnidad('AML 838')).toBe(true);
+    expect(nombraUnidad('A1Y 825')).toBe(true);
+    expect(nombraUnidad('Del volquete 9')).toBe(true);
+    expect(nombraUnidad('Unidad 9')).toBe(true);
+    expect(nombraUnidad('9')).toBe(true);
     expect(nombraUnidad('la última')).toBe(true);
     expect(nombraUnidad('gracias')).toBe(false);
+    // 15/09, José: «¿qué pasa si en el medio digo otra cosa?». Un mensaje de la
+    // misma persona que NO es solo la unidad no es la respuesta: es otra
+    // conversación, y la pregunta sigue en pie.
+    expect(nombraUnidad('mañana salimos a las 5')).toBe(false);
+    expect(nombraUnidad('juan mándame la 5 por favor')).toBe(false);
+    expect(nombraUnidad('es la 9, gracias')).toBe(false);
+    expect(nombraUnidad('a las 5 en planta')).toBe(false);
   });
 
   it('a los diez minutos vence', () => {
