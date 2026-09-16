@@ -137,6 +137,23 @@ export const resumenServicio = (descripcion: string, palabras = 8): string => {
   return p.length <= palabras ? p.join(' ') : `${p.slice(0, palabras).join(' ')}…`;
 };
 
+/**
+ * PURO: el mismo informe dos veces (el borrador y el completado del mismo
+ * servicio, tipo y fecha) es UNO: el completado. 16/09 08:57: «el informe de
+ * producción de planta de ayer» ofrecía «1. IPP 2026-09-15 / 2. IPP 2026-09-15»
+ * — dos opciones idénticas a la vista, y otra vuelta para elegir a ciegas.
+ */
+export const sinDuplicados = (lista: InformeEncontrado[]): InformeEncontrado[] => {
+  const orden = (e: string) => (e === 'completed' ? 2 : e === 'draft' ? 0 : 1);
+  const porClave = new Map<string, InformeEncontrado>();
+  for (const i of lista) {
+    const clave = `${i.companyId}|${i.tipo}|${i.fecha}|${i.servicio}|${i.cliente ?? ''}`;
+    const previo = porClave.get(clave);
+    if (!previo || orden(i.estado) > orden(previo.estado)) porClave.set(clave, i);
+  }
+  return lista.filter((i) => porClave.get(`${i.companyId}|${i.tipo}|${i.fecha}|${i.servicio}|${i.cliente ?? ''}`) === i);
+};
+
 export const buscarInformes = async (
   filtro: { tipo?: string; texto?: string; desde?: string; hasta?: string; companyId?: string },
   limite = 6
@@ -206,7 +223,7 @@ export const buscarInformes = async (
     });
     if (lista.length >= limite) break;
   }
-  return lista;
+  return sinDuplicados(lista);
 };
 
 const fechaCorta = (iso: string): string => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—');

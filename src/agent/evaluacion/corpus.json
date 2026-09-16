@@ -496,5 +496,48 @@
       }
     },
     "nota": "y dentro de unit_media, «de campo» son las del control de pista (pideFotosDeInforme), no las del despacho"
+  },
+  {
+    "id": "2026-09-16-0857-ipp-ayer",
+    "incidente": "2026-09-16-0857",
+    "pregunta": "@ConstRoad el informe de produccion de planta de ayer envialo",
+    "hoy": "2026-09-16",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "informes",
+      "argumentos": {
+        "fecha": "2026-09-15"
+      }
+    },
+    "nota": "«informe de producción de planta» + «envíalo» caía en la orden de avisar a planta"
+  },
+  {
+    "id": "orden-planta-sigue",
+    "pregunta": "@lila manda el aviso de producción de mañana a planta",
+    "hoy": "2026-09-16",
+    "esperado": {
+      "ruta": "orden_planta"
+    }
+  },
+  {
+    "id": "pdf-control-pista-ayer",
+    "pregunta": "@lila envíame el control de pista de ayer",
+    "hoy": "2026-09-16",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "informes",
+      "argumentos": {
+        "fecha": "2026-09-15"
+      }
+    }
+  },
+  {
+    "id": "pdf-imprimacion",
+    "pregunta": "@lila pásame el informe de imprimación de los pinos",
+    "hoy": "2026-09-16",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "informes"
+    }
   }
 ]

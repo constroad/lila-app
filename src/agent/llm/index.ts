@@ -182,18 +182,29 @@ const responderInformes = async (args: Argumentos, pregunta: string, quien: stri
     const tipos = TIPOS_INFORME.slice(0, 8).map((t) => t.nombre.toLowerCase()).join(', ');
     return { texto: `No encuentro informes ${que}${donde ? ` ${donde}` : ''}. Dime el tipo (${tipos}…), la obra o el cliente, o la fecha.` };
   }
-  if (lista.length === 1) return enviarInforme(lista[0]);
+  if (lista.length === 1) return enviarInforme(lista[0], grupo);
   preguntar({
     quien,
     grupo,
     opciones: lista.map((i) => `${i.nombreTipo} ${i.fecha}`),
     tipo: 'opciones',
-    continuar: (indice) => enviarInforme(lista[indice] ?? lista[0]),
+    continuar: (indice) => enviarInforme(lista[indice] ?? lista[0], grupo),
   });
   return { texto: [`📑 Encontré ${lista.length} informes${tipo ? ` de *${tipo.nombre}*` : ''}. ¿Cuál te mando?`, ...lista.map((i, n) => `${n + 1}. ${lineaInforme(i)}`), 'Responde con el número.'].join('\n') };
 };
 
-const enviarInforme = async (i: InformeEncontrado): Promise<{ texto: string; archivos?: Archivo[] }> => {
+const enviarInforme = async (i: InformeEncontrado, grupo?: string): Promise<{ texto: string; archivos?: Archivo[] }> => {
+  // Generar tarda ~25 s (Puppeteer sobre la hoja de impresión, con fotos) y
+  // después sube un PDF de varios MB: se avisa, o «escribiendo…» durante medio
+  // minuto se lee como que no va a responder (José, 16/09).
+  if (!i.pdfUrl && grupo) {
+    try {
+      const [{ responderEnGrupo }, { alcanceVigente }] = await Promise.all([import('../checklist/emisor.js'), import('../checklist/observador.js')]);
+      await responderEnGrupo(grupo, { texto: `📑 Generando el *${i.nombreTipo}* del ${i.fecha}… tarda medio minuto.` }, await alcanceVigente());
+    } catch {
+      /* el aviso es cortesía: si no sale, el PDF va igual */
+    }
+  }
   const pdf = await pdfDeInforme(i);
   if (!pdf) return { texto: `No pude armar el PDF de *${i.nombreTipo}* (${i.fecha}) de ${i.cliente || i.empresa}. Se puede generar desde Portal → Servicios → Informes.` };
   const buffer = pdf.buffer;

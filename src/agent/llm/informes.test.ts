@@ -1,5 +1,5 @@
 import { herramientaDeDatosPorReglas } from './herramientas';
-import { lineaInforme, nombreArchivo, resumenServicio, textoDeBusqueda, tipoDeInforme } from './informes';
+import { lineaInforme, nombreArchivo, resumenServicio, sinDuplicados, textoDeBusqueda, tipoDeInforme } from './informes';
 
 /**
  * LOS INFORMES EN PDF (José, 14/09): «dame el informe de planta», «dame el
@@ -50,5 +50,17 @@ describe('cómo se muestran', () => {
     expect(nombreArchivo(informe)).toBe('Control de pista - MUNICIPALIDAD DE COMAS - 2026-04-02.pdf');
     expect(resumenServicio('Mejoramiento del servicio de movilidad urbana en avenida los pinos en la zonal 07')).toBe('Mejoramiento del servicio de movilidad urbana en avenida…');
     expect(resumenServicio('Obra corta')).toBe('Obra corta');
+  });
+});
+
+describe('sinDuplicados: el borrador y el completado del mismo informe son uno', () => {
+  it('se queda el completado; dos servicios distintos siguen siendo dos', () => {
+    const base = { companyId: 'globofas-s8k', empresa: 'Globofast', tipo: 'IPP', nombreTipo: 'IPP', fecha: '2026-09-15', servicio: 'MOVILIDAD…', cliente: 'LOMAS' };
+    const lista = [
+      { ...base, id: 'a', estado: 'draft' },
+      { ...base, id: 'b', estado: 'completed' },
+      { ...base, id: 'c', estado: 'draft', servicio: 'OTRA OBRA' },
+    ] as never[];
+    expect(sinDuplicados(lista).map((i: { id: string }) => i.id)).toEqual(['b', 'c']);
   });
 });
