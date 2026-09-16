@@ -34,7 +34,8 @@ export interface TipoInforme {
 }
 
 export const TIPOS_INFORME: readonly TipoInforme[] = [
-  { codigo: 'IPP', nombre: 'Informe de producción de planta', alias: ['informe de produccion de planta', 'informe de planta', 'produccion de planta', 'informe de produccion', 'ipp'] },
+  // «planta» a secas cuenta en una lista de informes («pista, planta e imprimación»); solo llega acá quien ya pidió un informe.
+  { codigo: 'IPP', nombre: 'Informe de producción de planta', alias: ['informe de produccion de planta', 'informe de planta', 'produccion de planta', 'informe de produccion', 'ipp', 'planta'] },
   { codigo: 'CTL-PIS', nombre: 'Control de pista', alias: ['control de pista', 'informe de pista', 'pista'] },
   { codigo: 'CTL-IMP', nombre: 'Control de imprimación', alias: ['control de imprimacion', 'informe de imprimacion', 'imprimacion'] },
   { codigo: 'SOL-IMP', nombre: 'Solicitud de imprimación', alias: ['solicitud de imprimacion'] },
@@ -73,8 +74,37 @@ export const tipoDeInforme = (pregunta: string): TipoInforme | undefined => {
   return mejor?.tipo;
 };
 
+/**
+ * TODOS los tipos que nombra la pregunta, en el orden en que aparecen:
+ * «el informe de pista, planta e imprimación» son tres (16/09, 09:36: salió
+ * solo el último). Un alias que es prefijo de otro más largo no cuenta dos
+ * veces («solicitud de imprimación» no suma «imprimación»).
+ */
+export const tiposDeInforme = (pregunta: string): TipoInforme[] => {
+  const t = ` ${normalizar(pregunta).replace(/[,;.]/g, ' ').replace(/\s+/g, ' ')} `;
+  const hallados: Array<{ tipo: TipoInforme; pos: number; largo: number }> = [];
+  for (const tipo of TIPOS_INFORME) {
+    for (const alias of tipo.alias) {
+      const pos = t.indexOf(` ${alias} `);
+      if (pos !== -1) hallados.push({ tipo, pos, largo: alias.length });
+    }
+  }
+  // Por posición; en la misma posición gana el alias más largo; un tipo, una vez.
+  hallados.sort((a, b) => a.pos - b.pos || b.largo - a.largo);
+  const vistos = new Set<string>();
+  const out: TipoInforme[] = [];
+  for (const h of hallados) {
+    // Un alias contenido en otro ya tomado (misma posición cubierta) se descarta.
+    if (out.some((o) => o !== h.tipo && hallados.some((x) => x.tipo === o && x.pos <= h.pos && x.pos + x.largo >= h.pos + h.largo))) continue;
+    if (vistos.has(h.tipo.codigo)) continue;
+    vistos.add(h.tipo.codigo);
+    out.push(h.tipo);
+  }
+  return out;
+};
+
 /** Verbos de PEDIR el archivo. «Quiero ver cómo va la pista» no es pedir un PDF: esos van por el catálogo de siempre. */
-export const VERBOS = ['dame', 'damelo', 'damela', 'manda', 'mandame', 'mandalo', 'mandala', 'envia', 'enviame', 'envialo', 'enviala', 'pasa', 'pasame', 'pasalo', 'pasala', 'comparte', 'compartelo', 'compartela', 'adjunta', 'adjuntame', 'descarga', 'descargame'];
+export const VERBOS = ['genera', 'generame', 'generalo', 'generala', 'imprime', 'imprimeme', 'saca', 'sacame', 'dame', 'damelo', 'damela', 'manda', 'mandame', 'mandalo', 'mandala', 'envia', 'enviame', 'envialo', 'enviala', 'pasa', 'pasame', 'pasalo', 'pasala', 'comparte', 'compartelo', 'compartela', 'adjunta', 'adjuntame', 'descarga', 'descargame'];
 const NOMBRES = ['informe', 'informes', 'ipp', 'pista', 'imprimacion', 'valorizacion', 'acta', 'panel', 'dossier', 'liquidacion', 'constancia', 'metrado', 'protocolo', 'contrato', 'pdf', 'reporte', 'solicitud', 'aprobacion', 'fresado', 'levantamiento', 'recepcion', 'reclamo', 'adicional'];
 
 /** Reglas verbo + nombre («dame el informe», «pásame el control de pista», «manda el pdf»), y «pdf» a secas. */
@@ -85,7 +115,7 @@ export const VERBOS_INFORMES = new Set(VERBOS);
 const RELLENO = new Set([
   ...VERBOS,
   ...NOMBRES,
-  'el', 'la', 'los', 'las', 'un', 'una', 'de', 'del', 'en', 'por', 'para', 'con', 'que', 'me', 'lo', 'a', 'al', 'y', 'o', 'su', 'sus', 'este', 'esta', 'ese', 'esa', 'porfa', 'porfavor', 'favor', 'gracias', 'hola', 'lila',
+  'el', 'la', 'los', 'las', 'un', 'una', 'de', 'del', 'en', 'por', 'para', 'con', 'que', 'me', 'lo', 'a', 'al', 'y', 'e', 'o', 'su', 'sus', 'este', 'esta', 'ese', 'esa', 'porfa', 'porfavor', 'favor', 'gracias', 'hola', 'lila',
   'hoy', 'ayer', 'anteayer', 'manana', 'semana', 'mes', 'pasado', 'pasada', 'ultimo', 'ultima', 'ultimos', 'ultimas', 'reciente', 'nuevo', 'nueva',
   'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre',
   'servicio', 'obra', 'pedido', 'cliente', 'proyecto', 'como', 'esta', 'estan', 'va', 'van', 'ya', 'tiene', 'tienen', 'hay', 'listo', 'generado', 'generar', 'genera', 'generame', 'produccion', 'planta', 'campo', 'control',
@@ -98,8 +128,8 @@ const RELLENO = new Set([
  * el control de pista de los pinos de ayer» → «pinos» (con «los» fuera).
  */
 export const textoDeBusqueda = (pregunta: string, tipo?: TipoInforme): string => {
-  let t = ` ${normalizar(pregunta)} `;
-  for (const alias of tipo?.alias ?? []) t = t.split(` ${alias} `).join(' ');
+  let t = ` ${normalizar(pregunta).replace(/[,;]/g, ' ')} `;
+  for (const tp of tipo ? [tipo, ...tiposDeInforme(pregunta)] : tiposDeInforme(pregunta)) for (const alias of tp.alias) t = t.split(` ${alias} `).join(' ');
   for (const e of ALIAS_EMPRESA) for (const a of e.alias) t = t.split(` ${a} `).join(' ');
   return t
     .replace(/\b\d{1,2}\s*(de\s+\w+|\/\d{1,2})\b/g, ' ')

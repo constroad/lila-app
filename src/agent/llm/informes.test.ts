@@ -1,5 +1,5 @@
 import { herramientaDeDatosPorReglas } from './herramientas';
-import { lineaInforme, nombreArchivo, resumenServicio, sinDuplicados, textoDeBusqueda, tipoDeInforme } from './informes';
+import { lineaInforme, nombreArchivo, resumenServicio, sinDuplicados, textoDeBusqueda, tipoDeInforme, tiposDeInforme } from './informes';
 
 /**
  * LOS INFORMES EN PDF (José, 14/09): «dame el informe de planta», «dame el
@@ -62,5 +62,18 @@ describe('sinDuplicados: el borrador y el completado del mismo informe son uno',
       { ...base, id: 'c', estado: 'draft', servicio: 'OTRA OBRA' },
     ] as never[];
     expect(sinDuplicados(lista).map((i: { id: string }) => i.id)).toEqual(['b', 'c']);
+  });
+});
+
+describe('varios informes en una pregunta, y los verbos de generar', () => {
+  it('«el informe de pista, planta e imprimación» son tres, en orden; y el texto de búsqueda queda vacío', () => {
+    expect(tiposDeInforme('enviame el informe de pista, planta e imprimacion').map((t) => t.codigo)).toEqual(['CTL-PIS', 'IPP', 'CTL-IMP']);
+    expect(textoDeBusqueda('enviame el informe de pista, planta e imprimacion')).toBe('');
+    expect(tiposDeInforme('manda la solicitud de imprimación').map((t) => t.codigo)).toEqual(['SOL-IMP']);
+    expect(tiposDeInforme('dame el último informe')).toEqual([]);
+  });
+  it('«genérame», «imprime», «saca» también piden el archivo', () => {
+    expect(herramientaDeDatosPorReglas('generame el informe de planta de ayer')).toBe('informes');
+    expect(herramientaDeDatosPorReglas('imprime el control de pista')).toBe('informes');
   });
 });

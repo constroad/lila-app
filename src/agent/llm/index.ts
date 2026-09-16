@@ -20,7 +20,7 @@ import {
   tablaPedidos,
 } from './fichas.js';
 import { pngTabla, type TablaSpec } from '../consultas/imagen.js';
-import { buscarInformes, lineaInforme, nombreArchivo, pdfDeInforme, textoDeBusqueda, tipoDeInforme, TIPOS_INFORME, type InformeEncontrado } from './informes.js';
+import { buscarInformes, lineaInforme, nombreArchivo, pdfDeInforme, textoDeBusqueda, tipoDeInforme, tiposDeInforme, TIPOS_INFORME, type InformeEncontrado } from './informes.js';
 import type { Archivo } from '../consultas/archivos.js';
 import type { Argumentos, HerramientaDeDatos } from './herramientas.js';
 import { redactar } from './redaccion.js';
@@ -171,10 +171,51 @@ export const responderConDatos = async (
 export const MAX_OPCIONES_INFORMES = 6;
 
 const responderInformes = async (args: Argumentos, pregunta: string, quien: string, grupo: string): Promise<{ texto: string; archivos?: Archivo[] }> => {
-  const tipo = tipoDeInforme(pregunta);
+  const tipos = tiposDeInforme(pregunta);
+  const tipo = tipos[0] ?? tipoDeInforme(pregunta);
   const texto = args.nombre ?? textoDeBusqueda(pregunta, tipo);
-  const filtro = { tipo: tipo?.codigo, texto: texto || undefined, desde: args.desde ?? args.fecha, hasta: args.hasta ?? args.fecha, companyId: args.companyId };
-  const lista = await buscarInformes(filtro, MAX_OPCIONES_INFORMES);
+  // Sin fecha en la pregunta: la del hilo («…de ayer» dos preguntas antes) y,
+  // si no, los últimos 7 días. 16/09 09:36: «el informe de pista, planta e
+  // imprimación» sin fecha trajo un control de imprimación de MARZO, de otra
+  // empresa: el más reciente de toda la historia no es «el informe».
+  let desde = args.desde ?? args.fecha;
+  let hasta = args.hasta ?? args.fecha;
+  let sinFecha = false;
+  if (!desde && !hasta) {
+    sinFecha = true;
+    const { ultimaConsulta } = await import('../consultas/contexto.js');
+    const anterior = ultimaConsulta(quien, grupo);
+    const fechaHilo = anterior ? extraerParametros(anterior.pregunta).fecha : undefined;
+    if (fechaHilo) desde = hasta = fechaHilo;
+    else {
+      hasta = hoyLima();
+      desde = sumarDias(hasta, -7);
+    }
+  }
+  // Varios tipos en una pregunta («pista, planta e imprimación»): uno por uno,
+  // el mejor de cada uno (el más reciente en el rango), todos en la respuesta.
+  if (tipos.length > 1) {
+    const elegidos: InformeEncontrado[] = [];
+    const faltan: string[] = [];
+    for (const tp of tipos) {
+      // Sin fecha: el último COMPLETADO antes que el borrador de hoy a medio llenar.
+      const candidatos = await buscarInformes({ tipo: tp.codigo, texto: texto || undefined, desde, hasta, companyId: args.companyId }, sinFecha ? 6 : 1);
+      const mejor = sinFecha ? (candidatos.find((c) => c.estado === 'completed') ?? candidatos[0]) : candidatos[0];
+      if (mejor) elegidos.push(mejor);
+      else faltan.push(tp.nombre.toLowerCase());
+    }
+    logger.info(`[agente] informes ${tipos.map((t) => t.codigo).join('+')} ${desde}..${hasta} → ${elegidos.length} de ${tipos.length}`);
+    if (!elegidos.length) return { texto: `No encuentro informes de ${tipos.map((t) => t.nombre.toLowerCase()).join(', ')} entre el ${desde} y el ${hasta}.` };
+    await avisarGeneracion(elegidos, grupo);
+    const respuestas = await Promise.all(elegidos.map((i) => enviarInforme(i)));
+    const archivos = respuestas.flatMap((r) => r.archivos ?? []);
+    const fallidos = respuestas.filter((r) => !r.archivos?.length).map((r) => r.texto);
+    return { texto: [...fallidos, faltan.length ? `No encuentro ${faltan.join(', ')} en esas fechas.` : ''].filter(Boolean).join('\n'), archivos };
+  }
+  const filtro = { tipo: tipo?.codigo, texto: texto || undefined, desde, hasta, companyId: args.companyId };
+  let lista = await buscarInformes(filtro, MAX_OPCIONES_INFORMES);
+  // Sin fecha y con un tipo: el último completado, sin preguntar entre siete días de borradores.
+  if (sinFecha && tipo && lista.length > 1) lista = [lista.find((c) => c.estado === 'completed') ?? lista[0]];
   logger.info(`[agente] informes ${JSON.stringify(filtro)} → ${lista.length} resultado(s)`);
   if (!lista.length) {
     const que = tipo ? `de *${tipo.nombre}*` : 'de servicio';
@@ -182,29 +223,43 @@ const responderInformes = async (args: Argumentos, pregunta: string, quien: stri
     const tipos = TIPOS_INFORME.slice(0, 8).map((t) => t.nombre.toLowerCase()).join(', ');
     return { texto: `No encuentro informes ${que}${donde ? ` ${donde}` : ''}. Dime el tipo (${tipos}…), la obra o el cliente, o la fecha.` };
   }
-  if (lista.length === 1) return enviarInforme(lista[0], grupo);
+  if (lista.length === 1) {
+    await avisarGeneracion([lista[0]], grupo);
+    return enviarInforme(lista[0]);
+  }
   preguntar({
     quien,
     grupo,
     opciones: lista.map((i) => `${i.nombreTipo} ${i.fecha}`),
     tipo: 'opciones',
-    continuar: (indice) => enviarInforme(lista[indice] ?? lista[0], grupo),
+    continuar: async (indice) => {
+      const i = lista[indice] ?? lista[0];
+      await avisarGeneracion([i], grupo);
+      return enviarInforme(i);
+    },
   });
   return { texto: [`📑 Encontré ${lista.length} informes${tipo ? ` de *${tipo.nombre}*` : ''}. ¿Cuál te mando?`, ...lista.map((i, n) => `${n + 1}. ${lineaInforme(i)}`), 'Responde con el número.'].join('\n') };
 };
 
-const enviarInforme = async (i: InformeEncontrado, grupo?: string): Promise<{ texto: string; archivos?: Archivo[] }> => {
-  // Generar tarda ~25 s (Puppeteer sobre la hoja de impresión, con fotos) y
-  // después sube un PDF de varios MB: se avisa, o «escribiendo…» durante medio
-  // minuto se lee como que no va a responder (José, 16/09).
-  if (!i.pdfUrl && grupo) {
-    try {
-      const [{ responderEnGrupo }, { alcanceVigente }] = await Promise.all([import('../checklist/emisor.js'), import('../checklist/observador.js')]);
-      await responderEnGrupo(grupo, { texto: `📑 Generando el *${i.nombreTipo}* del ${i.fecha}… tarda medio minuto.` }, await alcanceVigente());
-    } catch {
-      /* el aviso es cortesía: si no sale, el PDF va igual */
-    }
+/**
+ * Generar tarda ~25 s por informe (Puppeteer sobre la hoja de impresión, con
+ * fotos) y después sube PDFs de varios MB: se avisa, o «escribiendo…» durante
+ * un minuto se lee como que no va a responder (José, 16/09).
+ */
+const avisarGeneracion = async (lista: InformeEncontrado[], grupo?: string): Promise<void> => {
+  const porGenerar = lista.filter((i) => !i.pdfUrl);
+  if (!porGenerar.length || !grupo) return;
+  try {
+    const [{ responderEnGrupo }, { alcanceVigente }] = await Promise.all([import('../checklist/emisor.js'), import('../checklist/observador.js')]);
+    const que = porGenerar.length === 1 ? `el *${porGenerar[0].nombreTipo}* del ${porGenerar[0].fecha}` : `${porGenerar.length} informes (${porGenerar.map((i) => i.nombreTipo.toLowerCase()).join(', ')})`;
+    const tarda = porGenerar.length === 1 ? 'medio minuto' : `~${Math.ceil(porGenerar.length * 0.5)} min`;
+    await responderEnGrupo(grupo, { texto: `📑 Generando ${que}… tarda ${tarda}.` }, await alcanceVigente());
+  } catch {
+    /* el aviso es cortesía: si no sale, el PDF va igual */
   }
+};
+
+const enviarInforme = async (i: InformeEncontrado): Promise<{ texto: string; archivos?: Archivo[] }> => {
   const pdf = await pdfDeInforme(i);
   if (!pdf) return { texto: `No pude armar el PDF de *${i.nombreTipo}* (${i.fecha}) de ${i.cliente || i.empresa}. Se puede generar desde Portal → Servicios → Informes.` };
   const buffer = pdf.buffer;

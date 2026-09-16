@@ -539,5 +539,30 @@
       "ruta": "datos",
       "herramienta": "informes"
     }
+  },
+  {
+    "id": "2026-09-16-0934-generame",
+    "incidente": "2026-09-16-0934",
+    "pregunta": "@ConstRoad generame el informe de planta de ayer",
+    "hoy": "2026-09-16",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "informes",
+      "argumentos": {
+        "fecha": "2026-09-15"
+      }
+    },
+    "nota": "«genérame» no era verbo de pedir el archivo: caía en el estado de los informes"
+  },
+  {
+    "id": "2026-09-16-0936-tres",
+    "incidente": "2026-09-16-0936",
+    "pregunta": "@ConstRoad enviame el informe de pista, planta e imprimacion",
+    "hoy": "2026-09-16",
+    "esperado": {
+      "ruta": "datos",
+      "herramienta": "informes"
+    },
+    "nota": "tres tipos, sin fecha: los tres, con la fecha del hilo o los últimos 7 días"
   }
 ]
