@@ -92,8 +92,12 @@ export const atencionPendiente = (conversaciones: ConversacionParaInicio[], ahor
       };
     });
 
-/** Tiempo de respuesta del bot: mediana, en segundos, del primer mensaje del bot tras cada mensaje del cliente (hoy). */
-export const tiempoDeRespuesta = (mensajes: MensajeParaInicio[]): number | null => {
+/**
+ * Tiempo de respuesta del bot: mediana, en segundos, del primer mensaje del bot
+ * tras cada mensaje del cliente. `maximoS` descarta las demoras mayores (una
+ * respuesta horas después no fue del bot: estaba en pausa o atendía una persona).
+ */
+export const tiempoDeRespuesta = (mensajes: MensajeParaInicio[], maximoS = Infinity): number | null => {
   const porConversacion = new Map<string, MensajeParaInicio[]>();
   for (const m of mensajes) porConversacion.set(m.conversationId, [...(porConversacion.get(m.conversationId) ?? []), m]);
   const demoras: number[] = [];
@@ -104,7 +108,8 @@ export const tiempoDeRespuesta = (mensajes: MensajeParaInicio[]): number | null 
       const t = new Date(m.createdAt).getTime();
       if (m.role === 'customer') esperando = esperando ?? t;
       else if (m.role === 'bot' && esperando !== null) {
-        demoras.push((t - esperando) / 1000);
+        const demora = (t - esperando) / 1000;
+        if (demora <= maximoS) demoras.push(demora);
         esperando = null;
       }
     }

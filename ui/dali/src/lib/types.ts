@@ -431,3 +431,26 @@ export interface Notificaciones {
   descanso: DescansoAvisos;
   eventos: EventoDeAviso[];
 }
+
+/** A19 «Reportes» (`src/agent/dali/reportes.ts`). */
+export type PeriodoReporte = 'semana' | 'semana-pasada' | '30-dias';
+
+export interface ResumenReporte {
+  conversaciones: number;
+  leads: number;
+  confirmados: number;
+  atendidos: number;
+}
+
+export interface Reporte {
+  periodo: PeriodoReporte;
+  rango: { desde: string; hasta: string; dias: number };
+  actualizado: string;
+  resumen: ResumenReporte & { variacionConversaciones: number | null; variacionLeads: number | null; anterior: ResumenReporte };
+  porDia: Array<{ fecha: string; etiqueta: string; conversaciones: number }>;
+  porServicio: Array<{ servicio: string; nombre: string; leads: number; pct: number }>;
+  embudo: Array<{ paso: 'iniciadas' | 'servicio' | 'datos' | 'cotizados' | 'ganados'; titulo: string; valor: number; pct: number }>;
+  masPreguntadas: Array<{ pregunta: string; usos: number; categoria: string }>;
+  sinRespuesta: { total: number; ejemplos: string[] };
+  tiempos: { respuestaDaliS: number | null; tomaHumanaMin: number | null };
+}

@@ -34,6 +34,7 @@ import {
 import { EquipoInvalido, cambiarMiembro, invitarMiembro, listarEquipo, quitarMiembro } from '../../agent/dali/equipo.js';
 import { motivoSinPermiso } from '../../agent/dali/permisos.js';
 import { leerPlan } from '../../agent/dali/plan.js';
+import { PERIODOS, leerReporte, type Periodo } from '../../agent/dali/reportes.js';
 import { EVENTOS_DE_AVISO, NotificacionesInvalidas, guardarNotificaciones, leerNotificaciones, textoDePruebaDeAviso, type GrupoDelStore } from '../../agent/dali/notificaciones.js';
 
 /**
@@ -332,6 +333,16 @@ router.delete('/equipo/:id', async (req: Request, res: Response) => {
   } catch (error) {
     responderErrorDeEquipo(res, error, 'quitar al miembro', req.dali!.companyId);
   }
+});
+
+/** A19: reportes por período (esta semana, la pasada, 30 días). */
+router.get('/reportes', async (req: Request, res: Response) => {
+  const periodo = String(req.query.periodo ?? 'semana') as Periodo;
+  if (!PERIODOS.includes(periodo)) {
+    res.status(400).json({ error: 'Período desconocido' });
+    return;
+  }
+  res.json(await leerReporte(req.dali!.companyId, periodo));
 });
 
 /** A17: plan y uso (solo lectura; el piloto no tiene pagos). */

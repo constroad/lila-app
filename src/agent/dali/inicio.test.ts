@@ -34,6 +34,10 @@ describe('métricas del día', () => {
     // a: 0 s (mismo minuto); b: 60 s; c sin cliente antes: no cuenta → mediana de [0, 60] = 60
     expect(tiempoDeRespuesta(mensajes)).toBe(60);
     expect(tiempoDeRespuesta([])).toBeNull();
+    // Una respuesta un día después no es del bot (estuvo en pausa o lo atendió una persona): con tope, no cuenta.
+    const tardia = [m('d', 'customer', '08:00'), { conversationId: 'd', role: 'bot', createdAt: lima('2026-09-16', '09:00') }];
+    expect(tiempoDeRespuesta(tardia)).toBe(90_000);
+    expect(tiempoDeRespuesta(tardia, 600)).toBeNull();
   });
 
   it('piden atención las escaladas, la más reciente primero, con «Tomar»', () => {

@@ -15,7 +15,7 @@ describe('notificacionesDe', () => {
     const n = notificacionesDe({ ownerNotifyTarget: '120363@g.us', avisos: { canal: 'grupo', numeroDueno: '51903124919', casos: { fallo: false } } }, grupos, '51949376824');
     expect(n.canal).toBe('grupo');
     expect(n.grupo).toEqual({ jid: '120363@g.us', nombre: 'Ventas CONSTROAD', miembros: 2 });
-    expect(n.grupos.map((g) => g.nombre)).toEqual(['Ventas CONSTROAD', 'Grupo sin nombre']);
+    expect(n.grupos.map((g) => g.nombre)).toEqual(['Grupo sin nombre', 'Ventas CONSTROAD']); // por nombre, que son más de cien
     expect(n.numeroDueno).toBe('51903124919');
     expect(n.casos).toEqual({ leadNuevo: true, pideUrgente: true, fallo: false });
     expect(n.descanso).toEqual({ activo: false, desde: '22:00', hasta: '07:00' });

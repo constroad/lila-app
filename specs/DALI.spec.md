@@ -161,7 +161,7 @@ Auth: `requireTenant` (JWT) salvo `auth/*` y `registro`. Rol en `req.auth.role`.
 | equipo | `GET equipo` · `POST equipo` (invitar = dar acceso) · `PATCH equipo/:id` {rol, recibeAvisos} · `DELETE equipo/:id` | `bot_members`; en F2 también constroad-auth. |
 | plan | `GET plan` (plan, uso, semanas, pagos) | hoy solo el piloto, sin costo ni pagos; los planes de pago y sus comprobantes, en F4. |
 | notificaciones | `GET/PUT notificaciones` (canal, grupo de la línea, número, casos, descanso) · `POST notificaciones/prueba` | `bot_configs.avisos` + `ownerNotifyTarget`. |
-| reportes | `GET reportes?rango` | agregados por semana; «no supo responder» sale de las conversaciones con `fueraDeTema`/sin ruta. |
+| reportes | `GET reportes?periodo=semana\|semana-pasada\|30-dias` | calculado al pedirlo sobre `bot_conversations`, `bot_leads` y los mensajes (90 días); «no supo responder» = las sugeridas de FAQ. |
 | ajustes | `GET/PUT ajustes` · `GET ajustes/sesiones` · `DELETE ajustes/sesiones/:id` · `GET ajustes/exportar.xlsx` · `POST ajustes/eliminar-cuenta` | |
 | admin | `GET admin/empresas` · `POST admin/empresas` · `GET admin/empresas/:id` · `POST admin/empresas/:id/impersonar` · `PATCH admin/empresas/:id` (pausar, suspender, plan, pago) · `GET/PUT admin/verticales/:v` · `POST admin/verticales/:v/aplicar` · `GET admin/salud` | rol `operator` (José). `salud` reusa `estadoLlm()`, sesiones, memoria del proceso. |
 
@@ -534,6 +534,29 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   (guardar el descanso y revertirlo). Tests: `notificaciones.test.ts`
   (armado, validación, eventos, prueba), `asistente.test.ts` (descanso,
   `destinosDeAviso` en la franja).
+- **A19 Reportes** (`ui/dali/src/screens/reportes/*`, comparada con
+  `A19-reportes` en los tres tamaños): cómo le fue a Dali en un período
+  —esta semana, la semana pasada o los últimos 30 días— contra el período
+  anterior del mismo largo (`GET reportes?periodo=`, `dali/reportes.ts`;
+  semanas de lunes a domingo en Lima; se calcula al pedirlo, sin agregados
+  guardados: son cientos de documentos, no millones). **Definiciones**:
+  conversaciones = las que tuvieron actividad del cliente en el período (o
+  nacieron en él); leads = con servicio identificado; confirmados = con todos
+  los datos (`lead.listo`); atendidos por persona = escaladas; por día =
+  conversaciones NUEVAS por día (Lima); leads por servicio con el nombre del
+  guion; embudo iniciadas → servicio → datos completos → cotizados
+  (`bot_leads` cotizado/ganado) → ganados; «lo que más preguntan» = las FAQ
+  por **usos acumulados** (no del período, y así se dice); «Dali no supo
+  responder» = las sugeridas de A11 (30 días); tiempos = mediana de la
+  respuesta de Dali (solo respuestas dentro de 10 min: una horas después no
+  fue de Dali) y mediana desde la escalada hasta el primer mensaje del equipo.
+  El gráfico por día es línea con área y el pico marcado, etiquetas en HTML.
+  **Contra el diseño, deliberado**: sin «Descargar PDF», sin horas pico, sin
+  «ciclo de venta en días» ni «servicio más rentable» (no se miden); las
+  variaciones son contra el período anterior y sin período anterior se dice
+  «sin período anterior para comparar». Tests: `reportes.test.ts` (rangos,
+  resumen, embudo, por día, por servicio, variación, toma humana),
+  `inicio.test.ts` (tope del tiempo de respuesta).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -573,7 +596,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
     el cliente) y el trabajo del dueño.
   - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
     identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
-    lead). Suite completa en verde (1058 + 333, tras A18).
+    lead). Suite completa en verde (1064 + 333, tras A19).
 - **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
   → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
   sin sesión → 401.
@@ -621,7 +644,7 @@ probó por el selector de archivos), y una plantilla editada por alguien en
 Excel de verdad (se probó la ida y vuelta sin tocar y los casos de
 normalización por test).
 
-**Pendiente de F3:** P1, P4–P6, A19–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

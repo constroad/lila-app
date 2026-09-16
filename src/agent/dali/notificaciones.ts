@@ -44,7 +44,7 @@ export const grupoLegible = (g: GrupoDelStore): GrupoDeLinea => ({
 
 export const notificacionesDe = (config: { avisos?: unknown; ownerNotifyTarget?: string } | null | undefined, gruposDelStore: GrupoDelStore[], linea: string): Notificaciones => {
   const avisos = avisosDe(config?.avisos);
-  const grupos = gruposDelStore.map(grupoLegible);
+  const grupos = gruposDelStore.map(grupoLegible).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const jid = String(config?.ownerNotifyTarget ?? '').trim();
   const grupo = jid ? (grupos.find((g) => g.jid === jid) ?? { jid, nombre: 'Grupo conectado desde Portal', miembros: 0 }) : undefined;
   return {
