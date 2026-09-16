@@ -88,7 +88,7 @@ Dali no es una app nueva para torre: es lila con un segundo hostname.
    > `app.get('/')` genérico de lila, así que en el host de Dali la raíz
    > contestaba `{status: ok}` y nunca redirigía a `/dali/`. Ahora va antes,
    > con test (`src/api/dali-ui.test.ts`).
-3. **Túnel (lo hace José, pide sudo):** una línea en
+3. **Túnel (lo hizo José el 16/09; pide sudo):** una línea en
    `/usr/local/etc/cloudflared/config.yml` ANTES del wildcard —
    `- hostname: dali.constroad.com` / `service: http://127.0.0.1:3001` — y
    reiniciar cloudflared. DNS: el CNAME wildcard de `constroad.com` al túnel ya
@@ -818,10 +818,11 @@ contra producción (16/09, 12:00): S1 con las dos líneas conectadas y S4
 cae y se reconecta sola varias veces por hora: «WhatsApp no respondió a
 tiempo»), y el ida y vuelta consola ↔ empresa con la sesión real de José.
 
-**Pendiente de F3:** `dali.constroad.com` en el túnel (José); Lighthouse
-móvil; PWA/instalable; un aviso de «WhatsApp desconectado» al dueño por
+**Pendiente de F3:** Lighthouse móvil; PWA/instalable; un aviso de «WhatsApp desconectado» al dueño por
 WhatsApp (A6 lo dibuja, ningún job lo emite hoy; el panel sí lo muestra, E1).
-Todas las pantallas de Stitch (A1–A20, P1–P6, S1–S4, E1) están implementadas.
+Todas las pantallas de Stitch (A1–A20, P1–P6, S1–S4, E1) están implementadas y
+`https://dali.constroad.com` abre el panel (verificado 16/09: `/` → 302 → `/dali/`,
+la landing sin sesión, `/api/dali/*` en el mismo origen).
 
 ## 8) Riesgos y decisiones abiertas
 
