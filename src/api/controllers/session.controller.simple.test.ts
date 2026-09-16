@@ -9,22 +9,28 @@ import { describe, it, expect, jest, beforeEach, beforeAll } from '@jest/globals
 const isWhatsAppProxyMode = jest.fn(() => false);
 const clearSession = jest.fn(async () => undefined);
 const disconnectSession = jest.fn(async () => undefined);
+const startSession = jest.fn(async () => ({}));
+const getQRCode = jest.fn((_id: string): string | undefined => undefined);
+const isSessionReady = jest.fn(() => false);
+const isPairingLoginInProgress = jest.fn(() => false);
+const markQRRequested = jest.fn();
+const getSession = jest.fn((_id: string): unknown => undefined);
 
 jest.unstable_mockModule('../../whatsapp/baileys/sessions.simple.js', () => ({
   __esModule: true,
-  startSession: jest.fn(),
+  startSession,
   requestPairingCodeForSession: jest.fn(async () => 'PAIR1234'),
-  getQRCode: jest.fn(),
-  getQRCodeGeneratedAt: jest.fn(),
-  isSessionReady: jest.fn(() => false),
+  getQRCode,
+  getQRCodeGeneratedAt: jest.fn(() => 1_700_000_000_000),
+  isSessionReady,
   isSessionParked: jest.fn(() => false),
-  isPairingLoginInProgress: jest.fn(() => false),
-  markQRRequested: jest.fn(),
+  isPairingLoginInProgress,
+  markQRRequested,
   listSessions: jest.fn(() => []),
   disconnectSession,
   clearSession,
   restartSession: jest.fn(),
-  getSession: jest.fn(),
+  getSession,
 }));
 
 jest.unstable_mockModule('../../services/whatsapp-direct.service.js', () => ({
@@ -71,6 +77,54 @@ beforeEach(() => {
   isWhatsAppProxyMode.mockReturnValue(false);
   clearSession.mockClear();
   disconnectSession.mockClear();
+  startSession.mockClear();
+  markQRRequested.mockClear();
+  getQRCode.mockReturnValue(undefined);
+  isSessionReady.mockReturnValue(false);
+  isPairingLoginInProgress.mockReturnValue(false);
+  getSession.mockReturnValue(undefined);
+});
+
+/**
+ * `resolveQrState` es el núcleo del emparejamiento que comparten Portal (GET /qr) y
+ * el panel Dali (A14): marca al consumidor, levanta la sesión si no existe y dice en
+ * qué está (conectada / vinculando / esperando QR / el QR como imagen).
+ */
+describe('resolveQrState — el estado del emparejamiento, compartido con Dali', () => {
+  it('sesión conectada: no la toca y dice «connected» sin QR', async () => {
+    getSession.mockReturnValue({});
+    isSessionReady.mockReturnValue(true);
+    const estado = await subject.resolveQrState('51949376824');
+    expect(estado).toEqual({ status: 'connected', qr: null, qrImage: null });
+    expect(startSession).not.toHaveBeenCalled();
+    expect(markQRRequested).toHaveBeenCalledWith('51949376824');
+  });
+
+  it('sin sesión: la levanta y devuelve el QR como imagen cuando Baileys ya lo emitió', async () => {
+    getQRCode.mockReturnValue('2@abc');
+    const estado = await subject.resolveQrState('51949376824');
+    expect(startSession).toHaveBeenCalledWith('51949376824', expect.any(Function));
+    expect(estado).toEqual({ status: 'waiting_qr', qr: '2@abc', qrImage: 'data:image/png;base64,xxx', qrGeneratedAt: 1_700_000_000_000 });
+  });
+
+  it('si la sesión no se puede levantar (sin lease, proxy), lo dice en `startError` en vez de «connecting» para siempre', async () => {
+    startSession.mockRejectedValueOnce(new Error('Esta instancia no posee el lease de sockets WhatsApp'));
+    const estado = await subject.resolveQrState('51949376824');
+    expect(estado.status).toBe('connecting');
+    expect(estado.startError).toContain('no posee el lease');
+    // Con la sesión ya viva, el error viejo se olvida.
+    getSession.mockReturnValue({});
+    isSessionReady.mockReturnValue(true);
+    expect((await subject.resolveQrState('51949376824')).startError).toBeUndefined();
+  });
+
+  it('QR ya escaneado (primer login en curso): «linking», sin esperar un QR nuevo', async () => {
+    getSession.mockReturnValue({});
+    isPairingLoginInProgress.mockReturnValue(true);
+    const estado = await subject.resolveQrState('51949376824');
+    expect(estado).toEqual({ status: 'linking', qr: null, qrImage: null });
+    expect(startSession).not.toHaveBeenCalled();
+  });
 });
 
 describe('clearSessionHandler — guard de proxy (protege creds de prod)', () => {

@@ -45,7 +45,8 @@ const QR_WAIT_MS = 6000;
 async function waitForQRCode(
   phoneNumber: string,
   timeoutMs = 60000,
-  intervalMs = 300
+  intervalMs = 300,
+  shouldAbort: () => boolean = () => false
 ): Promise<string | undefined> {
   const start = Date.now();
 
@@ -58,7 +59,8 @@ async function waitForQRCode(
         return;
       }
 
-      if (Date.now() - start >= timeoutMs) {
+      // La sesión no va a dar QR (arranque rechazado): no tiene sentido esperar el timeout.
+      if (shouldAbort() || Date.now() - start >= timeoutMs) {
         clearInterval(timer);
         resolve(undefined);
       }
@@ -363,6 +365,76 @@ export async function getAllSessionsHandler(req: Request, res: Response, next: N
   }
 }
 
+export interface QrState {
+  /** connected: nada que mostrar · linking: QR ya escaneado, primer login en curso · connecting: todavía sin QR · waiting_qr: escanear. */
+  status: 'connected' | 'linking' | 'connecting' | 'waiting_qr';
+  qr: string | null;
+  qrImage: string | null;
+  qrGeneratedAt?: number;
+  /** `connecting` porque la sesión NO pudo levantarse (sin lease, proxy): el cliente lo muestra en vez de esperar un QR que no va a llegar. */
+  startError?: string;
+}
+
+// Último error al levantar la sesión para el QR, por número. Se olvida en cuanto la
+// sesión existe. Sin esto, un arranque rechazado dejaba al cliente en «conectando…» eterno.
+const qrStartErrors: Record<string, string> = {};
+
+/**
+ * El estado del emparejamiento de un número, compartido por Portal (GET /qr) y por
+ * el panel Dali (A14 «Vincular dispositivo»): marca que hay un consumidor mirando,
+ * levanta la sesión si no existe y contesta en qué está. Sin el guard del proxy ni
+ * el formato de respuesta: eso es de cada handler.
+ */
+export async function resolveQrState(phoneNumber: string): Promise<QrState> {
+  // Hay un consumidor mirando el QR (Portal pollea cada 2.5-8s): mantiene vivo
+  // el ciclo de emparejamiento; sin polls se detiene solo (~90s).
+  markQRRequested(phoneNumber);
+
+  // Start session if not exists. Sin await (el QR se espera abajo), pero con el
+  // error atrapado: un arranque rechazado (sin lease, proxy) no puede ser un
+  // unhandled rejection.
+  if (!getSession(phoneNumber)) {
+    delete qrStartErrors[phoneNumber]; // intento nuevo: solo cuenta SU resultado
+    startSession(phoneNumber, () => {
+      logger.info(`QR generated for ${phoneNumber}`);
+    }).catch((error) => {
+      qrStartErrors[phoneNumber] = error instanceof Error ? error.message : String(error);
+      logger.warn(`No se pudo levantar la sesión ${phoneNumber} para el QR: ${String(error)}`);
+    });
+  } else {
+    delete qrStartErrors[phoneNumber];
+  }
+
+  // Si ya está conectada, no hay QR que mostrar.
+  if (isSessionReady(phoneNumber)) {
+    return { status: 'connected', qr: null, qrImage: null };
+  }
+
+  // QR YA escaneado (pair-success) y primer login en curso: no hay QR nuevo que
+  // esperar (ahorra el bloqueo de QR_WAIT_MS) y el cliente debe mostrar "vinculando…"
+  // en vez del QR muerto — y bloquear "Regenerar QR", que mataría el login.
+  if (isPairingLoginInProgress(phoneNumber)) {
+    return { status: 'linking', qr: null, qrImage: null };
+  }
+
+  // Espera CORTA para NO bloquear (Vercel Hobby mata la función proxy a ~10s). Si el QR aún no
+  // está listo, se responde "connecting" y el CLIENTE hace polling; NUNCA se bloquea 60s.
+  const startFailed = () => Boolean(qrStartErrors[phoneNumber]) && !getSession(phoneNumber);
+  const qr = (await waitForQRCode(phoneNumber, QR_WAIT_MS, 300, startFailed)) ?? getQRCode(phoneNumber);
+  if (!qr) {
+    const startError = getSession(phoneNumber) ? undefined : qrStartErrors[phoneNumber];
+    return { status: 'connecting', qr: null, qrImage: null, ...(startError ? { startError } : {}) };
+  }
+
+  const qrText = typeof qr === 'string' ? qr : String(qr);
+  return {
+    status: 'waiting_qr',
+    qr: qrText,
+    qrImage: await qrcode.toDataURL(qrText),
+    qrGeneratedAt: getQRCodeGeneratedAt(phoneNumber) ?? Date.now(),
+  };
+}
+
 /**
  * Get QR code image
  * GET /api/sessions/:phoneNumber/qr
@@ -388,52 +460,15 @@ export async function getQRCodeImageHandler(req: Request, res: Response, next: N
       return next(error);
     }
 
-    // Hay un consumidor mirando el QR (Portal pollea cada 2.5-8s): mantiene vivo
-    // el ciclo de emparejamiento; sin polls se detiene solo (~90s).
-    markQRRequested(phoneNumber);
+    const estado = await resolveQrState(phoneNumber);
 
-    // Start session if not exists
-    const existingSession = getSession(phoneNumber);
-    if (!existingSession) {
-      startSession(phoneNumber, (qr) => {
-        logger.info(`QR generated for ${phoneNumber}`);
-      });
-    }
-
-    // Si ya está conectada, no hay QR que mostrar.
-    if (isSessionReady(phoneNumber)) {
+    if (estado.status !== 'waiting_qr') {
       res.status(HTTP_STATUS.OK).json({
         success: true,
-        data: { status: 'connected', isConnected: true, qr: null, qrImage: null },
+        data: { status: estado.status, isConnected: estado.status === 'connected', qr: null, qrImage: null },
       });
       return;
     }
-
-    // QR YA escaneado (pair-success) y primer login en curso: no hay QR nuevo que
-    // esperar (ahorra el bloqueo de QR_WAIT_MS) y Portal debe mostrar "vinculando…"
-    // en vez del QR muerto — y bloquear "Regenerar QR", que mataría el login.
-    if (isPairingLoginInProgress(phoneNumber)) {
-      res.status(HTTP_STATUS.OK).json({
-        success: true,
-        data: { status: 'linking', isConnected: false, qr: null, qrImage: null },
-      });
-      return;
-    }
-
-    // Espera CORTA para NO bloquear (Vercel Hobby mata la función proxy a ~10s). Si el QR aún no
-    // está listo, se responde 200 "connecting" y el CLIENTE hace polling; NUNCA se bloquea 60s.
-    const qr = (await waitForQRCode(phoneNumber, QR_WAIT_MS)) ?? getQRCode(phoneNumber);
-
-    if (!qr) {
-      res.status(HTTP_STATUS.OK).json({
-        success: true,
-        data: { status: 'connecting', isConnected: false, qr: null, qrImage: null },
-      });
-      return;
-    }
-
-    const qrText = typeof qr === 'string' ? qr : String(qr);
-    const qrDataUrl = await qrcode.toDataURL(qrText);
 
     if (req.query.format === 'json') {
       res.status(HTTP_STATUS.OK).json({
@@ -441,15 +476,15 @@ export async function getQRCodeImageHandler(req: Request, res: Response, next: N
         data: {
           status: 'waiting_qr',
           isConnected: false,
-          qr: qrText,
-          qrImage: qrDataUrl,
-          qrGeneratedAt: getQRCodeGeneratedAt(phoneNumber) ?? Date.now(),
+          qr: estado.qr,
+          qrImage: estado.qrImage,
+          qrGeneratedAt: estado.qrGeneratedAt,
         },
       });
       return;
     }
 
-    const base64 = qrDataUrl.split(',')[1];
+    const base64 = (estado.qrImage as string).split(',')[1];
     const buffer = Buffer.from(base64, 'base64');
     res.setHeader('Content-Type', 'image/png');
     res.status(HTTP_STATUS.OK).send(buffer);

@@ -154,7 +154,7 @@ Auth: `requireTenant` (JWT) salvo `auth/*` y `registro`. Rol en `req.auth.role`.
 | faq | `GET/POST/PUT/DELETE faq` · `POST faq/probar` {pregunta} → {respuesta, coincidencia} · `GET faq/sugeridas` | embeddings e5 (`agent/checklist` ya los tiene). |
 | catalogo | `GET/POST/PUT/DELETE catalogo` · `PUT catalogo/politica` {daPrecios} | |
 | importar | `GET importar/plantilla.xlsx` · `POST importar/analizar` (multipart) → resumen + avisos · `POST importar/confirmar` {token, modo} · `GET importar/historial` | `xlsx` en lila (ya está en deps de exports). |
-| whatsapp | `GET whatsapp` (estado, calidad, historial) · `POST whatsapp/vincular` (QR/pairing, reusa `/api/sessions`) · `POST whatsapp/desconectar` · `POST whatsapp/prueba` {numero} | |
+| whatsapp | `GET whatsapp` (estado, salud de hoy, historial) · `POST whatsapp/vincular` {metodo: qr \| codigo} (reusa el núcleo del QR de `/api/sessions`) · `POST whatsapp/reconectar` · `POST whatsapp/desconectar` · `POST whatsapp/prueba` {numero} | `whatsapp_session_events` |
 | conversaciones | `GET conversaciones?estado&q&cursor` · `GET conversaciones/:id` (mensajes + lead) · `POST conversaciones/:id/tomar` · `POST …/devolver` · `POST …/cerrar` · `POST …/mensaje` {texto} (sale por el número del negocio, pausa a Dali) · `POST …/nota` | |
 | leads | `GET leads?estado&servicio&q` · `GET leads/:id` · `PATCH leads/:id` {estado, cotizacion, motivoPerdido} · `POST leads/:id/notas` · `GET leads/exportar.xlsx` | |
 | probar | `POST probar` {sesionId?, mensaje, como: nuevo|conocido} → {respuesta, entendido, siguiente, senales} | corre `paso()` con un estado en memoria (TTL 30 min), sin persistir ni avisar. |
@@ -413,6 +413,57 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   restauró el pack y se borró el registro de prueba. Tests: `importar.test.ts`
   (plantilla ↔ lectura ida y vuelta, rechazo por tamaño y por formato, conteo
   y avisos, los dos modos).
+- **A14 WhatsApp** (`ui/dali/src/screens/whatsapp/*`, comparada con
+  `A14-whatsapp` en los tres tamaños): la línea desde la que Dali atiende.
+  **Estado real** de la sesión Baileys del número de la empresa
+  (`companies.whatsappConfig.sender`): conectado / vinculando (QR escaneado,
+  primer login) / conectando (socket sin abrir) / requiere vincular (aparcada
+  o con QR esperando) / desconectado / sin número — `estadoDeLinea` en
+  `dali/whatsapp.ts`, con el manager de sesiones INYECTADO (`OperacionesDeLinea`,
+  armado en la ruta por import dinámico, como el envío al cliente). Con
+  quiénes se comparte el número (`listCompaniesByWhatsappSender`: el de
+  Constroad lo usa también Inframaq), la cuenta (plataforma y nombre de las
+  creds, `readAuthAccountInfo`, sin secretos), desde cuándo está conectada y
+  el último mensaje. **Salud de hoy**: mensajes por quién los escribió,
+  conversaciones, envíos fallidos y tiempo de respuesta (mediana). **Historial
+  de la línea** (7 días, 20 eventos): la colección nueva
+  `whatsapp_session_events` (`baileys/session-events.ts`, TTL 30 días,
+  fire-and-forget) que el manager escribe en cada transición —conectado,
+  reconectado (con los intentos), desconectado (con el código y el motivo en
+  palabras: 428 «se cortó la conexión», 440 «otra instancia», 515…),
+  vinculado, desvinculado (401), aparcado— más lo que hace el panel
+  (reconexión o desconexión pedida por quién, mensaje de prueba) y cada
+  respuesta del bot que no salió (`onSendFailed` del router → «Fallidos»; no
+  va a la línea de tiempo). Las rotaciones del QR y los reintentos que no
+  abren no se registran; el cierre por apagado de lila tampoco (cada deploy
+  deja solo su «Conectado»). **Acciones**: «Reconectar» = `restartSession`
+  (reinicio suave, conserva la sesión: vale para números compartidos);
+  «Desconectar» = `disconnectSession` (logout en WhatsApp, obliga a vincular
+  de nuevo) con confirmación inline, y **bloqueado (409) si el número lo
+  comparten varias empresas**; «Vincular» reusa el núcleo del QR de Portal
+  (`resolveQrState`, extraído del controller de sesiones: marca al
+  consumidor, levanta la sesión si no existe y devuelve conectada / vinculando
+  / preparando / QR como imagen; si la sesión NO pudo levantarse —sin lease,
+  proxy— lo dice en `startError` en vez de «conectando» eterno) con el panel
+  pidiéndolo cada 5 s y un contador de 20 s, o el código de ocho letras
+  (`requestPairingCodeForSession`, «ABCD-EFGH»); **mensaje de prueba** solo a
+  un celular del equipo (`bot_members`) o de la lista de pruebas
+  (`bot_configs.testNumbers`) — la línea del negocio no se usa para
+  escribirle a extraños —, con `WhatsAppDirectService.sendMessage`
+  (`queueOnFail: false`, cuenta en la cuota), rate limit 5 cada 10 min. De
+  regalo, `inicio.asistente.conectado` dejó de ser «hay un número
+  configurado» y pasó a ser el estado real (la barra superior dice «WhatsApp
+  sin conexión» cuando lo está). **Contra el diseño**: sin «ID de instancia /
+  servidor AWS» (no existe; se dice «WhatsApp Web (multi-dispositivo) ·
+  Servidor en Lima»), sin «98 % entregados» (Baileys no da acuses en lila; se
+  muestran los fallidos reales), sin el logo de Dali encima del QR (taparlo
+  puede impedir escanearlo), la «alerta de respaldo» no ofrece «avisos por
+  SMS» y dice que hoy NO hay aviso automático de caída, «Ver registro
+  completo» no existe (son 7 días, 20 eventos). Tests: `whatsapp.test.ts`
+  (estado, legibles, salud, historial, destino permitido, texto de prueba),
+  `session-events.test.ts`, `sessions.simple.test.ts` (qué transición deja
+  qué evento), `session.controller.simple.test.ts` (`resolveQrState`),
+  `inbound-router.test.ts` (envío fallido).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -452,7 +503,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
     el cliente) y el trabajo del dueño.
   - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
     identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
-    lead). Suite completa en verde (1006 + 333, tras A13).
+    lead). Suite completa en verde (1035 + 333, tras A14).
 - **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
   → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
   sin sesión → 401.
@@ -475,7 +526,13 @@ tarda ~5 s; el modelo es el mismo proceso que atiende al piloto, y un turno
 del simulador compite con él); en A8–A10, un guion editado contra un mensaje real del
 piloto (se probó guardando y restaurando desde la pantalla contra la base,
 más los tests del motor); el arrastre para reordenar que dibuja Stitch se
-reemplazó por flechas (decisión: sin librería de drag, y accesible); `escribirAlCliente` de punta a punta (envía por
+reemplazó por flechas (decisión: sin librería de drag, y accesible); en A14,
+todo lo que toca la sesión de verdad —vincular por QR o por código, reconectar,
+desconectar y el mensaje de prueba— se probó con tests y contra el harness
+local (donde el guard del lease rechaza abrir sockets y la pantalla lo muestra),
+NO contra la línea de producción: es la del piloto y la comparten dos empresas,
+y un envío real necesita el sí de José; el historial nace vacío (se registra
+desde este deploy); `escribirAlCliente` de punta a punta (envía por
 WhatsApp: no se probó para no mandarle mensajes a nadie); PWA/instalable (F3
 «done» lo pide); en A6, el efecto real de una pausa y de un perfil distinto
 sobre una conversación de WhatsApp (se probó con tests y guardando/reanudando
@@ -489,7 +546,7 @@ probó por el selector de archivos), y una plantilla editada por alguien en
 Excel de verdad (se probó la ida y vuelta sin tocar y los casos de
 normalización por test).
 
-**Pendiente de F3:** P1, P4–P6, A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A16–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

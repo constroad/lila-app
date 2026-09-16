@@ -32,7 +32,7 @@ export function AppShell() {
         <SidebarEscritorio empresa={inicio?.empresa.nombre} rubro={inicio?.empresa.rubro} contadores={contadores} />
         <RailTablet contadores={contadores} />
         <div className="min-w-0 flex-1 md:pl-[72px] xl:pl-0">
-          <BarraSuperior empresa={inicio?.empresa.nombre} numero={inicio?.asistente.numero} enLinea={inicio?.asistente.encendido} />
+          <BarraSuperior empresa={inicio?.empresa.nombre} numero={inicio?.asistente.numero} enLinea={inicio?.asistente.encendido} conectado={inicio?.asistente.conectado} />
           <main className="mx-auto min-h-dvh w-full max-w-[390px] bg-stone-50 pb-24 shadow-xl md:max-w-none md:bg-stone-100 md:pb-0 md:shadow-none">
             <Outlet />
           </main>
@@ -129,7 +129,7 @@ function SidebarEscritorio({ empresa, rubro, contadores }: { empresa?: string; r
  * «Guardar cambios»); si no, lo de A2/A4 tablet: «Ver en WhatsApp» y la
  * persona, solo hasta escritorio. Inicio trae la suya.
  */
-function BarraSuperior({ empresa, numero, enLinea }: { empresa?: string; numero?: string; enLinea?: boolean }) {
+function BarraSuperior({ empresa, numero, enLinea, conectado }: { empresa?: string; numero?: string; enLinea?: boolean; conectado?: boolean }) {
   const { yo } = useSesion();
   const { pathname } = useLocation();
   const { acciones } = useBarra();
@@ -149,10 +149,11 @@ function BarraSuperior({ empresa, numero, enLinea }: { empresa?: string; numero?
       <div className="flex shrink-0 items-center gap-3">
         {numero && (
           <span className="hidden h-10 items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 text-sm text-teal-900 lg:inline-flex">
-            <span className={cn('size-2 rounded-full', enLinea ? 'bg-emerald-500' : 'bg-stone-400')} />
+            <span className={cn('size-2 rounded-full', (acciones ? conectado : enLinea) ? 'bg-emerald-500' : acciones ? 'bg-red-500' : 'bg-stone-400')} />
             {acciones ? (
               <>
-                <span className="font-body text-stone-600">WhatsApp conectado:</span> <span className="font-mono font-semibold">{telefonoLegible(numero)}</span>
+                <span className="font-body text-stone-600">{conectado ? 'WhatsApp conectado:' : 'WhatsApp sin conexión:'}</span>{' '}
+                <span className="font-mono font-semibold">{telefonoLegible(numero)}</span>
               </>
             ) : (
               <>

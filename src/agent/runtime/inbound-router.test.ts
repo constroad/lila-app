@@ -266,3 +266,19 @@ describe('routeInboundMessage — F2/F3 (ventas)', () => {
     expect(vistos).toHaveLength(1);
   });
 });
+
+describe('routeInboundMessage — un envío que falla (A14 «Fallidos»)', () => {
+  it('avisa por `onSendFailed` con la empresa y el error, y el error sigue subiendo (no se guarda como enviado)', async () => {
+    const fake = buildDeps();
+    fake.deps.sendText = async () => {
+      throw new Error('Connection Closed');
+    };
+    const fallos: string[] = [];
+    fake.deps.onSendFailed = (companyId, error) => {
+      fallos.push(`${companyId}:${String(error)}`);
+    };
+    await expect(routeInboundMessage(buildMessage(), fake.deps)).rejects.toThrow('Connection Closed');
+    expect(fallos).toEqual(['company-1:Error: Connection Closed']);
+    expect(fake.savedOutbound).toEqual([]);
+  });
+});

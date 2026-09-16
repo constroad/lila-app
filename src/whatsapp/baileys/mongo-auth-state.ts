@@ -136,3 +136,24 @@ export async function clearMongoAuthState(sessionId: string): Promise<void> {
     logger.warn(`Failed to clear Mongo auth for ${sessionId}: ${String(error)}`);
   }
 }
+
+/** Lo NO secreto de las creds que el panel muestra (Dali A14): plataforma y nombre de la cuenta, y si llegó a emparejarse. */
+export interface AuthAccountInfo {
+  platform?: string;
+  accountName?: string;
+  registered: boolean;
+}
+
+export async function readAuthAccountInfo(sessionId: string): Promise<AuthAccountInfo | null> {
+  const conn = await getSharedConnection();
+  const doc = await conn
+    .collection(COLLECTION)
+    .findOne({ _id: docId(sessionId, 'creds') } as any, { projection: { 'value.platform': 1, 'value.me.name': 1, 'value.registered': 1 } });
+  if (!doc) return null;
+  const value = (doc as { value?: { platform?: unknown; me?: { name?: unknown }; registered?: unknown } }).value ?? {};
+  return {
+    platform: typeof value.platform === 'string' ? value.platform : undefined,
+    accountName: typeof value.me?.name === 'string' ? value.me.name : undefined,
+    registered: value.registered === true,
+  };
+}

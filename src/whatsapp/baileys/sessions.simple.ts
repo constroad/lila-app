@@ -31,6 +31,7 @@ import { hasSocketLease } from './instance-lease.js';
 import { isLocalOnlySession } from './local-sessions.js';
 import { handleAgentMessagesUpsert } from '../../agent/runtime/agent-wiring.js';
 import { findOutgoingMessage } from './outgoing-messages.js';
+import { recordSessionEvent } from './session-events.js';
 import { observarParaChecklist } from '../../agent/checklist/observador.js';
 import pino from 'pino';
 
@@ -352,6 +353,7 @@ function parkSession(sessionId: string) {
   readyClients.set(sessionId, false);
   clearReconnectTimer(sessionId);
   const stalls = connectingStalls[sessionId] ?? 0;
+  recordSessionEvent({ sessionId, kind: 'parked', detail: `sin completar el login tras ${stalls} intentos` });
 
   // 1) Diagnóstico por CAUSA, no por conteo: cierres con código transitorio (o error de
   //    red) ⇒ throttle de login / red caída, NO credenciales. El umbral es "al menos la
@@ -875,8 +877,10 @@ async function initSession(
       const wasReconnect = (reconnectAttempts[sessionId] ?? 0) > 0;
       if (wasReconnect) {
         logger.info(`🔄 Session RECONECTADA para ${sessionId} tras ${reconnectAttempts[sessionId]} intento(s)`);
+        recordSessionEvent({ sessionId, kind: 'reconnected', detail: `tras ${reconnectAttempts[sessionId]} intento(s)` });
       } else {
         logger.info(`✅ Session connected successfully for ${sessionId}`);
+        recordSessionEvent({ sessionId, kind: 'connected' });
       }
       readyClients.set(sessionId, true);
       // Reconexión exitosa → resetear backoff, contador de 440s y stalls de conexión.
@@ -940,6 +944,13 @@ async function initSession(
         return;
       }
 
+      // Historial de la línea (Dali A14): solo las caídas de una sesión que estaba VIVA
+      // (el 401 y el pair-success se registran en sus ramas; las rotaciones del QR y los
+      // reintentos que no llegan a abrir no son eventos para la persona).
+      if (everOpened && code !== DisconnectReason.loggedOut) {
+        recordSessionEvent({ sessionId, kind: 'disconnected', code, detail: boom?.message });
+      }
+
       if (code === DisconnectReason.connectionReplaced) {
         // 440: otra instancia (¿dev con creds de prod?) se conectó con las mismas creds.
         // Reconectar inmediatamente crea un "440 war" — ambas instancias se patean entre
@@ -977,6 +988,7 @@ async function initSession(
           if (state.creds.me) {
             recentlyPairedAt[sessionId] = Date.now();
             logger.info(`🔗 [${sessionId}] Pair-success (QR escaneado) — primer login post-pairing en curso`);
+            recordSessionEvent({ sessionId, kind: 'linked', detail: state.creds.platform ? String(state.creds.platform) : undefined });
           } else if (!hasActiveQRConsumer(sessionId)) {
             // Nadie está mirando el QR (Portal dejó de pollear hace >90s): detener el
             // ciclo en vez de rotar QRs para siempre. Se reanuda con el próximo GET /qr.
@@ -1020,6 +1032,7 @@ async function initSession(
         delete sessions[sessionId];
         delete stores[sessionId];
         delete pairingCodes[sessionId];
+        recordSessionEvent({ sessionId, kind: 'unlinked', code, detail: boom?.message });
         try {
           await clearMongoAuthState(sessionId);
           logger.info(`🧹 Cleared dead Mongo creds for ${sessionId} (loggedOut)`);

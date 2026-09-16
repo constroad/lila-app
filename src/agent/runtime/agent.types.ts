@@ -100,4 +100,6 @@ export interface InboundRouterDeps {
   onOwnerMessage?(message: AgentInboundMessage, companyId: string | null): Promise<void>;
   /** El número detrás de un JID `@lid` (Baileys 6.7.18 no lo trae en la clave); sin esto, los dígitos del JID. */
   resolvePhone?(jid: string): Promise<string | null>;
+  /** El envío de la respuesta falló (el error sigue subiendo): A14 lo cuenta como «fallido» en el historial de la línea. */
+  onSendFailed?(companyId: string, error: unknown): void;
 }

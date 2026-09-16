@@ -13,8 +13,12 @@ import { FUERA_DE_HORARIO_MAX, NOMBRE_MAX, SALUDO_MAX, normalizarNumero, type Fo
 
 /** Las tarjetas de «Asistente» (A6), en el lenguaje de las tres capturas. */
 
-export function Tarjeta({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={cn('rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6', className)}>{children}</section>;
+export function Tarjeta({ children, className, id }: { children: ReactNode; className?: string; id?: string }) {
+  return (
+    <section id={id} className={cn('rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6', className)}>
+      {children}
+    </section>
+  );
 }
 
 /** Título con icono: en móvil el icono va en línea; en tablet y escritorio, en un círculo teal. */
@@ -22,13 +26,16 @@ export function CabeceraTarjeta({
   icon,
   titulo,
   detalle,
+  detalleDesdeLg = false,
   derecha,
   tonoIcono = 'teal',
   divisor = true,
 }: {
   icon: IconName;
   titulo: ReactNode;
-  detalle?: string;
+  detalle?: ReactNode;
+  /** El detalle solo desde tablet ancha (en móvil el diseño deja el título solo). */
+  detalleDesdeLg?: boolean;
   derecha?: ReactNode;
   tonoIcono?: 'teal' | 'amber';
   divisor?: boolean;
@@ -46,7 +53,7 @@ export function CabeceraTarjeta({
         </span>
         <div className="min-w-0">
           <h2 className="font-headline text-lg font-bold tracking-tight text-stone-900 md:text-xl">{titulo}</h2>
-          {detalle && <p className="mt-0.5 font-body text-[15px] text-stone-500">{detalle}</p>}
+          {detalle && <p className={cn('mt-0.5 font-body text-[15px] text-stone-500', detalleDesdeLg && 'hidden lg:block')}>{detalle}</p>}
         </div>
       </div>
       {derecha && <div className="shrink-0">{derecha}</div>}

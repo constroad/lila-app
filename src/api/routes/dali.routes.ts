@@ -16,6 +16,20 @@ import { guardarNegocio, leerNegocio, type CambiosFicha } from '../../agent/dali
 import { guardarFaq, listarFaq, probarFaq, sugeridasFaq } from '../../agent/dali/faq.js';
 import { guardarCatalogo, leerCatalogo } from '../../agent/dali/catalogo.js';
 import { ArchivoInvalido, TAMANO_MAXIMO_BYTES, TAMANO_MAXIMO_MB, analizarArchivo, confirmarImportacion, historialDeImportaciones, plantillaDe } from '../../agent/dali/importar.js';
+import {
+  DestinoNoPermitido,
+  LineaCompartida,
+  LineaNoConectada,
+  LineaNoDisponible,
+  LineaSinNumero,
+  desconectarLinea,
+  enviarPrueba,
+  leerWhatsApp,
+  reconectarLinea,
+  vinculacionPorCodigo,
+  vinculacionPorQr,
+  type OperacionesDeLinea,
+} from '../../agent/dali/whatsapp.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -63,7 +77,7 @@ router.get('/auth/yo', async (req: Request, res: Response) => {
 
 router.get('/inicio', async (req: Request, res: Response) => {
   const s = req.dali!;
-  res.json(await cargarInicio(s.companyId, { nombre: s.name, rol: s.role }));
+  res.json(await cargarInicio(s.companyId, { nombre: s.name, rol: s.role }, Date.now(), async (numero) => (await lineaReal()).lista(numero)));
 });
 
 /** A6 «Asistente»: perfil, reglas, avisos, silencio al intervenir, números de prueba. */
@@ -242,6 +256,100 @@ router.post('/importar/confirmar', async (req: Request, res: Response) => {
 
 router.get('/importar/historial', async (req: Request, res: Response) => {
   res.json({ importaciones: await historialDeImportaciones(req.dali!.companyId) });
+});
+
+/**
+ * A14: la línea de WhatsApp. El manager de sesiones (Baileys) se carga tarde
+ * y por import dinámico, como el envío al cliente: las rutas no lo atan al
+ * módulo de Dali, y `whatsapp.ts` recibe las operaciones ya armadas.
+ */
+let operacionesDeLinea: Promise<OperacionesDeLinea> | null = null;
+const lineaReal = (): Promise<OperacionesDeLinea> =>
+  (operacionesDeLinea ??= (async () => {
+    const [sesiones, auth, controlador, directo] = await Promise.all([
+      import('../../whatsapp/baileys/sessions.simple.js'),
+      import('../../whatsapp/baileys/mongo-auth-state.js'),
+      import('../controllers/session.controller.simple.js'),
+      import('../../services/whatsapp-direct.service.js'),
+    ]);
+    return {
+      existe: (numero) => Boolean(sesiones.getSession(numero)),
+      lista: (numero) => sesiones.isSessionReady(numero),
+      vinculando: (numero) => sesiones.isPairingLoginInProgress(numero),
+      aparcada: (numero) => sesiones.isSessionParked(numero),
+      conQr: (numero) => Boolean(sesiones.getQRCode(numero)),
+      cuenta: (numero) => auth.readAuthAccountInfo(numero),
+      reiniciar: async (numero) => {
+        await sesiones.restartSession(numero);
+      },
+      cerrar: (numero) => sesiones.disconnectSession(numero),
+      qr: (numero) => controlador.resolveQrState(numero),
+      codigo: (numero) => sesiones.requestPairingCodeForSession(numero),
+      enviar: async (numero, destino, texto, companyId) => {
+        await directo.WhatsAppDirectService.sendMessage(numero, destino, texto, { queueOnFail: false, companyId, trackUsage: true });
+      },
+    };
+  })());
+
+const responderErrorDeLinea = (res: Response, error: unknown, accion: string, companyId: string): void => {
+  if (error instanceof LineaSinNumero || error instanceof LineaCompartida || error instanceof LineaNoConectada) {
+    res.status(409).json({ error: error.message });
+    return;
+  }
+  if (error instanceof DestinoNoPermitido) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+  if (error instanceof LineaNoDisponible) {
+    res.status(503).json({ error: error.message });
+    return;
+  }
+  logger.error(`[dali] whatsapp/${accion} falló para ${companyId}: ${String(error)}`);
+  res.status(500).json({ error: `No se pudo ${accion}: ${error instanceof Error ? error.message : String(error)}` });
+};
+
+router.get('/whatsapp', async (req: Request, res: Response) => {
+  try {
+    res.json(await leerWhatsApp(req.dali!.companyId, await lineaReal()));
+  } catch (error) {
+    responderErrorDeLinea(res, error, 'leer el estado de la línea', req.dali!.companyId);
+  }
+});
+
+router.post('/whatsapp/reconectar', async (req: Request, res: Response) => {
+  try {
+    await reconectarLinea(req.dali!.companyId, await lineaReal(), req.dali!.name);
+    res.json({ ok: true });
+  } catch (error) {
+    responderErrorDeLinea(res, error, 'reconectar', req.dali!.companyId);
+  }
+});
+
+router.post('/whatsapp/desconectar', async (req: Request, res: Response) => {
+  try {
+    await desconectarLinea(req.dali!.companyId, await lineaReal(), req.dali!.name);
+    res.json({ ok: true });
+  } catch (error) {
+    responderErrorDeLinea(res, error, 'desconectar', req.dali!.companyId);
+  }
+});
+
+router.post('/whatsapp/vincular', async (req: Request, res: Response) => {
+  try {
+    const linea = await lineaReal();
+    res.json(req.body?.metodo === 'codigo' ? await vinculacionPorCodigo(req.dali!.companyId, linea) : await vinculacionPorQr(req.dali!.companyId, linea));
+  } catch (error) {
+    responderErrorDeLinea(res, error, 'preparar la vinculación', req.dali!.companyId);
+  }
+});
+
+const limitePrueba = rateLimit({ windowMs: 10 * 60_000, max: 5, standardHeaders: true, legacyHeaders: false, message: { error: 'Ya mandaste varias pruebas seguidas: espera unos minutos' } });
+router.post('/whatsapp/prueba', limitePrueba, async (req: Request, res: Response) => {
+  try {
+    res.json(await enviarPrueba(req.dali!.companyId, await lineaReal(), String(req.body?.numero ?? ''), req.dali!.name));
+  } catch (error) {
+    responderErrorDeLinea(res, error, 'enviar la prueba', req.dali!.companyId);
+  }
 });
 
 /** A15: un turno del simulador. Nada se guarda ni se avisa; el estado va y viene con el navegador. */

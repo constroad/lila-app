@@ -16,6 +16,7 @@ import { saveInboundMessage, saveOutboundMessage } from './conversation.store.js
 import type { AgentBotConfig, AgentInboundMessage, InboundRouterDeps } from './agent.types.js';
 import { atenderMensajeDelDueno, responderVentas } from '../ventas/index.js';
 import { destinoDeAvisos } from '../dali/asistente.js';
+import { recordSessionEvent } from '../../whatsapp/baileys/session-events.js';
 
 interface AgentSocket {
   sendMessage(jid: string, content: { text: string }): Promise<unknown>;
@@ -170,6 +171,8 @@ function buildDeps(sessionPhone: string, sock: AgentSocket): InboundRouterDeps {
       await sock.sendPresenceUpdate('composing', toJid).catch(() => undefined);
       await delay(Math.min(calculateTypingDelay(text), MAX_TYPING_DELAY_MS));
     },
+    // A14: cada respuesta que no salió queda en el historial de la línea («Fallidos»).
+    onSendFailed: (companyId, error) => recordSessionEvent({ sessionId: sessionPhone, companyId, kind: 'send-failed', detail: String(error) }),
     sendText: async (toJid, text) => {
       await sendWithAgentTimeout(`agent→${toJid}`, sock.sendMessage(toJid, { text }));
       await sock.sendPresenceUpdate('paused', toJid).catch(() => undefined);

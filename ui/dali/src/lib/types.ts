@@ -305,3 +305,43 @@ export interface Importacion {
   quien: string;
   fecha: string;
 }
+
+/** A14 «WhatsApp» (`src/agent/dali/whatsapp.ts`). */
+export type EstadoLinea = 'conectado' | 'vinculando' | 'conectando' | 'requiere-vincular' | 'desconectado' | 'sin-numero';
+
+export interface SaludLinea {
+  nivel: 'optima' | 'con-fallos' | 'sin-conexion';
+  mensajesHoy: number;
+  conversacionesHoy: number;
+  enviados: number;
+  recibidos: number;
+  fallidos: number;
+  tiempoRespuestaS: number | null;
+}
+
+export interface EventoLinea {
+  tipo: string;
+  titulo: string;
+  detalle: string;
+  fecha: string;
+  tono: 'ok' | 'aviso' | 'error' | 'info';
+}
+
+export interface LineaWhatsApp {
+  numero: string;
+  empresa: string;
+  estado: EstadoLinea;
+  compartidaCon: string[];
+  cuenta?: { nombre?: string; plataforma?: string };
+  conectadoDesde?: string;
+  ultimoMensaje?: string;
+  salud: SaludLinea;
+  historial: EventoLinea[];
+}
+
+export interface Vinculacion {
+  estado: 'conectado' | 'vinculando' | 'preparando' | 'qr';
+  qrImagen?: string;
+  generadoEn?: string;
+  vigenciaS: number;
+}

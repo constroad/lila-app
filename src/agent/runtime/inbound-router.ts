@@ -97,7 +97,12 @@ export async function routeInboundMessage(
     : buildEchoReply(botConfig, message.text);
   if (reply === null) return 'silent';
   await deps.simulateTyping(message.remoteJid, reply);
-  await deps.sendText(message.remoteJid, reply);
+  try {
+    await deps.sendText(message.remoteJid, reply);
+  } catch (error) {
+    deps.onSendFailed?.(companyId, error);
+    throw error;
+  }
   await deps.saveOutbound({
     companyId,
     conversationId: inbound.conversationId,

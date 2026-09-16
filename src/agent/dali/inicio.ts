@@ -139,7 +139,13 @@ const texto = (v: unknown): string => (v == null ? '' : String(v)).trim();
 /** El rubro como lo lee la gente, a partir del vertical del bot. */
 const RUBRO: Record<string, string> = { asphalt: 'Asfalto', restaurant: 'Restaurante', appointments: 'Citas', transport: 'Transporte' };
 
-export const cargarInicio = async (companyId: string, usuario: { nombre: string; rol: string }, ahoraMs = Date.now()): Promise<Inicio> => {
+/** `lineaLista`: si la sesión de WhatsApp del número está abierta de verdad (la inyecta la ruta desde el manager de sesiones; A14). */
+export const cargarInicio = async (
+  companyId: string,
+  usuario: { nombre: string; rol: string },
+  ahoraMs = Date.now(),
+  lineaLista: (numero: string) => Promise<boolean> = async () => false
+): Promise<Inicio> => {
   const hoy = diaPeruano(ahoraMs);
   const ayer = diaPeruano(ahoraMs - 24 * 3_600_000);
   const desde = new Date(ahoraMs - 2 * 24 * 3_600_000);
@@ -193,7 +199,7 @@ export const cargarInicio = async (companyId: string, usuario: { nombre: string;
       pausadoHasta: pausada(config, ahoraMs) ? new Date(config!.pausedUntil as Date).toISOString() : undefined,
       numero: texto(whatsappConfig.sender),
       ultimoMensajeHaceMin: minutosDesde(ultimoMensaje, ahoraMs),
-      conectado: Boolean(texto(whatsappConfig.sender)),
+      conectado: Boolean(texto(whatsappConfig.sender)) && (await lineaLista(texto(whatsappConfig.sender)).catch(() => false)),
     },
     metricas: metricasDelDia(conversaciones, mensajesDeHoy, hoy, ayer),
     atencion: atencionPendiente(conversaciones, ahoraMs, (id) => ultimoTextoPor.get(id)),

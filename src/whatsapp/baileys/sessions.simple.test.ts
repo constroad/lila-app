@@ -153,6 +153,14 @@ jest.unstable_mockModule('./instance-lease.js', () => ({
   hasSocketLease: () => true,
 }));
 
+// El historial de la línea (Dali A14) es OBSERVABLE: qué evento se registra en cada
+// transición del socket es parte del contrato de esta suite.
+const recordSessionEvent = jest.fn((_e: { sessionId: string; kind: string; code?: number; detail?: string }) => undefined);
+jest.unstable_mockModule('./session-events.js', () => ({
+  __esModule: true,
+  recordSessionEvent,
+}));
+
 type Subject = typeof import('./sessions.simple.js');
 let subject: Subject;
 
@@ -170,6 +178,7 @@ beforeEach(async () => {
   clearMongoAuthState.mockClear();
   clearStoreSnapshot.mockClear();
   sendTelegramAlert.mockClear();
+  recordSessionEvent.mockClear();
   subject = await import('./sessions.simple.js');
 });
 
@@ -504,6 +513,57 @@ describe('sesión zombi: lista sobre un socket muerto', () => {
 
     expect(subject.sweepDeadSessions()).toBe(0);
     expect(subject.isSessionReady(ID)).toBe(true);
+  });
+});
+
+describe('historial de la línea (session-events): qué transición deja qué evento', () => {
+  const ID = '51949376824';
+  const kinds = () => recordSessionEvent.mock.calls.map((c) => c[0].kind);
+
+  it('open → «connected»; un open tras reintentos → «reconnected» diciendo cuántos', async () => {
+    await subject.startSession(ID);
+    await fireOpen();
+    expect(recordSessionEvent).toHaveBeenCalledWith(expect.objectContaining({ sessionId: ID, kind: 'connected' }));
+
+    await fireClose(428); // se cayó
+    await jest.advanceTimersByTimeAsync(10_000); // reconexión (intento 1)
+    await fireOpen();
+    expect(kinds()).toEqual(['connected', 'disconnected', 'reconnected']);
+    expect(recordSessionEvent.mock.calls[2][0].detail).toContain('1 intento');
+  });
+
+  it('un cierre de una sesión que estaba viva → «disconnected» con el código y el motivo', async () => {
+    await subject.startSession(ID);
+    await fireOpen();
+    currentSocket.ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: { output: { statusCode: 428 }, message: 'Connection Terminated' } } });
+    await Promise.resolve();
+    expect(recordSessionEvent).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'disconnected', code: 428, detail: 'Connection Terminated' }));
+  });
+
+  it('los cierres del modo QR (rotación) NO ensucian el historial; el escaneo sí → «linked»', async () => {
+    await subject.startSession(ID);
+    subject.markQRRequested(ID);
+    currentSocket.ev.emit('connection.update', { qr: 'QR-1' });
+    await fireClose(408); // rotación normal del QR
+    expect(kinds()).toEqual([]);
+
+    currentCreds.me = { id: `${ID}:20@s.whatsapp.net` }; // Baileys setea me al escanear
+    await fireClose(515);
+    expect(kinds()).toEqual(['linked']);
+  });
+
+  it('logout real (401) → «unlinked»; el cierre por apagado de lila no se registra', async () => {
+    await subject.startSession(ID);
+    await fireOpen();
+    await subject.endSession(ID); // deploy / apagado: cierre sin logout
+    currentSocket.ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: { output: { statusCode: 428 } } } });
+    await Promise.resolve();
+    expect(kinds()).toEqual(['connected']);
+
+    await subject.startSession(ID);
+    await fireOpen();
+    await fireClose(401);
+    expect(kinds()).toEqual(['connected', 'connected', 'unlinked']);
   });
 });
 
