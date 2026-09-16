@@ -482,5 +482,19 @@
     "esperado": {
       "ruta": "sin_dato"
     }
+  },
+  {
+    "id": "2026-09-15-2033-fotos-campo",
+    "incidente": "2026-09-15-2033",
+    "pregunta": "@ConstRoad muestrame las fotos de campo de la unidad 7",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_media",
+      "params": {
+        "unitNumber": 7
+      }
+    },
+    "nota": "y dentro de unit_media, «de campo» son las del control de pista (pideFotosDeInforme), no las del despacho"
   }
 ]

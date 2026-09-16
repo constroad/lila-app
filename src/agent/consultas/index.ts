@@ -98,7 +98,15 @@ const respuestaGuias = async (vista: VistaDelDia, indice: number): Promise<Respu
  * 09:15: «fotos y videos de la unidad 1 del control de pista» → salieron las
  * del despacho (el camión en planta).
  */
-const pideFotosDeInforme = (pregunta: string): boolean => Boolean(tipoDeInforme(pregunta)) || /\binforme\b/.test(normalizar(pregunta));
+export const pideFotosDeInforme = (pregunta: string): boolean => {
+  const t = normalizar(pregunta);
+  // «Fotos de campo / en obra» de una unidad son las del control de pista (las
+  // toma el ingeniero en obra); las del despacho son «de planta», «de salida»,
+  // «del despacho». 15/09 20:33: «muéstrame las fotos de campo de la unidad 7»
+  // mandó las cuatro de planta. Si nombra planta/despacho, manda el despacho.
+  if (/\b(planta|despacho|salida|cargando|carguio)\b/.test(t)) return false;
+  return Boolean(tipoDeInforme(pregunta)) || /\binforme\b|\b(campo|obra)\b/.test(t);
+};
 
 /** Las fotos y videos de un informe del día (o de la fecha pedida), de una unidad si la nombran; si hay varios informes, pregunta cuál. */
 const respuestaFotosDeInforme = async (vista: VistaDelDia, params: Parametros, pregunta: string, quien: string, grupo: string): Promise<Respuesta> => {

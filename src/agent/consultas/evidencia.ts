@@ -107,9 +107,20 @@ export const textoEvidencia = (lista: EvidenciaUnidad[], dia: string, unidad?: E
     const llegadas = lista.filter((u) => u.llego);
     const con = llegadas.filter((u) => u.marcadas[foco] > 0);
     const sin = llegadas.filter((u) => u.marcadas[foco] === 0);
-    const partes = [`📷 *Foto de ${nombre}, ${dia}*: marcada por el ingeniero en ${con.length} de ${llegadas.length} unidad(es) que llegaron${con.length ? ` (${con.map((u) => `unidad ${u.unitNumber}`).join(', ')})` : ''}.`];
-    if (sin.length) partes.push(`Sin la marca «${nombre}» en ninguna de sus fotos: ${sin.map((u) => `unidad ${u.unitNumber} (${u.fotos} foto(s))`).join(', ')}.`);
-    partes.push(`_Sin marca no es sin foto: la mayoría de las fotos de pista van solo con «Unidad N placa». Para saberlo con certeza, el Portal tendría que pedir la foto de ${nombre} como disparo fijo._`);
+    // 15/09 20:32: la lista «sin la marca: unidad 1, 2, 3…» se leyó como «no
+    // tienen foto de temperatura», y las fotos estaban (sin descripción). Lo
+    // que se sabe va primero y en positivo; lo que no se sabe, dicho como tal.
+    const partes = [`📷 *Foto de ${nombre}, ${dia}*`];
+    partes.push(
+      con.length
+        ? `Con «${nombre}» escrito por el ingeniero: ${con.map((u) => `unidad ${u.unitNumber}`).join(', ')} ✓`
+        : `Ninguna foto de hoy tiene «${nombre}» escrito en la descripción.`
+    );
+    if (sin.length) {
+      const rango = `${Math.min(...sin.map((u) => u.fotos))}–${Math.max(...sin.map((u) => u.fotos))}`;
+      partes.push(`Las otras ${sin.length} (${sin.map((u) => u.unitNumber).join(', ')}) tienen ${rango} fotos cada una sin decir cuál es cuál: *no puedo saber si la de ${nombre} está o no*. Para verlas: «fotos de campo de la unidad N».`);
+    }
+    partes.push(`_El ingeniero escribe la marca a veces; para saberlo siempre, el Portal tendría que pedir la foto de ${nombre} como disparo fijo._`);
     return partes.join('\n');
   }
   const llegadas = lista.filter((u) => u.llego);

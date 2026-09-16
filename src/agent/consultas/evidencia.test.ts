@@ -67,9 +67,9 @@ describe('las marcas que escribe el ingeniero (medido 15/09 sobre un mes de Glob
     const e = evidenciaPorUnidad(units, fotos, esVideo);
     expect(e[0].marcadas).toEqual({ ingreso: 0, temperatura: 1, vacio: 0 });
     const t = textoEvidencia(e, 'hoy', undefined, 'temperatura');
-    expect(t).toContain('marcada por el ingeniero en 1 de 2 unidad(es) que llegaron (unidad 7)');
-    expect(t).toContain('Sin la marca «temperatura» en ninguna de sus fotos: unidad 9 (4 foto(s))');
-    expect(t).toContain('Sin marca no es sin foto');
+    expect(t).toContain('Con «temperatura» escrito por el ingeniero: unidad 7 ✓');
+    expect(t).toContain('Las otras 1 (9) tienen 4–4 fotos cada una sin decir cuál es cuál: *no puedo saber si la de temperatura está o no*');
+    expect(t).not.toMatch(/sin la marca/i);
     expect(textoEvidencia(e, 'hoy', e[0])).toContain('Marcadas por el ingeniero: ingreso / descarga – · temperatura ✓ · salida vacía –');
   });
 });

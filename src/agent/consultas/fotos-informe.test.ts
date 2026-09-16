@@ -16,6 +16,21 @@ const schemaData = {
   unitPhotos_d2: { fotos: [{ url: `${base}/video_9.mp4`, mediaId: 'm9', descripcion: 'Unidad 2 BBE 942', hora: '09:00' }] },
 };
 
+describe('qué fotos pide: las de campo (control de pista) o las de planta (despacho)', () => {
+  it('«de campo», «en obra», «del control de pista» son del informe; «de planta», «de salida», «del despacho», no', async () => {
+    const { pideFotosDeInforme } = await import('./index');
+    expect(pideFotosDeInforme('muéstrame las fotos de campo de la unidad 7')).toBe(true);
+    expect(pideFotosDeInforme('fotos de la unidad 7 en obra')).toBe(true);
+    expect(pideFotosDeInforme('fotos de campo de control de pista de la unidad 7')).toBe(true);
+    expect(pideFotosDeInforme('fotos del panel fotográfico')).toBe(true);
+    expect(pideFotosDeInforme('muéstrame las fotos de planta de la unidad 7')).toBe(false);
+    expect(pideFotosDeInforme('el video de cómo salió la 7 de planta')).toBe(false);
+    expect(pideFotosDeInforme('fotos del despacho de la 7')).toBe(false);
+    // Sin lugar: las del despacho, como hasta ahora.
+    expect(pideFotosDeInforme('fotos de la unidad 7')).toBe(false);
+  });
+});
+
 describe('fotos de un informe', () => {
   const fotos = fotosDelInforme(schemaData);
 
