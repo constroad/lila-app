@@ -282,11 +282,35 @@ const TIMEOUT_GENERACION_MS = 120_000;
  * momento desde la hoja de impresión de Portal (token firmado por lila, mismo
  * secreto). Devuelve los bytes o `null` si no se pudo.
  */
+/**
+ * DE A UNO. Generar un informe es Puppeteer navegando la hoja de impresión del
+ * Portal con todas sus fotos (60 s de tope de navegación) y después el render
+ * a PDF: dos cargas pesadas por informe. El 16/09 a las 10:14 el agente pidió
+ * tres a la vez: cada uno tardó 71–73 s en vez de 23, y el tercero murió en
+ * «Navigation timeout of 60000 ms» — la misma lección del incidente PDF de
+ * jul-2026 («dos previews simultáneos con fotos saturaban la CPU»). El
+ * generador limita a 2 renders, pero cada informe son 2: acá se encola de a
+ * uno, para esta y para cualquier otra consulta que pida informes a la vez.
+ */
+let colaDeGeneracion: Promise<unknown> = Promise.resolve();
+const deAUno = <T>(tarea: () => Promise<T>): Promise<T> => {
+  const turno = colaDeGeneracion.then(tarea, tarea);
+  colaDeGeneracion = turno.catch(() => undefined);
+  return turno;
+};
+
+/** Solo para tests. */
+export const _deAUnoParaTests = deAUno;
+
 export const pdfDeInforme = async (i: InformeEncontrado): Promise<{ buffer: Buffer; generado: boolean } | null> => {
   if (i.pdfUrl) {
     const ruta = rutaLocalDe(i.pdfUrl, i.companyId);
     if (ruta && (await existe(ruta))) return { buffer: await readFile(ruta), generado: false };
   }
+  return deAUno(() => generarPdf(i));
+};
+
+const generarPdf = async (i: InformeEncontrado): Promise<{ buffer: Buffer; generado: boolean } | null> => {
   const secreto = config.security.jwtSecret;
   const tokenImpresion = jwt.sign({ scope: 'report-print', companyId: i.companyId, reportId: i.id }, secreto, { expiresIn: '15m' });
   const printUrl = `${config.portal.baseUrl.replace(/\/+$/, '')}/print/service-report/${encodeURIComponent(i.id)}?token=${encodeURIComponent(tokenImpresion)}`;

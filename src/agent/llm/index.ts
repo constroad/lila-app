@@ -208,7 +208,10 @@ const responderInformes = async (args: Argumentos, pregunta: string, quien: stri
     const noHay = await Promise.all(tipos.filter((tp) => faltan.includes(tp.nombre.toLowerCase())).map((tp) => textoNoHay(tp, desde!, hasta!, args.companyId)));
     if (!elegidos.length) return { texto: noHay.join('\n') };
     await avisarGeneracion(elegidos, grupo);
-    const respuestas = await Promise.all(elegidos.map((i) => enviarInforme(i)));
+    // En orden, no en paralelo: `pdfDeInforme` encola igual, pero así los
+    // archivos salen en el orden en que se pidieron.
+    const respuestas: Array<{ texto: string; archivos?: Archivo[] }> = [];
+    for (const i of elegidos) respuestas.push(await enviarInforme(i));
     const archivos = respuestas.flatMap((r) => r.archivos ?? []);
     const fallidos = respuestas.filter((r) => !r.archivos?.length).map((r) => r.texto);
     return { texto: [...fallidos, ...noHay].filter(Boolean).join('\n'), archivos };
@@ -272,7 +275,8 @@ const avisarGeneracion = async (lista: InformeEncontrado[], grupo?: string): Pro
   try {
     const [{ responderEnGrupo }, { alcanceVigente }] = await Promise.all([import('../checklist/emisor.js'), import('../checklist/observador.js')]);
     const que = porGenerar.length === 1 ? `el *${porGenerar[0].nombreTipo}* del ${porGenerar[0].fecha}` : `${porGenerar.length} informes (${porGenerar.map((i) => i.nombreTipo.toLowerCase()).join(', ')})`;
-    const tarda = porGenerar.length === 1 ? 'medio minuto' : `~${Math.ceil(porGenerar.length * 0.5)} min`;
+    // De a uno (ver `pdfDeInforme`): ~30 s cada uno.
+    const tarda = porGenerar.length === 1 ? 'medio minuto' : `~${Math.ceil(porGenerar.length * 0.5)} min (van de a uno)`;
     await responderEnGrupo(grupo, { texto: `📑 Generando ${que}… tarda ${tarda}.` }, await alcanceVigente());
   } catch {
     /* el aviso es cortesía: si no sale, el PDF va igual */

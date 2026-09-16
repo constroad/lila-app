@@ -77,3 +77,24 @@ describe('varios informes en una pregunta, y los verbos de generar', () => {
     expect(herramientaDeDatosPorReglas('imprime el control de pista')).toBe('informes');
   });
 });
+
+describe('los PDF se generan de a uno', () => {
+  it('tres pedidos a la vez corren en secuencia, no en paralelo', async () => {
+    const { _deAUnoParaTests } = await import('./informes');
+    let enCurso = 0;
+    let maximo = 0;
+    const tarea = async () => {
+      enCurso += 1;
+      maximo = Math.max(maximo, enCurso);
+      await new Promise((r) => setTimeout(r, 20));
+      enCurso -= 1;
+      return 'ok';
+    };
+    const r = await Promise.all([_deAUnoParaTests(tarea), _deAUnoParaTests(tarea), _deAUnoParaTests(tarea)]);
+    expect(r).toEqual(['ok', 'ok', 'ok']);
+    expect(maximo).toBe(1);
+    // Un fallo no traba la cola.
+    await expect(_deAUnoParaTests(async () => { throw new Error('x'); })).rejects.toThrow('x');
+    expect(await _deAUnoParaTests(async () => 'sigue')).toBe('sigue');
+  });
+});
