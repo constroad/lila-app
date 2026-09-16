@@ -171,7 +171,7 @@ export function LandingScreen() {
                 <Icon name="play_circle" className="text-2xl text-teal-700" /> Ver cómo funciona
               </a>
             </div>
-            <ul className="mt-6 grid grid-cols-2 gap-x-6 gap-y-3 font-body text-[15px] text-stone-700 sm:flex sm:flex-wrap">
+            <ul className="mt-6 grid grid-cols-2 gap-x-4 gap-y-3 font-body text-sm text-stone-700 sm:flex sm:flex-wrap sm:gap-x-6 sm:text-[15px]">
               {[
                 ['verified', 'Sin tarjeta de crédito'],
                 ['bolt', 'Conexión en 2 minutos'],
