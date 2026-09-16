@@ -258,7 +258,8 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   columnas), A3 Conversación, A4 Leads (tablero por estado y lista; en
   escritorio, el lead elegido como panel a la derecha), A5 Lead, **A6
   Asistente**, **A7 Negocio**, **A8 Servicios, A9 guion, A10 pregunta**,
-  **A11 Preguntas frecuentes**, **A15 Probar a Dali** (abajo). Las demás
+  **A11 Preguntas frecuentes**, **A12 Catálogo**, **A15 Probar a Dali**
+  (abajo). Las demás
   responden «esta pantalla se está construyendo»; «Más» del móvil lista lo
   que no cabe en la barra.
 - **A6 Asistente** (`ui/dali/src/screens/asistente/*`, comparada con
@@ -371,6 +372,21 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   sin contarla como «no entendí» ni fuera de tema; se incrementa `usos`.
   Tests: `faq.test.ts` (limpieza, literal, coseno con modelo de juguete,
   sin modelo), `guiado.test.ts` (FAQ dentro del guion).
+- **A12 Catálogo** (`ui/dali/src/screens/catalogo/*`, comparada con
+  `A12-catalogo` en los tres tamaños): lo que vende la empresa. La política
+  «Dali puede decir precios» (`bot_configs.dicePrecios`) manda: apagada, Dali
+  contesta como siempre (el asesor cotiza); encendida, si el cliente pregunta
+  el precio y nombra un ítem del catálogo, Dali dice el referencial por
+  unidad («precio referencial que el asesor confirma»), y si el ítem no está
+  disponible, que está bajo pedido especial (`itemEnTexto` +
+  `respuestaDePrecio` en `dali/catalogo.ts`, usados en `paso`); el prompt del
+  modelo grande recibe el catálogo entero. Tabla desde tablet y tarjetas en
+  móvil, ítem editado en panel/hoja (nombre, categoría, unidad, precio con
+  IGV, disponible, descripción, SKU), búsqueda y pestañas por categoría;
+  `GET/PUT catalogo` (la lista entera). **Sin fotos** (el diseño las
+  dibuja; Dali no tiene almacén de imágenes todavía) y sin «Importar desde
+  Excel» hasta A13. Tests: `catalogo.test.ts` (limpieza, ítem en el texto,
+  respuesta de precio), `guiado.test.ts` (precio del catálogo en el guion).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -443,7 +459,7 @@ navegador de la herramienta no mapea bien los clics con 1440 emulado); la
 barra superior en escritorio para Chats/Leads (A2 desktop la dibuja) queda
 para cuando se revisen esas pantallas.
 
-**Pendiente de F3:** P1, P4–P6, A12–A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A13–A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

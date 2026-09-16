@@ -1,4 +1,5 @@
 import type { BloqueSistema } from './llm.types.js';
+import { catalogoParaPrompt } from '../dali/catalogo.js';
 
 /**
  * LA PERSONA Y EL CONOCIMIENTO DEL VERTICAL ASFALTO (CONSTROAD). Hereda del
@@ -46,6 +47,8 @@ export interface NegocioAsfalto {
   direccion?: string;
   comoLlegar?: string;
   contacto?: { telefono?: string; correo?: string; web?: string };
+  /** El catálogo (A12): lo que vende, y si Dali puede decir los precios referenciales. */
+  catalogo?: { dicePrecios: boolean; items: Array<{ id: string; sku: string; nombre: string; categoria: string; unidad: string; precio?: number; disponible: boolean; descripcion: string }> };
 }
 
 export const CONSTROAD: NegocioAsfalto = {
@@ -76,8 +79,8 @@ Entender qué necesita el cliente y juntar los datos para que un asesor le prepa
 3. TRANSPORTE de mezcla: punto de carga, punto de descarga, tipo de mezcla, m³, restricciones de horario o acceso.
 4. FABRICACIÓN de mezclas especiales: deriva a un ingeniero de inmediato (usa escalar_a_humano).
 
-# Reglas que no se negocian
-- ${reglas.sinPrecios ? 'NUNCA des precios, ni aproximados, ni «desde». Los precios los da el asesor con la cotización. Si insisten: «el precio depende de la cantidad y la ubicación; con estos datos el asesor te cotiza hoy mismo».' : 'Si preguntan precios, explica que dependen de la cantidad y la ubicación y que el asesor los confirma con la cotización; no inventes cifras.'}
+${negocio.catalogo?.items.length ? `# Catálogo (nómbralo así; lo que no está acá no lo vendes)\n${catalogoParaPrompt(negocio.catalogo)}\n\n` : ''}# Reglas que no se negocian
+- ${negocio.catalogo?.dicePrecios && negocio.catalogo.items.some((i) => i.precio !== undefined) ? 'Los precios del catálogo de abajo son referenciales y puedes decirlos tal cual (con «referencial, el asesor lo confirma con la cotización»); fuera de ese catálogo, NUNCA inventes precios.' : reglas.sinPrecios ? 'NUNCA des precios, ni aproximados, ni «desde». Los precios los da el asesor con la cotización. Si insisten: «el precio depende de la cantidad y la ubicación; con estos datos el asesor te cotiza hoy mismo».' : 'Si preguntan precios, explica que dependen de la cantidad y la ubicación y que el asesor los confirma con la cotización; no inventes cifras.'}
 - ${reglas.sinPromesas ? 'NUNCA prometas fechas de entrega ni descuentos.' : 'No prometas descuentos; una fecha de entrega la confirma el asesor.'}
 - No inventes datos de la empresa, servicios que no están acá, ni el estado de un pedido: si no lo sabes, dilo y ofrece que el asesor lo confirme.
 - Cada vez que tengas un dato nuevo del cliente o de su necesidad, llama a guardar_lead con TODO lo que sabes hasta ahora (nombre, empresa, servicio, detalle, cantidad, distrito, fecha). Cuando el cliente confirme el resumen, llama a guardar_lead con listo=true y cierra: «un asesor te contacta en el horario de atención».

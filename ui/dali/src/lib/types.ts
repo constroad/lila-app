@@ -250,3 +250,20 @@ export interface FaqSugerida {
   veces: number;
   ultimaVezMs: number;
 }
+
+/** A12 «Catálogo» (`src/agent/dali/catalogo.ts`). */
+export interface ItemCatalogo {
+  id: string;
+  sku: string;
+  nombre: string;
+  categoria: string;
+  unidad: string;
+  precio?: number;
+  disponible: boolean;
+  descripcion: string;
+}
+
+export interface Catalogo {
+  items: ItemCatalogo[];
+  dicePrecios: boolean;
+}

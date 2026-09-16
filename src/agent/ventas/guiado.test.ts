@@ -318,6 +318,16 @@ describe('flujo guiado — la conversación del piloto (14/09), ahora con el gui
     expect(p.texto).toContain('¿Qué necesitas');
   });
 
+  it('con «Dali puede decir precios» y un ítem del catálogo nombrado, dice el precio referencial; sin permiso, lo de siempre', () => {
+    const catalogo = { dicePrecios: true, items: [{ id: 'mac', sku: '', nombre: 'Mezcla asfáltica en caliente', categoria: '', unidad: 'm³', precio: 390, disponible: true, descripcion: '' }] };
+    const estado: EstadoGuiado = { servicio: 'venta', saludado: true, respuestas: {}, ultimoCampo: 'tipoProyecto' };
+    let p = paso(estado, validarExtraccion({}, 'cuánto cuesta la mezcla en caliente?'), { ...CONSTROAD, catalogo }, null, true, 'cuánto cuesta la mezcla en caliente?');
+    expect(p.texto).toContain('Mezcla asfáltica en caliente: S/ 390 por m³, precio referencial que el asesor confirma con la cotización.');
+    expect(p.texto).toContain(pregunta('tipoProyecto', 'venta'));
+    p = paso(estado, validarExtraccion({}, 'cuánto cuesta la mezcla en caliente?'), { ...CONSTROAD, catalogo: { ...catalogo, dicePrecios: false } }, null, true, 'cuánto cuesta la mezcla en caliente?');
+    expect(p.texto).toContain('El precio depende de la cantidad y la ubicación');
+  });
+
   it('todo en tuteo peruano', () => {
     const textos = [habla({}, 'hola').texto, habla({ servicio: 'venta', saludado: true }, 'cuánto cuesta?').texto, ...GUION_ASFALTO.servicios.flatMap((s) => s.preguntas.map((p) => `${p.pregunta} ${p.pista ?? ''} ${p.explicacion ?? ''}`))];
     for (const t of textos) expect(t).not.toMatch(/\b(decime|podés|querés|necesitás|tenés|vos)\b/);

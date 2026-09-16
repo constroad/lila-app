@@ -2,6 +2,7 @@ import { getBotConfigModel } from '../../database/bot.models.js';
 import { getCompanyModel } from '../../database/models.js';
 import logger from '../../utils/logger.js';
 import { CONSTROAD, REGLAS_POR_DEFECTO, type NegocioAsfalto, type ReglasNegocio } from '../ventas/prompt.asfalto.js';
+import { catalogoDe } from './catalogo.js';
 
 /**
  * CÓMO SE PRESENTA Y SE COMPORTA DALI (pantalla A6 «Asistente», spec DALI
@@ -170,7 +171,7 @@ interface FichaGuardada {
 }
 
 /** El negocio que ve el guion, a partir del perfil y la ficha guardados (o el del piloto). */
-export const negocioDe = (config: { perfil?: unknown; negocio?: unknown; greeting?: string; tone?: string } | null | undefined, nombreEmpresa?: string): NegocioAsfalto => {
+export const negocioDe = (config: { perfil?: unknown; negocio?: unknown; catalogo?: unknown; dicePrecios?: unknown; greeting?: string; tone?: string } | null | undefined, nombreEmpresa?: string): NegocioAsfalto => {
   const perfil = perfilDe(config?.perfil, { greeting: config?.greeting, tone: config?.tone });
   const ficha = (config?.negocio ?? {}) as FichaGuardada;
   const lista = (v: unknown): string[] | undefined => (Array.isArray(v) && v.length ? v.map(String) : undefined);
@@ -191,6 +192,7 @@ export const negocioDe = (config: { perfil?: unknown; negocio?: unknown; greetin
     direccion: texto(ficha.direccion) || undefined,
     comoLlegar: texto(ficha.comoLlegar) || undefined,
     ...(contacto.telefono || contacto.correo || contacto.web ? { contacto } : {}),
+    ...(config?.catalogo ? { catalogo: catalogoDe(config) } : {}),
   };
 };
 

@@ -24,6 +24,9 @@ export interface AgentBotConfig {
   business?: unknown;
   /** Las preguntas frecuentes (`dali/faq.ts`): Dali las contesta tal cual. */
   faq?: unknown;
+  /** El catálogo (`dali/catalogo.ts`) y si Dali puede decir precios. */
+  catalog?: unknown;
+  tellsPrices?: boolean;
   /** Con el que se presenta el guion; ausente = CONSTROAD. */
   companyName?: string;
   /** Pausa del dueño desde el panel: hasta entonces no se contesta a nadie. */

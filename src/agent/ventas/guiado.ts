@@ -1,5 +1,6 @@
 import type { NegocioAsfalto } from './prompt.asfalto.js';
 import { GUION_ASFALTO, PREGUNTA_SERVICIO_POR_DEFECTO, aliasDeOpcion, regexDeServicio, type Guion, type PreguntaGuion, type ServicioGuion } from './guion.asfalto.js';
+import { itemEnTexto, respuestaDePrecio } from '../dali/catalogo.js';
 
 /**
  * EL FLUJO GUIADO: la conversación la lleva el CÓDIGO y el modelo solo LEE.
@@ -629,7 +630,10 @@ const pasoGuiado = (
     prefacio = `${negocio.comoLlegar.trim()} `;
     e.ubicacionExplicada = true;
   } else if (x.preguntaPrecio) {
-    prefacio = e.precioExplicado ? 'El precio te lo confirma el asesor con la cotización. ' : 'El precio depende de la cantidad y la ubicación; con estos datos el asesor te cotiza. ';
+    // Con «Dali puede decir precios» y un ítem del catálogo nombrado, el precio referencial; si no, lo de siempre.
+    const item = negocio.catalogo?.dicePrecios ? itemEnTexto(negocio.catalogo.items, mensaje) : undefined;
+    const delCatalogo = item ? respuestaDePrecio(item, true) : undefined;
+    prefacio = delCatalogo ? `${delCatalogo} ` : e.precioExplicado ? 'El precio te lo confirma el asesor con la cotización. ' : 'El precio depende de la cantidad y la ubicación; con estos datos el asesor te cotiza. ';
     e.precioExplicado = true;
   } else if (x.quiereCotizacion && !e.cotizacionExplicada) {
     prefacio = 'Claro, para la cotización necesito un par de datos. ';

@@ -31,6 +31,9 @@ export interface IBotConfig {
   negocio?: unknown;
   /** Las preguntas frecuentes (`agent/dali/faq.ts` `Faq[]`). */
   faq?: unknown;
+  /** El catálogo (`agent/dali/catalogo.ts` `ItemCatalogo[]`) y si Dali puede decir precios. */
+  catalogo?: unknown;
+  dicePrecios?: boolean;
   /** Pausa del dueño desde el panel: hasta esta hora Dali no contesta a nadie. */
   pausedUntil?: Date;
   createdAt?: Date;
@@ -61,6 +64,8 @@ export const BotConfigSchema = new Schema<IBotConfig>(
     avisos: { type: Schema.Types.Mixed },
     negocio: { type: Schema.Types.Mixed },
     faq: { type: Schema.Types.Mixed },
+    catalogo: { type: Schema.Types.Mixed },
+    dicePrecios: { type: Boolean },
     pausedUntil: { type: Date },
   },
   { collection: 'bot_configs', timestamps: true }

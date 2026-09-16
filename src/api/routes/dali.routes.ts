@@ -13,6 +13,7 @@ import { GuionInvalido, guardarServicios, leerServicios, restaurarPack, type Gui
 import { simularTurno } from '../../agent/dali/probar.js';
 import { guardarNegocio, leerNegocio, type CambiosFicha } from '../../agent/dali/negocio.js';
 import { guardarFaq, listarFaq, probarFaq, sugeridasFaq } from '../../agent/dali/faq.js';
+import { guardarCatalogo, leerCatalogo } from '../../agent/dali/catalogo.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -166,6 +167,17 @@ router.post('/faq/probar', async (req: Request, res: Response) => {
 
 router.get('/faq/sugeridas', async (req: Request, res: Response) => {
   res.json({ sugeridas: await sugeridasFaq(req.dali!.companyId) });
+});
+
+/** A12: el catálogo (la lista entera) y «Dali puede decir precios». */
+router.get('/catalogo', async (req: Request, res: Response) => {
+  res.json(await leerCatalogo(req.dali!.companyId));
+});
+
+router.put('/catalogo', async (req: Request, res: Response) => {
+  const catalogo = await guardarCatalogo(req.dali!.companyId, { items: req.body?.items, dicePrecios: req.body?.dicePrecios }, req.dali!.name);
+  clearAgentSessionCache();
+  res.json(catalogo);
 });
 
 /** A15: un turno del simulador. Nada se guarda ni se avisa; el estado va y viene con el navegador. */

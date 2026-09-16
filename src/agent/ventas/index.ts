@@ -138,7 +138,7 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
 
     const cliente = await clientePorTelefono(companyId, customerPhone).catch(() => null);
     // Cómo se presenta y cuándo atiende: lo configurado en «Asistente» (A6) o el piloto.
-    const negocio = negocioDe({ perfil: botConfig.profile, negocio: botConfig.business, greeting: botConfig.greeting }, botConfig.companyName);
+    const negocio = negocioDe({ perfil: botConfig.profile, negocio: botConfig.business, catalogo: botConfig.catalog, dicePrecios: botConfig.tellsPrices, greeting: botConfig.greeting }, botConfig.companyName);
     const hora = ahoraLima(perfilDe(botConfig.profile).horario);
     // CON EL MODELO LOCAL, EL FLUJO GUIADO: el código lleva la conversación y
     // Qwen solo extrae (`guiado.ts` cuenta por qué). Con un modelo grande, el
