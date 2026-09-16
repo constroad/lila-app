@@ -140,7 +140,8 @@ export const confirmarRegistro = async (
 };
 
 /** Crea la empresa con el pack del rubro y a la persona como dueña, y devuelve el miembro para abrirle la sesión. */
-export const crearEmpresa = async (datos: DatosDeRegistro): Promise<MiembroDali> => {
+/** `ingresa`: la dueña acaba de entrar con su código (registro público); desde la consola queda pendiente hasta su primer ingreso. */
+export const crearEmpresa = async (datos: DatosDeRegistro, { ingresa = true }: { ingresa?: boolean } = {}): Promise<MiembroDali> => {
   const [Company, Config, Member] = await Promise.all([getCompanyModel(), getBotConfigModel(), getBotMemberModel()]);
   const existentes = new Set((await Company.find({}).select('companyId').lean()).map((c) => String(c.companyId)));
   const companyId = companyIdDe(datos.negocio, (id) => existentes.has(id));
@@ -152,7 +153,14 @@ export const crearEmpresa = async (datos: DatosDeRegistro): Promise<MiembroDali>
     perfil: { asistente: datos.asistente, zona: datos.zona },
     avisos: { canal: 'dueno', numeroDueno: datos.whatsapp },
   });
-  const miembro = await Member.create({ companyId, identity: datos.whatsapp, name: datos.nombre, role: 'owner', receivesAlerts: true, lastLoginAt: new Date() });
+  const miembro = await Member.create({
+    companyId,
+    identity: datos.whatsapp,
+    name: datos.nombre,
+    role: 'owner',
+    receivesAlerts: true,
+    ...(ingresa ? { lastLoginAt: new Date() } : {}),
+  });
   return { id: String(miembro._id), companyId, identity: datos.whatsapp, name: datos.nombre, role: 'owner' };
 };
 

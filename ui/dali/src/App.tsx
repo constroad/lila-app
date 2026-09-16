@@ -1,9 +1,13 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/sonner';
 import { SesionProvider, useSesion } from '@/lib/session';
 import { AppShell } from '@/layout/AppShell';
+import { AdminShell } from '@/layout/AdminShell';
+import { irAConsola } from '@/lib/operador';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { EntrarScreen } from '@/screens/auth/EntrarScreen';
 import { CodigoScreen } from '@/screens/auth/CodigoScreen';
 import { RegistroScreen } from '@/screens/registro/RegistroScreen';
@@ -31,6 +35,11 @@ const PlanScreen = lazy(() => import('@/screens/plan/PlanScreen').then((m) => ({
 const NotificacionesScreen = lazy(() => import('@/screens/notificaciones/NotificacionesScreen').then((m) => ({ default: m.NotificacionesScreen })));
 const ReportesScreen = lazy(() => import('@/screens/reportes/ReportesScreen').then((m) => ({ default: m.ReportesScreen })));
 const AjustesScreen = lazy(() => import('@/screens/ajustes/AjustesScreen').then((m) => ({ default: m.AjustesScreen })));
+const EmpresasAdminScreen = lazy(() => import('@/screens/admin/EmpresasAdminScreen').then((m) => ({ default: m.EmpresasAdminScreen })));
+const EmpresaAdminScreen = lazy(() => import('@/screens/admin/EmpresaAdminScreen').then((m) => ({ default: m.EmpresaAdminScreen })));
+const VerticalesAdminScreen = lazy(() => import('@/screens/admin/VerticalesAdminScreen').then((m) => ({ default: m.VerticalesAdminScreen })));
+const SaludAdminScreen = lazy(() => import('@/screens/admin/SaludAdminScreen').then((m) => ({ default: m.SaludAdminScreen })));
+const MasAdminScreen = lazy(() => import('@/screens/admin/MasAdminScreen').then((m) => ({ default: m.MasAdminScreen })));
 
 /** En móvil y tablet la conversación y el lead son pantallas enteras; en escritorio viven dentro de la lista. */
 const ChatMovil = () => (
@@ -48,11 +57,77 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, ref
 
 /** Sin sesión, a «Entrar»; mientras se sabe, nada parpadea. */
 function ConSesion({ children }: { children: ReactNode }) {
-  const { yo, cargando } = useSesion();
+  const { yo, cargando, suspendida } = useSesion();
   const location = useLocation();
   if (cargando) return <div className="min-h-dvh bg-stone-100" aria-busy="true" />;
+  if (suspendida) return <EmpresaSuspendida />;
   if (!yo) return <Navigate to="/entrar" replace state={{ desde: location.pathname }} />;
+  if (yo.usuario.rol === 'operator') return <Navigate to="/admin/empresas" replace />;
   return <>{children}</>;
+}
+
+/**
+ * La consola (S1–S4) es del operador: con sesión de operador entra; si la
+ * identidad es operador pero la sesión es de una empresa (llegó por la URL),
+ * se le ofrece pasar (`POST auth/operador`; el cambio nunca es automático,
+ * para que «Abrir su panel» no rebote); si no es operador, al inicio. Y al
+ * revés: una sesión de operador que caiga en el panel de una empresa va a
+ * la consola.
+ */
+function SoloOperador({ children }: { children: ReactNode }) {
+  const { yo, cargando } = useSesion();
+  if (cargando) return <div className="min-h-dvh bg-stone-100" aria-busy="true" />;
+  if (!yo) return <Navigate to="/entrar" replace />;
+  if (yo.usuario.rol === 'operator') return <>{children}</>;
+  if (yo.esOperador) return <PasarALaConsola />;
+  return <Navigate to="/inicio" replace />;
+}
+
+function PasarALaConsola() {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState(false);
+  const pasar = () => irAConsola(queryClient).catch(() => setError(true));
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-stone-100 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 text-center shadow-sm">
+        <p className="font-headline text-2xl font-bold tracking-tight text-stone-900">Consola de Dali</p>
+        <p className="mt-2 font-body text-[15px] text-stone-600">Estás en el panel de tu empresa. Para ver todas las empresas, pasa a la consola del operador.</p>
+        {error && <p className="mt-3 font-body text-sm text-red-700">No se pudo cambiar de sesión. Intenta de nuevo.</p>}
+        <div className="mt-5 flex justify-center gap-3">
+          <Link to="/inicio" className="inline-flex h-11 items-center rounded-xl border border-stone-200 px-4 font-body text-[15px] font-semibold text-stone-700 hover:bg-stone-50">
+            Volver a mi panel
+          </Link>
+          <button
+            type="button"
+            onClick={() => void pasar()}
+            className="inline-flex h-11 items-center rounded-xl bg-teal-700 px-4 font-body text-[15px] font-semibold text-white hover:bg-teal-800"
+          >
+            Entrar a la consola
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** E1: la empresa está suspendida por el operador de Dali; la sesión existe pero el panel no abre. */
+function EmpresaSuspendida() {
+  const { salir } = useSesion();
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-stone-100 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 text-center shadow-sm">
+        <p className="font-headline text-2xl font-bold tracking-tight text-stone-900">Tu empresa está suspendida</p>
+        <p className="mt-2 font-body text-[15px] text-stone-600">Dali dejó de atender y el panel está cerrado. Escríbele al equipo de Dali para reactivarla.</p>
+        <button
+          type="button"
+          onClick={() => void salir()}
+          className="mt-5 inline-flex h-11 items-center rounded-xl border border-stone-200 px-4 font-body text-[15px] font-semibold text-stone-700 hover:bg-stone-50"
+        >
+          Salir
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function SoloSinSesion({ children }: { children: ReactNode }) {
@@ -120,6 +195,57 @@ export default function App() {
                 </ConSesion>
               }
             />
+            <Route
+              path="/admin"
+              element={
+                <SoloOperador>
+                  <AdminShell />
+                </SoloOperador>
+              }
+            >
+              <Route index element={<Navigate to="/admin/empresas" replace />} />
+              <Route
+                path="empresas"
+                element={
+                  <Suspense fallback={null}>
+                    <EmpresasAdminScreen />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="empresas/:id"
+                element={
+                  <Suspense fallback={null}>
+                    <EmpresaAdminScreen />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="verticales"
+                element={
+                  <Suspense fallback={null}>
+                    <VerticalesAdminScreen />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="salud"
+                element={
+                  <Suspense fallback={null}>
+                    <SaludAdminScreen />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="mas"
+                element={
+                  <Suspense fallback={null}>
+                    <MasAdminScreen />
+                  </Suspense>
+                }
+              />
+              <Route path="*" element={<Navigate to="/admin/empresas" replace />} />
+            </Route>
             <Route
               element={
                 <ConSesion>

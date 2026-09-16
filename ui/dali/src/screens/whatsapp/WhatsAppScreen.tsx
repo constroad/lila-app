@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { ApiError, api } from '@/lib/api';
 import { fechaLarga, telefonoLegible } from '@/lib/format';
 import { useSesion } from '@/lib/session';
-import type { EstadoLinea, EventoLinea, Inicio, LineaWhatsApp, SaludLinea } from '@/lib/types';
+import type { EventoLinea, Inicio, LineaWhatsApp, SaludLinea } from '@/lib/types';
+import { ESTADO_LINEA } from '@/lib/estados';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/Icon';
 import type { IconName } from '@/components/icon-map';
@@ -24,14 +25,7 @@ import { Vincular } from './Vincular';
  * cierra la sesión en WhatsApp (obliga a vincular de nuevo) y no cabe en un
  * número compartido con otras empresas.
  */
-const ESTADO: Record<EstadoLinea, { texto: string; tono: TonoPill }> = {
-  conectado: { texto: 'Conectado', tono: 'emerald' },
-  vinculando: { texto: 'Vinculando…', tono: 'amber' },
-  conectando: { texto: 'Conectando…', tono: 'amber' },
-  'requiere-vincular': { texto: 'Requiere vincular', tono: 'red' },
-  desconectado: { texto: 'Desconectado', tono: 'red' },
-  'sin-numero': { texto: 'Sin número', tono: 'stone' },
-};
+const ESTADO = ESTADO_LINEA;
 const SALUD: Record<SaludLinea['nivel'], { texto: string; tono: TonoPill }> = {
   optima: { texto: 'Óptima', tono: 'emerald' },
   'con-fallos': { texto: 'Con fallos', tono: 'amber' },

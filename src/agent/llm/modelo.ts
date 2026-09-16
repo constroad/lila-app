@@ -115,6 +115,8 @@ type Runtime = {
 };
 
 let runtime: Runtime | null = null;
+/** Cuándo se le pidió texto por última vez (consola del operador, S4). */
+let ultimoUsoMs: number | null = null;
 let cargando: Promise<Runtime | null> | null = null;
 let cola: Promise<unknown> = Promise.resolve();
 let temporizadorOcioso: NodeJS.Timeout | null = null;
@@ -208,6 +210,7 @@ export const generar = (pedido: PedidoDeTexto): Promise<string | null> => {
     const rt = await cargarLlm();
     if (!rt) return null;
     const inicio = Date.now();
+    ultimoUsoMs = inicio;
     try {
       let entrada = rt.sesiones.get(pedido.tarea);
       if (!entrada || entrada.sistema !== pedido.sistema) {
@@ -250,8 +253,12 @@ export const generar = (pedido: PedidoDeTexto): Promise<string | null> => {
   return turno;
 };
 
-export const estadoLlm = (): { activo: boolean; descargado: boolean; cargado: boolean } => ({
+export const estadoLlm = (): { activo: boolean; descargado: boolean; cargado: boolean; nombre: string; bytes: number; ultimoUsoMs: number | null; ociosoMs: number } => ({
   activo: AGENTE_ACTIVO && LLM_ACTIVO,
   descargado: modeloDescargado(),
   cargado: runtime !== null,
+  nombre: MODELO.nombre,
+  bytes: MODELO.bytes,
+  ultimoUsoMs,
+  ociosoMs: OCIOSO_MS,
 });

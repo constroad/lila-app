@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '@/components/Icon';
 import { BrandMark } from '@/components/BrandMark';
+import { BotonConsola } from '@/components/BotonConsola';
 import { useSesion } from '@/lib/session';
 import { api } from '@/lib/api';
 import { iniciales, telefonoLegible } from '@/lib/format';
@@ -104,6 +105,7 @@ function SidebarEscritorio({ empresa, rubro, contadores }: { empresa?: string; r
           </div>
         ))}
       </nav>
+      <BotonConsola variante="sidebar" />
       <div className="flex items-center gap-3 border-t border-stone-200 px-5 py-4">
         <div className="flex size-10 items-center justify-center rounded-full bg-stone-900 font-headline text-sm font-bold text-white">{iniciales(yo?.usuario.nombre ?? '?')}</div>
         <div className="min-w-0 flex-1">
@@ -222,6 +224,7 @@ function RailTablet({ contadores }: { contadores: Record<string, number> }) {
           </NavLink>
         ))}
       </nav>
+      <BotonConsola variante="rail" />
     </aside>
   );
 }

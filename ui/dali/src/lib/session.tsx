@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, onUnauthorized } from './api';
+import { ApiError, api, onUnauthorized } from './api';
 import type { Yo } from './types';
 
 /**
@@ -11,6 +11,8 @@ import type { Yo } from './types';
 interface Sesion {
   yo: Yo | null;
   cargando: boolean;
+  /** La empresa fue suspendida por el operador (S2): hay sesión, pero el panel está cerrado. */
+  suspendida: boolean;
   salir: () => Promise<void>;
   recargar: () => Promise<unknown>;
 }
@@ -38,7 +40,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     queryClient.setQueryData(['yo'], null);
   };
   const yo = q.isError ? null : (q.data ?? null);
-  return <SesionContext.Provider value={{ yo, cargando: q.isPending, salir, recargar: () => q.refetch() }}>{children}</SesionContext.Provider>;
+  const suspendida = q.isError && q.error instanceof ApiError && q.error.status === 403 && (q.error.body as { motivo?: string } | null)?.motivo === 'suspendida';
+  return <SesionContext.Provider value={{ yo, cargando: q.isPending, suspendida, salir, recargar: () => q.refetch() }}>{children}</SesionContext.Provider>;
 }
 
 export const useSesion = (): Sesion => {

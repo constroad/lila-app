@@ -6,6 +6,8 @@ export type EstadoConversacion = 'bot' | 'human' | 'closed';
 export interface Yo {
   usuario: { nombre: string; rol: RolDali; identidad: string };
   empresa: { companyId: string };
+  /** La identidad también es operador de Dali (S1–S4): puede pasar a la consola. */
+  esOperador?: boolean;
 }
 
 export interface LeadResumen {
@@ -453,4 +455,87 @@ export interface Reporte {
   masPreguntadas: Array<{ pregunta: string; usos: number; categoria: string }>;
   sinRespuesta: { total: number; ejemplos: string[] };
   tiempos: { respuestaDaliS: number | null; tomaHumanaMin: number | null };
+}
+
+/** S1–S4 La consola del operador (`src/agent/dali/admin.ts`, `verticales.ts`, `salud.ts`). */
+export type EstadoAsistenteAdmin = 'atendiendo' | 'pausado' | 'apagado' | 'requiere-qr' | 'sin-linea' | 'suspendida';
+
+export interface EmpresaAdmin {
+  companyId: string;
+  nombre: string;
+  ciudad: string;
+  vertical: string;
+  rubro: string;
+  linea: { numero: string; estado: EstadoLinea };
+  asistente: EstadoAsistenteAdmin;
+  uso: { mensajesMes: number; limite: number };
+  ultimoMensaje?: string;
+  miembros: number;
+  creadaEl?: string;
+  suspendida: boolean;
+}
+
+export interface ResumenEmpresas {
+  total: number;
+  atendiendo: number;
+  pausadas: number;
+  sinConectar: number;
+  suspendidas: number;
+}
+
+export interface ActividadAdmin {
+  tipo: 'escalada' | 'lead' | 'ingreso' | 'importacion' | 'linea';
+  titulo: string;
+  detalle: string;
+  fecha: string;
+  tono: 'ok' | 'aviso' | 'error' | 'info';
+}
+
+export interface EmpresaDetalleAdmin extends EmpresaAdmin {
+  kpis: { conversacionesMes: number; leadsMes: number; leadsSemana: number; leadsSemanaPrevia: number; leadsNuevos: number };
+  equipo: Equipo;
+  lineaDetalle: LineaWhatsApp;
+  configuracion: { asistente: string; tono: string; daPrecios: boolean; avisosA: string; numerosPrueba: string[]; pausaMin: number };
+  conocimiento: { servicios: number; preguntas: number; faq: number; catalogo: number; ultimaImportacion?: { fecha: string; archivo: string; quien: string } };
+  actividad: ActividadAdmin[];
+  nota: string;
+}
+
+export interface VerticalAdmin {
+  id: 'asphalt' | 'restaurant' | 'grifo' | 'lubricentro' | 'otro';
+  nombre: string;
+  detalle: string;
+  disponible: boolean;
+  modo: 'lead' | 'pedido' | 'cita' | 'info';
+  modoLegible: string;
+  version: string | null;
+  servicios: number;
+  preguntas: number;
+  cierre: number;
+  plantilla: string | null;
+  empresas: Array<{ companyId: string; nombre: string }>;
+}
+
+export interface VerticalDetalleAdmin extends VerticalAdmin {
+  guion: GuionEditable | null;
+  textos: { preguntaServicio: string };
+  hojas: string[];
+}
+
+export interface SaludAdmin {
+  ahora: string;
+  general: 'operativo' | 'atencion' | 'caido';
+  lineas: Array<{ companyId: string; nombre: string; rubro: string; numero: string; estado: EstadoLinea; ultimoMensaje?: string; caidaDesde?: string; motivo?: string }>;
+  ultimaHora: { mensajes: number; respuestaS: number | null; enviosFallidos: number; desconexiones: number };
+  modelo: { activo: boolean; descargado: boolean; cargado: boolean; nombre: string; gb: number; ultimoUso?: string; ociosoMin: number };
+  maquina: {
+    equipo: string;
+    uptimeS: number;
+    ram: { totalGb: number; pct: number; procesoMb: number };
+    cpu: { pct: number; carga1: number; nucleos: number };
+    disco: { total: string; libre: string; pct: number } | null;
+    historia: Array<{ t: number; cpu: number; ram: number }>;
+  };
+  errores: Array<{ tipo: 'desconexion' | 'envio-fallido' | 'sin-conectar'; titulo: string; detalle: string; fecha: string; numero: string; empresa?: string }>;
+  deploy: { release: string; sha: string | null; desplegadoEl: string | null; node: string; iniciadoEl: string };
 }

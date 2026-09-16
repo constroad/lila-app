@@ -7,7 +7,14 @@ import { getSharedConnection } from '../../database/sharedConnection.js';
  * que pertenece y su rol dentro de Dali. Es el espejo mínimo de `miembros` de
  * constroad-auth (F2); hasta entonces es la única lista.
  */
-export type RolDali = 'owner' | 'sales' | 'viewer';
+export type RolDali = 'owner' | 'sales' | 'viewer' | 'operator';
+
+/**
+ * El operador de la plataforma (José; spec §2 «rol operator») también vive en
+ * `bot_members`, con esta empresa ficticia: no pertenece a ninguna. Entra con
+ * su identidad como cualquiera y desde su panel pasa a la consola (S1–S4).
+ */
+export const EMPRESA_OPERADOR = '*';
 
 export interface IBotMember {
   companyId: string;
@@ -26,7 +33,7 @@ const BotMemberSchema = new Schema<IBotMember>(
     companyId: { type: String, required: true, index: true },
     identity: { type: String, required: true },
     name: { type: String, required: true },
-    role: { type: String, enum: ['owner', 'sales', 'viewer'], required: true },
+    role: { type: String, enum: ['owner', 'sales', 'viewer', 'operator'], required: true },
     receivesAlerts: { type: Boolean, default: true },
     lastLoginAt: { type: Date },
   },
@@ -51,8 +58,7 @@ export const normalizarIdentidad = (destino: string): string => {
   return digitos.length === 9 ? `51${digitos}` : digitos;
 };
 
-export const esIdentidadValida = (identidad: string): boolean =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identidad) || /^\d{10,15}$/.test(identidad);
+export const esIdentidadValida = (identidad: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identidad) || /^\d{10,15}$/.test(identidad);
 
 export interface MiembroDali {
   id: string;
@@ -70,10 +76,24 @@ const aMiembro = (d: IBotMember & { _id: unknown }): MiembroDali => ({
   role: d.role,
 });
 
-/** El miembro por su identidad. Una identidad puede estar en varias empresas: se devuelve la primera (F2 elegirá). */
+/**
+ * El miembro por su identidad. Una identidad puede estar en varias empresas:
+ * se devuelve la primera (F2 elegirá). Su ficha de operador, si la tiene, va
+ * última: uno entra a su empresa y desde ahí pasa a la consola.
+ */
 export const miembroPorIdentidad = async (identidad: string): Promise<MiembroDali | null> => {
   const Member = await getBotMemberModel();
-  const doc = await Member.findOne({ identity: identidad }).sort({ updatedAt: -1 }).lean();
+  const doc =
+    (await Member.findOne({ identity: identidad, role: { $ne: 'operator' } })
+      .sort({ updatedAt: -1 })
+      .lean()) ?? (await Member.findOne({ identity: identidad, role: 'operator' }).lean());
+  return doc ? aMiembro(doc as IBotMember & { _id: unknown }) : null;
+};
+
+/** La ficha de operador de una identidad (`companyId` `*`), o null si no es operador. */
+export const operadorPorIdentidad = async (identidad: string): Promise<MiembroDali | null> => {
+  const Member = await getBotMemberModel();
+  const doc = await Member.findOne({ identity: identidad, role: 'operator', companyId: EMPRESA_OPERADOR }).lean();
   return doc ? aMiembro(doc as IBotMember & { _id: unknown }) : null;
 };
 

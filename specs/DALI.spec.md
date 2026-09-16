@@ -127,11 +127,11 @@ convivir (el viejo redirige al nuevo). **La decisión del nombre es de José.**
 | Colección | Estado | Qué guarda |
 | --- | --- | --- |
 | `companies` | existe (Portal + lila) | tenant: `companyId`, nombre, `vertical`, plan, `whatsappConfig.sender`. Dali agrega `dali: { plan, trialEndsAt, status }`. |
-| `bot_configs` | existe (1 por empresa) | `enabled`, `vertical`, `testNumbers`, `ownerNotifyTarget`, `handoffPauseMinutes`, `guion` (hoy). **Crece con:** `perfil` (asistente, presentación, tono, emojis, horario, fueraDeHorario, zona, reglas: daPrecios, prometeFechas, escala), `negocio` (descripción, dirección, contacto, ofrece[], noOfrece[]), `faq[]` ({pregunta, respuesta, variantes[], activa}), `catalogo[]` ({nombre, categoria, unidad, precio?, disponible, descripcion, foto?}), `avisos` (canal, qué avisar, silencio), `packVersion`. Caché 60 s en lila (ya existe por sesión). |
+| `bot_configs` | existe (1 por empresa) | `enabled`, `vertical`, `testNumbers`, `ownerNotifyTarget`, `handoffPauseMinutes`, `guion` (hoy). **Crece con:** `perfil` (asistente, presentación, tono, emojis, horario, fueraDeHorario, zona, reglas: daPrecios, prometeFechas, escala), `negocio` (descripción, dirección, contacto, ofrece[], noOfrece[]), `faq[]` ({pregunta, respuesta, variantes[], activa}), `catalogo[]` ({nombre, categoria, unidad, precio?, disponible, descripcion, foto?}), `avisos` (canal, qué avisar, silencio), `packVersion`, `operador` ({suspendida, suspendidaEl, nota}: lo que anota la consola S2). Caché 60 s en lila (ya existe por sesión). |
 | `bot_conversations` | existe | conversación por cliente: estado bot/human/closed, pausas, `lead` (estado del guion), tokens. |
 | `bot_conversation_messages` | existe (TTL 90 d) | transcripción. |
 | `bot_leads` | **nueva** | el lead como objeto de trabajo del dueño: `companyId`, `conversationId`, `servicio`, `campos` (etiqueta→valor), `resumen`, `confirmado`, `estado` (nuevo/contactado/cotizado/ganado/perdido), `cotizacion` {monto, enviadaEl, validaHasta, pdf}, `notas[]`, `historial[]`, `motivoPerdido`. Se crea cuando el motor guarda un lead con servicio y (lugar o cantidad); se actualiza mientras la conversación siga; después es del dueño. |
-| `bot_members` | **nueva** | `companyId`, `identidad` (teléfono/correo), `nombre`, `rol` (owner/sales/viewer), `recibeAvisos`, `ultimoIngreso`. Espejo mínimo de constroad-auth `miembros` con el rol de la app. |
+| `bot_members` | **nueva** | `companyId`, `identidad` (teléfono/correo), `nombre`, `rol` (owner/sales/viewer, y `operator` con `companyId` `*` para la consola S1–S4), `recibeAvisos`, `ultimoIngreso`. Espejo mínimo de constroad-auth `miembros` con el rol de la app. |
 | `vertical_packs` | **nueva** (global) | por `vertical`: `version`, `modo` (lead/pedido/cita/info), `guion`, `faq[]`, `catalogo[]`, `textos` (saludo, precio, cierre, escalada, desambiguación), `plantillaExcel` (definición de pestañas). El default de asfalto es `ventas/guion.asfalto.ts` volcado como v1. |
 | `usage_metrics` | existe | conversaciones del mes por empresa (quota). |
 | `bot_imports` | **nueva** | historial de importaciones: archivo, resumen, avisos, quién, cuándo, modo (reemplazar/agregar). |
@@ -631,6 +631,72 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   409 del número de Constroad y la asignación de otro → P6 con los conteos.
   Tests: `registro.test.ts` (datos, companyId, borrador y código, creación,
   número ocupado), `permisos.test.ts` (registro es configuración: dueño).
+- **S1–S4 Consola del operador** (`ui/dali/src/screens/admin/*`,
+  `layout/AdminShell.tsx`, comparadas con `S1-admin-empresas`,
+  `S2-admin-empresa`, `S3-admin-verticales` y `S4-admin-salud` en los tres
+  tamaños; backend `src/agent/dali/admin.ts`, `verticales.ts`, `salud.ts`,
+  `suspension.ts`; rutas `/api/dali/admin/*` con `requireDaliOperator`).
+  **Quién**: el operador es una ficha más de `bot_members`, rol `operator`
+  con `companyId` `*` (hoy José, con su celular y su correo;
+  `scripts/dali-miembro.ts '*' <identidad> "<nombre>" operator`). Entra con
+  su código como siempre —el login prefiere su empresa— y desde el panel de
+  su empresa pasa a la consola con «Consola de Dali» (sidebar, rail y «Más»;
+  `POST auth/operador` reemite la cookie con rol `operator`) y vuelve con
+  «Volver a mi empresa» (`POST auth/empresa`). El cambio nunca es automático:
+  una sesión de empresa que cae en `/admin` ve «Entrar a la consola», y una
+  de operador que cae en el panel va a `/admin`. El cascarón es oscuro (para
+  no confundirlo con un panel de empresa): sidebar en escritorio, rail en
+  tablet, cabecera + barra de cuatro pestañas en móvil; «Cuentas y accesos»
+  del diseño no existe (los accesos son de cada empresa, en su Equipo).
+  **S1** lista las empresas de Dali (las que tienen `bot_configs`) con línea
+  (estado real del manager de sesiones), estado del asistente (atendiendo /
+  pausado / apagado / requiere QR / sin línea / suspendida), uso del mes
+  (`usage_metrics`), último mensaje y miembros; búsqueda, chips por rubro,
+  filtro por estado y tabla en escritorio; «Nueva empresa» (hoja, mismos
+  datos que P4 sin código: la dueña queda pendiente hasta su primer ingreso;
+  opcionalmente el número de la línea, 409 si otra empresa lo usa) y «Abrir
+  panel»: **entra al panel de esa empresa con una sesión de dueño a nombre del
+  operador** («José (Dali)» firma lo que haga; su identidad sigue siendo la
+  suya, así vuelve a la consola). **S2**: cabecera con pausa/encendido del
+  bot (`enabled`), cuatro cifras (conversaciones y mensajes del mes, leads
+  del mes contra la semana previa, miembros, modelo local sin costo por
+  mensaje), la línea (estado, dispositivo, desde cuándo, con quién se
+  comparte), plan (piloto, sin pagos), configuración del asistente y
+  conocimiento contados con los mismos lectores del panel, **actividad
+  reciente** (escaladas, leads avisados, ingresos, importaciones y los
+  eventos de la línea, en una sola línea de tiempo, 30 días), la **nota
+  privada** del operador (`bot_configs.operador.nota`) y **suspender**:
+  `operador.suspendida` apaga el bot y `requireDaliSession` contesta 403
+  `motivo: 'suspendida'` a todos menos al operador (caché de un minuto por
+  empresa; suspender y levantar la actualizan en el acto); la UI muestra «Tu
+  empresa está suspendida». Ver QR, editar y reimportar entran al panel de la
+  empresa en esa pantalla (no se duplican acá; «Desconectar» tampoco: es de
+  A14). **S3**: los cinco rubros del registro; solo asfalto tiene pack (v1,
+  en el código: 4 servicios, 22 preguntas, 2 de cierre, plantilla de A13) y
+  se muestra tal cual con sus empresas; «Aplicar pack a una empresa» es el
+  «restaurar pack» de A8 con confirmación; los otros cuatro van como
+  «próximamente» con el modo del motor que les tocará (§5). Sin «Nuevo
+  vertical» ni edición: el pack se edita con un deploy hasta que exista
+  `vertical_packs`, y se dice en pantalla. **S4**: líneas conectadas,
+  mensajes de la última hora, mediana del tiempo de respuesta de Dali,
+  envíos fallidos y desconexiones; el modelo local (cargado / en disco / sin
+  descargar, último uso, se descarga solo tras 5 min y «Descargar ahora» lo
+  libera ya: `descargarLlm`); la máquina (RAM real vía `memory_pressure`,
+  CPU, disco, uptime, historia de CPU/RAM de `admin-health`); las líneas por
+  empresa (caída desde cuándo y por qué); errores de 24 h solo de líneas de
+  Dali; y el deploy (sha y fecha de la carpeta de release de torre). Se
+  refresca cada 30 s. **Contra el diseño, deliberado**: sin planes de pago
+  ni «Registrar pago» (F4), sin colas/Redis/BullMQ (lila no los tiene), sin
+  «Avisar al dueño» ni «Reconectar QR» desde la consola (son envíos y
+  acciones sobre la línea: se hacen desde el panel de la empresa), sin RUC
+  (no lo pide el registro), sin «Cuentas y accesos». Probado en el harness:
+  alta de «Prueba Consola» desde la hoja, apagar/encender, suspender (403
+  comprobado con un token de esa empresa) y reactivar, aplicar el pack, abrir
+  su panel y volver a la consola, volver a mi empresa; la empresa de prueba
+  se borró después. Tests: `admin.test.ts` (estado del asistente, fila y
+  resumen, actividad, sesión para entrar), `verticales.test.ts`,
+  `salud.test.ts` (estado general, errores, deploy), `suspension.test.ts`
+  (caché).
 - **Backend** `src/agent/dali/*` + `src/api/routes/dali.routes.ts`:
   - **Sesión de prueba (decisión de José, 15/09: «no esperes un envío real de
     código, eso déjalo para el final»)**: el flujo de pantallas es el
@@ -656,7 +722,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
     el cliente) y el trabajo del dueño.
   - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
     identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
-    lead). Suite completa en verde (1104 + 333, tras P4–P6).
+    lead). Suite completa en verde (1126 + 333, tras S1–S4).
 - **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
   → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
   sin sesión → 401.
@@ -707,9 +773,13 @@ al WhatsApp (F2), el QR de un número nuevo hasta «conectado» (el harness no
 tiene el lease de sockets: la pantalla muestra que no pudo preparar el código
 y «Continuar» queda deshabilitado) y un registro entero contra producción (se
 verificó que `/dali/registro` carga y que `POST /api/dali/registro` vacío
-devuelve 400 sin crear nada).
+devuelve 400 sin crear nada); en S1–S4, la consola contra producción con las líneas de verdad (en el harness
+todas se ven desconectadas porque no tiene el lease de sockets), el «Descargar
+ahora» del modelo en producción (en el harness el modelo no estaba cargado), y
+el aviso de «empresa suspendida» visto por un dueño de verdad (se probó el 403
+con un token; la pantalla se vio solo por código).
 
-**Pendiente de F3:** P1, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

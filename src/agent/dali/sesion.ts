@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config/environment.js';
 import type { MiembroDali, RolDali } from './miembros.js';
+import { estaSuspendida } from './suspension.js';
 
 /**
  * LA SESIÓN DEL PANEL: un JWT de lila (mismo secreto que `requireTenant`) en
@@ -27,11 +28,9 @@ declare module 'express-serve-static-core' {
 }
 
 export const firmarSesion = (miembro: MiembroDali): string =>
-  jwt.sign(
-    { companyId: miembro.companyId, userId: miembro.id, identity: miembro.identity, name: miembro.name, role: miembro.role, app: 'dali' },
-    config.security.jwtSecret,
-    { expiresIn: DURACION_SESION_S }
-  );
+  jwt.sign({ companyId: miembro.companyId, userId: miembro.id, identity: miembro.identity, name: miembro.name, role: miembro.role, app: 'dali' }, config.security.jwtSecret, {
+    expiresIn: DURACION_SESION_S,
+  });
 
 export const leerSesion = (token: string): SesionDali | null => {
   try {
@@ -65,6 +64,12 @@ export const cabeceraCookie = (token: string, segura: boolean): string =>
 
 export const cabeceraCookieBorrada = (): string => `${COOKIE_SESION}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 
+/**
+ * Con sesión, y con la empresa sin suspender: una empresa suspendida por el
+ * operador (S2) no entra al panel (403 con `motivo: 'suspendida'`); el
+ * operador mismo entra siempre. Si Mongo no contesta, la sesión vigente
+ * sigue («la ausencia de respuesta no revoca»).
+ */
 export const requireDaliSession = (req: Request, res: Response, next: NextFunction): void => {
   const token = tokenDe(req);
   const sesion = token ? leerSesion(token) : null;
@@ -74,7 +79,16 @@ export const requireDaliSession = (req: Request, res: Response, next: NextFuncti
   }
   req.dali = sesion;
   req.companyId = sesion.companyId;
-  next();
+  if (sesion.role === 'operator') {
+    next();
+    return;
+  }
+  void estaSuspendida(sesion.companyId)
+    .catch(() => false)
+    .then((suspendida) => {
+      if (suspendida) res.status(403).json({ error: 'La empresa está suspendida', motivo: 'suspendida' });
+      else next();
+    });
 };
 
 /** Solo el operador de la plataforma (rol `operator` en el token) entra a `/admin/*`. */

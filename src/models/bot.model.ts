@@ -36,6 +36,8 @@ export interface IBotConfig {
   dicePrecios?: boolean;
   /** Pausa del dueño desde el panel: hasta esta hora Dali no contesta a nadie. */
   pausedUntil?: Date;
+  /** Lo del operador de Dali (S2): `suspendida` (bot apagado y panel cerrado) y su `nota` privada. */
+  operador?: { suspendida?: boolean; suspendidaEl?: Date; nota?: string };
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -67,6 +69,7 @@ export const BotConfigSchema = new Schema<IBotConfig>(
     catalogo: { type: Schema.Types.Mixed },
     dicePrecios: { type: Boolean },
     pausedUntil: { type: Date },
+    operador: { type: Schema.Types.Mixed },
   },
   { collection: 'bot_configs', timestamps: true }
 );

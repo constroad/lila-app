@@ -79,6 +79,15 @@ export const listSessionEvents = async (sessionId: string, { sinceMs, limit = 30
     .lean<SessionEvent[]>();
 };
 
+/** Los últimos eventos de TODAS las líneas (consola del operador, S4 «errores recientes»). */
+export const listRecentSessionEvents = async ({ sinceMs, kinds, limit = 50 }: { sinceMs: number; kinds?: SessionEventKind[]; limit?: number }): Promise<SessionEvent[]> => {
+  const M = await getModel();
+  return M.find({ at: { $gte: new Date(sinceMs) }, ...(kinds?.length ? { kind: { $in: kinds } } : {}) })
+    .sort({ at: -1 })
+    .limit(limit)
+    .lean<SessionEvent[]>();
+};
+
 export const countSessionEvents = async ({ companyId, kind, sinceMs }: { companyId: string; kind: SessionEventKind; sinceMs: number }): Promise<number> => {
   const M = await getModel();
   return M.countDocuments({ companyId, kind, at: { $gte: new Date(sinceMs) } });

@@ -1,3 +1,4 @@
+import { BotonConsola } from '@/components/BotonConsola';
 import { Icon } from '@/components/Icon';
 import { NAV_MAS, NAV_SECTIONS } from '@/layout/nav';
 import { Link } from 'react-router-dom';
@@ -40,6 +41,7 @@ function MasScreen() {
             </Link>
           </li>
         ))}
+        <BotonConsola variante="lista" />
       </ul>
     </div>
   );

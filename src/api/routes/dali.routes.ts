@@ -4,7 +4,11 @@ import multer from 'multer';
 import logger from '../../utils/logger.js';
 import { config } from '../../config/environment.js';
 import { pedirCodigo, verificarCodigo } from '../../agent/dali/acceso.js';
-import { cabeceraCookie, cabeceraCookieBorrada, firmarSesion, requireDaliSession } from '../../agent/dali/sesion.js';
+import { cabeceraCookie, cabeceraCookieBorrada, firmarSesion, requireDaliOperator, requireDaliSession } from '../../agent/dali/sesion.js';
+import { miembroPorIdentidad, operadorPorIdentidad } from '../../agent/dali/miembros.js';
+import { cambiarEmpresa, crearEmpresaDesdeConsola, esEmpresaDali, leerEmpresa, listarEmpresas, sesionParaEntrar } from '../../agent/dali/admin.js';
+import { VerticalSinPack, aplicarVertical, leerVertical, listarVerticales } from '../../agent/dali/verticales.js';
+import { leerSalud } from '../../agent/dali/salud.js';
 import { cargarInicio } from '../../agent/dali/inicio.js';
 import { cerrarConversacion, detalleDeConversacion, devolverConversacion, escribirAlCliente, listarConversaciones, tomarConversacion } from '../../agent/dali/conversaciones.js';
 import { ESTADOS_LEAD, agregarNotaALead, cambiarEstadoDeLead, detalleDeLead, listarLeads, type EstadoLead } from '../../agent/dali/leads.js';
@@ -125,7 +129,30 @@ router.use((req: Request, res: Response, next: () => void) => {
 
 router.get('/auth/yo', async (req: Request, res: Response) => {
   const s = req.dali!;
-  res.json({ usuario: { nombre: s.name, rol: s.role, identidad: s.identity }, empresa: { companyId: s.companyId } });
+  const esOperador = s.role === 'operator' || Boolean(await operadorPorIdentidad(s.identity).catch(() => null));
+  res.json({ usuario: { nombre: s.name, rol: s.role, identidad: s.identity }, empresa: { companyId: s.companyId }, esOperador });
+});
+
+/** S1–S4: el operador pasa de su panel a la consola con su misma identidad (su ficha `operator` en `bot_members`). */
+router.post('/auth/operador', async (req: Request, res: Response) => {
+  const operador = await operadorPorIdentidad(req.dali!.identity);
+  if (!operador) {
+    res.status(403).json({ error: 'No eres operador de Dali' });
+    return;
+  }
+  res.setHeader('Set-Cookie', cabeceraCookie(firmarSesion(operador), esSegura(req)));
+  res.json({ usuario: { nombre: operador.name, rol: operador.role, identidad: operador.identity }, empresa: { companyId: operador.companyId }, esOperador: true });
+});
+
+/** …y vuelve de la consola a su propia empresa (la primera donde es miembro). */
+router.post('/auth/empresa', async (req: Request, res: Response) => {
+  const miembro = await miembroPorIdentidad(req.dali!.identity);
+  if (!miembro || miembro.role === 'operator') {
+    res.status(404).json({ error: 'No perteneces a ninguna empresa' });
+    return;
+  }
+  res.setHeader('Set-Cookie', cabeceraCookie(firmarSesion(miembro), esSegura(req)));
+  res.json({ usuario: { nombre: miembro.name, rol: miembro.role, identidad: miembro.identity }, empresa: { companyId: miembro.companyId }, esOperador: true });
 });
 
 router.get('/inicio', async (req: Request, res: Response) => {
@@ -674,6 +701,114 @@ router.post('/leads/:id/notas', async (req: Request, res: Response) => {
   await agregarNotaALead(req.dali!.companyId, String(req.params.id), nota, req.dali!.name);
   res.json(await detalleDeLead(req.dali!.companyId, String(req.params.id)));
 });
+
+/**
+ * S1–S4: la consola del operador (`admin.ts`, `verticales.ts`, `salud.ts`).
+ * Solo el rol `operator` (403 para cualquier otra sesión).
+ */
+const admin = Router();
+admin.use(requireDaliOperator);
+
+admin.get('/empresas', async (_req: Request, res: Response) => {
+  res.json(await listarEmpresas(await lineaReal()));
+});
+
+admin.post('/empresas', async (req: Request, res: Response) => {
+  try {
+    const r = await crearEmpresaDesdeConsola(req.body ?? {}, req.dali!.name);
+    clearAgentSessionCache();
+    res.status(201).json(r);
+  } catch (error) {
+    if (error instanceof RegistroInvalido || error instanceof NumeroOcupado) {
+      res.status(error instanceof NumeroOcupado ? 409 : 400).json({ error: error.message });
+      return;
+    }
+    logger.error(`[dali] no se pudo dar de alta desde la consola: ${String(error)}`);
+    res.status(500).json({ error: 'No se pudo crear la empresa' });
+  }
+});
+
+admin.get('/empresas/:id', async (req: Request, res: Response) => {
+  const empresa = await leerEmpresa(String(req.params.id), await lineaReal());
+  if (!empresa) {
+    res.status(404).json({ error: 'Empresa no encontrada' });
+    return;
+  }
+  res.json(empresa);
+});
+
+admin.patch('/empresas/:id', async (req: Request, res: Response) => {
+  const cambios = {
+    encendida: typeof req.body?.encendida === 'boolean' ? req.body.encendida : undefined,
+    suspendida: typeof req.body?.suspendida === 'boolean' ? req.body.suspendida : undefined,
+    nota: typeof req.body?.nota === 'string' ? req.body.nota : undefined,
+  };
+  const ok = await cambiarEmpresa(String(req.params.id), cambios, req.dali!.name);
+  if (!ok) {
+    res.status(404).json({ error: 'Empresa no encontrada o nada que cambiar' });
+    return;
+  }
+  clearAgentSessionCache();
+  res.json(await leerEmpresa(String(req.params.id), await lineaReal()));
+});
+
+admin.post('/empresas/:id/entrar', async (req: Request, res: Response) => {
+  const companyId = String(req.params.id);
+  if (!(await esEmpresaDali(companyId))) {
+    res.status(404).json({ error: 'Empresa no encontrada' });
+    return;
+  }
+  const miembro = sesionParaEntrar(companyId, req.dali!);
+  logger.info(`[dali] ${req.dali!.name} entró al panel de ${companyId} desde la consola`);
+  res.setHeader('Set-Cookie', cabeceraCookie(firmarSesion(miembro), esSegura(req)));
+  res.json({ usuario: { nombre: miembro.name, rol: miembro.role, identidad: miembro.identity }, empresa: { companyId }, esOperador: true });
+});
+
+admin.get('/verticales', async (_req: Request, res: Response) => {
+  res.json({ verticales: await listarVerticales() });
+});
+
+admin.get('/verticales/:id', async (req: Request, res: Response) => {
+  const vertical = await leerVertical(String(req.params.id));
+  if (!vertical) {
+    res.status(404).json({ error: 'Rubro desconocido' });
+    return;
+  }
+  res.json(vertical);
+});
+
+admin.post('/verticales/:id/aplicar', async (req: Request, res: Response) => {
+  const companyId = String(req.body?.companyId ?? '');
+  if (!(await esEmpresaDali(companyId))) {
+    res.status(404).json({ error: 'Empresa no encontrada' });
+    return;
+  }
+  try {
+    const servicios = await aplicarVertical(String(req.params.id), companyId, `${req.dali!.name} (consola)`);
+    clearAgentSessionCache();
+    res.json(servicios);
+  } catch (error) {
+    if (error instanceof VerticalSinPack) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+admin.get('/salud', async (_req: Request, res: Response) => {
+  const [linea, modelo] = await Promise.all([lineaReal(), import('../../agent/llm/modelo.js')]);
+  res.json(await leerSalud(linea, modelo.estadoLlm()));
+});
+
+admin.post('/salud/modelo/descargar', async (req: Request, res: Response) => {
+  const modelo = await import('../../agent/llm/modelo.js');
+  await modelo.descargarLlm();
+  logger.info(`[dali] ${req.dali!.name} descargó el modelo de memoria desde la consola`);
+  res.json({ ok: true });
+});
+
+router.use('/admin', admin);
 
 // El resto de la API (§4) llega con sus pantallas. Ni una ruta sin guard.
 router.use((_req: Request, res: Response) => res.status(404).json({ error: 'Ruta no encontrada' }));
