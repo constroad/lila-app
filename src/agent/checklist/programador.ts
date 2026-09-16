@@ -156,6 +156,11 @@ export const atenderPosibleAnuncio = async (m: MensajeGrupo, alcance: AlcanceAge
   if (!/\b(produccion|producción|producciones|pedido|pedidos|despacho|despachos|asfalt|m3|m³|cubos|se suspende|se cancela|se mueve|se pasa|reprogram|ya no)\b/i.test(m.texto)) return;
   const autor = aliasDeAutor(m.autor);
   const anuncio = (await interpretarAnuncio(m.texto, m.ts, autor ?? undefined)) ?? anuncioPorReglas(m);
+  if (anuncio.vago) {
+    logger.info(`[agente] anuncio vago de ${m.autor} (sin hora ni m³): se pide el dato ← «${m.texto.slice(0, 60)}»`);
+    await responderEnGrupo(alcance.grupoEscuchado, { texto: '¿A qué hora arranca y cuántos m³? Con eso programo el aviso a planta. Y no olviden crear el pedido en Portal.' }, alcance, m.autor);
+    return;
+  }
   if (anuncio.accion === 'ninguna' || !anuncio.producciones.length) return;
   const sinFecha = anuncio.producciones.filter((p) => !p.fecha);
   const hechos = hechosDeAnuncio(anuncio, m);

@@ -37,6 +37,8 @@ export interface Anuncio {
   producciones: ProduccionAnunciada[];
   /** Al mover: de qué día venía. */
   desdeFecha?: string;
+  /** Anunció producción sin hora ni m³: no se programa, se pregunta. */
+  vago?: boolean;
 }
 
 const EMPRESAS = ['globofast', 'constroad'] as const;
@@ -80,7 +82,7 @@ export const promptAnuncio = (hoy: string): string => {
     '- hora: la hora de arranque de la producción en HH:mm si está escrita; si no, "".',
     '- m3: los metros cúbicos escritos, solo el número; si no, "".',
     '- Varios días en un mensaje = varias producciones.',
-    '- Preguntas, dudas, charla, lo que ya pasó, y lo que dice Lila: ninguna.',
+    '- Preguntas ("¿mañana tienen producción?", "hay producción?", "@CONSTROAD, GLOBOFAST??"), dudas, charla, lo que ya pasó, y lo que dice Lila: ninguna.',
     '- "ya no el jueves, pasa al viernes" / "se mueve" / "se reprograma" / "en vez de" = mover, con desde_fecha el día viejo y fecha el nuevo.',
     '- "se cancela" / "se suspende" / "no va" / "no hay producción" = cancelar, con la fecha cancelada.',
     '',
@@ -136,7 +138,20 @@ export const resolverFechaAnunciada = (span: string, mensajeMs: number): string 
  * tiene que estar en el mensaje (o venir del autor), los m³ escritos, la fecha
  * resuelta con el día del mensaje. Lo que el modelo inventó no pasa.
  */
+/**
+ * Una PREGUNTA no anuncia nada, diga lo que diga el modelo. 16/09 06:50, Nene:
+ * «Buen dia, mañana tienen producción, @CONSTROAD, GLOBOFAST??» → el modelo
+ * dijo «programar» y Lila programó a Globofast para el jueves sin hora ni m³.
+ * El signo de pregunta, «tienen/hay/habrá … ?» y las etiquetas a otros son
+ * de quien pregunta, no de quien programa.
+ */
+export const esPregunta = (texto: string): boolean => {
+  const t = normalizar(texto);
+  return /[?¿]/.test(texto) || /\b(alguien sabe|saben si|se sabe si|me confirman si)\b/.test(t);
+};
+
 export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs: number, empresaDelAutor?: { companyId: string; empresa: string }): Anuncio | null => {
+  if (esPregunta(texto)) return { accion: 'ninguna', producciones: [] };
   let crudo: { accion?: unknown; producciones?: unknown; desde_fecha?: unknown };
   try {
     crudo = JSON.parse(json);
@@ -151,7 +166,10 @@ export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs:
   for (const p of lista) {
     const empresa = empresaDe(String(p.empresa ?? ''), texto);
     const cubosTxt = String(p.m3 ?? '').replace(/,/g, '.').match(/\d+(?:\.\d+)?/)?.[0];
-    const cubos = cubosTxt && t.includes(cubosTxt.split('.')[0]) ? Math.round(Number(cubosTxt)) : undefined;
+    // Los m³ del modelo valen si están en el texto; si inventó («150» donde
+    // dice 137m3), se leen del texto. Con varias producciones no se adivina.
+    const delTexto = lista.length === 1 ? t.match(/(\d+(?:[.,]\d+)?)\s*(?:m3|m³|metros|cubos)\b/)?.[1] : undefined;
+    const cubos = cubosTxt && t.includes(cubosTxt.split('.')[0]) ? Math.round(Number(cubosTxt)) : delTexto ? Math.round(Number(delTexto.replace(',', '.'))) : undefined;
     const hora = horaDe(String(p.hora ?? ''));
     const cliente = String(p.cliente ?? '').trim();
     producciones.push({
@@ -168,6 +186,10 @@ export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs:
   // salió como cancelar del 14/09): ninguna.
   const vigentes = producciones.filter((p) => !p.fecha || p.fecha >= hoy);
   if (!vigentes.length) return { accion: 'ninguna', producciones: [] };
+  // Programar exige sustancia: una hora o unos m³. «Mañana hay producción» a
+  // secas no arma un aviso a planta («hora por confirmar · m³ por confirmar»
+  // no le sirve a nadie): se contesta pidiendo el dato, sin programar.
+  if (accion === 'programar' && !vigentes.some((p) => p.hora || p.cubos)) return { accion: 'ninguna', producciones: [], vago: true };
   let desdeFecha = accion === 'mover' ? resolverFechaAnunciada(String(crudo.desde_fecha ?? ''), mensajeMs) : undefined;
   // «El jueves cambia: 160 m3 en vez de 137» vino como mover del jueves al
   // jueves: es una actualización, o sea programar.

@@ -1,4 +1,4 @@
-import { horaDe, interpretarJsonDeAnuncio, resolverFechaAnunciada } from './anuncios';
+import { esPregunta, horaDe, interpretarJsonDeAnuncio, resolverFechaAnunciada } from './anuncios';
 
 const lima = (fecha: string, hora: string) => new Date(`${fecha}T${hora}:00.000-05:00`).getTime();
 const lunes = lima('2026-09-14', '10:23');
@@ -38,7 +38,8 @@ describe('interpretarJsonDeAnuncio: el modelo señala, el código resuelve y val
     const json = JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'constroad', cliente: 'LOS PINOS', fecha: 'Jueves 17', hora: '', m3: '150' }], desde_fecha: '' });
     const a = interpretarJsonDeAnuncio(json, texto, lunes, { companyId: 'constroad', empresa: 'ConstRoad' });
     // «globo» está en el texto: gana el alias del texto sobre lo que dijo el modelo y sobre el autor.
-    expect(a!.producciones[0]).toMatchObject({ companyId: 'globofas-s8k', fecha: '2026-09-17', cubos: undefined, cliente: undefined, hora: undefined });
+    // Los «150» inventados no pasan; los 137 del texto sí.
+    expect(a!.producciones[0]).toMatchObject({ companyId: 'globofas-s8k', fecha: '2026-09-17', cubos: 137, cliente: undefined, hora: undefined });
   });
   it('mover trae el día de origen; cancelar la fecha; ninguna, nada', () => {
     const mover = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'mover', producciones: [{ empresa: 'globofast', cliente: '', fecha: 'viernes', hora: '', m3: '' }], desde_fecha: 'jueves' }), 'la producción de globofast del jueves ya no va, pasa al viernes', lima('2026-09-15', '11:00'));
@@ -63,5 +64,24 @@ describe('lo que el modelo confunde y el código endereza', () => {
   it('lo que apunta al pasado («ayer terminamos») no es cancelar ni programar', () => {
     const a = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'cancelar', producciones: [{ empresa: '', cliente: '', fecha: 'ayer', hora: '', m3: '250' }], desde_fecha: '' }), 'ayer terminamos a las 3 con 250 m3', lima('2026-09-15', '11:00'));
     expect(a).toEqual({ accion: 'ninguna', producciones: [] });
+  });
+});
+
+describe('una pregunta no anuncia nada, y un anuncio sin hora ni m³ no programa', () => {
+  it('16/09 06:50, Nene: «mañana tienen producción, @CONSTROAD, GLOBOFAST??» → ninguna aunque el modelo diga programar', () => {
+    const texto = 'Buen dia,mañana tienen producción,@CONSTROAD,GLOBO FAST??';
+    expect(esPregunta(texto)).toBe(true);
+    expect(esPregunta('hay producción mañana')).toBe(false); // sin «?» no se adivina: el modelo decide
+    expect(esPregunta('tenemos producción en INFRAMAQ martes 15-09')).toBe(false);
+    expect(esPregunta('📣 Jueves 17 tengo produccion de 137m3')).toBe(false);
+    const a = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'globofast', cliente: '', fecha: 'mañana', hora: '', m3: '' }], desde_fecha: '' }), texto, lima('2026-09-16', '06:50'));
+    expect(a).toEqual({ accion: 'ninguna', producciones: [] });
+  });
+  it('«mañana producción de globofast» sin hora ni m³: vago, se pregunta el dato', () => {
+    const a = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'globofast', cliente: '', fecha: 'mañana', hora: '', m3: '' }], desde_fecha: '' }), 'mañana producción de globofast', lima('2026-09-16', '06:50'));
+    expect(a).toMatchObject({ accion: 'ninguna', vago: true });
+    // Con m³ o con hora, sí.
+    const b = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'globofast', cliente: '', fecha: 'mañana', hora: '', m3: '137' }], desde_fecha: '' }), 'mañana producción de globofast 137 m3', lima('2026-09-16', '06:50'));
+    expect(b).toMatchObject({ accion: 'programar', producciones: [{ cubos: 137 }] });
   });
 });
