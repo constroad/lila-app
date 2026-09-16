@@ -443,5 +443,44 @@
       "clave": "site_finish"
     },
     "nota": "«llegaron» solo (agregados) pierde contra «carros»+«llegaron»; «cuántos agregados llegaron» sigue siendo agregados"
+  },
+  {
+    "id": "2026-09-15-2023-foto-temperatura",
+    "incidente": "2026-09-15-2023",
+    "pregunta": "@ConstRoad Hay unidades que no tienen foto de temperatura?",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_evidence"
+    },
+    "nota": "«temperatura» disparaba «no se registra»; la FOTO de temperatura es evidencia de campo"
+  },
+  {
+    "id": "2026-09-15-2023-foto-temperatura-campo",
+    "pregunta": "@ConstRoad Hay unidades que no tienen foto de temperatura en campo o planta?",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "unit_evidence"
+    }
+  },
+  {
+    "id": "2026-09-15-2021-terminaron",
+    "incidente": "2026-09-15-2021",
+    "pregunta": "@ConstRoad twrminaron de colocar todas las unidades en campo hoy?",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "site_finish"
+    },
+    "nota": "con el typo, «campo» a secas la mandaba a la unidad en campo; «colocar»+«todas» / «todas»+«campo» es terminar"
+  },
+  {
+    "id": "temperatura-pen",
+    "pregunta": "@lila a qué temperatura está el PEN en el tanque",
+    "hoy": "2026-09-15",
+    "esperado": {
+      "ruta": "sin_dato"
+    }
   }
 ]

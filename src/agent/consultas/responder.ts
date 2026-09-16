@@ -243,6 +243,9 @@ export const responder = (clave: ClaveConsulta | null, ctx: ContextoRespuesta): 
       const partes: string[] = [];
       if (llegadas[0]) partes.push(`🛣 Última en llegar a campo: *unidad ${llegadas[0].unitNumber}* a las ${hora(llegadas[0].arrivalAt)}.`);
       if (enRuta.length) partes.push(`En ruta: ${enRuta.map((u) => `*${u.unitNumber}*`).join(', ')}.`);
+      // «¿Terminaron?» cae acá cuando la frase no se entendió del todo: que la
+      // respuesta lo diga igual (15/09, 20:21: «última en llegar» y nada más).
+      else if (llegadas.length) partes.push(`Ya llegaron todas: ${llegadas.length} de ${todas.filter((u) => u.state === 'despachado').length} despachadas, ninguna en ruta.`);
       if (!partes.length) partes.push('No hay unidades en ruta ni llegadas registradas.');
       return partes.join('\n');
     }

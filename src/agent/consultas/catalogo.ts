@@ -176,7 +176,7 @@ export const CATALOGO: EntradaCatalogo[] = [
     // (15/09 12:26) no caía en ninguna regla, iba al modelo y el modelo elegía
     // el PDF del control de pista por el nombre. Cuántos llegaron / se
     // colocaron / faltan por colocar es esto: llegadas contra el total.
-    reglas: [['falta', 'terminar', 'pista'], ['falta', 'terminar', 'colocacion'], ['falta', 'terminar', 'colocación'], ['falta', 'terminar', 'campo'], ['termina', 'campo'], ['falta', 'acabar', 'obra'], ['termine', 'obra'], ['termine', 'campo'], ['acabamos', 'obra'], ['terminamos', 'campo'], ['termina', 'obra'], ['termina', 'colocacion'], ['falta', 'colocar'], ['cuant', 'colocar'], ['colocaron'], ['colocados'], ['colocadas'], ['descarg', 'campo'], ['descarg', 'obra'], ['descarg', 'pista'], ['llegaron', 'obra'], ['llegaron', 'campo'], ['llegaron', 'pista'], ['carros', 'llegaron'], ['unidades', 'llegaron'], ['volquetes', 'llegaron']],
+    reglas: [['todas', 'campo'], ['todas', 'obra'], ['todas', 'colocar'], ['todas', 'colocad'], ['colocar', 'campo'], ['colocaron', 'todas'], ['terminaron', 'colocar'], ['terminaron', 'campo'], ['terminaron', 'obra'], ['falta', 'terminar', 'pista'], ['falta', 'terminar', 'colocacion'], ['falta', 'terminar', 'colocación'], ['falta', 'terminar', 'campo'], ['termina', 'campo'], ['falta', 'acabar', 'obra'], ['termine', 'obra'], ['termine', 'campo'], ['acabamos', 'obra'], ['terminamos', 'campo'], ['termina', 'obra'], ['termina', 'colocacion'], ['falta', 'colocar'], ['cuant', 'colocar'], ['colocaron'], ['colocados'], ['colocadas'], ['descarg', 'campo'], ['descarg', 'obra'], ['descarg', 'pista'], ['llegaron', 'obra'], ['llegaron', 'campo'], ['llegaron', 'pista'], ['carros', 'llegaron'], ['unidades', 'llegaron'], ['volquetes', 'llegaron']],
   },
   {
     id: 'reports_status',
@@ -421,8 +421,15 @@ export const SIN_DATO: Array<{ patron: RegExp; texto: string }> = [
   },
 ];
 
+/** «Foto de temperatura», «evidencia», «control de pista»: hablan de las FOTOS, no del dato. */
+const HABLA_DE_FOTOS = /\b(foto|fotos|fotografia|fotografias|imagen|imagenes|evidencia|evidencias|video|videos)\b|control de pista/;
+
 export const temaSinDato = (pregunta: string): string | null => {
   const t = normalizar(pregunta);
+  // 15/09 20:23: «¿hay unidades que no tienen foto de temperatura?» → «la
+  // temperatura no se registra». La foto sí existe; lo que no existe es el
+  // valor. Si habla de fotos, no es un dato sin registrar.
+  if (HABLA_DE_FOTOS.test(t)) return null;
   return SIN_DATO.find((s) => s.patron.test(t))?.texto ?? null;
 };
 
