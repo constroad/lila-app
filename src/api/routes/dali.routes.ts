@@ -30,6 +30,8 @@ import {
   vinculacionPorQr,
   type OperacionesDeLinea,
 } from '../../agent/dali/whatsapp.js';
+import { EquipoInvalido, cambiarMiembro, invitarMiembro, listarEquipo, quitarMiembro } from '../../agent/dali/equipo.js';
+import { motivoSinPermiso } from '../../agent/dali/permisos.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -69,6 +71,16 @@ router.post('/auth/salir', (_req: Request, res: Response) => {
 });
 
 router.use(requireDaliSession);
+
+// A16: el rol decide qué se puede cambiar (`dali/permisos.ts`); leer puede cualquiera con sesión.
+router.use((req: Request, res: Response, next: () => void) => {
+  const motivo = motivoSinPermiso(req.method, req.path, req.dali!.role);
+  if (motivo) {
+    res.status(403).json({ error: motivo });
+    return;
+  }
+  next();
+});
 
 router.get('/auth/yo', async (req: Request, res: Response) => {
   const s = req.dali!;
@@ -256,6 +268,67 @@ router.post('/importar/confirmar', async (req: Request, res: Response) => {
 
 router.get('/importar/historial', async (req: Request, res: Response) => {
   res.json({ importaciones: await historialDeImportaciones(req.dali!.companyId) });
+});
+
+/** A16: el equipo. Verlo puede cualquier miembro; invitar, cambiar y quitar, solo el dueño (el gate de roles de arriba). */
+const responderErrorDeEquipo = (res: Response, error: unknown, accion: string, companyId: string): void => {
+  if (error instanceof EquipoInvalido) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+  logger.error(`[dali] equipo/${accion} falló para ${companyId}: ${String(error)}`);
+  res.status(500).json({ error: `No se pudo ${accion}` });
+};
+
+router.get('/equipo', async (req: Request, res: Response) => {
+  res.json(await listarEquipo(req.dali!.companyId));
+});
+
+router.post('/equipo', async (req: Request, res: Response) => {
+  try {
+    const miembro = await invitarMiembro(req.dali!.companyId, {
+      destino: String(req.body?.destino ?? ''),
+      nombre: String(req.body?.nombre ?? ''),
+      rol: String(req.body?.rol ?? ''),
+      recibeAvisos: req.body?.recibeAvisos !== false,
+    });
+    clearAgentSessionCache();
+    logger.info(`[dali] ${req.dali!.name} invitó a ${miembro.identidad} (${miembro.rol}) al equipo de ${req.dali!.companyId}`);
+    res.status(201).json(miembro);
+  } catch (error) {
+    responderErrorDeEquipo(res, error, 'invitar', req.dali!.companyId);
+  }
+});
+
+router.patch('/equipo/:id', async (req: Request, res: Response) => {
+  try {
+    const miembro = await cambiarMiembro(req.dali!.companyId, String(req.params.id), {
+      ...(req.body?.rol !== undefined ? { rol: String(req.body.rol) } : {}),
+      ...(req.body?.recibeAvisos !== undefined ? { recibeAvisos: Boolean(req.body.recibeAvisos) } : {}),
+    });
+    if (!miembro) {
+      res.status(404).json({ error: 'Esa persona ya no está en el equipo' });
+      return;
+    }
+    clearAgentSessionCache();
+    res.json(miembro);
+  } catch (error) {
+    responderErrorDeEquipo(res, error, 'cambiar al miembro', req.dali!.companyId);
+  }
+});
+
+router.delete('/equipo/:id', async (req: Request, res: Response) => {
+  try {
+    const ok = await quitarMiembro(req.dali!.companyId, String(req.params.id));
+    if (!ok) {
+      res.status(404).json({ error: 'Esa persona ya no está en el equipo' });
+      return;
+    }
+    clearAgentSessionCache();
+    res.json({ ok: true });
+  } catch (error) {
+    responderErrorDeEquipo(res, error, 'quitar al miembro', req.dali!.companyId);
+  }
 });
 
 /**

@@ -21,7 +21,7 @@ import { clientePorTelefono } from './cliente.js';
 import { HERRAMIENTAS_VENTAS, type DatosLead } from './herramientas.js';
 import type { ProveedorLlm } from './llm.types.js';
 import { bloquesSistema, type NegocioAsfalto } from './prompt.asfalto.js';
-import { enHorarioSegun, negocioDe, perfilDe, type HorarioAtencion } from '../dali/asistente.js';
+import { destinosDeAviso, enHorarioSegun, negocioDe, perfilDe, type HorarioAtencion } from '../dali/asistente.js';
 import { respuestaFaqPara } from '../dali/faq.js';
 import { correrTurno, historialATurnos } from './runtime.js';
 
@@ -110,9 +110,13 @@ export interface DepsVentas {
   notificar(target: string, texto: string): Promise<void>;
 }
 
-/** A quién avisar de qué: lo elegido en A6 («Avisos»), o todo si no se eligió. */
-const avisaDe = (botConfig: ReplyInput['botConfig'], caso: 'leadNuevo' | 'pideUrgente' | 'fallo'): string | null =>
-  botConfig.ownerNotifyTarget && (botConfig.notifyOn?.[caso] ?? true) ? String(botConfig.ownerNotifyTarget) : null;
+/** A quiénes avisar de qué: el canal elegido en A6 («Avisos») más el equipo con avisos activos (A16); vacío si el caso está apagado. */
+const avisaDe = (botConfig: ReplyInput['botConfig'], caso: 'leadNuevo' | 'pideUrgente' | 'fallo'): string[] => destinosDeAviso(botConfig, caso);
+
+/** El mismo aviso a cada destino, uno a uno (un fallo en uno no calla a los demás: `notificar` ya atrapa). */
+const avisarA = async (deps: DepsVentas, destinos: string[], textoAviso: string): Promise<void> => {
+  for (const destino of destinos) await deps.notificar(destino, textoAviso);
+};
 
 /**
  * La respuesta del agente a un mensaje entrante ya persistido. `null` = callar
@@ -163,11 +167,11 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
           // trabajar (servicio y ubicación o cantidad); una vez por conversación y día.
           const conQue = Boolean(lead.servicio && (lead.distrito || lead.cantidad));
           const avisadoHoy = conversacion.leadNotifiedAt && Date.now() - conversacion.leadNotifiedAt.getTime() < 24 * 3_600_000;
-          const destinoLead = avisaDe(botConfig, 'leadNuevo');
-          const notificar = Boolean(destinoLead) && (lead.listo || conQue) && (!avisadoHoy || Boolean(lead.listo && !conversacion.lead?.listo));
+          const destinosLead = avisaDe(botConfig, 'leadNuevo');
+          const notificar = destinosLead.length > 0 && (lead.listo || conQue) && (!avisadoHoy || Boolean(lead.listo && !conversacion.lead?.listo));
           await guardarLeadEnConversacion(conversationId, lead as Record<string, unknown>, notificar);
-          if (notificar && destinoLead) {
-            await deps.notificar(destinoLead, textoLead(lead, customerPhone, negocio, cliente?.nombre ?? conversacion.customerName));
+          if (notificar) {
+            await avisarA(deps, destinosLead, textoLead(lead, customerPhone, negocio, cliente?.nombre ?? conversacion.customerName));
             conversacion.leadNotifiedAt = new Date();
             conversacion.lead = lead as Record<string, unknown>;
           }
@@ -176,10 +180,10 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
         escalar: async (motivo) => {
           escalado = true;
           await pausarConversacion(conversationId, botConfig.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN, 'escalada');
-          const destino = avisaDe(botConfig, 'pideUrgente');
-          if (destino) {
+          const destinos = avisaDe(botConfig, 'pideUrgente');
+          if (destinos.length) {
             const ultimos = mensajes.filter((m) => m.role === 'customer').slice(-2).map((m) => `«${String(m.text || '').slice(0, 120)}»`).join(' / ');
-            await deps.notificar(destino, `🙋 *Cliente pide atención — ${negocio.nombre}*\n👤 ${cliente?.nombre ?? conversacion.customerName ?? 'sin nombre'} · ${telefonoLegible(customerPhone)}\nMotivo: ${motivo}\nÚltimos mensajes: ${ultimos}\nEl bot se calla 30 min: responde desde el WhatsApp de ${negocio.nombre}.`);
+            await avisarA(deps, destinos, `🙋 *Cliente pide atención — ${negocio.nombre}*\n👤 ${cliente?.nombre ?? conversacion.customerName ?? 'sin nombre'} · ${telefonoLegible(customerPhone)}\nMotivo: ${motivo}\nÚltimos mensajes: ${ultimos}\nEl bot se calla 30 min: responde desde el WhatsApp de ${negocio.nombre}.`);
           }
         },
         horario: () => ({ texto: negocio.horario, abierto: hora.enHorario }),
@@ -188,9 +192,9 @@ export const responderVentas = async (input: ReplyInput, deps: DepsVentas): Prom
     void sumarTokens(conversationId, resultado.uso.entrada, resultado.uso.salida).catch(() => undefined);
     if (resultado.degradado && !escalado) {
       await pausarConversacion(conversationId, botConfig.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN, 'escalada');
-      const destino = avisaDe(botConfig, 'fallo');
-      if (destino) {
-        await deps.notificar(destino, `⚠️ *El bot no pudo contestar — ${negocio.nombre}*\n${telefonoLegible(customerPhone)}: «${String(message.text).slice(0, 160)}»\nLe dije que un asesor responde. Toma la conversación desde el WhatsApp de ${negocio.nombre}.`);
+      const destinos = avisaDe(botConfig, 'fallo');
+      if (destinos.length) {
+        await avisarA(deps, destinos, `⚠️ *El bot no pudo contestar — ${negocio.nombre}*\n${telefonoLegible(customerPhone)}: «${String(message.text).slice(0, 160)}»\nLe dije que un asesor responde. Toma la conversación desde el WhatsApp de ${negocio.nombre}.`);
       }
     }
     logger.info(
@@ -209,11 +213,11 @@ const notificarLead = async (
 ): Promise<boolean> => {
   const conQue = Boolean(lead.servicio && (lead.distrito || lead.cantidad));
   const avisadoHoy = ctx.conversacion.leadNotifiedAt && Date.now() - ctx.conversacion.leadNotifiedAt.getTime() < 24 * 3_600_000;
-  const destino = avisaDe(ctx.botConfig, 'leadNuevo');
-  const notificar = Boolean(destino) && (lead.listo || conQue) && (!avisadoHoy || Boolean(lead.listo && !ctx.conversacion.lead?.listo));
+  const destinos = avisaDe(ctx.botConfig, 'leadNuevo');
+  const notificar = destinos.length > 0 && (lead.listo || conQue) && (!avisadoHoy || Boolean(lead.listo && !ctx.conversacion.lead?.listo));
   await guardarLeadEnConversacion(ctx.conversationId, guardar, notificar);
-  if (notificar && destino) {
-    await deps.notificar(destino, textoLead(lead, ctx.customerPhone, ctx.negocio, ctx.nombreCliente));
+  if (notificar) {
+    await avisarA(deps, destinos, textoLead(lead, ctx.customerPhone, ctx.negocio, ctx.nombreCliente));
     ctx.conversacion.leadNotifiedAt = new Date();
     ctx.conversacion.lead = guardar;
   }
@@ -252,15 +256,15 @@ const turnoGuiado = async (
   if (p.guardar) await notificarLead(lead, guardar, { ...ctx, nombreCliente: ctx.cliente?.nombre ?? ctx.conversacion.customerName }, deps);
   else await guardarLeadEnConversacion(ctx.conversationId, guardar, false);
   const quien = lead.nombre ?? ctx.cliente?.nombre ?? ctx.conversacion.customerName;
-  const destinoNota = avisaDe(ctx.botConfig, 'leadNuevo');
-  if (p.notaNueva && destinoNota) {
-    await deps.notificar(destinoNota, `➕ *${quien ?? telefonoLegible(ctx.customerPhone)} agregó:* «${p.notaNueva}»`);
+  const destinosNota = avisaDe(ctx.botConfig, 'leadNuevo');
+  if (p.notaNueva && destinosNota.length) {
+    await avisarA(deps, destinosNota, `➕ *${quien ?? telefonoLegible(ctx.customerPhone)} agregó:* «${p.notaNueva}»`);
   }
   if (p.escalar) {
     await pausarConversacion(ctx.conversationId, ctx.botConfig.handoffPauseMinutes ?? PAUSA_POR_DEFECTO_MIN, 'escalada');
-    const destinoEscalada = avisaDe(ctx.botConfig, 'pideUrgente');
-    if (destinoEscalada) {
-      await deps.notificar(destinoEscalada, `🙋 *Cliente pide atención — ${ctx.negocio.nombre}*\n👤 ${quien ?? 'sin nombre'} · ${telefonoLegible(ctx.customerPhone)}\nMotivo: ${p.escalar}\nÚltimo mensaje: «${texto.slice(0, 160)}»\nEl bot se calla 30 min: responde desde el WhatsApp de ${ctx.negocio.nombre}.`);
+    const destinosEscalada = avisaDe(ctx.botConfig, 'pideUrgente');
+    if (destinosEscalada.length) {
+      await avisarA(deps, destinosEscalada, `🙋 *Cliente pide atención — ${ctx.negocio.nombre}*\n👤 ${quien ?? 'sin nombre'} · ${telefonoLegible(ctx.customerPhone)}\nMotivo: ${p.escalar}\nÚltimo mensaje: «${texto.slice(0, 160)}»\nEl bot se calla 30 min: responde desde el WhatsApp de ${ctx.negocio.nombre}.`);
     }
   }
   const respondido = Object.entries(p.estado.respuestas ?? {}).map(([k, v]) => `${k}=${v}`).join(' ');

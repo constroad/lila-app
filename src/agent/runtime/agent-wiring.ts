@@ -16,6 +16,7 @@ import { saveInboundMessage, saveOutboundMessage } from './conversation.store.js
 import type { AgentBotConfig, AgentInboundMessage, InboundRouterDeps } from './agent.types.js';
 import { atenderMensajeDelDueno, responderVentas } from '../ventas/index.js';
 import { destinoDeAvisos } from '../dali/asistente.js';
+import { jidsConAvisos } from '../dali/equipo.js';
 import { recordSessionEvent } from '../../whatsapp/baileys/session-events.js';
 
 interface AgentSocket {
@@ -79,7 +80,7 @@ async function resolveSessionContext(
     companyId = clave ? String(clave) : null;
     if (companyId) {
       const configModel = await getBotConfigModel();
-      const stored = await configModel.findOne({ companyId }).lean();
+      const [stored, alertTargets] = await Promise.all([configModel.findOne({ companyId }).lean(), jidsConAvisos(companyId).catch(() => [] as string[])]);
       const avisos = destinoDeAvisos(stored);
       botConfig = stored
         ? {
@@ -90,6 +91,7 @@ async function resolveSessionContext(
             handoffPauseMinutes: stored.handoffPauseMinutes,
             ownerNotifyTarget: avisos.target,
             notifyOn: avisos.casos,
+            alertTargets,
             guion: stored.guion,
             profile: stored.perfil,
             business: stored.negocio,

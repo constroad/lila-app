@@ -207,6 +207,19 @@ export const destinoDeAvisos = (config: { avisos?: unknown; ownerNotifyTarget?: 
   return { target: avisos.canal === 'dueno' ? (dueno ?? grupo) : grupo, casos: avisos.casos };
 };
 
+/**
+ * A quiénes va un aviso (A16): el canal elegido en «Avisos» (grupo o número
+ * del dueño) más cada miembro del equipo con los avisos activos, sin repetir;
+ * nada si ese caso está apagado.
+ */
+export const destinosDeAviso = (
+  config: { ownerNotifyTarget?: string; notifyOn?: Partial<AvisosAsistente['casos']>; alertTargets?: string[] },
+  caso: keyof AvisosAsistente['casos']
+): string[] => {
+  if (!(config.notifyOn?.[caso] ?? true)) return [];
+  return [...new Set([config.ownerNotifyTarget, ...(config.alertTargets ?? [])].map((t) => texto(t)).filter(Boolean))];
+};
+
 /** ¿Dali está pausada? (`pausedUntil` en el futuro). */
 export const pausada = (config: { pausedUntil?: Date | string | null } | null | undefined, ahoraMs = Date.now()): boolean =>
   Boolean(config?.pausedUntil) && new Date(config!.pausedUntil as string).getTime() > ahoraMs;

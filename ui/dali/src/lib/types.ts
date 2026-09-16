@@ -345,3 +345,22 @@ export interface Vinculacion {
   generadoEn?: string;
   vigenciaS: number;
 }
+
+/** A16 «Equipo» (`src/agent/dali/equipo.ts`). */
+export interface MiembroEquipo {
+  id: string;
+  nombre: string;
+  identidad: string;
+  rol: RolDali;
+  recibeAvisos: boolean;
+  pendiente: boolean;
+  ultimoIngreso?: string;
+  invitadoEl?: string;
+}
+
+export interface Equipo {
+  miembros: MiembroEquipo[];
+  activos: number;
+  pendientes: number;
+  cupo: { usados: number; limite: number };
+}

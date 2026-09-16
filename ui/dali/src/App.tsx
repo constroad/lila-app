@@ -23,6 +23,7 @@ const FaqScreen = lazy(() => import('@/screens/faq/FaqScreen').then((m) => ({ de
 const CatalogoScreen = lazy(() => import('@/screens/catalogo/CatalogoScreen').then((m) => ({ default: m.CatalogoScreen })));
 const ImportarScreen = lazy(() => import('@/screens/importar/ImportarScreen').then((m) => ({ default: m.ImportarScreen })));
 const WhatsAppScreen = lazy(() => import('@/screens/whatsapp/WhatsAppScreen').then((m) => ({ default: m.WhatsAppScreen })));
+const EquipoScreen = lazy(() => import('@/screens/equipo/EquipoScreen').then((m) => ({ default: m.EquipoScreen })));
 
 /** En móvil y tablet la conversación y el lead son pantallas enteras; en escritorio viven dentro de la lista. */
 const ChatMovil = () => (
@@ -187,7 +188,15 @@ export default function App() {
                   </Suspense>
                 }
               />
-              {['/equipo', '/plan', '/ajustes', '/notificaciones', '/reportes', '/mas'].map((ruta) => (
+              <Route
+                path="/equipo"
+                element={
+                  <Suspense fallback={null}>
+                    <EquipoScreen />
+                  </Suspense>
+                }
+              />
+              {['/plan', '/ajustes', '/notificaciones', '/reportes', '/mas'].map((ruta) => (
                 <Route key={ruta} path={`${ruta}/*`} element={<PendienteScreen titulo={ruta.slice(1)} />} />
               ))}
               <Route path="/" element={<Navigate to="/inicio" replace />} />

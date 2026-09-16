@@ -158,7 +158,7 @@ Auth: `requireTenant` (JWT) salvo `auth/*` y `registro`. Rol en `req.auth.role`.
 | conversaciones | `GET conversaciones?estado&q&cursor` · `GET conversaciones/:id` (mensajes + lead) · `POST conversaciones/:id/tomar` · `POST …/devolver` · `POST …/cerrar` · `POST …/mensaje` {texto} (sale por el número del negocio, pausa a Dali) · `POST …/nota` | |
 | leads | `GET leads?estado&servicio&q` · `GET leads/:id` · `PATCH leads/:id` {estado, cotizacion, motivoPerdido} · `POST leads/:id/notas` · `GET leads/exportar.xlsx` | |
 | probar | `POST probar` {sesionId?, mensaje, como: nuevo|conocido} → {respuesta, entendido, siguiente, senales} | corre `paso()` con un estado en memoria (TTL 30 min), sin persistir ni avisar. |
-| equipo | `GET equipo` · `POST equipo/invitar` · `PATCH equipo/:id` · `DELETE equipo/:id` | invita en constroad-auth + `bot_members`. |
+| equipo | `GET equipo` · `POST equipo` (invitar = dar acceso) · `PATCH equipo/:id` {rol, recibeAvisos} · `DELETE equipo/:id` | `bot_members`; en F2 también constroad-auth. |
 | plan | `GET plan` (plan, uso, semanas, pagos) | pagos registrados por el operador (sin pasarela: transferencia/Yape). |
 | notificaciones | `GET/PUT notificaciones` | `bot_configs.avisos`. |
 | reportes | `GET reportes?rango` | agregados por semana; «no supo responder» sale de las conversaciones con `fueraDeTema`/sin ruta. |
@@ -464,6 +464,34 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   `session-events.test.ts`, `sessions.simple.test.ts` (qué transición deja
   qué evento), `session.controller.simple.test.ts` (`resolveQrState`),
   `inbound-router.test.ts` (envío fallido).
+- **A16 Equipo** (`ui/dali/src/screens/equipo/*`, comparada con `A16-equipo`
+  en los tres tamaños): quién entra al panel y quién recibe los avisos. Es
+  `bot_members` administrado desde el panel (`dali/equipo.ts`): la lista con
+  nombre, identidad (celular o correo), rol, avisos, último ingreso y si está
+  **pendiente** (nunca entró); **invitar = dar acceso** (`POST equipo`:
+  celular de 9 cifras o correo, nombre —el diseño no lo pide, pero sin nombre
+  no hay a quién mostrar—, rol y «recibe los avisos», que con correo no aplica
+  porque los avisos van por WhatsApp); cambiar rol o avisos (`PATCH`) y quitar
+  (`DELETE`, con confirmación en la fila); nadie puede quitar ni degradar al
+  último dueño; cupo del piloto `CUPO_MIEMBROS = 5` (no hay plan con asientos
+  todavía). **Roles de verdad** (`dali/permisos.ts`, gate en la ruta después
+  de la sesión): leer puede cualquiera; la configuración (asistente,
+  servicios, negocio, FAQ, catálogo, importar, WhatsApp, equipo) la cambia
+  solo el dueño; conversaciones y leads los trabajan dueño y ventas; solo
+  lectura no toca; probar a Dali, todos. **Avisos al equipo**: los avisos de
+  A6 (lead, cliente que pide a alguien, fallo) ahora salen al canal elegido Y
+  a cada miembro con celular y avisos activos (`destinosDeAviso` en
+  `asistente.ts`, `AgentBotConfig.alertTargets` que el wiring llena con
+  `jidsConAvisos`; `ventas/index.ts` avisa a cada destino). **Contra el
+  diseño**: la invitación NO manda ningún mensaje ni enlace de 24 h (eso es
+  constroad-auth, F2): la persona entra pidiendo su código y hasta F2 el
+  código le llega a quien opera lila, y la pantalla lo dice; por eso tampoco
+  hay «Reenviar»; el filtro de avisos por servicio («Asfalto en caliente») no
+  existe (es prender/apagar); el «Plan Negocio» es «Piloto · N de 5». Probado
+  de punta a punta contra la base con un miembro de prueba (invitar, cambiar
+  rol y avisos, quitar). Tests: `equipo.test.ts` (legible, invitación, último
+  dueño, JIDs de avisos, cupo), `permisos.test.ts` (qué rol cambia qué),
+  `asistente.test.ts` (`destinosDeAviso`).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -503,7 +531,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
     el cliente) y el trabajo del dueño.
   - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
     identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
-    lead). Suite completa en verde (1035 + 333, tras A14).
+    lead). Suite completa en verde (1047 + 333, tras A16).
 - **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
   → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
   sin sesión → 401.
@@ -517,8 +545,8 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
 - Los nombres de servicio del guion son minúsculas y con paréntesis
   («asfaltado (colocación)»); en títulos van en oración y sin paréntesis
   («Asfaltado 600 m² · Lurín»).
-- Cualquier miembro puede tomar/devolver/cerrar y escribir al cliente; el rol
-  fino (§3 `bot_members.role`) se aplica cuando llegue Equipo (A16).
+- Dueño y ventas pueden tomar/devolver/cerrar y escribir al cliente; solo
+  lectura, no; la configuración es del dueño (A16, `dali/permisos.ts`).
 
 **Sin verificar todavía:** tema oscuro (tokens definidos, ninguna pantalla
 revisada en oscuro); A15 con Qwen en producción bajo carga (en local un turno
@@ -532,7 +560,10 @@ desconectar y el mensaje de prueba— se probó con tests y contra el harness
 local (donde el guard del lease rechaza abrir sockets y la pantalla lo muestra),
 NO contra la línea de producción: es la del piloto y la comparten dos empresas,
 y un envío real necesita el sí de José; el historial nace vacío (se registra
-desde este deploy); `escribirAlCliente` de punta a punta (envía por
+desde este deploy); en A16, un aviso real a un miembro del equipo (el fan-out
+se probó con tests; nadie más que José tiene celular en el equipo hoy) y un
+ingreso con rol ventas o solo lectura (no hay otro miembro: el gate de roles se
+probó por test); `escribirAlCliente` de punta a punta (envía por
 WhatsApp: no se probó para no mandarle mensajes a nadie); PWA/instalable (F3
 «done» lo pide); en A6, el efecto real de una pausa y de un perfil distinto
 sobre una conversación de WhatsApp (se probó con tests y guardando/reanudando
@@ -546,7 +577,7 @@ probó por el selector de archivos), y una plantilla editada por alguien en
 Excel de verdad (se probó la ida y vuelta sin tocar y los casos de
 normalización por test).
 
-**Pendiente de F3:** P1, P4–P6, A16–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A17–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

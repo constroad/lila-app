@@ -16,6 +16,8 @@ export interface AgentBotConfig {
   ownerNotifyTarget?: string;
   /** Qué avisar (A6 «Avisos»); ausente = todo. */
   notifyOn?: { leadNuevo: boolean; pideUrgente: boolean; fallo: boolean };
+  /** JIDs de los miembros del equipo con los avisos activos (A16); reciben lo mismo que `ownerNotifyTarget`. */
+  alertTargets?: string[];
   /** El guion de preguntas del vertical (`ventas/guion.asfalto.ts`); ausente = el default en código. */
   guion?: unknown;
   /** Cómo se presenta la asistente (`dali/asistente.ts` `PerfilAsistente`); ausente = el perfil del piloto. */

@@ -5,8 +5,9 @@ import { BrandMark } from '@/components/BrandMark';
 import { useSesion } from '@/lib/session';
 import { api } from '@/lib/api';
 import { iniciales, telefonoLegible } from '@/lib/format';
+import { NOMBRE_ROL } from '@/lib/roles';
 import { cn } from '@/lib/utils';
-import type { Inicio } from '@/lib/types';
+import type { Inicio, RolDali } from '@/lib/types';
 import { NAV_MAS, NAV_MOBILE, NAV_RAIL, NAV_SECTIONS } from './nav';
 import { BarraProvider, useBarra } from './barra';
 
@@ -20,7 +21,6 @@ import { BarraProvider, useBarra } from './barra';
  * barra de arriba (tablet, y escritorio en las pantallas de configuración)
  * lleva las migas y las acciones que la pantalla registra (`barra.tsx`).
  */
-const ROL: Record<string, string> = { owner: 'Administrador', sales: 'Ventas', viewer: 'Solo lectura', operator: 'Operador' };
 
 export function AppShell() {
   const { yo } = useSesion();
@@ -108,7 +108,7 @@ function SidebarEscritorio({ empresa, rubro, contadores }: { empresa?: string; r
         <div className="flex size-10 items-center justify-center rounded-full bg-stone-900 font-headline text-sm font-bold text-white">{iniciales(yo?.usuario.nombre ?? '?')}</div>
         <div className="min-w-0 flex-1">
           <p className="truncate font-headline text-sm font-bold">{yo?.usuario.nombre}</p>
-          <p className="truncate font-label text-xs text-stone-500">{ROL[yo?.usuario.rol ?? ''] ?? yo?.usuario.rol}</p>
+          <p className="truncate font-label text-xs text-stone-500">{yo ? NOMBRE_ROL[yo.usuario.rol] : ''}</p>
         </div>
         <button
           type="button"
@@ -169,7 +169,7 @@ function BarraSuperior({ empresa, numero, enLinea, conectado }: { empresa?: stri
   );
 }
 
-function AccionesPorDefecto({ numero, nombre, rol }: { numero?: string; nombre?: string; rol?: string }) {
+function AccionesPorDefecto({ numero, nombre, rol }: { numero?: string; nombre?: string; rol?: RolDali }) {
   return (
     <>
       <a
@@ -184,7 +184,7 @@ function AccionesPorDefecto({ numero, nombre, rol }: { numero?: string; nombre?:
         <div className="flex size-9 items-center justify-center rounded-full bg-stone-200 font-headline text-xs font-bold text-stone-700">{iniciales(nombre ?? '?')}</div>
         <div className="hidden leading-tight lg:block">
           <p className="font-headline text-sm font-bold text-stone-900">{nombre}</p>
-          <p className="font-body text-xs text-stone-500">{ROL[rol ?? ''] ?? rol}</p>
+          <p className="font-body text-xs text-stone-500">{rol ? NOMBRE_ROL[rol] : ''}</p>
         </div>
       </div>
     </>

@@ -1,4 +1,4 @@
-import { avisosDe, destinoDeAvisos, enHorarioSegun, horarioLegible, minutosHastaManana, negocioDe, pausada, perfilDe, PERFIL_POR_DEFECTO } from './asistente';
+import { destinosDeAviso, avisosDe, destinoDeAvisos, enHorarioSegun, horarioLegible, minutosHastaManana, negocioDe, pausada, perfilDe, PERFIL_POR_DEFECTO } from './asistente';
 
 /**
  * LO QUE SE CONFIGURA EN «ASISTENTE» (A6) llega al guion tal cual: el nombre,
@@ -65,6 +65,14 @@ describe('avisosDe', () => {
     });
     expect(destinoDeAvisos({ ownerNotifyTarget: '120363@g.us', avisos: { canal: 'dueno' } }).target).toBe('120363@g.us');
     expect(destinoDeAvisos(null).target).toBeUndefined();
+  });
+
+  it('destinosDeAviso (A16): el canal elegido más cada miembro con avisos activos, sin repetir, y nada si el caso está apagado', () => {
+    const config = { ownerNotifyTarget: '51903124919@s.whatsapp.net', notifyOn: { leadNuevo: true, pideUrgente: true, fallo: false }, alertTargets: ['51987111222@s.whatsapp.net', '51903124919@s.whatsapp.net'] };
+    expect(destinosDeAviso(config, 'leadNuevo')).toEqual(['51903124919@s.whatsapp.net', '51987111222@s.whatsapp.net']);
+    expect(destinosDeAviso(config, 'fallo')).toEqual([]);
+    expect(destinosDeAviso({ alertTargets: ['51987111222@s.whatsapp.net'] }, 'pideUrgente')).toEqual(['51987111222@s.whatsapp.net']);
+    expect(destinosDeAviso({}, 'leadNuevo')).toEqual([]);
   });
 });
 
