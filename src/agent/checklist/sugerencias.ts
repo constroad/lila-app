@@ -161,6 +161,24 @@ export const pendientes = (ahoraMs = Date.now()): Propuesta[] => {
   return propuestas.filter((p) => p.estado === 'pendiente').reverse();
 };
 
+/**
+ * Cierra en silencio lo pendiente de los tipos que ya no existen (spec §14:
+ * el aviso con «1», el checklist de planta y las menciones). Devuelve las
+ * cerradas para persistirlas. Sin esto, la b88e1226 del 15/09 habría vencido
+ * a las 01:21 con un «⌛ no se mandó» de un mecanismo que ya no está.
+ */
+export const cerrarTiposRetirados = (tipos: TipoPropuesta[], ahoraMs = Date.now()): Propuesta[] => {
+  const cerradas: Propuesta[] = [];
+  for (const p of propuestas) {
+    if (p.estado !== 'pendiente' || !tipos.includes(p.tipo)) continue;
+    p.estado = 'descartada';
+    p.decididaPor = 'agente';
+    p.decididaMs = ahoraMs;
+    cerradas.push(p);
+  }
+  return cerradas;
+};
+
 /** Las que vencieron en esta pasada, para avisar en operaciones. */
 export const vencidasAhora = (ahoraMs = Date.now()): Propuesta[] => expirar(ahoraMs);
 

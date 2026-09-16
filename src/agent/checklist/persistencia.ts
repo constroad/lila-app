@@ -3,6 +3,7 @@ import logger from '../../utils/logger.js';
 import { getSharedConnection } from '../../database/sharedConnection.js';
 import type { MensajeGrupo } from './mensajes.js';
 import type { Propuesta } from './sugerencias.js';
+import type { AvisoProgramado } from './agenda.js';
 
 /**
  * LA MEMORIA DEL AGENTE SOBREVIVE UN DEPLOY.
@@ -63,19 +64,64 @@ const configSchema = new Schema(
 );
 
 type Doc = Record<string, unknown>;
+/** La agenda de avisos a planta (spec §14): una entrada por día de producción. */
+const avisoSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    fecha: { type: String, required: true, index: true },
+    envioMs: Number,
+    estado: { type: String, index: true },
+    producciones: Schema.Types.Mixed,
+    creadoMs: Number,
+    actualizadoMs: Number,
+    msgIdPlanta: String,
+    textoPublicado: String,
+    enviadoComo: String,
+    confirmaciones: [String],
+    recordadoSinPedido: Boolean,
+  },
+  { collection: 'agent_avisos', strict: false }
+);
+
 let mensajes: Model<Doc> | null = null;
 let propuestas: Model<Doc> | null = null;
 let config: Model<Doc> | null = null;
+let avisos: Model<Doc> | null = null;
 
-const modelos = async (): Promise<{ mensajes: Model<Doc>; propuestas: Model<Doc>; config: Model<Doc> }> => {
-  if (mensajes && propuestas && config) return { mensajes, propuestas, config };
+const modelos = async (): Promise<{ mensajes: Model<Doc>; propuestas: Model<Doc>; config: Model<Doc>; avisos: Model<Doc> }> => {
+  if (mensajes && propuestas && config && avisos) return { mensajes, propuestas, config, avisos };
   const conn = await getSharedConnection();
   mensajes =
     (conn.models.AgentMessage as Model<Doc>) || conn.model<Doc>('AgentMessage', mensajeSchema);
   propuestas =
     (conn.models.AgentProposal as Model<Doc>) || conn.model<Doc>('AgentProposal', propuestaSchema);
   config = (conn.models.AgentConfig as Model<Doc>) || conn.model<Doc>('AgentConfig', configSchema);
-  return { mensajes, propuestas, config };
+  avisos = (conn.models.AgentAviso as Model<Doc>) || conn.model<Doc>('AgentAviso', avisoSchema);
+  return { mensajes, propuestas, config, avisos };
+};
+
+export const guardarAviso = async (a: AvisoProgramado): Promise<void> => {
+  try {
+    const { avisos } = await modelos();
+    await avisos.updateOne({ id: a.id }, { $set: { ...a } }, { upsert: true });
+  } catch (error) {
+    avisar(`no pude guardar el aviso ${a.id}`, error);
+  }
+};
+
+/** Los avisos vivos o recientes: desde `desdeFecha` (día de producción). */
+export const cargarAvisos = async (desdeFecha: string): Promise<AvisoProgramado[]> => {
+  try {
+    const { avisos } = await modelos();
+    const docs = (await avisos.find({ fecha: { $gte: desdeFecha } }).lean()) as Doc[];
+    return docs.map((d) => {
+      const { _id: _omit, __v: _omit2, ...resto } = d;
+      return resto as unknown as AvisoProgramado;
+    });
+  } catch (error) {
+    avisar('no pude cargar la agenda de avisos', error);
+    return [];
+  }
 };
 
 const avisar = (que: string, error: unknown): void => {

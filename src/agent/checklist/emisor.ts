@@ -41,6 +41,22 @@ const mandar = async (destino: string, texto: string): Promise<string | undefine
   return resultado?.key?.id || undefined;
 };
 
+/**
+ * A PLANTA, directo (spec §14): el aviso programado, su actualización o su
+ * cancelación. Mismo guard que las propuestas aprobadas: solo los grupos del
+ * alcance (escuchado y planta) son destinos válidos.
+ */
+export const mandarA = async (destino: string, texto: string): Promise<string | undefined> => {
+  if (!AGENTE_ACTIVO || agenteApagado()) return undefined;
+  const { alcanceVigente } = await import('./observador.js');
+  const alcance = await alcanceVigente();
+  if (!destinosConAprobacion(alcance).includes(destino)) {
+    logger.error(`[agente] se intentó mandar a ${destino}, que no es un destino del alcance. No se manda.`);
+    return undefined;
+  }
+  return mandar(destino, texto);
+};
+
 export const enviarAOperaciones = async (texto: string): Promise<boolean> => {
   const destino = destinoPermitido();
   if (!destino) return false;
@@ -179,8 +195,9 @@ export const responderEnGrupo = async (
   respuesta: { texto?: string; archivos?: ArchivoAEnviar[] },
   alcance: AlcanceAgente,
   /** A quién se le contesta: se recuerda el id del mensaje para que pueda seguir citándolo sin etiqueta. */
-  paraQuien?: string
-): Promise<boolean> => {
+  paraQuien?: string,
+  opciones: { devolverId?: boolean } = {}
+): Promise<boolean | string> => {
   if (!AGENTE_ACTIVO || agenteApagado()) return false;
   const jid = grupoDeConsultas(destino, alcance);
   if (!jid) {
@@ -197,8 +214,10 @@ export const responderEnGrupo = async (
     await empezarAEscribir(jid, alcance);
     await new Promise((r) => setTimeout(r, Math.min(600 + (respuesta.texto?.length ?? 0) * 8, 2_500)));
   }
+  let idTexto: string | undefined;
   if (respuesta.texto?.trim()) {
     const msgId = await mandar(jid, respuesta.texto);
+    idTexto = msgId;
     if (msgId && paraQuien) {
       const { recordarRespuestaA } = await import('../consultas/contexto.js');
       recordarRespuestaA(paraQuien, jid, msgId);
@@ -249,7 +268,7 @@ export const responderEnGrupo = async (
     }
   }
   await dejarDeEscribir(jid);
-  return true;
+  return opciones.devolverId ? (idTexto ?? true) : true;
 };
 
 const mandadas = new Set<string>();

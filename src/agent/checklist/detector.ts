@@ -29,6 +29,7 @@ import {
   type Propuesta,
 } from './sugerencias.js';
 import { agruparPorDia, firmaDia, momentoVigente, type DiaDePlanta, type PedidoDelDia } from './dia.js';
+import { sincronizarConPortal, forzarEnvio } from './programador.js';
 import { analizarStockDelDia, conStockDePortal } from './stock.js';
 import { diaPeruano, instanteArranque } from './tiempo.js';
 import { agenteApagado } from './interruptor.js';
@@ -151,13 +152,16 @@ export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => 
       `días ${dias.map((d) => `${d.fecha} (${d.pedidos.map((p) => `${p.hora} ${p.empresa} ${p.cubos}m³`).join(', ')})`).join(' | ') || '—'}`
   );
 
+  // Los pedidos de Portal entran a la agenda de avisos a planta (spec §14):
+  // Portal manda en hora y m³; el aviso sale solo el día anterior a las 17:00.
+  // Reemplaza a la propuesta con «1», al checklist de planta y al recordatorio
+  // por menciones (José, 16/09). El checklist de CAMPO sigue igual.
+  await sincronizarConPortal(pedidos, alcance, ahoraMs).catch((error) => logger.warn(`[agente] no pude sincronizar la agenda con Portal: ${error instanceof Error ? error.message : String(error)}`));
+
   for (const dia of dias) {
     if (ahoraMs >= dia.arranqueMs + 60 * 60_000) continue; // arrancó hace más de 1 h: ya no se coordina, se produce
-    nuevas += await proponerAvisoDelDia(dia, alcance, ahoraMs, presupuesto);
     nuevas += await proponerRevisionDelDia(dia, alcance, ahoraMs, presupuesto);
   }
-
-  nuevas += await proponerPorMenciones(alcance, ahoraMs, presupuesto);
 
   return nuevas;
 };
@@ -166,42 +170,6 @@ export const correrDeteccion = async (ahoraMs = Date.now()): Promise<number> => 
 type Presupuesto = { restantes: number };
 const SIN_LIMITE: Presupuesto = { restantes: Number.POSITIVE_INFINITY };
 
-const proponerAvisoDelDia = async (
-  dia: DiaDePlanta,
-  alcance: Awaited<ReturnType<typeof alcanceVigente>>,
-  ahoraMs: number,
-  presupuesto: Presupuesto = SIN_LIMITE,
-  opciones: { aunqueVencida?: boolean } = {}
-): Promise<number> => {
-  if (!alcance.grupoPlanta || presupuesto.restantes <= 0) return 0;
-  const firma = `${firmaDia(dia)}|aviso`;
-  // Ya se mandó (a pedido o aprobada): no hay nada que proponer. Y lo que
-  // venció sin respuesta no se vuelve a proponer solo: para eso está «@lila
-  // manda el aviso a planta»… salvo que llegue la hora del checklist de planta
-  // y planta siga sin aviso: ahí el aviso va primero (`aunqueVencida`).
-  if (yaEnviada('aviso-planta', firma)) return 0;
-  if (yaPropuesta('aviso-planta', firma, ahoraMs, { incluirVencidas: !opciones.aunqueVencida })) return 0;
-
-  const anterior = ultimaVersionDelDia.get(dia.fecha);
-  const cambio = anterior ? describirCambio(anterior, dia.pedidos) : '';
-  const texto = construirAvisoProduccion(dia, { actualizacion: cambio || undefined });
-  const propuesta = proponer(
-    {
-      tipo: 'aviso-planta',
-      fecha: dia.fecha,
-      firma,
-      destino: alcance.grupoPlanta,
-      nombreDestino: alcance.nombreGrupoPlanta || 'planta',
-      texto,
-    },
-    ahoraMs
-  );
-  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
-  presupuesto.restantes -= 1;
-  ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
-  logger.info(`[agente] propuesta ${propuesta.id}: ${cambio ? 'actualización' : 'aviso'} de producción ${dia.fecha} → «${propuesta.nombreDestino}»`);
-  return 1;
-};
 
 /**
  * «@lila manda el aviso a planta con la programación de mañana»: la propuesta
@@ -216,24 +184,10 @@ export const proponerAvisoManual = async (
   ahoraMs = Date.now()
 ): Promise<string> => {
   if (!alcance.grupoPlanta) return 'No tengo resuelto el grupo de planta: no puedo armar el aviso.';
+  // Spec §14: el aviso ya no se propone, se manda. Pedirlo lo fuerza AHORA.
   const pedidos = await pedidosConArranque(ahoraMs);
-  const dia = agruparPorDia(pedidos).find((d) => d.fecha === fecha);
-  if (!dia) return `No hay pedidos con hora de inicio para el ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}: sin pedido no hay aviso que mandar.`;
-  const firmaBase = `${firmaDia(dia)}|aviso`;
-  const enviada = yaEnviada('aviso-planta', firmaBase);
-  if (enviada?.decididaMs) {
-    const hora = new Date(enviada.decididaMs).toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false });
-    return `Ese aviso ya se mandó a «${enviada.nombreDestino}» hoy a las ${hora}. Si cambió algo, dime qué y lo propongo de nuevo.`;
-  }
-  const texto = construirAvisoProduccion(dia);
-  const propuesta = proponer(
-    { tipo: 'aviso-planta', fecha: dia.fecha, firma: `${firmaBase}|manual|${ahoraMs}`, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || 'planta', texto },
-    ahoraMs
-  );
-  await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
-  ultimaVersionDelDia.set(dia.fecha, dia.pedidos);
-  logger.info(`[agente] propuesta ${propuesta.id}: aviso de producción ${dia.fecha} a pedido → «${propuesta.nombreDestino}»`);
-  return '';
+  await sincronizarConPortal(pedidos, alcance, ahoraMs);
+  return forzarEnvio(fecha, alcance, ahoraMs);
 };
 
 const proponerRevisionDelDia = async (
@@ -282,7 +236,8 @@ const proponerRevisionDelDia = async (
   // admin, que es donde está la gente que lo responde — ahí no hay a quién
   // proponérselo: se les está hablando a ellos.
   let nuevas = 0;
-  for (const dominio of ['planta', 'obra'] as const) {
+  // Solo CAMPO (spec §14, 16/09): planta recibe el aviso programado, no un checklist.
+  for (const dominio of ['obra'] as const) {
     if (presupuesto.restantes <= 0) break;
     const texto = construirAvisoChecklist(revision, contexto, dominio);
     if (!texto) continue;
@@ -294,17 +249,6 @@ const proponerRevisionDelDia = async (
     const marca = `${dia.fecha}|${momento}|${dominio}|`;
     if (yaPropuesta(tipo, marca, ahoraMs)) continue;
     const aPlanta = dominio === 'planta' && Boolean(alcance.grupoPlanta);
-    // EL AVISO VA PRIMERO. A planta no se le pide «confirmen PEN» de una
-    // producción que nadie les anunció. Si el aviso del día no salió (venció
-    // sin respuesta, se descartó), en el horario del checklist se vuelve a
-    // proponer el aviso, y el checklist queda para la siguiente pasada. 15/09,
-    // 17:00: José respondió «1» al checklist esperando que saliera el aviso.
-    if (aPlanta && !plantaYaAvisada(`${firmaDia(dia)}|aviso`)) {
-      const avisos = await proponerAvisoDelDia(dia, alcance, ahoraMs, presupuesto, { aunqueVencida: true });
-      if (avisos) logger.info(`[agente] checklist de planta del ${dia.fecha} espera: planta no tenía el aviso, se propuso primero`);
-      nuevas += avisos;
-      continue;
-    }
     const propuesta: Propuesta = proponer(
       {
         tipo,
@@ -441,76 +385,6 @@ const propuestasDeMencion = new Map<string, number>();
 export const _resetMenciones = (): void => propuestasDeMencion.clear();
 
 
-/**
- * LO QUE SE DIJO Y NO ES PEDIDO. José, 14/09: «muchas veces crean el pedido
- * hasta el último día o las últimas horas antes». Si en el grupo mencionaron
- * producciones por venir y en Portal no hay pedido para ese día —o lo hay pero
- * sin hora de inicio—, se proponen dos cosas en operaciones, UNA VEZ por día y
- * agrupando todo lo pendiente: un aviso PREVIO a planta («posible
- * producción…», marcado como no confirmado) y un recordatorio al grupo admin
- * para que carguen los pedidos con su hora. Cada una se aprueba por separado.
- * Con pedido y hora, no hay nada que decir: el flujo normal se ocupa.
- */
-const proponerPorMenciones = async (
-  alcance: Awaited<ReturnType<typeof alcanceVigente>>,
-  ahoraMs: number,
-  presupuesto: Presupuesto = SIN_LIMITE
-): Promise<number> => {
-  if (presupuesto.restantes <= 0) return 0;
-  // No es urgente: se dice en horario de oficina, no a las 20:40 junto con el
-  // checklist ni a las 3 de la mañana.
-  if (!enHorarioDeOficina(ahoraMs)) return 0;
-  const hoy = diaPeruano(ahoraMs);
-  const menciones = detectarMenciones(mensajesDesde(alcance.grupoEscuchado, ahoraMs - VENTANA_MS)).filter((m) => m.hasta >= hoy);
-  const sinPedido: MencionDeProduccion[] = [];
-  const sinHora: MencionDeProduccion[] = [];
-  for (const mencion of menciones) {
-    const firma = firmaMencion(mencion);
-    const ultima = propuestasDeMencion.get(firma);
-    if (ultima && ahoraMs - ultima < MENCION_REPETIR_MS) continue;
-    try {
-      const pedidos = await pedidosEnRango(mencion.desde < hoy ? hoy : mencion.desde, mencion.hasta, mencion.companyId);
-      if (pedidos.conHora > 0) continue;
-      (pedidos.sinHora > 0 ? sinHora : sinPedido).push(mencion);
-    } catch (error) {
-      logger.warn(`[agente] no pude mirar los pedidos de una mención: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-  if (sinPedido.length === 0 && sinHora.length === 0) return 0;
-  const todas = [...sinPedido, ...sinHora];
-  const firma = todas.map(firmaMencion).join(';');
-  if (yaPropuesta('recordatorio-pedido', firma, ahoraMs) || yaPropuesta('aviso-mencion', firma, ahoraMs)) return 0;
-  for (const m of todas) propuestasDeMencion.set(firmaMencion(m), ahoraMs);
-
-  // UN SOLO MENSAJE en el grupo (14/09: eran dos, y además citaban lo que el
-  // mismo grupo acababa de decir): el recordatorio de cargar los pedidos, y
-  // —si hay producciones sin pedido y un grupo de planta— la pregunta de si
-  // se avisa a planta lo posible, que se aprueba con el «1» de siempre.
-  const recordatorio = textoRecordatorioPedido(sinPedido, sinHora);
-  if (sinPedido.length && alcance.grupoPlanta) {
-    const texto = textoAvisoPrevio(sinPedido);
-    const propuesta = proponer(
-      { tipo: 'aviso-mencion', fecha: sinPedido[0].desde, firma, destino: alcance.grupoPlanta, nombreDestino: alcance.nombreGrupoPlanta || 'planta', texto },
-      ahoraMs
-    );
-    await publicarPropuesta(propuesta, `${recordatorio}\n\n📨 ¿Aviso a «${propuesta.nombreDestino}» de lo posible? Responde a este mensaje (deslízalo) con *1* para avisar, o *3* para no.`, alcance);
-    presupuesto.restantes -= 1;
-    logger.info(`[agente] propuesta ${propuesta.id}: recordatorio + aviso previo por ${todas.length} mención(es) → «${propuesta.nombreDestino}»`);
-    return 1;
-  }
-  const propuesta = proponer(
-    { tipo: 'recordatorio-pedido', fecha: todas[0].desde, firma, destino: alcance.grupoEscuchado, nombreDestino: alcance.nombreGrupo || 'admin', texto: recordatorio },
-    ahoraMs
-  );
-  const enviado = await responderEnGrupo(alcance.grupoEscuchado, { texto: recordatorio }, alcance);
-  propuesta.estado = enviado ? 'aprobada' : 'descartada';
-  propuesta.decididaPor = 'agente';
-  propuesta.decididaMs = ahoraMs;
-  void guardarPropuesta(propuesta);
-  presupuesto.restantes -= 1;
-  logger.info(`[agente] recordatorio ${propuesta.id}: pedidos sin hora por ${todas.length} mención(es) → «${propuesta.nombreDestino}»`);
-  return 1;
-};
 
 /** De 08:00 a 19:00 en Lima: cuando la gente carga pedidos. */
 export const enHorarioDeOficina = (ahoraMs: number): boolean => {

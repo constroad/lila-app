@@ -55,6 +55,8 @@ import { startDispatchAutoCloseFlusher } from './services/dispatch-autoclose.ser
 import { startDispatchAutoCloseSweeper } from './services/dispatch-autoclose-sweeper.service.js';
 import cron from 'node-cron';
 import { correrDeteccion } from './agent/checklist/detector.js';
+import { startProgramadorTicker } from './agent/checklist/programador.js';
+import { alcanceVigente } from './agent/checklist/observador.js';
 import { hidratarAgente } from './agent/checklist/observador.js';
 import fs from 'fs-extra';
 import path from 'path';
@@ -512,6 +514,9 @@ async function startServer() {
           logger.warn(`[agente] la detección del checklist falló: ${String(error)}`);
         });
       });
+      // Los avisos a planta salen a su hora (17:00 del día anterior), no en
+      // la pasada de 20 min: un tick por minuto que solo manda lo que toca.
+      startProgramadorTicker(() => alcanceVigente());
       // Re-encola transcodes de academia atascados en `processing` (trigger
       // perdido o reinicio a mitad). Solo la instancia de jobs (dev comparte
       // Atlas: dos watchdogs procesarían el mismo doc en discos distintos).

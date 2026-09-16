@@ -11,12 +11,13 @@ import {
 } from './alcance.js';
 import { normalizarTexto } from './checklist.js';
 import { hidratarMensajes, recordarMensaje } from './almacen.js';
-import { cerrarSuperadas, decidir, esVoto, hidratarPropuestas, porMensaje, type MotivoRechazo } from './sugerencias.js';
+import { cerrarSuperadas, cerrarTiposRetirados, decidir, esVoto, hidratarPropuestas, porMensaje, type MotivoRechazo } from './sugerencias.js';
 import { avisarEnGrupo, enviarAOperaciones, enviarAprobado } from './emisor.js';
 import { cargarAprobadores, esAdmin, esAprobador } from './aprobadores.js';
 import { apagar, comandoInterruptor, encender, estadoInterruptor, hidratarInterruptor, type EstadoInterruptor } from './interruptor.js';
 import { cargarConfig, cargarMensajes, cargarPropuestas, guardarConfig, guardarMensaje, guardarPropuesta } from './persistencia.js';
 import { alCambiarHilos, citaRespuestaPropia, hidratarHilos, type UltimaConsulta } from '../consultas/contexto.js';
+import { hidratarAutores } from './autores.js';
 import { VENTANA_MS } from './almacen.js';
 import { GROUP_ERRORS_TRACKING } from '../../constants/whatsapp.constants.js';
 import { findOutgoingMessage } from '../../whatsapp/baileys/outgoing-messages.js';
@@ -259,6 +260,10 @@ export const observarParaChecklist = async (
           await atenderInterruptor(comando, quien, remoteJid, alcance);
           continue;
         }
+        // «3» o «se movió» citando una confirmación del programador de avisos
+        // (spec §14): cancela o mueve ese aviso. Antes que los votos.
+        // Import dinámico: el programador arrastra el modelo y los datos (ciclo y peso).
+        if (citaDe(raw.message) && (await (await import('./programador.js')).atenderRespuestaAConfirmacion(texto, citaDe(raw.message), alcance))) continue;
         // Las propuestas ahora se publican acá (José, 14/09): el voto —«1» o
         // «3» citando la propuesta— también se atiende acá, y solo de un admin.
         // Si lo citado no es una propuesta, no es voto: sigue a las consultas.
@@ -284,6 +289,9 @@ export const observarParaChecklist = async (
       // Y a Mongo, para que un deploy no lo borre. Fire-and-forget: nunca en el
       // camino del listener.
       void guardarMensaje(remoteJid, { ...mensaje, waId: String(raw?.key?.id || '') || undefined });
+      // ¿Anuncia, mueve o cancela una producción? El programador de avisos a
+      // planta (spec §14) lo lee con el modelo y contesta en este grupo.
+      if (!delBot) void import('./programador.js').then(({ atenderPosibleAnuncio }) => atenderPosibleAnuncio(mensaje, alcance)).catch((error) => logger.warn(`[agente] no pude leer un posible anuncio: ${error instanceof Error ? error.message : String(error)}`));
     }
   } catch (error) {
     logger.warn(
@@ -476,12 +484,15 @@ export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
     return;
   }
   try {
-    const [mensajes, propuestas, interruptor, hilos] = await Promise.all([
+    const [mensajes, propuestas, interruptor, hilos, autores, avisos] = await Promise.all([
       cargarMensajes(ahoraMs - VENTANA_MS),
       cargarPropuestas(ahoraMs - 7 * 24 * 3_600_000),
       cargarConfig<EstadoInterruptor>('interruptor'),
       cargarConfig<UltimaConsulta[]>('hilos'),
+      cargarConfig<Record<string, string>>('autores'),
+      import('./programador.js').then(({ hidratarAgenda }) => hidratarAgenda(ahoraMs)).catch(() => 0),
     ]);
+    hidratarAutores(autores);
     hidratarMensajes(mensajes);
     // El hilo de cada persona («ese volquete») también vuelve del deploy.
     const hilosVivos = hidratarHilos(hilos, ahoraMs);
@@ -489,9 +500,11 @@ export const hidratarAgente = async (ahoraMs = Date.now()): Promise<void> => {
     // Lo pendiente que ya venció mientras el proceso no corría se marca vencido
     // y se persiste, sin avisar: avisar es para lo que vence estando vivo.
     for (const vencida of hidratarPropuestas(propuestas, ahoraMs)) void guardarPropuesta(vencida);
+    // Lo que el programador de avisos reemplazó (spec §14) no queda esperando un «1».
+    for (const cerrada of cerrarTiposRetirados(['aviso-planta', 'checklist-planta', 'aviso-mencion', 'recordatorio-pedido'], ahoraMs)) void guardarPropuesta(cerrada);
     hidratarInterruptor(interruptor);
     logger.info(
-      `[agente] memoria rehidratada: ${mensajes.length} mensaje(s), ${propuestas.length} propuesta(s), ${hilosVivos} hilo(s), ` +
+      `[agente] memoria rehidratada: ${mensajes.length} mensaje(s), ${propuestas.length} propuesta(s), ${hilosVivos} hilo(s), ${avisos} aviso(s) programado(s), ` +
         `interruptor ${interruptor?.apagado ? 'APAGADO' : 'prendido'}`
     );
     // Los aprobadores se leen ya, para que la lista quede en el log antes del
