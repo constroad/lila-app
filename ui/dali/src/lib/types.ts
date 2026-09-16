@@ -267,3 +267,41 @@ export interface Catalogo {
   items: ItemCatalogo[];
   dicePrecios: boolean;
 }
+
+/** A13 «Importar desde Excel» (`src/agent/dali/importar.ts`). */
+export type HojaImportacion = 'Negocio' | 'Servicios' | 'Preguntas' | 'Preguntas frecuentes' | 'Catálogo';
+
+export interface AvisoImportacion {
+  seccion: HojaImportacion;
+  fila: number;
+  detalle: string;
+  nivel: 'omitido' | 'ajustado';
+}
+
+export interface ResumenImportacion {
+  negocio: number;
+  servicios: number;
+  preguntas: number;
+  faqs: number;
+  catalogo: number;
+  total: number;
+}
+
+export interface Analisis {
+  token: string;
+  archivo: string;
+  tamano: number;
+  resumen: ResumenImportacion;
+  avisos: AvisoImportacion[];
+  hojasEncontradas: HojaImportacion[];
+}
+
+export interface Importacion {
+  archivo: string;
+  tamano: number;
+  resumen: ResumenImportacion;
+  avisos: number;
+  modo: 'reemplazar' | 'agregar';
+  quien: string;
+  fecha: string;
+}

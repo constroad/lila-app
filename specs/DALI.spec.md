@@ -384,9 +384,35 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   móvil, ítem editado en panel/hoja (nombre, categoría, unidad, precio con
   IGV, disponible, descripción, SKU), búsqueda y pestañas por categoría;
   `GET/PUT catalogo` (la lista entera). **Sin fotos** (el diseño las
-  dibuja; Dali no tiene almacén de imágenes todavía) y sin «Importar desde
-  Excel» hasta A13. Tests: `catalogo.test.ts` (limpieza, ítem en el texto,
+  dibuja; Dali no tiene almacén de imágenes todavía); «Importar desde Excel»
+  enlaza a A13. Tests: `catalogo.test.ts` (limpieza, ítem en el texto,
   respuesta de precio), `guiado.test.ts` (precio del catálogo en el guion).
+- **A13 Importar desde Excel** (`ui/dali/src/screens/importar/*`, comparada
+  con `A13-importar` en los tres tamaños): tres pasos. **1) La plantilla**
+  (`GET importar/plantilla.xlsx`, `exceljs`) sale con lo que la empresa YA
+  tiene —así también exporta—: cinco hojas, *Negocio* (campo / valor / ayuda),
+  *Servicios* (código, nombre, palabras clave, modo, activo), *Preguntas*
+  (servicio, orden, pregunta, dato, tipo, opciones «valor: palabra; palabra |
+  valor2», condición «Dato = valor», pista, explicación, y una décima columna
+  «Código del dato (no tocar)» con el identificador interno para que una ida y
+  vuelta no lo cambie), *Preguntas frecuentes* y *Catálogo*. **2) Subir**
+  (`POST importar/analizar`, multipart en memoria, ≤ 2 MB por §8 —la de
+  Constroad pesa 14 KB—, arrastrar o elegir): se lee, se cuenta por hoja y se
+  listan los **avisos** de lo que se normalizó (sin palabras clave, opción sin
+  palabras, condición que apunta a un dato sin opciones, pregunta de un
+  servicio que no está, FAQ sin respuesta, ítem sin nombre); nada se guarda
+  todavía: el plan queda en memoria con un token 15 minutos. **3) Guardar**
+  (`POST importar/confirmar` {token, modo}) en modo **agregar** (lo que
+  coincide por código / pregunta / nombre se actualiza, lo demás se suma, las
+  FAQ conservan sus usos) o **reemplazar** (cada hoja con datos pisa la suya);
+  escribe negocio, guion, FAQ y catálogo con los mismos `guardar*` de sus
+  pantallas y deja el registro en `bot_imports` (archivo, tamaño, modo,
+  resumen, quién, cuándo; `GET importar/historial`). Probado de punta a punta
+  contra la base con la plantilla de Constroad subida sin tocar: 27 elementos
+  (1 ficha, 4 servicios, 22 preguntas), guion equivalente al pack; después se
+  restauró el pack y se borró el registro de prueba. Tests: `importar.test.ts`
+  (plantilla ↔ lectura ida y vuelta, rechazo por tamaño y por formato, conteo
+  y avisos, los dos modos).
 - **A15 Probar a Dali** (`ui/dali/src/screens/probar/*`, comparada con
   `A15-probar` en los tres tamaños): el simulador. `POST probar` {texto,
   estado, ultimaPreguntaBot, clienteConocido} corre el MISMO motor guiado
@@ -426,7 +452,7 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
     el cliente) y el trabajo del dueño.
   - Tests: `acceso.test.ts` (ciclo del código, vencimiento, bloqueo,
     identidades), `inicio.test.ts` (métricas, tiempo de respuesta, atención,
-    lead). Suite completa en verde (913 + 333).
+    lead). Suite completa en verde (1006 + 333, tras A13).
 - **Verificado en producción** (15/09, 13:20): `https://lila.constroad.com/dali/entrar`
   → código en el log → Inicio con los datos reales de Constroad; `/api/dali/*`
   sin sesión → 401.
@@ -457,9 +483,13 @@ desde la pantalla contra la base, no con un mensaje del piloto); A6 en
 escritorio se miró en composición pero los clics se probaron en móvil (el
 navegador de la herramienta no mapea bien los clics con 1440 emulado); la
 barra superior en escritorio para Chats/Leads (A2 desktop la dibuja) queda
-para cuando se revisen esas pantallas.
+para cuando se revisen esas pantallas; en A13, un `.xls` viejo (solo se lee
+`.xlsx`; el error lo dice) y el arrastrar-y-soltar con la mano (la subida se
+probó por el selector de archivos), y una plantilla editada por alguien en
+Excel de verdad (se probó la ida y vuelta sin tocar y los casos de
+normalización por test).
 
-**Pendiente de F3:** P1, P4–P6, A13–A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
+**Pendiente de F3:** P1, P4–P6, A14, A16–A20, S1–S4, E1 con sus endpoints (§4);
 `dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
 «WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
 

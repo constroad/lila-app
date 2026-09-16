@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import multer from 'multer';
 import logger from '../../utils/logger.js';
 import { config } from '../../config/environment.js';
 import { pedirCodigo, verificarCodigo } from '../../agent/dali/acceso.js';
@@ -14,6 +15,7 @@ import { simularTurno } from '../../agent/dali/probar.js';
 import { guardarNegocio, leerNegocio, type CambiosFicha } from '../../agent/dali/negocio.js';
 import { guardarFaq, listarFaq, probarFaq, sugeridasFaq } from '../../agent/dali/faq.js';
 import { guardarCatalogo, leerCatalogo } from '../../agent/dali/catalogo.js';
+import { ArchivoInvalido, TAMANO_MAXIMO_BYTES, TAMANO_MAXIMO_MB, analizarArchivo, confirmarImportacion, historialDeImportaciones, plantillaDe } from '../../agent/dali/importar.js';
 
 /**
  * `/api/dali/*` (spec DALI §4): la API del panel. `auth/*` es pública con
@@ -178,6 +180,68 @@ router.put('/catalogo', async (req: Request, res: Response) => {
   const catalogo = await guardarCatalogo(req.dali!.companyId, { items: req.body?.items, dicePrecios: req.body?.dicePrecios }, req.dali!.name);
   clearAgentSessionCache();
   res.json(catalogo);
+});
+
+/** A13: importar desde Excel — la plantilla con lo actual, analizar (en memoria, ≤ 2 MB), confirmar, historial. */
+const subida = multer({ storage: multer.memoryStorage(), limits: { fileSize: TAMANO_MAXIMO_BYTES, files: 1 } });
+
+router.get('/importar/plantilla.xlsx', async (req: Request, res: Response) => {
+  const buffer = await plantillaDe(req.dali!.companyId);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="dali-${req.dali!.companyId}.xlsx"`);
+  res.send(buffer);
+});
+
+const recibirArchivo = subida.single('archivo');
+router.post(
+  '/importar/analizar',
+  (req: Request, res: Response, next) => {
+    // Con tipos: multer trae su propio Request de express-serve-static-core.
+    (recibirArchivo as unknown as (rq: Request, rs: Response, cb: (error?: unknown) => void) => void)(req, res, (error?: unknown) => {
+      if (error) {
+        res.status(400).json({ error: error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? `El archivo pesa más de ${TAMANO_MAXIMO_MB} MB` : 'No se pudo recibir el archivo' });
+        return;
+      }
+      next();
+    });
+  },
+  async (req: Request, res: Response) => {
+    const archivo = (req as Request & { file?: { originalname: string; buffer: Buffer } }).file;
+    if (!archivo) {
+      res.status(400).json({ error: 'Adjunta el archivo .xlsx' });
+      return;
+    }
+    try {
+      res.json(await analizarArchivo(req.dali!.companyId, { nombre: archivo.originalname, buffer: archivo.buffer }));
+    } catch (error) {
+      if (error instanceof ArchivoInvalido) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
+      logger.error(`[dali] no se pudo analizar el archivo de ${req.dali!.companyId}: ${String(error)}`);
+      res.status(500).json({ error: 'No se pudo analizar el archivo' });
+    }
+  }
+);
+
+router.post('/importar/confirmar', async (req: Request, res: Response) => {
+  const modo = req.body?.modo === 'reemplazar' ? 'reemplazar' : 'agregar';
+  try {
+    const r = await confirmarImportacion(req.dali!.companyId, String(req.body?.token ?? ''), modo, req.dali!.name);
+    clearAgentSessionCache();
+    res.json(r);
+  } catch (error) {
+    if (error instanceof ArchivoInvalido) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    logger.error(`[dali] no se pudo importar en ${req.dali!.companyId}: ${String(error)}`);
+    res.status(500).json({ error: 'No se pudo guardar la importación' });
+  }
+});
+
+router.get('/importar/historial', async (req: Request, res: Response) => {
+  res.json({ importaciones: await historialDeImportaciones(req.dali!.companyId) });
 });
 
 /** A15: un turno del simulador. Nada se guarda ni se avisa; el estado va y viene con el navegador. */
