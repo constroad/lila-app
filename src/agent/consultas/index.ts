@@ -511,6 +511,9 @@ const sinRuta = async (pregunta: string, quien: string, grupo: string, reglaDeRe
   return { clave: null, pregunta };
 };
 
+/** Un número suelto que no contesta nada: se dice cómo se usa, en vez de adivinar. */
+export const SIN_PENDIENTE_PARA_NUMERO = 'Ese número no responde a nada pendiente. Para aprobar o descartar una propuesta, desliza sobre ella y responde *1* o *3*; para elegir una opción, responde al mensaje donde te la pregunté.';
+
 /** Lo que se contesta si la consulta revienta por dentro (base, red): honesto y sin stack. */
 export const MENSAJE_DE_FALLO = '⚠️ No pude responder ahora: algo falló al buscar los datos. Vuelve a preguntarme en un momento.';
 
@@ -526,6 +529,13 @@ export const atenderConsulta = async (
     // segundos, y la persona tiene que ver que algo pasa (José, 14/09).
     await empezarAEscribir(grupo, alcance);
     let pregunta = preguntaLimpia(texto, numeroBot);
+    // «@lila 1» sin nada pendiente ni propuesta citada: un número no es una
+    // pregunta, y al modelo le pareció el clima (15/09, 21:08). Se explica.
+    if (/^\s*\d{1,3}\s*$/.test(pregunta)) {
+      logger.info(`[agente] «${pregunta}» de ${quien} sin pregunta pendiente ni propuesta citada: se explica`);
+      await responderEnGrupo(grupo, { texto: SIN_PENDIENTE_PARA_NUMERO }, alcance, quien);
+      return;
+    }
     // La decisión vive en `decision.ts` (misma precedencia, sin IO): es lo que
     // el examen del corpus corre con cada pregunta real. Acá solo se ejecuta.
     const decision = decidirRuta(pregunta);

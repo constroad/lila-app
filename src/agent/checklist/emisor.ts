@@ -1,6 +1,6 @@
 import logger from '../../utils/logger.js';
 import { AGENTE_ACTIVO, COMPANY_PILOTO, EMPRESAS_CON_PEDIDOS, destinoPermitido, destinosConAprobacion, grupoDestino, type AlcanceAgente } from './alcance.js';
-import { anotarMensaje, type Propuesta } from './sugerencias.js';
+import { anotarMensaje, type Propuesta, anotarTextoPublicado } from './sugerencias.js';
 import { guardarPropuesta } from './persistencia.js';
 import { agenteApagado } from './interruptor.js';
 
@@ -61,8 +61,11 @@ export const publicarPropuesta = async (propuesta: Propuesta, textoPublicado: st
   const destino = alcance?.grupoEscuchado || destinoPermitido();
   if (!destino) return false;
   const msgId = await mandar(destino, textoPublicado);
+  // El texto se guarda SIEMPRE: si el envío se encola (19:21 del 15/09, «Timed
+  // Out»), el id que llega después no es de nadie y la cita se reconoce por el texto.
+  anotarTextoPublicado(propuesta.id, textoPublicado);
   if (msgId) anotarMensaje(propuesta.id, msgId);
-  else logger.warn(`[agente] la propuesta ${propuesta.id} salió sin id de mensaje (¿encolada?): no se va a poder aprobar por cita`);
+  else logger.warn(`[agente] la propuesta ${propuesta.id} salió sin id de mensaje (encolada): se aprobará por el texto citado`);
   void guardarPropuesta(propuesta);
   return true;
 };

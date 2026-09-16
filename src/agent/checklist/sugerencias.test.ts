@@ -1,4 +1,6 @@
 import {
+
+  anotarTextoPublicado,
   plantaYaAvisada,
   _resetPropuestas,
   anotarMensaje,
@@ -46,6 +48,23 @@ describe('plantaYaAvisada — el aviso va antes que el checklist', () => {
     const manual = proponer({ tipo: 'aviso-planta', fecha: '2026-09-16', firma: `${firma}|manual|2000`, destino: 'p@g.us', nombreDestino: 'planta', texto: '…' }, 2_000);
     manual.estado = 'aprobada';
     expect(plantaYaAvisada(firma)).toBe(true);
+  });
+});
+
+describe('decidir por el TEXTO citado cuando el id no llegó', () => {
+  it('19:21 del 15/09: envío encolado, sin msgId; el «1» citando el texto aprueba igual', () => {
+    _resetPropuestas();
+    const p = proponer({ tipo: 'aviso-planta', fecha: '2026-09-16', firma: 'f', destino: 'p@g.us', nombreDestino: 'planta', texto: '📢 Producción programada — miércoles 16/09' }, 1_000);
+    anotarTextoPublicado(p.id, '📢 *Producción programada — miércoles 16/09*\n\n• 04:30 — *Globofast Solkali* (CONSORCIO LOMAS) · 225 m³ · reunión 04:00\n\n📨 Para «Inframaq Planta»: responde…');
+    // Sin id: solo el texto que WhatsApp manda con la cita (puede venir con espacios distintos).
+    expect(decidir({ voto: '1', citaMsgId: 'id-que-nadie-anoto', citaTexto: '📢 *Producción programada — miércoles 16/09*\n\n• 04:30 — *Globofast Solkali* (CONSORCIO LOMAS) · 225 m³ · reunión 04:00\n\n📨 Para «Inframaq Planta»: responde…', quien: 'jose', esAprobador: true }, 2_000)).toMatchObject({ ok: true });
+    expect(p.estado).toBe('aprobada');
+    // Una propuesta de ANTES (sin texto publicado guardado) se reconoce por su cuerpo, que es el comienzo del mensaje.
+    const vieja = proponer({ tipo: 'checklist-planta', fecha: '2026-09-16', firma: 'g', destino: 'p@g.us', nombreDestino: 'planta', texto: '⏰ *Planta, sigue sin confirmar* — miércoles 16/09 · 04:30 Globofast Solkali 200 m³' }, 1_000);
+    expect(decidir({ voto: '3', citaMsgId: 'otro-id', citaTexto: '⏰ *Planta, sigue sin confirmar* — miércoles 16/09 · 04:30 Globofast Solkali 200 m³ · arranca en 11 h\nSegún Portal…\n📨 Para «Inframaq Planta»: responde…', quien: 'jose', esAprobador: true }, 2_000)).toMatchObject({ ok: true });
+    expect(vieja.estado).toBe('descartada');
+    // Un texto que no es de ninguna propuesta sigue siendo cita desconocida; uno muy corto tampoco cuenta.
+    expect(decidir({ voto: '1', citaMsgId: 'x', citaTexto: 'Hola, ¿cómo va?', quien: 'jose', esAprobador: true }, 2_000)).toMatchObject({ ok: false, motivo: 'cita-desconocida' });
   });
 });
 

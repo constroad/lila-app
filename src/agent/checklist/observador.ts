@@ -83,8 +83,19 @@ export const esperarAlcance = async (
 
 type ContenidoEntrante = BaileysMessageContent & {
   extendedTextMessage?: {
-    contextInfo?: { stanzaId?: string | null; participant?: string | null; mentionedJid?: string[] | null } | null;
+    contextInfo?: {
+      stanzaId?: string | null;
+      participant?: string | null;
+      mentionedJid?: string[] | null;
+      quotedMessage?: { conversation?: string | null; extendedTextMessage?: { text?: string | null } | null } | null;
+    } | null;
   } | null;
+};
+
+/** El texto del mensaje citado, si WhatsApp lo trae (lo trae siempre que se desliza). */
+const textoCitadoDe = (message: ContenidoEntrante | null | undefined): string => {
+  const q = message?.extendedTextMessage?.contextInfo?.quotedMessage;
+  return String(q?.conversation || q?.extendedTextMessage?.text || '');
 };
 
 /**
@@ -225,7 +236,7 @@ export const observarParaChecklist = async (
         }
         // Un voto cita una PROPUESTA. Si cita otra cosa (la pregunta «¿lo
         // genero? 1/2/3» del agente), no es voto y sigue a las consultas.
-        if (esVoto(texto) && citaDe(raw.message) && (await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance))) continue;
+        if (esVoto(texto) && citaDe(raw.message) && (await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), citaTexto: textoCitadoDe(raw.message), quien, origen: remoteJid }, alcance))) continue;
         if (await explicarVotoInvalido(texto, citaDe(raw.message), quien, remoteJid, alcance)) continue;
         // Las consultas también se atienden acá: es nuestro grupo (José, 13/09).
         void atenderComoConsulta(raw, texto, quien, remoteJid, alcance, { votosSueltos: true });
@@ -251,7 +262,7 @@ export const observarParaChecklist = async (
         // Las propuestas ahora se publican acá (José, 14/09): el voto —«1» o
         // «3» citando la propuesta— también se atiende acá, y solo de un admin.
         // Si lo citado no es una propuesta, no es voto: sigue a las consultas.
-        if (esVoto(texto) && citaDe(raw.message) && (await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), quien, origen: remoteJid }, alcance))) continue;
+        if (esVoto(texto) && citaDe(raw.message) && (await atenderVoto({ voto: texto, citaMsgId: citaDe(raw.message), citaTexto: textoCitadoDe(raw.message), quien, origen: remoteJid }, alcance))) continue;
         if (await explicarVotoInvalido(texto, citaDe(raw.message), quien, remoteJid, alcance)) continue;
         void atenderComoConsulta(raw, texto, quien, remoteJid, alcance, { votosSueltos: false });
       }
@@ -346,6 +357,9 @@ export const atenderComoConsulta = async (
     const mensaje = raw.message as ContenidoEntrante | null | undefined;
     if (paraOtraPersona(mensaje, propios)) return;
     const limpio = preguntaLimpia(texto, bot);
+    // «@lila 1» deslizando sobre una propuesta es un voto con etiqueta de más,
+    // no una consulta: a las 21:08 del 15/09 fue al modelo y salió el clima.
+    if (esVoto(limpio) && citaDe(mensaje) && (await atenderVoto({ voto: limpio, citaMsgId: citaDe(mensaje), citaTexto: textoCitadoDe(mensaje), quien, origen: remoteJid }, alcance))) return;
     if (limpio.split(/\s+/).filter(Boolean).length <= RESPUESTA_CORTA_PALABRAS && (await atenderEleccion(limpio, quien, remoteJid, alcance))) return;
     // Etiquetada, o RESPONDIENDO (deslizar) a una respuesta que Lila le dio a
     // esta misma persona: las dos formas de hablarle en un grupo. Citar un
@@ -368,7 +382,7 @@ export const atenderComoConsulta = async (
 };
 
 const atenderVoto = async (
-  args: { voto: string; citaMsgId: string; quien: string; origen?: string },
+  args: { voto: string; citaMsgId: string; citaTexto?: string; quien: string; origen?: string },
   alcance: AlcanceAgente
 ): Promise<boolean> => {
   // Se contesta donde se votó: en INFRAMAQ admin o en operaciones.

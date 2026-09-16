@@ -42,6 +42,8 @@ export interface Propuesta {
   estado: EstadoPropuesta;
   /** Id del mensaje de WhatsApp con la propuesta: la cita que la decide apunta acá. */
   msgId?: string;
+  /** El texto tal cual salió al grupo (con el pie): para reconocer la cita cuando el id no llegó. */
+  textoPublicado?: string;
   decididaPor?: string;
   decididaMs?: number;
 }
@@ -165,6 +167,37 @@ export const vencidasAhora = (ahoraMs = Date.now()): Propuesta[] => expirar(ahor
 export const porMensaje = (msgId: string): Propuesta | undefined =>
   msgId ? propuestas.find((p) => p.msgId === msgId) : undefined;
 
+/** Se llama cuando se sabe qué texto salió al grupo (se persiste con la propuesta). */
+export const anotarTextoPublicado = (id: string, texto: string): Propuesta | undefined => {
+  const p = propuestas.find((x) => x.id === id);
+  if (p) p.textoPublicado = texto;
+  return p;
+};
+
+const compacto = (t: string): string => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+
+/**
+ * LA CITA POR SU TEXTO, cuando el id no sirve. 15/09 19:21: el envío a
+ * WhatsApp expiró («Timed Out»), la propuesta quedó en la cola de salida y
+ * salió a las 19:25 con un id que nadie asoció; José la citó con «1» y el voto
+ * fue «cita desconocida» — en silencio. WhatsApp manda el texto citado junto
+ * con el id: si el texto es el de una propuesta, es esa propuesta. Se compara
+ * el comienzo (160 caracteres compactados): dos propuestas distintas del mismo
+ * día difieren desde la primera línea.
+ */
+export const porTextoCitado = (textoCitado: string): Propuesta | undefined => {
+  const c = compacto(textoCitado);
+  if (c.length < 20) return undefined;
+  // Por el texto publicado si se guardó; si no (propuestas anteriores a este
+  // cambio, como la b88e1226 del 15/09), por el CUERPO: es el comienzo del
+  // mensaje publicado, el pie va después.
+  return propuestas.find((p) => {
+    if (p.textoPublicado) return compacto(p.textoPublicado) === c;
+    const cuerpo = compacto(p.texto).slice(0, 120);
+    return cuerpo.length >= 20 && c.startsWith(cuerpo);
+  });
+};
+
 /** ¿Es una respuesta de decisión? */
 export const esVoto = (texto: string): boolean => {
   const t = String(texto || '').trim();
@@ -183,14 +216,14 @@ export type ResultadoDecision =
  * operaciones.
  */
 export const decidir = (
-  args: { voto: string; citaMsgId?: string; quien: string; esAprobador: boolean },
+  args: { voto: string; citaMsgId?: string; citaTexto?: string; quien: string; esAprobador: boolean },
   ahoraMs = Date.now()
 ): ResultadoDecision => {
   const voto = String(args.voto || '').trim();
   if (voto !== '1' && voto !== '3') return { ok: false, motivo: 'no-es-voto' };
-  if (!args.citaMsgId) return { ok: false, motivo: 'sin-cita' };
+  if (!args.citaMsgId && !args.citaTexto) return { ok: false, motivo: 'sin-cita' };
   expirar(ahoraMs);
-  const propuesta = porMensaje(args.citaMsgId);
+  const propuesta = porMensaje(args.citaMsgId ?? '') ?? porTextoCitado(args.citaTexto ?? '');
   if (!propuesta) return { ok: false, motivo: 'cita-desconocida' };
   if (propuesta.estado !== 'pendiente') return { ok: false, motivo: 'no-pendiente' };
   if (!args.esAprobador) return { ok: false, motivo: 'no-aprobador' };
