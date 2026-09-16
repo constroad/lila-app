@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useSesion } from '@/lib/session';
 import { fechaLarga, iniciales } from '@/lib/format';
+import { ErrorDeCarga } from '@/components/Estados';
 import { Icon } from '@/components/Icon';
 import { StatusPill } from '@/components/StatusPill';
 import type { Inicio } from '@/lib/types';
@@ -20,7 +21,12 @@ export function InicioScreen() {
   const { yo } = useSesion();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: inicio, isPending } = useQuery({
+  const {
+    data: inicio,
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ['inicio'],
     queryFn: () => api.get<Inicio>('/inicio'),
     refetchInterval: 60_000,
@@ -44,6 +50,13 @@ export function InicioScreen() {
   const ahoraMs = Date.now();
   const nombre = yo?.usuario.nombre ?? '';
 
+  if (isError) {
+    return (
+      <div className="px-4 pt-6 md:px-6 xl:px-10">
+        <ErrorDeCarga onReintentar={() => void refetch()} />
+      </div>
+    );
+  }
   if (isPending || !inicio) return <InicioEsqueleto nombre={nombre} />;
   const m = inicio.metricas;
   const delta = (hoy: number, ayer: number) =>

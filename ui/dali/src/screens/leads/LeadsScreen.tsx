@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { cuando, iniciales, oracion } from '@/lib/format';
+import { ErrorDeCarga, EstadoVacio, SinResultados } from '@/components/Estados';
 import { Icon } from '@/components/Icon';
 import { NOMBRE_ESTADO_LEAD, StatusPill, TONO_LEAD } from '@/components/StatusPill';
 import type { EstadoLead, Inicio, LeadResumen } from '@/lib/types';
@@ -30,7 +31,11 @@ export function LeadsScreen() {
   const [servicio, setServicio] = useState<string>('todos');
   const [q, setQ] = useState('');
   const { data: inicio } = useQuery({ queryKey: ['inicio'], queryFn: () => api.get<Inicio>('/inicio'), staleTime: 60_000 });
-  const { data, isPending } = useQuery({ queryKey: ['leads', q], queryFn: () => api.get<Respuesta>(`/leads?q=${encodeURIComponent(q)}`), refetchInterval: 30_000 });
+  const { data, isPending, isError, refetch } = useQuery({
+    queryKey: ['leads', q],
+    queryFn: () => api.get<Respuesta>(`/leads?q=${encodeURIComponent(q)}`),
+    refetchInterval: 30_000,
+  });
   const todos = data?.leads ?? [];
   const servicios = [...new Set(todos.map((l) => l.servicio))];
   const filtrados = todos.filter((l) => servicio === 'todos' || l.servicio === servicio);
@@ -118,21 +123,22 @@ export function LeadsScreen() {
             </label>
             <div className="-mx-4 mt-3 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] xl:mx-0 xl:flex-wrap xl:px-0">
               <span className="hidden font-label text-sm font-semibold uppercase tracking-wider text-stone-500 xl:inline">Servicio:</span>
-              {[['todos', 'Todos', todos.length] as const, ...servicios.map((s) => [s, oracion(s.replace(/\s*\(.*?\)/, '')), todos.filter((l) => l.servicio === s).length] as const)].map(
-                ([id, label, n]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setServicio(id)}
-                    className={cn(
-                      'inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 font-body text-[15px] transition-colors xl:h-10 xl:rounded-lg',
-                      servicio === id ? 'border-teal-800 bg-teal-800 font-semibold text-white' : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 xl:bg-stone-100'
-                    )}
-                  >
-                    {label} <span className={cn('rounded-md px-1.5 font-mono text-xs', servicio === id ? 'bg-white/20' : 'bg-stone-100 text-stone-500')}>{n}</span>
-                  </button>
-                )
-              )}
+              {[
+                ['todos', 'Todos', todos.length] as const,
+                ...servicios.map((s) => [s, oracion(s.replace(/\s*\(.*?\)/, '')), todos.filter((l) => l.servicio === s).length] as const),
+              ].map(([id, label, n]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setServicio(id)}
+                  className={cn(
+                    'inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 font-body text-[15px] transition-colors xl:h-10 xl:rounded-lg',
+                    servicio === id ? 'border-teal-800 bg-teal-800 font-semibold text-white' : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 xl:bg-stone-100'
+                  )}
+                >
+                  {label} <span className={cn('rounded-md px-1.5 font-mono text-xs', servicio === id ? 'bg-white/20' : 'bg-stone-100 text-stone-500')}>{n}</span>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -167,6 +173,10 @@ export function LeadsScreen() {
                 <div key={i} className="h-48 animate-pulse rounded-xl bg-white shadow-sm" />
               ))}
             </div>
+          ) : isError ? (
+            <ErrorDeCarga onReintentar={() => void refetch()} />
+          ) : q.trim() && todos.length === 0 ? (
+            <SinResultados termino={q.trim()} onLimpiar={() => setQ('')} />
           ) : vista === 'lista' ? (
             <ListaLeads leads={filtrados} ahoraMs={ahoraMs} activo={id} />
           ) : (
@@ -213,15 +223,22 @@ export function LeadsScreen() {
 }
 
 function Vacio({ estado }: { estado: EstadoLead }) {
-  return (
-    <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center">
-      <Icon name="group" className="text-4xl text-stone-300" />
-      <p className="font-headline font-semibold text-stone-800">Sin leads en {NOMBRE_ESTADO_LEAD[estado].toLowerCase()}</p>
-      <p className="font-body text-sm text-stone-500">
-        {estado === 'nuevo' ? 'Cuando Dali junte los datos de un cliente, el lead aparece aquí.' : 'Cambia el estado de un lead desde su ficha.'}
-      </p>
-    </div>
-  );
+  if (estado === 'nuevo') {
+    return (
+      <EstadoVacio
+        icono="filter_center_focus"
+        tono="teal"
+        titulo="Aún no hay leads"
+        texto="Aparecen cuando Dali junta los datos de un pedido o una consulta por chat."
+        accion={
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 font-body text-sm font-semibold text-teal-800">
+            <Icon name="check_circle" className="text-base" /> Dali pedirá: qué necesita, dónde y cuánto
+          </span>
+        }
+      />
+    );
+  }
+  return <EstadoVacio icono="group" titulo={`Sin leads en ${NOMBRE_ESTADO_LEAD[estado].toLowerCase()}`} texto="Cambia el estado de un lead desde su ficha." />;
 }
 
 function ListaLeads({ leads, ahoraMs, activo }: { leads: LeadResumen[]; ahoraMs: number; activo?: string }) {

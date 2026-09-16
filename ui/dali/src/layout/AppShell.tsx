@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import type { Inicio, RolDali } from '@/lib/types';
 import { NAV_MAS, NAV_MOBILE, NAV_RAIL, NAV_SECTIONS } from './nav';
 import { BarraProvider, useBarra } from './barra';
+import { Banners } from './Banners';
 
 /**
  * EL CASCARÓN, uno por tamaño, como en los diseños de Stitch (A1 en los tres):
@@ -35,6 +36,7 @@ export function AppShell() {
         <div className="min-w-0 flex-1 md:pl-[72px] xl:pl-0">
           <BarraSuperior empresa={inicio?.empresa.nombre} numero={inicio?.asistente.numero} enLinea={inicio?.asistente.encendido} conectado={inicio?.asistente.conectado} />
           <main className="mx-auto min-h-dvh w-full max-w-[390px] bg-stone-50 pb-24 shadow-xl md:max-w-none md:bg-stone-100 md:pb-0 md:shadow-none">
+            <Banners inicio={inicio} />
             <Outlet />
           </main>
         </div>

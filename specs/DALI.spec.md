@@ -697,6 +697,38 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   resumen, actividad, sesión para entrar), `verticales.test.ts`,
   `salud.test.ts` (estado general, errores, deploy), `suspension.test.ts`
   (caché).
+- **P1 Landing** (`ui/dali/src/screens/landing/LandingScreen.tsx`, comparada
+  con `P1-landing` en los tres tamaños): la página pública en `/dali/` sin
+  sesión (con sesión, al inicio): cabecera con «Entrar» y «Probar gratis»
+  (→ registro), héroe con la conversación de muestra (sigue el guion real de
+  asfalto: área y lugar, espesor, base, y el aviso «lead calificado»), «cómo
+  funciona en 3 pasos» (P4→P6), «un asistente preparado para cada rubro»
+  (asfalto de verdad; los otros tres «próximamente»), «lo que Dali NO hace»
+  (las reglas del asistente, tal cual: sin precios cerrados, sin fechas,
+  pasa a una persona y se calla 30 min), «Piloto sin costo» (en vez de los
+  planes) y el pie. **Contra el diseño, deliberado**: sin precios ni planes
+  (F4), sin «14 días», sin logos de clientes (Inframaq es un cliente y no
+  dio permiso; «Globofast» no existe), sin «Ver una demo» (no hay video),
+  sin número de soporte ni «Hablar con un asesor», sin «Términos» ni
+  «Privacidad» (no existen las páginas).
+- **E1 Estados** (`ui/dali/src/components/Estados.tsx`, `layout/Banners.tsx`,
+  comparados con `E1-estados`): las piezas comunes —vacío con icono, título,
+  texto y acción; «No pudimos cargar esto» con reintentar; «Nada con «x»»
+  con limpiar búsqueda— y los avisos globales arriba de cualquier pantalla
+  del panel: **sin conexión** (el navegador offline; se dice que lo que ves
+  puede estar viejo, sin prometer que lo que cambies se guarde: no hay cola
+  offline), **línea desconectada** («Dali no está atendiendo» + «Vincular
+  ahora», salvo en WhatsApp), **límite del plan** (solo si hay límite y el
+  uso pasa del 90 %; el piloto no tiene) y **«esto lo cambia el dueño»** en
+  las pantallas de configuración para quien no es dueño (nombra al dueño;
+  la API ya contestaba 403). Cableado en Conversaciones (nadie escribe /
+  conecta tu número / sin resultados / error), Leads (aún no hay leads / sin
+  resultados / error) e Inicio (error). Skeletons y toasts ya existían por
+  pantalla; la confirmación destructiva ya existía donde hace falta (A14
+  desconectar, A16 quitar, S2 suspender, S3 aplicar pack). Probado: los
+  cuatro avisos y los vacíos en el harness (offline con el navegador en modo
+  offline, el rol con una sesión de ventas firmada, la línea caída porque el
+  harness no tiene el lease).
 - **Backend** `src/agent/dali/*` + `src/api/routes/dali.routes.ts`:
   - **Sesión de prueba (decisión de José, 15/09: «no esperes un envío real de
     código, eso déjalo para el final»)**: el flujo de pantallas es el
@@ -773,15 +805,19 @@ al WhatsApp (F2), el QR de un número nuevo hasta «conectado» (el harness no
 tiene el lease de sockets: la pantalla muestra que no pudo preparar el código
 y «Continuar» queda deshabilitado) y un registro entero contra producción (se
 verificó que `/dali/registro` carga y que `POST /api/dali/registro` vacío
-devuelve 400 sin crear nada); en S1–S4, la consola contra producción con las líneas de verdad (en el harness
-todas se ven desconectadas porque no tiene el lease de sockets), el «Descargar
+devuelve 400 sin crear nada); en S1–S4, el «Descargar
 ahora» del modelo en producción (en el harness el modelo no estaba cargado), y
 el aviso de «empresa suspendida» visto por un dueño de verdad (se probó el 403
-con un token; la pantalla se vio solo por código).
+con un token; la pantalla se vio solo por código). La consola sí se miró
+contra producción (16/09, 12:00): S1 con las dos líneas conectadas y S4
+«Operativo» con 7 desconexiones en la última hora (la línea del piloto se
+cae y se reconecta sola varias veces por hora: «WhatsApp no respondió a
+tiempo»), y el ida y vuelta consola ↔ empresa con la sesión real de José.
 
-**Pendiente de F3:** P1, E1 con sus endpoints (§4);
-`dali.constroad.com` en el túnel (José); Lighthouse móvil; un aviso de
-«WhatsApp desconectado» al dueño (A6 lo dibuja, ningún job lo emite hoy).
+**Pendiente de F3:** `dali.constroad.com` en el túnel (José); Lighthouse
+móvil; PWA/instalable; un aviso de «WhatsApp desconectado» al dueño por
+WhatsApp (A6 lo dibuja, ningún job lo emite hoy; el panel sí lo muestra, E1).
+Todas las pantallas de Stitch (A1–A20, P1–P6, S1–S4, E1) están implementadas.
 
 ## 8) Riesgos y decisiones abiertas
 

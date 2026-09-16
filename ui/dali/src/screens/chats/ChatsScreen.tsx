@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { cuando, iniciales, telefonoLegible } from '@/lib/format';
+import { AccionVacio, ErrorDeCarga, EstadoVacio, SinResultados } from '@/components/Estados';
 import { Icon } from '@/components/Icon';
 import { StatusPill } from '@/components/StatusPill';
 import type { ConversacionResumen, Inicio } from '@/lib/types';
@@ -40,7 +41,7 @@ export function ChatsScreen() {
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [q, setQ] = useState('');
   const { data: inicio } = useQuery({ queryKey: ['inicio'], queryFn: () => api.get<Inicio>('/inicio'), staleTime: 60_000 });
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['conversaciones', filtro, q],
     queryFn: () =>
       api.get<{ conversaciones: ConversacionResumen[]; porEstado: Record<string, number> }>(
@@ -141,12 +142,43 @@ export function ChatsScreen() {
         <div className="mt-4 flex-1 space-y-3 px-4 pb-6 md:px-6 lg:space-y-0 lg:divide-y lg:divide-stone-100 lg:overflow-y-auto lg:px-0">
           {isPending ? (
             [0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl bg-white shadow-sm" />)
+          ) : isError ? (
+            <ErrorDeCarga onReintentar={() => void refetch()} />
           ) : lista.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center">
-              <Icon name="forum" className="text-4xl text-stone-300" />
-              <p className="font-headline font-semibold text-stone-800">Sin conversaciones {filtro !== 'todas' ? 'con ese filtro' : 'todavía'}</p>
-              <p className="font-body text-sm text-stone-500">Cuando un cliente escriba al número del negocio, aparece aquí.</p>
-            </div>
+            q.trim() ? (
+              <SinResultados termino={q.trim()} onLimpiar={() => setQ('')} />
+            ) : filtro !== 'todas' ? (
+              <EstadoVacio icono="forum" titulo="Sin conversaciones con ese filtro" texto="Prueba con «Todas» para ver el resto." />
+            ) : inicio && !inicio.asistente.numero ? (
+              <EstadoVacio
+                icono="wifi_off"
+                tono="red"
+                titulo="Conecta tu número"
+                texto={`Dali necesita tu WhatsApp para atender a los clientes de ${inicio.empresa.nombre}.`}
+                accion={
+                  <AccionVacio to="/whatsapp" icono="qr_code" primaria>
+                    Conectar WhatsApp
+                  </AccionVacio>
+                }
+              />
+            ) : (
+              <EstadoVacio
+                icono="chat"
+                titulo="Todavía nadie te escribe"
+                texto={
+                  <>
+                    Cuando un cliente escriba al{' '}
+                    <b className="font-mono font-semibold text-stone-800">{inicio?.asistente.numero ? telefonoLegible(inicio.asistente.numero) : 'número del negocio'}</b>, la
+                    conversación aparece aquí.
+                  </>
+                }
+                accion={
+                  <AccionVacio to="/probar" icono="play_circle">
+                    Probar a Dali
+                  </AccionVacio>
+                }
+              />
+            )
           ) : (
             lista.map((c) => <TarjetaConversacion key={c.id} c={c} activa={c.id === id} ahoraMs={ahoraMs} />)
           )}

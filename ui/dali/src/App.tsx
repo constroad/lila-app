@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { EntrarScreen } from '@/screens/auth/EntrarScreen';
 import { CodigoScreen } from '@/screens/auth/CodigoScreen';
 import { RegistroScreen } from '@/screens/registro/RegistroScreen';
+const LandingScreen = lazy(() => import('@/screens/landing/LandingScreen').then((m) => ({ default: m.LandingScreen })));
 const RegistroWhatsAppScreen = lazy(() => import('@/screens/registro/RegistroWhatsAppScreen').then((m) => ({ default: m.RegistroWhatsAppScreen })));
 const RegistroConocimientoScreen = lazy(() => import('@/screens/registro/RegistroConocimientoScreen').then((m) => ({ default: m.RegistroConocimientoScreen })));
 import { InicioScreen } from '@/screens/inicio/InicioScreen';
@@ -143,6 +144,16 @@ export default function App() {
       <SesionProvider>
         <BrowserRouter basename="/dali">
           <Routes>
+            <Route
+              path="/"
+              element={
+                <SoloSinSesion>
+                  <Suspense fallback={<div className="min-h-dvh bg-stone-50" aria-busy="true" />}>
+                    <LandingScreen />
+                  </Suspense>
+                </SoloSinSesion>
+              }
+            />
             <Route
               path="/entrar"
               element={
