@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { MarcaDali } from '@/components/BrandMark';
 import { Icon } from '@/components/Icon';
 import type { IconName } from '@/components/icon-map';
 import { api } from '@/lib/api';
@@ -87,7 +88,7 @@ function SidebarAdmin() {
   return (
     <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col bg-stone-950 text-stone-200 xl:flex">
       <div className="flex items-center gap-3 px-5 pt-5">
-        <div className="flex size-10 items-center justify-center rounded-full bg-teal-700 font-headline text-lg font-bold text-white">D</div>
+        <MarcaDali className="size-10 text-teal-200" />
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-2 font-headline text-lg font-bold text-white">
             Dali <span className="rounded-md border border-stone-700 px-1.5 py-0.5 font-label text-[10px] font-bold tracking-wider text-stone-300">ADMIN</span>
@@ -151,7 +152,7 @@ function RailAdmin() {
   const { general } = useResumenAdmin();
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[72px] flex-col items-center bg-stone-950 pt-4 text-stone-300 md:flex xl:hidden">
-      <div className="flex size-12 items-center justify-center rounded-full bg-teal-700 font-headline text-xl font-bold text-white">D</div>
+      <MarcaDali className="size-12 text-teal-200" />
       <p className="mt-1 font-label text-[10px] font-bold tracking-wider text-teal-300">ADMIN</p>
       <nav className="mt-4 flex w-full flex-1 flex-col items-stretch gap-1 border-t border-stone-800 px-1.5 pb-4 pt-3">
         {NAV_ADMIN.map((item) => (

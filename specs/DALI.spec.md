@@ -715,6 +715,21 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   dio permiso; «Globofast» no existe), sin «Ver una demo» (no hay video),
   sin número de soporte ni «Hablar con un asesor», sin «Términos» ni
   «Privacidad» (no existen las páginas).
+- **Marca y tarjeta al compartir** (16/09): el isotipo de Dali salió de una hoja
+  de marca generada en Stitch (monograma «D» geométrico: columna, arco de
+  diálogo y punto focal; teal `#115e59` sobre papel, teal claro `#99f6e4`
+  sobre oscuro), como SVG puro en `components/BrandMark.tsx` (`MarcaDali`);
+  se corrigió el arco para que cierre al ras de la columna. El mismo trazo va
+  en el favicon (`public/favicon.svg`, monograma blanco sobre teal), en los
+  PNG de icono y en la imagen de la tarjeta (`public/og.png`, 1200×630),
+  renderizados con el Chrome del sistema y las fuentes de la app
+  (`scripts/og-image.mjs`; se corre a mano cuando cambie la marca). El
+  `index.html` lleva título, descripción, canónica, `theme-color` y las
+  etiquetas Open Graph/Twitter con la imagen absoluta
+  (`https://dali.constroad.com/dali/og.png`), así al compartir el enlace por
+  WhatsApp sale la tarjeta con el logo, igual que Portal y chancadora. Son
+  etiquetas estáticas (la SPA sirve el mismo `index.html` para toda ruta), o
+  sea que cualquier enlace del panel muestra la tarjeta de la landing.
 - **E1 Estados** (`ui/dali/src/components/Estados.tsx`, `layout/Banners.tsx`,
   comparados con `E1-estados`): las piezas comunes —vacío con icono, título,
   texto y acción; «No pudimos cargar esto» con reintentar; «Nada con «x»»

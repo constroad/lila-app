@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '@/components/Icon';
-import { BrandMark } from '@/components/BrandMark';
+import { BrandMark, MarcaDali } from '@/components/BrandMark';
 import { BotonConsola } from '@/components/BotonConsola';
 import { useSesion } from '@/lib/session';
 import { api } from '@/lib/api';
@@ -198,7 +198,7 @@ function AccionesPorDefecto({ numero, nombre, rol }: { numero?: string; nombre?:
 function RailTablet({ contadores }: { contadores: Record<string, number> }) {
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[72px] flex-col items-center border-r border-stone-200 bg-stone-50 pt-4 md:flex xl:hidden">
-      <div className="mb-3 flex size-12 items-center justify-center rounded-full border-2 border-teal-100 bg-teal-800 font-headline text-xl font-bold text-white">D</div>
+      <MarcaDali className="mb-3 size-12 text-teal-800" />
       <nav className="flex w-full flex-1 flex-col items-stretch gap-1 overflow-y-auto px-1.5 pb-4">
         {NAV_RAIL.map((item) => (
           <NavLink
