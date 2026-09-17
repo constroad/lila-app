@@ -7,11 +7,14 @@ import { cn } from '@/lib/utils';
 
 /**
  * P1 «Landing» (diseños `P1-landing` móvil, tablet y escritorio): la página
- * pública de Dali, en `/dali/` sin sesión (con sesión se va al inicio). Lo
- * que dice es lo que el producto hace hoy: la conversación de muestra sigue
- * el guion real de asfalto, los tres pasos son P4→P6, «lo que Dali no hace»
- * son las reglas del asistente (sin precios cerrados, sin fechas
- * prometidas, pasa a una persona y se calla 30 min). **Contra el diseño,
+ * pública de Dali, en `/dali/` sin sesión (con sesión se va al inicio). Dali
+ * es para cualquier negocio que venda por WhatsApp —el rubro solo cambia el
+ * guion—, así que la landing habla en general (José, 16/09: nada de «obra» ni
+ * de ejemplos de asfalto en el héroe); la conversación de muestra es el patrón
+ * de Dali con un negocio cualquiera, los tres pasos son P4→P6, «lo que Dali
+ * no hace» son las reglas del asistente (sin precios cerrados, sin fechas
+ * prometidas, pasa a una persona y se calla 30 min). Los rubros dicen cuál
+ * está disponible hoy y cuáles vienen, sin esconderlo. **Contra el diseño,
  * deliberado**: sin precios ni planes (el piloto no tiene costo; los planes
  * los define José en F4), sin «14 días» (el piloto no tiene plazo), sin
  * logos de clientes (Inframaq es un cliente y no dio permiso; Globofast no
@@ -76,7 +79,7 @@ const PASOS: Array<{ icono: IconName; tono: string; titulo: string; texto: strin
     icono: 'notifications_active',
     tono: 'teal',
     titulo: '3. Dali atiende y te avisa',
-    texto: 'Dali guía la conversación con amabilidad y te manda el resumen ordenado a tu celular: metrado, lugar y teléfono del cliente.',
+    texto: 'Dali guía la conversación con amabilidad y te manda el resumen ordenado a tu celular: qué necesita, cuánto, dónde y el teléfono del cliente.',
     pie: 'Leads listos para cotizar',
     pieIcono: 'check_circle',
   },
@@ -86,7 +89,7 @@ const NO_HACE: Array<{ icono: IconName; titulo: string; texto: string }> = [
   {
     icono: 'block',
     titulo: 'No inventa precios cerrados ni descuentos',
-    texto: 'Junta los datos técnicos que tú necesitas (m², ubicación, espesor). No da presupuestos: deriva a tu cotización, salvo que tú pongas una tarifa fija en el catálogo.',
+    texto: 'Junta los datos que tú necesitas (cantidad, lugar, fecha). No da presupuestos: deriva a tu cotización, salvo que tú pongas una tarifa fija en el catálogo.',
   },
   {
     icono: 'event_busy',
@@ -149,13 +152,14 @@ export function LandingScreen() {
         <div className="mx-auto grid max-w-6xl gap-10 px-4 py-10 md:px-6 md:py-16 lg:grid-cols-[1.25fr_1fr] lg:items-center lg:py-20">
           <div>
             <span className="inline-flex items-center gap-2 rounded-full border border-teal-200/80 bg-white px-3 py-1.5 font-body text-sm font-semibold text-teal-800">
-              <span className="size-2 rounded-full bg-teal-500" /> Asistente con IA conectado a tu WhatsApp
+              <span className="size-2 rounded-full bg-teal-500" /> Asistente con IA para el WhatsApp de cualquier negocio
             </span>
             <h1 className="mt-5 font-headline text-[36px] font-bold leading-[1.05] tracking-tight text-stone-900 md:text-[56px] lg:text-[60px]">
-              Tu negocio responde por WhatsApp <span className="text-teal-800 underline decoration-teal-300 decoration-4 underline-offset-8">aunque tú estés en obra</span>
+              Tu negocio responde por WhatsApp <span className="text-teal-800 underline decoration-teal-300 decoration-4 underline-offset-8">aunque tú no estés</span>
             </h1>
             <p className="mt-6 max-w-xl font-body text-lg leading-relaxed text-stone-600 md:text-xl">
-              Dali atiende a tus clientes, junta los datos de cada pedido y te avisa ordenado al celular. <b className="font-semibold text-stone-900">Tú solo cotizas.</b>
+              Dali atiende a tus clientes, junta los datos de cada pedido o consulta y te avisa ordenado al celular.{' '}
+              <b className="font-semibold text-stone-900">Tú solo cierras la venta.</b>
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
@@ -190,7 +194,7 @@ export function LandingScreen() {
 
       <section className="border-y border-stone-200 bg-white">
         <p className="mx-auto max-w-6xl px-4 py-6 text-center font-label text-[13px] font-semibold uppercase tracking-[0.12em] text-stone-600 md:px-6">
-          Ya atiende a empresas de asfalto y obras en Lima
+          Ya atiende negocios en Lima y provincias
         </p>
       </section>
 
@@ -226,7 +230,7 @@ export function LandingScreen() {
         id="rubros"
         pill="Vocabulario y lógica peruana"
         titulo="Un asistente preparado para cada rubro"
-        texto="Dali no da respuestas genéricas de robot: conoce los términos y las preguntas clave de cada negocio. Hoy atiende asfalto y obras; los demás rubros vienen después."
+        texto="Dali no da respuestas genéricas de robot: conoce los términos y las preguntas clave de cada rubro, y se le enseña el tuyo con un Excel."
         fondo="bg-white"
       >
         <div className="grid gap-4 md:grid-cols-2">
@@ -244,7 +248,7 @@ export function LandingScreen() {
                       r.disponible ? 'border-teal-200 bg-white text-teal-800' : 'border-stone-200 bg-white text-stone-600'
                     )}
                   >
-                    {r.disponible ? r.chip : 'Próximamente'}
+                    {r.disponible ? `${r.chip} · disponible` : 'Próximamente'}
                   </span>
                 </div>
               </div>
@@ -293,7 +297,7 @@ export function LandingScreen() {
             {[
               '1 número de WhatsApp conectado (el tuyo, sin cambiar de chip)',
               'Conversaciones sin límite mientras dure el piloto',
-              'El pack de asfalto y obras listo: servicios, preguntas y plantilla',
+              'El pack de tu rubro listo: servicios, preguntas y plantilla de Excel',
               'Avisos de cada lead a tu WhatsApp personal',
               'Carga de conocimiento por Excel, las veces que quieras',
             ].map((t) => (
@@ -318,7 +322,7 @@ export function LandingScreen() {
             <BrandMark size="sm" />
             <span className="font-body text-sm text-stone-500">· un producto de Constroad Ingenieros</span>
           </div>
-          <p className="font-body text-sm text-stone-500">© 2026 Dali.pe — Para empresas y contratistas de Lima y todo el Perú.</p>
+          <p className="font-body text-sm text-stone-500">© 2026 Dali.pe — Para negocios de Lima y todo el Perú.</p>
         </div>
       </footer>
     </div>
@@ -342,18 +346,23 @@ function Seccion({ id, pill, titulo, texto, fondo, children }: { id: string; pil
   );
 }
 
-/** La conversación de muestra sigue el guion real de asfalto: área y lugar, espesor, base. */
+/**
+ * La conversación de muestra: el patrón de Dali en modo lead —saluda, pregunta
+ * qué necesita, cuánto, dónde y para cuándo, y avisa— con un negocio
+ * cualquiera, porque Dali no es de un rubro: el guion de cada rubro solo
+ * cambia las preguntas.
+ */
 function ChatDeMuestra() {
   return (
     <div className="overflow-hidden rounded-2xl border border-stone-200 bg-stone-200/70 shadow-xl">
       <div className="flex items-center gap-3 bg-teal-900 px-4 py-3 text-white">
         <span className="relative flex size-11 items-center justify-center rounded-full border-2 border-teal-500 bg-stone-900 font-headline text-sm font-bold">
-          CR
+          TN
           <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-teal-900 bg-emerald-400" />
         </span>
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 font-headline text-base font-bold">
-            CONSTROAD Asfaltos <Icon name="verified" className="text-base text-emerald-300" />
+            Tu negocio <Icon name="verified" className="text-base text-emerald-300" />
           </p>
           <p className="font-body text-xs text-teal-100">en línea · Dali, asistente</p>
         </div>
@@ -364,21 +373,21 @@ function ChatDeMuestra() {
       <div className="space-y-3 px-3 py-4">
         <p className="mx-auto w-fit rounded-lg bg-white/80 px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wider text-stone-500">Hoy · Lima, Perú</p>
         <Burbuja lado="cliente" hora="10:41">
-          Necesito asfaltar 600 m² en Lurín
+          Hola, ¿tienen para el viernes? Necesito una cotización
         </Burbuja>
-        <Burbuja lado="dali" hora="10:41" quien="Dali (asistente de CONSTROAD)">
-          ¡Hola! Soy Dali, la asistente de <b className="font-semibold">CONSTROAD</b> 👋 Con gusto te ayudamos. ¿Qué espesor buscas? 1", 2" o 3"…
+        <Burbuja lado="dali" hora="10:41" quien="Dali (asistente de Tu negocio)">
+          ¡Hola! Soy Dali, la asistente de <b className="font-semibold">Tu negocio</b> 👋 Con gusto te ayudo. ¿Qué necesitas y en qué cantidad?
         </Burbuja>
         <Burbuja lado="cliente" hora="10:42">
-          2 pulgadas
+          Unas 40 unidades, para mi local en Surco
         </Burbuja>
         <Burbuja lado="dali" hora="10:42" quien="Dali">
-          Perfecto: espesor 2". ¿La base ya está preparada (afirmado compactado) o es terreno natural?
+          Perfecto: 40 unidades para el viernes en Surco. ¿A nombre de quién va la cotización y a qué número te llamamos?
         </Burbuja>
         <div className="flex items-center gap-3 rounded-xl bg-stone-900 px-4 py-3 text-white">
           <Icon name="notifications_active" className="shrink-0 text-2xl text-amber-400" />
           <p className="min-w-0 flex-1 font-body text-sm">
-            Aviso a tu WhatsApp personal: <b className="font-semibold">Lead calificado (600 m² · Lurín)</b>
+            Aviso a tu WhatsApp personal: <b className="font-semibold">Lead calificado (40 unidades · Surco · viernes)</b>
           </p>
           <span className="shrink-0 rounded-lg bg-teal-700 px-2.5 py-1.5 text-center font-body text-xs font-semibold">Listo para cotizar</span>
         </div>

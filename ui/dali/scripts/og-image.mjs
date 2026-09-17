@@ -37,8 +37,8 @@ const pagina = `<!doctype html><html lang="es"><head><meta charset="utf-8"><styl
   <div class="fondo"></div><div class="banda"></div>
   <div class="marco">
     <div class="marca"><div class="d">${marca(96, '#115e59')}</div><div class="nombre">dali<span>.pe</span><span class="pe">PERÚ</span></div></div>
-    <h1>Tu negocio responde por WhatsApp <em>aunque tú estés en obra</em></h1>
-    <div class="pie"><b>Asistente con IA para WhatsApp</b><span class="punto"></span><span>Junta los datos de cada pedido y te avisa</span><span class="punto"></span><span>Sin tarjeta</span></div>
+    <h1>Tu negocio responde por WhatsApp <em>aunque tú no estés</em></h1>
+    <div class="pie"><b>Asistente con IA para WhatsApp</b><span class="punto"></span><span>Para cualquier negocio que venda por WhatsApp</span><span class="punto"></span><span>Sin tarjeta</span></div>
   </div>
 </body></html>`;
 
