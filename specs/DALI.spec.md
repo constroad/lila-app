@@ -719,9 +719,10 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   de marca generada en Stitch (monograma «D» geométrico: columna, arco de
   diálogo y punto focal; teal `#115e59` sobre papel, teal claro `#99f6e4`
   sobre oscuro), como SVG puro en `components/BrandMark.tsx` (`MarcaDali`);
-  se corrigió el arco para que cierre al ras de la columna. El mismo trazo va
-  en el favicon (`public/favicon.svg`, monograma blanco sobre teal), en los
-  PNG de icono y en la imagen de la tarjeta (`public/og.png`, 1200×630),
+  se corrigió el arco para que cierre al ras de la columna. El mismo trazo, tal
+  cual y sin cuadro, va en el favicon (`public/favicon.svg`), en los PNG de
+  icono (el de iOS con el papel de fondo, porque iOS no admite
+  transparencia) y en la imagen de la tarjeta (`public/og.png`, 1200×630),
   renderizados con el Chrome del sistema y las fuentes de la app
   (`scripts/og-image.mjs`; se corre a mano cuando cambie la marca). El
   `index.html` lleva título, descripción, canónica, `theme-color` y las

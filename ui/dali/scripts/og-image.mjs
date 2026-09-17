@@ -42,11 +42,14 @@ const pagina = `<!doctype html><html lang="es"><head><meta charset="utf-8"><styl
   </div>
 </body></html>`;
 
-/** El icono de app: el monograma en blanco sobre el teal de marca, esquinas redondeadas (igual que public/favicon.svg). */
-const icono = (px, radio) => `<!doctype html><html><head><meta charset="utf-8"><style>
-  * { margin: 0; } body { width: ${px}px; height: ${px}px; background: transparent; }
-  .d { width: ${px}px; height: ${px}px; border-radius: ${radio}px; background: #115e59; display: grid; place-items: center; }
-</style></head><body><div class="d">${marca(Math.round(px * 0.8), '#ffffff')}</div></body></html>`;
+/**
+ * El icono de app es EL MISMO isotipo que el header, en teal, sin cuadro (igual que
+ * public/favicon.svg): un solo logo en todos lados. El apple-touch-icon lleva el
+ * papel de fondo porque iOS no admite transparencia; el favicon PNG, ninguno.
+ */
+const icono = (px, fondo) => `<!doctype html><html><head><meta charset="utf-8"><style>
+  * { margin: 0; } body { width: ${px}px; height: ${px}px; background: ${fondo}; display: grid; place-items: center; }
+</style></head><body>${marca(px, '#115e59')}</body></html>`;
 
 // El Chromium que trae puppeteer no arranca en esta Mac (crash al lanzar); el Chrome del sistema sí, y es el mismo que usa lila para los PDF.
 const browser = await puppeteer.launch({ headless: 'new', executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--no-sandbox'] });
@@ -60,6 +63,6 @@ const capturar = async (html, ancho, alto, salida, omitBackground = false) => {
   console.log('public/' + salida, `${ancho}x${alto}`);
 };
 await capturar(pagina, 1200, 630, 'og.png');
-await capturar(icono(180, 40), 180, 180, 'apple-touch-icon.png', true);
-await capturar(icono(32, 7), 32, 32, 'favicon-32.png', true);
+await capturar(icono(180, '#fafaf9'), 180, 180, 'apple-touch-icon.png');
+await capturar(icono(32, 'transparent'), 32, 32, 'favicon-32.png', true);
 await browser.close();
