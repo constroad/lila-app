@@ -704,8 +704,9 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
 - **P1 Landing** (`ui/dali/src/screens/landing/LandingScreen.tsx`, comparada
   con `P1-landing` en los tres tamaños): la página pública en `/dali/` sin
   sesión (con sesión, al inicio): cabecera con «Entrar» y «Probar gratis»
-  (→ registro), héroe con la conversación de muestra (sigue el guion real de
-  asfalto: área y lugar, espesor, base, y el aviso «lead calificado»), «cómo
+  (→ registro), héroe con la conversación de muestra (el patrón de Dali en
+  modo lead con un negocio cualquiera: qué necesita, cuánto, dónde, para
+  cuándo, y el aviso «lead calificado»), «cómo
   funciona en 3 pasos» (P4→P6), «un asistente preparado para cada rubro»
   (asfalto de verdad; los otros tres «próximamente»), «lo que Dali NO hace»
   (las reglas del asistente, tal cual: sin precios cerrados, sin fechas,
@@ -714,7 +715,12 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   (F4), sin «14 días», sin logos de clientes (Inframaq es un cliente y no
   dio permiso; «Globofast» no existe), sin «Ver una demo» (no hay video),
   sin número de soporte ni «Hablar con un asesor», sin «Términos» ni
-  «Privacidad» (no existen las páginas).
+  «Privacidad» (no existen las páginas). **Decisión de José (16/09): Dali es
+  para cualquier negocio que venda por WhatsApp —el rubro solo cambia el
+  guion—, así que la landing, el título, la descripción y la tarjeta al
+  compartir hablan en general («aunque tú no estés», nada de «obra» ni
+  ejemplos de asfalto en el héroe); el diseño de Stitch estaba escrito para
+  Constroad y se corrigió. Los rubros siguen diciendo cuál está disponible hoy.**
 - **Marca y tarjeta al compartir** (16/09): el isotipo de Dali salió de una hoja
   de marca generada en Stitch (monograma «D» geométrico: columna, arco de
   diálogo y punto focal; teal `#115e59` sobre papel, teal claro `#99f6e4`
