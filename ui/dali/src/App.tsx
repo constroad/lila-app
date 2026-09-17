@@ -41,6 +41,7 @@ const EmpresaAdminScreen = lazy(() => import('@/screens/admin/EmpresaAdminScreen
 const VerticalesAdminScreen = lazy(() => import('@/screens/admin/VerticalesAdminScreen').then((m) => ({ default: m.VerticalesAdminScreen })));
 const SaludAdminScreen = lazy(() => import('@/screens/admin/SaludAdminScreen').then((m) => ({ default: m.SaludAdminScreen })));
 const MasAdminScreen = lazy(() => import('@/screens/admin/MasAdminScreen').then((m) => ({ default: m.MasAdminScreen })));
+const GuiaScreen = lazy(() => import('@/screens/guia/GuiaScreen').then((m) => ({ default: m.GuiaScreen })));
 
 /** En móvil y tablet la conversación y el lead son pantallas enteras; en escritorio viven dentro de la lista. */
 const ChatMovil = () => (
@@ -404,6 +405,14 @@ export default function App() {
                 element={
                   <Suspense fallback={null}>
                     <AjustesScreen />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/guia"
+                element={
+                  <Suspense fallback={null}>
+                    <GuiaScreen />
                   </Suspense>
                 }
               />

@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 import express from 'express';
 import { createServer, request, type Server } from 'node:http';
-import { DALI_HOSTS, montarUiDali } from './dali-ui.js';
+import { DALI_HOSTS, HOSTS_QUE_REDIRIGEN, montarUiDali } from './dali-ui.js';
 
 /** `fetch` de Node no deja poner `Host`; con `http.request` sí. */
 const pedir = (base: string, ruta: string, host: string): Promise<{ status: number; location?: string; cuerpo: string }> =>
@@ -45,6 +45,14 @@ describe('montarUiDali', () => {
       const lila = await pedir(base, '/', 'lila.constroad.com');
       expect(lila.status).toBe(200);
       expect(JSON.parse(lila.cuerpo)).toEqual({ status: 'ok' });
+    });
+  });
+
+  it('desde lila.constroad.com, /dali/… manda al host de Dali con la misma ruta', async () => {
+    await conApp(async (base) => {
+      const r = await pedir(base, '/dali/admin/salud?x=1', HOSTS_QUE_REDIRIGEN[0]);
+      expect(r.status).toBe(301);
+      expect(r.location).toBe(`https://${DALI_HOSTS[0]}/dali/admin/salud?x=1`);
     });
   });
 

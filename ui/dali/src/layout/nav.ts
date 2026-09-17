@@ -45,6 +45,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Cuenta',
     items: [
+      { to: '/guia', label: 'Cómo funciona Dali', short: 'Guía', icon: 'route' },
       { to: '/equipo', label: 'Equipo', icon: 'badge' },
       { to: '/plan', label: 'Plan y uso', short: 'Plan', icon: 'credit_card' },
       { to: '/ajustes', label: 'Ajustes', icon: 'tune' },

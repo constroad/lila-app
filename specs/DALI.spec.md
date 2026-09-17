@@ -737,6 +737,23 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   WhatsApp sale la tarjeta con el logo, igual que Portal y chancadora. Son
   etiquetas estáticas (la SPA sirve el mismo `index.html` para toda ruta), o
   sea que cualquier enlace del panel muestra la tarjeta de la landing.
+- **Guía «Cómo funciona Dali»** (`ui/dali/src/screens/guia/GuiaScreen.tsx`,
+  `/guia`, en «Cuenta» del sidebar y en «Más»; pedida por José el 17/09 «como
+  las páginas de workflow de los rubros del Portal»): la referencia del
+  circuito —qué le das a Dali en cada pantalla y qué produce, en el orden
+  configurar → probar → operar—, los ciclos de estado de la conversación y
+  del lead, y «cómo decide Dali» (pausa, FAQ ≥ 0,87, precio/persona, guion con
+  el modelo local, lead y aviso) con cómo se miden las cosas y dónde vive
+  todo. Arriba, **«Lo que te falta»**: siete chequeos contados contra la
+  configuración real (ficha, guion, FAQ, catálogo/política, línea conectada,
+  números de prueba vacíos, destino de avisos), cada uno enlaza a su
+  pantalla. Data-driven y fiel al código; Stitch no la dibujó.
+- **Una sola puerta**: `lila.constroad.com/dali/*` redirige (301) a
+  `dali.constroad.com/dali/*` (`HOSTS_QUE_REDIRIGEN`), así el panel tiene un
+  solo host y una sola cookie; `/api/dali/*` sigue en los dos.
+- **Identidad de José** (corregida 17/09): en `bot_members` estaba con
+  `51903124919` —la línea de Globofast, un error de la semilla—; va con su
+  celular personal `51902049935` (dueño de constroad y operador) y su correo.
 - **E1 Estados** (`ui/dali/src/components/Estados.tsx`, `layout/Banners.tsx`,
   comparados con `E1-estados`): las piezas comunes —vacío con icono, título,
   texto y acción; «No pudimos cargar esto» con reintentar; «Nada con «x»»
