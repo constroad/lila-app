@@ -1,4 +1,4 @@
-import { esPregunta, esTentativo, horaDe, interpretarJsonDeAnuncio, resolverFechaAnunciada } from './anuncios';
+import { esPregunta, esTentativo, horaDe, horaDeInicio, horasEnTexto, interpretarJsonDeAnuncio, resolverFechaAnunciada } from './anuncios';
 
 const lima = (fecha: string, hora: string) => new Date(`${fecha}T${hora}:00.000-05:00`).getTime();
 const lunes = lima('2026-09-14', '10:23');
@@ -95,5 +95,33 @@ describe('una pregunta no anuncia nada, y un anuncio sin hora ni m³ no programa
     // Con m³ o con hora, sí.
     const b = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'globofast', cliente: '', fecha: 'mañana', hora: '', m3: '137' }], desde_fecha: '' }), 'mañana producción de globofast 137 m3', lima('2026-09-16', '06:50'));
     expect(b).toMatchObject({ accion: 'programar', producciones: [{ cubos: 137 }] });
+  });
+});
+
+describe('las horas salen del texto, no del modelo (17/09 18:09: «20:00» por «2.30.am»)', () => {
+  const orden = 'envia mensaje de produccion al grupo de.planta reunion 2.00am inicio 2.30.am 300m3';
+  it('lee «2.00am», «2.30.am», «04:30 am», «5 pm», «4.30», y no toma «300» ni «2 pulgadas» por horas', () => {
+    expect(horasEnTexto(orden).map((h) => h.hora)).toEqual(['02:00', '02:30']);
+    expect(horasEnTexto('H.de producion. 04:30 am / M3: 250.00').map((h) => h.hora)).toEqual(['04:30']);
+    expect(horasEnTexto('a las 5 pm salimos').map((h) => h.hora)).toEqual(['17:00']);
+    expect(horasEnTexto('137m3, 2 pulgadas').map((h) => h.hora)).toEqual([]);
+  });
+  it('la de inicio es la que sigue a «inicio/arranque/producción»; sin marca, la más tarde de dos', () => {
+    expect(horaDeInicio(orden)).toBe('02:30');
+    expect(horaDeInicio('reunion 4:00 am y arrancamos 4:30 am')).toBe('04:30');
+    expect(horaDeInicio('4:00 am reunion, 4:30 am')).toBe('04:30');
+    expect(horaDeInicio('mañana 04:30 am 250 m3')).toBe('04:30');
+    expect(horaDeInicio('300 m3 de 2 pulgadas')).toBeUndefined();
+  });
+  it('la orden de José: hora 02:30 aunque el modelo diga 20:00, fecha por defecto (mañana) porque no la escribió', () => {
+    const jueves = lima('2026-09-17', '18:09');
+    const a = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'constroad', cliente: '', fecha: 'viernes', hora: '20:00', m3: '300' }], desde_fecha: '' }), orden, jueves, { companyId: 'constroad', empresa: 'ConstRoad' }, { fechaPorDefecto: '2026-09-18' });
+    expect(a).toMatchObject({ accion: 'programar', producciones: [{ companyId: 'constroad', fecha: '2026-09-18', hora: '02:30', cubos: 300 }] });
+    // Sin fecha por defecto (un anuncio suelto sin día escrito): no se programa.
+    const b = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'constroad', cliente: '', fecha: 'viernes', hora: '20:00', m3: '300' }], desde_fecha: '' }), 'produccion reunion 2.00am inicio 2.30.am 300m3', jueves, { companyId: 'constroad', empresa: 'ConstRoad' });
+    expect(b).toMatchObject({ accion: 'ninguna', vago: true });
+    // Con la fecha escrita, la del texto manda sobre la que el modelo copió mal.
+    const c = interpretarJsonDeAnuncio(JSON.stringify({ accion: 'programar', producciones: [{ empresa: 'constroad', cliente: '', fecha: 'sábado', hora: '02:30', m3: '300' }], desde_fecha: '' }), 'viernes 18 produccion inicio 2.30 am 300m3', jueves, { companyId: 'constroad', empresa: 'ConstRoad' });
+    expect(c!.producciones[0]).toMatchObject({ fecha: '2026-09-18', hora: '02:30' });
   });
 });

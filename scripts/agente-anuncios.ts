@@ -18,6 +18,7 @@ const casos: Array<[string, number]> = [
   ['se tiene que ver despues de produccion', martes],
   ['Buen dia,mañana tienen producción,@CONSTROAD,GLOBO FAST??', martes],
   ['Rafael lo acaba de ver. Parece que hay material rosando.', martes],
+  ['envia mensaje de produccion al grupo de.planta reunion 2.00am inicio 2.30.am 300m3', new Date('2026-09-17T18:09:00.000-05:00').getTime()],
 ];
 for (const [texto, ms] of casos) {
   const t0 = Date.now();

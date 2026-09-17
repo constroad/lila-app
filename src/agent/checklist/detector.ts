@@ -29,7 +29,7 @@ import {
   type Propuesta,
 } from './sugerencias.js';
 import { agruparPorDia, firmaDia, momentoVigente, type DiaDePlanta, type PedidoDelDia } from './dia.js';
-import { sincronizarConPortal, forzarEnvio } from './programador.js';
+import { sincronizarConPortal, forzarEnvio, atenderOrdenAPlanta } from './programador.js';
 import { analizarStockDelDia, conStockDePortal } from './stock.js';
 import { diaPeruano, instanteArranque } from './tiempo.js';
 import { agenteApagado } from './interruptor.js';
@@ -181,13 +181,15 @@ const SIN_LIMITE: Presupuesto = { restantes: Number.POSITIVE_INFINITY };
 export const proponerAvisoManual = async (
   fecha: string,
   alcance: Awaited<ReturnType<typeof alcanceVigente>>,
-  ahoraMs = Date.now()
+  ahoraMs = Date.now(),
+  orden: { texto: string; quien: string } = { texto: '', quien: '' }
 ): Promise<string> => {
   if (!alcance.grupoPlanta) return 'No tengo resuelto el grupo de planta: no puedo armar el aviso.';
-  // Spec §14: el aviso ya no se propone, se manda. Pedirlo lo fuerza AHORA.
+  // Spec §14: el aviso ya no se propone, se manda. Pedirlo lo fuerza AHORA; y
+  // si la orden trae la producción (hora, m³), primero entra a la agenda.
   const pedidos = await pedidosConArranque(ahoraMs);
   await sincronizarConPortal(pedidos, alcance, ahoraMs);
-  return forzarEnvio(fecha, alcance, ahoraMs);
+  return orden.texto ? atenderOrdenAPlanta(orden.texto, orden.quien, fecha, alcance, ahoraMs) : forzarEnvio(fecha, alcance, ahoraMs);
 };
 
 const proponerRevisionDelDia = async (

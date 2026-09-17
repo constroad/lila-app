@@ -564,5 +564,15 @@
       "herramienta": "informes"
     },
     "nota": "tres tipos, sin fecha: los tres, con la fecha del hilo o los últimos 7 días"
+  },
+  {
+    "id": "2026-09-17-1809-orden",
+    "incidente": "2026-09-17-1809",
+    "pregunta": "@ConstRoad envia mensaje de produccion al grupo de.planta reunion 2.00am inicio 2.30.am 300m3",
+    "hoy": "2026-09-17",
+    "esperado": {
+      "ruta": "orden_planta"
+    },
+    "nota": "la orden trae la programación adentro: la hora es la del texto (02:30, no 20:00), la fecha es mañana"
   }
 ]

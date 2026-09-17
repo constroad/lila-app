@@ -545,7 +545,7 @@ export const atenderConsulta = async (
     if (decision.tipo === 'orden_planta') {
       const { proponerAvisoManual } = await import('../checklist/detector.js');
       const fecha = fechaDe(pregunta) ?? sumarDias(hoyLima(), /\bhoy\b/.test(normalizar(pregunta)) ? 0 : 1);
-      const respuestaTexto = await proponerAvisoManual(fecha, alcance);
+      const respuestaTexto = await proponerAvisoManual(fecha, alcance, Date.now(), { texto: pregunta, quien });
       logger.info(`[agente] orden de ${quien}: aviso a planta del ${fecha} → ${respuestaTexto ? 'no se propuso' : 'propuesto'}`);
       if (respuestaTexto) await responderEnGrupo(grupo, { texto: respuestaTexto }, alcance);
       return;

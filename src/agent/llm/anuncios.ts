@@ -126,6 +126,53 @@ export const horaDe = (cruda: string): string | undefined => {
   return `${String(h).padStart(2, '0')}:${mm}`;
 };
 
+/**
+ * LAS HORAS QUE DICE EL TEXTO, y cuál es la de INICIO. «reunión 2.00am inicio
+ * 2.30.am 300m3» (17/09 18:09): el modelo devolvió «20:00» y a planta le llegó
+ * «producción 20:00, reunión 19:30» en vez de 02:30 / 02:00. Un 1,5 B no
+ * convierte horas; las copia mal. Así que la hora vale solo si está escrita en
+ * el texto, y con varias se toma la que sigue a «inicio / arranque / empieza /
+ * producción»; si no hay marca y son dos, la de producción es la más tarde
+ * (la reunión es media hora antes).
+ */
+const HORA_EN_TEXTO = /\b(\d{1,2})(?:[:.h](\d{2}))?\s*\.?\s*(am|pm|a\.?\s?m\.?|p\.?\s?m\.?|hrs?|horas)?\b\.?/gi;
+export const horasEnTexto = (texto: string): Array<{ hora: string; pos: number }> => {
+  const t = normalizar(texto);
+  const out: Array<{ hora: string; pos: number }> = [];
+  for (const m of t.matchAll(HORA_EN_TEXTO)) {
+    const h = Number(m[1]);
+    const mm = m[2];
+    const sufijo = (m[3] ?? '').replace(/[.\s]/g, '');
+    // Un número suelto sin minutos ni am/pm no es una hora («300», «2 pulgadas», «el 17»).
+    if (!mm && !sufijo) continue;
+    if (h > 23 || (mm && Number(mm) > 59)) continue;
+    let hh = h;
+    if (/^p/.test(sufijo) && hh < 12) hh += 12;
+    if (/^a/.test(sufijo) && hh === 12) hh = 0;
+    out.push({ hora: `${String(hh).padStart(2, '0')}:${mm ?? '00'}`, pos: m.index ?? 0 });
+  }
+  return out;
+};
+
+export const horaDeInicio = (texto: string): string | undefined => {
+  const t = normalizar(texto);
+  const horas = horasEnTexto(texto);
+  if (!horas.length) return undefined;
+  const marca = /\b(inicio|inicia|arranque|arranca|arrancamos|empieza|empezamos|comienza|comienzo|produccion|produce|carga|cargamos)\b/g;
+  let mejor: { hora: string; distancia: number } | undefined;
+  for (const m of t.matchAll(marca)) {
+    const pos = m.index ?? 0;
+    for (const h of horas) {
+      const d = h.pos - pos;
+      if (d >= 0 && d < 30 && (!mejor || d < mejor.distancia)) mejor = { hora: h.hora, distancia: d };
+    }
+  }
+  if (mejor) return mejor.hora;
+  if (horas.length === 1) return horas[0].hora;
+  // Dos horas y ninguna marca: la reunión es antes; la producción es la más tarde.
+  return [...horas].sort((a, b) => a.hora.localeCompare(b.hora))[horas.length - 1].hora;
+};
+
 /** Resuelve una fecha copiada del mensaje al día que nombra, relativa al día del mensaje. */
 export const resolverFechaAnunciada = (span: string, mensajeMs: number): string | undefined => {
   const s = String(span || '').trim();
@@ -166,7 +213,12 @@ export const esTentativo = (texto: string): boolean => {
     || /\b(manana|hoy|lunes|martes|miercoles|jueves|viernes|sabado|domingo|\d{1,2}(?:[-/]\d{1,2})?)\s+o\s+(el\s+)?(manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|\d{1,2}(?:[-/]\d{1,2})?)\b/.test(t);
 };
 
-export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs: number, empresaDelAutor?: { companyId: string; empresa: string }): Anuncio | null => {
+export interface OpcionesAnuncio {
+  /** Una orden («envía el mensaje de producción a planta…») sin fecha escrita es para este día. */
+  fechaPorDefecto?: string;
+}
+
+export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs: number, empresaDelAutor?: { companyId: string; empresa: string }, opciones: OpcionesAnuncio = {}): Anuncio | null => {
   if (esPregunta(texto)) return { accion: 'ninguna', producciones: [] };
   if (esTentativo(texto)) return { accion: 'posible', producciones: [] };
   let crudo: { accion?: unknown; producciones?: unknown; desde_fecha?: unknown };
@@ -188,13 +240,23 @@ export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs:
     // dice 137m3), se leen del texto. Con varias producciones no se adivina.
     const delTexto = lista.length === 1 ? t.match(/(\d+(?:[.,]\d+)?)\s*(?:m3|m³|metros|cubos)\b/)?.[1] : undefined;
     const cubos = cubosTxt && t.includes(cubosTxt.split('.')[0]) ? Math.round(Number(cubosTxt)) : delTexto ? Math.round(Number(delTexto.replace(',', '.'))) : undefined;
-    const hora = horaDe(String(p.hora ?? ''));
+    // La hora vale si está escrita; si el modelo la «convirtió» («20:00» por
+    // «2.30.am»), se toma la de inicio del texto.
+    const escritas = horasEnTexto(texto).map((h) => h.hora);
+    const horaModelo = horaDe(String(p.hora ?? ''));
+    const hora = horaModelo && escritas.includes(horaModelo) ? horaModelo : horaDeInicio(texto);
     const cliente = String(p.cliente ?? '').trim();
+    // La fecha vale si el texto la nombra (el modelo no inventa un «viernes»);
+    // sin fecha escrita, la del contexto si la hay (una orden = mañana).
+    const spanFecha = String(p.fecha ?? '');
+    const fechaCopiada = resolverFechaAnunciada(spanFecha, mensajeMs);
+    const fechaEnTexto = fechasEn(normalizar(texto), diaPeruano(mensajeMs))[0]?.fecha;
+    const fecha = fechaCopiada && (fechaCopiada === fechaEnTexto || normalizar(texto).includes(normalizar(spanFecha).trim())) ? fechaCopiada : fechaEnTexto ?? opciones.fechaPorDefecto;
     producciones.push({
       companyId: empresa.companyId ?? empresaDelAutor?.companyId,
       empresa: empresa.companyId ? empresa.empresa : empresaDelAutor?.empresa ?? '',
       cliente: cliente && t.includes(normalizar(cliente)) ? cliente : undefined,
-      fecha: resolverFechaAnunciada(String(p.fecha ?? ''), mensajeMs),
+      fecha,
       hora,
       cubos,
     });
@@ -228,11 +290,11 @@ export const interpretarJsonDeAnuncio = (json: string, texto: string, mensajeMs:
  * Pregunta al modelo. `null` si no hay modelo o no supo: el llamador cae al
  * lector por reglas.
  */
-export const interpretarAnuncio = async (texto: string, mensajeMs: number, empresaDelAutor?: { companyId: string; empresa: string }): Promise<Anuncio | null> => {
+export const interpretarAnuncio = async (texto: string, mensajeMs: number, empresaDelAutor?: { companyId: string; empresa: string }, opciones: OpcionesAnuncio = {}): Promise<Anuncio | null> => {
   const hoy = diaPeruano(mensajeMs);
   const json = await generar({ tarea: 'anuncio', sistema: promptAnuncio(hoy), usuario: texto, esquema: ESQUEMA_ANUNCIO as unknown as Record<string, unknown>, maxTokens: 260, timeoutMs: TIMEOUT_MS });
   if (!json) return null;
-  const anuncio = interpretarJsonDeAnuncio(json, texto, mensajeMs, empresaDelAutor);
+  const anuncio = interpretarJsonDeAnuncio(json, texto, mensajeMs, empresaDelAutor, opciones);
   logger.info(`[agente] anuncio: ${anuncio ? `${anuncio.accion} ${JSON.stringify(anuncio.producciones)}${anuncio.desdeFecha ? ` desde ${anuncio.desdeFecha}` : ''}` : 'no se entendió'} ← «${texto.slice(0, 80)}»`);
   return anuncio;
 };

@@ -21,6 +21,7 @@ import type { PedidoDelDia } from './dia.js';
 import { aplicar, esUltimoMomento, pendientesDeEnvio, type AvisoProgramado, type Efecto, type Hecho, type Produccion } from './agenda.js';
 import { interpretarAnuncio, type Anuncio } from '../llm/anuncios.js';
 import { mencionesDe } from './menciones.js';
+import { esOrdenDeAvisoAPlanta } from '../consultas/orden-planta.js';
 import { alias as aliasDeAutor } from './autores.js';
 
 let agenda: AvisoProgramado[] = [];
@@ -151,6 +152,10 @@ const anuncioPorReglas = (m: MensajeGrupo): Anuncio => ({
  */
 export const atenderPosibleAnuncio = async (m: MensajeGrupo, alcance: AlcanceAgente, ahoraMs = Date.now()): Promise<void> => {
   if (!AGENTE_ACTIVO || agenteApagado() || m.esPropio) return;
+  // Una ORDEN («envía el mensaje de producción a planta…») la atiende la
+  // consulta, no este camino: el 17/09 a las 18:09 corrieron los dos, la orden
+  // contestó «no tengo nada programado» y este programó y mandó por su cuenta.
+  if (esOrdenDeAvisoAPlanta(m.texto)) return;
   if (!cargada) await hidratarAgenda(ahoraMs);
   // Barato antes que caro: sin una palabra de producción ni una fecha, no se molesta al modelo.
   if (!/\b(produccion|producción|producciones|pedido|pedidos|despacho|despachos|asfalt|m3|m³|cubos|se suspende|se cancela|se mueve|se pasa|reprogram|ya no)\b/i.test(m.texto)) return;
@@ -281,6 +286,32 @@ export const enviarPendientes = async (alcance: AlcanceAgente, ahoraMs = Date.no
 const enviarAOperacionesOAdmin = async (alcance: AlcanceAgente, texto: string): Promise<void> => {
   if (alcance.grupoEscuchado) await responderEnGrupo(alcance.grupoEscuchado, { texto }, alcance);
   else await enviarAOperaciones(texto);
+};
+
+/**
+ * «@lila envía el mensaje de producción a planta: reunión 2:00 am, inicio
+ * 2:30 am, 300 m³» — la orden TRAE la producción. Se interpreta como anuncio
+ * (fecha por defecto: mañana, o hoy si lo dice), entra a la agenda, se
+ * confirma en el grupo y sale ya. Sin datos («manda el aviso a planta»), solo
+ * fuerza lo que ya estaba programado.
+ */
+export const atenderOrdenAPlanta = async (texto: string, quien: string, fecha: string, alcance: AlcanceAgente, ahoraMs = Date.now()): Promise<string> => {
+  if (!alcance.grupoPlanta) return 'No tengo resuelto el grupo de planta: no puedo armar el aviso.';
+  if (!cargada) await hidratarAgenda(ahoraMs);
+  const autor = aliasDeAutor(quien);
+  const anuncio = await interpretarAnuncio(texto, ahoraMs, autor ?? undefined, { fechaPorDefecto: fecha });
+  const conDatos = anuncio && anuncio.accion === 'programar' && anuncio.producciones.length > 0;
+  if (conDatos) {
+    const m: MensajeGrupo = { texto, autor: quien, ts: ahoraMs, esPropio: false };
+    const efectos = aplicarHechos(hechosDeAnuncio(anuncio, m), ahoraMs);
+    const confirmacion = textoConfirmacion(efectos, alcance.nombreGrupoPlanta || 'planta', ahoraMs, sinPedidoEnPortal);
+    if (confirmacion) {
+      const msgId = await responderEnGrupo(alcance.grupoEscuchado, { texto: confirmacion }, alcance, quien, { devolverId: true });
+      if (typeof msgId === 'string') for (const a of tocadosDe(efectos)) { a.confirmaciones = [...(a.confirmaciones ?? []), msgId].slice(-10); void guardarAviso(a); }
+    }
+    logger.info(`[agente] orden con datos de ${quien}: ${efectos.map((e) => e.tipo).join(',') || 'sin cambios'} ← «${texto.slice(0, 60)}»`);
+  }
+  return forzarEnvio(fecha, alcance, ahoraMs);
 };
 
 /** «@lila manda el aviso a planta (de mañana)»: fuerza el envío del día, ya. */
