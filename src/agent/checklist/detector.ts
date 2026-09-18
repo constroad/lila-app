@@ -6,14 +6,8 @@ import { mensajesDesde, observados } from './almacen.js';
 import { esConfirmacionEnBloque, filtrarMensajes, type MensajeGrupo } from './mensajes.js';
 import { CHECKLIST_PRODUCCION, type ChecklistDomain, type ChecklistItem } from './checklist.js';
 import { evaluarRevisionSemantica } from './semantica.js';
-import {
-  conPiePropuesta,
-  construirAvisoChecklist,
-  construirAvisoProduccion,
-  describirCambio,
-  firmaAviso,
-} from './aviso.js';
-import { enviarAOperaciones, preguntarEnGrupo, publicarPropuesta, responderEnGrupo } from './emisor.js';
+import { construirAvisoChecklist, firmaAviso } from './aviso.js';
+import { enviarAOperaciones, preguntarEnGrupo } from './emisor.js';
 import { guardarPropuesta } from './persistencia.js';
 import {
   _resetPropuestas,
@@ -231,62 +225,54 @@ const proponerRevisionDelDia = async (
     grupoEscuchado: alcance.nombreGrupo || alcance.grupoEscuchado,
   };
 
-  // UNA PARTE POR QUIEN LA RESPONDE (José, 14/09: «lo mezclas con campo y
-  // planta y pierde el foco»). Lo de PLANTA (agregados, combustible, operadores,
-  // clima) se propone para el grupo de planta, con aprobación; lo de CAMPO
-  // (cuadrilla, tren, herramientas, comidas) se pregunta directo en INFRAMAQ
-  // admin, que es donde está la gente que lo responde — ahí no hay a quién
-  // proponérselo: se les está hablando a ellos.
+  // SOLO CAMPO (spec §14, 16/09): planta recibe el aviso programado, no un
+  // checklist. Lo de campo (cuadrilla, tren, herramientas, comidas) se pregunta
+  // directo en INFRAMAQ admin, que es donde está la gente que lo responde —
+  // ahí no hay a quién proponérselo: se les está hablando a ellos (José,
+  // 14/09: «lo mezclas con campo y planta y pierde el foco»).
   let nuevas = 0;
-  // Solo CAMPO (spec §14, 16/09): planta recibe el aviso programado, no un checklist.
-  for (const dominio of ['obra'] as const) {
-    if (presupuesto.restantes <= 0) break;
+  const dominio = 'obra';
+  const tipo = 'checklist-admin';
+  if (presupuesto.restantes > 0) {
     const texto = construirAvisoChecklist(revision, contexto, dominio);
-    if (!texto) continue;
-    const tipo = dominio === 'planta' ? 'checklist-planta' : 'checklist-admin';
     const firma = `${firmaAviso(dia.fecha, momento, revision)}|${dominio}`;
-    if (yaPropuesta(tipo, firma, ahoraMs)) continue;
     // Un horario se propone UNA vez, aunque lo pendiente cambie después: lo que
     // cambia lo recoge el siguiente horario. Es lo que evita el goteo.
     const marca = `${dia.fecha}|${momento}|${dominio}|`;
-    if (yaPropuesta(tipo, marca, ahoraMs)) continue;
-    const aPlanta = dominio === 'planta' && Boolean(alcance.grupoPlanta);
-    const propuesta: Propuesta = proponer(
-      {
-        tipo,
-        fecha: dia.fecha,
-        firma,
-        destino: aPlanta ? alcance.grupoPlanta : alcance.grupoEscuchado,
-        nombreDestino: aPlanta ? alcance.nombreGrupoPlanta || 'planta' : alcance.nombreGrupo || 'admin',
-        texto,
-      },
-      ahoraMs
-    );
-    // Marca del horario, independiente de lo pendiente: ver arriba. SE
-    // PERSISTE, como la pregunta directa: el 14/09 a las 21:00 el checklist de
-    // campo salió dos veces en 20 min porque un deploy en el medio reinició la
-    // memoria y la marca solo vivía ahí.
-    const marcador = proponer({ ...propuesta, firma: marca, texto: '', destino: '', nombreDestino: '' }, ahoraMs);
-    marcador.estado = 'descartada';
-    void guardarPropuesta(marcador);
+    if (texto && !yaPropuesta(tipo, firma, ahoraMs) && !yaPropuesta(tipo, marca, ahoraMs)) {
+      const propuesta: Propuesta = proponer(
+        {
+          tipo,
+          fecha: dia.fecha,
+          firma,
+          destino: alcance.grupoEscuchado,
+          nombreDestino: alcance.nombreGrupo || 'admin',
+          texto,
+        },
+        ahoraMs
+      );
+      // Marca del horario, independiente de lo pendiente: ver arriba. SE
+      // PERSISTE, como la pregunta directa: el 14/09 a las 21:00 el checklist de
+      // campo salió dos veces en 20 min porque un deploy en el medio reinició la
+      // memoria y la marca solo vivía ahí.
+      const marcador = proponer({ ...propuesta, firma: marca, texto: '', destino: '', nombreDestino: '' }, ahoraMs);
+      marcador.estado = 'descartada';
+      void guardarPropuesta(marcador);
 
-    if (aPlanta) {
-      await publicarPropuesta(propuesta, conPiePropuesta(texto, propuesta.nombreDestino), alcance);
-    } else {
       const msgId = await preguntarEnGrupo(alcance.grupoEscuchado, texto, alcance);
       propuesta.estado = msgId !== null ? 'aprobada' : 'descartada';
       propuesta.decididaPor = 'agente';
       propuesta.decididaMs = ahoraMs;
       if (msgId) anotarMensaje(propuesta.id, msgId);
       void guardarPropuesta(propuesta);
+      presupuesto.restantes -= 1;
+      nuevas += 1;
+      logger.info(
+        `[agente] pregunta ${propuesta.id}: checklist de campo (${momento}) de ${dia.fecha} → «${propuesta.nombreDestino}» ` +
+          `(${revision.pendientes.filter((i) => i.domain === dominio).length} pendientes, ${revision.semanticas.length} confirmación(es) entendidas por semántica, ` +
+          `descartados: ${JSON.stringify(utiles.descartados)})`
+      );
     }
-    presupuesto.restantes -= 1;
-    nuevas += 1;
-    logger.info(
-      `[agente] ${aPlanta ? 'propuesta' : 'pregunta'} ${propuesta.id}: checklist de ${dominio === 'planta' ? 'planta' : 'campo'} (${momento}) de ${dia.fecha} → «${propuesta.nombreDestino}» ` +
-        `(${revision.pendientes.filter((i) => i.domain === dominio).length} pendientes, ${revision.semanticas.length} confirmación(es) entendidas por semántica, ` +
-        `descartados: ${JSON.stringify(utiles.descartados)})`
-    );
   }
   return nuevas;
 };

@@ -236,6 +236,27 @@ describe('el aviso al grupo de operaciones', () => {
   });
 
   /**
+   * 17/09 18:20: la orden de José entró por el chat como «ConstRoad 20:00» y
+   * diez minutos después el sync con el Portal la fundió con su pedido
+   * («CONSTROAD SAC», cliente HEMAJOPE, 02:30). Planta leyó «se suma
+   * CONSTROAD SAC 300 m³ a las 02:30; se cae ConstRoad (20:00)»: dos
+   * producciones donde había una. La misma empresa es la misma línea aunque
+   * cambie cómo se escribe o se le agregue el cliente.
+   */
+  it('la misma empresa con otro nombre o con cliente nuevo es un cambio de hora, no una que se cae y otra que se suma', () => {
+    const antes = [{ id: 'constroad|', companyId: 'constroad', empresa: 'ConstRoad', hora: '20:00', cubos: 300 }];
+    const ahora = [{ id: 'constroad|corporacion hemajope sac', companyId: 'constroad', empresa: 'CONSTROAD SAC', hora: '02:30', cubos: 300, cliente: 'CORPORACION HEMAJOPE SAC' }];
+
+    expect(describirCambio(antes, ahora)).toBe('Cambio: *CONSTROAD SAC* pasa de 20:00 a 02:30.');
+    // Un aviso guardado antes de que las líneas llevaran empresa real: se empareja por nombre.
+    const viejo = [{ id: 'CONSTROAD SAC|CORPORACION HEMAJOPE SAC', empresa: 'CONSTROAD SAC', hora: '02:30', cubos: 300, cliente: 'CORPORACION HEMAJOPE SAC' }];
+    expect(describirCambio(viejo, [{ ...ahora[0], cubos: 320 }])).toBe('Cambio: *CONSTROAD SAC* pasa de 300 a 320 m³.');
+    // Dos clientes distintos de la misma empresa sí son dos líneas.
+    const dos = [...ahora, { id: 'constroad|otro', companyId: 'constroad', empresa: 'CONSTROAD SAC', hora: '08:00', cubos: 100, cliente: 'OTRO' }];
+    expect(describirCambio(ahora, dos)).toBe('Cambio: se suma *CONSTROAD SAC* 100 m³ a las 08:00.');
+  });
+
+  /**
    * LA PROPUESTA DICE CÓMO APROBARLA, y es por cita: José, 13/09: «toco el
    * mensaje y le doy responder con uno». Un «1» suelto en el grupo no es de nadie.
    */

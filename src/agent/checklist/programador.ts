@@ -14,7 +14,7 @@ import { AGENTE_ACTIVO, type AlcanceAgente } from './alcance.js';
 import { enviarAOperaciones, mandarA, responderEnGrupo } from './emisor.js';
 import { agenteApagado } from './interruptor.js';
 import { cargarAvisos, guardarAviso } from './persistencia.js';
-import { construirAvisoProduccion, describirCambio, horaMenos, MINUTOS_REUNION_ANTES } from './aviso.js';
+import { construirAvisoProduccion, describirCambio, horaMenos, MINUTOS_REUNION_ANTES, type LineaAviso } from './aviso.js';
 import { diaPeruano, fechaLegible } from './tiempo.js';
 import type { MensajeGrupo } from './mensajes.js';
 import type { PedidoDelDia } from './dia.js';
@@ -72,14 +72,25 @@ const aplicarHechos = (hechos: Hecho[], ahoraMs: number): Efecto[] => {
 
 // ─── El texto que sale a planta ────────────────────────────────────────────
 
-/** Las líneas del aviso; `id` (empresa|cliente) es con lo que `describirCambio` empareja antes y después. */
+/**
+ * Las líneas del aviso. `id` (empresa real|cliente) y `companyId` son con lo
+ * que `describirCambio` empareja antes y después: por la empresa REAL, no por
+ * cómo se escribió («ConstRoad» en el chat, «CONSTROAD SAC» en el Portal).
+ */
 const comoPedidos = (a: AvisoProgramado) =>
-  a.producciones.map((p) => ({ id: `${p.empresa}|${p.cliente ?? ''}`, empresa: p.empresa || 'por confirmar', hora: p.hora ?? 'hora por confirmar', cubos: p.cubos ?? 0, cliente: p.cliente }));
+  a.producciones.map((p) => ({
+    id: `${p.companyId || p.empresa}|${(p.cliente ?? '').toLowerCase().trim()}`,
+    companyId: p.companyId || undefined,
+    empresa: p.empresa || 'por confirmar',
+    hora: p.hora ?? 'hora por confirmar',
+    cubos: p.cubos ?? 0,
+    cliente: p.cliente,
+  }));
 
 export const textoParaPlanta = (a: AvisoProgramado): string => {
   const pedidos = comoPedidos(a);
   const total = pedidos.reduce((s, p) => s + p.cubos, 0);
-  const cambio = a.estado === 'enviada' && a.enviadoComo ? describirCambio(JSON.parse(a.enviadoComo) as never, pedidos as never) || 'Actualización.' : undefined;
+  const cambio = a.estado === 'enviada' && a.enviadoComo ? describirCambio(JSON.parse(a.enviadoComo) as LineaAviso[], pedidos) || 'Actualización.' : undefined;
   const base = construirAvisoProduccion({ fecha: a.fecha, pedidos, totalCubos: total }, { actualizacion: cambio });
   return a.estado === 'programada' && esUltimoMomento(a) ? `⚠️ *Aviso de último momento*\n${base}` : base;
 };

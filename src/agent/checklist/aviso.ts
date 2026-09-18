@@ -174,26 +174,57 @@ export const horaMenos = (hora: string, minutos: number): string => {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 };
 
+/** Una línea del aviso con lo que hace falta para reconocerla en otra versión del día. */
+export type LineaAviso = PedidoParaAviso & { id?: string; companyId?: string };
+
+const n = (t: string | undefined): string => String(t ?? '').toLowerCase().trim();
+
+/**
+ * ¿Son la misma producción? Misma empresa real (`companyId`) o, si alguna
+ * versión no la trae (avisos guardados antes de llevarla), el mismo nombre; y
+ * si las dos nombran cliente, el mismo. 17/09: la orden del chat decía
+ * «ConstRoad» y el pedido del Portal «CONSTROAD SAC (HEMAJOPE)»: era UNA
+ * producción que cambió de hora, y planta leyó que se caía una y se sumaba otra.
+ */
+const mismaLinea = (a: LineaAviso, b: LineaAviso): boolean => {
+  const empresa = a.companyId && b.companyId ? a.companyId === b.companyId : n(a.empresa) === n(b.empresa);
+  return empresa && (!a.cliente || !b.cliente || n(a.cliente) === n(b.cliente));
+};
+
+/** Cada línea de ahora con la de antes que le corresponde: por id exacto y, si no, por empresa. */
+const emparejar = (antes: LineaAviso[], ahora: LineaAviso[]): Map<LineaAviso, LineaAviso | undefined> => {
+  const sueltas = new Set(antes);
+  const pares = new Map<LineaAviso, LineaAviso | undefined>();
+  for (const p of ahora) {
+    const exacta = p.id ? [...sueltas].find((q) => q.id === p.id) : undefined;
+    if (exacta) {
+      pares.set(p, exacta);
+      sueltas.delete(exacta);
+    }
+  }
+  for (const p of ahora) {
+    if (pares.has(p)) continue;
+    const parecida = [...sueltas].find((q) => mismaLinea(q, p));
+    pares.set(p, parecida);
+    if (parecida) sueltas.delete(parecida);
+  }
+  return pares;
+};
+
 /**
  * Qué cambió entre dos versiones del día, en palabras: «se suma Constroad
  * 45 m³ a las 07:00», «se cae Globofast», «Globofast pasa de 04:00 a 05:00».
  */
-export const describirCambio = (
-  antes: PedidoParaAviso[] & { id?: string }[],
-  ahora: PedidoParaAviso[] & { id?: string }[]
-): string => {
-  const porId = (lista: Array<PedidoParaAviso & { id?: string }>) =>
-    new Map(lista.map((p) => [p.id ?? `${p.empresa}|${p.hora}`, p]));
-  const a = porId(antes);
-  const b = porId(ahora);
+export const describirCambio = (antes: LineaAviso[], ahora: LineaAviso[]): string => {
+  const pares = emparejar(antes, ahora);
   const frases: string[] = [];
-  for (const [id, p] of b) {
-    const previo = a.get(id);
+  for (const [p, previo] of pares) {
     if (!previo) frases.push(`se suma *${p.empresa}* ${p.cubos} m³ a las ${p.hora}`);
     else if (previo.hora !== p.hora) frases.push(`*${p.empresa}* pasa de ${previo.hora} a ${p.hora}`);
     else if (previo.cubos !== p.cubos) frases.push(`*${p.empresa}* pasa de ${previo.cubos} a ${p.cubos} m³`);
   }
-  for (const [id, p] of a) if (!b.has(id)) frases.push(`se cae *${p.empresa}* (${p.hora})`);
+  const emparejadas = new Set([...pares.values()]);
+  for (const p of antes) if (!emparejadas.has(p)) frases.push(`se cae *${p.empresa}* (${p.hora})`);
   return frases.length ? `Cambio: ${frases.join('; ')}.` : '';
 };
 
