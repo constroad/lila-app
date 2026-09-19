@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * P1 «Landing» (diseños `P1-landing` móvil, tablet y escritorio): la página
- * pública de Dali, en `/dali/` sin sesión (con sesión se va al inicio). Dali
+ * pública de Dali, en la raíz sin sesión (con sesión se va al inicio). Dali
  * es para cualquier negocio que venda por WhatsApp —el rubro solo cambia el
  * guion—, así que la landing habla en general (José, 16/09: nada de «obra» ni
  * de ejemplos de asfalto en el héroe); la conversación de muestra es el patrón

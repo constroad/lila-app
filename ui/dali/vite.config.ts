@@ -5,14 +5,13 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 /**
- * La UI de Dali se sirve desde lila SIEMPRE bajo `/dali/` (en
- * `dali.constroad.com`, la raíz redirige ahí): `base` absoluta, porque con una
- * relativa un enlace profundo (`/dali/servicios/colocacion`) pedía los assets
- * en `/dali/servicios/assets/…` y recibía el index. En desarrollo, `/api` va
- * al lila local.
+ * La UI de Dali se sirve desde lila en la RAÍZ de `dali.constroad.com`
+ * (`src/api/dali-ui.ts`): `base` absoluta, porque con una relativa un enlace
+ * profundo (`/servicios/colocacion`) pedía los assets en `/servicios/assets/…`
+ * y recibía el index. En desarrollo, `/api` va al lila local.
  */
 export default defineConfig({
-  base: '/dali/',
+  base: '/',
   plugins: [react(), tailwindcss(), svgr()],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   server: {

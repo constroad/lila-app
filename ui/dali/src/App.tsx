@@ -143,7 +143,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SesionProvider>
-        <BrowserRouter basename="/dali">
+        <BrowserRouter>
           <Routes>
             <Route
               path="/"

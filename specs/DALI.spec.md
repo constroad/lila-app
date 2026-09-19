@@ -81,13 +81,20 @@ Dali no es una app nueva para torre: es lila con un segundo hostname.
    release; aceptable, y si molesta se compila en GitHub Actions y se commitea
    el `dist`.
 2. **Servir.** Express en lila: si `Host` es el hostname de Dali (constante
-   `DALI_HOSTS` en código, sin env nueva), sirve `ui/dali/dist` con fallback a
-   `index.html` (SPA) y deja pasar `/api/*`; en cualquier otro host, la UI
-   también está en `/dali/` para probar sin DNS.
+   `DALI_HOSTS` en código, sin env nueva), sirve `ui/dali/dist` **en la raíz**
+   con fallback a `index.html` (SPA) y deja pasar solo lo que sigue siendo de
+   lila (`RUTAS_DE_LILA = ['/api', '/files', '/health']`); en ese host
+   `/admin/*` es la consola del operador, no el dashboard de salud de lila
+   (por eso el montaje va antes de ese `/admin`). Los enlaces viejos
+   `…/dali/*` —desde cualquier host— mandan con 301 a la misma ruta en la raíz
+   de `dali.constroad.com`. Con test (`src/api/dali-ui.test.ts`).
    > Defecto que hubo (16/09): `montarUiDali` estaba montado DESPUÉS del
    > `app.get('/')` genérico de lila, así que en el host de Dali la raíz
-   > contestaba `{status: ok}` y nunca redirigía a `/dali/`. Ahora va antes,
-   > con test (`src/api/dali-ui.test.ts`).
+   > contestaba `{status: ok}`. Ahora va antes.
+   > Y hasta el 18/09 el panel vivía en `/dali/` también en su propio host
+   > (`dali.constroad.com/dali/guia`): un prefijo que solo tenía sentido para
+   > probar sin DNS. José: «no tiene sentido». Base de Vite `/`, router sin
+   > `basename`, cookie ya era `Path=/`.
 3. **Túnel (lo hizo José el 16/09; pide sudo):** una línea en
    `/usr/local/etc/cloudflared/config.yml` ANTES del wildcard —
    `- hostname: dali.constroad.com` / `service: http://127.0.0.1:3001` — y
@@ -191,7 +198,7 @@ avisos, pausa del dueño, números de prueba, quotas.
 | --- | --- | --- |
 | **F1 · Conocimiento** | `bot_configs` con perfil/negocio/faq/catálogo/avisos; `bot_leads`; `vertical_packs` con asfalto v1; importador Excel (plantilla, analizar, confirmar); Dali usa ficha (saludo, horario, zona) y FAQ por embeddings; `/api/dali/*` de negocio, servicios, faq, catálogo, importar, leads, conversaciones, probar | tests de importación (plantilla real) y de FAQ; curl 401 sin token; una FAQ respondida en el piloto |
 | **F2 · Acceso** | llave `dali` emitida en Torre → Identidad; `auth/*`, `registro`, `bot_members`, roles; cookie 14 d | login real desde el celular de José por código de WhatsApp; invitación a un segundo miembro |
-| **F3 · UI** | `ui/dali` (Vite + React + shadcn) con las 31 pantallas de §7 en los 3 tamaños; build integrado en lila; servido en `/dali`; PWA instalable | recorrido completo en móvil real: registro → conectar → importar → probar → conversación → lead; Lighthouse móvil ≥ 90 accesibilidad |
+| **F3 · UI** | `ui/dali` (Vite + React + shadcn) con las 31 pantallas de §7 en los 3 tamaños; build integrado en lila; servido en la raíz de `dali.constroad.com`; PWA instalable | recorrido completo en móvil real: registro → conectar → importar → probar → conversación → lead; Lighthouse móvil ≥ 90 accesibilidad |
 | **F4 · Marca y admin** | dominio propio, landing, panel admin (empresas, verticales, salud), Portal enlaza a Dali y retira `aiEnabled` | José da de alta un restaurante de prueba sin tocar código |
 | **F5 · Verticales** | modo *pedido* (restaurante) y *cita* (lubricentro) con sus packs | pedido y cita de prueba de punta a punta |
 
@@ -247,11 +254,11 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
 - **UI** en `ui/dali` (Vite 8 + React 19 + Tailwind v4 + shadcn/radix, fuentes
   fontsource y Material Symbols autoalojados: cero red en runtime). Se compila
   en `build.js` de lila (`npm ci --include=dev` porque el deploy corre con
-  `NODE_ENV=production`; si la UI no compila, lila igual se despliega y `/dali`
-  responde 404 «no compilada»). Servida por lila en **`/dali/`** (`src/api/dali-ui.ts`,
-  `DALI_HOSTS = ['dali.constroad.com']` redirige `/` → `/dali/`). El túnel para
-  `dali.constroad.com` sigue pendiente de José (§2.1, paso 3); mientras tanto,
-  `https://lila.constroad.com/dali/`.
+  `NODE_ENV=production`; si la UI no compila, lila igual se despliega y el
+  panel responde 404 «no compilada»). Servida por lila en la **raíz de
+  `dali.constroad.com`** (`src/api/dali-ui.ts`, `DALI_HOSTS`; hasta el 18/09
+  vivía bajo `/dali/`, y esos enlaces redirigen). El túnel lo hizo José el 16/09
+  (§2.1, paso 3).
 - **Diseños**: el HTML de Stitch de las 93 pantallas en `ui/dali/design/html`;
   las capturas a resolución completa (39 MB) fuera del repo, en
   `~/.cache/lila-app/dali-design/shots` (cómo bajarlas: `ui/dali/design/README.md`).
@@ -748,9 +755,10 @@ Los IDs de Stitch por dispositivo están en `specs/DALI-pantallas.md`
   configuración real (ficha, guion, FAQ, catálogo/política, línea conectada,
   números de prueba vacíos, destino de avisos), cada uno enlaza a su
   pantalla. Data-driven y fiel al código; Stitch no la dibujó.
-- **Una sola puerta**: `lila.constroad.com/dali/*` redirige (301) a
-  `dali.constroad.com/dali/*` (`HOSTS_QUE_REDIRIGEN`), así el panel tiene un
-  solo host y una sola cookie; `/api/dali/*` sigue en los dos.
+- **Una sola puerta, en la raíz** (18/09): el panel vive en
+  `dali.constroad.com/…` sin prefijo; `…/dali/*` desde cualquier host redirige
+  (301) a la misma ruta en esa raíz (`PREFIJO_VIEJO`), así el panel tiene un
+  solo host y una sola cookie; `/api/dali/*` sigue en los dos hosts.
 - **Identidad de José** (corregida 17/09): en `bot_members` estaba con
   `51903124919` —la línea de Globofast, un error de la semilla—; va con su
   celular personal `51902049935` (dueño de constroad y operador) y su correo.

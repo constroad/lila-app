@@ -251,8 +251,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// El panel de Dali: su UI estática (spec DALI §2.1). Va ANTES de la raíz
-// genérica: en `dali.constroad.com` la raíz redirige a `/dali/`, y un `app.get('/')`
+// El panel de Dali: su UI estática, en la raíz de `dali.constroad.com` (spec
+// DALI §2.1). Va ANTES de la raíz genérica y del `/admin` de lila: en ese host
+// la raíz es el panel y `/admin/*` es la consola del operador; un `app.get('/')`
 // registrado antes se la comería (pasó: el host de Dali contestaba `{status: ok}`).
 montarUiDali(app);
 
