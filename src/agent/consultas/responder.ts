@@ -88,6 +88,8 @@ const SIN_SENAS = new Set([
   'obra', 'cliente', 'servicio', 'reporte', 'informe', 'para', 'este', 'esta', 'estos', 'estas', 'ano', 'anio', 'mes', 'semana', 'pasado', 'pasada',
   'hoy', 'ayer', 'manana', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre',
   'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo', 'produccion', 'despacho', 'solo', 'todo', 'todos', 'como', 'donde', 'cual', 'cuando',
+  // Palabras de relleno: «del» aparece en media obra de Portal («… DEL PUEBLO JOVEN …») y contaba como seña.
+  'para', 'desde', 'hasta', 'sobre', 'entre', 'pero', 'porque', 'tambien', 'ahora', 'nuevo', 'nueva', 'otra', 'otro',
 ]);
 
 const sinAcentos = (t: string): string => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -100,7 +102,7 @@ const sinAcentos = (t: string): string => String(t || '').toLowerCase().normaliz
  * que más tienen. Si ninguna coincide, quedan todos (y se pregunta cuál).
  */
 export const porSenasDeLaPregunta = (candidatos: PedidoDelDiaVista[], pregunta: string): PedidoDelDiaVista[] => {
-  const senas = sinAcentos(pregunta).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 3 && !SIN_SENAS.has(w));
+  const senas = sinAcentos(pregunta).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 4 && !SIN_SENAS.has(w));
   if (!senas.length) return candidatos;
   const puntaje = (o: PedidoDelDiaVista): number => {
     const texto = ` ${sinAcentos(`${o.obra} ${o.cliente}`)} `;
