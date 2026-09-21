@@ -574,5 +574,16 @@
       "ruta": "orden_planta"
     },
     "nota": "la orden trae la programación adentro: la hora es la del texto (02:30, no 20:00), la fecha es mañana"
+  },
+  {
+    "id": "2026-09-21-1547-enero",
+    "incidente": "2026-09-21-1547",
+    "pregunta": "@ConstRoad crea el enlace del pedido de enero de la obra en pueblo libre",
+    "hoy": "2026-09-21",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "order_link"
+    },
+    "nota": "«enero» es el mes entero (2026-01) y «pueblo libre» elige el pedido; no es «hoy»"
   }
 ]

@@ -79,16 +79,52 @@ export const acotarArchivos = (archivos: Archivo[]): { enviar: Archivo[]; omitid
 };
 
 /** El pedido de la pregunta: por empresa si la nombran; si hay varios, `null` y que pregunten. */
+/**
+ * Palabras de la pregunta que no nombran un pedido: el pedido mismo, el verbo,
+ * los tiempos. «Obra» va acá porque casi toda obra en Portal empieza por «OBRA …».
+ */
+const SIN_SENAS = new Set([
+  'enlace', 'link', 'pedido', 'pedidos', 'crea', 'crear', 'creame', 'genera', 'generar', 'generame', 'dame', 'pasame', 'mandame', 'enviame', 'quiero', 'necesito',
+  'obra', 'cliente', 'servicio', 'reporte', 'informe', 'para', 'este', 'esta', 'estos', 'estas', 'ano', 'anio', 'mes', 'semana', 'pasado', 'pasada',
+  'hoy', 'ayer', 'manana', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre',
+  'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo', 'produccion', 'despacho', 'solo', 'todo', 'todos', 'como', 'donde', 'cual', 'cuando',
+]);
+
+const sinAcentos = (t: string): string => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/**
+ * LA OBRA O EL CLIENTE NOMBRADOS ELIGEN EL PEDIDO. José, 21/09: «crea el
+ * enlace del pedido de enero de la obra en pueblo libre» — enero tiene nueve
+ * pedidos y uno solo es de PUEBLO LIBRE. Se cuentan las palabras de la
+ * pregunta que aparecen en la obra o el cliente de cada pedido; quedan los
+ * que más tienen. Si ninguna coincide, quedan todos (y se pregunta cuál).
+ */
+export const porSenasDeLaPregunta = (candidatos: PedidoDelDiaVista[], pregunta: string): PedidoDelDiaVista[] => {
+  const senas = sinAcentos(pregunta).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 3 && !SIN_SENAS.has(w));
+  if (!senas.length) return candidatos;
+  const puntaje = (o: PedidoDelDiaVista): number => {
+    const texto = ` ${sinAcentos(`${o.obra} ${o.cliente}`)} `;
+    return senas.filter((w) => texto.includes(` ${w} `) || (w.length >= 5 && texto.includes(w))).length;
+  };
+  const mejor = Math.max(...candidatos.map(puntaje));
+  return mejor > 0 ? candidatos.filter((o) => puntaje(o) === mejor) : candidatos;
+};
+
 export const elegirPedido = (
   vista: VistaDelDia,
-  params: Parametros
+  params: Parametros,
+  pregunta = ''
 ): { pedido: PedidoDelDiaVista | null; candidatos: PedidoDelDiaVista[] } => {
-  const candidatos = params.companyId ? vista.orders.filter((o) => o.companyId === params.companyId) : vista.orders;
+  const deLaEmpresa = params.companyId ? vista.orders.filter((o) => o.companyId === params.companyId) : vista.orders;
+  const candidatos = pregunta ? porSenasDeLaPregunta(deLaEmpresa, pregunta) : deLaEmpresa;
   return { pedido: candidatos.length === 1 ? candidatos[0] : null, candidatos };
 };
 
-export const etiquetaPedido = (o: PedidoDelDiaVista): string =>
-  `${o.hora || '—'} — ${o.cliente || o.companySlug} · ${o.obra || 'sin obra'} · ${o.cantidadCubos} m³`;
+const diaMes = (fecha: string): string => `${fecha.slice(8, 10)}/${fecha.slice(5, 7)}`;
+
+/** Con varios días a la vista (un mes), cada pedido se presenta por su día; en un día, por su hora. */
+export const etiquetaPedido = (o: PedidoDelDiaVista, conFecha = false): string =>
+  `${conFecha && o.fecha ? diaMes(o.fecha) : o.hora || '—'} — ${o.cliente || o.companySlug} · ${o.obra || 'sin obra'} · ${o.cantidadCubos} m³`;
 
 /** La unidad por placa, por número, o por orden («la última que salió», «la primera»). */
 export const unidadPor = (vista: VistaDelDia, params: Parametros) => {

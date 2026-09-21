@@ -1,5 +1,5 @@
 import {
-  fueraDeCatalogo, especificidadDeRegla, esConsulta, extraerParametros, fechaDe, hablaEnPasado, normalizarPlaca, preguntaLimpia, rutearPorReglas, sumarDias } from './catalogo';
+  fueraDeCatalogo, especificidadDeRegla, esConsulta, extraerParametros, fechaDe, hablaEnPasado, normalizarPlaca, preguntaLimpia, rutearPorReglas, sumarDias, periodoDe } from './catalogo';
 
 /**
  * EL CATÁLOGO ES CERRADO Y EL RUTEO SE PUEDE LEER. Cada pregunta real de José
@@ -244,6 +244,28 @@ describe('parámetros', () => {
     expect(fechaDe('clima el 5 de enero', ahora)).toBe('2027-01-05'); // el que viene está más cerca que el que pasó
     expect(fechaDe('clima hoy', ahora)).toBeUndefined();
     expect(sumarDias('2026-09-30', 1)).toBe('2026-10-01');
+  });
+
+  /**
+   * UN MES ENTERO. José, 21/09 15:47: «crea el enlace del pedido de enero de
+   * la obra en pueblo libre» → «No hay pedidos para lunes 21/09»: «enero» sin
+   * día no era una fecha, y sin fecha se toma hoy. Un mes nombrado es el
+   * último que ya empezó (en septiembre, «enero» es el de este año; «octubre»,
+   * el del año pasado); con año, ese. También «este año», «este mes», «el mes
+   * pasado». Un día concreto («5 de enero») sigue mandando sobre el mes.
+   */
+  it('entiende un mes entero, «este año», «este mes» y «el mes pasado»', () => {
+    const ahora = new Date('2026-09-21T20:47:00Z').getTime(); // lunes 21/09, 15:47 Lima
+    expect(periodoDe('crea el enlace del pedido de enero de la obra en pueblo libre', ahora)).toEqual({ desde: '2026-01-01', hasta: '2026-01-31', etiqueta: 'enero 2026' });
+    expect(periodoDe('los pedidos de octubre', ahora)).toEqual({ desde: '2025-10-01', hasta: '2025-10-31', etiqueta: 'octubre 2025' });
+    expect(periodoDe('los pedidos de setiembre 2025', ahora)).toEqual({ desde: '2025-09-01', hasta: '2025-09-30', etiqueta: 'setiembre 2025' });
+    expect(periodoDe('el link del pedido de la obra en pueblo libre este año', ahora)).toEqual({ desde: '2026-01-01', hasta: '2026-12-31', etiqueta: 'este año' });
+    expect(periodoDe('pedidos de este mes', ahora)).toEqual({ desde: '2026-09-01', hasta: '2026-09-30', etiqueta: 'setiembre 2026' });
+    expect(periodoDe('pedidos del mes pasado', ahora)).toEqual({ desde: '2026-08-01', hasta: '2026-08-31', etiqueta: 'agosto 2026' });
+    expect(periodoDe('clima el 5 de enero', ahora)).toBeUndefined(); // un día concreto no es un periodo
+    expect(periodoDe('enlace del pedido de mañana', ahora)).toBeUndefined();
+    expect(extraerParametros('crea el enlace del pedido de enero de la obra en pueblo libre', ahora).periodo?.desde).toBe('2026-01-01');
+    expect(extraerParametros('clima el 5 de enero', ahora).periodo).toBeUndefined();
   });
 
   /**

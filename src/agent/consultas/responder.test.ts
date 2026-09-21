@@ -1,4 +1,4 @@
-import { AYUDA, NOTA_ENTRENAMIENTO, OPCIONES_PESTANAS, acotarArchivos, conNotaSiVacia, elegirPedido, esRespuestaVacia, estimarFin, pestanasEnLaPregunta, responder, textoEnlace, unidadPor } from './responder';
+import { AYUDA, NOTA_ENTRENAMIENTO, OPCIONES_PESTANAS, acotarArchivos, conNotaSiVacia, elegirPedido, esRespuestaVacia, estimarFin, etiquetaPedido, pestanasEnLaPregunta, responder, textoEnlace, unidadPor } from './responder';
 import type { VistaDelDia } from './vista';
 import { CHECKLIST_PRODUCCION } from '../checklist/checklist';
 
@@ -207,6 +207,33 @@ describe('responder', () => {
     expect(elegirPedido(dos, hoy).pedido).toBeNull();
     expect(elegirPedido(dos, hoy).candidatos).toHaveLength(2);
     expect(elegirPedido(dos, { ...hoy, companyId: 'constroad' }).pedido?.orderId).toBe('o2');
+  });
+
+  /**
+   * LA OBRA O EL CLIENTE NOMBRADOS ELIGEN EL PEDIDO. José, 21/09: «crea el
+   * enlace del pedido de enero de la obra en pueblo libre» — enero tiene nueve
+   * pedidos y uno solo es de PUEBLO LIBRE. Se busca lo que la pregunta dice en
+   * la obra y el cliente; las palabras del pedido mismo («enlace», «pedido»,
+   * «obra», los meses) no cuentan. Si nada coincide, quedan todos.
+   */
+  it('elegir pedido: la obra o el cliente que nombra la pregunta acotan', () => {
+    const enero: VistaDelDia = {
+      fecha: '2026-01-01',
+      hasta: '2026-01-31',
+      computedAt: 0,
+      orders: [
+        { ...vista.orders[0], orderId: 'e1', companyId: 'constroad', companySlug: 'constroad', cliente: 'Consorcio vial pista nueva', obra: 'VIADUCTO', fecha: '2026-01-09' },
+        { ...vista.orders[0], orderId: 'e2', companyId: 'constroad', companySlug: 'constroad', cliente: 'Edgardo valverde', obra: 'PUEBLO LIBRE', fecha: '2026-01-13' },
+        { ...vista.orders[0], orderId: 'e3', companyId: 'constroad', companySlug: 'constroad', cliente: 'Sercon l & c s.a.c', obra: 'NI', fecha: '2026-01-24' },
+      ],
+    };
+    expect(elegirPedido(enero, hoy, 'crea el enlace del pedido de enero de la obra en pueblo libre').pedido?.orderId).toBe('e2');
+    expect(elegirPedido(enero, hoy, 'el link del pedido de sercon').pedido?.orderId).toBe('e3');
+    expect(elegirPedido(enero, hoy, 'enlace del pedido de enero').pedido).toBeNull();
+    expect(elegirPedido(enero, hoy, 'enlace del pedido de enero').candidatos).toHaveLength(3);
+    // Con varios días a la vista, la etiqueta dice el día de cada pedido.
+    expect(etiquetaPedido(enero.orders[1], true)).toBe('13/01 — Edgardo valverde · PUEBLO LIBRE · 91 m³');
+    expect(etiquetaPedido(vista.orders[0])).toBe('04:00 — FERNANDO COBEÑAS · PROYECTOS VARIOS · 91 m³');
   });
 });
 

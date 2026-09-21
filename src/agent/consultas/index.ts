@@ -1,6 +1,6 @@
 import logger from '../../utils/logger.js';
 import { CATALOGO, esConsulta, extraerParametros, preguntaLimpia, rutearPorReglas, type ClaveConsulta, type Parametros } from './catalogo.js';
-import { construirVista, type PedidoDelDiaVista, type VistaDelDia } from './vista.js';
+import { construirVista, construirVistaPeriodo, type PedidoDelDiaVista, type VistaDelDia } from './vista.js';
 import { OPCIONES_PESTANAS, PREGUNTA_UNIDAD, acotarArchivos, conNotaSiVacia, describeUnidad, elegirPedido, etiquetaPedido, identificaUnidad, pestanasEnLaPregunta, responder, textoEnlace, unidadPor, type Respuesta } from './responder.js';
 import { crearEnlaceDelPedido, enlaceDelPedido, guiasDelPedido, informesDelDia, mediaDelDespacho, type Archivo, type PestanasEnlace } from './archivos.js';
 import { preguntar, responderPendiente, textoPregunta, textoRespuestaInvalida } from './pendientes.js';
@@ -61,12 +61,13 @@ const respuestaEnlace =
   (quien: string, grupo: string, pregunta: string) =>
   async (vista: VistaDelDia, indice: number): Promise<Respuesta> => {
     const o = vista.orders[indice];
+    const dia = o.fecha ?? vista.fecha;
     const existente = await enlaceDelPedido(o.companyId, o.orderId, o.companySlug);
-    if (existente) return { texto: textoEnlace(o, vista.fecha, existente, false) };
+    if (existente) return { texto: textoEnlace(o, dia, existente, false) };
     const generar = async (pestanas: PestanasEnlace): Promise<Respuesta> => {
       const enlace = await crearEnlaceDelPedido(o.companyId, o.orderId, o.companySlug, pestanas, quien);
-      logger.info(`[agente] enlace del cliente generado por ${quien} para el pedido ${o.orderId} (${o.companySlug}, ${vista.fecha}): ${enlace.tabs.join(',')}`);
-      return { texto: textoEnlace(o, vista.fecha, enlace, true) };
+      logger.info(`[agente] enlace del cliente generado por ${quien} para el pedido ${o.orderId} (${o.companySlug}, ${dia}): ${enlace.tabs.join(',')}`);
+      return { texto: textoEnlace(o, dia, enlace, true) };
     };
     const dichas = pestanasEnLaPregunta(pregunta);
     if (dichas) return generar(dichas);
@@ -77,7 +78,7 @@ const respuestaEnlace =
       tipo: 'opciones',
       continuar: (i) => generar((OPCIONES_PESTANAS[i] ?? OPCIONES_PESTANAS[0]).pestanas),
     });
-    return { texto: textoPregunta(`El pedido de *${o.cliente || o.companySlug}* (${fechaLegible(vista.fecha)}) no tiene enlace. ¿Lo genero? Producción va siempre; elige qué más ve el cliente:`, OPCIONES_PESTANAS.map((op) => op.etiqueta)) };
+    return { texto: textoPregunta(`El pedido de *${o.cliente || o.companySlug}* (${fechaLegible(dia)}) no tiene enlace. ¿Lo genero? Producción va siempre; elige qué más ve el cliente:`, OPCIONES_PESTANAS.map((op) => op.etiqueta)) };
   };
 
 /** Con un pedido elegido: sus guías y vales. */
@@ -183,24 +184,30 @@ const respuestaMedia = async (vista: VistaDelDia, params: Parametros, encabezado
  * Para las consultas que necesitan UN pedido: si hay uno, sigue; si hay varios,
  * pregunta y guarda la continuación; si no hay ninguno, lo dice.
  */
+const MAX_OPCIONES_PEDIDO = 9;
+
 const conPedidoElegido = async (
   vista: VistaDelDia,
   params: Parametros,
   quien: string,
   grupo: string,
-  continuar: (vista: VistaDelDia, indice: number) => Promise<Respuesta>
+  continuar: (vista: VistaDelDia, indice: number) => Promise<Respuesta>,
+  pregunta = ''
 ): Promise<Respuesta> => {
-  const { pedido, candidatos } = elegirPedido(vista, params);
-  if (candidatos.length === 0) return { texto: `No hay pedidos ${params.companyId ? 'de esa empresa ' : ''}para ${fechaLegible(vista.fecha)}.` };
+  const { pedido, candidatos } = elegirPedido(vista, params, pregunta);
+  const cuando = params.periodo ? `en ${params.periodo.etiqueta}` : `para ${fechaLegible(vista.fecha)}`;
+  if (candidatos.length === 0) return { texto: `No hay pedidos ${params.companyId ? 'de esa empresa ' : ''}${cuando}.` };
   if (pedido) return continuar(vista, vista.orders.indexOf(pedido));
-  const opciones = candidatos.map(etiquetaPedido);
+  // Un mes entero puede traer decenas: se pide una seña antes que una lista de 40.
+  if (candidatos.length > MAX_OPCIONES_PEDIDO) return { texto: `Hay ${candidatos.length} pedidos ${cuando}. Dime el cliente o la obra para ubicarlo.` };
+  const opciones = candidatos.map((o) => etiquetaPedido(o, Boolean(vista.hasta)));
   preguntar({
     quien,
     grupo,
     opciones,
     continuar: (i) => continuar(vista, vista.orders.indexOf(candidatos[i])),
   });
-  return { texto: textoPregunta(`Hay ${candidatos.length} producciones ${fechaLegible(vista.fecha)}. ¿Cuál?`, opciones) };
+  return { texto: textoPregunta(`Hay ${candidatos.length} ${params.periodo ? 'pedidos' : 'producciones'} ${cuando}. ¿Cuál?`, opciones) };
 };
 
 /** Una imagen con su caption; si no se puede rasterizar, el texto solo. */
@@ -302,7 +309,11 @@ const armarRespuesta = async (
     return r.archivos ? r : { texto: responder(clave, { vista, params }) };
   }
 
-  if (clave === 'order_link') return conPedidoElegido(vista, params, quien, grupo, respuestaEnlace(quien, grupo, pregunta));
+  if (clave === 'order_link') {
+    // «El pedido de enero de la obra en pueblo libre»: un mes (o un año) a la vista, y la obra elige.
+    const enPeriodo = params.periodo ? await construirVistaPeriodo(params.periodo.desde, params.periodo.hasta) : vista;
+    return conPedidoElegido(enPeriodo, params, quien, grupo, respuestaEnlace(quien, grupo, pregunta), pregunta);
+  }
   if (clave === 'guias_day') return conPedidoElegido(vista, params, quien, grupo, respuestaGuias);
   // Las fotos de un INFORME (control de pista, panel…) no son las del despacho,
   // y no necesitan unidad: sin ella van todas las del informe.

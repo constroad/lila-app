@@ -236,6 +236,8 @@ export interface Parametros {
   fecha?: string;
   /** «la semana», «esta semana», «los próximos días». */
   rango?: 'semana';
+  /** Un tramo largo nombrado: «enero», «este año», «el mes pasado». Solo si no hay día concreto. */
+  periodo?: Periodo;
   /** «la última (unidad)», «la primera», «la que acaba de salir». */
   ordinal?: 'ultima' | 'primera';
 }
@@ -282,6 +284,50 @@ export const fechaConAnio = (mes: number, dia: number, hoy: string, haciaAtras: 
   if (haciaAtras) return diasEntre(hoy, en(anio)) > DIAS_DE_PROGRAMACION ? en(anio - 1) : en(anio);
   const distancia = (a: number) => Math.abs(diasEntre(hoy, en(a)));
   return en([anio - 1, anio + 1].reduce((mejor, a) => (distancia(a) < distancia(mejor) ? a : mejor), anio));
+};
+
+/** Un tramo de días, con cómo se nombra al contestar («enero 2026», «este año»). */
+export interface Periodo {
+  desde: string;
+  hasta: string;
+  etiqueta: string;
+}
+
+const NOMBRE_MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre'];
+const numeroDeMes = (nombre: string): number => {
+  const i = MESES.indexOf(nombre);
+  return i < 0 ? 0 : i + 1 - (i >= 9 ? 1 : 0);
+};
+const dos = (n: number): string => String(n).padStart(2, '0');
+const mesEntero = (anio: number, mes: number): Periodo => ({
+  desde: `${anio}-${dos(mes)}-01`,
+  hasta: `${anio}-${dos(mes)}-${dos(new Date(Date.UTC(anio, mes, 0)).getUTCDate())}`,
+  etiqueta: `${NOMBRE_MES[mes - 1]} ${anio}`,
+});
+
+/**
+ * UN MES ENTERO, UN AÑO. José, 21/09 15:47: «crea el enlace del pedido de
+ * enero de la obra en pueblo libre» → «No hay pedidos para lunes 21/09»:
+ * «enero» sin día no era una fecha, y sin fecha se toma hoy. Un mes nombrado
+ * es el último que ya empezó (en septiembre, «enero» es el de este año y
+ * «octubre» el del año pasado); con año, ese. También «este año», «el año
+ * pasado», «este mes», «el mes pasado». Un día concreto («5 de enero») no es
+ * un periodo: ese lo lee `fechaDe`, y manda.
+ */
+export const periodoDe = (pregunta: string, ahoraMs = Date.now()): Periodo | undefined => {
+  const t = normalizar(pregunta);
+  const [anioHoy, mesHoy] = hoyLima(ahoraMs).split('-').map(Number) as [number, number];
+  if (/\bano pasado\b/.test(t)) return { desde: `${anioHoy - 1}-01-01`, hasta: `${anioHoy - 1}-12-31`, etiqueta: 'el año pasado' };
+  if (/\b(este|del|el|en el|en este|todo el) ano\b/.test(t)) return { desde: `${anioHoy}-01-01`, hasta: `${anioHoy}-12-31`, etiqueta: 'este año' };
+  if (/\bmes pasado\b/.test(t)) return mesHoy === 1 ? mesEntero(anioHoy - 1, 12) : mesEntero(anioHoy, mesHoy - 1);
+  if (/\beste mes\b/.test(t)) return mesEntero(anioHoy, mesHoy);
+  const MES = '(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)';
+  if (new RegExp(`\\b\\d{1,2}\\s*(?:de\\s+)?${MES}\\b`).test(t)) return undefined;
+  const m = t.match(new RegExp(`\\b${MES}\\b(?:\\s+(?:de\\s+|del\\s+)?(20\\d{2})\\b)?`));
+  if (!m) return undefined;
+  const mes = numeroDeMes(m[1]!);
+  const anio = m[2] ? Number(m[2]) : mes <= mesHoy ? anioHoy : anioHoy - 1;
+  return mesEntero(anio, mes);
 };
 
 export interface OpcionesFecha {
@@ -367,6 +413,7 @@ export const extraerParametros = (pregunta: string, ahoraMs = Date.now()): Param
   const empresa = ALIAS_EMPRESA.find((e) => e.alias.some((a) => new RegExp(`\\b${a}\\b`).test(t)));
   const rango = /\b(semana|semanal|proximos dias|próximos días|estos dias|estos días)\b/.test(t) ? ('semana' as const) : undefined;
   const fecha = fechaDe(pregunta, ahoraMs);
+  const periodo = fecha ? undefined : periodoDe(pregunta, ahoraMs);
   // «la última», «el último carro», «la que acaba de salir» / «la primera».
   const ordinal = /\b(ultim[oa]|acaba de salir|recien salio|recién salió)\b/.test(t)
     ? ('ultima' as const)
@@ -381,6 +428,7 @@ export const extraerParametros = (pregunta: string, ahoraMs = Date.now()): Param
     unitNumber: unitNumber && unitNumber > 0 ? unitNumber : undefined,
     fecha,
     rango,
+    periodo,
     ordinal,
   };
 };
