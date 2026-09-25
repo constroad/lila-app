@@ -38,6 +38,16 @@
       ],
       "port": 5180,
       "url": "http://127.0.0.1:5180"
+    },
+    {
+      "name": "portal-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/jose/projects/Portal && yarn dev"
+      ],
+      "port": 3000,
+      "autoPort": false
     }
   ]
 }
