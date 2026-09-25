@@ -13,7 +13,8 @@ describe('la confirmación en INFRAMAQ admin', () => {
     expect(t).toContain('✅ Programé el aviso a «Inframaq Planta» (para el miércoles 16/09 a las 17:00):');
     expect(t).toContain('• jueves 17/09 · 04:30 Globofast Solkali (CONSORCIO LOMAS) · 137 m³ · reunión 04:00');
     expect(t).toContain('No olviden crear el pedido en Portal: Globofast Solkali (jueves 17/09).');
-    expect(t).toContain('(Responde 3 a este mensaje si no va.)');
+    // Qué hacer con esto: normalmente nada, y se dice (José, 25/09).
+    expect(t).toContain('No hay que hacer nada: el aviso sale solo. Responde 3 a este mensaje si no va.');
   });
   it('último momento: «sale ahora»; con pedido en Portal no pide crearlo; sin cambios no dice nada', () => {
     const miercolesTarde = lima('2026-09-16', '19:00');

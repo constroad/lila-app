@@ -91,9 +91,23 @@ export const yaArranco = (fecha: string, hora: string | undefined, ahoraMs: numb
 
 const claveDe = (p: { companyId: string; cliente?: string }): string => `${p.companyId}|${(p.cliente ?? '').toLowerCase().trim()}`;
 
-/** Misma producción: misma empresa y, si los dos nombran cliente, el mismo. */
-export const mismaProduccion = (a: { companyId: string; cliente?: string }, b: { companyId: string; cliente?: string }): boolean =>
-  a.companyId === b.companyId && (!a.cliente || !b.cliente || claveDe(a) === claveDe(b));
+/**
+ * ¿Es la misma producción? Dos PEDIDOS de Portal son dos producciones aunque
+ * sean de la misma empresa y el mismo cliente: el 26/09 CONSTROAD SAC tenía
+ * dos para Sergio Correa (04:30 124 m³ y 07:00 6.5 m³) y, tomados por uno
+ * solo, cada pasada del detector los fundía uno sobre otro y confirmaba un
+ * «actualicé» en el grupo — cada 20 minutos, sin parar (José, 25/09/2026).
+ *
+ * Sin pedido (lo que se anuncia por chat) sigue siendo la empresa y, si los
+ * dos nombran cliente, el mismo.
+ */
+export const mismaProduccion = (
+  a: { companyId: string; cliente?: string; pedidoId?: string },
+  b: { companyId: string; cliente?: string; pedidoId?: string }
+): boolean => {
+  if (a.pedidoId && b.pedidoId) return a.pedidoId === b.pedidoId;
+  return a.companyId === b.companyId && (!a.cliente || !b.cliente || claveDe(a) === claveDe(b));
+};
 
 const nuevoId = (fecha: string, ahoraMs: number): string => `av-${fecha}-${ahoraMs.toString(36)}`;
 
@@ -133,6 +147,8 @@ export interface Cancelar {
   /** Sin empresa: se cancela el día entero. */
   companyId?: string;
   cliente?: string;
+  /** El pedido que desapareció de Portal: cancela SOLO ese, no los demás del mismo cliente. */
+  pedidoId?: string;
   ts: number;
 }
 export type Hecho = Programar | Cancelar;
@@ -147,9 +163,13 @@ export const aplicar = (agenda: AvisoProgramado[], hecho: Hecho, ahoraMs: number
 
   const vivas = (fecha: string) => lista.filter((a) => a.fecha === fecha && a.estado !== 'cancelada');
 
-  const cancelarEn = (fecha: string, filtro: { companyId?: string; cliente?: string }): void => {
+  const cancelarEn = (fecha: string, filtro: { companyId?: string; cliente?: string; pedidoId?: string }): void => {
     for (const aviso of vivas(fecha)) {
-      const quitar = filtro.companyId ? aviso.producciones.filter((p) => mismaProduccion(p, { companyId: filtro.companyId!, cliente: filtro.cliente })) : [...aviso.producciones];
+      const quitar = filtro.pedidoId
+        ? aviso.producciones.filter((p) => p.pedidoId === filtro.pedidoId)
+        : filtro.companyId
+          ? aviso.producciones.filter((p) => mismaProduccion(p, { companyId: filtro.companyId!, cliente: filtro.cliente }))
+          : [...aviso.producciones];
       if (!quitar.length) continue;
       aviso.producciones = aviso.producciones.filter((p) => !quitar.includes(p));
       aviso.actualizadoMs = ahoraMs;
@@ -163,7 +183,7 @@ export const aplicar = (agenda: AvisoProgramado[], hecho: Hecho, ahoraMs: number
   };
 
   if (hecho.accion === 'cancelar') {
-    cancelarEn(hecho.fecha, { companyId: hecho.companyId, cliente: hecho.cliente });
+    cancelarEn(hecho.fecha, { companyId: hecho.companyId, cliente: hecho.cliente, pedidoId: hecho.pedidoId });
     return { agenda: lista, efectos };
   }
 
@@ -210,7 +230,14 @@ export const aplicar = (agenda: AvisoProgramado[], hecho: Hecho, ahoraMs: number
       efectos.push({ tipo: 'programado', aviso, produccion: p });
       return aviso;
     }
-    const i = aviso.producciones.findIndex((x) => mismaProduccion(x, p));
+    // Con pedido: primero el MISMO pedido; si no está, el anuncio del chat que
+    // este pedido viene a completar (nunca otro pedido ya identificado).
+    const i = p.pedidoId
+      ? (() => {
+          const mismo = aviso.producciones.findIndex((x) => x.pedidoId === p.pedidoId);
+          return mismo !== -1 ? mismo : aviso.producciones.findIndex((x) => !x.pedidoId && mismaProduccion(x, p));
+        })()
+      : aviso.producciones.findIndex((x) => mismaProduccion(x, p));
     if (i === -1) {
       aviso.producciones = ordenar([...aviso.producciones, p]);
       aviso.actualizadoMs = ahoraMs;
@@ -219,11 +246,14 @@ export const aplicar = (agenda: AvisoProgramado[], hecho: Hecho, ahoraMs: number
     }
     const antes = aviso.producciones[i];
     const fundida = fundir(antes, p);
+    // La fundida se guarda SIEMPRE, aunque para la gente no haya cambio: así el
+    // anuncio del chat se queda con el `pedidoId` de Portal cuando aparece, y
+    // deja de pedir que creen el pedido que ya existe.
+    aviso.producciones = ordenar(aviso.producciones.map((x, j) => (j === i ? fundida : x)));
     if (!difiere(antes, fundida)) {
       efectos.push({ tipo: 'sin-cambio', aviso });
       return aviso;
     }
-    aviso.producciones = ordenar(aviso.producciones.map((x, j) => (j === i ? fundida : x)));
     aviso.actualizadoMs = ahoraMs;
     efectos.push({ tipo: 'actualizado', aviso, produccion: fundida, antes });
     return aviso;

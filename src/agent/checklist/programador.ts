@@ -40,6 +40,7 @@ export const _agenda = (): AvisoProgramado[] => agenda;
 export const _resetAgenda = (): void => {
   agenda = [];
   cargada = true;
+  dichas.clear();
 };
 
 const persistir = (tocados: AvisoProgramado[]): void => {
@@ -130,7 +131,10 @@ export const textoConfirmacion = (efectos: Efecto[], nombrePlanta: string, ahora
   if (!lineas.length) return null;
   if (pendientesPortal.size) lineas.push(`No olviden crear el pedido en Portal: ${[...pendientesPortal].join(', ')}.`);
   else if (efectos.some((e) => e.tipo === 'programado' || e.tipo === 'sumado')) lineas.push('El pedido ya está en Portal ✓.');
-  lineas.push('_(Responde 3 a este mensaje si no va.)_');
+  // Qué hacer con esto: normalmente NADA. José, 25/09: «además solo indica
+  // responder con 3» — el mensaje pedía una acción sin decir que no hace falta
+  // ninguna, y el aviso sale solo igual.
+  lineas.push('_(No hay que hacer nada: el aviso sale solo. Responde 3 a este mensaje si no va.)_');
   return lineas.join('\n');
 };
 
@@ -224,6 +228,26 @@ export const atenderRespuestaAConfirmacion = async (texto: string, citaMsgId: st
 // ─── Entrada 2: los pedidos de Portal ──────────────────────────────────────
 
 /** En cada pasada del detector: los pedidos con hora entran a la agenda (Portal manda); los que desaparecieron, se cancelan. */
+/**
+ * EL MISMO AVISO NO SE REPITE. El 25/09 el grupo recibió el mismo par de
+ * «Actualicé el aviso» cada 20 minutos durante horas: la causa era que dos
+ * pedidos del mismo cliente se fundían uno sobre otro en cada pasada (ya
+ * corregido en `agenda`), pero un mensaje que se repite solo no debería poder
+ * pasar de una vez por hora aunque algo vuelva a calcularse mal.
+ */
+const SILENCIO_CONFIRMACION_MS = 60 * 60_000;
+const dichas = new Map<string, number>();
+const yaSeDijo = (texto: string, ahoraMs: number): boolean => {
+  const ultimo = dichas.get(texto);
+  if (ultimo !== undefined && ahoraMs - ultimo < SILENCIO_CONFIRMACION_MS) {
+    logger.info('[agente] confirmación repetida en menos de 1 h: no se manda de nuevo');
+    return true;
+  }
+  for (const [k, ms] of dichas) if (ahoraMs - ms > SILENCIO_CONFIRMACION_MS) dichas.delete(k);
+  dichas.set(texto, ahoraMs);
+  return false;
+};
+
 export const sincronizarConPortal = async (pedidos: PedidoDelDia[], alcance: AlcanceAgente, ahoraMs = Date.now()): Promise<void> => {
   if (!cargada) await hidratarAgenda(ahoraMs);
   const hechos: Hecho[] = pedidos.map((p) => ({
@@ -237,7 +261,7 @@ export const sincronizarConPortal = async (pedidos: PedidoDelDia[], alcance: Alc
     // Solo lo que Portal tenía dentro de la ventana que mira el detector (2 días): fuera de ella no se sabe.
     for (const p of a.producciones) {
       if (p.pedidoId && !ids.has(p.pedidoId) && a.fecha <= diaPeruano(ahoraMs + 47 * 3_600_000)) {
-        hechos.push({ accion: 'cancelar', fecha: a.fecha, companyId: p.companyId, cliente: p.cliente, ts: ahoraMs });
+        hechos.push({ accion: 'cancelar', fecha: a.fecha, companyId: p.companyId, cliente: p.cliente, pedidoId: p.pedidoId, ts: ahoraMs });
       }
     }
   }
@@ -245,7 +269,7 @@ export const sincronizarConPortal = async (pedidos: PedidoDelDia[], alcance: Alc
   const relevantes = efectos.filter((e) => e.tipo !== 'sin-cambio' && e.tipo !== 'posible-movimiento');
   if (relevantes.length) {
     const texto = textoConfirmacion(relevantes, alcance.nombreGrupoPlanta || 'planta', ahoraMs, sinPedidoEnPortal);
-    if (texto) await responderEnGrupo(alcance.grupoEscuchado, { texto: `📋 Desde Portal:\n${texto}` }, alcance);
+    if (texto && !yaSeDijo(texto, ahoraMs)) await responderEnGrupo(alcance.grupoEscuchado, { texto: `📋 Desde Portal:\n${texto}` }, alcance);
     await enviarCancelaciones(efectos, alcance);
   }
   await enviarPendientes(alcance, ahoraMs);

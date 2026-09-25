@@ -47,6 +47,57 @@ describe('aplicar: programar, sumar, actualizar', () => {
     expect(fundir(globo({ hora: '04:30', cubos: 137 }), globo({ fuente: 'portal', hora: '05:00', cubos: 140, pedidoId: 'o1' }))).toMatchObject({ hora: '05:00', cubos: 140, fuente: 'portal', pedidoId: 'o1' });
     expect(fundir(globo({ fuente: 'portal', hora: '05:00', cubos: undefined }), globo({ hora: '04:30', cubos: 137 }))).toMatchObject({ hora: '05:00', cubos: 137, fuente: 'portal' });
   });
+  /**
+   * DOS PEDIDOS DEL MISMO CLIENTE EL MISMO DÍA SON DOS PRODUCCIONES. José,
+   * 25/09/2026: INFRAMAQ admin recibió el MISMO par de «Actualicé el aviso»
+   * cada 20 minutos (11:00, 11:20, 11:40, 12:00, 12:20…). Portal tenía dos
+   * pedidos de CONSTROAD SAC para Sergio Correa el 26/09 —04:30 124 m³ y
+   * 07:00 6.5 m³— y la agenda los tomaba por la MISMA producción (empresa +
+   * cliente): cada pasada del detector los fundía uno sobre otro, ida y
+   * vuelta, y cada vuelta era un «actualizado» que se confirmaba en el grupo.
+   * Lo que los distingue es el pedido de Portal.
+   */
+  it('dos pedidos distintos del mismo cliente conviven y no se pisan entre pasadas', () => {
+    const sergio = (extra: Partial<Produccion> = {}): Produccion =>
+      constroad({ empresa: 'CONSTROAD SAC', cliente: 'Sergio Correa', fuente: 'portal', ...extra });
+    const madrugada = { accion: 'programar' as const, fecha: '2026-09-26', produccion: sergio({ hora: '04:30', cubos: 124, pedidoId: 'ped-1' }) };
+    const manana = { accion: 'programar' as const, fecha: '2026-09-26', produccion: sergio({ hora: '07:00', cubos: 6.5, pedidoId: 'ped-2' }) };
+
+    const r1 = aplicar([], madrugada, ahora);
+    const r2 = aplicar(r1.agenda, manana, ahora);
+    expect(r2.efectos.map((e) => e.tipo)).toEqual(['sumado']);
+    expect(r2.agenda[0].producciones.map((p) => `${p.hora}|${p.cubos}`)).toEqual(['04:30|124', '07:00|6.5']);
+
+    // La pasada siguiente lee lo mismo de Portal: nada cambió.
+    const r3 = aplicar(r2.agenda, madrugada, ahora + 20 * 60_000);
+    const r4 = aplicar(r3.agenda, manana, ahora + 20 * 60_000);
+    expect([...r3.efectos, ...r4.efectos].map((e) => e.tipo)).toEqual(['sin-cambio', 'sin-cambio']);
+    expect(r4.agenda[0].producciones).toHaveLength(2);
+  });
+
+  it('el pedido de Portal completa al anuncio del chat en vez de duplicarlo', () => {
+    const delChat = aplicar([], { accion: 'programar', fecha: '2026-09-26', produccion: constroad({ hora: '04:30', cubos: 124 }) }, ahora);
+    const delPortal = aplicar(delChat.agenda, { accion: 'programar', fecha: '2026-09-26', produccion: constroad({ hora: '04:30', cubos: 124, fuente: 'portal', pedidoId: 'ped-1' }) }, ahora + 1000);
+
+    // Para la gente no cambió nada (misma hora, mismos m³), pero la producción
+    // se queda con el pedido: deja de pedir que creen el que ya existe.
+    expect(delPortal.efectos.map((e) => e.tipo)).toEqual(['sin-cambio']);
+    expect(delPortal.agenda[0].producciones).toHaveLength(1);
+    expect(delPortal.agenda[0].producciones[0]).toMatchObject({ pedidoId: 'ped-1', fuente: 'portal' });
+  });
+
+  it('cancelar un pedido de Portal no se lleva al otro del mismo cliente', () => {
+    const sergio = (extra: Partial<Produccion> = {}): Produccion =>
+      constroad({ empresa: 'CONSTROAD SAC', cliente: 'Sergio Correa', fuente: 'portal', ...extra });
+    const r1 = aplicar([], { accion: 'programar', fecha: '2026-09-26', produccion: sergio({ hora: '04:30', cubos: 124, pedidoId: 'ped-1' }) }, ahora);
+    const r2 = aplicar(r1.agenda, { accion: 'programar', fecha: '2026-09-26', produccion: sergio({ hora: '07:00', cubos: 6.5, pedidoId: 'ped-2' }) }, ahora);
+
+    const r3 = aplicar(r2.agenda, { accion: 'cancelar', fecha: '2026-09-26', companyId: 'constroad', cliente: 'Sergio Correa', pedidoId: 'ped-2', ts: ahora }, ahora);
+
+    expect(r3.efectos.map((e) => e.tipo)).toEqual(['cancelado']);
+    expect(r3.agenda[0].producciones.map((p) => p.pedidoId)).toEqual(['ped-1']);
+  });
+
   it('misma empresa, dos clientes el mismo día: dos líneas', () => {
     const r1 = aplicar([], { accion: 'programar', fecha: '2026-09-17', produccion: globo() }, ahora);
     const r2 = aplicar(r1.agenda, { accion: 'programar', fecha: '2026-09-17', produccion: globo({ cliente: 'SANTA ROSA', hora: '08:00', cubos: 60 }) }, ahora);
