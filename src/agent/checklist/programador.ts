@@ -114,6 +114,17 @@ const cuandoSale = (a: AvisoProgramado, ahoraMs: number): string => {
   return `para el ${fechaLegible(diaPeruano(a.envioMs))} a las ${hora}`;
 };
 
+/** Los avisos que quedaron vivos después de los cambios, sin repetir. */
+const diasTocados = (efectos: Efecto[]): AvisoProgramado[] => {
+  const vistos = new Map<string, AvisoProgramado>();
+  for (const e of efectos) {
+    const aviso = e.tipo === 'movido' ? e.hasta : 'aviso' in e ? e.aviso : null;
+    if (!aviso || aviso.estado === 'cancelada') continue;
+    vistos.set(aviso.id, aviso);
+  }
+  return [...vistos.values()];
+};
+
 export const textoConfirmacion = (efectos: Efecto[], nombrePlanta: string, ahoraMs: number, faltanEnPortal: (a: AvisoProgramado) => Produccion[]): string | null => {
   const lineas: string[] = [];
   const pendientesPortal = new Set<string>();
@@ -129,6 +140,18 @@ export const textoConfirmacion = (efectos: Efecto[], nombrePlanta: string, ahora
     if (e.tipo === 'movido') for (const p of faltanEnPortal(e.hasta)) pendientesPortal.add(`${p.empresa} (${fechaLegible(e.hasta.fecha)})`);
   }
   if (!lineas.length) return null;
+  // CÓMO QUEDA EL DÍA, no solo lo que cambió. José, 25/09: llegó «Sumé … 07:00
+  // · 6.5 m³» y preguntó «hay 2 pedidos de Sergio Correa y solo veo uno».
+  // Estaban los dos —y los dos salen a planta—, pero desde el grupo no había
+  // cómo verificarlo. Con una sola producción la línea del cambio ya lo dice.
+  for (const a of diasTocados(efectos)) {
+    if (a.producciones.length < 2) continue;
+    const total = a.producciones.reduce((s, p) => s + (p.cubos ?? 0), 0);
+    lineas.push(
+      `El ${fechaLegible(a.fecha)} queda así (${Number(total.toFixed(2))} m³ en total):`,
+      ...a.producciones.map((p) => lineaProduccion(p, a.fecha))
+    );
+  }
   if (pendientesPortal.size) lineas.push(`No olviden crear el pedido en Portal: ${[...pendientesPortal].join(', ')}.`);
   else if (efectos.some((e) => e.tipo === 'programado' || e.tipo === 'sumado')) lineas.push('El pedido ya está en Portal ✓.');
   // Qué hacer con esto: normalmente NADA. José, 25/09: «además solo indica

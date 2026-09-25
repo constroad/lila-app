@@ -25,6 +25,35 @@ describe('la confirmación en INFRAMAQ admin', () => {
     const repetido = aplicar(agenda, { accion: 'programar', fecha: '2026-09-17', produccion: globo({ fuente: 'portal', pedidoId: 'o1' }) }, miercolesTarde);
     expect(textoConfirmacion(repetido.efectos, 'Inframaq Planta', miercolesTarde, sinPedido)).toBeNull();
   });
+  /**
+   * CÓMO QUEDA EL DÍA, NO SOLO LO QUE CAMBIÓ. José, 25/09: llegó «Sumé al
+   * aviso de sábado 26/09 · 07:00 · 6.5 m³» y preguntó «hay 2 pedidos de
+   * Sergio Correa y solo veo uno». Estaban los dos en la agenda —y los dos
+   * salen a planta—, pero la confirmación solo contaba el cambio, así que no
+   * había cómo verificarlo desde el grupo.
+   */
+  it('con más de una producción en el día, muestra el día completo con su total', () => {
+    const viernes = lima('2026-09-25', '12:40');
+    const sergio = (extra: Partial<Produccion> = {}): Produccion =>
+      globo({ companyId: 'constroad', empresa: 'CONSTROAD SAC', cliente: 'Sergio Correa', fuente: 'portal', ...extra });
+    const r1 = aplicar([], { accion: 'programar', fecha: '2026-09-26', produccion: sergio({ hora: '04:30', cubos: 124, pedidoId: 'p1' }) }, viernes);
+    const r2 = aplicar(r1.agenda, { accion: 'programar', fecha: '2026-09-26', produccion: sergio({ hora: '07:00', cubos: 6.5, pedidoId: 'p2' }) }, viernes);
+
+    const t = textoConfirmacion(r2.efectos, 'Inframaq Planta', viernes, sinPedido)!;
+
+    expect(t).toContain('✅ Sumé al aviso de sábado 26/09');
+    expect(t).toContain('El sábado 26/09 queda así (130.5 m³ en total):');
+    expect(t).toContain('• sábado 26/09 · 04:30 CONSTROAD SAC (Sergio Correa) · 124 m³ · reunión 04:00');
+    expect(t).toContain('• sábado 26/09 · 07:00 CONSTROAD SAC (Sergio Correa) · 6.5 m³ · reunión 06:30');
+  });
+
+  it('con una sola producción no repite el día: la línea del cambio ya lo dice todo', () => {
+    const lunes = lima('2026-09-14', '09:00');
+    const { efectos } = aplicar([], { accion: 'programar', fecha: '2026-09-17', produccion: globo() }, lunes);
+
+    expect(textoConfirmacion(efectos, 'Inframaq Planta', lunes, sinPedido)!).not.toContain('queda así');
+  });
+
   it('posible movimiento: lo dice y pide «se movió»', () => {
     const martes = lima('2026-09-15', '10:00');
     const r1 = aplicar([], { accion: 'programar', fecha: '2026-09-17', produccion: globo() }, martes);
