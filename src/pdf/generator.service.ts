@@ -30,15 +30,28 @@ const IMAGES_READY_TIMEOUT_MS = 15_000;
  * Puppeteer más nuevo en caché — saltando explícitamente las versiones viejas
  * y rotas. Override manual con PUPPETEER_EXECUTABLE_PATH.
  */
-function resolveChromeExecutable(): string | undefined {
+export function resolveChromeExecutable(): string | undefined {
   const candidates: string[] = [];
 
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
     candidates.push(process.env.PUPPETEER_EXECUTABLE_PATH);
   }
 
-  // Chrome estable del sistema (macOS): se mantiene compatible con el OS.
-  candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+  // ─── PRIMERO EL «CHROME FOR TESTING», NO EL CHROME DEL SISTEMA ───────────
+  //
+  // Antes el orden era al revés, y el efecto es de los que cuesta diagnosticar:
+  // lila mantiene un Chrome VIVO entre PDFs (`this.browser` se reusa para no
+  // pagar el arranque en cada vale). Si ese Chrome es el mismo bundle que el de
+  // la persona, macOS lo cuenta como «Google Chrome ya está abierto» y al
+  // clickear el ícono del Dock ACTIVA esa instancia — que es headless y no tiene
+  // ventanas. Síntoma: «Chrome no abre», sin error, sin ventana, sin nada.
+  // Pasó en la Mac mini el 29/09/2026: un headless de lila llevaba una hora
+  // arriba y José no podía usar su navegador.
+  //
+  // «Google Chrome for Testing» es un bundle distinto y existe justo para esto.
+  // El Chrome del sistema queda como último recurso: se sigue actualizando solo,
+  // así que sirve si algún día la build en caché deja de arrancar — pero cuando
+  // se use, vuelve el conflicto.
 
   // Builds de Puppeteer en caché, del más nuevo al más viejo, descartando los
   // anteriores a la 130 que crashean en macOS recientes.
@@ -68,6 +81,9 @@ function resolveChromeExecutable(): string | undefined {
   } catch {
     // sin caché legible: seguimos con los demás candidatos
   }
+
+  // Último recurso (ver arriba): el Chrome del sistema, que es el de la persona.
+  candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 
   for (const candidate of candidates) {
     try {
