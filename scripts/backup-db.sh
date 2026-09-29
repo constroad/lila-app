@@ -140,10 +140,18 @@ Falta 'Acceso total al disco' para el proceso del backup."
   # el SRV de Atlas (`lookup _mongodb._tcp... read udp`) tiraba el backup de esa
   # hora entero. Con RPO de 1h, perder una corrida por un fallo de red de un
   # segundo es desproporcionado — y encima genera una alerta que parece grave.
+  # LA URI NO VA EN LA LÍNEA DE COMANDOS. `ps` la lee cualquier usuario de la
+  # máquina, y ahí viaja la contraseña de la base en claro — se vio en un `ps`
+  # de rutina el 29/09/2026, con la credencial de Atlas entera a la vista.
+  # `mongodump --config` lee la URI de un archivo, que se crea 600 y se borra
+  # con el resto del directorio de trabajo (trap EXIT).
+  local conf="$WORK_DIR/.mongodump.yaml"
+  ( umask 077; printf 'uri: "%s"\n' "$MONGO_URI" > "$conf" )
+
   local intento
   for db in "${DATABASES[@]}"; do
     for intento in 1 2 3; do
-      if "$MONGODUMP" --uri="$MONGO_URI" --db="$db" --out="$WORK_DIR" \
+      if "$MONGODUMP" --config="$conf" --db="$db" --out="$WORK_DIR" \
            --quiet >>"$LOG_FILE" 2>&1; then
         dumped=$((dumped + 1))
         [ "$intento" -gt 1 ] && log "'$db' OK en el intento ${intento} (fallo transitorio)"
