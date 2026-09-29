@@ -176,19 +176,6 @@ install_agent "com.constroad.backup-report" \
     </dict>" \
   "reporte diario de estado"
 
-# Vencimientos de Tailscale, DIARIO a las 08:05 (justo después del reporte).
-# Calla si todo está bien: solo avisa cuando falta poco para un vencimiento.
-install_agent "com.constroad.tailscale-health" \
-  "${REPO_DIR}/scripts/check-tailscale-health.sh" \
-"    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>8</integer>
-        <key>Minute</key>
-        <integer>5</integer>
-    </dict>" \
-  "vencimientos de Tailscale, diario"
-
 # Recursos cada 30 min: CPU/RAM/disco + detección de minería. Más frecuente que
 # los demás porque el objetivo secundario es detectar un COMPROMISO, y ahí las
 # horas importan. La corrida cuesta ~100s de muestreo liviano.

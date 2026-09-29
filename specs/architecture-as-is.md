@@ -2,7 +2,6 @@
 
 > **Ultima actualizacion:** Junio 2026
 > **Documentos relacionados:**
-> - `docs/tailscale-funnel.spec.md`
 > - `docs/handoff-portal-resiliencia.md`
 > - `specs/SCALABILITY-MULTI-SESSION.spec.md` (escalabilidad + RLS + persistencia; reemplaza al viejo `../MULTI-SESSION-WHATSAPP.SPEC.md`)
 > - `../STREAMING-THUMBNAILS-LILA-APP.spec.md`
@@ -368,11 +367,21 @@ Flujo estándar de renditions (post-auditoría):
 - `telegram-alert.service.ts` - alertas de errores con deduplicacion.
 - `telegram-queue.ts` - cola persistente en `data/telegram-alerts/queue.json` con retry (max 5 intentos, TTL 24h).
 - Flusher background arrancado en `src/index.ts:362` via `startTelegramQueueFlusher()`.
-- Usado por: dispatch-post-process, public reception, quota violations, tailscale watchdog.
+- Usado por: dispatch-post-process, public reception, quota violations.
 
-### Tailscale (resiliencia red)
-- Scripts: `scripts/tailscale-funnel-watchdog.sh`, `scripts/tailscale-external-probe.sh`.
-- Notifica via Telegram cuando el funnel cae (commits "tailscale funnel" mayo 2026).
+### Tailscale — DADO DE BAJA (29/09/2026)
+
+Se apagó el Funnel, se cerró la sesión del nodo, se quitaron los jobs
+(`com.constroad.tailscale-health`, `com.lila.tailscale-funnel`) y se borraron
+sus scripts. **Todo lo público sale por el túnel de Cloudflare**
+(`constroad.com`, `lila.constroad.com`, `*.constroad.com`), que ya servía lo
+mismo. Motivo: 956 caídas y ~30 h acumuladas entre mayo y septiembre de 2026
+(picos a las 03:00 y 23:00), contra cero caídas propias del túnel de Cloudflare;
+ver `boveda-atlas/specs/BOVEDA.spec.md` §4.3. Las 69 filas de `media` que
+guardaban URLs `…ts.net` se reescribieron a `https://lila.constroad.com` y el
+host salió de `LILA_APP_CORS_ORIGINS` y `PORTAL_PRINT_HOSTS`. El acceso por
+terminal ahora es SSH sobre el mismo túnel: `torre/specs/ACCESO-SSH-MAC-MINI.spec.md`.
+Los plists quedaron archivados en `~/backups/tailscale-baja-2026-09-29/`.
 
 ## Rutas montadas (src/index.ts:197-207)
 
@@ -440,7 +449,7 @@ documentada en `Portal/specs/ARCHITECTURE-Portal.as-is.md` §7-bis).
 3. Copia ordenes, despachos, medias, folders, clientes, transportes con normalizacion (placas, etc.).
 
 ### 5) Cron de alertas
-- Tailscale watchdog (script externo) detecta caida -> notifica Telegram.
+- Watchdog del túnel de Cloudflare (`scripts/cloudflare-tunnel-watchdog.sh`) detecta caida -> notifica Telegram.
 - Quota validator -> excede 95% -> encola alerta Telegram para admin.
 
 ## Persistencia y artefactos
@@ -640,10 +649,10 @@ Calla si todo está bien. Umbrales: CPU 85%, RAM 90%, disco 85%.
   descarta el ruido de libsignal y redacta material criptográfico antes de que llegue al log
   (ver §Seguridad).
 - Request logger middleware.
-- Tailscale watchdog notifica Telegram en caidas de red.
+- Watchdog del túnel de Cloudflare notifica Telegram en caidas de red.
 - Quota validator emite alertas a 80%, 95%, 100%.
 
-## Tailscale funnel — guard de sesión en el probe (✅ 2026-08-08)
+## Tailscale funnel — guard de sesión en el probe (histórico; Tailscale dado de baja el 29/09/2026)
 
 Incidente: el funnel flapeó (microcortes de ~1 min, ~1/hora), el probe acumuló 3 fallos y
 escaló. `tailscale down && tailscale up` sobre una sesión EXPIRADA no reconecta: exige

@@ -40,7 +40,7 @@ function resolveProto(req: Request): string {
   return req.protocol;
 }
 
-// Base pública configurable de lila (p. ej. https://joses-mac-mini.tail46a1b0.ts.net).
+// Base pública configurable de lila (p. ej. https://lila.constroad.com).
 // TIENE PRIORIDAD sobre el Host del request: detrás del túnel de la Mac mini, lila
 // recibe `Host: localhost:3001`, por lo que sin esto las URLs absolutas de archivos
 // (pdfUrlAbsolute, previewUrlAbsolute) salían como http://localhost:3001/files/... y
