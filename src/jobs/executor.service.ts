@@ -3,6 +3,7 @@ import config from '../config/environment.js';
 import { getSharedModels, getUsageMetricModel } from '../database/models.js';
 import { ICronJob } from '../models/cronjob.model.js';
 import { WhatsAppDirectService } from '../services/whatsapp-direct.service.js';
+import { buildCronSendPlan } from './cron-attachments.js';
 import logger from '../utils/logger.js';
 import { getCompanyBotLabel, replaceLegacyBotLabel } from '../utils/company-bot.js';
 import { normalizeWhatsAppRecipient } from '../utils/whatsapp-phone.js';
@@ -168,9 +169,15 @@ export class JobExecutor {
       throw new Error('Message configuration is missing');
     }
 
-    const { chatId, body, mentions } = job.message;
+    const { chatId, body, mentions, attachments } = job.message;
     const resolvedBody = (overrideBody ?? body ?? '').trim();
     const messageBody = this.prependBotPrefix(resolvedBody, prefix ?? '');
+    // Los adjuntos solo viajan con el cuerpo propio del job: una respuesta de
+    // API (`overrideBody`) es otro mensaje y no lleva las cuentas bancarias.
+    const plan = buildCronSendPlan({
+      body: messageBody,
+      attachments: overrideBody === undefined ? attachments : [],
+    });
 
     logger.info('[JobExecutor] WhatsApp message request prepared', {
       jobId: String(job._id),
@@ -178,14 +185,53 @@ export class JobExecutor {
       sender,
       chatId,
       mentionsCount: mentions?.length || 0,
+      attachmentsCount: plan.filter((step) => step.kind !== 'text').length,
       nodeEnv: config.nodeEnv,
     });
 
-    await WhatsAppDirectService.sendMessage(sender, chatId, messageBody, {
-      companyId: job.companyId,
-      mentions: mentions || [],
-      queueOnFail: true,
-    });
+    const sendText = () =>
+      WhatsAppDirectService.sendMessage(sender, chatId, messageBody, {
+        companyId: job.companyId,
+        mentions: mentions || [],
+        queueOnFail: true,
+      });
+
+    let sentSomething = false;
+    for (const step of plan) {
+      if (step.kind === 'text') {
+        await sendText();
+        sentSomething = true;
+        continue;
+      }
+      try {
+        const options = {
+          fileUrl: step.url,
+          fileName: step.fileName,
+          mimeType: step.mimeType,
+          caption: step.caption,
+          companyId: job.companyId,
+          queueOnFail: true,
+        };
+        if (step.kind === 'image') {
+          await WhatsAppDirectService.sendImageFile(sender, chatId, options);
+        } else {
+          await WhatsAppDirectService.sendDocument(sender, chatId, options);
+        }
+        sentSomething = true;
+      } catch (error) {
+        // Un adjunto caído no puede tragarse el aviso: se loguea y sigue.
+        logger.error('[JobExecutor] adjunto del cronjob no se pudo enviar', {
+          jobId: String(job._id),
+          url: step.url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // Todos los adjuntos fallaron: el texto igual tiene que llegar.
+    if (!sentSomething && messageBody) {
+      await sendText();
+    }
 
     logger.info(`[JobExecutor] Message sent to ${chatId}`);
   }

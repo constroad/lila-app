@@ -61,6 +61,24 @@ function isValidCronSegment(segment: string, range: { min: number; max: number }
   return false;
 }
 
+/**
+ * Adjuntos del mensaje (imagen de cuentas bancarias o PDF). Sin declararlos
+ * acá, Joi los BORRABA del body antes de llegar al modelo y el job quedaba sin
+ * adjuntos sin un solo error (23/09/2026).
+ */
+const cronMessageAttachmentsSchema = Joi.array()
+  .items(
+    Joi.object({
+      url: Joi.string()
+        .required()
+        .uri({ scheme: ["http", "https"] }),
+      fileName: Joi.string().allow("").optional(),
+      mimeType: Joi.string().allow("").optional(),
+    }),
+  )
+  .max(5)
+  .optional();
+
 const cronExpressionSchema = Joi.string()
   .custom((value, helpers) => {
     if (!validateCronExpression(value)) {
@@ -119,12 +137,14 @@ export function validateCronJobCreate(data: any): {
         chatId: Joi.string().required(),
         body: Joi.string().required().min(1),
         mentions: Joi.array().items(Joi.string()).optional(),
+        attachments: cronMessageAttachmentsSchema,
       }).required(),
       otherwise: Joi.object({
         sender: Joi.string().optional(),
         chatId: Joi.string().required(),
         body: Joi.string().allow("").optional(),
         mentions: Joi.array().items(Joi.string()).optional(),
+        attachments: cronMessageAttachmentsSchema,
       }).optional(),
     }),
     apiConfig: Joi.object({
@@ -188,6 +208,7 @@ export function validateCronJobUpdate(data: any): {
       chatId: Joi.string().required(),
       body: Joi.string().allow("").optional(),
       mentions: Joi.array().items(Joi.string()).optional(),
+      attachments: cronMessageAttachmentsSchema,
     }).optional(),
     apiConfig: Joi.object({
       url: Joi.string().required().uri(),

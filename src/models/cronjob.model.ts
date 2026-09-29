@@ -1,10 +1,18 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+/** Imagen (cuentas bancarias) o PDF que acompaña al recordatorio. */
+export interface ICronJobMessageAttachment {
+  url: string;
+  fileName?: string;
+  mimeType?: string;
+}
+
 export interface ICronJobMessage {
   sender?: string; // legacy (no usar para envio)
   chatId: string;
   body: string;
   mentions?: string[];
+  attachments?: ICronJobMessageAttachment[];
 }
 
 export interface ICronJobApiConfig {
@@ -74,6 +82,15 @@ const CronJobMessageSchema = new Schema<ICronJobMessage>(
     chatId: { type: String, required: true },
     body: { type: String },
     mentions: [{ type: String }],
+    // Objeto PLANO a propósito: con un `new Schema(...)` anidado acá, mongoose
+    // guardaba `[]` sin avisar y el job quedaba sin adjuntos (23/09/2026).
+    attachments: [
+      {
+        url: { type: String, required: true },
+        fileName: { type: String },
+        mimeType: { type: String },
+      },
+    ],
   },
   { _id: false },
 );
