@@ -372,7 +372,7 @@ Flujo estándar de renditions (post-auditoría):
 ### Tailscale — DADO DE BAJA (29/09/2026)
 
 Se apagó el Funnel, se cerró la sesión del nodo, se quitaron los jobs
-(`com.constroad.tailscale-health`, `com.lila.tailscale-funnel`) y se borraron
+(`com.constroad.tailscale-health`, `com.lila.tailscale-funnel`, `com.lila.external-probe`) y se borraron
 sus scripts. **Todo lo público sale por el túnel de Cloudflare**
 (`constroad.com`, `lila.constroad.com`, `*.constroad.com`), que ya servía lo
 mismo. Motivo: 956 caídas y ~30 h acumuladas entre mayo y septiembre de 2026
