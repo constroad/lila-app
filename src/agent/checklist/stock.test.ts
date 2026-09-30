@@ -102,7 +102,7 @@ describe('el checklist con lo que Portal sabe', () => {
     const texto = construirAvisoChecklist(r, { fecha: '2026-09-16', minutosParaArranque: 1090, pedidos: [{ empresa: 'Globofast', hora: '04:30', cubos: 200 }], totalCubos: 200, momento: 'inicial', grupoEscuchado: 'INFRAMAQ admin' }, 'planta');
     expect(texto).toContain('Según Portal (kardex al 12/09 · tanques al 15/09):');
     expect(texto).toContain('• PEN ⚠️ 116 m³ producibles de 200');
-    expect(texto).toContain('Por confirmar: PEN ⚠️ · gasohol ⚠️ · aviso a operadores · mantenimiento o riesgos · clima');
-    expect(texto).toContain('✔ agregados (Portal), petróleo de planta (Portal)');
+    expect(texto).toContain('*Por confirmar (5):*\n• PEN ⚠️\n• Gasohol ⚠️\n• Aviso a operadores\n• Mantenimiento o riesgos\n• Clima');
+    expect(texto).toContain('✔️ *Ya confirmado:* agregados (Portal), petróleo de planta (Portal)');
   });
 });

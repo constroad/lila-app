@@ -177,23 +177,71 @@ describe('el aviso al grupo de operaciones', () => {
   it('por dominio: solo esa parte, con su encabezado y solo lo confirmado de esa parte', () => {
     const r = evaluarRevision(CHECKLIST_PRODUCCION, ['cuadrilla lista', 'hay gasohol']);
     const planta = construirAvisoChecklist(r, contexto, 'planta')!;
-    // Tres líneas: cabecera con el día y el arranque, los pendientes por su nombre, lo confirmado.
     expect(planta.split('\n')).toEqual([
-      '📋 *Planta, por confirmar* — domingo 13/09 · 04:00 Globofast 91 m³ · 07:00 Constroad 45 m³ · total 136 m³ · arranca en 4 h',
-      'Por confirmar: agregados · PEN · petróleo de planta · aviso a operadores · mantenimiento o riesgos · clima',
-      '✔ gasohol',
-      'Confirmen aquí mismo, ítem por ítem: «agregados ok», «PEN ok».',
+      '📋 *Checklist para planta*',
+      '',
+      '*Producción del domingo 13/09* · arranca en 4 h',
+      '• 04:00 — *Globofast* · 91 m³',
+      '• 07:00 — *Constroad* · 45 m³',
+      'Total: *136 m³*',
+      '',
+      '*Por confirmar (6):*',
+      '• Agregados',
+      '• PEN',
+      '• Petróleo de planta',
+      '• Aviso a operadores',
+      '• Mantenimiento o riesgos',
+      '• Clima',
+      '',
+      '✔️ *Ya confirmado:* gasohol',
+      '',
+      'Para confirmar, escriban aquí cada ítem con «ok» («agregados ok», «PEN ok») o respondan a este mensaje con «todo confirmado».',
     ]);
     const campo = construirAvisoChecklist(r, contexto, 'obra')!;
-    expect(campo).toContain('📋 *Campo, por confirmar* — domingo 13/09');
-    expect(campo).toContain('tren de asfalto');
-    expect(campo).not.toContain('petróleo de planta');
-    expect(campo).toContain('✔ cuadrilla');
-    expect(construirAvisoChecklist(r, { ...contexto, momento: 'recordatorio' }, 'planta')).toContain('⏰ *Planta, sigue sin confirmar*');
-    expect(construirAvisoChecklist(r, { ...contexto, momento: 'ultima-llamada' }, 'obra')).toContain('🚨 *Campo, última llamada*');
+    expect(campo).toContain('📋 *Checklist para el personal de campo*');
+    expect(campo).toContain('\n• Tren de asfalto\n');
+    expect(campo).not.toContain('Petróleo de planta');
+    expect(campo).toContain('✔️ *Ya confirmado:* cuadrilla');
+    const recordatorio = construirAvisoChecklist(r, { ...contexto, momento: 'recordatorio' }, 'planta')!;
+    expect(recordatorio).toContain('📋 *Checklist para planta*\n_Recordatorio: esto sigue sin confirmar._');
+    expect(recordatorio).not.toContain('⏰');
+    expect(construirAvisoChecklist(r, { ...contexto, momento: 'ultima-llamada' }, 'obra')).toContain('📋 *Checklist para el personal de campo*\n⚠️ *Última llamada:* falta lo crítico.');
     // Con todo lo de una parte confirmado, esa parte calla.
     const todoPlanta = evaluarRevision(CHECKLIST_PRODUCCION, CHECKLIST_PRODUCCION.filter((i) => i.domain === 'planta').flatMap((i) => i.seSatisfaceCon.slice(0, 1)));
     expect(construirAvisoChecklist(todoPlanta, contexto, 'planta')).toBeNull();
+  });
+
+  /**
+   * 30/09, José, sobre el recordatorio de campo de las 17:00: «está todo sin
+   * formato y desordenado, el usuario sufre para leerlo; el título dice Campo,
+   * debería ser checklist para el personal de campo, y no un ícono de reloj».
+   * Salía en tres renglones con ocho ítems separados por «·».
+   */
+  it('el recordatorio de campo: título claro, la producción aparte, un ítem por línea y cómo confirmar', () => {
+    const globofast = [{ empresa: 'Globofast Solkali', hora: '05:00', cubos: 75 }];
+    const r = evaluarRevision(CHECKLIST_PRODUCCION, []);
+    const aviso = construirAvisoChecklist(r, { fecha: '2026-09-30', minutosParaArranque: 720, pedidos: globofast, totalCubos: 75, momento: 'recordatorio', grupoEscuchado: 'INFRAMAQ admin' }, 'obra');
+    expect(aviso).toBe(
+      [
+        '📋 *Checklist para el personal de campo*',
+        '_Recordatorio: esto sigue sin confirmar._',
+        '',
+        '*Producción del miércoles 30/09* · arranca en 12 h',
+        '• 05:00 — *Globofast Solkali* · 75 m³',
+        '',
+        '*Por confirmar (8):*',
+        '• Cuadrilla',
+        '• Tren de asfalto',
+        '• Imprimación / riego de liga',
+        '• Herramientas',
+        '• Arena o aceite',
+        '• Petróleo y gasolina de cuadrilla',
+        '• Agua de cuadrilla',
+        '• Comidas en campo',
+        '',
+        'Para confirmar, escriban aquí cada ítem con «ok» («cuadrilla ok», «tren de asfalto ok») o respondan a este mensaje con «todo confirmado».',
+      ].join('\n')
+    );
   });
 
   it('el recordatorio y la última llamada se anuncian como tales', () => {

@@ -69,6 +69,7 @@ export const construirAvisoChecklist = (
   dominio?: ChecklistDomain
 ): string | null => {
   const TITULO: Record<ChecklistDomain, string> = { planta: 'Planta', obra: 'Campo' };
+  const TITULO_CHECKLIST: Record<ChecklistDomain, string> = { planta: 'Checklist para planta', obra: 'Checklist para el personal de campo' };
   const dominios = dominio ? [dominio] : (['planta', 'obra'] as ChecklistDomain[]);
   const pendientesDe = (d: ChecklistDomain) => revision.pendientes.filter((i) => i.domain === d);
   if (dominios.every((d) => pendientesDe(d).length === 0)) return null;
@@ -77,29 +78,45 @@ export const construirAvisoChecklist = (
   const cuando = faltan >= 0 ? `arranca en ${duracion(faltan)}` : `arrancó hace ${duracion(faltan)}`;
   const quienes = contexto.pedidos.map((p) => `${p.hora} ${p.empresa} ${p.cubos} m³`).join(' · ');
 
-  // UNA PARTE, CORTA (José, 14/09, 20:40, viendo cuatro mensajes largos a la
-  // vez: «mira todo lo que envió»): tres líneas, los pendientes por su nombre
-  // corto —quien confirma sabe qué es «gasohol» o «tren de asfalto»— y lo ya
-  // confirmado en una línea. La versión completa (sin dominio) queda para el
-  // detalle y las pruebas.
+  // UNA PARTE, ORDENADA PARA LEERLA EN EL CELULAR. El 14/09 (20:40) José pidió
+  // mensajes cortos, y salieron tres renglones con los ítems separados por «·».
+  // El 30/09, viendo el recordatorio de campo: «está todo sin formato y
+  // desordenado, el usuario sufre para leerlo; el título dice Campo, debería
+  // ser checklist para el personal de campo, y no un ícono de reloj». Ahora:
+  // título que dice qué es y para quién, el momento debajo (sin reloj), la
+  // producción en su bloque, UN ÍTEM POR LÍNEA, lo confirmado aparte y cómo
+  // confirmar al final. Sigue siendo corto: nombres de ítem, no las preguntas.
+  // La versión completa (sin dominio) queda para el detalle y las pruebas.
   if (dominio) {
     const pendientes = pendientesDe(dominio);
     const resueltos = revision.resueltos.filter((r) => r.domain === dominio);
-    const encabezado = ENCABEZADO_DOMINIO[contexto.momento](TITULO[dominio]);
     // Lo que Portal sabe del stock va con la parte de PLANTA: qué cubre, qué falta y las cifras (José, 15/09).
     const stock = dominio === 'planta' ? revision.stock : undefined;
     const faltantes = new Set((stock?.faltantes ?? []).map((i) => i.id));
     const porPortal = new Set((stock?.cubiertos ?? []).map((i) => i.id));
     const titulo = (i: ChecklistItem) => (faltantes.has(i.id) ? `${i.titulo} ⚠️` : porPortal.has(i.id) ? `${i.titulo} (Portal)` : i.titulo);
+    const conMayuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
     // Cómo se confirma, con ejemplos de lo que falta (Globofast, 14/09, 20:58: «¿cómo se confirma?»).
+    // «Todo confirmado» respondiendo a ESTE mensaje cierra la parte entera (`dominiosConfirmadosEnBloque`).
     const ejemplos = pendientes.slice(0, 2).map((i) => `«${i.titulo} ok»`).join(', ');
-    return [
-      `${encabezado} — ${fechaLegible(contexto.fecha)} · ${quienes}${contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''} · ${cuando}`,
-      ...(stock?.lineas ?? []),
-      `Por confirmar: ${pendientes.map(titulo).join(' · ')}`,
-      ...(resueltos.length ? [`✔ ${resueltos.map(titulo).join(', ')}`] : []),
-      `Confirmen aquí mismo, ítem por ítem: ${ejemplos}.`,
-    ].join('\n');
+    const cabecera = [`📋 *${TITULO_CHECKLIST[dominio]}*`, ...(MOMENTO_DOMINIO[contexto.momento] ? [MOMENTO_DOMINIO[contexto.momento]] : [])];
+    const produccion = [
+      `*Producción del ${fechaLegible(contexto.fecha)}* · ${cuando}`,
+      ...contexto.pedidos.map((p) => `• ${p.hora} — *${p.empresa}*${p.cliente ? ` (${p.cliente})` : ''} · ${p.cubos} m³`),
+      ...(contexto.pedidos.length > 1 ? [`Total: *${contexto.totalCubos} m³*`] : []),
+    ];
+    const bloques = [
+      cabecera,
+      produccion,
+      stock?.lineas ?? [],
+      [`*Por confirmar (${pendientes.length}):*`, ...pendientes.map((i) => `• ${conMayuscula(titulo(i))}`)],
+      resueltos.length ? [`✔️ *Ya confirmado:* ${resueltos.map(titulo).join(', ')}`] : [],
+      [`Para confirmar, escriban aquí cada ítem con «ok» (${ejemplos}) o respondan a este mensaje con «todo confirmado».`],
+    ];
+    return bloques
+      .filter((b) => b.length)
+      .map((b) => b.join('\n'))
+      .join('\n\n');
   }
 
   const lineas = [`${ENCABEZADO[contexto.momento]} — ${fechaLegible(contexto.fecha)}`, `${quienes}${contexto.pedidos.length > 1 ? ` · total ${contexto.totalCubos} m³` : ''} · ${cuando}`];
@@ -119,11 +136,11 @@ export const construirAvisoChecklist = (
   return lineas.join('\n');
 };
 
-/** El encabezado de una sola parte: «Planta, por confirmar», «Planta, sigue sin confirmar», «Planta, última llamada». */
-const ENCABEZADO_DOMINIO: Record<ContextoRevision['momento'], (parte: string) => string> = {
-  inicial: (parte) => `📋 *${parte}, por confirmar*`,
-  recordatorio: (parte) => `⏰ *${parte}, sigue sin confirmar*`,
-  'ultima-llamada': (parte) => `🚨 *${parte}, última llamada*`,
+/** El momento de una sola parte, debajo del título: el primero no lo necesita; el recordatorio y la última llamada, sí. */
+const MOMENTO_DOMINIO: Record<ContextoRevision['momento'], string> = {
+  inicial: '',
+  recordatorio: '_Recordatorio: esto sigue sin confirmar._',
+  'ultima-llamada': '⚠️ *Última llamada:* falta lo crítico.',
 };
 
 export interface PedidoParaAviso {
