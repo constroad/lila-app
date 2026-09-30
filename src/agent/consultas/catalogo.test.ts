@@ -118,6 +118,11 @@ describe('ruteo por reglas', () => {
     ['cuánto pen queda', 'tank_levels'],
     ['consumos de la producción de hoy', 'production_consume'],
     ['cuánto gasohol se usó hoy', 'production_consume'],
+    // «Consumo» es lo que se PIDE; «obra», «planta» y «pen» dicen de dónde o de qué
+    // (30/09, 07:25: «el consumo … en la obra las lomas» empataba con la unidad en campo).
+    ['el consumo del cemento asfaltico en la obra las lomas', 'production_consume'],
+    ['consumo de pen del 14, 15 y 16 de setiembre', 'production_consume'],
+    ['consumo de planta de ayer', 'production_consume'],
     ['cuánto agregado tengo en stock', 'aggregates_stock'],
     ['cómo está el clima en Lurigancho', 'weather'],
     ['va a llover mañana en Ate?', 'weather'],
@@ -187,6 +192,7 @@ describe('parámetros', () => {
     ['qué empresa tuvo producción el 03 y 04 de setiembre', undefined],
     ['la salida de la 7 el 4/9', 7],
     ['consumos del 03/09/26', undefined],
+    ['el consumo del cemento asfaltico del 14, 15 y 16 de setiembre en la obra las lomas', undefined],
   ])('«%s» → unidad %s', (pregunta, unidad) => {
     expect(extraerParametros(pregunta).unitNumber).toBe(unidad);
   });

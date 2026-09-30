@@ -585,5 +585,44 @@
       "clave": "order_link"
     },
     "nota": "«enero» es el mes entero (2026-01) y «pueblo libre» elige el pedido; no es «hoy»"
+  },
+  {
+    "id": "2026-09-30-0725",
+    "incidente": "2026-09-30-0725",
+    "pregunta": "@244534046892225 el consumo del cemento asfaltico del 14, 15 y 16 de setiembre en la obra las lomas",
+    "hoy": "2026-09-30",
+    "esperado": {
+      "ruta": "modelo",
+      "reglaDeRespaldo": "production_consume"
+    },
+    "esperadoConModelo": {
+      "herramienta": "production_consume"
+    },
+    "nota": "larga: va al modelo; sin modelo, «consumo» (lo que se pide) gana a «obra» (dónde). Los tres días, solo PEN y solo Las Lomas los resuelve la respuesta"
+  },
+  {
+    "id": "2026-09-30-0725-corta",
+    "incidente": "2026-09-30-0725",
+    "pregunta": "@lila consumo de pen del 14, 15 y 16 de setiembre",
+    "hoy": "2026-09-30",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "production_consume",
+      "params": {
+        "unitNumber": null
+      }
+    },
+    "nota": "«pen» no la manda a los tanques: pide el consumo; y el 14 de la lista no es una unidad"
+  },
+  {
+    "id": "2026-09-30-0806-editado",
+    "incidente": "2026-09-30-0806",
+    "pregunta": "@244534046892225 pásame el link del despacho de producción de hoy",
+    "hoy": "2026-09-30",
+    "esperado": {
+      "ruta": "catalogo",
+      "clave": "order_link"
+    },
+    "nota": "el texto EDITADO; el original («pásame el despacho de producción de hoy») fue a day_progress y la edición no se escuchaba"
   }
 ]

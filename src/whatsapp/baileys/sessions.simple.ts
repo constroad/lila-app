@@ -32,7 +32,7 @@ import { isLocalOnlySession } from './local-sessions.js';
 import { handleAgentMessagesUpsert } from '../../agent/runtime/agent-wiring.js';
 import { findOutgoingMessage } from './outgoing-messages.js';
 import { recordSessionEvent } from './session-events.js';
-import { observarParaChecklist } from '../../agent/checklist/observador.js';
+import { observarEdiciones, observarParaChecklist } from '../../agent/checklist/observador.js';
 import pino from 'pino';
 
 // ✅ Simple dictionary approach (like notifications)
@@ -732,6 +732,13 @@ async function initSession(
     // —el de la empresa piloto— y no responde nada; lo que sale al grupo de
     // operaciones lo manda el detector. Nunca lanza.
     void observarParaChecklist(sessionId, upsert);
+  });
+
+  // Un mensaje EDITADO no llega por `messages.upsert` con texto: Baileys lo
+  // emite acá (`editedMessage`). Lila contesta lo editado, no lo viejo
+  // (30/09: «pásame el despacho…» corregido a «…el link del despacho…»). Nunca lanza.
+  sock.ev.on('messages.update', (updates) => {
+    void observarEdiciones(sessionId, updates);
   });
 
   // Watchdog: si el socket no llega a 'open' ni 'close' en CONNECTION_TIMEOUT_MS,

@@ -104,6 +104,15 @@ export const CATALOGO: EntradaCatalogo[] = [
     reglas: [['maneja'], ['chofer'], ['conductor'], ['placa']],
     pideUnidad: true,
   },
+  // «CONSUMO» ES LO QUE SE PIDE; planta, obra, campo y «pen» dicen de dónde o de
+  // qué. A igual especificidad manda el orden, así que va antes que ellos: el
+  // 30/09 a las 07:25 «el consumo del cemento asfáltico … en la obra las lomas»
+  // empataba «consumo» con «obra» y, sin modelo, ganaba la unidad en campo.
+  {
+    id: 'production_consume',
+    seSatisfaceCon: ['cuanto consumio la produccion de hoy', 'consumos de la produccion', 'cuanto pen gastamos', 'consumo de gasohol de hoy', 'cuantos galones se usaron'],
+    reglas: [['consumo'], ['consumio'], ['consumió'], ['consumieron'], ['gastamos'], ['gasto', 'produccion'], ['se', 'uso'], ['se', 'usaron'], ['se', 'gasto'], ['cuanto', 'gasohol', 'hoy'], ['cuanto', 'pen', 'hoy']],
+  },
   {
     id: 'plant_current_unit',
     seSatisfaceCon: ['en que carro van los despachos en planta', 'que unidad esta cargando', 'cual esta en planta', 'cuantos carros han salido de planta'],
@@ -133,11 +142,6 @@ export const CATALOGO: EntradaCatalogo[] = [
     id: 'tank_levels',
     seSatisfaceCon: ['cuantos galones tenemos en los tanques', 'como estan los tanques', 'cuanto pen queda', 'nivel de gasohol', 'cuanto petroleo hay en planta'],
     reglas: [['galones'], ['tanque'], ['nivel'], ['liquido'], ['líquido'], ['pen'], ['gasohol'], ['gashol'], ['petroleo', 'planta'], ['petróleo', 'planta'], ['queda', 'petroleo'], ['queda', 'petróleo'], ['resumen', 'liquido'], ['resumen', 'líquido'], ['reporte', 'liquido'], ['reporte', 'líquido']],
-  },
-  {
-    id: 'production_consume',
-    seSatisfaceCon: ['cuanto consumio la produccion de hoy', 'consumos de la produccion', 'cuanto pen gastamos', 'consumo de gasohol de hoy', 'cuantos galones se usaron'],
-    reglas: [['consumo'], ['consumio'], ['consumió'], ['consumieron'], ['gastamos'], ['gasto', 'produccion'], ['se', 'uso'], ['se', 'usaron'], ['se', 'gasto'], ['cuanto', 'gasohol', 'hoy'], ['cuanto', 'pen', 'hoy']],
   },
   {
     id: 'aggregates_stock',
@@ -383,8 +387,9 @@ export const normalizarPlaca = (placa: string): string =>
  * «la 5», «unidad 5», «carro 5», «volquete #5», «el 12». Un número de dos
  * cifras como máximo: una placa o un vale tienen más y no son unidades.
  */
-/** «el 4 de setiembre», «el 3 y 4 de setiembre», «4/9», «04/09/26»: los números de una fecha no son una unidad. */
-const FECHAS_ESCRITAS = /\b\d{1,2}(?:\s*(?:y|al|a|hasta|-)\s*(?:el\s+)?\d{1,2})?\s*(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g;
+/** «el 4 de setiembre», «el 3 y 4 de setiembre», «el 14, 15 y 16 de setiembre», «4/9», «04/09/26»: los números de una fecha no son una unidad. */
+// Un número tras «la», «unidad», «carro»… es la unidad aunque le siga una fecha: «la 5, el 3 de setiembre».
+const FECHAS_ESCRITAS = /(?<!\b(?:la|unidad|carro|camion|volquete|numero|placa)\s+)\b\d{1,2}(?:(?:\s*,\s*|\s*(?:y|al|a|hasta|-)\s*(?:el\s+)?)\d{1,2})*\s*(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g;
 
 export const extraerParametros = (pregunta: string, ahoraMs = Date.now()): Parametros => {
   const t = normalizar(pregunta);

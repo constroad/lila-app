@@ -73,14 +73,20 @@ const mensaje = (texto: string, contextInfo: Record<string, unknown> = {}) =>
 describe('atenderComoConsulta', () => {
   it('«@bot 3» con una pregunta pendiente es la respuesta, no una consulta nueva', async () => {
     await observador.atenderComoConsulta(mensaje('@244534046892225 3', { mentionedJid: ['244534046892225@lid'] }), '@244534046892225 3', QUIEN, ADMIN, alcance, { votosSueltos: false });
-    expect(atenderEleccion).toHaveBeenCalledWith('3', QUIEN, ADMIN, alcance);
+    expect(atenderEleccion).toHaveBeenCalledWith('3', QUIEN, ADMIN, alcance, true);
     expect(atenderConsulta).not.toHaveBeenCalled();
   });
 
   it('«3» citando la pregunta del agente también es la respuesta', async () => {
     await observador.atenderComoConsulta(mensaje('3', { stanzaId: 'q1', participant: '244534046892225@lid' }), '3', QUIEN, ADMIN, alcance, { votosSueltos: false });
-    expect(atenderEleccion).toHaveBeenCalledWith('3', QUIEN, ADMIN, alcance);
+    expect(atenderEleccion).toHaveBeenCalledWith('3', QUIEN, ADMIN, alcance, false);
     expect(atenderConsulta).not.toHaveBeenCalled();
+  });
+
+  /** 30/09, 08:07: «Si @ConstRoad» a «elige qué más ve el cliente: 1/2/3». Etiquetado, el «sí» le habla a Lila. */
+  it('«Si @bot» llega a la elección marcado como dicho a Lila', async () => {
+    await observador.atenderComoConsulta(mensaje('Si @244534046892225', { mentionedJid: ['244534046892225@lid'] }), 'Si @244534046892225', QUIEN, ADMIN, alcance, { votosSueltos: false });
+    expect(atenderEleccion).toHaveBeenCalledWith('si', QUIEN, ADMIN, alcance, true);
   });
 
   /** 15/09, 10:30: Globofast citó el checklist para decirle a alguien «enlaza al grupo de certificados» y Lila contestó con la tabla de certificados. */

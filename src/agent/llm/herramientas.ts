@@ -59,7 +59,7 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
   { id: 'plant_finish', descripcion: 'cuánto falta para terminar la producción en planta', argumentos: [] },
   { id: 'site_finish', descripcion: 'cuánto falta para terminar en campo / control de pista', argumentos: [] },
   { id: 'tank_levels', descripcion: 'galones, niveles, líquidos, PEN, petróleo, gasohol de los tanques', argumentos: [] },
-  { id: 'production_consume', descripcion: 'consumos de una producción', argumentos: ['fecha'] },
+  { id: 'production_consume', descripcion: 'consumos de producción de uno o varios días: PEN / cemento asfáltico, gasohol, petróleo, por obra', argumentos: ['fecha'] },
   { id: 'aggregates_stock', descripcion: 'stock actual de agregados: arena, piedra, confitillo', argumentos: [] },
   { id: 'weather', descripcion: 'clima, lluvia, pronóstico en un distrito', argumentos: ['distrito', 'fecha'] },
   { id: 'weather_districts', descripcion: 'qué distritos o zonas tienen riesgo de lluvia (todos los distritos, un día o la semana)', argumentos: ['fecha'] },
@@ -145,15 +145,26 @@ const MES = 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|se[pt]?tiembre|oc
 const numeroDeMes = (nombre: string): number => (/^se[pt]?tiembre$/.test(nombre) ? 9 : MESES.indexOf(nombre) + 1);
 /** Entre dos días: «y», «al», «a», «hasta», «hasta el», «y el», «-». */
 const ENTRE = '\\s*(?:y|al|a|hasta|-|–)\\s*(?:el\\s+)?';
-const DIAS_CON_MES = new RegExp(`\\b(\\d{1,2})(?:\\s*(?:de\\s+)?(${MES}))?${ENTRE}(\\d{1,2})\\s*(?:de\\s+)?(${MES})\\b`);
-const DIAS_CON_BARRA = new RegExp(`\\b(\\d{1,2})\\/(\\d{1,2})(?:\\/\\d{2,4})?${ENTRE}(\\d{1,2})\\/(\\d{1,2})\\b`);
+/**
+ * UNA LISTA DE DÍAS también es un rango, del primero al último: «el 14, 15 y 16
+ * de setiembre», «14,15,16 de setiembre», «14/09, 15/09 y 16/09». 30/09, 07:25:
+ * «el consumo … del 14, 15 y 16 de setiembre» se leyó como «15 y 16» (la coma
+ * no era separador) y el modelo dio el 16 solo.
+ */
+const COMA = '\\s*,\\s*';
+const SEPARADOR = `(?:${ENTRE}|${COMA})`;
+/** «la unidad 5, el 3 de setiembre»: el 5 es una unidad, no el primer día de un rango. */
+const NO_ES_UNIDAD = '(?<!\\b(?:la|unidad|carro|camion|volquete|numero|placa)\\s+)';
+const DIAS_CON_MES = new RegExp(`${NO_ES_UNIDAD}\\b(\\d{1,2})(?:\\s*(?:de\\s+)?(${MES}))?(?:${COMA}\\d{1,2})*${SEPARADOR}(\\d{1,2})\\s*(?:de\\s+)?(${MES})\\b`);
+const DIA_BARRA = '\\d{1,2}\\/\\d{1,2}(?:\\/\\d{2,4})?';
+const DIAS_CON_BARRA = new RegExp(`${NO_ES_UNIDAD}\\b(\\d{1,2})\\/(\\d{1,2})(?:\\/\\d{2,4})?(?:${COMA}${DIA_BARRA})*${SEPARADOR}(\\d{1,2})\\/(\\d{1,2})\\b`);
 const DIAS_DEL_MES = /\bdel\s+(\d{1,2})\s+(?:al|a|hasta el|hasta)\s+(\d{1,2})\b(?![/:])/;
 
 /**
  * Un rango de DÍAS escrito en la pregunta, mirando hacia atrás (como todo lo
  * que tiene rango): «el 03 y 04 de setiembre», «del 3 al 5 de setiembre»,
  * «del 28 de agosto al 4 de setiembre», «03/09 y 04/09», «del 1 al 15» (de
- * este mes). Un día fuera de calendario no es rango.
+ * este mes), «el 14, 15 y 16 de setiembre». Un día fuera de calendario no es rango.
  */
 const rangoDeDias = (t: string, hoy: string): { desde: string; hasta: string } | undefined => {
   const mesActual = Number(hoy.slice(5, 7));

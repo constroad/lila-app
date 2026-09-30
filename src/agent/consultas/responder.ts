@@ -101,13 +101,20 @@ const sinAcentos = (t: string): string => String(t || '').toLowerCase().normaliz
  * pregunta que aparecen en la obra o el cliente de cada pedido; quedan los
  * que más tienen. Si ninguna coincide, quedan todos (y se pregunta cuál).
  */
+/** Las palabras de la pregunta que pueden nombrar una obra o un cliente; `ademas` suma las que en ESA consulta no nombran nada. */
+export const senasDeLaPregunta = (pregunta: string, ademas: readonly string[] = []): string[] =>
+  sinAcentos(pregunta).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 4 && !SIN_SENAS.has(w) && !ademas.includes(w));
+
+/** Cuántas señas aparecen en el texto de una obra o un cliente. */
+export const puntajeDeSenas = (textoDeLaObra: string, senas: string[]): number => {
+  const texto = ` ${sinAcentos(textoDeLaObra)} `;
+  return senas.filter((w) => texto.includes(` ${w} `) || (w.length >= 5 && texto.includes(w))).length;
+};
+
 export const porSenasDeLaPregunta = (candidatos: PedidoDelDiaVista[], pregunta: string): PedidoDelDiaVista[] => {
-  const senas = sinAcentos(pregunta).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 4 && !SIN_SENAS.has(w));
+  const senas = senasDeLaPregunta(pregunta);
   if (!senas.length) return candidatos;
-  const puntaje = (o: PedidoDelDiaVista): number => {
-    const texto = ` ${sinAcentos(`${o.obra} ${o.cliente}`)} `;
-    return senas.filter((w) => texto.includes(` ${w} `) || (w.length >= 5 && texto.includes(w))).length;
-  };
+  const puntaje = (o: PedidoDelDiaVista): number => puntajeDeSenas(`${o.obra} ${o.cliente}`, senas);
   const mejor = Math.max(...candidatos.map(puntaje));
   return mejor > 0 ? candidatos.filter((o) => puntaje(o) === mejor) : candidatos;
 };

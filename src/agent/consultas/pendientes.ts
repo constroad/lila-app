@@ -63,13 +63,30 @@ export interface RespuestaPendiente {
   texto: string;
   /** Un número que no es ninguna de las opciones («5» con tres opciones): se avisa y la pregunta sigue en pie. */
   invalida?: boolean;
+  /** «No» ante opciones numeradas: la pregunta se cierra sin elegir nada. */
+  cancelada?: boolean;
 }
+
+export interface OpcionesRespuesta {
+  /**
+   * El mensaje le habla al agente (etiqueta, mención o cita). Solo entonces un
+   * «sí» o un «no» contestan una pregunta de opciones: sin etiqueta pueden ser
+   * para cualquiera del grupo.
+   */
+  dirigido?: boolean;
+}
+
+const sinTildes = (texto: string): string => String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+/** El texto ENTERO es un sí o un no («sí», «dale», «sí, dale»), no una frase que empieza así. */
+const esSi = (t: string): boolean => t.split(/\s+/).length <= 2 && /^(si|dale|ok|okey|claro|exacto|eso|ya)\b/.test(t);
+const esNo = (t: string): boolean => t.split(/\s+/).length <= 2 && /^(no|nada|ninguno|ninguna|cancela|cancelar)\b/.test(t);
 
 export const responderPendiente = (
   quien: string,
   grupo: string,
   texto: string,
-  ahoraMs = Date.now()
+  ahoraMs = Date.now(),
+  opciones: OpcionesRespuesta = {}
 ): RespuestaPendiente | null => {
   const k = clave(quien, grupo);
   const p = pendientes.get(k);
@@ -104,7 +121,19 @@ export const responderPendiente = (
     return si ? { pregunta: p, indice: 0, texto: t } : null;
   }
   const t = String(texto || '').trim();
-  if (!/^\d{1,2}$/.test(t)) return null;
+  if (!/^\d{1,2}$/.test(t)) {
+    // 30/09, 08:07: a «elige qué más ve el cliente: 1/2/3» Globofast contestó
+    // «Si @ConstRoad» y Lila repitió la pregunta entera. Un «sí» dicho a Lila es
+    // un intento de contestar (se pide el número); un «no», que no quiere ninguna.
+    if (!opciones.dirigido) return null;
+    const corto = sinTildes(t).replace(/[.,;:!?]+/g, ' ').trim();
+    if (esSi(corto)) return { pregunta: p, indice: -1, texto: t, invalida: true };
+    if (esNo(corto)) {
+      pendientes.delete(k);
+      return { pregunta: p, indice: -1, texto: t, cancelada: true };
+    }
+    return null;
+  }
   const n = Number(t);
   // «5» con tres opciones es un intento de responder, no otra conversación: se
   // dice cuáles valen y la pregunta sigue en pie (José, 15/09: «valida que

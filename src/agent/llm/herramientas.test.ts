@@ -124,6 +124,10 @@ describe('rangoDe', () => {
     ['kardex de pen del 1 al 15 en globofast', { desde: '2026-09-01', hasta: '2026-09-15' }], // sin mes: este mes
     ['del 5 al 3 de setiembre', { desde: '2026-09-03', hasta: '2026-09-05' }], // al revés
     ['el pedido del 3 de setiembre a globofast', { desde: '2026-09-03', hasta: '2026-09-03' }], // «a globofast» no es «al 4»
+    // UNA LISTA DE DÍAS también es un rango (30/09, 07:25: «del 14, 15 y 16 de setiembre» → solo el 16).
+    ['el consumo del cemento asfaltico del 14, 15 y 16 de setiembre en la obra las lomas', { desde: '2026-09-14', hasta: '2026-09-16' }],
+    ['consumo de los días 14,15,16 de setiembre', { desde: '2026-09-14', hasta: '2026-09-16' }],
+    ['los pedidos del 14/09, 15/09 y 16/09', { desde: '2026-09-14', hasta: '2026-09-16' }],
     ['los pedidos', undefined],
   ])('«%s»', (pregunta, esperado) => {
     expect(rangoDe(pregunta, hoy)).toEqual(esperado);

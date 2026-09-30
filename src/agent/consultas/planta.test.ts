@@ -1,4 +1,4 @@
-import { SIN_AGREGADOS, materialesPorEmpresa, textoConsumos, textoMateriales, textoTanques } from './planta';
+import { SIN_AGREGADOS, consumosDeLaObra, contenidoDeTanque, liquidoDe, materialesPorEmpresa, textoConsumos, textoMateriales, textoTanques } from './planta';
 
 /**
  * Los textos de planta, sin base. Lo que se prueba es que digan lo MISMO que
@@ -47,6 +47,112 @@ describe('consumos', () => {
 
   it('sin consumo registrado, lo dice y dice dónde se registra', () => {
     expect(textoConsumos([], '2026-09-14')).toContain('No hay consumo registrado para lunes 14/09');
+  });
+
+  it('el título va pegado al contenido: una línea en blanco, no tres', () => {
+    const t = textoConsumos([{ fecha: '2026-09-13', pedidos: ['FERNANDO COBEÑAS'], m3: 91, totalGalones: 18, porTanque: [{ tanque: 'GRUPO WILSON', galones: 18, glPorM3: 0.1978 }] }], '2026-09-13');
+    expect(t).not.toMatch(/\n\n\n/);
+    expect(t.startsWith('🛢 *Consumos de domingo 13/09*\n\n*FERNANDO COBEÑAS*')).toBe(true);
+  });
+});
+
+/**
+ * 30/09, 07:25, Globofast: «el consumo del cemento asfáltico del 14, 15 y 16 de
+ * setiembre en la obra las lomas» → Lila mandó SOLO el 16/09 y todos los
+ * tanques (petróleo de los grupos, gasohol…). Lo pedido: tres días, solo PEN,
+ * solo esa obra.
+ */
+describe('consumos de un rango, de un líquido, de una obra', () => {
+  const pen = (galones1: number, galones2: number, m3: number) => [
+    { tanque: 'INFRA PEN #2', galones: galones1, glPorM3: galones1 / m3, contenido: 'pen' as const },
+    { tanque: 'INFRA PEN #1', galones: galones2, glPorM3: galones2 / m3, contenido: 'pen' as const },
+    { tanque: 'INFRA GASOHOL', galones: 544.8, glPorM3: 544.8 / m3, contenido: 'gasohol' as const },
+    { tanque: 'GRUPO WILSON', galones: 13, glPorM3: 13 / m3, contenido: 'petroleo' as const },
+  ];
+  const consumo = (fecha: string, cliente: string, m3: number, g1: number, g2: number) => {
+    const porTanque = pen(g1, g2, m3);
+    return { fecha, pedidos: [cliente], m3, porTanque, totalGalones: porTanque.reduce((s, t) => s + t.galones, 0) };
+  };
+  const lista = [
+    consumo('2026-09-14', 'CONSORCIO LOMAS', 200, 4000, 800),
+    consumo('2026-09-16', 'CONSORCIO LOMAS', 250, 4784.3, 1196.6),
+    consumo('2026-09-16', 'MUNICIPALIDAD DE COMAS', 90, 1500, 300),
+  ];
+
+  it('liquidoDe: cemento asfáltico es PEN; gasohol; petróleo; sin líquido nombrado, todos', () => {
+    expect(liquidoDe('el consumo del cemento asfaltico del 14, 15 y 16 de setiembre')).toBe('pen');
+    expect(liquidoDe('cuánto pen gastamos ayer')).toBe('pen');
+    expect(liquidoDe('consumo de gashol de hoy')).toBe('gasohol');
+    expect(liquidoDe('cuánto petróleo se usó')).toBe('petroleo');
+    expect(liquidoDe('consumos de la producción de hoy')).toBeUndefined();
+  });
+
+  it('contenidoDeTanque: por el tanque de Portal si se conoce, si no por el nombre', () => {
+    const porNombre = new Map([['CUMMINS PROD.', 'petroleo' as const]]);
+    expect(contenidoDeTanque('CUMMINS PROD.', porNombre)).toBe('petroleo');
+    expect(contenidoDeTanque('INFRA PEN #2', porNombre)).toBe('pen');
+    expect(contenidoDeTanque('INFRA GASHOL', porNombre)).toBe('gasohol');
+    expect(contenidoDeTanque('INFRA HIGHWAY', porNombre)).toBe('otro');
+  });
+
+  it('la obra nombrada elige sus consumos; si no coincide ninguna, quedan todos y se dice', () => {
+    expect(consumosDeLaObra(lista, 'el consumo del cemento asfaltico del 14, 15 y 16 de setiembre en la obra las lomas')).toMatchObject({ obra: 'CONSORCIO LOMAS', noEncontrada: false });
+    expect(consumosDeLaObra(lista, 'el consumo en la obra las lomas').lista).toHaveLength(2);
+    expect(consumosDeLaObra(lista, 'consumo de pen del 14 al 16 de setiembre')).toMatchObject({ obra: undefined, noEncontrada: false });
+    expect(consumosDeLaObra(lista, 'consumo de pen del 14 al 16 de setiembre').lista).toHaveLength(3);
+    const otra = consumosDeLaObra(lista, 'consumo de pen en la obra santa rosa');
+    expect(otra).toMatchObject({ obra: undefined, noEncontrada: true });
+    expect(otra.lista).toHaveLength(3);
+  });
+
+  it('tres días, solo PEN, una obra: cada día (el que no tuvo, dicho) y el total por tanque', () => {
+    const { lista: deLomas, obra } = consumosDeLaObra(lista, 'en la obra las lomas');
+    const t = textoConsumos(deLomas, '2026-09-14', { hasta: '2026-09-16', liquido: 'pen', obra, hoy: '2026-09-30' });
+    expect(t).toContain('🛢 *Consumo de cemento asfáltico (PEN) — lunes 14/09 al miércoles 16/09*');
+    expect(t).toContain('CONSORCIO LOMAS');
+    expect(t).toContain('• lunes 14/09 — 200 m³ · 4,800 gl · 24 gl/m³');
+    expect(t).toContain('• martes 15/09 — sin consumo registrado');
+    expect(t).toContain('• miércoles 16/09 — 250 m³ · 5,980.9 gl · 23.924 gl/m³');
+    expect(t).toContain('*Total:* 450 m³ · 10,780.9 gl · 23.958 gl/m³');
+    expect(t).toContain('• INFRA PEN #2: 8,784.3 gl');
+    expect(t).toContain('• INFRA PEN #1: 1,996.6 gl');
+    expect(t).not.toContain('GASOHOL');
+    expect(t).not.toContain('WILSON');
+    expect(t).not.toContain('COMAS');
+    expect(t).not.toMatch(/\n\n\n/);
+  });
+
+  it('sin obra: cada consumo con su pedido', () => {
+    const t = textoConsumos(lista, '2026-09-14', { hasta: '2026-09-16', liquido: 'pen', hoy: '2026-09-30' });
+    expect(t).toContain('• miércoles 16/09 · CONSORCIO LOMAS — 250 m³');
+    expect(t).toContain('• miércoles 16/09 · MUNICIPALIDAD DE COMAS — 90 m³');
+    expect(t).toContain('*Total:* 540 m³');
+  });
+
+  it('la obra que no se encontró se dice antes de mostrar todo', () => {
+    const t = textoConsumos(lista, '2026-09-14', { hasta: '2026-09-16', liquido: 'pen', obraNoEncontrada: true, hoy: '2026-09-30' });
+    expect(t).toContain('No encuentro consumos de esa obra en esas fechas; estos son todos los registrados.');
+  });
+
+  it('un día, solo PEN: los tanques de PEN con su gl/m³ y el total de PEN', () => {
+    const t = textoConsumos([lista[1]], '2026-09-16', { liquido: 'pen' });
+    expect(t).toContain('🛢 *Consumo de cemento asfáltico (PEN) — miércoles 16/09*');
+    expect(t).toContain('*CONSORCIO LOMAS* — 250 m³, 5,980.9 gl en total');
+    expect(t).toContain('• INFRA PEN #2: 4,784.3 gl · 19.137 gl/m³');
+    expect(t).not.toContain('GASOHOL');
+  });
+
+  it('hubo producción pero no del líquido pedido: se dice cuál no hay', () => {
+    const soloPetroleo = [{ fecha: '2026-09-13', pedidos: ['FERNANDO COBEÑAS'], m3: 91, totalGalones: 18, porTanque: [{ tanque: 'GRUPO WILSON', galones: 18, glPorM3: 0.1978, contenido: 'petroleo' as const }] }];
+    expect(textoConsumos(soloPetroleo, '2026-09-13', { liquido: 'pen' })).toBe('No hay consumo de cemento asfáltico (PEN) registrado para domingo 13/09. Se registra en Portal → Consumos.');
+  });
+
+  it('un rango largo lista solo los días con consumo, y los días por venir no cuentan como «sin consumo»', () => {
+    const t = textoConsumos(lista, '2026-09-01', { hasta: '2026-09-30', liquido: 'pen', hoy: '2026-09-15' });
+    expect(t).not.toContain('sin consumo registrado');
+    const semana = textoConsumos([lista[0]], '2026-09-14', { hasta: '2026-09-20', liquido: 'pen', hoy: '2026-09-15' });
+    expect(semana).toContain('• martes 15/09 — sin consumo registrado');
+    expect(semana).not.toContain('miércoles 16/09 — sin consumo');
   });
 });
 

@@ -167,6 +167,105 @@ const yaVisto = (id: string): boolean => {
   return false;
 };
 
+/**
+ * EL TEXTO QUE SE VIO DE CADA MENSAJE, para saber si una edición cambia algo.
+ * Mismo tope que `vistos`: una edición llega a los minutos, no a las horas.
+ */
+const textos = new Map<string, string>();
+const recordarTexto = (clave: string, texto: string): void => {
+  textos.delete(clave);
+  textos.set(clave, texto);
+  if (textos.size > 500) textos.delete(textos.keys().next().value as string);
+};
+
+/** Una edición que llega más tarde que esto (al reconectar tras un deploy) ya no se contesta: la conversación siguió. */
+export const VENTANA_EDICION_MS = 5 * 60_000;
+
+interface UpdateEvent {
+  key?: { remoteJid?: string | null; fromMe?: boolean | null; id?: string | null; participant?: string | null };
+  update?: {
+    message?: { editedMessage?: { message?: ContenidoEntrante | null } | null } | null;
+    messageTimestamp?: number | Long | null;
+  } | null;
+}
+
+export interface Edicion {
+  remoteJid: string;
+  /** El id del mensaje ORIGINAL (Baileys lo pone en la clave de la edición). */
+  id: string;
+  quien: string;
+  texto: string;
+  message: ContenidoEntrante;
+  fromMe: boolean;
+}
+
+/**
+ * ¿Este `messages.update` es un mensaje de GRUPO editado, reciente? Baileys
+ * 6.7.18 convierte el `protocolMessage` MESSAGE_EDIT en un update con el
+ * contenido nuevo en `update.message.editedMessage.message`; el resto de los
+ * updates (acuses, estados, reacciones) no traen eso. PURO.
+ */
+export const leerEdicion = (u: UpdateEvent, ahoraMs: number): Edicion | null => {
+  const message = u?.update?.message?.editedMessage?.message;
+  if (!message) return null;
+  const texto = extractInboundText(message);
+  const remoteJid = String(u?.key?.remoteJid || '');
+  const id = String(u?.key?.id || '');
+  if (!texto.trim() || !id || !remoteJid.endsWith('@g.us')) return null;
+  if (ahoraMs - aMilisegundos(u?.update?.messageTimestamp, ahoraMs) > VENTANA_EDICION_MS) return null;
+  return { remoteJid, id, quien: String(u?.key?.participant || 'alguien'), texto, message, fromMe: Boolean(u?.key?.fromMe) };
+};
+
+/** Palabras, sin la etiqueta, las tildes ni los signos: corregir «pasame» por «pásame» no es otra pregunta. */
+const palabrasDe = (texto: string): string => preguntaLimpia(texto).replace(/[^a-z0-9ñ]+/g, ' ').trim();
+
+/** ¿La edición dice otra cosa? Sin el texto original (un deploy en el medio), se toma como nueva. PURO. */
+export const cambioDeFondo = (anterior: string | undefined, nuevo: string): boolean => anterior === undefined || palabrasDe(anterior) !== palabrasDe(nuevo);
+
+/**
+ * UN MENSAJE EDITADO ES LO QUE LA PERSONA QUISO DECIR. 30/09, 08:06: Globofast
+ * escribió «@ConstRoad pásame el despacho de producción de hoy», lo corrigió en
+ * seguida a «…pásame el link del despacho…» y Lila contestó el texto viejo (el
+ * avance del día): la edición llega por `messages.update`, no por
+ * `messages.upsert`, y nadie la escuchaba.
+ *
+ * Solo como CONSULTA (o respuesta a una pregunta pendiente): una edición no
+ * vota, no prende ni apaga a Lila y no reprograma avisos a planta — esos son
+ * actos, y rehacerlos por una corrección de tipeo sería peor que no hacerlo.
+ * Si Lila ya contestó el original, contesta de nuevo: lo editado es lo que vale.
+ *
+ * Nunca lanza: cuelga del listener de Baileys.
+ */
+export const observarEdiciones = async (
+  sessionPhone: string,
+  updates: UpdateEvent[] | null | undefined,
+  obtenerAlcance: () => Promise<AlcanceAgente> = alcanceVigente
+): Promise<void> => {
+  try {
+    if (!AGENTE_ACTIVO) return;
+    const ahora = Date.now();
+    // Casi todo `messages.update` es un acuse o un estado: se filtra antes de tocar el alcance.
+    const ediciones = (updates ?? []).map((u) => leerEdicion(u, ahora)).filter((e): e is Edicion => e !== null);
+    if (!ediciones.length) return;
+    const alcance = await esperarAlcance(obtenerAlcance);
+    if (!alcance.grupoEscuchado) return;
+    for (const e of ediciones) {
+      if (e.remoteJid !== GROUP_ERRORS_TRACKING && !debeEscuchar(e.remoteJid, alcance)) continue;
+      const clave = `${e.remoteJid}|${e.id}`;
+      const anterior = textos.get(clave);
+      // La misma edición llega por las dos sesiones del grupo: la segunda ya no cambia nada.
+      if (!cambioDeFondo(anterior, e.texto)) continue;
+      recordarTexto(clave, e.texto);
+      if (await esDelBot({ key: { fromMe: e.fromMe, participant: e.quien } }, sessionPhone)) continue;
+      logger.info(`[agente] mensaje editado por ${e.quien}: «${(anterior ?? '(no lo vi)').slice(0, 80)}» → «${e.texto.slice(0, 80)}»`);
+      // Se espera acá (las ediciones son pocas) y el listener la llama con `void`: no frena a Baileys.
+      await atenderComoConsulta({ message: e.message }, e.texto, e.quien, e.remoteJid, alcance, { votosSueltos: false, edicion: true });
+    }
+  } catch (error) {
+    logger.warn(`[agente] no pude leer una edición de ${sessionPhone}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
 interface UpsertEvent {
   type?: string;
   messages?: Array<{
@@ -218,6 +317,8 @@ export const observarParaChecklist = async (
       const texto = extractInboundText(raw.message);
       if (!texto.trim()) continue;
       if (yaVisto(`${remoteJid}|${String(raw?.key?.id || '')}`)) continue;
+      // Para reconocer después si una edición de este mensaje cambia algo.
+      if (raw?.key?.id) recordarTexto(`${remoteJid}|${raw.key.id}`, texto);
 
       // LAS APROBACIONES vienen del grupo de operaciones, CITANDO la propuesta,
       // y de un administrador: un «1» suelto, o del propio bot, o de quien no
@@ -356,7 +457,7 @@ export const atenderComoConsulta = async (
   quien: string,
   remoteJid: string,
   alcance: AlcanceAgente,
-  opciones: { votosSueltos: boolean }
+  opciones: { votosSueltos: boolean; edicion?: boolean }
 ): Promise<void> => {
   try {
     const { esConsulta, atenderConsulta, atenderEleccion } = await import('../consultas/index.js');
@@ -367,12 +468,16 @@ export const atenderComoConsulta = async (
     const limpio = preguntaLimpia(texto, bot);
     // «@lila 1» deslizando sobre una propuesta es un voto con etiqueta de más,
     // no una consulta: a las 21:08 del 15/09 fue al modelo y salió el clima.
-    if (esVoto(limpio) && citaDe(mensaje) && (await atenderVoto({ voto: limpio, citaMsgId: citaDe(mensaje), citaTexto: textoCitadoDe(mensaje), quien, origen: remoteJid }, alcance))) return;
-    if (limpio.split(/\s+/).filter(Boolean).length <= RESPUESTA_CORTA_PALABRAS && (await atenderEleccion(limpio, quien, remoteJid, alcance))) return;
+    // Un mensaje EDITADO no vota: aprobar un envío a un grupo real es un acto, no una corrección.
+    if (!opciones.edicion && esVoto(limpio) && citaDe(mensaje) && (await atenderVoto({ voto: limpio, citaMsgId: citaDe(mensaje), citaTexto: textoCitadoDe(mensaje), quien, origen: remoteJid }, alcance))) return;
     // Etiquetada, o RESPONDIENDO (deslizar) a una respuesta que Lila le dio a
     // esta misma persona: las dos formas de hablarle en un grupo. Citar un
     // checklist o una propuesta no cuenta (eso es un voto, arriba, o nada).
-    if (esConsulta(texto, bot, mencionadosDe(mensaje), propios) || citaRespuestaPropia(quien, remoteJid, citaDe(mensaje))) {
+    const leHabla = esConsulta(texto, bot, mencionadosDe(mensaje), propios) || citaRespuestaPropia(quien, remoteJid, citaDe(mensaje));
+    // «Sí» o «no» a una pregunta de opciones cuentan solo si le hablan a ella:
+    // sin etiqueta ni cita pueden ser para cualquiera del grupo.
+    if (limpio.split(/\s+/).filter(Boolean).length <= RESPUESTA_CORTA_PALABRAS && (await atenderEleccion(limpio, quien, remoteJid, alcance, leHabla))) return;
+    if (leHabla) {
       await atenderConsulta(texto, quien, remoteJid, alcance, bot);
       return;
     }

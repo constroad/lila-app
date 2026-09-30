@@ -7,14 +7,14 @@ import { preguntar, responderPendiente, textoPregunta, textoRespuestaInvalida } 
 import { TEMAS, menuAyuda, temaPorPalabra, textoTema } from './ayuda.js';
 import { fusionar, pareceContinuacion, recordarConsulta, ultimaConsulta, unidadHeredada } from './contexto.js';
 import { ALIAS_EMPRESA } from './catalogo.js';
-import { SIN_AGREGADOS, consumosDelDia, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
+import { MAX_DIAS_CONSUMO, SIN_AGREGADOS, consumosDeLaObra, consumosDelRango, diasDelRango, liquidoDe, materiales, materialesPorEmpresa, tanques, textoConsumos, textoMateriales, textoMaterialesDe, textoTanques } from './planta.js';
 import { NOMBRES_DE_DISTRITOS, diasHasta, distritosDe, lugarDesconocido, pronosticoHorario, pronosticoSemanal, riesgoPorDistrito, textoClima, textoClimaSemanal, textoFueraDeAlcance, textoLugarDesconocido, textoRiesgoDistritos } from './clima.js';
 import { pngAgregados, pngResumenDespachos, pngTanques } from './imagen.js';
 import { fechaDe, hoyLima, normalizar, sumarDias } from './catalogo.js';
 import { cargarModelo, clasificar } from '../checklist/semantica.js';
 import { dejarDeEscribir, empezarAEscribir, responderEnGrupo } from '../checklist/emisor.js';
 import { buscarCubicacion, empresaDeLaUnidad, type Cubicacion } from './cubicacion.js';
-import { MAX_OPCIONES_INFORMES, argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
+import { MAX_OPCIONES_INFORMES, argumentosDeRango, elegirHerramienta, esHerramientaDeDatos, rangoDe, responderConDatos, type Argumentos, type HerramientaDeDatos } from '../llm/index.js';
 import { fechaLegible } from '../checklist/tiempo.js';
 import { revisionDelDia } from '../checklist/detector.js';
 import { buscarInformes, tipoDeInforme, type InformeEncontrado } from '../llm/informes.js';
@@ -78,8 +78,24 @@ const respuestaEnlace =
       tipo: 'opciones',
       continuar: (i) => generar((OPCIONES_PESTANAS[i] ?? OPCIONES_PESTANAS[0]).pestanas),
     });
-    return { texto: textoPregunta(`El pedido de *${o.cliente || o.companySlug}* (${fechaLegible(dia)}) no tiene enlace. ¿Lo genero? Producción va siempre; elige qué más ve el cliente:`, OPCIONES_PESTANAS.map((op) => op.etiqueta)) };
+    // Sin «¿Lo genero?»: una pregunta de sí/no delante de opciones numeradas
+    // pide un «sí» (30/09, 08:07: «Si @ConstRoad» → la misma pregunta otra vez).
+    return { texto: textoPregunta(`El pedido de *${o.cliente || o.companySlug}* (${fechaLegible(dia)}) todavía no tiene enlace. Para generarlo, elige qué ve el cliente además de la producción:`, OPCIONES_PESTANAS.map((op) => op.etiqueta)) };
   };
+
+/**
+ * Los consumos de los días, el líquido y la obra que nombra la pregunta. El
+ * rango lo lee el código («del 14, 15 y 16», «la semana pasada», «el martes»
+ * que pasó: un consumo siempre mira hacia atrás); si no nombra ninguno, el día
+ * que ya se entendió (el de la pregunta, el del modelo, u hoy).
+ */
+const respuestaConsumos = async (pregunta: string, fecha: string): Promise<Respuesta> => {
+  const hoy = hoyLima();
+  const { desde, hasta } = rangoDe(pregunta, hoy) ?? { desde: fecha, hasta: fecha };
+  if (diasDelRango(desde, hasta) > MAX_DIAS_CONSUMO) return { texto: `Te doy hasta ${MAX_DIAS_CONSUMO} días de consumos por pregunta; acórtame el rango (por ejemplo, «el consumo de PEN de agosto»).` };
+  const { lista, obra, noEncontrada } = consumosDeLaObra(await consumosDelRango(desde, hasta), pregunta);
+  return { texto: textoConsumos(lista, desde, { hasta, liquido: liquidoDe(pregunta), obra, obraNoEncontrada: noEncontrada, hoy }) };
+};
 
 /** Con un pedido elegido: sus guías y vales. */
 const respuestaGuias = async (vista: VistaDelDia, indice: number): Promise<Respuesta> => {
@@ -263,7 +279,7 @@ const armarRespuesta = async (
     if (lista.length === 0) return { texto };
     return conImagen(texto, `tanques-${fecha}.png`, () => pngTanques(lista, 'Inframaq · planta'));
   }
-  if (clave === 'production_consume') return { texto: textoConsumos(await consumosDelDia(fecha), fecha) };
+  if (clave === 'production_consume') return respuestaConsumos(pregunta, fecha);
   if (clave === 'aggregates_stock') {
     // «El stock de agregados de globofast» es el de Globofast, no el de todas
     // (15/09, 06:43: salieron Globofast y Constroad). Inframaq es la planta, no
@@ -602,15 +618,25 @@ export const atenderConsulta = async (
   }
 };
 
-/** Un número suelto de alguien con una pregunta pendiente: es su respuesta. */
+/**
+ * Un número suelto de alguien con una pregunta pendiente: es su respuesta.
+ * `dirigido`: el mensaje le habla a Lila (etiqueta o cita), así que un «sí» o
+ * un «no» ante opciones numeradas también le contesta (ver `responderPendiente`).
+ */
 export const atenderEleccion = async (
   texto: string,
   quien: string,
   grupo: string,
-  alcance: AlcanceAgente
+  alcance: AlcanceAgente,
+  dirigido = false
 ): Promise<boolean> => {
-  const eleccion = responderPendiente(quien, grupo, texto);
+  const eleccion = responderPendiente(quien, grupo, texto, Date.now(), { dirigido });
   if (!eleccion) return false;
+  if (eleccion.cancelada) {
+    logger.info(`[agente] ${quien} contestó «${eleccion.texto}» a la pregunta pendiente: se cierra sin elegir`);
+    await responderEnGrupo(grupo, { texto: 'Listo, lo dejo ahí.' }, alcance, quien);
+    return true;
+  }
   if (eleccion.invalida) {
     logger.info(`[agente] ${quien} contestó «${eleccion.texto}» a una pregunta de ${eleccion.pregunta.opciones.length} opciones: se le pide un número válido`);
     await responderEnGrupo(grupo, { texto: textoRespuestaInvalida(eleccion.pregunta) }, alcance, quien);

@@ -110,6 +110,37 @@ describe('pregunta de texto libre', () => {
   });
 });
 
+/**
+ * 30/09, 08:07: Lila preguntó «¿Lo genero? … elige qué más ve el cliente: 1/2/3»,
+ * Globofast contestó «Si @ConstRoad» y Lila repitió la pregunta entera. Un «sí»
+ * DICHO A LILA (con etiqueta o citándola) ante opciones numeradas es un intento
+ * de contestar: se pide el número. Un «no» la cierra. Sin etiqueta ni cita, un
+ * «sí» puede ser para otra persona del grupo y no se toca.
+ */
+describe('un «sí» o un «no» a una pregunta de opciones', () => {
+  beforeEach(() => _resetPendientes());
+  const opciones = ['Solo producción', 'Producción + colocación', 'Producción + colocación + informes'];
+
+  it('«sí» dicho a Lila es un intento: se pide el número y la pregunta sigue en pie', () => {
+    preguntar({ quien: 'q', grupo: 'g', opciones, tipo: 'opciones', continuar: async () => 'ok' }, 0);
+    expect(responderPendiente('q', 'g', 'Si', 1, { dirigido: true })).toMatchObject({ invalida: true });
+    expect(responderPendiente('q', 'g', 'sí, dale', 1, { dirigido: true })).toMatchObject({ invalida: true });
+    expect(responderPendiente('q', 'g', '3', 2)).toMatchObject({ indice: 2, texto: '3' });
+  });
+
+  it('sin etiqueta ni cita, un «sí» no contesta nada', () => {
+    preguntar({ quien: 'q', grupo: 'g', opciones, tipo: 'opciones', continuar: async () => 'ok' }, 0);
+    expect(responderPendiente('q', 'g', 'si', 1)).toBeNull();
+    expect(responderPendiente('q', 'g', '1', 2)).toMatchObject({ indice: 0 });
+  });
+
+  it('«no» dicho a Lila la cierra sin elegir nada', () => {
+    preguntar({ quien: 'q', grupo: 'g', opciones, tipo: 'opciones', continuar: async () => 'ok' }, 0);
+    expect(responderPendiente('q', 'g', 'no', 1, { dirigido: true })).toMatchObject({ cancelada: true, indice: -1 });
+    expect(responderPendiente('q', 'g', '1', 2)).toBeNull();
+  });
+});
+
 /** «5» con tres opciones es un intento de responder: se avisa y la pregunta sigue en pie (José, 15/09). */
 describe('un número que no es ninguna opción', () => {
   beforeEach(() => _resetPendientes());
