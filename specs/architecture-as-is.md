@@ -188,7 +188,10 @@ El servicio sigue siendo monolitico pero con servicios desacoplados en `src/serv
 - **Agente de operaciones «Lila» (sept. 2026):** `src/agent/checklist/*` (observa
   INFRAMAQ admin, checklist de producción, propuestas con aprobación por cita),
   `src/agent/consultas/*` (preguntas `@lila`, catálogo cerrado) y `src/agent/llm/*`
-  (Qwen2.5-1.5B local por `node-llama-cpp`, herramientas de datos, fichas). Su as-is
+  (Qwen2.5-1.5B local por `node-llama-cpp`, herramientas de datos, fichas). Escucha
+  `messages.upsert` y, desde el 30/09/2026, `messages.update` (solo para los
+  mensajes EDITADOS: `observarEdiciones`; los acuses y estados se descartan antes de
+  tocar nada). Su as-is
   vive en `../Portal/specs/AGENT-OPERATIONS.spec.md` §13; la **auditoría del
   entendimiento** (cinco ruteadores, tres extractores; diseño objetivo «el modelo
   señala, el código resuelve» + corpus de evaluación, pendiente) está en §13.5.
