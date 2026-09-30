@@ -15,6 +15,9 @@ describe('¿le hablan al agente?', () => {
     // La mención llega como JID (número o LID) en contextInfo, no en el texto.
     expect(esConsulta('@ConstRoad quién maneja la 3', '51949376824', ['51949376824@s.whatsapp.net'])).toBe(true);
     expect(esConsulta('@ConstRoad quién maneja la 3', '51949376824', ['188570740486215@lid'], ['188570740486215@lid'])).toBe(true);
+    // Sin `mentionedJid` (un mensaje editado), la mención queda escrita con el LID del bot.
+    expect(esConsulta('@244534046892225 pásame el link del despacho de producción de hoy', '51949376824', [], ['244534046892225@lid'])).toBe(true);
+    expect(esConsulta('@2445340468922251 otra cosa', '51949376824', [], ['244534046892225@lid'])).toBe(false);
   });
 
   /**

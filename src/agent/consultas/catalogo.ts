@@ -216,6 +216,9 @@ export const esConsulta = (texto: string, numeroBot?: string, mencionados: strin
   if (/^lila\b/.test(t)) return true;
   if (numeroBot && t.includes(`@${numeroBot}`)) return true;
   const propios = new Set([...jidsBot, numeroBot ? `${numeroBot}@s.whatsapp.net` : ''].filter(Boolean).map((j) => j.replace(/:\d+@/, '@')));
+  // La mención escrita con el LID del bot («@244534046892225 …»): es lo que queda
+  // en el texto cuando el mensaje no trae `mentionedJid` (una edición, 30/09).
+  if ([...propios].some((j) => new RegExp(`@${j.split('@')[0]}\\b`).test(t))) return true;
   return mencionados.some((m) => propios.has(String(m).replace(/:\d+@/, '@')));
 };
 
