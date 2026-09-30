@@ -39,6 +39,22 @@ ENV_FILE="$BACKUP_ENV_FILE"
 LOG_FILE="${DB_BACKUP_LOG_FILE:-${BACKUP_LOG_DIR}/backup-db.log}"
 HEARTBEAT_FILE="${DB_HEARTBEAT_FILE:-${BACKUP_CONFIG_DIR}/last-db-backup}"
 
+# ---- el mongod propio (bóveda) --------------------------------------------
+#
+# LO QUE ESTO ARREGLA, y es serio: el 29/09/2026 seis bases se migraron de Atlas
+# al mongod de la mini, y este script seguía respaldando SOLO Atlas — donde esos
+# datos ya no viven. Estuvieron un día sin respaldo. Peor: la consola de bóveda
+# mostraba «✓ Último backup: hace 38 min» leyendo el latido de ESTE respaldo,
+# o sea reportando en verde el respaldo de otra cosa. Un falso verde en la única
+# pregunta que importa.
+#
+# Se respalda acá y no en un script aparte a propósito: mismo repositorio de
+# restic, mismo candado, mismas alertas, misma retención. Dos scripts de
+# respaldo son dos cosas que se pueden desincronizar, y la que se rompe en
+# silencio es siempre la segunda.
+BOVEDA_ENV_FILE="${BOVEDA_ENV_FILE:-/Users/jose/deploys/boveda/shared/.env}"
+BOVEDA_HEARTBEAT_FILE="${BOVEDA_HEARTBEAT_FILE:-${BACKUP_CONFIG_DIR}/last-boveda-backup}"
+
 
 LOCK_FILE="/tmp/constroad-backup-db.lock"
 
@@ -52,6 +68,17 @@ KEEP_DAILY="${DB_KEEP_DAILY:-7}"
 KEEP_WEEKLY="${DB_KEEP_WEEKLY:-4}"
 
 WORK_DIR=""
+# Los .yaml con las URIs van ACA, no en WORK_DIR — y la diferencia no es cosmética.
+#
+# El 30/09/2026 se sacó la URI de la línea de comandos (`ps` la mostraba con la
+# contraseña en claro) poniéndola en un archivo que `mongodump --config` lee. El
+# archivo se creó dentro de WORK_DIR… que es exactamente el directorio que se le
+# pasa a `restic backup`. Resultado: las dos URIs, con contraseña, viajaron a 22
+# snapshots. Se arregló una exposición y se abrió otra, y la segunda tardó más en
+# verse porque no la muestra ningún comando: hay que listar el snapshot.
+# Lo encontró el simulacro de restauración (`verify-db-restore.sh`), que es para
+# lo que sirve restaurar de verdad en vez de suponer.
+CONF_DIR=""
 
 # ---- utilidades ------------------------------------------------------------
 
@@ -65,6 +92,12 @@ load_env() {
     TELEGRAM_BOT_TOKEN=$(grep -E '^TELEGRAM_BOT_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
     TELEGRAM_ERRORS_CHAT_ID=$(grep -E '^TELEGRAM_ERRORS_CHAT_ID=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
     MONGO_URI=$(grep -E '^PORTAL_MONGO_URI=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+  fi
+  # El mongod PROPIO de la mini (bóveda). Vive en otro `.env` porque es de otro
+  # servicio; se lee acá para respaldar las dos fuentes en la misma corrida.
+  BOVEDA_URI=""
+  if [ -r "$BOVEDA_ENV_FILE" ]; then
+    BOVEDA_URI=$(grep -E '^BOVEDA_MONGO_URI_RESPALDO=' "$BOVEDA_ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
   fi
 }
 
@@ -80,6 +113,7 @@ notify() {
 # El dump en claro se borra SIEMPRE, pase lo que pase.
 cleanup() {
   [ -n "$WORK_DIR" ] && [ -d "$WORK_DIR" ] && rm -rf "$WORK_DIR"
+  [ -n "$CONF_DIR" ] && [ -d "$CONF_DIR" ] && rm -rf "$CONF_DIR"
   rm -f "$LOCK_FILE"
 }
 
@@ -132,6 +166,8 @@ Falta 'Acceso total al disco' para el proceso del backup."
   # -- dump --
   WORK_DIR=$(mktemp -d "/tmp/constroad-db-dump.XXXXXX") || fail "No se pudo crear el directorio temporal"
   chmod 700 "$WORK_DIR"
+  CONF_DIR=$(mktemp -d "/tmp/constroad-db-conf.XXXXXX") || fail "No se pudo crear el directorio de configuración"
+  chmod 700 "$CONF_DIR"
 
   local started dumped=0
   started=$(date +%s)
@@ -143,9 +179,9 @@ Falta 'Acceso total al disco' para el proceso del backup."
   # LA URI NO VA EN LA LÍNEA DE COMANDOS. `ps` la lee cualquier usuario de la
   # máquina, y ahí viaja la contraseña de la base en claro — se vio en un `ps`
   # de rutina el 29/09/2026, con la credencial de Atlas entera a la vista.
-  # `mongodump --config` lee la URI de un archivo, que se crea 600 y se borra
-  # con el resto del directorio de trabajo (trap EXIT).
-  local conf="$WORK_DIR/.mongodump.yaml"
+  # `mongodump --config` lee la URI de un archivo, que se crea 600 en CONF_DIR
+  # —FUERA de lo que se respalda, ver arriba— y se borra en el trap EXIT.
+  local conf="$CONF_DIR/mongodump.yaml"
   ( umask 077; printf 'uri: "%s"\n' "$MONGO_URI" > "$conf" )
 
   local intento
@@ -165,9 +201,37 @@ Falta 'Acceso total al disco' para el proceso del backup."
     done
   done
 
+  # ---- y ahora el mongod propio -------------------------------------------
+  #
+  # `--oplog` y volcado COMPLETO: es lo que da consistencia punto-en-el-tiempo,
+  # y solo funciona sobre el servidor entero (por eso la URI de `respaldo` no
+  # lleva base en la ruta). Atlas no lo permitía en el tier gratis; acá sí, y es
+  # la mejora concreta de tener el mongod propio.
+  local boveda_ok=0
+  if [ -n "$BOVEDA_URI" ]; then
+    local bconf="$CONF_DIR/boveda.yaml"
+    ( umask 077; printf 'uri: "%s"\n' "$BOVEDA_URI" > "$bconf" )
+    local bintento
+    for bintento in 1 2 3; do
+      if "$MONGODUMP" --config="$bconf" --oplog --out="$WORK_DIR/boveda" \
+           --quiet >>"$LOG_FILE" 2>&1; then
+        boveda_ok=1
+        [ "$bintento" -gt 1 ] && log "bóveda OK en el intento ${bintento} (fallo transitorio)"
+        break
+      fi
+      [ "$bintento" -eq 3 ] && fail "mongodump del mongod propio falló tras 3 intentos"
+      log "mongodump de bóveda falló (intento ${bintento}/3) — reintentando en 10s"
+      sleep 10
+    done
+  else
+    # «No pude chequear» NO es «está bien»: si falta la credencial, el respaldo
+    # de bóveda NO corrió, y su latido no se toca para que la consola lo diga.
+    log "AVISO: sin BOVEDA_MONGO_URI_RESPALDO en $BOVEDA_ENV_FILE — el mongod propio NO se respaldó"
+  fi
+
   local dump_size
   dump_size=$(du -sh "$WORK_DIR" 2>/dev/null | cut -f1)
-  log "Dump OK — ${dumped} bases, ${dump_size}"
+  log "Dump OK — ${dumped} bases de Atlas$([ "$boveda_ok" = 1 ] && echo ' + el mongod propio (con oplog)'), ${dump_size}"
 
   # -- a restic --
   export RESTIC_REPOSITORY="$REPO"
@@ -181,7 +245,10 @@ Falta 'Acceso total al disco' para el proceso del backup."
   "$RESTIC" unlock >>"$LOG_FILE" 2>&1 || true
 
   local out rc
-  out=$("$RESTIC" backup "$WORK_DIR" --tag db --tag automatico 2>&1)
+  # `--exclude` es el cinturón sobre el tirante: los .yaml ya no viven acá, pero
+  # si alguien vuelve a escribir un secreto en WORK_DIR, no entra al repositorio.
+  out=$("$RESTIC" backup "$WORK_DIR" --tag db --tag automatico \
+          --exclude '*.yaml' --exclude '*.conf' --exclude '.env*' 2>&1)
   rc=$?
   echo "$out" >> "$LOG_FILE"
   [ $rc -eq 0 ] || fail "restic backup falló (código $rc):
@@ -206,6 +273,10 @@ $(echo "$out" | tail -4)"
   # perdido (p.ej. tras migrar de máquina) no se detecta hasta que se necesita
   # restaurar. Se escribe SOLO en éxito.
   date +%s > "$HEARTBEAT_FILE"
+  # El latido de bóveda SOLO si su dump de verdad corrió. Escribirlo siempre
+  # sería reportar en verde un respaldo que no existe, que es exactamente el
+  # fallo que se está arreglando.
+  [ "$boveda_ok" = 1 ] && date +%s > "$BOVEDA_HEARTBEAT_FILE"
 
   # Cierra el ciclo: si veníamos fallando, avisa que se recuperó. Sin esto
   # quedás sin saber si el problema sigue o se arregló solo.
